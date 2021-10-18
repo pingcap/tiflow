@@ -19,19 +19,23 @@ import (
 )
 
 type columnsDispatcher struct {
-	partitionNum int32
-	columnNames  map[string]struct{}
-	hasher       *hash.PositionInertia
+	partitionNum  int32
+	targetColumns map[string]struct{}
+	hasher        *hash.PositionInertia
+}
+
+func getTargetColumns(columnNames string) map[string]struct{} {
+	return nil
 }
 
 func newColumnsDispatcher(partitionNum int32, columnNames string) *columnsDispatcher {
 	// columnsNames should be a string in the form like "[column-1,column-2,..., column-n]"
 	// we cannot know whether the specified columns exist or not, just assume that all target columns exists.
-	var targetColumns map[string]struct{}
+	targetColumns := getTargetColumns(columnNames)
 	return &columnsDispatcher{
-		partitionNum: partitionNum,
-		columnNames:  targetColumns,
-		hasher:       hash.NewPositionInertia(),
+		partitionNum:  partitionNum,
+		targetColumns: targetColumns,
+		hasher:        hash.NewPositionInertia(),
 	}
 }
 
@@ -41,7 +45,7 @@ func newColumnsDispatcher(partitionNum int32, columnNames string) *columnsDispat
 func (r *columnsDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	r.hasher.Reset()
 	for _, col := range row.Columns {
-		if _, ok := r.columnNames[col.Name]; ok {
+		if _, ok := r.targetColumns[col.Name]; ok {
 			r.hasher.Write([]byte(model.ColumnValueString(col.Value)))
 		}
 	}
