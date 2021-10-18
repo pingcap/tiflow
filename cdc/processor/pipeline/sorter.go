@@ -49,6 +49,7 @@ type sorterNode struct {
 	wg     errgroup.Group
 	cancel context.CancelFunc
 
+	// The latest resolved ts that sorter has received.
 	resolvedTs model.Ts
 }
 
@@ -198,7 +199,8 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		rawKV := msg.PolymorphicEvent.RawKV
-		if rawKV.OpType == model.OpTypeResolved {
+		if rawKV != nil && rawKV.OpType == model.OpTypeResolved {
+			// Note that resolved ts could fall back here, if puller falls back.
 			atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 		}
 		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
