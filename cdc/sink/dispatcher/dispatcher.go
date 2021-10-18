@@ -14,6 +14,7 @@
 package dispatcher
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/pingcap/log"
@@ -43,22 +44,37 @@ const (
 	dispatchRuleByPartitionNum
 )
 
-func (r *dispatchRule) fromString(rule string) {
-	switch strings.ToLower(rule) {
-	case "default":
-		*r = dispatchRuleDefault
-	case "rowid":
-		*r = dispatchRuleRowID
-	case "ts":
-		*r = dispatchRuleTS
-	case "table":
-		*r = dispatchRuleTable
-	case "index-value":
-		*r = dispatchRuleIndexValue
-	default:
-		*r = dispatchRuleDefault
-		log.Warn("can't support dispatch rule, using default rule", zap.String("rule", rule))
+var (
+	rules = map[string]dispatchRule{
+		"default":     dispatchRuleDefault,
+		"rowid":       dispatchRuleRowID,
+		"ts":          dispatchRuleTS,
+		"table":       dispatchRuleTable,
+		"index-value": dispatchRuleIndexValue,
+		"pk":          dispatchRulePK,
 	}
+)
+
+func (r *dispatchRule) fromString(s string) {
+	s = strings.ToLower(s)
+	rule, ok := rules[s]
+	if ok {
+		*r = rule
+		return
+	}
+
+	if tryGetDispatchRuleByPartitionNum(s) {
+		*r = dispatchRuleByPartitionNum
+		return
+	}
+
+	if tryGetDispatchRuleByColumns(s) {
+		*r = dispatchRuleByColumns
+		return
+	}
+
+	*r = dispatchRuleDefault
+	log.Warn("can't support dispatch rule, using default rule", zap.String("rule", s))
 }
 
 type dispatcherSwitcher struct {
@@ -133,4 +149,14 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 	return &dispatcherSwitcher{
 		rules: rules,
 	}, nil
+}
+
+func tryGetDispatchRuleByPartitionNum(s string) bool {
+	_, err := strconv.Atoi(s)
+	return err == nil
+}
+
+// for by columns rule, s should have the format "[a, b, c]"
+func tryGetDispatchRuleByColumns(s string) bool {
+	return strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]")
 }
