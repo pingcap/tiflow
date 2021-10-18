@@ -13,14 +13,17 @@
 
 package p2p
 
+import "github.com/pingcap/ticdc/proto/p2p"
+
 type (
 	// SenderID represents the identifier of a sender node.
 	// Using IP address is not enough because of possible restarts.
 	SenderID = string
 	// Topic represents the topic for a peer-to-peer message
 	Topic = string
+	// Seq represents the serial number of a message for a given topic.
+	Seq = int64
+	// MessageServerStream is an alias for the protobuf-generated interface for the message service.
+	MessageServerStream = p2p.CDCPeerToPeer_SendMessageServer
 )
 
-type (
-	Seq = int64
-)

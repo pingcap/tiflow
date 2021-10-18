@@ -14,6 +14,7 @@
 package p2p
 
 import (
+	"context"
 	"sync"
 
 	"github.com/modern-go/reflect2"
@@ -25,16 +26,40 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+type streamWrapper struct {
+	MessageServerStream
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+func wrapStream(stream MessageServerStream) *streamWrapper {
+	ctx, cancel := context.WithCancel(stream.Context())
+	return &streamWrapper{
+		MessageServerStream: stream,
+		ctx:                 ctx,
+		cancel:              cancel,
+	}
+}
+
+func (w *streamWrapper) Context() context.Context {
+	return w.ctx
+}
+
 // ServerWrapper implements a CDCPeerToPeerServer, and it
 // maintains an inner CDCPeerToPeerServer instance that can
 // be replaced as needed.
 type ServerWrapper struct {
 	rwMu        sync.RWMutex
 	innerServer p2p.CDCPeerToPeerServer
+
+	wrappedStreamsMu sync.Mutex
+	wrappedStreams   map[*streamWrapper]struct{}
 }
 
-func NewResettableServer() *ServerWrapper {
-	return &ServerWrapper{}
+func NewServerWrapper() *ServerWrapper {
+	return &ServerWrapper{
+		wrappedStreams: map[*streamWrapper]struct{}{},
+	}
 }
 
 func (s *ServerWrapper) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) error {
@@ -52,12 +77,30 @@ func (s *ServerWrapper) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 		return status.New(codes.Unavailable, "CDC capture is not running").Err()
 	}
 
-	return s.innerServer.SendMessage(stream)
+	wrappedStream := wrapStream(stream)
+	s.wrappedStreamsMu.Lock()
+	s.wrappedStreams[wrappedStream] = struct{}{}
+	s.wrappedStreamsMu.Unlock()
+	defer func() {
+		s.wrappedStreamsMu.Lock()
+		delete(s.wrappedStreams, wrappedStream)
+		s.wrappedStreamsMu.Unlock()
+		wrappedStream.cancel()
+	}()
+	return s.innerServer.SendMessage(wrappedStream)
 }
 
 func (s *ServerWrapper) Reset(inner p2p.CDCPeerToPeerServer) {
 	s.rwMu.Lock()
 	defer s.rwMu.Unlock()
+
+	s.wrappedStreamsMu.Lock()
+	defer s.wrappedStreamsMu.Unlock()
+
+	for wrappedStream := range s.wrappedStreams {
+		wrappedStream.cancel()
+	}
+
 	// reflect2.IsNil handles two cases for us:
 	// 1) null value
 	// 2) an interface with a null value but a not-null type info.

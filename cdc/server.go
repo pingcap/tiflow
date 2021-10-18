@@ -77,7 +77,7 @@ func NewServer(pdEndpoints []string) (*Server, error) {
 
 	s := &Server{
 		pdEndpoints: pdEndpoints,
-		grpcServer:  p2p.NewResettableServer(),
+		grpcServer:  p2p.NewServerWrapper(),
 	}
 	return s, nil
 }
