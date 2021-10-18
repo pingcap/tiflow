@@ -141,9 +141,10 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 				return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 			}
 			if int32(targetPartition) > partitionNum {
-				return nil, todo: add a error
+				return nil, cerror.ErrFilterRuleInvalid.GenWithStack(
+					"can't create dispatcher rule by target partition(%d) > partitionNum(%d)",
+					targetPartition, partitionNum)
 			}
-
 			d = newPartitionNumDispatcher(int32(targetPartition))
 		case dispatchRuleByColumns:
 			d = newColumnsDispatcher(partitionNum, ruleConfig.Dispatcher)
