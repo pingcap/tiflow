@@ -534,8 +534,6 @@ func newMySQLSink(
 	replicaConfig *config.ReplicaConfig,
 	opts map[string]string,
 ) (Sink, error) {
-	ctx, cancel := context.WithCancel(ctx)
-
 	opts[OptChangefeedID] = changefeedID
 	params, err := parseSinkURI(ctx, sinkURI, opts)
 	if err != nil {
@@ -599,6 +597,8 @@ func newMySQLSink(
 		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
 			params.captureAddr, params.changefeedID, strconv.Itoa(i))
 	}
+	ctx, cancel := context.WithCancel(ctx)
+
 	sink := &mysqlSink{
 		db:                              db,
 		params:                          params,
