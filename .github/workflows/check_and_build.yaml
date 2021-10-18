@@ -49,7 +49,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: tools/bin
-        key: ${{ runner.os }}-cdc-lint-tools-${{ hashFiles('tools/check/go.sum') }}
+        key: ${{ runner.os }}-cdc-lint-tools-${{ hashFiles('tools/check/go.sum') }}-${{ hashFiles('Makefile') }}
 
     - name: Check
       run: make check
