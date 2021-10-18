@@ -3298,6 +3298,11 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	cancel()
 }
 
+// TestPrewriteNotMatchError tests TiKV sends a commit event without a matching
+// prewrite(which is a bug, ref: https://github.com/tikv/tikv/issues/11055,
+// TiCDC catches this error and resets the gRPC stream. TiCDC must not send a
+// new request before closing gRPC stream since currently there is no mechanism
+// to release an existing region connection.
 func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
@@ -3338,6 +3343,8 @@ func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
 	c.Assert(err, check.IsNil)
 	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
 	defer kvStorage.Close() //nolint:errcheck
+
+	// create two regions to avoid the stream is canceled by no region remained
 	regionID3 := uint64(3)
 	regionID4 := uint64(4)
 	cluster.AddStore(1, addr1)
@@ -3421,6 +3428,8 @@ func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
 		wg.Wait()
 	}()
 
+	// After the gRPC stream is canceled, two more reqeusts will be sent, so the
+	// allocated id is increased by 2 from baseAllocatedID+2.
 	waitRequestID(c, baseAllocatedID+4)
 	cancel()
 }
