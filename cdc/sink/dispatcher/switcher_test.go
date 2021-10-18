@@ -42,6 +42,8 @@ func (s SwitcherSuite) TestSwitcher(c *check.C) {
 				{Matcher: []string{"test_index_value.*"}, Dispatcher: "index-value"},
 				{Matcher: []string{"test.*"}, Dispatcher: "rowid"},
 				{Matcher: []string{"*.*", "!*.test"}, Dispatcher: "ts"},
+				{Matcher: []string{"test_by_partition.*"}, Dispatcher: "4"},
+				{Matcher: []string{"test_by_columns.*"}, Dispatcher: "[a, b]"},
 			},
 		},
 	}, 4)
@@ -76,4 +78,14 @@ func (s SwitcherSuite) TestSwitcher(c *check.C) {
 			Schema: "test_index_value", Table: "test",
 		},
 	}), check.FitsTypeOf, &indexValueDispatcher{})
+	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema: "test_by_partition", Table: "test",
+		},
+	}), check.FitsTypeOf, &partitionNumDispatcher{})
+	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema: "test_by_columns", Table: "test",
+		},
+	}), check.FitsTypeOf, &columnsDispatcher{})
 }

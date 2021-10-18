@@ -140,9 +140,9 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 			if err != nil {
 				return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 			}
-			if int32(targetPartition) > partitionNum {
+			if int32(targetPartition) >= partitionNum {
 				return nil, cerror.ErrFilterRuleInvalid.GenWithStack(
-					"can't create dispatcher rule by target partition(%d) > partitionNum(%d)",
+					"can't create dispatcher rule by target partition(%d) >= partitionNum(%d)",
 					targetPartition, partitionNum)
 			}
 			d = newPartitionNumDispatcher(int32(targetPartition))
