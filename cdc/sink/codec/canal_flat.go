@@ -184,7 +184,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) *ca
 
 // EncodeCheckpointEvent is no-op
 func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
-	return nil, nil
+	return newResolvedMQMessage(ProtocolCanalJSON, nil, c.newResolvedEventEncoder().Encode(), ts), nil
 }
 
 // AppendRowChangedEvent implements the interface EventBatchEncoder
