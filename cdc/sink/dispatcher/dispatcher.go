@@ -136,8 +136,15 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		case dispatchRuleDefault:
 			d = newDefaultDispatcher(partitionNum, cfg.EnableOldValue)
 		case dispatchRuleByPartitionNum:
-			var targetPartition int32 = 0 // todo: fix this.
-			d = newPartitionNumDispatcher(targetPartition)
+			targetPartition, err := strconv.Atoi(ruleConfig.Dispatcher)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
+			}
+			if int32(targetPartition) > partitionNum {
+				return nil, todo: add a error
+			}
+
+			d = newPartitionNumDispatcher(int32(targetPartition))
 		case dispatchRuleByColumns:
 			d = newColumnsDispatcher(partitionNum, ruleConfig.Dispatcher)
 		}

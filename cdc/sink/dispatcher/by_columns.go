@@ -14,6 +14,8 @@
 package dispatcher
 
 import (
+	"strings"
+
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/hash"
 )
@@ -25,12 +27,20 @@ type columnsDispatcher struct {
 }
 
 func getTargetColumns(columnNames string) map[string]struct{} {
-	return nil
+	targetColumns := make(map[string]struct{})
+	names := strings.Split(columnNames, ",")
+	for _, column := range names {
+		column = strings.Trim(column, " ")
+		targetColumns[column] = struct{}{}
+	}
+
+	return targetColumns
 }
 
-func newColumnsDispatcher(partitionNum int32, columnNames string) *columnsDispatcher {
-	// columnsNames should be a string in the form like "[column-1,column-2,..., column-n]"
+func newColumnsDispatcher(partitionNum int32, s string) *columnsDispatcher {
+	// s should be a string in the form like "[column-1,column-2,..., column-n]"
 	// we cannot know whether the specified columns exist or not, just assume that all target columns exists.
+	columnNames := strings.Trim(s, "[]")
 	targetColumns := getTargetColumns(columnNames)
 	return &columnsDispatcher{
 		partitionNum:  partitionNum,
@@ -41,6 +51,7 @@ func newColumnsDispatcher(partitionNum int32, columnNames string) *columnsDispat
 
 // Dispatch the row to the target which can be indicated by a number.
 // If no target column found, just send it to 0.
+// If user set, for table A, by column "a, b, c", but one of the selected column does not exist in A, shall we report the error, or just ignore it.
 // todo (Ling Jin): discuss this with other stakeholder.
 func (r *columnsDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	r.hasher.Reset()
