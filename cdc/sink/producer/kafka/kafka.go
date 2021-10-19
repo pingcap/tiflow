@@ -57,9 +57,8 @@ type Config struct {
 // NewConfig returns a default Kafka configuration
 func NewConfig() *Config {
 	return &Config{
-		Version: "2.4.0",
-		// this value will be used to initialize the producer, default to the broker's default `message.max.bytes`, which is 1MB.
-		MaxMessageBytes:   1 * 1024 * 1024,
+		Version:           "2.4.0",
+		MaxMessageBytes:   512 * 1024 * 1024, // 512MB
 		ReplicationFactor: 1,
 		Compression:       "none",
 		Credential:        &security.Credential{},
@@ -99,11 +98,7 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 		if err != nil {
 			return err
 		}
-		// `MaxMessageBytes` is set to `512 mb` by default, but it's still possible that a larger value expected.
-		// TiCDC should send the message at best.
-		if a > c.MaxMessageBytes {
-			c.MaxMessageBytes = a
-		}
+		c.MaxMessageBytes = a
 		opts["max-message-bytes"] = s
 	}
 
