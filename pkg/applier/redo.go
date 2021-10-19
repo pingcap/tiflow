@@ -111,7 +111,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		return err
 	}
 	opts := map[string]string{}
-	s, err := sink.NewSink(ctx, applierChangefeed, ra.cfg.SinkURI, ft, replicaConfig, opts, ra.errCh)
+	s, err := sink.New(ctx, applierChangefeed, ra.cfg.SinkURI, ft, replicaConfig, opts, ra.errCh)
 	if err != nil {
 		return err
 	}

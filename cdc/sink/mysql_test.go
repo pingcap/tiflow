@@ -1554,10 +1554,10 @@ func (s MySQLSinkSuite) TestMySQLSinkClose(c *check.C) {
 		c.Assert(err, check.IsNil)
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx := context.Background()

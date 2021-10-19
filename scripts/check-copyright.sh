@@ -1,4 +1,3 @@
-result=$(find ./ -name "*.go" | grep -vE '.pb.go|vendor/|leaktest.go|kv_gen|meta_gen|sink_gen' | while read file_path; do
 result=$(find ./ -name "*.go" | grep -vE '.pb.go|vendor/|leaktest.go|kv_gen|redo_gen|sink_gen' | while read file_path; do
 	head=$(cat "${file_path}" | head -n 1)
 	if [[ ! "$head" =~ Copyright\ 20[0-9][0-9]\ PingCAP,\ Inc\. ]]; then
