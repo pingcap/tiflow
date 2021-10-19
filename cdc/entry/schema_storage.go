@@ -226,6 +226,7 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 
 	schemas := make(map[int64]*timodel.DBInfo, len(s.schemas))
 	for k, v := range s.schemas {
+		// DBInfo is readonly in TiCDC, shallow copy to reduce memory
 		schemas[k] = v.Copy()
 	}
 	clone.schemas = schemas
