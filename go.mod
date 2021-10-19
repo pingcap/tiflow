@@ -19,6 +19,7 @@ require (
 	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/gin-gonic/gin v1.7.0
 	github.com/go-sql-driver/mysql v1.6.0
+	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang/protobuf v1.5.2
 	github.com/google/btree v1.0.0
 	github.com/google/go-cmp v0.5.6
@@ -56,6 +57,7 @@ require (
 	github.com/uber-go/atomic v1.4.0
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
+	go.uber.org/goleak v1.1.10
 	go.uber.org/zap v1.19.0
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897 // indirect
 	golang.org/x/net v0.0.0-20210503060351-7fd8e65b6420
@@ -67,3 +69,6 @@ require (
 	sigs.k8s.io/yaml v1.2.0 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
+
+// Fix CVE-2020-26160.
+replace github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt v3.2.1+incompatible
