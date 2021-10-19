@@ -49,6 +49,9 @@ jobs:
       uses: actions/cache@v2
       with:
         path: tools/bin
+        # See: https://docs.github.com/en/actions/advanced-guides/caching-dependencies-to-speed-up-workflows
+        # We compile tools from tools/check/go.mod, and also download some tools directly from the Makefile.
+        # So we have to calculate hash for both files here.
         key: ${{ runner.os }}-cdc-lint-tools-${{ hashFiles('tools/check/go.sum') }}-${{ hashFiles('Makefile') }}
 
     - name: Check
