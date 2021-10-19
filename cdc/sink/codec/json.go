@@ -36,7 +36,7 @@ const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes
-	DefaultMaxMessageBytes int = 64 * 1024 * 1024 // 64M
+	DefaultMaxMessageBytes int = 1 * 1024 * 1024 // 1M
 	// DefaultMaxBatchSize sets the default value for max-batch-size
 	DefaultMaxBatchSize int = 16
 )
