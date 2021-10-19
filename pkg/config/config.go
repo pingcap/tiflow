@@ -193,7 +193,7 @@ var defaultServerConfig = &ServerConfig{
 		SortDir:                DefaultSortDir,
 	},
 	Security:            &SecurityConfig{},
-	PerTableMemoryQuota: 20 * 1024 * 1024, // 20MB
+	PerTableMemoryQuota: 10 * 1024 * 1024, // 10MB
 	KVClient: &KVClientConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
@@ -305,9 +305,9 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		}
 	}
 
-	conf := GetDefaultServerConfig()
+	defaultCfg := GetDefaultServerConfig()
 	if c.Sorter == nil {
-		c.Sorter = conf.Sorter
+		c.Sorter = defaultCfg.Sorter
 	}
 	c.Sorter.SortDir = DefaultSortDir
 	err := c.Sorter.ValidateAndAdjust()
@@ -316,14 +316,11 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 
 	if c.PerTableMemoryQuota == 0 {
-		c.PerTableMemoryQuota = conf.PerTableMemoryQuota
-	}
-	if c.PerTableMemoryQuota < 6*1024*1024 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
+		c.PerTableMemoryQuota = defaultCfg.PerTableMemoryQuota
 	}
 
 	if c.KVClient == nil {
-		c.KVClient = conf.KVClient
+		c.KVClient = defaultCfg.KVClient
 	}
 	if c.KVClient.WorkerConcurrent <= 0 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
