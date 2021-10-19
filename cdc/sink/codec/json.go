@@ -429,7 +429,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
 	if length > d.maxKafkaMessageSize {
 		log.Warn("Single message too large", zap.Int("max-message-size", d.maxKafkaMessageSize), zap.Int("length", length))
-		return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge
+		return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
 	}
 
 	if d.supportMixedBuild {
