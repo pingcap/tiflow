@@ -109,6 +109,7 @@ type mysqlSink struct {
 	metricBucketSizeCounters        []prometheus.Counter
 
 	forceReplicate bool
+	cancel         func()
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -596,6 +597,7 @@ func newMySQLSink(
 		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
 			params.captureAddr, params.changefeedID, strconv.Itoa(i))
 	}
+	ctx, cancel := context.WithCancel(ctx)
 
 	sink := &mysqlSink{
 		db:                              db,
@@ -607,6 +609,7 @@ func newMySQLSink(
 		metricBucketSizeCounters:        metricBucketSizeCounters,
 		errCh:                           make(chan error, 1),
 		forceReplicate:                  replicaConfig.ForceReplicate,
+		cancel:                          cancel,
 	}
 
 	if val, ok := opts[mark.OptCyclicConfig]; ok {
@@ -625,7 +628,9 @@ func newMySQLSink(
 
 	sink.execWaitNotifier = new(notify.Notifier)
 	sink.resolvedNotifier = new(notify.Notifier)
+
 	err = sink.createSinkWorkers(ctx)
+
 	if err != nil {
 		return nil, err
 	}
@@ -877,6 +882,7 @@ func (s *mysqlSink) Close(ctx context.Context) error {
 	s.execWaitNotifier.Close()
 	s.resolvedNotifier.Close()
 	err := s.db.Close()
+	s.cancel()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }
 
