@@ -36,10 +36,10 @@ var (
 	ErrGetTiKVRPCContext       = errors.Normalize("get tikv grpc context failed", errors.RFCCodeText("CDC:ErrGetTiKVRPCContext"))
 	ErrPendingRegionCancel     = errors.Normalize("pending region cancelled due to stream disconnecting", errors.RFCCodeText("CDC:ErrPendingRegionCancel"))
 	ErrEventFeedAborted        = errors.Normalize("single event feed aborted", errors.RFCCodeText("CDC:ErrEventFeedAborted"))
-	ErrUnknownKVEventType      = errors.Normalize("unknown kv event type: %v, entry: %v", errors.RFCCodeText("CDC:ErrUnknownKVEventType"))
+	ErrUnknownKVEventType      = errors.Normalize("unknown kv optype: %s, entry: %v", errors.RFCCodeText("CDC:ErrUnknownKVEventType"))
 	ErrNoPendingRegion         = errors.Normalize("received event regionID %v, requestID %v from %v,"+
 		" but neither pending region nor running region was found", errors.RFCCodeText("CDC:ErrNoPendingRegion"))
-	ErrPrewriteNotMatch       = errors.Normalize("prewrite not match, key: %b, start-ts: %d", errors.RFCCodeText("CDC:ErrPrewriteNotMatch"))
+	ErrPrewriteNotMatch       = errors.Normalize("prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s", errors.RFCCodeText("CDC:ErrPrewriteNotMatch"))
 	ErrGetRegionFailed        = errors.Normalize("get region failed", errors.RFCCodeText("CDC:ErrGetRegionFailed"))
 	ErrScanLockFailed         = errors.Normalize("scan lock failed", errors.RFCCodeText("CDC:ErrScanLockFailed"))
 	ErrResolveLocks           = errors.Normalize("resolve locks failed", errors.RFCCodeText("CDC:ErrResolveLocks"))
@@ -64,6 +64,7 @@ var (
 	ErrAdminStopProcessor = errors.Normalize("stop processor by admin command", errors.RFCCodeText("CDC:ErrAdminStopProcessor"))
 	// ErrVersionIncompatible is an error for running CDC on an incompatible Cluster.
 	ErrVersionIncompatible   = errors.Normalize("version is incompatible: %s", errors.RFCCodeText("CDC:ErrVersionIncompatible"))
+	ErrClusterIDMismatch     = errors.Normalize("cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d", errors.RFCCodeText("CDC:ErrClusterIDMismatch"))
 	ErrCreateMarkTableFailed = errors.Normalize("create mark table failed", errors.RFCCodeText("CDC:ErrCreateMarkTableFailed"))
 
 	// sink related errors
@@ -89,6 +90,7 @@ var (
 	ErrS3SinkWriteStorage        = errors.Normalize("write to storage", errors.RFCCodeText("CDC:ErrS3SinkWriteStorage"))
 	ErrS3SinkInitialize          = errors.Normalize("new s3 sink", errors.RFCCodeText("CDC:ErrS3SinkInitialize"))
 	ErrS3SinkStorageAPI          = errors.Normalize("s3 sink storage api", errors.RFCCodeText("CDC:ErrS3SinkStorageAPI"))
+	ErrS3StorageInitialize       = errors.Normalize("new s3 storage for redo log", errors.RFCCodeText("CDC:ErrS3StorageInitialize"))
 	ErrPrepareAvroFailed         = errors.Normalize("prepare avro failed", errors.RFCCodeText("CDC:ErrPrepareAvroFailed"))
 	ErrAsyncBroadcastNotSupport  = errors.Normalize("Async broadcasts not supported", errors.RFCCodeText("CDC:ErrAsyncBroadcastNotSupport"))
 	ErrKafkaInvalidConfig        = errors.Normalize("kafka config invalid", errors.RFCCodeText("CDC:ErrKafkaInvalidConfig"))
@@ -216,6 +218,12 @@ var (
 	// pipeline errors
 	ErrSendToClosedPipeline = errors.Normalize("pipeline is closed, cannot send message", errors.RFCCodeText("CDC:ErrSendToClosedPipeline"))
 	ErrPipelineTryAgain     = errors.Normalize("pipeline is full, please try again. Internal use only, report a bug if seen externally", errors.RFCCodeText("CDC:ErrPipelineTryAgain"))
+
+	// actor errors
+	ErrActorDuplicate = errors.Normalize("duplicated actor, already in use", errors.RFCCodeText("CDC:ErrActorDuplicate"))
+	ErrActorNotFound  = errors.Normalize("actor not found", errors.RFCCodeText("CDC:ErrActorNotFound"))
+	ErrActorStopped   = errors.Normalize("actor stopped", errors.RFCCodeText("CDC:ErrActorStopped"))
+	ErrMailboxFull    = errors.Normalize("mailbox is full, please try again. Internal use only, report a bug if seen externally", errors.RFCCodeText("CDC:ErrMailboxFull"))
 
 	// workerpool errors
 	ErrWorkerPoolHandleCancelled = errors.Normalize("workerpool handle is cancelled", errors.RFCCodeText("CDC:ErrWorkerPoolHandleCancelled"))

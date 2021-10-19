@@ -15,12 +15,12 @@ package cli
 
 import (
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -42,7 +42,7 @@ type cfMeta struct {
 
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.
 type queryChangefeedOptions struct {
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 
 	credential *security.Credential
 
@@ -142,6 +142,7 @@ func newCmdQueryChangefeed(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "query",
 		Short: "Query information and status of a replication task (changefeed)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {

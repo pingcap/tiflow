@@ -18,22 +18,18 @@ import (
 	"math/rand"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/pingcap/log"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
+
 	"golang.org/x/sync/errgroup"
 )
 
-type asyncPoolSuite struct{}
-
-var _ = check.Suite(&asyncPoolSuite{})
-
-func (s *asyncPoolSuite) TestBasic(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestBasic(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -54,19 +50,18 @@ func (s *asyncPoolSuite) TestBasic(c *check.C) {
 			atomic.AddInt32(&sum, int32(finalI+1))
 			wg.Done()
 		})
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 
 	wg.Wait()
-	c.Assert(sum, check.Equals, int32(5050))
+	require.Equal(t, sum, int32(5050))
 
 	cancel()
 	err := errg.Wait()
-	c.Assert(err, check.ErrorMatches, "context canceled")
+	require.Regexp(t, "context canceled", err)
 }
 
-func (s *asyncPoolSuite) TestEventuallyRun(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestEventuallyRun(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -106,7 +101,7 @@ loop:
 			atomic.AddInt32(&sum, int32(finalI+1))
 		})
 		if err != nil {
-			c.Assert(err, check.ErrorMatches, "context canceled")
+			require.Regexp(t, "context canceled", err.Error())
 		} else {
 			sumExpected += int32(i + 1)
 		}
@@ -114,8 +109,8 @@ loop:
 
 	cancel()
 	err := errg.Wait()
-	c.Assert(err, check.IsNil)
-	c.Assert(sum, check.Equals, sumExpected)
+	require.Nil(t, err)
+	require.Equal(t, sum, sumExpected)
 }
 
 func runForDuration(ctx context.Context, duration time.Duration, f func(ctx context.Context) error) error {

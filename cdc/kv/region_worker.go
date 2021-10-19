@@ -15,6 +15,7 @@ package kv
 
 import (
 	"context"
+	"encoding/hex"
 	"reflect"
 	"runtime"
 	"sync"
@@ -708,7 +709,10 @@ func (w *regionWorker) handleEventEntry(
 					state.matcher.cacheCommitRow(entry)
 					continue
 				}
-				return cerror.ErrPrewriteNotMatch.GenWithStackByArgs(entry.GetKey(), entry.GetStartTs())
+				return cerror.ErrPrewriteNotMatch.GenWithStackByArgs(
+					hex.EncodeToString(entry.GetKey()),
+					entry.GetStartTs(), entry.GetCommitTs(),
+					entry.GetType(), entry.GetOpType())
 			}
 
 			revent, err := assembleRowEvent(regionID, entry, w.enableOldValue)
@@ -819,12 +823,9 @@ func getWorkerPoolSize() (size int) {
 	return
 }
 
-// InitWorkerPool initializs workerpool once, the workerpool must be initialized
+// InitWorkerPool initialize workerpool once, the workerpool must be initialized
 // before any kv event is received.
 func InitWorkerPool() {
-	if !enableKVClientV2 {
-		return
-	}
 	workerPoolOnce.Do(func() {
 		size := getWorkerPoolSize()
 		regionWorkerPool = workerpool.NewDefaultWorkerPool(size)
@@ -834,9 +835,6 @@ func InitWorkerPool() {
 // RunWorkerPool runs the worker pool used by the region worker in kv client v2
 // It must be running before region worker starts to work
 func RunWorkerPool(ctx context.Context) error {
-	if !enableKVClientV2 {
-		return nil
-	}
 	InitWorkerPool()
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {

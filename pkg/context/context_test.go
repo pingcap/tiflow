@@ -18,21 +18,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-func TestSuite(t *testing.T) { check.TestingT(t) }
-
-type contextSuite struct{}
-
-var _ = check.Suite(&contextSuite{})
-
-func (s *contextSuite) TestVars(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestVars(t *testing.T) {
+	t.Parallel()
 	stdCtx := context.Background()
 	conf := config.GetDefaultReplicaConfig()
 	conf.Filter.Rules = []string{"hello.world"}
@@ -43,12 +36,12 @@ func (s *contextSuite) TestVars(c *check.C) {
 	ctx = WithChangefeedVars(ctx, &ChangefeedVars{
 		Info: info,
 	})
-	c.Assert(ctx.ChangefeedVars().Info, check.DeepEquals, info)
-	c.Assert(ctx.GlobalVars().CaptureInfo.ID, check.Equals, "capture1")
+	require.Equal(t, ctx.ChangefeedVars().Info, info)
+	require.Equal(t, ctx.GlobalVars().CaptureInfo.ID, "capture1")
 }
 
-func (s *contextSuite) TestStdCancel(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestStdCancel(t *testing.T) {
+	t.Parallel()
 	stdCtx := context.Background()
 	stdCtx, cancel := context.WithCancel(stdCtx)
 	ctx := NewContext(stdCtx, &GlobalVars{})
@@ -56,8 +49,8 @@ func (s *contextSuite) TestStdCancel(c *check.C) {
 	<-ctx.Done()
 }
 
-func (s *contextSuite) TestCancel(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCancel(t *testing.T) {
+	t.Parallel()
 	stdCtx := context.Background()
 	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx, cancel := WithCancel(ctx)
@@ -65,8 +58,8 @@ func (s *contextSuite) TestCancel(c *check.C) {
 	<-ctx.Done()
 }
 
-func (s *contextSuite) TestCancelCascade(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCancelCascade(t *testing.T) {
+	t.Parallel()
 	startTime := time.Now()
 	stdCtx, cancel := context.WithDeadline(context.Background(), time.Now().Add(1*time.Second))
 	ctx := NewContext(stdCtx, &GlobalVars{})
@@ -74,19 +67,19 @@ func (s *contextSuite) TestCancelCascade(c *check.C) {
 	ctx2, cancel2 := WithCancel(ctx)
 	cancel2()
 	<-ctx2.Done()
-	c.Assert(time.Since(startTime), check.Less, time.Second)
+	require.Less(t, time.Since(startTime), time.Second)
 	<-ctx1.Done()
-	c.Assert(time.Since(startTime), check.GreaterEqual, time.Second)
+	require.GreaterOrEqual(t, time.Since(startTime), time.Second)
 	cancel()
 }
 
-func (s *contextSuite) TestThrow(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestThrow(t *testing.T) {
+	t.Parallel()
 	stdCtx := context.Background()
 	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx, cancel := WithCancel(ctx)
 	ctx = WithErrorHandler(ctx, func(err error) error {
-		c.Assert(err.Error(), check.Equals, "mock error")
+		require.Equal(t, err.Error(), "mock error")
 		cancel()
 		return nil
 	})
@@ -95,8 +88,8 @@ func (s *contextSuite) TestThrow(c *check.C) {
 	<-ctx.Done()
 }
 
-func (s *contextSuite) TestThrowCascade(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestThrowCascade(t *testing.T) {
+	t.Parallel()
 	stdCtx := context.Background()
 	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx, cancel := WithCancel(ctx)
@@ -107,7 +100,7 @@ func (s *contextSuite) TestThrowCascade(c *check.C) {
 		} else if err.Error() == "mock error2" {
 			errNum2++
 		} else {
-			c.Fail()
+			require.Fail(t, "TestThrowCascade fail")
 		}
 		return nil
 	})
@@ -118,25 +111,25 @@ func (s *contextSuite) TestThrowCascade(c *check.C) {
 		} else if err.Error() == "mock error3" {
 			errNum3++
 		} else {
-			c.Fail()
+			require.Fail(t, "TestThrowCascade fail")
 		}
 		return nil
 	})
 	ctx2.Throw(errors.New("mock error2"))
 	ctx2.Throw(errors.New("mock error3"))
 	ctx.Throw(errors.New("mock error"))
-	c.Assert(errNum1, check.Equals, 1)
-	c.Assert(errNum2, check.Equals, 2)
-	c.Assert(errNum3, check.Equals, 1)
+	require.Equal(t, errNum1, 1)
+	require.Equal(t, errNum2, 2)
+	require.Equal(t, errNum3, 1)
 	cancel()
 	<-ctx.Done()
 }
 
-func (s *contextSuite) TestThrowPanic(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestThrowPanic(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		panicMsg := recover()
-		c.Assert(panicMsg, check.Equals, "an error has escaped, please report a bug{error 26 0  mock error}")
+		require.Equal(t, panicMsg, "an error has escaped, please report a bug{error 26 0  mock error}")
 	}()
 	stdCtx := context.Background()
 	ctx := NewContext(stdCtx, &GlobalVars{})

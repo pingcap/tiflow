@@ -19,14 +19,15 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/etcd"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"go.etcd.io/etcd/clientv3"
@@ -143,7 +144,7 @@ type tableInfo struct {
 type cluster struct {
 	ownerAddr  string
 	captures   map[string][]*tableInfo
-	cdcEtcdCli kv.CDCEtcdClient
+	cdcEtcdCli etcd.CDCEtcdClient
 }
 
 func newCluster(ctx context.Context, pd string) (*cluster, error) {
@@ -177,7 +178,7 @@ func newCluster(ctx context.Context, pd string) (*cluster, error) {
 	ret := &cluster{
 		ownerAddr:  "",
 		captures:   nil,
-		cdcEtcdCli: kv.NewCDCEtcdClient(ctx, etcdCli),
+		cdcEtcdCli: etcd.NewCDCEtcdClient(ctx, etcdCli),
 	}
 
 	log.Info("new cluster initialized")
@@ -186,7 +187,7 @@ func newCluster(ctx context.Context, pd string) (*cluster, error) {
 }
 
 func (c *cluster) refreshInfo(ctx context.Context) error {
-	ownerID, err := c.cdcEtcdCli.GetOwnerID(ctx, kv.CaptureOwnerKey)
+	ownerID, err := c.cdcEtcdCli.GetOwnerID(ctx, etcd.CaptureOwnerKey)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -265,7 +266,7 @@ func moveTable(ctx context.Context, ownerAddr string, changefeed string, target 
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return errors.Trace(err)
 		}

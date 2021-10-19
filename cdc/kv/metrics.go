@@ -79,6 +79,13 @@ var (
 			Name:      "region_token",
 			Help:      "size of region token in kv client",
 		}, []string{"store", "changefeed", "capture"})
+	cachedRegionSize = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "cached_region",
+			Help:      "cached region that has not requested to TiKV in kv client",
+		}, []string{"store", "changefeed", "capture"})
 	batchResolvedEventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -87,13 +94,6 @@ var (
 			Help:      "The number of region in one batch resolved ts event",
 			Buckets:   prometheus.ExponentialBuckets(2, 2, 16),
 		}, []string{"capture", "changefeed"})
-	etcdRequestCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "etcd",
-			Name:      "request_count",
-			Help:      "request counter of etcd operation",
-		}, []string{"type", "capture"})
 	grpcPoolStreamGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -113,8 +113,8 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(sendEventCounter)
 	registry.MustRegister(clientChannelSize)
 	registry.MustRegister(clientRegionTokenSize)
+	registry.MustRegister(cachedRegionSize)
 	registry.MustRegister(batchResolvedEventSize)
-	registry.MustRegister(etcdRequestCounter)
 	registry.MustRegister(grpcPoolStreamGauge)
 
 	// Register client metrics to registry.

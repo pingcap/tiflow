@@ -196,7 +196,7 @@ var defaultServerConfig = &ServerConfig{
 		SortDir:                DefaultSortDir,
 	},
 	Security:            &SecurityConfig{},
-	PerTableMemoryQuota: 20 * 1024 * 1024, // 20MB
+	PerTableMemoryQuota: 10 * 1024 * 1024, // 10MB
 	KVClient: &KVClientConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
@@ -308,39 +308,22 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		}
 	}
 
+	defaultCfg := GetDefaultServerConfig()
 	if c.Sorter == nil {
-		c.Sorter = defaultServerConfig.Sorter
+		c.Sorter = defaultCfg.Sorter
 	}
 	c.Sorter.SortDir = DefaultSortDir
-
-	if c.Sorter.ChunkSizeLimit < 1*1024*1024 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
-	}
-	if c.Sorter.NumConcurrentWorker < 1 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-concurrent-worker should be at least 1")
-	}
-	if c.Sorter.NumWorkerPoolGoroutine > 4096 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at most 4096")
-	}
-	if c.Sorter.NumConcurrentWorker > c.Sorter.NumWorkerPoolGoroutine {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-concurrent-worker larger than num-workerpool-goroutine is useless")
-	}
-	if c.Sorter.NumWorkerPoolGoroutine < 1 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at least 1, larger than 8 is recommended")
-	}
-	if c.Sorter.MaxMemoryPressure < 0 || c.Sorter.MaxMemoryPressure > 100 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage")
+	err := c.Sorter.ValidateAndAdjust()
+	if err != nil {
+		return err
 	}
 
 	if c.PerTableMemoryQuota == 0 {
-		c.PerTableMemoryQuota = defaultServerConfig.PerTableMemoryQuota
-	}
-	if c.PerTableMemoryQuota < 6*1024*1024 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
+		c.PerTableMemoryQuota = defaultCfg.PerTableMemoryQuota
 	}
 
 	if c.KVClient == nil {
-		c.KVClient = defaultServerConfig.KVClient
+		c.KVClient = defaultCfg.KVClient
 	}
 	if c.KVClient.WorkerConcurrent <= 0 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")

@@ -34,6 +34,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// DDLPullerTableName is the fake table name for ddl puller
+const DDLPullerTableName = "DDL_PULLER"
+
 const (
 	defaultPullerEventChanSize  = 128
 	defaultPullerOutputChanSize = 128
@@ -162,7 +165,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			// be ignored since no late data is received and the guarantee of
 			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
-				log.Warn("The CRTs is fallen back in pulelr",
+				log.Warn("The CRTs is fallen back in puller",
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),

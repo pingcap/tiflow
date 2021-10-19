@@ -55,7 +55,7 @@ const (
 type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
-	changefeed   *model.ChangefeedReactorState
+	changefeed   *orchestrator.ChangefeedReactorState
 
 	tables map[model.TableID]tablepipeline.TablePipeline
 
@@ -119,7 +119,7 @@ func newProcessor4Test(ctx cdcContext.Context,
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
-func (p *processor) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState) (orchestrator.ReactorState, error) {
+func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
 	p.changefeed = state
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
@@ -161,7 +161,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 }
 
-func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
+func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
 	p.changefeed = state
 	if !p.checkChangefeedNormal() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
@@ -287,12 +287,13 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
-	s, err := sink.NewSink(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
+	s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs)
+	captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
 	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}
 	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
@@ -355,7 +356,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 					cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
 				patchOperation(tableID, func(operation *model.TableOperation) error {
 					operation.Status = model.OperFinished
-					operation.Done = true
 					return nil
 				})
 				continue
@@ -384,7 +384,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 				patchOperation(tableID, func(operation *model.TableOperation) error {
 					operation.BoundaryTs = table.CheckpointTs()
 					operation.Status = model.OperFinished
-					operation.Done = true
 					return nil
 				})
 				p.removeTable(table, tableID)
@@ -429,7 +428,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 				if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
 					patchOperation(tableID, func(operation *model.TableOperation) error {
 						operation.Status = model.OperFinished
-						operation.Done = true
 						return nil
 					})
 					log.Debug("Operation done signal received",
@@ -449,8 +447,10 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	kvStorage := ctx.GlobalVars().KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
+	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	ddlPuller := puller.NewPuller(
-		ctx,
+		stdCtx,
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
@@ -466,7 +466,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-		p.sendError(ddlPuller.Run(ctx))
+		p.sendError(ddlPuller.Run(stdCtx))
 	}()
 	ddlRawKVCh := puller.SortOutput(ctx, ddlPuller.Output())
 	p.wg.Add(1)

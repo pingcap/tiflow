@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	redo "github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -44,16 +45,26 @@ type Manager struct {
 	flushing int64
 
 	drawbackChan chan drawbackMsg
+
+	captureAddr               string
+	changefeedID              model.ChangeFeedID
+	metricsTableSinkTotalRows prometheus.Counter
 }
 
 // NewManager creates a new Sink manager
-func NewManager(ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts) *Manager {
+func NewManager(
+	ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts,
+	captureAddr string, changefeedID model.ChangeFeedID,
+) *Manager {
 	drawbackChan := make(chan drawbackMsg, 16)
 	return &Manager{
-		backendSink:  newBufferSink(ctx, backendSink, errCh, checkpointTs, drawbackChan),
-		checkpointTs: checkpointTs,
-		tableSinks:   make(map[model.TableID]*tableSink),
-		drawbackChan: drawbackChan,
+		backendSink:               newBufferSink(ctx, backendSink, errCh, checkpointTs, drawbackChan),
+		checkpointTs:              checkpointTs,
+		tableSinks:                make(map[model.TableID]*tableSink),
+		drawbackChan:              drawbackChan,
+		captureAddr:               captureAddr,
+		changefeedID:              changefeedID,
+		metricsTableSinkTotalRows: tableSinkTotalRowsCountCounter.WithLabelValues(captureAddr, changefeedID),
 	}
 }
 
@@ -77,6 +88,7 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
 func (m *Manager) Close(ctx context.Context) error {
+	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
 	return m.backendSink.Close(ctx)
 }
 
@@ -88,9 +100,9 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 	}
 	minTs := model.Ts(math.MaxUint64)
 	for _, tableSink := range m.tableSinks {
-		resolvedTs := tableSink.getResolvedTs()
-		if minTs > resolvedTs {
-			minTs = resolvedTs
+		emittedTs := tableSink.getEmittedTs()
+		if minTs > emittedTs {
+			minTs = emittedTs
 		}
 	}
 	return minTs
@@ -158,6 +170,7 @@ func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	if t.redoManager.Enabled() {
 		return t.redoManager.EmitRowChangedEvents(ctx, t.tableID, rows...)
 	}
+	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
 	return nil
 }
 
@@ -200,10 +213,10 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	return t.manager.flushBackendSink(ctx)
 }
 
-// getResolvedTs returns resolved ts, which means all events before resolved ts
+// getEmittedTs returns resolved ts, which means all events before resolved ts
 // have been sent to sink manager, if redo log is enabled, it also means all events
 // before resolved ts have been persisted to redo log storage.
-func (t *tableSink) getResolvedTs() uint64 {
+func (t *tableSink) getEmittedTs() uint64 {
 	ts := atomic.LoadUint64(&t.emittedTs)
 	if t.redoManager.Enabled() {
 		redoResolvedTs := t.redoManager.GetMinResolvedTs()
@@ -268,6 +281,13 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 	metricFlushDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "Flush")
 	metricEmitRowDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "EmitRow")
 	metricBufferSize := bufferChanSizeGauge.WithLabelValues(advertiseAddr, changefeedID)
+	metricTotalRows := bufferSinkTotalRowsCountCounter.WithLabelValues(advertiseAddr, changefeedID)
+	defer func() {
+		flushRowChangedDuration.DeleteLabelValues(advertiseAddr, changefeedID, "Flush")
+		flushRowChangedDuration.DeleteLabelValues(advertiseAddr, changefeedID, "EmitRow")
+		bufferChanSizeGauge.DeleteLabelValues(advertiseAddr, changefeedID)
+		bufferSinkTotalRowsCountCounter.DeleteLabelValues(advertiseAddr, changefeedID)
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -288,6 +308,7 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				i := sort.Search(len(rows), func(i int) bool {
 					return rows[i].CommitTs > resolvedTs
 				})
+				metricTotalRows.Add(float64(i))
 
 				start := time.Now()
 				err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)

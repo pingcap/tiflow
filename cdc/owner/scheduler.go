@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"go.uber.org/zap"
 )
 
@@ -35,7 +36,7 @@ type schedulerJob struct {
 	Tp      schedulerJobType
 	TableID model.TableID
 	// if the operation is a delete operation, boundaryTs is checkpoint ts
-	// if the operation is a add operation, boundaryTs is start ts
+	// if the operation is an add operation, boundaryTs is start ts
 	BoundaryTs    uint64
 	TargetCapture model.CaptureID
 }
@@ -46,7 +47,7 @@ type moveTableJob struct {
 }
 
 type scheduler struct {
-	state         *model.ChangefeedReactorState
+	state         *orchestrator.ChangefeedReactorState
 	currentTables []model.TableID
 	captures      map[model.CaptureID]*model.CaptureInfo
 
@@ -65,7 +66,7 @@ func newScheduler() *scheduler {
 // Tick is the main function of scheduler. It dispatches tables to captures and handles move-table and rebalance events.
 // Tick returns a bool representing whether the changefeed's state can be updated in this tick.
 // The state can be updated only if all the tables which should be listened to have been dispatched to captures and no operations have been sent to captures in this tick.
-func (s *scheduler) Tick(state *model.ChangefeedReactorState, currentTables []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (shouldUpdateState bool, err error) {
+func (s *scheduler) Tick(state *orchestrator.ChangefeedReactorState, currentTables []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (shouldUpdateState bool, err error) {
 	s.state = state
 	s.currentTables = currentTables
 	s.captures = captures
@@ -161,8 +162,9 @@ func (s *scheduler) table2CaptureIndex() (map[model.TableID]model.CaptureID, err
 	return table2CaptureIndex, nil
 }
 
-// dispatchToTargetCaptures sets the the TargetCapture of scheduler jobs
-// If the TargetCapture of a job is not set, it chooses a capture with the minimum workload and sets the TargetCapture to the capture.
+// dispatchToTargetCaptures sets the TargetCapture of scheduler jobs
+// If the TargetCapture of a job is not set, it chooses a capture with the minimum workload(minimum number of tables)
+// and sets the TargetCapture to the capture.
 func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
 	workloads := make(map[model.CaptureID]uint64)
 

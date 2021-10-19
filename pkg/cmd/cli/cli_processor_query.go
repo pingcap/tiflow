@@ -14,12 +14,12 @@
 package cli
 
 import (
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +30,7 @@ type processorMeta struct {
 
 // queryProcessorOptions defines flags for the `cli processor query` command.
 type queryProcessorOptions struct {
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 
 	changefeedID string
 	captureID    string
@@ -88,6 +88,7 @@ func newCmdQueryProcessor(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "query",
 		Short: "Query information and status of a sub replication task (processor)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {

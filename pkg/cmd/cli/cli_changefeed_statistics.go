@@ -17,7 +17,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/pkg/etcd"
+
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
@@ -36,7 +37,7 @@ type status struct {
 
 // statisticsChangefeedOptions defines flags for the `cli changefeed statistics` command.
 type statisticsChangefeedOptions struct {
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 	pdClient   pd.Client
 
 	changefeedID string
@@ -138,6 +139,7 @@ func newCmdStatisticsChangefeed(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "statistics",
 		Short: "Periodically check and output the status of a replication task (changefeed)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {

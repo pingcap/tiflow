@@ -26,6 +26,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/redo"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/prometheus/client_golang/prometheus"
@@ -35,12 +37,12 @@ import (
 
 type changefeed struct {
 	id    model.ChangeFeedID
-	state *model.ChangefeedReactorState
+	state *orchestrator.ChangefeedReactorState
 
 	scheduler        *scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	gcManager        GcManager
+	gcManager        gc.Manager
 	redoManager      redo.LogManager
 
 	schema      *schemaWrap4Owner
@@ -70,7 +72,7 @@ type changefeed struct {
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
+func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 	c := &changefeed{
 		id:               id,
 		scheduler:        newScheduler(),
@@ -88,7 +90,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, gcManager GcManager,
+	id model.ChangeFeedID, gcManager gc.Manager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
@@ -98,7 +100,7 @@ func newChangefeed4Test(
 	return c
 }
 
-func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
+func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		c.errCh <- errors.Trace(err)
 		return nil
@@ -112,7 +114,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		} else {
 			code = string(cerror.ErrOwnerUnknown.RFCCode())
 		}
-		c.feedStateManager.HandleError(&model.RunningError{
+		c.feedStateManager.handleError(&model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
 			Code:    code,
 			Message: err.Error(),
@@ -124,14 +126,14 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
 	state := c.state.Info.State
 	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
-		if err := c.gcManager.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
+		if err := c.gcManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
 	return nil
 }
 
-func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
+func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	c.state = state
 	c.feedStateManager.Tick(state)
 	if !c.feedStateManager.ShouldRunning() {
@@ -204,7 +206,19 @@ LOOP:
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
 	if c.state.Info.Config.CheckGCSafePoint {
-		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, checkpointTs)
+		// Check TiDB GC safepoint does not exceed the checkpoint.
+		//
+		// We update TTL to 10 minutes,
+		//  1. to delete the service GC safepoint effectively,
+		//  2. in case owner update TiCDC service GC safepoint fails.
+		//
+		// Also it unblocks TiDB GC, because the service GC safepoint is set to
+		// 1 hour TTL during creating changefeed.
+		//
+		// See more gc doc.
+		ensureTTL := int64(10 * 60)
+		err := gc.EnsureChangefeedStartTsSafety(
+			ctx, ctx.GlobalVars().PDClient, c.state.ID, ensureTTL, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}

@@ -18,10 +18,10 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -35,7 +35,7 @@ type changefeedCommonInfo struct {
 
 // listChangefeedOptions defines flags for the `cli changefeed list` command.
 type listChangefeedOptions struct {
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 
 	credential *security.Credential
 
@@ -122,6 +122,7 @@ func newCmdListChangefeed(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "list",
 		Short: "List all replication tasks (changefeeds) in TiCDC cluster",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {
