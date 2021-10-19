@@ -26,8 +26,8 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/puller"
-	pullerSorter "github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/config"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -66,7 +66,7 @@ func main() {
 		log.Error("sorter_stress_test:", zap.Error(err))
 	}
 
-	sorter, err := pullerSorter.NewUnifiedSorter(*sorterDir, "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := unified.NewUnifiedSorter(*sorterDir, "test-cf", "test", 0, "0.0.0.0:0")
 	if err != nil {
 		log.Panic("sorter_stress_test:", zap.Error(err))
 	}
@@ -76,7 +76,7 @@ func main() {
 	eg, ctx := errgroup.WithContext(ctx1)
 
 	eg.Go(func() error {
-		return pullerSorter.RunWorkerPool(ctx)
+		return unified.RunWorkerPool(ctx)
 	})
 
 	eg.Go(func() error {
@@ -135,7 +135,7 @@ func main() {
 	}
 }
 
-func generateGroup(ctx context.Context, sorter puller.EventSorter) {
+func generateGroup(ctx context.Context, sorter sorter.EventSorter) {
 	for i := 0; i < *msgsPerBatch; i++ {
 		ts := (i << 5) + rand.Intn(256)
 		event := model.NewPolymorphicEvent(newMockRawKV(uint64(ts)))

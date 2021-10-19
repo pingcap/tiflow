@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sorter
+package unified
 
 import (
 	"context"
@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/sorter"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
@@ -127,7 +127,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	log.Info("Sorter successfully cancelled")
 }
 
-func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, count int) error {
+func testSorter(ctx context.Context, c *check.C, sorter sorter.EventSorter, count int) error {
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))

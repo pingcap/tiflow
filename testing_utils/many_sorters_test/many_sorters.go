@@ -27,8 +27,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/puller"
-	pullerSorter "github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
@@ -70,17 +70,17 @@ func main() {
 		log.Error("sorter_stress_test:", zap.Error(err))
 	}
 
-	sorters := make([]puller.EventSorter, *numSorters)
+	sorters := make([]sorter.EventSorter, *numSorters)
 	ctx0, cancel := context.WithCancel(context.Background())
 	errg, ctx := errgroup.WithContext(ctx0)
 
 	errg.Go(func() error {
-		return pullerSorter.RunWorkerPool(ctx)
+		return unified.RunWorkerPool(ctx)
 	})
 
 	var finishCount int32
 	for i := 0; i < *numSorters; i++ {
-		sorters[i], err = pullerSorter.NewUnifiedSorter(*sorterDir,
+		sorters[i], err = unified.NewUnifiedSorter(*sorterDir,
 			"test-cf",
 			fmt.Sprintf("test-%d", i),
 			model.TableID(i),
