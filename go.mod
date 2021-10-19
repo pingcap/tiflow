@@ -19,6 +19,7 @@ require (
 	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/gin-gonic/gin v1.7.0
 	github.com/go-sql-driver/mysql v1.6.0
+	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang/protobuf v1.5.2
 	github.com/google/btree v1.0.0
 	github.com/google/go-cmp v0.5.6
@@ -68,3 +69,6 @@ require (
 	sigs.k8s.io/yaml v1.2.0 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
+
+// Fix CVE-2020-26160.
+replace github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt v3.2.1+incompatible
