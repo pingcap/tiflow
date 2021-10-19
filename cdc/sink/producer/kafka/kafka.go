@@ -58,7 +58,7 @@ type Config struct {
 func NewConfig() *Config {
 	return &Config{
 		Version:           "2.4.0",
-		MaxMessageBytes:   512 * 1024 * 1024, // 512MB
+		MaxMessageBytes:   512 * 1024 * 1024, // 512M
 		ReplicationFactor: 1,
 		Compression:       "none",
 		Credential:        &security.Credential{},
