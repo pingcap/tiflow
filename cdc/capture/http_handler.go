@@ -656,11 +656,7 @@ func (h *HTTPHandler) ListCapture(c *gin.Context) {
 		return
 	}
 
-<<<<<<< HEAD
 	ownerID, err := h.capture.etcdClient.GetOwnerID(c, kv.CaptureOwnerKey)
-=======
-	ownerID, err := h.capture.etcdClient.GetOwnerID(ctx, etcd.CaptureOwnerKey)
->>>>>>> 8e77196a6 (http_handler: fix a bug that will lead cdc to consume cpu hugely (#3074))
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
