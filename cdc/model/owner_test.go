@@ -14,21 +14,15 @@
 package model
 
 import (
+	"github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
-
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-func TestSuite(t *testing.T) { check.TestingT(t) }
+func TestAdminJobType(t *testing.T) {
+	t.Parallel()
 
-type ownerCommonSuite struct{}
-
-var _ = check.Suite(&ownerCommonSuite{})
-
-func (s *ownerCommonSuite) TestAdminJobType(c *check.C) {
-	defer testleak.AfterTest(c)()
 	names := map[AdminJobType]string{
 		AdminNone:         "noop",
 		AdminStop:         "stop changefeed",
@@ -38,7 +32,7 @@ func (s *ownerCommonSuite) TestAdminJobType(c *check.C) {
 		AdminJobType(100): "unknown",
 	}
 	for job, name := range names {
-		c.Assert(job.String(), check.Equals, name)
+		require.Equal(t, name, job.String())
 	}
 
 	isStopped := map[AdminJobType]bool{
@@ -49,12 +43,13 @@ func (s *ownerCommonSuite) TestAdminJobType(c *check.C) {
 		AdminFinish: true,
 	}
 	for job, stopped := range isStopped {
-		c.Assert(job.IsStopState(), check.Equals, stopped)
+		require.Equal(t, stopped, job.IsStopState())
 	}
 }
 
-func (s *ownerCommonSuite) TestDDLStateString(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestDDLStateString(t *testing.T) {
+	t.Parallel()
+
 	names := map[ChangeFeedDDLState]string{
 		ChangeFeedSyncDML:          "SyncDML",
 		ChangeFeedWaitToExecDDL:    "WaitToExecDDL",
@@ -63,12 +58,13 @@ func (s *ownerCommonSuite) TestDDLStateString(c *check.C) {
 		ChangeFeedDDLState(100):    "Unknown",
 	}
 	for state, name := range names {
-		c.Assert(state.String(), check.Equals, name)
+		require.Equal(t, name, state.String())
 	}
 }
 
-func (s *ownerCommonSuite) TestTaskPositionMarshal(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestTaskPositionMarshal(t *testing.T) {
+	t.Parallel()
+
 	pos := &TaskPosition{
 		ResolvedTs:   420875942036766723,
 		CheckPointTs: 420875940070686721,
@@ -76,18 +72,19 @@ func (s *ownerCommonSuite) TestTaskPositionMarshal(c *check.C) {
 	expected := `{"checkpoint-ts":420875940070686721,"resolved-ts":420875942036766723,"count":0,"error":null}`
 
 	data, err := pos.Marshal()
-	c.Assert(err, check.IsNil)
-	c.Assert(data, check.DeepEquals, expected)
-	c.Assert(pos.String(), check.Equals, expected)
+	require.Nil(t, err)
+	require.Equal(t, expected, data)
+	require.Equal(t, expected, pos.String())
 
 	newPos := &TaskPosition{}
 	err = newPos.Unmarshal([]byte(data))
-	c.Assert(err, check.IsNil)
-	c.Assert(newPos, check.DeepEquals, pos)
+	require.Nil(t, err)
+	require.Equal(t, pos, newPos)
 }
 
-func (s *ownerCommonSuite) TestChangeFeedStatusMarshal(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestChangeFeedStatusMarshal(t *testing.T) {
+	t.Parallel()
+
 	status := &ChangeFeedStatus{
 		ResolvedTs:   420875942036766723,
 		CheckpointTs: 420875940070686721,
@@ -95,17 +92,18 @@ func (s *ownerCommonSuite) TestChangeFeedStatusMarshal(c *check.C) {
 	expected := `{"resolved-ts":420875942036766723,"checkpoint-ts":420875940070686721,"admin-job-type":0}`
 
 	data, err := status.Marshal()
-	c.Assert(err, check.IsNil)
-	c.Assert(data, check.DeepEquals, expected)
+	require.Nil(t, err)
+	require.Equal(t, expected, data)
 
 	newStatus := &ChangeFeedStatus{}
 	err = newStatus.Unmarshal([]byte(data))
-	c.Assert(err, check.IsNil)
-	c.Assert(newStatus, check.DeepEquals, status)
+	require.Nil(t, err)
+	require.Equal(t, status, newStatus)
 }
 
-func (s *ownerCommonSuite) TestTableOperationState(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestTableOperationState(t *testing.T) {
+	t.Parallel()
+
 	processedMap := map[uint64]bool{
 		OperDispatched: false,
 		OperProcessed:  true,
@@ -120,20 +118,21 @@ func (s *ownerCommonSuite) TestTableOperationState(c *check.C) {
 
 	for status, processed := range processedMap {
 		o.Status = status
-		c.Assert(o.TableProcessed(), check.Equals, processed)
+		require.Equal(t, processed, o.TableProcessed())
 	}
 	for status, applied := range appliedMap {
 		o.Status = status
-		c.Assert(o.TableApplied(), check.Equals, applied)
+		require.Equal(t, applied, o.TableApplied())
 	}
 
 	// test clone nil operation. no-nil clone will be tested in `TestShouldBeDeepCopy`
 	var nilTableOper *TableOperation
-	c.Assert(nilTableOper.Clone(), check.IsNil)
+	require.Nil(t, nilTableOper.Clone())
 }
 
-func (s *ownerCommonSuite) TestTaskWorkloadMarshal(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestTaskWorkloadMarshal(t *testing.T) {
+	t.Parallel()
+
 	workload := &TaskWorkload{
 		12: WorkloadInfo{Workload: uint64(1)},
 		15: WorkloadInfo{Workload: uint64(3)},
@@ -141,26 +140,27 @@ func (s *ownerCommonSuite) TestTaskWorkloadMarshal(c *check.C) {
 	expected := `{"12":{"workload":1},"15":{"workload":3}}`
 
 	data, err := workload.Marshal()
-	c.Assert(err, check.IsNil)
-	c.Assert(data, check.Equals, expected)
+	require.Nil(t, err)
+	require.Equal(t, expected, data)
 
 	newWorkload := &TaskWorkload{}
 	err = newWorkload.Unmarshal([]byte(data))
-	c.Assert(err, check.IsNil)
-	c.Assert(newWorkload, check.DeepEquals, workload)
+	require.Nil(t, err)
+	require.Equal(t, workload, newWorkload)
 
 	workload = nil
 	data, err = workload.Marshal()
-	c.Assert(err, check.IsNil)
-	c.Assert(data, check.Equals, "{}")
+	require.Nil(t, err)
+	require.Equal(t, "{}", data)
 }
 
 type taskStatusSuite struct{}
 
 var _ = check.Suite(&taskStatusSuite{})
 
-func (s *taskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestShouldBeDeepCopy(t *testing.T) {
+	t.Parallel()
+
 	info := TaskStatus{
 
 		Tables: map[TableID]*TableReplicaInfo{
@@ -182,21 +182,21 @@ func (s *taskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
 
 	clone := info.Clone()
 	assertIsSnapshot := func() {
-		c.Assert(clone.Tables, check.DeepEquals, map[TableID]*TableReplicaInfo{
+		require.Equal(t, map[TableID]*TableReplicaInfo{
 			1: {StartTs: 100},
 			2: {StartTs: 100},
 			3: {StartTs: 100},
 			4: {StartTs: 100},
-		})
-		c.Assert(clone.Operation, check.DeepEquals, map[TableID]*TableOperation{
+		}, clone.Tables)
+		require.Equal(t, map[TableID]*TableOperation{
 			5: {
 				Delete: true, BoundaryTs: 6,
 			},
 			6: {
 				Delete: false, BoundaryTs: 7,
 			},
-		})
-		c.Assert(clone.AdminJobType, check.Equals, AdminStop)
+		}, clone.Operation)
+		require.Equal(t, AdminStop, clone.AdminJobType)
 	}
 
 	assertIsSnapshot()
@@ -210,8 +210,9 @@ func (s *taskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
 	assertIsSnapshot()
 }
 
-func (s *taskStatusSuite) TestProcSnapshot(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestProcSnapshot(t *testing.T) {
+	t.Parallel()
+
 	info := TaskStatus{
 		Tables: map[TableID]*TableReplicaInfo{
 			10: {StartTs: 100},
@@ -220,14 +221,15 @@ func (s *taskStatusSuite) TestProcSnapshot(c *check.C) {
 	cfID := "changefeed-1"
 	captureID := "capture-1"
 	snap := info.Snapshot(cfID, captureID, 200)
-	c.Assert(snap.CfID, check.Equals, cfID)
-	c.Assert(snap.CaptureID, check.Equals, captureID)
-	c.Assert(snap.Tables, check.HasLen, 1)
-	c.Assert(snap.Tables[10], check.DeepEquals, &TableReplicaInfo{StartTs: 200})
+	require.Equal(t, cfID, snap.CfID)
+	require.Equal(t, captureID, snap.CaptureID)
+	require.Equal(t, 1, len(snap.Tables))
+	require.Equal(t, &TableReplicaInfo{StartTs: 200}, snap.Tables[10])
 }
 
-func (s *taskStatusSuite) TestTaskStatusMarshal(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestTaskStatusMarshal(t *testing.T) {
+	t.Parallel()
+
 	status := &TaskStatus{
 		Tables: map[TableID]*TableReplicaInfo{
 			1: {StartTs: 420875942036766723},
@@ -236,18 +238,19 @@ func (s *taskStatusSuite) TestTaskStatusMarshal(c *check.C) {
 	expected := `{"tables":{"1":{"start-ts":420875942036766723,"mark-table-id":0}},"operation":null,"admin-job-type":0}`
 
 	data, err := status.Marshal()
-	c.Assert(err, check.IsNil)
-	c.Assert(data, check.DeepEquals, expected)
-	c.Assert(status.String(), check.Equals, expected)
+	require.Nil(t, err)
+	require.Equal(t, expected, data)
+	require.Equal(t, expected, status.String())
 
 	newStatus := &TaskStatus{}
 	err = newStatus.Unmarshal([]byte(data))
-	c.Assert(err, check.IsNil)
-	c.Assert(newStatus, check.DeepEquals, status)
+	require.Nil(t, err)
+	require.Equal(t, status, newStatus)
 }
 
-func (s *taskStatusSuite) TestAddTable(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestAddTable(t *testing.T) {
+	t.Parallel()
+
 	ts := uint64(420875942036766723)
 	expected := &TaskStatus{
 		Tables: map[TableID]*TableReplicaInfo{
@@ -262,35 +265,33 @@ func (s *taskStatusSuite) TestAddTable(c *check.C) {
 	}
 	status := &TaskStatus{}
 	status.AddTable(1, &TableReplicaInfo{StartTs: ts}, ts)
-	c.Assert(status, check.DeepEquals, expected)
+	require.Equal(t, expected, status)
 
 	// add existing table does nothing
 	status.AddTable(1, &TableReplicaInfo{StartTs: 1}, 1)
-	c.Assert(status, check.DeepEquals, expected)
+	require.Equal(t, expected, status)
 }
 
-func (s *taskStatusSuite) TestTaskStatusApplyState(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestTaskStatusApplyState(t *testing.T) {
+	t.Parallel()
+
 	ts1 := uint64(420875042036766723)
 	ts2 := uint64(420876783269969921)
 	status := &TaskStatus{}
 	status.AddTable(1, &TableReplicaInfo{StartTs: ts1}, ts1)
 	status.AddTable(2, &TableReplicaInfo{StartTs: ts2}, ts2)
-	c.Assert(status.SomeOperationsUnapplied(), check.IsTrue)
-	c.Assert(status.AppliedTs(), check.Equals, ts1)
+	require.True(t, status.SomeOperationsUnapplied())
+	require.Equal(t, ts1, status.AppliedTs())
 
 	status.Operation[1].Status = OperFinished
 	status.Operation[2].Status = OperFinished
-	c.Assert(status.SomeOperationsUnapplied(), check.IsFalse)
-	c.Assert(status.AppliedTs(), check.Equals, uint64(math.MaxUint64))
+	require.False(t, status.SomeOperationsUnapplied())
+	require.Equal(t, uint64(math.MaxUint64), status.AppliedTs())
 }
 
-type removeTableSuite struct{}
+func TestMoveTable(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&removeTableSuite{})
-
-func (s *removeTableSuite) TestMoveTable(c *check.C) {
-	defer testleak.AfterTest(c)()
 	info := TaskStatus{
 		Tables: map[TableID]*TableReplicaInfo{
 			1: {StartTs: 100},
@@ -299,23 +300,24 @@ func (s *removeTableSuite) TestMoveTable(c *check.C) {
 	}
 
 	replicaInfo, found := info.RemoveTable(2, 300, true)
-	c.Assert(found, check.IsTrue)
-	c.Assert(replicaInfo, check.DeepEquals, &TableReplicaInfo{StartTs: 200})
-	c.Assert(info.Tables, check.HasKey, int64(1))
-	c.Assert(info.Tables, check.Not(check.HasKey), int64(2))
+	require.True(t, found)
+	require.Equal(t, &TableReplicaInfo{StartTs: 200}, replicaInfo)
+	require.NotNil(t, info.Tables[int64(1)])
+	require.Nil(t, info.Tables[int64(2)])
 	expectedFlag := uint64(1) // OperFlagMoveTable
-	c.Assert(info.Operation, check.DeepEquals, map[int64]*TableOperation{
+	require.Equal(t, map[int64]*TableOperation{
 		2: {
 			Delete:     true,
 			Flag:       expectedFlag,
 			BoundaryTs: 300,
 			Status:     OperDispatched,
 		},
-	})
+	}, info.Operation)
 }
 
-func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestShouldReturnRemovedTable(t *testing.T) {
+	t.Parallel()
+
 	info := TaskStatus{
 		Tables: map[TableID]*TableReplicaInfo{
 			1: {StartTs: 100},
@@ -326,15 +328,16 @@ func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
 	}
 
 	replicaInfo, found := info.RemoveTable(2, 666, false)
-	c.Assert(found, check.IsTrue)
-	c.Assert(replicaInfo, check.DeepEquals, &TableReplicaInfo{StartTs: 200})
+	require.True(t, found)
+	require.Equal(t, &TableReplicaInfo{StartTs: 200}, replicaInfo)
 }
 
-func (s *removeTableSuite) TestShouldHandleTableNotFound(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestShouldHandleTableNotFound(t *testing.T) {
+	t.Parallel()
+
 	info := TaskStatus{}
 	_, found := info.RemoveTable(404, 666, false)
-	c.Assert(found, check.IsFalse)
+	require.False(t, found)
 
 	info = TaskStatus{
 		Tables: map[TableID]*TableReplicaInfo{
@@ -342,5 +345,5 @@ func (s *removeTableSuite) TestShouldHandleTableNotFound(c *check.C) {
 		},
 	}
 	_, found = info.RemoveTable(404, 666, false)
-	c.Assert(found, check.IsFalse)
+	require.False(t, found)
 }

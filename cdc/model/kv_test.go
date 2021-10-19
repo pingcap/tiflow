@@ -14,17 +14,14 @@
 package model
 
 import (
-	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
+	"testing"
 )
 
-type kvSuite struct{}
+func TestRegionFeedEvent(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&kvSuite{})
-
-func (s *kvSuite) TestRegionFeedEvent(c *check.C) {
-	defer testleak.AfterTest(c)()
 	raw := &RawKVEntry{
 		CRTs:   1,
 		OpType: OpTypePut,
@@ -35,19 +32,20 @@ func (s *kvSuite) TestRegionFeedEvent(c *check.C) {
 	}
 
 	ev := &RegionFeedEvent{}
-	c.Assert(ev.GetValue(), check.IsNil)
+	require.Nil(t, ev.GetValue())
 
 	ev = &RegionFeedEvent{Val: raw}
-	c.Assert(ev.GetValue(), check.DeepEquals, raw)
+	require.Equal(t, raw, ev.GetValue())
 
 	ev = &RegionFeedEvent{Resolved: resolved}
-	c.Assert(ev.GetValue(), check.DeepEquals, resolved)
+	require.Equal(t, resolved, ev.GetValue())
 
-	c.Assert(resolved.String(), check.Equals, "span: [61, 62), resolved-ts: 111")
+	require.Equal(t, "span: [61, 62), resolved-ts: 111", resolved.String())
 }
 
-func (s *kvSuite) TestRawKVEntry(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestRawKVEntry(t *testing.T) {
+	t.Parallel()
+
 	raw := &RawKVEntry{
 		StartTs: 100,
 		CRTs:    101,
@@ -56,6 +54,6 @@ func (s *kvSuite) TestRawKVEntry(c *check.C) {
 		Value:   []byte("345"),
 	}
 
-	c.Assert(raw.String(), check.Equals, "OpType: 1, Key: 123, Value: 345, StartTs: 100, CRTs: 101, RegionID: 0")
-	c.Assert(raw.ApproximateSize(), check.Equals, int64(6))
+	require.Equal(t, "OpType: 1, Key: 123, Value: 345, StartTs: 100, CRTs: 101, RegionID: 0", raw.String())
+	require.Equal(t, int64(6), raw.ApproximateSize())
 }

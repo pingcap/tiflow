@@ -14,16 +14,13 @@
 package model
 
 import (
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
+	"testing"
 )
 
-type stringSuite struct{}
+func TestHolderString(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&stringSuite{})
-
-func (s *stringSuite) TestHolderString(c *check.C) {
-	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		count    int
 		expected string
@@ -34,15 +31,16 @@ func (s *stringSuite) TestHolderString(c *check.C) {
 	}
 	for _, tc := range testCases {
 		s := HolderString(tc.count)
-		c.Assert(s, check.Equals, tc.expected)
+		require.Equal(t, tc.expected, s)
 	}
 	// test invalid input
-	c.Assert(func() { HolderString(0) }, check.Panics, "strings.Builder.Grow: negative count")
-	c.Assert(func() { HolderString(-1) }, check.Panics, "strings.Builder.Grow: negative count")
+	require.Panics(t, func() { HolderString(0) }, "strings.Builder.Grow: negative count")
+	require.Panics(t, func() { HolderString(-1) }, "strings.Builder.Grow: negative count")
 }
 
-func (s *stringSuite) TestExtractKeySuffix(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestExtractKeySuffix(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		input  string
 		expect string
@@ -57,10 +55,10 @@ func (s *stringSuite) TestExtractKeySuffix(c *check.C) {
 	for _, tc := range testCases {
 		key, err := ExtractKeySuffix(tc.input)
 		if tc.hasErr {
-			c.Assert(err, check.NotNil)
+			require.NotNil(t, err)
 		} else {
-			c.Assert(err, check.IsNil)
-			c.Assert(key, check.Equals, tc.expect)
+			require.Nil(t, err)
+			require.Equal(t, tc.expect, key)
 		}
 	}
 }
