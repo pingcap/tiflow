@@ -100,7 +100,7 @@ var (
 	ErrMySQLTxnError             = errors.Normalize("MySQL txn error", errors.RFCCodeText("CDC:ErrMySQLTxnError"))
 	ErrMySQLQueryError           = errors.Normalize("MySQL query error", errors.RFCCodeText("CDC:ErrMySQLQueryError"))
 	ErrMySQLConnectionError      = errors.Normalize("MySQL connection error", errors.RFCCodeText("CDC:ErrMySQLConnectionError"))
-	ErrMySQLInvalidConfig        = errors.Normalize("MySQL config invaldi", errors.RFCCodeText("CDC:ErrMySQLInvalidConfig"))
+	ErrMySQLInvalidConfig        = errors.Normalize("MySQL config invalid", errors.RFCCodeText("CDC:ErrMySQLInvalidConfig"))
 	ErrMySQLWorkerPanic          = errors.Normalize("MySQL worker panic", errors.RFCCodeText("CDC:ErrMySQLWorkerPanic"))
 	ErrAvroToEnvelopeError       = errors.Normalize("to envelope failed", errors.RFCCodeText("CDC:ErrAvroToEnvelopeError"))
 	ErrAvroUnknownType           = errors.Normalize("unknown type for Avro: %v", errors.RFCCodeText("CDC:ErrAvroUnknownType"))
