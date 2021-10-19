@@ -753,7 +753,7 @@ sink uri invalid
 
 ["CDC:ErrSnapshotLostByGC"]
 error = '''
-fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than GC safepoint at %d
+fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
 ["CDC:ErrSnapshotSchemaExists"]
