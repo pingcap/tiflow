@@ -34,6 +34,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// DDLPullerTableName is the fake table name for ddl puller
+const DDLPullerTableName = "DDL_PULLER"
+
 const (
 	defaultPullerEventChanSize  = 128
 	defaultPullerOutputChanSize = 128
