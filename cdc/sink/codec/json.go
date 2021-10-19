@@ -424,7 +424,8 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	length := len(keyLenByte[:]) + len(key) + len(valueLenByte[:]) + len(value) + maximumRecordOverhead
+	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
+	length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
 	// for single message that longer than max-message-size, just ignore to send it.
 	if length > d.maxKafkaMessageSize {
 		log.Warn("Single message too large", zap.Int("max-message-size", d.maxKafkaMessageSize), zap.Int("length", length))

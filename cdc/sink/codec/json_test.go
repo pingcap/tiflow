@@ -248,18 +248,12 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 
-	// make producer's `max-message-bytes` must less than event, but we should still send it as possible.
+	// make producer's `max-message-bytes` must less than event, append event should return error.
 	err := encoder.SetParams(map[string]string{"max-message-bytes": "1"})
 	c.Check(err, check.IsNil)
-	for i := 0; i < 100; i++ {
-		r, err := encoder.AppendRowChangedEvent(testEvent)
-		c.Check(r, check.Equals, EncoderNoOperation)
-		c.Check(err, check.IsNil)
-	}
-
-	// one message per batch, and can be build, which means the producer will try to send it.
-	messages := encoder.Build()
-	c.Assert(len(messages), check.Equals, 100)
+	r, err := encoder.AppendRowChangedEvent(testEvent)
+	c.Check(err, check.NotNil)
+	c.Check(r, check.Equals, EncoderNoOperation)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "256"})
@@ -271,7 +265,7 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 		c.Check(err, check.IsNil)
 	}
 
-	messages = encoder.Build()
+	messages := encoder.Build()
 	for _, msg := range messages {
 		c.Assert(msg.Length(), check.LessEqual, 256)
 	}
