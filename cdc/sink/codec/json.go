@@ -424,14 +424,6 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	// for single message that longer than max-message-size, do not send it.
-	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
-	length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
-	if length > d.maxKafkaMessageSize {
-		log.Warn("Single message too large", zap.Int("max-message-size", d.maxKafkaMessageSize), zap.Int("length", length))
-		return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
-	}
-
 	if d.supportMixedBuild {
 		d.keyBuf.Write(keyLenByte[:])
 		d.keyBuf.Write(key)
@@ -439,6 +431,14 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		d.valueBuf.Write(valueLenByte[:])
 		d.valueBuf.Write(value)
 	} else {
+		// for single message that longer than max-message-size, do not send it.
+		// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
+		length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
+		if length > d.maxKafkaMessageSize {
+			log.Warn("Single message too large", zap.Int("max-message-size", d.maxKafkaMessageSize), zap.Int("length", length))
+			return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
+		}
+
 		if len(d.messageBuf) == 0 ||
 			d.curBatchSize >= d.maxBatchSize ||
 			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxKafkaMessageSize {
