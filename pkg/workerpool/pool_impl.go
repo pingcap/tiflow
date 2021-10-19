@@ -181,7 +181,7 @@ func (h *defaultEventHandle) Unregister() {
 
 func (h *defaultEventHandle) GracefulUnregister(ctx context.Context, timeout time.Duration) error {
 	if !atomic.CompareAndSwapInt32(&h.status, handleRunning, handleCancelling) {
-		// already cancelled
+		// already cancelling or cancelled
 		return nil
 	}
 
