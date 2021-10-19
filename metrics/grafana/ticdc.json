@@ -1295,7 +1295,7 @@
               "refId": "A"
             },
             {
-              "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"}) * 1000",
+              "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"})",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -7260,7 +7260,7 @@
               "step": 10
             },
             {
-              "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"}) * 1000",
+              "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"})",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
