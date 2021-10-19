@@ -226,7 +226,7 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 
 	schemas := make(map[int64]*timodel.DBInfo, len(s.schemas))
 	for k, v := range s.schemas {
-		schemas[k] = v.Clone()
+		schemas[k] = v.Copy()
 	}
 	clone.schemas = schemas
 
@@ -389,7 +389,7 @@ func (s *schemaSnapshot) createSchema(db *timodel.DBInfo) error {
 		return cerror.ErrSnapshotSchemaExists.GenWithStackByArgs(db.Name, db.ID)
 	}
 
-	s.schemas[db.ID] = db.Clone()
+	s.schemas[db.ID] = db.Copy()
 	s.schemaNameToID[db.Name.O] = db.ID
 	s.tableInSchema[db.ID] = []int64{}
 
@@ -402,7 +402,7 @@ func (s *schemaSnapshot) replaceSchema(db *timodel.DBInfo) error {
 	if !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("schema %s(%d) not found", db.Name, db.ID)
 	}
-	s.schemas[db.ID] = db.Clone()
+	s.schemas[db.ID] = db.Copy()
 	s.schemaNameToID[db.Name.O] = db.ID
 	return nil
 }
