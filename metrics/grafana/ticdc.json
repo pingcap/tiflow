@@ -7250,7 +7250,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "scalar(max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"})) - avg(tikv_cdc_min_resolved_ts{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}/1000) by (instance) > 0",
+              "expr": "scalar(max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"}))/1000 - avg(tikv_cdc_min_resolved_ts{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}/1000) by (instance) > 0",
               "format": "time_series",
               "hide": false,
               "instant": false,
