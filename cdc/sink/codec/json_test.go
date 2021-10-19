@@ -242,16 +242,25 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := NewJSONEventBatchEncoder()
 
+	// the size of `testEvent` is 87
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 
-	// make producer's `max-message-bytes` must less than event, append event should return error.
-	err := encoder.SetParams(map[string]string{"max-message-bytes": "1"})
+	// for a single message, the overhead is 36(maximumRecordOverhead) + 8(versionHea) = 44, just can hold it.
+	a := strconv.Itoa(87 + 44)
+	err := encoder.SetParams(map[string]string{"max-message-bytes": a})
 	c.Check(err, check.IsNil)
 	r, err := encoder.AppendRowChangedEvent(testEvent)
+	c.Check(err, check.IsNil)
+	c.Check(r, check.Equals, EncoderNoOperation)
+
+	a = strconv.Itoa(87 + 43)
+	err = encoder.SetParams(map[string]string{"max-message-bytes": a})
+	c.Assert(err, check.IsNil)
+	r, err = encoder.AppendRowChangedEvent(testEvent)
 	c.Check(err, check.NotNil)
 	c.Check(r, check.Equals, EncoderNoOperation)
 
