@@ -106,6 +106,22 @@ func (tp *TaskPosition) String() string {
 	return data
 }
 
+func (tp *TaskPosition) Clone() *TaskPosition {
+	ret := &TaskPosition{
+		CheckPointTs: tp.CheckPointTs,
+		ResolvedTs:   tp.ResolvedTs,
+		Count:        tp.Count,
+	}
+	if tp.Error != nil {
+		ret.Error = &RunningError{
+			Addr:    tp.Error.Addr,
+			Code:    tp.Error.Code,
+			Message: tp.Error.Message,
+		}
+	}
+	return ret
+}
+
 // MoveTableStatus represents for the status of a MoveTableJob
 type MoveTableStatus int
 
