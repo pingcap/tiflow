@@ -26,17 +26,11 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/redo/common"
+	"github.com/pingcap/ticdc/pkg/leakutil"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/atomic"
-	"go.uber.org/goleak"
 )
-
-// LeakOptions is used to filter the goroutines.
-var LeakOptions = []goleak.Option{
-	goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
-	goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"),
-}
 
 func TestMain(m *testing.M) {
 	originValue := defaultGCIntervalInMs
@@ -45,7 +39,7 @@ func TestMain(m *testing.M) {
 		defaultGCIntervalInMs = originValue
 	}()
 
-	goleak.VerifyTestMain(m, LeakOptions...)
+	leakutil.SetUpLeakTest(m)
 }
 
 func TestWriterWrite(t *testing.T) {
@@ -63,7 +57,7 @@ func TestWriterWrite(t *testing.T) {
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		},
 		uint64buf: make([]byte, 8),
-		state:     *atomic.NewUint32(started),
+		state:     *atomic.NewBool(started),
 	}
 
 	w.eventCommitTS.Store(1)
@@ -111,20 +105,20 @@ func TestWriterGC(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_1.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_1.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_1.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_1.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_1.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_1.log.tmp").Return(nil).Times(1)
 
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_2.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_2.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_2.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_2.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp").Return(nil).Times(1)
 
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_3.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_3.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_3.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_3.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_3.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_3.log.tmp").Return(nil).Times(1)
 
-	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_1.log").Return(errors.New("ignore err")).Times(1)
-	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_2.log").Return(errors.New("ignore err")).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_1.log").Return(errors.New("ignore err")).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_2.log").Return(errors.New("ignore err")).Times(1)
 
 	megabyte = 1
 	cfg := &FileWriterConfig{
@@ -182,9 +176,8 @@ func TestAdvanceTs(t *testing.T) {
 }
 
 func TestNewWriter(t *testing.T) {
-	require.Panics(t, func() {
-		NewWriter(context.Background(), nil)
-	})
+	_, err := NewWriter(context.Background(), nil)
+	require.NotNil(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -195,20 +188,19 @@ func TestNewWriter(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	require.NotPanics(t, func() {
-		NewWriter(ctx, &FileWriterConfig{
-			Dir:       "sdfsf",
-			S3Storage: true,
-			S3URI:     s3URI,
-		})
+	_, err = NewWriter(ctx, &FileWriterConfig{
+		Dir:       "sdfsf",
+		S3Storage: true,
+		S3URI:     s3URI,
 	})
+	require.Nil(t, err)
 	time.Sleep(time.Duration(defaultFlushIntervalInMs+1000) * time.Millisecond)
 
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_ddl_0.log.tmp", gomock.Any()).Return(nil).Times(2)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_ddl_0.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_ddl_0.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_ddl_0.log.tmp", gomock.Any()).Return(nil).Times(2)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_ddl_0.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_ddl_0.log.tmp").Return(nil).Times(1)
 
 	w := &Writer{
 		cfg: &FileWriterConfig{

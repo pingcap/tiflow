@@ -62,7 +62,8 @@ func TestReader_Read(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	w := writer.NewWriter(ctx, cfg)
+	w, err := writer.NewWriter(ctx, cfg)
+	require.Nil(t, err)
 	log := &model.RedoLog{
 		Row: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 1123}},
 	}
@@ -105,9 +106,10 @@ func TestReader_openSelectedFiles(t *testing.T) {
 		Dir:        dir,
 	}
 	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+common.TmpEXT)
-	w := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
+	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
+	require.Nil(t, err)
 	log := &model.RedoLog{
 		Row: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
 	}

@@ -35,23 +35,29 @@ import (
 )
 
 //go:generate mockery --name=RedoLogWriter --inpackage
-// RedoLogWriter ...
+// RedoLogWriter defines the interfaces used to write redo log, all operations are thread-safe
 type RedoLogWriter interface {
 	io.Closer
 
-	// WriteLog ...
+	// WriteLog writer RedoRowChangedEvent to row log file
 	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) (resolvedTs uint64, err error)
+
 	// SendDDL EmitCheckpointTs and EmitResolvedTs are called from owner only
+	// SendDDL writer RedoDDLEvent to ddl log file
 	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
+
 	// FlushLog sends resolved-ts from table pipeline to log writer, it is
 	// essential to flush when a table doesn't have any row change event for
 	// some time, and the resolved ts of this table should be moved forward.
 	FlushLog(ctx context.Context, tableID int64, ts uint64) error
-	// EmitCheckpointTs ...
+
+	// EmitCheckpointTs write CheckpointTs to meta file
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
-	// EmitResolvedTs ...
+
+	// EmitResolvedTs write ResolvedTs to meta file
 	EmitResolvedTs(ctx context.Context, ts uint64) error
-	// GetCurrentResolvedTs ...
+
+	// GetCurrentResolvedTs return all the ResolvedTs list for given tableIDs
 	GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) (resolvedTsList map[int64]uint64, err error)
 }
 
@@ -82,7 +88,7 @@ type LogWriterConfig struct {
 	S3URI *url.URL
 }
 
-// LogWriter ...
+// LogWriter implement the RedoLogWriter interface
 type LogWriter struct {
 	cfg       *LogWriterConfig
 	rowWriter fileWriter
@@ -94,12 +100,13 @@ type LogWriter struct {
 
 // NewLogWriter creates a LogWriter instance. It is guaranteed only one LogWriter per changefeed
 // TODO: delete log files when changefeed removed, metric
-func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
+func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error) {
+	var errInit error
 	// currently, caller do not have the ability of self-healing, like try to fix if on some error,
 	// so initOnce just literary init once, do not support re-init if fail on some condition
 	initOnce.Do(func() {
 		if cfg == nil {
-			log.Panic("LogWriterConfig can not be nil")
+			errInit = cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("LogWriterConfig can not be nil"))
 			return
 		}
 
@@ -126,10 +133,18 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 			S3URI:             cfg.S3URI,
 		}
 		logWriter = &LogWriter{
-			cfg:       cfg,
-			rowWriter: NewWriter(ctx, rowCfg),
-			ddlWriter: NewWriter(ctx, ddlCfg),
+			cfg: cfg,
 		}
+		logWriter.rowWriter, errInit = NewWriter(ctx, rowCfg)
+		if errInit != nil {
+			return
+		}
+		logWriter.ddlWriter, errInit = NewWriter(ctx, ddlCfg)
+		if errInit != nil {
+			return
+		}
+
+		// since the error will not block write log, so keep go to the next init process
 		err := logWriter.initMeta(ctx)
 		if err != nil {
 			log.Warn("init redo meta fail",
@@ -137,19 +152,20 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 				zap.Error(err))
 		}
 		if cfg.S3Storage {
-			s3storage, err := common.InitS3storage(ctx, cfg.S3URI)
-			if err != nil {
-				log.Panic("initS3storage fail",
-					zap.Error(err),
-					zap.String("change feed", cfg.ChangeFeedID))
+			var s3storage storage.ExternalStorage
+			s3storage, errInit = common.InitS3storage(ctx, cfg.S3URI)
+			if errInit != nil {
+				return
 			}
 			logWriter.storage = s3storage
 		}
 
 		go logWriter.runGC(ctx)
 	})
-
-	return logWriter
+	if errInit != nil {
+		return nil, errInit
+	}
+	return logWriter, nil
 }
 
 func (l *LogWriter) initMeta(ctx context.Context) error {
@@ -165,7 +181,7 @@ func (l *LogWriter) initMeta(ctx context.Context) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't read log file directory"))
+		return cerror.WrapError(cerror.ErrRedoMetaInitialize, errors.Annotate(err, "can't read log file directory"))
 	}
 
 	for _, file := range files {
@@ -173,13 +189,13 @@ func (l *LogWriter) initMeta(ctx context.Context) error {
 			path := filepath.Join(l.cfg.Dir, file.Name())
 			fileData, err := os.ReadFile(path)
 			if err != nil {
-				return cerror.WrapError(cerror.ErrRedoFileOp, err)
+				return cerror.WrapError(cerror.ErrRedoMetaInitialize, err)
 			}
 
 			_, err = l.meta.UnmarshalMsg(fileData)
 			if err != nil {
 				l.meta = &common.LogMeta{ResolvedTsList: map[int64]uint64{}}
-				return cerror.WrapError(cerror.ErrRedoFileOp, err)
+				return cerror.WrapError(cerror.ErrRedoMetaInitialize, err)
 			}
 			break
 		}
@@ -211,10 +227,10 @@ func (l *LogWriter) runGC(ctx context.Context) {
 
 func (l *LogWriter) gc() error {
 	l.metaLock.RLock()
-	defer l.metaLock.RUnlock()
+	ts := l.meta.CheckPointTs
+	l.metaLock.RUnlock()
 
 	var err error
-	ts := l.meta.CheckPointTs
 	err = multierr.Append(err, l.rowWriter.GC(ts))
 	err = multierr.Append(err, l.ddlWriter.GC(ts))
 	return err
@@ -229,7 +245,7 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.R
 	}
 
 	if l.isStopped() {
-		return 0, cerror.ErrRedoWriterStopped
+		return 0, cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 	if len(rows) == 0 {
 		return 0, nil
@@ -272,7 +288,7 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error 
 	}
 
 	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped
+		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 	if ddl == nil || ddl.DDL == nil {
 		return nil
@@ -303,7 +319,7 @@ func (l *LogWriter) FlushLog(ctx context.Context, tableID int64, ts uint64) erro
 	}
 
 	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped
+		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 
 	if err := l.flush(); err != nil {
@@ -322,7 +338,7 @@ func (l *LogWriter) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	}
 
 	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped
+		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 	return l.flushLogMeta(ts, 0)
 }
@@ -336,7 +352,7 @@ func (l *LogWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
 	}
 
 	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped
+		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 
 	return l.flushLogMeta(0, ts)
@@ -451,7 +467,6 @@ func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	log.Debug("tmp file synced", zap.String("tmp file name", tmpFile.Name()))
 	err = os.Rename(tmpFileName, l.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
@@ -460,7 +475,10 @@ func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {
 	if !l.cfg.S3Storage {
 		return nil
 	}
-	return l.writeMetaToS3(context.Background())
+
+	ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
+	defer cancel()
+	return l.writeMetaToS3(ctx)
 }
 
 func (l *LogWriter) writeMetaToS3(ctx context.Context) error {

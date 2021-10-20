@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLogWriter_WriteLog(t *testing.T) {
+func TestLogWriterWriteLog(t *testing.T) {
 	type arg struct {
 		ctx     context.Context
 		tableID int64
@@ -140,7 +140,7 @@ func TestLogWriter_WriteLog(t *testing.T) {
 	}
 }
 
-func TestLogWriter_SendDDL(t *testing.T) {
+func TestLogWriterSendDDL(t *testing.T) {
 	type arg struct {
 		ctx     context.Context
 		tableID int64
@@ -235,7 +235,7 @@ func TestLogWriter_SendDDL(t *testing.T) {
 	}
 }
 
-func TestLogWriter_FlushLog(t *testing.T) {
+func TestLogWriterFlushLog(t *testing.T) {
 	type arg struct {
 		ctx     context.Context
 		tableID int64
@@ -302,7 +302,7 @@ func TestLogWriter_FlushLog(t *testing.T) {
 		controller := gomock.NewController(t)
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 		if tt.isRunning && tt.name != "context cancel" {
-			mockStorage.EXPECT().WriteFile(context.Background(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
+			mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
 		}
 		mockWriter := &mockFileWriter{}
 		mockWriter.On("Flush", mock.Anything).Return(tt.flushErr)
@@ -339,7 +339,7 @@ func TestLogWriter_FlushLog(t *testing.T) {
 	}
 }
 
-func TestLogWriter_EmitCheckpointTs(t *testing.T) {
+func TestLogWriterEmitCheckpointTs(t *testing.T) {
 	type arg struct {
 		ctx context.Context
 		ts  uint64
@@ -391,7 +391,7 @@ func TestLogWriter_EmitCheckpointTs(t *testing.T) {
 		controller := gomock.NewController(t)
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 		if tt.isRunning && tt.name != "context cancel" {
-			mockStorage.EXPECT().WriteFile(context.Background(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
+			mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
 		}
 
 		mockWriter := &mockFileWriter{}
@@ -428,7 +428,7 @@ func TestLogWriter_EmitCheckpointTs(t *testing.T) {
 	}
 }
 
-func TestLogWriter_EmitResolvedTs(t *testing.T) {
+func TestLogWriterEmitResolvedTs(t *testing.T) {
 	type arg struct {
 		ctx context.Context
 
@@ -481,7 +481,7 @@ func TestLogWriter_EmitResolvedTs(t *testing.T) {
 		controller := gomock.NewController(t)
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 		if tt.isRunning && tt.name != "context cancel" {
-			mockStorage.EXPECT().WriteFile(context.Background(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
+			mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
 		}
 		mockWriter := &mockFileWriter{}
 		mockWriter.On("IsRunning").Return(tt.isRunning)
@@ -517,7 +517,7 @@ func TestLogWriter_EmitResolvedTs(t *testing.T) {
 	}
 }
 
-func TestLogWriter_GetCurrentResolvedTs(t *testing.T) {
+func TestLogWriterGetCurrentResolvedTs(t *testing.T) {
 	type arg struct {
 		ctx      context.Context
 		ts       map[int64]uint64
@@ -598,7 +598,8 @@ func TestLogWriter_GetCurrentResolvedTs(t *testing.T) {
 }
 
 func TestNewLogWriter(t *testing.T) {
-	require.Panics(t, func() { NewLogWriter(context.Background(), nil) })
+	_, err := NewLogWriter(context.Background(), nil)
+	require.NotNil(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -612,12 +613,14 @@ func TestNewLogWriter(t *testing.T) {
 	}
 	var ll *LogWriter
 	initOnce = sync.Once{}
-	require.NotPanics(t, func() { ll = NewLogWriter(ctx, cfg) })
+	ll, err = NewLogWriter(ctx, cfg)
+	require.Nil(t, err)
 	time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
 	require.Equal(t, map[int64]uint64{}, ll.meta.ResolvedTsList)
 
 	cfg.Dir += "ttt"
-	ll1 := NewLogWriter(ctx, cfg)
+	ll1, err := NewLogWriter(ctx, cfg)
+	require.Nil(t, err)
 	require.Same(t, ll, ll1)
 
 	dir, err := ioutil.TempDir("", "redo-NewLogWriter")
@@ -639,14 +642,15 @@ func TestNewLogWriter(t *testing.T) {
 
 	cfg.Dir = dir
 	initOnce = sync.Once{}
-	l := NewLogWriter(ctx, cfg)
+	l, err := NewLogWriter(ctx, cfg)
+	require.Nil(t, err)
 	require.Equal(t, cfg.Dir, l.cfg.Dir)
 	require.Equal(t, meta.CheckPointTs, l.meta.CheckPointTs)
 	require.Equal(t, meta.ResolvedTs, l.meta.ResolvedTs)
 	require.Equal(t, map[int64]uint64{}, l.meta.ResolvedTsList)
 }
 
-func TestWriter_GC(t *testing.T) {
+func TestWriterRedoGC(t *testing.T) {
 	cfg := &LogWriterConfig{
 		Dir:               "dir",
 		ChangeFeedID:      "test-cf",

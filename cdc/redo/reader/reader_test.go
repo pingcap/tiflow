@@ -51,9 +51,10 @@ func TestLogReader_ResetReader(t *testing.T) {
 		Dir:        dir,
 	}
 	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf100", time.Now().Unix(), common.DefaultDDLLogFileType, 100, common.LogEXT)
-	w := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
+	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
+	require.Nil(t, err)
 	log := &model.RedoLog{
 		Row: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
 	}
@@ -68,9 +69,10 @@ func TestLogReader_ResetReader(t *testing.T) {
 	require.Nil(t, err)
 
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf10", time.Now().Unix(), common.DefaultRowLogFileType, 10, common.LogEXT)
-	w = writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
+	w, err = writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
+	require.Nil(t, err)
 	log = &model.RedoLog{
 		Row: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
 	}

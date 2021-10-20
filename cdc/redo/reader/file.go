@@ -253,7 +253,10 @@ func writFile(ctx context.Context, dir, name string, h logHeap) error {
 		Dir:        dir,
 		MaxLogSize: math.MaxInt32,
 	}
-	w := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string { return name }))
+	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string { return name }))
+	if err != nil {
+		return err
+	}
 
 	for h.Len() != 0 {
 		item := heap.Pop(&h).(*logWithIdx).data
