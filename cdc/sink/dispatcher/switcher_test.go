@@ -42,7 +42,7 @@ func (s SwitcherSuite) TestSwitcher(c *check.C) {
 				{Matcher: []string{"test_index_value.*"}, Dispatcher: "index-value"},
 				{Matcher: []string{"test.*"}, Dispatcher: "rowid"},
 				{Matcher: []string{"*.*", "!*.test"}, Dispatcher: "ts"},
-				{Matcher: []string{"test_by_partition.*"}, Dispatcher: "4"},
+				{Matcher: []string{"test_by_partition.*"}, Dispatcher: "3"},
 				{Matcher: []string{"test_by_columns.*"}, Dispatcher: "[a, b]"},
 			},
 		},
@@ -139,7 +139,7 @@ func (s SwitcherSuite) TestByColumnDispatcher(c *check.C) {
 		},
 	}
 	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(row), check.FitsTypeOf, &columnsDispatcher{})
-	c.Assert(d.Dispatch(row), check.Equals, 0)
+	c.Assert(d.Dispatch(row), check.Equals, int32(0))
 
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
@@ -166,5 +166,5 @@ func (s SwitcherSuite) TestByColumnDispatcher(c *check.C) {
 		},
 	}
 	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(row), check.FitsTypeOf, &columnsDispatcher{})
-	c.Assert(d.Dispatch(row), check.Not(check.Equals), 0)
+	c.Assert(d.Dispatch(row), check.Not(check.Equals), int32(0))
 }
