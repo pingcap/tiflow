@@ -188,9 +188,12 @@ func (s *utilsSuite) TestAndWriteExampleReplicaTOML(c *check.C) {
 		DispatchRules: []*config.DispatchRule{
 			{Dispatcher: "ts", Matcher: []string{"test1.*", "test2.*"}},
 			{Dispatcher: "rowid", Matcher: []string{"test3.*", "test4.*"}},
+			{Partition: "2", Matcher: []string{"test_by_partition.*"}},
+			{Partition: "[a, b, c]", Matcher: []string{"test_by_columns*"}},
 		},
 		Protocol: "default",
 	})
+
 	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
 		Enable:          false,
 		ReplicaID:       1,

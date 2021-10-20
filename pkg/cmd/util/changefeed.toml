@@ -30,6 +30,8 @@ worker-num = 16
 dispatchers = [
 	{matcher = ['test1.*', 'test2.*'], dispatcher = "ts"},
 	{matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
+	{matcher = ["test_by_partition.*"], partition = "2"},
+	{matcher = ["test_by_columns.*"], partition = "[a, b, c]"}
 ]
 # 对于 MQ 类的 Sink，可以指定消息的协议格式
 # 协议目前支持 default, canal, avro 和 maxwell 四种，default 为 ticdc-open-protocol
