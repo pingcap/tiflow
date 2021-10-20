@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/stretchr/testify/require"
-
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -407,6 +407,104 @@ func TestCancelByAddEventContext(t *testing.T) {
 
 	err := errg.Wait()
 	require.Nil(t, err)
+}
+
+func TestGracefulUnregister(t *testing.T) {
+	poolCtx, poolCancel := context.WithCancel(context.Background())
+	defer poolCancel()
+	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
+	go func() {
+		err := pool.Run(poolCtx)
+		require.Regexp(t, ".*context canceled.*", err)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+
+	waitCh := make(chan struct{})
+
+	var lastEventIdx int64
+	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-waitCh:
+		}
+
+		idx := event.(int64)
+		old := atomic.SwapInt64(&lastEventIdx, idx)
+		require.Equal(t, old+1, idx)
+		return nil
+	})
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		var maxEventIdx int64
+		for i := int64(0); ; i++ {
+			err := handle.AddEvent(ctx, i+1)
+			if cerror.ErrWorkerPoolHandleCancelled.Equal(err) {
+				maxEventIdx = i
+				break
+			}
+			require.NoError(t, err)
+			time.Sleep(time.Millisecond * 10)
+		}
+
+		require.Eventually(t, func() (success bool) {
+			return atomic.LoadInt64(&lastEventIdx) == maxEventIdx
+		}, time.Millisecond*500, time.Millisecond*10)
+	}()
+
+	time.Sleep(time.Millisecond * 200)
+	go func() {
+		close(waitCh)
+	}()
+	err := handle.GracefulUnregister(ctx, time.Second*10)
+	require.NoError(t, err)
+
+	err = handle.AddEvent(ctx, int64(0))
+	require.Error(t, err)
+	require.True(t, cerror.ErrWorkerPoolHandleCancelled.Equal(err))
+	require.Equal(t, handleCancelled, handle.(*defaultEventHandle).status)
+
+	wg.Wait()
+}
+
+func TestGracefulUnregisterTimeout(t *testing.T) {
+	poolCtx, poolCancel := context.WithCancel(context.Background())
+	defer poolCancel()
+	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
+	go func() {
+		err := pool.Run(poolCtx)
+		require.Regexp(t, ".*context canceled.*", err)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+
+	waitCh := make(chan struct{})
+
+	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+		select {
+		case <-waitCh:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
+
+	err := handle.AddEvent(ctx, 0)
+	require.NoError(t, err)
+
+	go func() {
+		time.Sleep(time.Millisecond * 100)
+		close(waitCh)
+	}()
+	err = handle.GracefulUnregister(ctx, time.Millisecond*10)
+	require.Error(t, err)
+	require.Truef(t, cerror.ErrWorkerPoolGracefulUnregisterTimedOut.Equal(err), "%s", err.Error())
 }
 
 // Benchmark workerpool with ping-pong workflow.
