@@ -157,9 +157,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		if err != nil {
 			log.S().Fatal(err)
 		}
-		// insert 5 * 1M
+		// insert 5 * 512KB
 		// note limitation of TiDB: https://github.com/pingcap/docs/blob/733a5b0284e70c5b4d22b93a818210a3f6fbb5a0/FAQ.md#the-error-message-transaction-too-large-is-displayed
-		data := make([]byte, 1<<20)
+		data := make([]byte, 1<<19)
 		for i := 0; i < 5; i++ {
 			_, err = tx.Query("INSERT INTO binlog_big(id, data) VALUES(?, ?);", i, data)
 			if err != nil {
