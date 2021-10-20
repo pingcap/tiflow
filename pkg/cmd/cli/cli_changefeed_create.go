@@ -220,7 +220,7 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 	}
 
 	for _, rules := range cfg.Sink.DispatchRules {
-		switch strings.ToLower(rules.Dispatcher) {
+		switch strings.ToLower(rules.GetPartitionRule()) {
 		case "rowid", "index-value", "pk":
 			if cfg.EnableOldValue {
 				cmd.Printf("[WARN] This index-value distribution mode "+

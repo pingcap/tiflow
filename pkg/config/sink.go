@@ -25,3 +25,10 @@ type DispatchRule struct {
 	Dispatcher string   `toml:"dispatcher" json:"dispatcher"`
 	Partition  string   `toml:"partition" json:"partition"`
 }
+
+func (r *DispatchRule) GetPartitionRule() string {
+	if r.Partition != "" {
+		return r.Partition
+	}
+	return r.Dispatcher
+}

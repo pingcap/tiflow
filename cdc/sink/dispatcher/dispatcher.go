@@ -104,7 +104,8 @@ func (s *dispatcherSwitcher) matchDispatcher(row *model.RowChangedEvent) Dispatc
 // NewDispatcher creates a new dispatcher
 func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, error) {
 	ruleConfigs := append(cfg.Sink.DispatchRules, &config.DispatchRule{
-		Matcher:    []string{"*.*"},
+		Matcher: []string{"*.*"},
+		// todo (Ling Jin): use `table` as the default dispatch rule in the future version.
 		Dispatcher: "default",
 	})
 	rules := make([]struct {
@@ -120,12 +121,14 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		if !cfg.CaseSensitive {
 			f = filter.CaseInsensitive(f)
 		}
-		var d Dispatcher
-		var rule dispatchRule
-		if ruleConfig.Dispatcher == "" {
-			ruleConfig.Dispatcher = ruleConfig.Partition
-		}
-		rule.fromString(ruleConfig.Dispatcher)
+
+		var (
+			d    Dispatcher
+			rule dispatchRule
+		)
+		partitionRule := ruleConfig.GetPartitionRule()
+		rule.fromString(partitionRule)
+
 		switch rule {
 		case dispatchRuleRowID, dispatchRuleIndexValue, dispatchRulePK:
 			if cfg.EnableOldValue {
@@ -141,7 +144,7 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		case dispatchRuleDefault:
 			d = newDefaultDispatcher(partitionNum, cfg.EnableOldValue)
 		case dispatchRuleByPartitionNum:
-			targetPartition, err := strconv.Atoi(ruleConfig.Dispatcher)
+			targetPartition, err := strconv.Atoi(partitionRule)
 			if err != nil {
 				return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 			}
@@ -152,7 +155,7 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 			}
 			d = newPartitionNumDispatcher(int32(targetPartition))
 		case dispatchRuleByColumns:
-			d = newColumnsDispatcher(partitionNum, ruleConfig.Dispatcher)
+			d = newColumnsDispatcher(partitionNum, partitionRule)
 		}
 		rules = append(rules, struct {
 			Dispatcher
