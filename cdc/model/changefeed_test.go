@@ -15,9 +15,7 @@ package model
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"math"
-	"regexp"
 	"testing"
 	"time"
 
@@ -25,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
@@ -250,10 +249,7 @@ func TestChangefeedInfoStringer(t *testing.T) {
 		SinkURI: "blackhole://",
 		StartTs: 418881574869139457,
 	}
-	str := info.String()
-	matches, err := regexp.MatchString("^.*sink-uri\":\"\\*\\*\\*\".*$", str)
-	require.Nil(t, err)
-	require.True(t, matches)
+	require.Regexp(t, "^.*sink-uri\":\"\\*\\*\\*\".*$", info.String())
 }
 
 func TestValidateChangefeedID(t *testing.T) {
