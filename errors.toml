@@ -261,6 +261,11 @@ error = '''
 file sink meta file already exists
 '''
 
+["CDC:ErrFileSizeExceed"]
+error = '''
+rawData size %d exceeds maximum file size %d
+'''
+
 ["CDC:ErrFilterRuleInvalid"]
 error = '''
 filter rule is invalid
@@ -364,6 +369,11 @@ invalid task key: %s
 ["CDC:ErrJSONCodecInvalidData"]
 error = '''
 json codec invalid data
+'''
+
+["CDC:ErrJSONCodecRowTooLarge"]
+error = '''
+json codec single row too large
 '''
 
 ["CDC:ErrKVStorageBackoffFailed"]
@@ -488,7 +498,7 @@ MySQL connection error
 
 ["CDC:ErrMySQLInvalidConfig"]
 error = '''
-MySQL config invaldi
+MySQL config invalid
 '''
 
 ["CDC:ErrMySQLQueryError"]
@@ -656,6 +666,26 @@ error = '''
 the reactor has done its job and should no longer be executed
 '''
 
+["CDC:ErrRedoConfigInvalid"]
+error = '''
+redo log config invalid
+'''
+
+["CDC:ErrRedoFileOp"]
+error = '''
+redo file operation
+'''
+
+["CDC:ErrRedoMetaInitialize"]
+error = '''
+initialize meta for redo log
+'''
+
+["CDC:ErrRedoWriterStopped"]
+error = '''
+redo log writer stopped
+'''
+
 ["CDC:ErrRegionWorkerExit"]
 error = '''
 region worker exited
@@ -684,6 +714,11 @@ s3 sink storage api
 ["CDC:ErrS3SinkWriteStorage"]
 error = '''
 write to storage
+'''
+
+["CDC:ErrS3StorageAPI"]
+error = '''
+s3 storage api
 '''
 
 ["CDC:ErrS3StorageInitialize"]
@@ -748,7 +783,7 @@ sink uri invalid
 
 ["CDC:ErrSnapshotLostByGC"]
 error = '''
-fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than GC safepoint at %d
+fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
 ["CDC:ErrSnapshotSchemaExists"]
