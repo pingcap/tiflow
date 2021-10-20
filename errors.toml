@@ -371,6 +371,11 @@ error = '''
 json codec invalid data
 '''
 
+["CDC:ErrJSONCodecRowTooLarge"]
+error = '''
+json codec single row too large
+'''
+
 ["CDC:ErrKVStorageBackoffFailed"]
 error = '''
 backoff failed
@@ -904,6 +909,11 @@ version is incompatible: %s
 ["CDC:ErrWaitHandleOperationTimeout"]
 error = '''
 waiting processor to handle the operation finished timeout
+'''
+
+["CDC:ErrWorkerPoolGracefulUnregisterTimedOut"]
+error = '''
+workerpool handle graceful unregister timed out
 '''
 
 ["CDC:ErrWorkerPoolHandleCancelled"]
