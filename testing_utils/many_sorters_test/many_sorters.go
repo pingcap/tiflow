@@ -45,7 +45,7 @@ var (
 
 func main() {
 	flag.Parse()
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterDebug", "return(true)")
 	if err != nil {
 		log.Fatal("Could not enable failpoint", zap.Error(err))
 	}
