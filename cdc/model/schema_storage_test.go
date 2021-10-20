@@ -14,11 +14,12 @@
 package model
 
 import (
+	"testing"
+
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	parser_types "github.com/pingcap/parser/types"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(t *testing.T) {

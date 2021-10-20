@@ -14,10 +14,11 @@
 package model
 
 import (
-	"github.com/pingcap/check"
-	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
+
+	"github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAdminJobType(t *testing.T) {

@@ -14,9 +14,10 @@
 package model
 
 import (
+	"testing"
+
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestRegionFeedEvent(t *testing.T) {

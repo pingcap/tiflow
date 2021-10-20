@@ -15,9 +15,10 @@ package model
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestPolymorphicEvent(t *testing.T) {

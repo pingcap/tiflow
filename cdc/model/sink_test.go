@@ -14,11 +14,12 @@
 package model
 
 import (
+	"testing"
+
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/types"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestSetFlag(t *testing.T) {
