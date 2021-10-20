@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
 }
 
-func TestReader_newReader(t *testing.T) {
+func TestReaderNewReader(t *testing.T) {
 	_, err := newReader(context.Background(), nil)
 	require.NotNil(t, err)
 
@@ -46,7 +46,7 @@ func TestReader_newReader(t *testing.T) {
 	require.Nil(t, err)
 }
 
-func TestReader_Read(t *testing.T) {
+func TestReaderRead(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-reader")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
@@ -94,7 +94,7 @@ func TestReader_Read(t *testing.T) {
 	require.EqualValues(t, 1123, log.Row.Row.CommitTs)
 }
 
-func TestReader_openSelectedFiles(t *testing.T) {
+func TestReaderOpenSelectedFiles(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-openSelectedFiles")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)

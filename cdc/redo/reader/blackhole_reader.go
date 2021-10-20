@@ -19,31 +19,31 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-// BlackholeReader is a blockhole storage which implements LogReader interface
-type BlackholeReader struct {
+// BlackHoleReader is a blockHole storage which implements LogReader interface
+type BlackHoleReader struct {
 }
 
-// NewBlackholeReader creates a new BlackholeReader
-func NewBlackholeReader() *BlackholeReader {
-	return &BlackholeReader{}
+// NewBlackholeReader creates a new BlackHoleReader
+func NewBlackholeReader() *BlackHoleReader {
+	return &BlackHoleReader{}
 }
 
 // ResetReader implements LogReader.ReadLog
-func (br *BlackholeReader) ResetReader(ctx context.Context, startTs, endTs uint64) error {
+func (br *BlackHoleReader) ResetReader(ctx context.Context, startTs, endTs uint64) error {
 	return nil
 }
 
 // ReadNextLog implements LogReader.ReadNextLog
-func (br *BlackholeReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoRowChangedEvent, error) {
+func (br *BlackHoleReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoRowChangedEvent, error) {
 	return nil, nil
 }
 
 // ReadNextDDL implements LogReader.ReadNextDDL
-func (br *BlackholeReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoDDLEvent, error) {
+func (br *BlackHoleReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoDDLEvent, error) {
 	return nil, nil
 }
 
 // ReadMeta implements LogReader.ReadMeta
-func (br *BlackholeReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
+func (br *BlackHoleReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
 	return 0, 1, nil
 }

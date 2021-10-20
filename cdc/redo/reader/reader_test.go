@@ -39,7 +39,7 @@ func TestNewLogReader(t *testing.T) {
 	require.Nil(t, err)
 }
 
-func TestLogReader_ResetReader(t *testing.T) {
+func TestLogReaderResetReader(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-ResetReader")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
@@ -194,7 +194,7 @@ func TestLogReader_ResetReader(t *testing.T) {
 	}
 }
 
-func TestLogReader_ReadMeta(t *testing.T) {
+func TestLogReaderReadMeta(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-ReadMeta")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
@@ -282,7 +282,7 @@ func TestLogReader_ReadMeta(t *testing.T) {
 	}
 }
 
-func TestLogReader_ReadNextLog(t *testing.T) {
+func TestLogReaderReadNextLog(t *testing.T) {
 	type arg struct {
 		ctx    context.Context
 		maxNum uint64
@@ -424,7 +424,9 @@ func TestLogReader_ReadNextLog(t *testing.T) {
 			arg := args.Get(0).(*model.RedoLog)
 			arg.Row = tt.readerRet.Row
 			arg.Type = model.RedoLogTypeRow
-		})
+		}).Times(int(tt.args.maxNum))
+		mockReader.On("Read", mock.Anything).Return(io.EOF).Once()
+
 		mockReader1 := &mockFileReader{}
 		mockReader1.On("Read", mock.Anything).Return(tt.readerErr1).Run(func(args mock.Arguments) {
 			arg := args.Get(0).(*model.RedoLog)
@@ -468,7 +470,7 @@ func TestLogReader_ReadNextLog(t *testing.T) {
 	}
 }
 
-func TestLogReader_ReadNexDDL(t *testing.T) {
+func TestLogReaderReadNexDDL(t *testing.T) {
 	type arg struct {
 		ctx    context.Context
 		maxNum uint64
@@ -600,7 +602,8 @@ func TestLogReader_ReadNexDDL(t *testing.T) {
 			arg := args.Get(0).(*model.RedoLog)
 			arg.DDL = tt.readerRet.DDL
 			arg.Type = model.RedoLogTypeDDL
-		})
+		}).Times(int(tt.args.maxNum))
+		mockReader.On("Read", mock.Anything).Return(io.EOF).Once()
 		mockReader1 := &mockFileReader{}
 		mockReader1.On("Read", mock.Anything).Return(tt.readerErr1).Run(func(args mock.Arguments) {
 			arg := args.Get(0).(*model.RedoLog)
@@ -643,7 +646,7 @@ func TestLogReader_ReadNexDDL(t *testing.T) {
 	}
 }
 
-func TestLogReader_Close(t *testing.T) {
+func TestLogReaderClose(t *testing.T) {
 	tests := []struct {
 		name    string
 		wantErr bool

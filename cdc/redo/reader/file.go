@@ -51,7 +51,7 @@ const (
 //go:generate mockery --name=fileReader --inpackage
 type fileReader interface {
 	io.Closer
-	// Read ...
+	// Read return the log from log file
 	Read(log *model.RedoLog) error
 }
 
@@ -363,7 +363,7 @@ func shouldOpen(startTs, endTs uint64, name, fixedType string) (bool, error) {
 	return commitTs > startTs && commitTs <= endTs, nil
 }
 
-// Read ...
+// Read implement Read interface.
 // TODO: more general reader pair with writer in writer pkg
 func (r *reader) Read(redoLog *model.RedoLog) error {
 	r.mu.Lock()
@@ -456,7 +456,7 @@ func (r *reader) isTornEntry(data []byte) bool {
 	return false
 }
 
-// Close ...
+// Close implement the Close interface
 func (r *reader) Close() error {
 	if r == nil || r.closer == nil {
 		return nil

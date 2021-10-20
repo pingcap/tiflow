@@ -30,9 +30,9 @@ import (
 	"go.uber.org/multierr"
 )
 
-//go:generate mockery --name=Reader --inpackage
-// Reader is a reader abstraction for redo log storage layer
-type Reader interface {
+//go:generate mockery --name=RedoLogReader --inpackage
+// RedoLogReader is a reader abstraction for redo log storage layer
+type RedoLogReader interface {
 	io.Closer
 
 	// ResetReader setup the reader boundary
@@ -45,11 +45,11 @@ type Reader interface {
 	// ReadNextDDL reads `maxNumberOfDDLs` ddl events from redo logs from current cursor
 	ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoDDLEvent, error)
 
-	// ReadMeta reads meta from redo logs and returns the latest checkpointTs and resovledTs
+	// ReadMeta reads meta from redo logs and returns the latest checkpointTs and resolvedTs
 	ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error)
 }
 
-// LogReaderConfig ...
+// LogReaderConfig is the config for LogReader
 type LogReaderConfig struct {
 	// Dir is the folder contains the redo logs need to apply when OP environment or
 	// the folder used to download redo logs to if s3 enabled
@@ -65,7 +65,7 @@ type LogReaderConfig struct {
 	endTs      uint64
 }
 
-// LogReader ...
+// LogReader implement RedoLogReader interface
 type LogReader struct {
 	cfg       *LogReaderConfig
 	rowReader []fileReader
@@ -103,7 +103,7 @@ func NewLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error)
 	return logReader, nil
 }
 
-// ResetReader ...
+// ResetReader implement ResetReader interface
 func (l *LogReader) ResetReader(ctx context.Context, startTs, endTs uint64) error {
 	select {
 	case <-ctx.Done():
@@ -194,7 +194,7 @@ func (l *LogReader) setUpDDLReader(ctx context.Context, startTs, endTs uint64) e
 	return nil
 }
 
-// ReadNextLog ...
+// ReadNextLog implement ReadNextLog interface
 func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoRowChangedEvent, error) {
 	select {
 	case <-ctx.Done():
@@ -230,11 +230,11 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 	var i uint64
 	for l.rowHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.rowHeap).(*logWithIdx)
-		if item.data.Row.Row.CommitTs <= l.cfg.startTs {
-			continue
+		if item.data.Row != nil && item.data.Row.Row != nil &&
+			item.data.Row.Row.CommitTs > l.cfg.startTs {
+			ret = append(ret, item.data.Row)
+			i++
 		}
-		ret = append(ret, item.data.Row)
-		i++
 
 		rl := &model.RedoLog{}
 		err := l.rowReader[item.idx].Read(rl)
@@ -255,7 +255,7 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 	return ret, nil
 }
 
-// ReadNextDDL ...
+// ReadNextDDL implement ReadNextDDL interface
 func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoDDLEvent, error) {
 	select {
 	case <-ctx.Done():
@@ -291,12 +291,11 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 	var i uint64
 	for l.ddlHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.ddlHeap).(*logWithIdx)
-		if item.data.DDL.DDL.CommitTs <= l.cfg.startTs {
-			continue
+		if item.data.DDL != nil && item.data.DDL.DDL != nil &&
+			item.data.DDL.DDL.CommitTs > l.cfg.startTs {
+			ret = append(ret, item.data.DDL)
+			i++
 		}
-
-		ret = append(ret, item.data.DDL)
-		i++
 
 		rl := &model.RedoLog{}
 		err := l.ddlReader[item.idx].Read(rl)
@@ -317,7 +316,7 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 	return ret, nil
 }
 
-// ReadMeta ...
+// ReadMeta implement ReadMeta interface
 func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
 	select {
 	case <-ctx.Done():
@@ -388,7 +387,7 @@ func (l *LogReader) closeDDLReader() error {
 	return errs
 }
 
-// Close ...
+// Close implement Close interface
 func (l *LogReader) Close() error {
 	if l == nil {
 		return nil
@@ -419,9 +418,21 @@ func (h logHeap) Len() int {
 
 func (h logHeap) Less(i, j int) bool {
 	if h[i].data.Type == model.RedoLogTypeDDL {
+		if h[i].data.DDL == nil || h[i].data.DDL.DDL == nil {
+			return true
+		}
+		if h[j].data.DDL == nil || h[j].data.DDL.DDL == nil {
+			return false
+		}
 		return h[i].data.DDL.DDL.CommitTs < h[j].data.DDL.DDL.CommitTs
 	}
 
+	if h[i].data.Row == nil || h[i].data.Row.Row == nil {
+		return true
+	}
+	if h[j].data.Row == nil || h[j].data.Row.Row == nil {
+		return false
+	}
 	return h[i].data.Row.Row.CommitTs < h[j].data.Row.Row.CommitTs
 }
 
