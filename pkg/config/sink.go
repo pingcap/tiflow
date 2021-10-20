@@ -23,4 +23,5 @@ type SinkConfig struct {
 type DispatchRule struct {
 	Matcher    []string `toml:"matcher" json:"matcher"`
 	Dispatcher string   `toml:"dispatcher" json:"dispatcher"`
+	Partition  string   `toml:"partition" json:"partition"`
 }

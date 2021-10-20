@@ -221,7 +221,7 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 
 	for _, rules := range cfg.Sink.DispatchRules {
 		switch strings.ToLower(rules.Dispatcher) {
-		case "rowid", "index-value":
+		case "rowid", "index-value", "pk":
 			if cfg.EnableOldValue {
 				cmd.Printf("[WARN] This index-value distribution mode "+
 					"does not guarantee row-level orderliness when "+

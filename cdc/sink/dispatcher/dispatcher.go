@@ -122,6 +122,9 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		}
 		var d Dispatcher
 		var rule dispatchRule
+		if ruleConfig.Dispatcher == "" {
+			ruleConfig.Dispatcher = ruleConfig.Partition
+		}
 		rule.fromString(ruleConfig.Dispatcher)
 		switch rule {
 		case dispatchRuleRowID, dispatchRuleIndexValue, dispatchRulePK:
