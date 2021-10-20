@@ -92,10 +92,9 @@ func (s *dispatcherSwitcher) Dispatch(row *model.RowChangedEvent) int32 {
 
 func (s *dispatcherSwitcher) matchDispatcher(row *model.RowChangedEvent) Dispatcher {
 	for _, rule := range s.rules {
-		if !rule.MatchTable(row.Table.Schema, row.Table.Table) {
-			continue
+		if rule.MatchTable(row.Table.Schema, row.Table.Table) {
+			return rule.Dispatcher
 		}
-		return rule.Dispatcher
 	}
 	log.Panic("the dispatch rule must cover all tables")
 	return nil
