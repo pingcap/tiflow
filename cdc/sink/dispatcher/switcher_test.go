@@ -144,7 +144,7 @@ func (s SwitcherSuite) TestByColumnDispatcher(c *check.C) {
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_by_columns.*"}, Dispatcher: "[a, b]"}, // equal to partitionNum, out of index.
+				{Matcher: []string{"test_by_columns.*"}, Dispatcher: "[a, b]"},
 			},
 		},
 	}, 4)
@@ -161,7 +161,7 @@ func (s SwitcherSuite) TestByColumnDispatcher(c *check.C) {
 			},
 			{
 				Name:  "b",
-				Value: 1,
+				Value: 2,
 			},
 		},
 	}

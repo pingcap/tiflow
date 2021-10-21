@@ -65,6 +65,7 @@ func (r *dispatchRule) fromString(s string) {
 		return
 	}
 
+	// todo (Ling Jin): how to handle `-1`, fail or broadcast
 	if tryGetDispatchRuleByPartitionNum(s) {
 		*r = dispatchRuleByPartitionNum
 		return
@@ -167,7 +168,10 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 }
 
 func tryGetDispatchRuleByPartitionNum(s string) bool {
-	_, err := strconv.Atoi(s)
+	a, err := strconv.Atoi(s)
+	if a < 0 {
+		return false
+	}
 	return err == nil
 }
 
