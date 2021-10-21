@@ -76,8 +76,18 @@ function run() {
 		--ssl-ca=$TLS_DIR/ca.pem \
 		--ssl-cert=$TLS_DIR/server.pem \
 		--ssl-key=$TLS_DIR/server-key.pem
+	run_sql "INSERT INTO test.simple1(id, val) VALUES (1, 1);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+		--ssl-ca=$TLS_DIR/ca.pem \
+		--ssl-cert=$TLS_DIR/server.pem \
+		--ssl-key=$TLS_DIR/server-key.pem
+	run_sql "INSERT INTO test.simple1(id, val) VALUES (2, 2);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+		--ssl-ca=$TLS_DIR/ca.pem \
+		--ssl-cert=$TLS_DIR/server.pem \
+		--ssl-key=$TLS_DIR/server-key.pem
 	# wait for above sql done in the up source
 	sleep 2
+
+	check_table_exists test.simple1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	sequential_cases=(
 		"list_changefeed"
