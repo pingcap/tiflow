@@ -23,8 +23,8 @@ import (
 type BlackHoleReader struct {
 }
 
-// NewBlackholeReader creates a new BlackHoleReader
-func NewBlackholeReader() *BlackHoleReader {
+// NewBlackHoleReader creates a new BlackHoleReader
+func NewBlackHoleReader() *BlackHoleReader {
 	return &BlackHoleReader{}
 }
 

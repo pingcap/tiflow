@@ -56,7 +56,7 @@ type LogReaderConfig struct {
 	Dir       string
 	S3Storage bool
 	// S3URI should be like S3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-	S3URI *url.URL
+	S3URI url.URL
 	// WorkerNums is the num of workers used to sort the log file to sorted file,
 	// will load the file to memory first then write the sorted file to disk
 	// the memory used is WorkerNums * defaultMaxLogSize (64 * megabyte) total
@@ -230,9 +230,9 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 	var i uint64
 	for l.rowHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.rowHeap).(*logWithIdx)
-		if item.data.Row != nil && item.data.Row.Row != nil &&
-			item.data.Row.Row.CommitTs > l.cfg.startTs {
-			ret = append(ret, item.data.Row)
+		if item.data.RedoRow != nil && item.data.RedoRow.Row != nil &&
+			item.data.RedoRow.Row.CommitTs > l.cfg.startTs {
+			ret = append(ret, item.data.RedoRow)
 			i++
 		}
 
@@ -291,9 +291,9 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 	var i uint64
 	for l.ddlHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.ddlHeap).(*logWithIdx)
-		if item.data.DDL != nil && item.data.DDL.DDL != nil &&
-			item.data.DDL.DDL.CommitTs > l.cfg.startTs {
-			ret = append(ret, item.data.DDL)
+		if item.data.RedoDDL != nil && item.data.RedoDDL.DDL != nil &&
+			item.data.RedoDDL.DDL.CommitTs > l.cfg.startTs {
+			ret = append(ret, item.data.RedoDDL)
 			i++
 		}
 
@@ -387,7 +387,7 @@ func (l *LogReader) closeDDLReader() error {
 	return errs
 }
 
-// Close implement Close interface
+// Close the backing file readers
 func (l *LogReader) Close() error {
 	if l == nil {
 		return nil
@@ -418,22 +418,22 @@ func (h logHeap) Len() int {
 
 func (h logHeap) Less(i, j int) bool {
 	if h[i].data.Type == model.RedoLogTypeDDL {
-		if h[i].data.DDL == nil || h[i].data.DDL.DDL == nil {
+		if h[i].data.RedoDDL == nil || h[i].data.RedoDDL.DDL == nil {
 			return true
 		}
-		if h[j].data.DDL == nil || h[j].data.DDL.DDL == nil {
+		if h[j].data.RedoDDL == nil || h[j].data.RedoDDL.DDL == nil {
 			return false
 		}
-		return h[i].data.DDL.DDL.CommitTs < h[j].data.DDL.DDL.CommitTs
+		return h[i].data.RedoDDL.DDL.CommitTs < h[j].data.RedoDDL.DDL.CommitTs
 	}
 
-	if h[i].data.Row == nil || h[i].data.Row.Row == nil {
+	if h[i].data.RedoRow == nil || h[i].data.RedoRow.Row == nil {
 		return true
 	}
-	if h[j].data.Row == nil || h[j].data.Row.Row == nil {
+	if h[j].data.RedoRow == nil || h[j].data.RedoRow.Row == nil {
 		return false
 	}
-	return h[i].data.Row.Row.CommitTs < h[j].data.Row.Row.CommitTs
+	return h[i].data.RedoRow.Row.CommitTs < h[j].data.RedoRow.Row.CommitTs
 }
 
 func (h logHeap) Swap(i, j int) {

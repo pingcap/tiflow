@@ -61,7 +61,7 @@ type readerConfig struct {
 	startTs    uint64
 	endTs      uint64
 	s3Storage  bool
-	s3URI      *url.URL
+	s3URI      url.URL
 	workerNums int
 }
 

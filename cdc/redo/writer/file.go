@@ -89,7 +89,7 @@ type FileWriterConfig struct {
 	MaxLogSize        int64
 	FlushIntervalInMs int64
 	S3Storage         bool
-	S3URI             *url.URL
+	S3URI             url.URL
 }
 
 // Option define the writerOptions
@@ -141,9 +141,12 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 	if cfg.MaxLogSize == 0 {
 		cfg.MaxLogSize = defaultMaxLogSize
 	}
+	var s3storage storage.ExternalStorage
 	if cfg.S3Storage {
-		if cfg.S3URI == nil {
-			return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("S3URI can not be nil"))
+		var err error
+		s3storage, err = common.InitS3storage(ctx, cfg.S3URI)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -155,14 +158,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		cfg:       cfg,
 		op:        op,
 		uint64buf: make([]byte, 8),
-	}
-
-	if cfg.S3Storage {
-		s3storage, err := common.InitS3storage(ctx, cfg.S3URI)
-		if err != nil {
-			return nil, err
-		}
-		w.storage = s3storage
+		storage:   s3storage,
 	}
 
 	w.state.Store(started)
