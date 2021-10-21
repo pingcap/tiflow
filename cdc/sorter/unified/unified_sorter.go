@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sorter
+package unified
 
 import (
 	"context"
@@ -35,6 +35,7 @@ const (
 )
 
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
+//nolint:revive
 type UnifiedSorter struct {
 	inputCh     chan *model.PolymorphicEvent
 	outputCh    chan *model.PolymorphicEvent
@@ -60,6 +61,7 @@ type ctxKey struct {
 // parameter: cfSortDir - the directory designated in changefeed's setting,
 // which will be overridden by a non-empty local setting of `sort-dir`.
 // TODO better way to organize this function after we obsolete chanegfeed setting's `sort-dir`
+//nolint:revive
 func UnifiedSorterCheckDir(cfSortDir string) error {
 	dir := cfSortDir
 	sorterConfig := config.GetGlobalServerConfig().Sorter
@@ -123,6 +125,7 @@ func NewUnifiedSorter(
 }
 
 // UnifiedSorterCleanUp cleans up the files that might have been used.
+//nolint:revive
 func UnifiedSorterCleanUp() {
 	poolMu.Lock()
 	defer poolMu.Unlock()

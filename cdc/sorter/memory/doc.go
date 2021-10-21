@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,18 +11,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package puller
-
-import (
-	"context"
-
-	"github.com/pingcap/ticdc/cdc/model"
-)
-
-// EventSorter accepts unsorted PolymorphicEvents, sort them in background and returns
-// sorted PolymorphicEvents in Output channel
-type EventSorter interface {
-	Run(ctx context.Context) error
-	AddEntry(ctx context.Context, entry *model.PolymorphicEvent)
-	Output() <-chan *model.PolymorphicEvent
-}
+// Package memory is an in-memory EventSorter implementation.
+package memory

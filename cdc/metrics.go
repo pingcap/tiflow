@@ -20,8 +20,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/processor"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/cdc/sorter/memory"
+	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/actor"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,11 +38,13 @@ func init() {
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
-	sorter.InitMetrics(registry)
 	processor.InitMetrics(registry)
 	tablepipeline.InitMetrics(registry)
 	owner.InitMetrics(registry)
 	etcd.InitMetrics(registry)
 	initServerMetrics(registry)
 	actor.InitMetrics(registry)
+	// Sorter metrics
+	memory.InitMetrics(registry)
+	unified.InitMetrics(registry)
 }

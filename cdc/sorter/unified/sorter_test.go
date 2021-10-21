@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sorter
+package unified
 
 import (
 	"context"
@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/sorter"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
@@ -127,8 +127,8 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	log.Info("Sorter successfully cancelled")
 }
 
-func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, count int) error {
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
+func testSorter(ctx context.Context, c *check.C, sorter sorter.EventSorter, count int) error {
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
 	}
@@ -309,17 +309,17 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// enable the failpoint to simulate delays
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/asyncFlushStartDelay", "sleep(100)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/asyncFlushStartDelay", "sleep(100)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/asyncFlushStartDelay")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/asyncFlushStartDelay")
 	}()
 
 	// enable the failpoint to simulate delays
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/asyncFlushInProcessDelay", "1%sleep(1)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/asyncFlushInProcessDelay", "1%sleep(1)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/asyncFlushInProcessDelay")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/asyncFlushInProcessDelay")
 	}()
 
 	for i := 0; i < 5; i++ {
@@ -358,10 +358,10 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	defer cancel()
 
 	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc", "return(true)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndAlloc", "return(true)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndAlloc")
 	}()
 
 	finishedCh := make(chan struct{})
@@ -379,12 +379,12 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	}
 
 	UnifiedSorterCleanUp()
-	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
+	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndAlloc")
 	// enable the failpoint to simulate backEnd write error (usually would happen when writing to a file)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite", "return(true)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndWrite", "return(true)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndWrite")
 	}()
 
 	// recreate the sorter
@@ -435,16 +435,16 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 	defer cancel()
 
 	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectHeapSorterExitDelay", "sleep(2000)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectHeapSorterExitDelay", "sleep(2000)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectHeapSorterExitDelay")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectHeapSorterExitDelay")
 	}()
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc", "return(true)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndAlloc", "return(true)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndAlloc")
 	}()
 
 	finishedCh := make(chan struct{})
