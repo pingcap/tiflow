@@ -15,7 +15,7 @@ random_file_name=
 # Random generate the sockets config.
 # Make sure we dont use the same sock.
 randomGenSocketsConf() {
-  date=$(date '+%s%N')
+	date=$(date '+%s%N')
 
 	random_file_name="$OUT_DIR/tidb-config-$date.toml"
 
