@@ -9,7 +9,7 @@ fix-sql-file = "fix.sql"
 
 # tables need to check.
 [[check-tables]]
-    schema = "new_ci_collation_test"
+    schema = "new_ci_collation_with_old_value_test"
     tables = ["~.*"]
 
 [[source-db]]
