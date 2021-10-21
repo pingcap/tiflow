@@ -83,6 +83,7 @@ var BadRequestError = []*errors.Error{
 	ErrMySQLInvalidConfig,
 }
 
+// IsHTTPBadRequestError check if a error is a http bad request error
 func IsHTTPBadRequestError(err error) bool {
 	if err == nil {
 		return false
