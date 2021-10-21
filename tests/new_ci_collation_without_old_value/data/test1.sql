@@ -1,6 +1,6 @@
-drop database if exists `new_ci_collation_test`;
-create database `new_ci_collation_test`;
-use `new_ci_collation_test`;
+drop database if exists `new_ci_collation_without_old_value_test`;
+create database `new_ci_collation_without_old_value_test`;
+use `new_ci_collation_without_old_value_test`;
 
 CREATE TABLE t1 (
     a varchar(20) charset utf8mb4 collate utf8mb4_general_ci primary key,

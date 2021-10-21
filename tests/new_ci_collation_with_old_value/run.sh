@@ -20,7 +20,7 @@ function run() {
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	TOPIC_NAME="ticdc-new_ci_collation-test-$RANDOM"
+	TOPIC_NAME="ticdc-new_ci_collation_with_old_value-test-$RANDOM"
 	case $SINK_TYPE in
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}" ;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?safe-mode=true" ;;
@@ -32,7 +32,7 @@ function run() {
 
 	run_sql_file $CUR/data/test1.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	for i in $(seq 1 5); do
-		table="new_ci_collation_test.t$i"
+		table="new_ci_collation_with_old_value_test.t$i"
 		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	done
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
