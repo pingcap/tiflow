@@ -968,14 +968,12 @@ func (s *eventFeedSession) enqueueError(ctx context.Context, errorInfo regionErr
 
 // checkRateLimit checks whether a region can be reconnected based on its rate limiter
 func (s *eventFeedSession) checkRateLimit(regionID uint64) (allowed bool) {
-	allowed = true
 	limiter := s.client.getRegionLimiter(regionID)
-	now := time.Now()
-	delay := limiter.ReserveN(now, 1).Delay()
-	if delay != 0 {
-		log.Info("EventFeed retry rate limited",
-			zap.Duration("delay", delay), zap.Reflect("regionID", regionID))
-		allowed = false
+	// use Limiter.Allow here since if exceed the rate limit, we skip this region
+	// and try it later.
+	allowed = limiter.Allow()
+	if !allowed {
+		log.Info("EventFeed retry rate limited", zap.Uint64("regionID", regionID))
 	}
 	return
 }
