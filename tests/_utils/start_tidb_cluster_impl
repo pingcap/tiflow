@@ -13,6 +13,7 @@ multiple_upstream_pd=
 random_file_name=
 
 # Random generate the sockets config.
+# Make sure we dont use the same sock.
 randomGenSocketsConf() {
   date=$(date '+%s%N')
 
