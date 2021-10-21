@@ -163,11 +163,8 @@ function run() {
 	cleanup_process $CDC_BINARY
 
 	# updating GC safepoint failure case
-<<<<<<< HEAD
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectActualGCSafePoint=return(9223372036854775807)'
-=======
+
 	export GO_FAILPOINTS='github.com/pingcap/ticdc/pkg/txnutil/gc/InjectActualGCSafePoint=return(9223372036854775807)'
->>>>>>> fdf4b52fd (*: Release new owner / processor implementation to release-5.0 (#2946))
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
 	changefeedid_2="changefeed-error-2"
