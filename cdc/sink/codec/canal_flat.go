@@ -267,7 +267,6 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *
 	}
 }
 
-// EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	if !c.enableTiDBExtension {
 		return nil, nil
