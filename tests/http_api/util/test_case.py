@@ -21,7 +21,7 @@ def create_changefeed(sink_uri):
             "ignore_ineligible_table": True
         }
         # set sink_uri
-        if sink_uri != "":
+        if i == 1 and sink_uri != "":
             data["sink_uri"] = sink_uri
 
         data = json.dumps(data)
