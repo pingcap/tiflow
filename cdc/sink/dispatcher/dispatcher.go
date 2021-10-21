@@ -44,16 +44,14 @@ const (
 	dispatchRuleByPartitionIndex
 )
 
-var (
-	rules = map[string]dispatchRule{
-		"default":     dispatchRuleDefault,
-		"rowid":       dispatchRuleRowID,
-		"ts":          dispatchRuleTS,
-		"table":       dispatchRuleTable,
-		"index-value": dispatchRuleIndexValue,
-		"pk":          dispatchRulePK,
-	}
-)
+var rules = map[string]dispatchRule{
+	"default":     dispatchRuleDefault,
+	"rowid":       dispatchRuleRowID,
+	"ts":          dispatchRuleTS,
+	"table":       dispatchRuleTable,
+	"index-value": dispatchRuleIndexValue,
+	"pk":          dispatchRulePK,
+}
 
 // fromString decide which partition dispatcher rule to use by parsing the given `s`.
 // if no one matched, use default.
