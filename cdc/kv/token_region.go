@@ -136,7 +136,17 @@ func (r *sizedRegionRouter) Release(id string) {
 
 func (r *sizedRegionRouter) Run(ctx context.Context) error {
 	ticker := time.NewTicker(sizedRegionCheckInterval)
-	defer ticker.Stop()
+	defer func() {
+		ticker.Stop()
+		r.lock.Lock()
+		defer r.lock.Unlock()
+		for _, m := range r.metrics.tokens {
+			m.Set(0)
+		}
+		for _, m := range r.metrics.cachedRegions {
+			m.Set(0)
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
