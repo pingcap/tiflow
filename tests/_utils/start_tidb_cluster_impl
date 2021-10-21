@@ -204,7 +204,7 @@ tikv-server \
 sleep 2
 
 echo "Starting Upstream TiDB..."
-random_file_name
+randomAppendSocketsConf
 tidb-server \
 	-P ${UP_TIDB_PORT} \
 	-config "$random_file_name" \
@@ -213,7 +213,7 @@ tidb-server \
 	--status=${UP_TIDB_STATUS} \
 	--log-file "$OUT_DIR/tidb.log" &
 
-random_file_name
+randomAppendSocketsConf
 tidb-server \
 	-P ${UP_TIDB_OTHER_PORT} \
 	-config "$random_file_name" \
@@ -223,7 +223,7 @@ tidb-server \
 	--log-file "$OUT_DIR/tidb_other.log" &
 
 echo "Starting Downstream TiDB..."
-random_file_name
+randomAppendSocketsConf
 tidb-server \
 	-P ${DOWN_TIDB_PORT} \
 	-config "$random_file_name" \
