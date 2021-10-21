@@ -4,6 +4,13 @@
 # --tidb-config: path to tidb config file
 # --multiple-upstream-pd: whether to deploy multiple pd severs in upstream
 
+randomAppendSocketsConf() {
+	random_file_name="$OUT_DIR/tidb-config-$RANDOM.toml"
+
+	cat "$OUT_DIR/tidb-config.toml" >"$random_file_name"
+	echo "socket = \"/tmp/tidb-$RANDOM.sock\"" >>"$random_file_name"
+}
+
 set -e
 
 OUT_DIR=
@@ -168,13 +175,6 @@ alter-primary-key = true
 new_collations_enabled_on_first_bootstrap = true
 EOF
 fi
-
-randomAppendSocketsConf(){
-  random_file_name="$OUT_DIR/tidb-config-$RANDOM.toml"
-
-  cat "$OUT_DIR/tidb-config.toml" > "$random_file_name"
-  echo "socket = \"/tmp/tidb-$RANDOM.sock\"" >> "$random_file_name"
-}
 
 echo "Starting Upstream TiKV..."
 for idx in $(seq 1 3); do
