@@ -76,7 +76,8 @@ func IsRetryableError(err error) bool {
 	return true
 }
 
-var BadRequestError = []*errors.Error{
+// HTTPBadRequestError is some errors that will cause a BadRequestError in http handler
+var HTTPBadRequestError = []*errors.Error{
 	ErrAPIInvalidParam, ErrSinkURIInvalid, ErrStartTsBeforeGC,
 	ErrChangeFeedNotExists, ErrTargetTsBeforeStartTs, ErrTableIneligible,
 	ErrFilterRuleInvalid, ErrChangefeedUpdateRefused, ErrMySQLConnectionError,
@@ -88,7 +89,7 @@ func IsHTTPBadRequestError(err error) bool {
 	if err == nil {
 		return false
 	}
-	for _, e := range BadRequestError {
+	for _, e := range HTTPBadRequestError {
 		if e.Equal(err) {
 			return true
 		}
