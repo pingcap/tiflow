@@ -531,7 +531,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 					return errors.Trace(ctx.Err())
 				case err = <-w.errorCh:
 					return err
-				case <-time.After(50 * time.Millisecond):
+				case <-time.After(10 * time.Millisecond):
 					if atomic.LoadInt32(&counter) == 0 {
 						break checkEventsProcessed
 					}
@@ -806,7 +806,7 @@ func getWorkerPoolSize() (size int) {
 	if cfg.WorkerPoolSize > 0 {
 		size = cfg.WorkerPoolSize
 	} else {
-		size = runtime.NumCPU() * 2
+		size = runtime.NumCPU() * 4
 	}
 	if size > maxWorkerPoolSize {
 		size = maxWorkerPoolSize
