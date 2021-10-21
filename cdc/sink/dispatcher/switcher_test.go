@@ -147,12 +147,13 @@ func (s SwitcherSuite) TestByColumnDispatcher(c *check.C) {
 	d, err := NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_by_columns.*"}, Dispatcher: "[]"}, // equal to partitionNum, out of index.
+				{Matcher: []string{"test_by_columns.*"}, Dispatcher: "[]"},
 			},
 		},
 	}, 4)
 	c.Assert(err, check.IsNil)
 
+	// no columns matched
 	row := &model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test_by_columns", Table: "test",
