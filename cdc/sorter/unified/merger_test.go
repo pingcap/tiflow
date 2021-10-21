@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sorter
+package unified
 
 import (
 	"context"
@@ -93,7 +93,7 @@ func (b *mockFlushTaskBuilder) build() *flushTask {
 // It tests the most basic scenario.
 func (s *sorterSuite) TestMergerSingleHeap(c *check.C) {
 	defer testleak.AfterTest(c)()
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
 	}
@@ -164,7 +164,7 @@ func (s *sorterSuite) TestMergerSingleHeap(c *check.C) {
 // TestMergerSingleHeapRetire simulates a situation where the resolved event is not the last event in a flushTask
 func (s *sorterSuite) TestMergerSingleHeapRetire(c *check.C) {
 	defer testleak.AfterTest(c)()
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
 	}
@@ -237,14 +237,14 @@ func (s *sorterSuite) TestMergerSingleHeapRetire(c *check.C) {
 // Expects intermediate resolved events to be generated, so that the sink would not get stuck in a real life situation.
 func (s *sorterSuite) TestMergerSortDelay(c *check.C) {
 	defer testleak.AfterTest(c)()
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterDebug", "return(true)")
 	c.Assert(err, check.IsNil)
 
 	// enable the failpoint to simulate delays
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterMergeDelay", "sleep(5)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterMergeDelay", "sleep(5)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterMergeDelay")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterMergeDelay")
 	}()
 
 	log.SetLevel(zapcore.DebugLevel)
@@ -317,14 +317,14 @@ func (s *sorterSuite) TestMergerSortDelay(c *check.C) {
 // Expects proper clean-up of the data.
 func (s *sorterSuite) TestMergerCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterDebug", "return(true)")
 	c.Assert(err, check.IsNil)
 
 	// enable the failpoint to simulate delays
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterMergeDelay", "sleep(10)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterMergeDelay", "sleep(10)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterMergeDelay")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterMergeDelay")
 	}()
 
 	log.SetLevel(zapcore.DebugLevel)
@@ -380,7 +380,7 @@ func (s *sorterSuite) TestMergerCancel(c *check.C) {
 // Expects proper clean-up of the data.
 func (s *sorterSuite) TestMergerCancelWithUnfinishedFlushTasks(c *check.C) {
 	defer testleak.AfterTest(c)()
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterDebug", "return(true)")
 	c.Assert(err, check.IsNil)
 
 	log.SetLevel(zapcore.DebugLevel)
@@ -436,7 +436,7 @@ func (s *sorterSuite) TestMergerCancelWithUnfinishedFlushTasks(c *check.C) {
 // There is expected to be NO fatal error.
 func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
 	defer testleak.AfterTest(c)()
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterDebug", "return(true)")
 	c.Assert(err, check.IsNil)
 
 	log.SetLevel(zapcore.DebugLevel)
@@ -482,9 +482,9 @@ func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
 // a significant period of time.
 func (s *sorterSuite) TestMergerOutputBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterDebug", "return(true)")
 	c.Assert(err, check.IsNil)
-	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug") //nolint:errcheck
+	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterDebug") //nolint:errcheck
 
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*25)
 	defer cancel()

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sorter
+package unified
 
 import (
 	"context"
@@ -50,7 +50,7 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
 	config.StoreGlobalServerConfig(conf)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(100)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
@@ -67,9 +67,9 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	fileName := backEnd.(*fileBackEnd).fileName
 	c.Assert(fileName, check.Not(check.Equals), "")
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(0)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint", "return(0)")
 	c.Assert(err, check.IsNil)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryUsageInjectPoint", "return(34359738368)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryUsageInjectPoint", "return(34359738368)")
 	c.Assert(err, check.IsNil)
 
 	backEnd1, err := backEndPool.alloc(ctx)
@@ -79,9 +79,9 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	c.Assert(fileName1, check.Not(check.Equals), "")
 	c.Assert(fileName1, check.Not(check.Equals), fileName)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(0)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint", "return(0)")
 	c.Assert(err, check.IsNil)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryUsageInjectPoint", "return(0)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryUsageInjectPoint", "return(0)")
 	c.Assert(err, check.IsNil)
 
 	backEnd2, err := backEndPool.alloc(ctx)
@@ -160,9 +160,9 @@ func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
 	config.StoreGlobalServerConfig(conf)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(100)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)
-	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint") //nolint:errcheck
+	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint") //nolint:errcheck
 
 	backEndPool, err := newBackEndPool(sorterDir, "")
 	c.Assert(err, check.IsNil)
@@ -325,9 +325,9 @@ func (s *backendPoolSuite) TestCleanUpStaleLockNoPermission(c *check.C) {
 func (s *backendPoolSuite) TestGetMemoryPressureFailure(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/getMemoryPressureFails", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/getMemoryPressureFails", "return(true)")
 	c.Assert(err, check.IsNil)
-	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/getMemoryPressureFails") //nolint:errcheck
+	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/getMemoryPressureFails") //nolint:errcheck
 
 	dir := c.MkDir()
 	backEndPool, err := newBackEndPool(dir, "")
