@@ -36,7 +36,6 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 )
 
 var (
@@ -140,7 +139,6 @@ for event processing to increase throughput.
 type regionWorker struct {
 	parentCtx context.Context
 	session   *eventFeedSession
-	limiter   *rate.Limiter
 
 	inputCh  chan *regionStatefulEvent
 	outputCh chan<- model.RegionFeedEvent
@@ -161,11 +159,10 @@ type regionWorker struct {
 	storeAddr      string
 }
 
-func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter, addr string) *regionWorker {
+func newRegionWorker(s *eventFeedSession, addr string) *regionWorker {
 	cfg := config.GetGlobalServerConfig().KVClient
 	worker := &regionWorker{
 		session:        s,
-		limiter:        limiter,
 		inputCh:        make(chan *regionStatefulEvent, regionWorkerInputChanSize),
 		outputCh:       s.eventCh,
 		errorCh:        make(chan error, 1),
@@ -258,24 +255,6 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	state.markStopped()
 	w.delRegionState(regionID)
 	failpoint.Inject("kvClientSingleFeedProcessDelay", nil)
-	now := time.Now()
-	delay := w.limiter.ReserveN(now, 1).Delay()
-	if delay != 0 {
-		log.Info("EventFeed retry rate limited",
-			zap.Duration("delay", delay), zap.Reflect("regionID", regionID))
-		t := time.NewTimer(delay)
-		defer t.Stop()
-		select {
-		case <-t.C:
-			// We can proceed.
-		case <-ctx.Done():
-			revokeToken := !state.initialized
-			return w.session.onRegionFail(w.parentCtx, regionErrorInfo{
-				singleRegionInfo: state.sri,
-				err:              err,
-			}, revokeToken)
-		}
-	}
 
 	failpoint.Inject("kvClientErrUnreachable", func() {
 		if err == errUnreachable {

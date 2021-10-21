@@ -542,9 +542,15 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				return ctx.Err()
 			case errInfo := <-s.errCh:
 				s.errChSizeGauge.Dec()
-				err := s.handleError(ctx, errInfo)
-				if err != nil {
-					return err
+				allowed := s.checkRateLimit(errInfo.singleRegionInfo.verID.GetID())
+				if !allowed {
+					// rate limit triggers, add the error info to the end of error queue
+					s.enqueueError(ctx, errInfo)
+				} else {
+					err := s.handleError(ctx, errInfo)
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -637,18 +643,7 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 	if revokeToken {
 		s.regionRouter.Release(errorInfo.rpcCtx.Addr)
 	}
-	select {
-	case s.errCh <- errorInfo:
-		s.errChSizeGauge.Inc()
-	default:
-		go func() {
-			select {
-			case s.errCh <- errorInfo:
-				s.errChSizeGauge.Inc()
-			case <-ctx.Done():
-			}
-		}()
-	}
+	s.enqueueError(ctx, errorInfo)
 	return nil
 }
 
@@ -754,10 +749,9 @@ func (s *eventFeedSession) requestRegionToStore(
 			}
 			s.addStream(rpcCtx.Addr, stream, streamCancel)
 
-			limiter := s.client.getRegionLimiter(regionID)
 			g.Go(func() error {
 				defer s.deleteStream(rpcCtx.Addr)
-				return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client, pendingRegions, limiter)
+				return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client, pendingRegions)
 			})
 		}
 
@@ -956,6 +950,36 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 	}
 }
 
+// enqueueError sends error to the eventFeedSession's error channel in a none blocking way
+func (s *eventFeedSession) enqueueError(ctx context.Context, errorInfo regionErrorInfo) {
+	select {
+	case s.errCh <- errorInfo:
+		s.errChSizeGauge.Inc()
+	default:
+		go func() {
+			select {
+			case s.errCh <- errorInfo:
+				s.errChSizeGauge.Inc()
+			case <-ctx.Done():
+			}
+		}()
+	}
+}
+
+// checkRateLimit checks whether a region can be reconnected based on its rate limiter
+func (s *eventFeedSession) checkRateLimit(regionID uint64) (allowed bool) {
+	allowed = true
+	limiter := s.client.getRegionLimiter(regionID)
+	now := time.Now()
+	delay := limiter.ReserveN(now, 1).Delay()
+	if delay != 0 {
+		log.Info("EventFeed retry rate limited",
+			zap.Duration("delay", delay), zap.Reflect("regionID", regionID))
+		allowed = false
+	}
+	return
+}
+
 // handleError handles error returned by a region. If some new EventFeed connection should be established, the region
 // info will be sent to `regionCh`. Note if region channel is full, this function will be blocked.
 // CAUTION: Note that this should only be invoked in a context that the region is not locked, otherwise use onRegionFail
@@ -1035,7 +1059,6 @@ func (s *eventFeedSession) receiveFromStream(
 	storeID uint64,
 	stream cdcpb.ChangeData_EventFeedClient,
 	pendingRegions *syncRegionFeedStateMap,
-	limiter *rate.Limiter,
 ) error {
 	// Cancel the pending regions if the stream failed. Otherwise it will remain unhandled in the pendingRegions list
 	// however not registered in the new reconnected stream.
@@ -1063,7 +1086,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 	// always create a new region worker, because `receiveFromStreamV2` is ensured
 	// to call exactly once from outter code logic
-	worker := newRegionWorker(s, limiter, addr)
+	worker := newRegionWorker(s, addr)
 
 	defer func() {
 		worker.evictAllRegions() //nolint:errcheck
