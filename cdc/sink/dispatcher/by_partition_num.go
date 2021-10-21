@@ -17,16 +17,16 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-type partitionNumDispatcher struct {
-	targetPartition int32
+type partitionIndexDispatcher struct {
+	targetIndex int32
 }
 
-func newPartitionNumDispatcher(targetPartition int32) *partitionNumDispatcher {
-	return &partitionNumDispatcher{
-		targetPartition: targetPartition,
+func newPartitionIndexDispatcher(targetIndex int32) *partitionIndexDispatcher {
+	return &partitionIndexDispatcher{
+		targetIndex: targetIndex,
 	}
 }
 
-func (r *partitionNumDispatcher) Dispatch(_ *model.RowChangedEvent) int32 {
-	return r.targetPartition
+func (r *partitionIndexDispatcher) Dispatch(_ *model.RowChangedEvent) int32 {
+	return r.targetIndex
 }

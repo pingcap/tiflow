@@ -82,7 +82,7 @@ func (s SwitcherSuite) TestSwitcher(c *check.C) {
 		Table: &model.TableName{
 			Schema: "test_by_partition", Table: "test",
 		},
-	}), check.FitsTypeOf, &partitionNumDispatcher{})
+	}), check.FitsTypeOf, &partitionIndexDispatcher{})
 	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test_by_columns", Table: "test",
@@ -116,17 +116,27 @@ func (s SwitcherSuite) TestByPartitionDispatcher(c *check.C) {
 	d, err := NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_by_partition.*"}, Dispatcher: "4"}, // equal to partitionNum, out of index.
+				{Matcher: []string{"test_by_partition.*"}, Partition: "4"}, // equal to partitionNum, out of index.
 			},
 		},
 	}, 4)
-	c.Assert(err, check.ErrorMatches, ".*filter rule is invalid.*")
+	c.Assert(err, check.ErrorMatches, ".*can't create partition dispatcher.*")
 	c.Assert(d, check.IsNil)
 
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_by_partition.*"}, Dispatcher: "2"}, // equal to partitionNum, out of index.
+				{Matcher: []string{"test_by_partition.*"}, Partition: "-1"}, // invalid target partition index
+			},
+		},
+	}, 4)
+	c.Assert(err, check.ErrorMatches, ".*can't create partition dispatcher.*")
+	c.Assert(d, check.IsNil)
+
+	d, err = NewDispatcher(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{Matcher: []string{"test_by_partition.*"}, Partition: "2"}, // equal to partitionNum, out of index.
 			},
 		},
 	}, 4)
@@ -135,7 +145,7 @@ func (s SwitcherSuite) TestByPartitionDispatcher(c *check.C) {
 		Table: &model.TableName{
 			Schema: "test_by_partition", Table: "test",
 		},
-	}), check.FitsTypeOf, &partitionNumDispatcher{})
+	}), check.FitsTypeOf, &partitionIndexDispatcher{})
 }
 
 func (s SwitcherSuite) TestByColumnDispatcher(c *check.C) {

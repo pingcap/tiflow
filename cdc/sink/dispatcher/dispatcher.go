@@ -41,7 +41,7 @@ const (
 	dispatchRuleIndexValue // alias of RowID
 	dispatchRulePK         // alias of RowID
 	dispatchRuleByColumns
-	dispatchRuleByPartitionNum
+	dispatchRuleByPartitionIndex
 )
 
 var (
@@ -65,9 +65,8 @@ func (r *dispatchRule) fromString(s string) {
 		return
 	}
 
-	// todo (Ling Jin): how to handle `-1`, fail or broadcast
-	if tryGetDispatchRuleByPartitionNum(s) {
-		*r = dispatchRuleByPartitionNum
+	if tryGetDispatchRuleByPartitionIndex(s) {
+		*r = dispatchRuleByPartitionIndex
 		return
 	}
 
@@ -143,17 +142,15 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 			d = newTableDispatcher(partitionNum)
 		case dispatchRuleDefault:
 			d = newDefaultDispatcher(partitionNum, cfg.EnableOldValue)
-		case dispatchRuleByPartitionNum:
+		case dispatchRuleByPartitionIndex:
 			targetPartition, err := strconv.Atoi(partitionRule)
 			if err != nil {
 				return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 			}
-			if int32(targetPartition) >= partitionNum {
-				return nil, cerror.ErrFilterRuleInvalid.GenWithStack(
-					"can't create dispatcher rule by target partition(%d) >= partitionNum(%d)",
-					targetPartition, partitionNum)
+			if err := validateTargetPartitionIndex(int32(targetPartition), partitionNum); err != nil {
+				return nil, err
 			}
-			d = newPartitionNumDispatcher(int32(targetPartition))
+			d = newPartitionIndexDispatcher(int32(targetPartition))
 		case dispatchRuleByColumns:
 			d = newColumnsDispatcher(partitionNum, partitionRule)
 		}
@@ -167,12 +164,26 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 	}, nil
 }
 
-func tryGetDispatchRuleByPartitionNum(s string) bool {
-	a, err := strconv.Atoi(s)
-	if a < 0 {
-		return false
-	}
+// for by partition number rule, s should be able to be parsed as a positive int.
+// this function only check if s an int, we have to check it value further.
+func tryGetDispatchRuleByPartitionIndex(s string) bool {
+	_, err := strconv.Atoi(s)
 	return err == nil
+}
+
+func validateTargetPartitionIndex(target, partitionNum int32) error {
+	if target < 0 {
+		return cerror.ErrFilterRuleInvalid.GenWithStack(
+			"can't create partition dispatcher by target partition not a positive integer")
+	}
+
+	if target >= partitionNum {
+		return cerror.ErrFilterRuleInvalid.GenWithStack(
+			"can't create partition dispatcher by target partition(%d) >= partitionNum(%d)",
+			target, partitionNum)
+	}
+
+	return nil
 }
 
 // for by columns rule, s should have the format "[a, b, c]"
