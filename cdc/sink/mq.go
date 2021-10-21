@@ -230,9 +230,19 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	}
 
+	// -1 means broadcast to all partition, it's the default for the default open protocol.
+	var partition int32 = -1
+	// for Canal-Json / Canal-pb, send to partition 0.
+	if _, ok := encoder.(*codec.CanalFlatEventBatchEncoder); ok {
+		partition = 0
+	}
+	if _, ok := encoder.(*codec.CanalEventBatchEncoder); ok {
+		partition = 0
+	}
+
 	k.statistics.AddDDLCount()
-	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
-	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
+	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs), zap.Int32("partition", partition))
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
 	return errors.Trace(err)
 }
 
