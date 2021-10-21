@@ -90,12 +90,11 @@ func (s SwitcherSuite) TestSwitcher(c *check.C) {
 	}), check.FitsTypeOf, &columnsDispatcher{})
 }
 
-func (s SwitcherSuite) TestByPartitionDispatcher(c *check.C) {
+func (s SwitcherSuite) TestInvalidPartitionRule(c *check.C) {
 	defer testleak.AfterTest(c)()
-
-	invalidPartitionNum := []string{"-1", "3.14", "aloha"}
+	invalidPartitionRule := []string{"-1", "3.14", "aloha", "[,]"}
 	// for invalid partition number parameter, use `default`
-	for _, n := range invalidPartitionNum {
+	for _, n := range invalidPartitionRule {
 		d, err := NewDispatcher(&config.ReplicaConfig{
 			Sink: &config.SinkConfig{
 				DispatchRules: []*config.DispatchRule{
@@ -110,7 +109,10 @@ func (s SwitcherSuite) TestByPartitionDispatcher(c *check.C) {
 			},
 		}), check.FitsTypeOf, &defaultDispatcher{})
 	}
+}
 
+func (s SwitcherSuite) TestByPartitionDispatcher(c *check.C) {
+	defer testleak.AfterTest(c)()
 	d, err := NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
@@ -118,8 +120,22 @@ func (s SwitcherSuite) TestByPartitionDispatcher(c *check.C) {
 			},
 		},
 	}, 4)
-	c.Assert(err, check.NotNil)
+	c.Assert(err, check.ErrorMatches, ".*filter rule is invalid.*")
 	c.Assert(d, check.IsNil)
+
+	d, err = NewDispatcher(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{Matcher: []string{"test_by_partition.*"}, Dispatcher: "2"}, // equal to partitionNum, out of index.
+			},
+		},
+	}, 4)
+	c.Assert(err, check.IsNil)
+	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema: "test_by_partition", Table: "test",
+		},
+	}), check.FitsTypeOf, &partitionNumDispatcher{})
 }
 
 func (s SwitcherSuite) TestByColumnDispatcher(c *check.C) {
