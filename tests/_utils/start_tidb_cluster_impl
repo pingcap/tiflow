@@ -10,6 +10,7 @@ OUT_DIR=
 tidb_config=
 pd_config=
 multiple_upstream_pd=
+random_file_name=
 
 while [[ ${1} ]]; do
 	case "${1}" in
@@ -165,9 +166,15 @@ else
 split-table = true
 alter-primary-key = true
 new_collations_enabled_on_first_bootstrap = true
-socket = "/tmp/tidb-tls.sock"
 EOF
 fi
+
+randomAppendSocketsConf(){
+  random_file_name="$OUT_DIR/tidb-config-$RANDOM.toml"
+
+  cat "$OUT_DIR/tidb-config.toml" > "$random_file_name"
+  echo "socket = \"/tmp/tidb-$RANDOM.sock\"" >> "$random_file_name"
+}
 
 echo "Starting Upstream TiKV..."
 for idx in $(seq 1 3); do
@@ -197,26 +204,29 @@ tikv-server \
 sleep 2
 
 echo "Starting Upstream TiDB..."
+random_file_name
 tidb-server \
 	-P ${UP_TIDB_PORT} \
-	-config "$OUT_DIR/tidb-config.toml" \
+	-config "$random_file_name" \
 	--store tikv \
 	--path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
 	--status=${UP_TIDB_STATUS} \
 	--log-file "$OUT_DIR/tidb.log" &
 
+random_file_name
 tidb-server \
 	-P ${UP_TIDB_OTHER_PORT} \
-	-config "$OUT_DIR/tidb-config.toml" \
+	-config "$random_file_name" \
 	--store tikv \
 	--path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
 	--status=${UP_TIDB_OTHER_STATUS} \
 	--log-file "$OUT_DIR/tidb_other.log" &
 
 echo "Starting Downstream TiDB..."
+random_file_name
 tidb-server \
 	-P ${DOWN_TIDB_PORT} \
-	-config "$OUT_DIR/tidb-config.toml" \
+	-config "$random_file_name" \
 	--store tikv \
 	--path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
 	--status=${DOWN_TIDB_STATUS} \
