@@ -182,6 +182,10 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) *ca
 	return ret
 }
 
+func (c *CanalFlatEventBatchEncoder) newFlatMessageForCheckpointEvent(ts uint64) *canalFlatMessage {
+	return nil
+}
+
 // EncodeCheckpointEvent is no-op
 func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	return newResolvedMQMessage(ProtocolCanalJSON, nil, nil, ts), nil
