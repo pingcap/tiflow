@@ -523,9 +523,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 					return err
 				}
 			}
+			counter := len(w.handles)
 		checkEventsProcessed:
 			for {
-				counter := len(w.handles)
 				select {
 				case <-ctx.Done():
 					return errors.Trace(ctx.Err())
