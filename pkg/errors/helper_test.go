@@ -96,5 +96,4 @@ func TestChangefeedFastFailError(t *testing.T) {
 	rfcCode, _ = RFCCode(err)
 	require.Equal(t, false, ChangefeedFastFailError(err))
 	require.Equal(t, false, ChangefeedFastFailErrorCode(rfcCode))
-
 }
