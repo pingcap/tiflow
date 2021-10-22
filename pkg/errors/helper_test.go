@@ -69,16 +69,32 @@ func TestChangefeedFastFailError(t *testing.T) {
 	t.Parallel()
 	err := ErrGCTTLExceeded.FastGenByArgs()
 	rfcCode, _ := RFCCode(err)
-	require.Equal(t, ChangefeedFastFailError(err), true)
-	require.Equal(t, ChangefeedFastFailErrorCode(rfcCode), true)
+	require.Equal(t, true, ChangefeedFastFailError(err))
+	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+
+	err = ErrGCTTLExceeded.GenWithStack("aa")
+	rfcCode, _ = RFCCode(err)
+	require.Equal(t, true, ChangefeedFastFailError(err))
+	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+
+	err = ErrGCTTLExceeded.Wrap(errors.New("aa"))
+	rfcCode, _ = RFCCode(err)
+	require.Equal(t, true, ChangefeedFastFailError(err))
+	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrSnapshotLostByGC.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, ChangefeedFastFailError(err), true)
-	require.Equal(t, ChangefeedFastFailErrorCode(rfcCode), true)
+	require.Equal(t, true, ChangefeedFastFailError(err))
+	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrStartTsBeforeGC.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, ChangefeedFastFailError(err), true)
-	require.Equal(t, ChangefeedFastFailErrorCode(rfcCode), true)
+	require.Equal(t, true, ChangefeedFastFailError(err))
+	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+
+	err = ErrToTLSConfigFailed.FastGenByArgs()
+	rfcCode, _ = RFCCode(err)
+	require.Equal(t, false, ChangefeedFastFailError(err))
+	require.Equal(t, false, ChangefeedFastFailErrorCode(rfcCode))
+
 }
