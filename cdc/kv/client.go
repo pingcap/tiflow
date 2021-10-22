@@ -96,9 +96,9 @@ type regionStatefulEvent struct {
 	// regionID is used for load balancer, we don't use fields in state to reduce lock usage
 	regionID uint64
 
-	// finishedCounter is used to mark events that are sent from a give region
+	// finishedCallbackCh is used to mark events that are sent from a give region
 	// worker to this worker(one of the workers in worker pool) are all processed.
-	finishedCounter *int32
+	finishedCallbackCh chan struct{}
 }
 
 var (

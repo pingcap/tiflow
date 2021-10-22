@@ -19,7 +19,6 @@ import (
 	"reflect"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -377,8 +376,8 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 }
 
 func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEvent) error {
-	if event.finishedCounter != nil {
-		atomic.AddInt32(event.finishedCounter, -1)
+	if event.finishedCallbackCh != nil {
+		event.finishedCallbackCh <- struct{}{}
 		return nil
 	}
 	var err error
@@ -517,22 +516,24 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			// Send a dummy event to each worker pool handler, after each of these
 			// events are processed, we can ensure all events sent to worker pool
 			// from this region worker are processed.
-			counter := int32(len(w.handles))
+			finishedCallbackCh := make(chan struct{}, len(w.handles))
 			for _, handle := range w.handles {
-				err = handle.AddEvent(ctx, &regionStatefulEvent{finishedCounter: &counter})
+				err = handle.AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
 				if err != nil {
 					return err
 				}
 			}
 		checkEventsProcessed:
 			for {
+				counter := len(w.handles)
 				select {
 				case <-ctx.Done():
 					return errors.Trace(ctx.Err())
 				case err = <-w.errorCh:
 					return err
-				case <-time.After(10 * time.Millisecond):
-					if atomic.LoadInt32(&counter) == 0 {
+				case <-finishedCallbackCh:
+					counter--
+					if counter == 0 {
 						break checkEventsProcessed
 					}
 				}
