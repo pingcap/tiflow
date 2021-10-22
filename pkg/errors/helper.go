@@ -30,21 +30,37 @@ func WrapError(rfcError *errors.Error, err error) error {
 	return rfcError.Wrap(err).GenWithStackByCause()
 }
 
+var ChangeFeedFastFailError = []*errors.Error{
+	ErrGCTTLExceeded, ErrSnapshotLostByGC, ErrStartTsBeforeGC,
+}
+
 // ChangefeedFastFailError checks the error, returns true if it is meaningless
 // to retry on this error
 func ChangefeedFastFailError(err error) bool {
-	return ErrStartTsBeforeGC.Equal(err) || ErrSnapshotLostByGC.Equal(err) || ErrGCTTLExceeded.Equal(err)
+	if err == nil {
+		return false
+	}
+	for _, e := range ChangeFeedFastFailError {
+		if e.Equal(err.(error)) {
+			return true
+		}
+		rfcCode, ok := RFCCode(err.(error))
+		if ok && e.RFCCode() == rfcCode {
+			return true
+		}
+	}
+	return false
 }
 
 // ChangefeedFastFailErrorCode checks the error, returns true if it is meaningless
 // to retry on this error
 func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
-	switch errCode {
-	case ErrStartTsBeforeGC.RFCCode(), ErrSnapshotLostByGC.RFCCode(), ErrGCTTLExceeded.RFCCode():
-		return true
-	default:
-		return false
+	for _, e := range ChangeFeedFastFailError {
+		if errCode == e.RFCCode() {
+			return true
+		}
 	}
+	return false
 }
 
 // RFCCode returns a RFCCode from an error
