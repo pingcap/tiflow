@@ -95,6 +95,36 @@ func (s *rtsHeapSuite) TestRegionTsManagerPenalty(c *check.C) {
 	c.Assert(rts.ts.resolvedTs, check.DeepEquals, uint64(2000))
 }
 
+func (s *rtsHeapSuite) TestRegionTsManagerPenaltyForFallBackEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
+	mgr := newRegionTsManager()
+	initRegions := []*regionTsInfo{
+		{regionID: 100, ts: newResolvedTsItem(1000)},
+	}
+	for _, rts := range initRegions {
+		mgr.Upsert(rts)
+	}
+	c.Assert(mgr.Len(), check.Equals, 1)
+
+	// test penalty increases if we meet a fallback event
+	for i := 0; i < 6; i++ {
+		rts := &regionTsInfo{regionID: 100, ts: newResolvedTsItem(uint64(1000 - i))}
+		mgr.Upsert(rts)
+	}
+	rts := mgr.Pop()
+	// original resolvedTs will remain unchanged
+	c.Assert(rts.ts.resolvedTs, check.Equals, uint64(1000))
+	c.Assert(rts.ts.penalty, check.Equals, 6)
+
+	// test penalty is cleared to zero if resolved ts is advanced
+	mgr.Upsert(rts)
+	rtsNew := &regionTsInfo{regionID: 100, ts: newResolvedTsItem(2000)}
+	mgr.Upsert(rtsNew)
+	rts = mgr.Pop()
+	c.Assert(rts.ts.penalty, check.DeepEquals, 0)
+	c.Assert(rts.ts.resolvedTs, check.DeepEquals, uint64(2000))
+}
+
 func (s *rtsHeapSuite) TestRegionTsManagerEvTime(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mgr := newRegionTsManager()
