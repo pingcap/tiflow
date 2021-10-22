@@ -122,6 +122,7 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	ctx := context.Background()
 	err := gcManager.CheckStaleCheckpointTs(ctx, "cfID", 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
+	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 
 	err = gcManager.CheckStaleCheckpointTs(ctx, "cfID", oracle.GoTimeToTS(time.Now()))
 	c.Assert(err, check.IsNil)
@@ -130,4 +131,5 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	gcManager.lastSafePointTs = 20
 	err = gcManager.CheckStaleCheckpointTs(ctx, "cfID", 10)
 	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
+	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 }
