@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -10,29 +10,15 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//go:build !leak
-// +build !leak
 
-package testleak
+package model
 
 import (
 	"testing"
 
-	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/leakutil"
 )
 
-// BeforeTest is a dummy implementation when build tag 'leak' is not set.
-func BeforeTest() {
-}
-
-// AfterTest is a dummy implementation when build tag 'leak' is not set.
-func AfterTest(c *check.C) func() {
-	return func() {
-	}
-}
-
-// AfterTestT is used after all the test cases is finished.
-func AfterTestT(t *testing.T) func() {
-	return func() {
-	}
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }
