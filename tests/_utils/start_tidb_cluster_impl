@@ -94,25 +94,52 @@ pd-server \
 	--log-file "$OUT_DIR/down_pd.log" \
 	--data-dir "$OUT_DIR/down_pd" &
 
-# wait until PD is online...
+# wait until upstream PD is online...
+echo "Verifying upstream PD is started..."
 for idx in $(seq 1 $pd_count); do
 	host="UP_PD_HOST_$idx"
 	port="UP_PD_PORT_$idx"
 
+	i=0
 	while ! curl -o /dev/null -sf http://${!host}:${!port}/pd/api/v1/version; do
+		i=$((i + 1))
+		if [ "$i" -gt 60 ]; then
+			echo 'Failed to start upstream PD'
+			exit 1
+		fi
 		sleep 1
 	done
 
+	i=0
 	while [ -z "$(curl http://${!host}:${!port}/pd/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
+		i=$((i + 1))
+		if [ "$i" -gt 60 ]; then
+			echo 'Failed to start upstream PD'
+			exit 1
+		fi
 		sleep 1
 	done
 done
 
+# wait until downstream PD is online...
+echo "Verifying downstream PD is started..."
+i=0
 while ! curl -o /dev/null -sf http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/version; do
+	i=$((i + 1))
+	if [ "$i" -gt 60 ]; then
+		echo 'Failed to start downstream PD'
+		exit 1
+	fi
 	sleep 1
 done
 
+i=0
 while [ -z "$(curl http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
+	i=$((i + 1))
+	if [ "$i" -gt 60 ]; then
+		echo 'Failed to start downstream PD'
+		exit 1
+	fi
 	sleep 1
 done
 
