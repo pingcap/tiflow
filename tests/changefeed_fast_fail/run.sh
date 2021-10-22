@@ -70,7 +70,7 @@ function run() {
 	changefeedid="changefeed-fast-fail"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid
 
-	ensure $MAX_RETRIES check_changefeed_mark_failed_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_2} "ErrGCTTLExceeded"
+	ensure $MAX_RETRIES check_changefeed_mark_failed_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "ErrGCTTLExceeded"
 
 	cleanup_process $CDC_BINARY
 }
