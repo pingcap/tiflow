@@ -16,17 +16,13 @@ package model
 import (
 	"context"
 	"sync"
+	"testing"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type mounterSuite struct{}
-
-var _ = check.Suite(&mounterSuite{})
-
-func (s *mounterSuite) TestPolymorphicEvent(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestPolymorphicEvent(t *testing.T) {
+	t.Parallel()
 	raw := &RawKVEntry{
 		StartTs:  99,
 		CRTs:     100,
@@ -39,23 +35,23 @@ func (s *mounterSuite) TestPolymorphicEvent(c *check.C) {
 	}
 
 	polyEvent := NewPolymorphicEvent(raw)
-	c.Assert(polyEvent.RawKV, check.DeepEquals, raw)
-	c.Assert(polyEvent.CRTs, check.Equals, raw.CRTs)
-	c.Assert(polyEvent.StartTs, check.Equals, raw.StartTs)
-	c.Assert(polyEvent.RegionID(), check.Equals, raw.RegionID)
+	require.Equal(t, raw, polyEvent.RawKV)
+	require.Equal(t, raw.CRTs, polyEvent.CRTs)
+	require.Equal(t, raw.StartTs, polyEvent.StartTs)
+	require.Equal(t, raw.RegionID, polyEvent.RegionID())
 
 	rawResolved := &RawKVEntry{CRTs: resolved.CRTs, OpType: OpTypeResolved}
 	polyEvent = NewPolymorphicEvent(resolved)
-	c.Assert(polyEvent.RawKV, check.DeepEquals, rawResolved)
-	c.Assert(polyEvent.CRTs, check.Equals, resolved.CRTs)
-	c.Assert(polyEvent.StartTs, check.Equals, uint64(0))
+	require.Equal(t, rawResolved, polyEvent.RawKV)
+	require.Equal(t, resolved.CRTs, polyEvent.CRTs)
+	require.Equal(t, uint64(0), polyEvent.StartTs)
 }
 
-func (s *mounterSuite) TestPolymorphicEventPrepare(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestPolymorphicEventPrepare(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	polyEvent := NewPolymorphicEvent(&RawKVEntry{OpType: OpTypeResolved})
-	c.Assert(polyEvent.WaitPrepare(ctx), check.IsNil)
+	require.Nil(t, polyEvent.WaitPrepare(ctx))
 
 	polyEvent = NewPolymorphicEvent(&RawKVEntry{OpType: OpTypePut})
 	polyEvent.SetUpFinishedChan()
@@ -64,7 +60,7 @@ func (s *mounterSuite) TestPolymorphicEventPrepare(c *check.C) {
 	go func() {
 		defer wg.Done()
 		err := polyEvent.WaitPrepare(ctx)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}()
 	polyEvent.PrepareFinished()
 	wg.Wait()
@@ -74,5 +70,5 @@ func (s *mounterSuite) TestPolymorphicEventPrepare(c *check.C) {
 	polyEvent.SetUpFinishedChan()
 	cancel()
 	err := polyEvent.WaitPrepare(cctx)
-	c.Assert(err, check.Equals, context.Canceled)
+	require.Equal(t, context.Canceled, err)
 }
