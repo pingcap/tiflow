@@ -26,7 +26,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+<<<<<<< HEAD
 	"github.com/pingcap/ticdc/cdc/kv"
+=======
+	"github.com/pingcap/ticdc/cdc/capture"
+>>>>>>> 541fd8ace (api: fix pprof page 404 issues (#3109))
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -38,7 +42,7 @@ import (
 )
 
 func (s *Server) startStatusHTTP() error {
-	router := newRouter(s.capture)
+	router := newRouter(capture.NewHTTPHandler(s.capture))
 
 	router.GET("/status", gin.WrapF(s.handleStatus))
 	router.GET("/debug/info", gin.WrapF(s.handleDebugInfo))
