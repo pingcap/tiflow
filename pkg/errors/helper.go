@@ -33,7 +33,7 @@ func WrapError(rfcError *errors.Error, err error) error {
 // ChangefeedFastFailError checks the error, returns true if it is meaningless
 // to retry on this error
 func ChangefeedFastFailError(err error) bool {
-	return ErrStartTsBeforeGC.Equal(errors.Cause(err)) || ErrSnapshotLostByGC.Equal(errors.Cause(err)) || ErrGCTTLExceeded.Equal(errors.Cause(err))
+	return ErrStartTsBeforeGC.Equal(err) || ErrSnapshotLostByGC.Equal(err) || ErrGCTTLExceeded.Equal(err)
 }
 
 // ChangefeedFastFailErrorCode checks the error, returns true if it is meaningless
