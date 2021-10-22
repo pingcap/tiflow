@@ -76,11 +76,6 @@ type taskOnMessageBatch struct {
 	messageEntries []*p2p.MessageEntry
 }
 
-type taskOnMessageBackFill struct {
-	topic   string
-	entries []pendingMessageEntry
-}
-
 type taskOnRegisterPeer struct {
 	streamMeta *streamMeta
 	sender     *streamSender
@@ -183,12 +178,6 @@ func (m *MessageServer) run(ctx context.Context) error {
 							close(task.done)
 						}
 					}()
-				}
-			case taskOnMessageBackFill:
-				for _, entry := range task.entries {
-					if err := m.handleMessage(ctx, entry.SenderID, entry.Entry); err != nil {
-						return errors.Trace(err)
-					}
 				}
 			case taskOnRegisterPeer:
 				log.Debug("taskOnRegisterPeer",
@@ -409,10 +398,10 @@ func (m *MessageServer) registerHandler(ctx context.Context, topic string, handl
 			zap.String("topic", topic))
 	}
 
+	m.handlers[topic] = handler
 	if err := m.handlePendingMessages(ctx, topic, handler); err != nil {
 		return errors.Trace(err)
 	}
-	m.handlers[topic] = handler
 	return nil
 }
 
@@ -423,12 +412,13 @@ func (m *MessageServer) handlePendingMessages(ctx context.Context, topic string,
 			continue
 		}
 
-		if err := m.scheduleTask(ctx, taskOnMessageBackFill{
-			topic:   topic,
-			entries: entries,
-		}); err != nil {
-			return errors.Trace(err)
+		for _, entry := range entries {
+			if err := m.handleMessage(ctx, entry.SenderID, entry.Entry); err != nil {
+				return errors.Trace(err)
+			}
 		}
+
+		delete(m.pendingMessages, key)
 	}
 
 	return nil
