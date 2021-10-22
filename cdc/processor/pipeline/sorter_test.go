@@ -16,7 +16,7 @@ package pipeline
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/pipeline"
@@ -29,17 +29,17 @@ var _ = check.Suite(&sorterSuite{})
 
 func (s *sorterSuite) TestUnifiedSorterFileLockConflict(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer sorter.UnifiedSorterCleanUp()
+	defer unified.UnifiedSorterCleanUp()
 
 	dir := c.MkDir()
 	captureAddr := "0.0.0.0:0"
 
 	// GlobalServerConfig overrides dir parameter in NewUnifiedSorter.
 	config.GetGlobalServerConfig().Sorter.SortDir = dir
-	_, err := sorter.NewUnifiedSorter(dir, "test-cf", "test", 0, captureAddr)
+	_, err := unified.NewUnifiedSorter(dir, "test-cf", "test", 0, captureAddr)
 	c.Assert(err, check.IsNil)
 
-	sorter.ResetGlobalPoolWithoutCleanup()
+	unified.ResetGlobalPoolWithoutCleanup()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.Engine = model.SortUnified
 	ctx.ChangefeedVars().Info.SortDir = dir
