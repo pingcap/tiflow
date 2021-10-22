@@ -807,7 +807,7 @@ func getWorkerPoolSize() (size int) {
 	if cfg.WorkerPoolSize > 0 {
 		size = cfg.WorkerPoolSize
 	} else {
-		size = runtime.NumCPU() * 4
+		size = runtime.NumCPU() * 2
 	}
 	if size > maxWorkerPoolSize {
 		size = maxWorkerPoolSize
