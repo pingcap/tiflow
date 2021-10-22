@@ -238,6 +238,7 @@ var (
 	ErrReachMaxTry = errors.Normalize("reach maximum try: %d", errors.RFCCodeText("CDC:ErrReachMaxTry"))
 
 	// p2p error
+	ErrPeerMessageIllegalMeta           = errors.Normalize("peer-to-peer message server received an RPC call with illegal metadata", errors.RFCCodeText("CDC:ErrPeerMessageIllegalMeta"))
 	ErrPeerMessageTopicCongested        = errors.Normalize("peer-to-peer message topic has congested, aborting all connections", errors.RFCCodeText("CDC:ErrPeerMessageTopicCongested"))
 	ErrPeerMessageTaskQueueCongested    = errors.Normalize("peer-to-peer message server has too many pending tasks", errors.RFCCodeText("CDC:ErrPeerMessageTaskQueueCongested"))
 	ErrPeerMessageDecodeError           = errors.Normalize("failed to decode peer-to-peer message", errors.RFCCodeText("CDC:ErrPeerMessageDecodeError"))

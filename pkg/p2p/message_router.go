@@ -27,14 +27,14 @@ import (
 // that the local node needs to communicate with.
 type MessageRouter interface {
 	// AddPeer should be invoked when a new peer is discovered.
-	AddPeer(id SenderID, addr string)
+	AddPeer(id NodeID, addr string)
 	// RemovePeer should be invoked when a peer is determined to
 	// be permanently unavailable.
-	RemovePeer(id SenderID)
+	RemovePeer(id NodeID)
 	// GetClient returns a MessageClient for `target`. It returns
 	// nil if the target peer does not exist. The returned client
 	// is canceled if RemovePeer is called on `target`.
-	GetClient(target SenderID) *MessageClient
+	GetClient(target NodeID) *MessageClient
 	// Close cancels all clients maintained internally.
 	Close()
 	// Wait waits for all clients to exit.
@@ -42,10 +42,10 @@ type MessageRouter interface {
 }
 
 // NewMessageRouter creates a new MessageRouter
-func NewMessageRouter(selfID SenderID, credentials *security.Credential, clientConfig *MessageClientConfig) MessageRouter {
+func NewMessageRouter(selfID NodeID, credentials *security.Credential, clientConfig *MessageClientConfig) MessageRouter {
 	return &messageRouterImpl{
-		addressMap:   make(map[SenderID]string),
-		clients:      make(map[SenderID]clientWrapper),
+		addressMap:   make(map[NodeID]string),
+		clients:      make(map[NodeID]clientWrapper),
 		credentials:  credentials,
 		selfID:       selfID,
 		clientConfig: clientConfig,
@@ -54,8 +54,8 @@ func NewMessageRouter(selfID SenderID, credentials *security.Credential, clientC
 
 type messageRouterImpl struct {
 	mu         sync.RWMutex
-	addressMap map[SenderID]string
-	clients    map[SenderID]clientWrapper
+	addressMap map[NodeID]string
+	clients    map[NodeID]clientWrapper
 
 	wg sync.WaitGroup
 
@@ -63,7 +63,7 @@ type messageRouterImpl struct {
 
 	// read only field
 	credentials  *security.Credential
-	selfID       SenderID
+	selfID       NodeID
 	clientConfig *MessageClientConfig
 }
 
@@ -73,7 +73,7 @@ type clientWrapper struct {
 }
 
 // AddPeer implements MessageRouter.
-func (m *messageRouterImpl) AddPeer(id SenderID, addr string) {
+func (m *messageRouterImpl) AddPeer(id NodeID, addr string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -81,7 +81,7 @@ func (m *messageRouterImpl) AddPeer(id SenderID, addr string) {
 }
 
 // RemovePeer implements MessageRouter.
-func (m *messageRouterImpl) RemovePeer(id SenderID) {
+func (m *messageRouterImpl) RemovePeer(id NodeID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -92,7 +92,7 @@ func (m *messageRouterImpl) RemovePeer(id SenderID) {
 }
 
 // GetClient implements MessageRouter. The client will be created lazily.
-func (m *messageRouterImpl) GetClient(target SenderID) *MessageClient {
+func (m *messageRouterImpl) GetClient(target NodeID) *MessageClient {
 	m.mu.RLock()
 	// fast path
 	if cliWrapper, ok := m.clients[target]; ok {

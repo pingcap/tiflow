@@ -30,16 +30,16 @@ import (
 )
 
 type messageRouterTestSuite struct {
-	servers       map[SenderID]*MessageServer
-	cancels       map[SenderID]context.CancelFunc
+	servers       map[NodeID]*MessageServer
+	cancels       map[NodeID]context.CancelFunc
 	messageRouter MessageRouter
 	wg            sync.WaitGroup
 }
 
 func newMessageRouterTestSuite() *messageRouterTestSuite {
 	return &messageRouterTestSuite{
-		servers:       map[SenderID]*MessageServer{},
-		cancels:       map[SenderID]context.CancelFunc{},
+		servers:       map[NodeID]*MessageServer{},
+		cancels:       map[NodeID]context.CancelFunc{},
 		messageRouter: NewMessageRouter(
 			"test-client-1",
 			&security.Credential{},
@@ -47,11 +47,11 @@ func newMessageRouterTestSuite() *messageRouterTestSuite {
 	}
 }
 
-func (s *messageRouterTestSuite) getServer(id SenderID) *MessageServer {
+func (s *messageRouterTestSuite) getServer(id NodeID) *MessageServer {
 	return s.servers[id]
 }
 
-func (s *messageRouterTestSuite) addServer(ctx context.Context, t *testing.T, id SenderID) {
+func (s *messageRouterTestSuite) addServer(ctx context.Context, t *testing.T, id NodeID) {
 	addr := strings.TrimPrefix(tempurl.Alloc(), "http://")
 	lis, err := net.Listen("tcp", addr)
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestMessageRouterBasic(t *testing.T) {
 	for i := 0; i < defaultMessageBatchSizeLarge; i++ {
 		serverIdx := i % 3
 		serverID := fmt.Sprintf("server-%d", serverIdx+1)
-		Seq, err := suite.messageRouter.GetClient(SenderID(serverID)).SendMessage(ctx, "test-topic", &testTopicContent{int64(i/3) + 1})
+		Seq, err := suite.messageRouter.GetClient(NodeID(serverID)).SendMessage(ctx, "test-topic", &testTopicContent{int64(i/3) + 1})
 		require.NoError(t, err)
 		lastSeq[serverIdx] = Seq
 	}

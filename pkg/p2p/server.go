@@ -15,6 +15,7 @@ package p2p
 
 import (
 	"context"
+	"github.com/prometheus/client_golang/prometheus"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -49,7 +50,7 @@ type MessageServerConfig struct {
 
 // MessageServer is an implementation of the gRPC server for the peer-to-peer system
 type MessageServer struct {
-	serverID SenderID
+	serverID NodeID
 
 	handlers map[string]*handler
 
@@ -59,7 +60,7 @@ type MessageServer struct {
 	pendingMessages map[topicSenderPair][]pendingMessageEntry
 
 	acksMapLock sync.RWMutex
-	acksMap     map[SenderID]map[Topic]Seq
+	acksMap     map[NodeID]map[Topic]Seq
 
 	taskQueue chan interface{}
 	pool      workerpool.WorkerPool
@@ -71,7 +72,7 @@ type MessageServer struct {
 }
 
 type taskOnMessageBatch struct {
-	streamMeta     *p2p.StreamMeta
+	streamMeta     *streamMeta
 	messageEntries []*p2p.MessageEntry
 }
 
@@ -81,7 +82,7 @@ type taskOnMessageBackFill struct {
 }
 
 type taskOnRegisterPeer struct {
-	streamMeta *p2p.StreamMeta
+	streamMeta *streamMeta
 	sender     *streamSender
 	clientIP   string
 }
@@ -104,13 +105,13 @@ type taskDebugDelay struct {
 }
 
 // NewMessageServer creates a new MessageServer
-func NewMessageServer(serverID SenderID, config *MessageServerConfig) *MessageServer {
+func NewMessageServer(serverID NodeID, config *MessageServerConfig) *MessageServer {
 	return &MessageServer{
 		serverID:        serverID,
 		handlers:        make(map[string]*handler),
 		peers:           make(map[string]*cdcPeer),
 		pendingMessages: make(map[topicSenderPair][]pendingMessageEntry),
-		acksMap:         make(map[SenderID]map[Topic]Seq),
+		acksMap:         make(map[NodeID]map[Topic]Seq),
 		taskQueue:       make(chan interface{}, config.MaxPendingTaskCount),
 		pool:            workerpool.NewDefaultWorkerPool(config.WorkerPoolSize),
 		closeCh:         make(chan struct{}),
@@ -158,7 +159,7 @@ func (m *MessageServer) run(ctx context.Context) error {
 			switch task := task.(type) {
 			case taskOnMessageBatch:
 				for _, entry := range task.messageEntries {
-					if err := m.handleMessage(ctx, task.streamMeta.GetSenderId(), entry); err != nil {
+					if err := m.handleMessage(ctx, task.streamMeta.SenderID, entry); err != nil {
 						return errors.Trace(err)
 					}
 				}
@@ -191,8 +192,8 @@ func (m *MessageServer) run(ctx context.Context) error {
 				}
 			case taskOnRegisterPeer:
 				log.Debug("taskOnRegisterPeer",
-					zap.String("sender", task.streamMeta.GetSenderId()),
-					zap.Int64("epoch", task.streamMeta.GetEpoch()))
+					zap.String("sender", task.streamMeta.SenderID),
+					zap.Int64("epoch", task.streamMeta.Epoch))
 				if err := m.registerPeer(ctx, task.streamMeta, task.sender, task.clientIP); err != nil {
 					if cerror.ErrPeerMessageStaleConnection.Equal(err) || cerror.ErrPeerMessageDuplicateConnection.Equal(err) {
 						// These two errors should not affect other peers
@@ -232,7 +233,7 @@ func (m *MessageServer) tick(ctx context.Context) error {
 	for _, peer := range m.peers {
 		var acks []*p2p.Ack
 		m.acksMapLock.RLock()
-		for topic, ack := range m.acksMap[peer.SenderID] {
+		for topic, ack := range m.acksMap[peer.PeerID] {
 			acks = append(acks, &p2p.Ack{
 				Topic:   topic,
 				LastSeq: ack,
@@ -305,7 +306,7 @@ func (m *MessageServer) AddHandler(
 		e := reflect.New(tp.Elem()).Interface()
 
 		m.acksMapLock.Lock()
-		lastAck := m.getAck(SenderID(senderID), Topic(entry.GetTopic()))
+		lastAck := m.getAck(NodeID(senderID), Topic(entry.GetTopic()))
 		if lastAck >= entry.Sequence {
 			// TODO add metrics
 			log.Debug("skipping peer message",
@@ -435,22 +436,21 @@ func (m *MessageServer) handlePendingMessages(ctx context.Context, topic string,
 
 func (m *MessageServer) registerPeer(
 	ctx context.Context,
-	streamMeta *p2p.StreamMeta,
+	streamMeta *streamMeta,
 	sender *streamSender,
 	clientIP string) error {
 	log.Info("peer connection received",
-		zap.String("sender-id", streamMeta.GetSenderId()),
+		zap.String("sender-id", streamMeta.SenderID),
 		zap.String("addr", clientIP),
-		zap.Int64("epoch", streamMeta.GetEpoch()))
+		zap.Int64("epoch", streamMeta.Epoch))
 
 	m.peerLock.Lock()
-	peer, ok := m.peers[streamMeta.SenderId]
+	peer, ok := m.peers[streamMeta.SenderID]
 	if !ok {
 		// no existing peer
-		m.peers[streamMeta.SenderId] = &cdcPeer{
-			PeerID:   streamMeta.SenderId,
+		m.peers[streamMeta.SenderID] = &cdcPeer{
+			PeerID:   streamMeta.SenderID,
 			Epoch:    streamMeta.Epoch,
-			SenderID: streamMeta.SenderId,
 			sender:   sender,
 		}
 		m.peerLock.Unlock()
@@ -459,9 +459,9 @@ func (m *MessageServer) registerPeer(
 		// there is an existing peer
 		if peer.Epoch > streamMeta.Epoch {
 			log.Warn("incoming connection is stale",
-				zap.String("sender-id", streamMeta.GetSenderId()),
+				zap.String("sender-id", streamMeta.SenderID),
 				zap.String("addr", clientIP),
-				zap.Int64("epoch", streamMeta.GetEpoch()))
+				zap.Int64("epoch", streamMeta.Epoch))
 
 			// the current stream is stale
 			return cerror.ErrPeerMessageStaleConnection.GenWithStackByArgs(streamMeta.Epoch /* old */, peer.Epoch /* new */)
@@ -469,18 +469,17 @@ func (m *MessageServer) registerPeer(
 			err := cerror.ErrPeerMessageStaleConnection.GenWithStackByArgs(peer.Epoch /* old */, streamMeta.Epoch /* new */)
 			m.deregisterPeer(ctx, peer, err)
 			m.peerLock.Lock()
-			m.peers[streamMeta.SenderId] = &cdcPeer{
-				PeerID:   streamMeta.SenderId,
+			m.peers[streamMeta.SenderID] = &cdcPeer{
+				PeerID:   streamMeta.SenderID,
 				Epoch:    streamMeta.Epoch,
-				SenderID: streamMeta.SenderId,
 				sender:   sender,
 			}
 			m.peerLock.Unlock()
 		} else {
 			log.Warn("incoming connection is duplicate",
-				zap.String("sender-id", streamMeta.GetSenderId()),
+				zap.String("sender-id", streamMeta.SenderID),
 				zap.String("addr", clientIP),
-				zap.Int64("epoch", streamMeta.GetEpoch()))
+				zap.Int64("epoch", streamMeta.Epoch))
 
 			return cerror.ErrPeerMessageDuplicateConnection.GenWithStackByArgs(streamMeta.Epoch)
 		}
@@ -511,6 +510,16 @@ func (m *MessageServer) scheduleTaskBlocking(ctx context.Context, task interface
 
 // SendMessage implements the gRPC call SendMessage.
 func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) error {
+	sm, err := streamMetaFromCtx(stream.Context())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	metricsServerStreamCount := serverStreamCount.With(prometheus.Labels{
+		"from": sm.SenderAdvertisedAddr,
+	})
+	metricsServerStreamCount.Add(1)
+	defer metricsServerStreamCount.Sub(1)
+
 	sendCh := make(chan p2p.SendMessageResponse, m.config.SendChannelSize)
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
@@ -522,7 +531,7 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 			closeCh: make(chan struct{}),
 		}
 		defer sender.Close()
-		if err := m.receive(ctx, stream, sender); err != nil {
+		if err := m.receive(stream, sender); err != nil {
 			log.Warn("peer-to-peer message handler error", zap.Error(err))
 			select {
 			case <-ctx.Done():
@@ -566,8 +575,26 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 	// namely this function.
 }
 
-func (m *MessageServer) receive(ctx context.Context, stream p2p.CDCPeerToPeer_SendMessageServer, sender *streamSender) error {
-	var streamMeta *p2p.StreamMeta
+func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, sender *streamSender) error {
+	sm, err := streamMetaFromCtx(stream.Context())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	clientIP := "unknown"
+	if p, ok := gRPCPeer.FromContext(stream.Context()); ok {
+		clientIP = p.Addr.String()
+	}
+	// We use scheduleTaskBlocking because blocking here is acceptable.
+	// Blocking here will cause grpc-go to back propagate the pressure
+	// to the client, which is what we want.
+	if err := m.scheduleTaskBlocking(stream.Context(), taskOnRegisterPeer{
+		streamMeta: sm,
+		sender:     sender,
+		clientIP:   clientIP,
+	}); err != nil {
+		return errors.Trace(err)
+	}
+
 	for {
 		failpoint.Inject("ServerInjectServerRestart", func() {
 			_ = stream.Send(&p2p.SendMessageResponse{
@@ -581,40 +608,13 @@ func (m *MessageServer) receive(ctx context.Context, stream p2p.CDCPeerToPeer_Se
 			return errors.Trace(err)
 		}
 
-		clientIP := "unknown"
-		if p, ok := gRPCPeer.FromContext(stream.Context()); ok {
-			clientIP = p.Addr.String()
-		}
-
-		if streamMeta == nil {
-			// streamMeta has not been received
-			if packet.GetStreamMeta() == nil {
-				return cerror.ErrPeerMessageUnexpected.GenWithStackByArgs(clientIP, "no stream-meta")
-			}
-			streamMeta = packet.GetStreamMeta()
-			if streamMeta.ReceiverId != m.serverID {
-				return cerror.ErrPeerMessageReceiverMismatch.GenWithStackByArgs(m.serverID /* expected */, streamMeta.ReceiverId /* got */)
-			}
-
-			// We use scheduleTaskBlocking because blocking here is acceptable.
-			// Blocking here will cause grpc-go to back propagate the pressure
-			// to the client, which is what we want.
-			if err := m.scheduleTaskBlocking(stream.Context(), taskOnRegisterPeer{
-				streamMeta: streamMeta,
-				sender:     sender,
-				clientIP:   clientIP,
-			}); err != nil {
-				return errors.Trace(err)
-			}
-		}
-
-		log.Debug("received packet", zap.String("sender", streamMeta.GetSenderId()),
+		log.Debug("received packet", zap.String("sender", sm.SenderID),
 			zap.Int("num-entries", len(packet.GetEntries())))
 
 		if len(packet.GetEntries()) > 0 {
 			// See the comment above on why use scheduleTaskBlocking.
-			if err := m.scheduleTaskBlocking(ctx, taskOnMessageBatch{
-				streamMeta:     streamMeta,
+			if err := m.scheduleTaskBlocking(stream.Context(), taskOnMessageBatch{
+				streamMeta:     sm,
 				messageEntries: packet.GetEntries(),
 			}); err != nil {
 				return errors.Trace(err)
@@ -664,7 +664,7 @@ func (m *MessageServer) handleMessage(ctx context.Context, senderID string, entr
 }
 
 // getAckStorage must be called with `acksMapLock` taken.
-func (m *MessageServer) getAck(senderID SenderID, topic Topic) Seq {
+func (m *MessageServer) getAck(senderID NodeID, topic Topic) Seq {
 	var senderMap map[Topic]Seq
 	if senderMap = m.acksMap[senderID]; senderMap == nil {
 		senderMap = make(map[Topic]Seq)
@@ -674,7 +674,7 @@ func (m *MessageServer) getAck(senderID SenderID, topic Topic) Seq {
 }
 
 // setAck must be called with `acksMapLock` taken.
-func (m *MessageServer) setAck(senderID SenderID, topic Topic, ack Seq) {
+func (m *MessageServer) setAck(senderID NodeID, topic Topic, ack Seq) {
 	var senderMap map[Topic]Seq
 	if senderMap = m.acksMap[senderID]; senderMap == nil {
 		senderMap = make(map[Topic]Seq)
@@ -745,7 +745,6 @@ func (s *streamSender) Close() {
 type cdcPeer struct {
 	PeerID   string
 	Epoch    int64
-	SenderID SenderID
 	sender   *streamSender
 }
 

@@ -147,16 +147,13 @@ func TestServerSingleClientSingleTopic(t *testing.T) {
 	client, closeClient := newClient()
 	defer closeClient()
 
-	stream, err := client.SendMessage(ctx)
-	require.NoError(t, err)
-
-	err = stream.Send(&p2p.MessagePacket{
-		StreamMeta: &p2p.StreamMeta{
-			SenderId:   "test-client-1",
-			ReceiverId: "test-server-1",
-			Epoch:      0,
-		},
+	streamCtx := withStreamMeta(ctx, &streamMeta{
+		SenderID:             "test-client-1",
+		ReceiverID:           "test-server-1",
+		Epoch:                0,
 	})
+
+	stream, err := client.SendMessage(streamCtx)
 	require.NoError(t, err)
 
 	wg.Add(1)
@@ -244,6 +241,11 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			client, closeClient := newClient()
+			ctx := withStreamMeta(ctx, &streamMeta{
+				SenderID:             fmt.Sprintf("test-client-%d", i),
+				ReceiverID:           "test-server-1",
+				Epoch:                0,
+			})
 			stream, err := client.SendMessage(ctx)
 			require.NoError(t, err)
 
@@ -266,15 +268,6 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 					}
 				}
 			}()
-
-			err = stream.Send(&p2p.MessagePacket{
-				StreamMeta: &p2p.StreamMeta{
-					SenderId:   fmt.Sprintf("test-client-%d", i),
-					ReceiverId: "test-server-1",
-					Epoch:      0,
-				},
-			})
-			require.NoError(t, err)
 
 			for j := 0; j < defaultMessageBatchSizeLarge; j++ {
 				content := &testTopicContent{Index: int64(j + 1)}
@@ -347,16 +340,13 @@ func TestServerSingleClientMultiTopic(t *testing.T) {
 	client, closeClient := newClient()
 	defer closeClient()
 
-	stream, err := client.SendMessage(ctx)
-	require.NoError(t, err)
-
-	err = stream.Send(&p2p.MessagePacket{
-		StreamMeta: &p2p.StreamMeta{
-			SenderId:   "test-client-1",
-			ReceiverId: "test-server-1",
-			Epoch:      0,
-		},
+	streamCtx := withStreamMeta(ctx, &streamMeta{
+		SenderID:             "test-client-1",
+		ReceiverID:           "test-server-1",
+		Epoch:                0,
 	})
+
+	stream, err := client.SendMessage(streamCtx)
 	require.NoError(t, err)
 
 	wg.Add(1)
@@ -451,16 +441,13 @@ func TestServerDeregisterHandler(t *testing.T) {
 	client, closeClient := newClient()
 	defer closeClient()
 
-	stream, err := client.SendMessage(ctx)
-	require.NoError(t, err)
-
-	err = stream.Send(&p2p.MessagePacket{
-		StreamMeta: &p2p.StreamMeta{
-			SenderId:   "test-client-1",
-			ReceiverId: "test-server-1",
-			Epoch:      0,
-		},
+	streamCtx := withStreamMeta(ctx, &streamMeta{
+		SenderID:             "test-client-1",
+		ReceiverID:           "test-server-1",
+		Epoch:                0,
 	})
+
+	stream, err := client.SendMessage(streamCtx)
 	require.NoError(t, err)
 
 	removeHandler := func() {
@@ -562,6 +549,13 @@ func TestServerSingleClientReconnection(t *testing.T) {
 	for i := 0; ; i++ {
 		i := i
 		client, closeClient := newClient()
+
+		ctx := withStreamMeta(ctx, &streamMeta{
+			SenderID:             "test-client-1",
+			ReceiverID:           "test-server-1",
+			Epoch:                int64(i),
+		})
+
 		stream, err := client.SendMessage(ctx)
 		require.NoError(t, err)
 
@@ -570,15 +564,6 @@ func TestServerSingleClientReconnection(t *testing.T) {
 		go func() {
 			defer subWg.Done()
 			defer closeClient()
-
-			err = stream.Send(&p2p.MessagePacket{
-				StreamMeta: &p2p.StreamMeta{
-					SenderId:   "test-client-1",
-					ReceiverId: "test-server-1",
-					Epoch:      int64(i),
-				},
-			})
-			require.NoError(t, err)
 
 			startSeq := atomic.LoadInt64(&lastAck) + 1
 			for j := startSeq; j < startSeq+defaultMessageBatchSizeSmall; j++ {
@@ -646,6 +631,12 @@ func TestServerClosed(t *testing.T) {
 	server, newClient, closer := newServerForTesting(t, "test-server-1")
 	defer closer()
 
+	ctx = withStreamMeta(ctx, &streamMeta{
+		SenderID:             "test-client-1",
+		ReceiverID:           "test-server-1",
+		Epoch:               0,
+	})
+
 	cctx, cancelServer := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -690,16 +681,13 @@ func TestServerTopicCongestedDueToNoHandler(t *testing.T) {
 	client, closeClient := newClient()
 	defer closeClient()
 
-	stream, err := client.SendMessage(ctx)
-	require.NoError(t, err)
-
-	err = stream.Send(&p2p.MessagePacket{
-		StreamMeta: &p2p.StreamMeta{
-			SenderId:   "test-client-1",
-			ReceiverId: "test-server-1",
-			Epoch:      0,
-		},
+	streamCtx := withStreamMeta(ctx, &streamMeta{
+		SenderID:             "test-client-1",
+		ReceiverID:           "test-server-1",
+		Epoch:               0,
 	})
+
+	stream, err := client.SendMessage(streamCtx)
 	require.NoError(t, err)
 
 	wg.Add(1)

@@ -48,6 +48,8 @@ type MessageClientConfig struct {
 	RetryRateLimitPerSecond float64
 	// The dial timeout for the gRPC client
 	DialTimeout             time.Duration
+	// The advertised address of this node. Used for logging and monitoring purposes.
+	AdvertisedAddr          string
 }
 
 // MessageClient is a client used to send peer messages.
@@ -58,7 +60,7 @@ type MessageClient struct {
 	topicMu sync.RWMutex
 	topics  map[string]*topicEntry
 
-	senderID SenderID
+	senderID NodeID
 
 	closeCh  chan struct{}
 	isClosed int32
@@ -87,7 +89,7 @@ type messageEntry struct {
 
 // NewMessageClient creates a new MessageClient
 // senderID is an identifier for the local node.
-func NewMessageClient(senderID SenderID, config *MessageClientConfig) *MessageClient {
+func NewMessageClient(senderID NodeID, config *MessageClientConfig) *MessageClient {
 	return &MessageClient{
 		sendCh:   make(chan *messageEntry, config.SendChannelSize),
 		topics:   make(map[string]*topicEntry),
@@ -98,7 +100,7 @@ func NewMessageClient(senderID SenderID, config *MessageClientConfig) *MessageCl
 }
 
 // Run launches background goroutines for MessageClient to work.
-func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverID SenderID, credential *security.Credential) (ret error) {
+func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverID NodeID, credential *security.Credential) (ret error) {
 	defer func() {
 		atomic.StoreInt32(&c.isClosed, 1)
 		close(c.closeCh)
@@ -140,7 +142,15 @@ func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverI
 
 		grpcClient := p2p.NewCDCPeerToPeerClient(conn)
 
-		cancelCtx, cancelStream := context.WithCancel(ctx)
+		epoch++
+		streamCtx := withStreamMeta(ctx, &streamMeta{
+			SenderID:             c.senderID,
+			ReceiverID:           receiverID,
+			SenderAdvertisedAddr: c.config.AdvertisedAddr,
+			Epoch:                epoch,
+		})
+
+		cancelCtx, cancelStream := context.WithCancel(streamCtx)
 		clientStream, err := grpcClient.SendMessage(cancelCtx)
 		if err != nil {
 			cancelStream()
@@ -149,12 +159,6 @@ func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverI
 			continue
 		}
 
-		epoch++
-		err = clientStream.Send(&p2p.MessagePacket{StreamMeta: &p2p.StreamMeta{
-			SenderId:   c.senderID,
-			ReceiverId: receiverID,
-			Epoch:      epoch,
-		}})
 		if err != nil {
 			cancelStream()
 			_ = conn.Close()
