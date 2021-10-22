@@ -14,20 +14,18 @@
 package model
 
 import (
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"testing"
+
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	parser_types "github.com/pingcap/tidb/parser/types"
+	"github.com/stretchr/testify/require"
 )
 
-type schemaStorageSuite struct{}
+func TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&schemaStorageSuite{})
-
-func (s *schemaStorageSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *check.C) {
-	defer testleak.AfterTest(c)()
-	t := timodel.TableInfo{
+	tbl := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
 				Name: timodel.CIStr{O: "group"},
@@ -89,16 +87,17 @@ func (s *schemaStorageSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 		IsCommonHandle: true,
 		PKIsHandle:     false,
 	}
-	info := WrapTableInfo(1, "", 0, &t)
+	info := WrapTableInfo(1, "", 0, &tbl)
 	cols := info.GetUniqueKeys()
-	c.Assert(cols, check.DeepEquals, [][]string{
+	require.Equal(t, [][]string{
 		{"id"}, {"name"},
-	})
+	}, cols)
 }
 
-func (s *schemaStorageSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *check.C) {
-	defer testleak.AfterTest(c)()
-	t := timodel.TableInfo{
+func TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(t *testing.T) {
+	t.Parallel()
+
+	tbl := timodel.TableInfo{
 		Indices: []*timodel.IndexInfo{
 			{
 				Name: timodel.CIStr{
@@ -132,16 +131,17 @@ func (s *schemaStorageSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *chec
 		},
 		PKIsHandle: true,
 	}
-	info := WrapTableInfo(1, "", 0, &t)
+	info := WrapTableInfo(1, "", 0, &tbl)
 	cols := info.GetUniqueKeys()
-	c.Assert(cols, check.DeepEquals, [][]string{
+	require.Equal(t, [][]string{
 		{"uid"}, {"job"},
-	})
+	}, cols)
 }
 
-func (s *schemaStorageSuite) TestUniqueKeyIsHandle(c *check.C) {
-	defer testleak.AfterTest(c)()
-	t := timodel.TableInfo{
+func TestUniqueKeyIsHandle(t *testing.T) {
+	t.Parallel()
+
+	tbl := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
 				Name: timodel.CIStr{O: "group"},
@@ -187,14 +187,15 @@ func (s *schemaStorageSuite) TestUniqueKeyIsHandle(c *check.C) {
 		IsCommonHandle: false,
 		PKIsHandle:     false,
 	}
-	info := WrapTableInfo(1, "", 0, &t)
+	info := WrapTableInfo(1, "", 0, &tbl)
 	cols := info.GetUniqueKeys()
-	c.Assert(cols, check.DeepEquals, [][]string{{"name"}})
+	require.Equal(t, [][]string{{"name"}}, cols)
 }
 
-func (s *schemaStorageSuite) TestHandleKeyPriority(c *check.C) {
-	defer testleak.AfterTest(c)()
-	t := timodel.TableInfo{
+func TestHandleKeyPriority(t *testing.T) {
+	t.Parallel()
+
+	tbl := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
 				Name: timodel.CIStr{O: "a"},
@@ -292,15 +293,16 @@ func (s *schemaStorageSuite) TestHandleKeyPriority(c *check.C) {
 		IsCommonHandle: false,
 		PKIsHandle:     false,
 	}
-	info := WrapTableInfo(1, "", 0, &t)
+	info := WrapTableInfo(1, "", 0, &tbl)
 	cols := info.GetUniqueKeys()
-	c.Assert(info.HandleIndexID, check.Equals, int64(8))
-	c.Assert(cols, check.DeepEquals, [][]string{{"a", "b"}, {"c"}, {"b"}})
+	require.Equal(t, int64(8), info.HandleIndexID)
+	require.Equal(t, [][]string{{"a", "b"}, {"c"}, {"b"}}, cols)
 }
 
-func (s *schemaStorageSuite) TestTableInfoGetterFuncs(c *check.C) {
-	defer testleak.AfterTest(c)()
-	t := timodel.TableInfo{
+func TestTableInfoGetterFuncs(t *testing.T) {
+	t.Parallel()
+
+	tbl := timodel.TableInfo{
 		ID:   1071,
 		Name: timodel.CIStr{O: "t1"},
 		Columns: []*timodel.ColumnInfo{
@@ -347,34 +349,34 @@ func (s *schemaStorageSuite) TestTableInfoGetterFuncs(c *check.C) {
 		IsCommonHandle: false,
 		PKIsHandle:     false,
 	}
-	info := WrapTableInfo(1, "test", 0, &t)
+	info := WrapTableInfo(1, "test", 0, &tbl)
 
 	col, exists := info.GetColumnInfo(2)
-	c.Assert(exists, check.IsTrue)
-	c.Assert(col.Name.O, check.Equals, "c")
+	require.True(t, exists)
+	require.Equal(t, "c", col.Name.O)
 	_, exists = info.GetColumnInfo(4)
-	c.Assert(exists, check.IsFalse)
+	require.False(t, exists)
 
-	c.Assert(info.String(), check.Equals, "TableInfo, ID: 1071, Name:test.t1, ColNum: 3, IdxNum: 1, PKIsHandle: false")
+	require.Equal(t, "TableInfo, ID: 1071, Name:test.t1, ColNum: 3, IdxNum: 1, PKIsHandle: false", info.String())
 
 	idx, exists := info.GetIndexInfo(0)
-	c.Assert(exists, check.IsTrue)
-	c.Assert(idx.Name.O, check.Equals, "c")
+	require.True(t, exists)
+	require.Equal(t, "c", idx.Name.O)
 	_, exists = info.GetIndexInfo(1)
-	c.Assert(exists, check.IsFalse)
+	require.False(t, exists)
 
 	handleColIDs, fts, colInfos := info.GetRowColInfos()
-	c.Assert(handleColIDs, check.DeepEquals, []int64{-1})
-	c.Assert(len(fts), check.Equals, 3)
-	c.Assert(len(colInfos), check.Equals, 3)
+	require.Equal(t, []int64{-1}, handleColIDs)
+	require.Equal(t, 3, len(fts))
+	require.Equal(t, 3, len(colInfos))
 
-	c.Assert(info.IsColumnUnique(0), check.IsFalse)
-	c.Assert(info.IsColumnUnique(2), check.IsTrue)
-	c.Assert(info.ExistTableUniqueColumn(), check.IsTrue)
+	require.False(t, info.IsColumnUnique(0))
+	require.True(t, info.IsColumnUnique(2))
+	require.True(t, info.ExistTableUniqueColumn())
 
 	// check IsEligible
-	c.Assert(info.IsEligible(false), check.IsTrue)
-	t = timodel.TableInfo{
+	require.True(t, info.IsEligible(false))
+	tbl = timodel.TableInfo{
 		ID:   1073,
 		Name: timodel.CIStr{O: "t2"},
 		Columns: []*timodel.ColumnInfo{
@@ -398,17 +400,18 @@ func (s *schemaStorageSuite) TestTableInfoGetterFuncs(c *check.C) {
 		IsCommonHandle: false,
 		PKIsHandle:     false,
 	}
-	info = WrapTableInfo(1, "test", 0, &t)
-	c.Assert(info.IsEligible(false), check.IsFalse)
-	c.Assert(info.IsEligible(true), check.IsTrue)
-	t.View = &timodel.ViewInfo{}
-	info = WrapTableInfo(1, "test", 0, &t)
-	c.Assert(info.IsEligible(false), check.IsTrue)
+	info = WrapTableInfo(1, "test", 0, &tbl)
+	require.False(t, info.IsEligible(false))
+	require.True(t, info.IsEligible(true))
+	tbl.View = &timodel.ViewInfo{}
+	info = WrapTableInfo(1, "test", 0, &tbl)
+	require.True(t, info.IsEligible(false))
 }
 
-func (s *schemaStorageSuite) TestTableInfoClone(c *check.C) {
-	defer testleak.AfterTest(c)()
-	t := timodel.TableInfo{
+func TestTableInfoClone(t *testing.T) {
+	t.Parallel()
+
+	tbl := timodel.TableInfo{
 		ID:   1071,
 		Name: timodel.CIStr{O: "t1"},
 		Columns: []*timodel.ColumnInfo{
@@ -434,9 +437,9 @@ func (s *schemaStorageSuite) TestTableInfoClone(c *check.C) {
 			},
 		},
 	}
-	info := WrapTableInfo(10, "test", 0, &t)
+	info := WrapTableInfo(10, "test", 0, &tbl)
 	cloned := info.Clone()
-	c.Assert(cloned.SchemaID, check.Equals, info.SchemaID)
+	require.Equal(t, cloned.SchemaID, info.SchemaID)
 	cloned.SchemaID = 100
-	c.Assert(info.SchemaID, check.Equals, int64(10))
+	require.Equal(t, int64(10), info.SchemaID)
 }

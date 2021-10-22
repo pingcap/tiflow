@@ -14,81 +14,77 @@
 package model
 
 import (
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"testing"
+
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/stretchr/testify/require"
 )
 
-type columnFlagTypeSuite struct{}
+func TestSetFlag(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&columnFlagTypeSuite{})
-
-func (s *columnFlagTypeSuite) TestSetFlag(c *check.C) {
-	defer testleak.AfterTest(c)()
 	var flag ColumnFlagType
 	flag.SetIsBinary()
 	flag.SetIsGeneratedColumn()
-	c.Assert(flag.IsBinary(), check.IsTrue)
-	c.Assert(flag.IsHandleKey(), check.IsFalse)
-	c.Assert(flag.IsGeneratedColumn(), check.IsTrue)
+	require.True(t, flag.IsBinary())
+	require.False(t, flag.IsHandleKey())
+	require.True(t, flag.IsGeneratedColumn())
 	flag.UnsetIsBinary()
-	c.Assert(flag.IsBinary(), check.IsFalse)
+	require.False(t, flag.IsBinary())
 	flag.SetIsMultipleKey()
 	flag.SetIsUniqueKey()
-	c.Assert(flag.IsMultipleKey() && flag.IsUniqueKey(), check.IsTrue)
+	require.True(t, flag.IsMultipleKey() && flag.IsUniqueKey())
 	flag.UnsetIsUniqueKey()
 	flag.UnsetIsGeneratedColumn()
 	flag.UnsetIsMultipleKey()
-	c.Assert(flag.IsUniqueKey() || flag.IsGeneratedColumn() || flag.IsMultipleKey(), check.IsFalse)
+	require.False(t, flag.IsUniqueKey() || flag.IsGeneratedColumn() || flag.IsMultipleKey())
 
 	flag = ColumnFlagType(0)
 	flag.SetIsHandleKey()
 	flag.SetIsPrimaryKey()
 	flag.SetIsUnsigned()
-	c.Assert(flag.IsHandleKey() && flag.IsPrimaryKey() && flag.IsUnsigned(), check.IsTrue)
+	require.True(t, flag.IsHandleKey() && flag.IsPrimaryKey() && flag.IsUnsigned())
 	flag.UnsetIsHandleKey()
 	flag.UnsetIsPrimaryKey()
 	flag.UnsetIsUnsigned()
-	c.Assert(flag.IsHandleKey() || flag.IsPrimaryKey() || flag.IsUnsigned(), check.IsFalse)
+	require.False(t, flag.IsHandleKey() || flag.IsPrimaryKey() || flag.IsUnsigned())
 	flag.SetIsNullable()
-	c.Assert(flag.IsNullable(), check.IsTrue)
+	require.True(t, flag.IsNullable())
 	flag.UnsetIsNullable()
-	c.Assert(flag.IsNullable(), check.IsFalse)
+	require.False(t, flag.IsNullable())
 }
 
-func (s *columnFlagTypeSuite) TestFlagValue(c *check.C) {
-	defer testleak.AfterTest(c)()
-	c.Assert(BinaryFlag, check.Equals, ColumnFlagType(0b1))
-	c.Assert(HandleKeyFlag, check.Equals, ColumnFlagType(0b10))
-	c.Assert(GeneratedColumnFlag, check.Equals, ColumnFlagType(0b100))
-	c.Assert(PrimaryKeyFlag, check.Equals, ColumnFlagType(0b1000))
-	c.Assert(UniqueKeyFlag, check.Equals, ColumnFlagType(0b10000))
-	c.Assert(MultipleKeyFlag, check.Equals, ColumnFlagType(0b100000))
-	c.Assert(NullableFlag, check.Equals, ColumnFlagType(0b1000000))
+func TestFlagValue(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, ColumnFlagType(0b1), BinaryFlag)
+	require.Equal(t, ColumnFlagType(0b1), BinaryFlag)
+	require.Equal(t, ColumnFlagType(0b10), HandleKeyFlag)
+	require.Equal(t, ColumnFlagType(0b100), GeneratedColumnFlag)
+	require.Equal(t, ColumnFlagType(0b1000), PrimaryKeyFlag)
+	require.Equal(t, ColumnFlagType(0b10000), UniqueKeyFlag)
+	require.Equal(t, ColumnFlagType(0b100000), MultipleKeyFlag)
+	require.Equal(t, ColumnFlagType(0b1000000), NullableFlag)
 }
 
-type commonDataStructureSuite struct{}
-
-var _ = check.Suite(&commonDataStructureSuite{})
-
-func (s *commonDataStructureSuite) TestTableNameFuncs(c *check.C) {
-	defer testleak.AfterTest(c)()
-	t := &TableName{
+func TestTableNameFuncs(t *testing.T) {
+	t.Parallel()
+	tbl := &TableName{
 		Schema:  "test",
 		Table:   "t1",
 		TableID: 1071,
 	}
-	c.Assert(t.String(), check.Equals, "test.t1")
-	c.Assert(t.QuoteString(), check.Equals, "`test`.`t1`")
-	c.Assert(t.GetSchema(), check.Equals, "test")
-	c.Assert(t.GetTable(), check.Equals, "t1")
-	c.Assert(t.GetTableID(), check.Equals, int64(1071))
+	require.Equal(t, "test.t1", tbl.String())
+	require.Equal(t, "`test`.`t1`", tbl.QuoteString())
+	require.Equal(t, "test", tbl.GetSchema())
+	require.Equal(t, "t1", tbl.GetTable())
+	require.Equal(t, int64(1071), tbl.GetTableID())
 }
 
-func (s *commonDataStructureSuite) TestRowChangedEventFuncs(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestRowChangedEventFuncs(t *testing.T) {
+	t.Parallel()
 	deleteRow := &RowChangedEvent{
 		Table: &TableName{
 			Schema: "test",
@@ -113,9 +109,9 @@ func (s *commonDataStructureSuite) TestRowChangedEventFuncs(c *check.C) {
 			Flag:  HandleKeyFlag | PrimaryKeyFlag,
 		},
 	}
-	c.Assert(deleteRow.IsDelete(), check.IsTrue)
-	c.Assert(deleteRow.PrimaryKeyColumns(), check.DeepEquals, expectedKeyCols)
-	c.Assert(deleteRow.HandleKeyColumns(), check.DeepEquals, expectedKeyCols)
+	require.True(t, deleteRow.IsDelete())
+	require.Equal(t, expectedKeyCols, deleteRow.PrimaryKeyColumns())
+	require.Equal(t, expectedKeyCols, deleteRow.HandleKeyColumns())
 
 	insertRow := &RowChangedEvent{
 		Table: &TableName{
@@ -142,13 +138,13 @@ func (s *commonDataStructureSuite) TestRowChangedEventFuncs(c *check.C) {
 			Flag:  HandleKeyFlag,
 		},
 	}
-	c.Assert(insertRow.IsDelete(), check.IsFalse)
-	c.Assert(insertRow.PrimaryKeyColumns(), check.DeepEquals, expectedPrimaryKeyCols)
-	c.Assert(insertRow.HandleKeyColumns(), check.DeepEquals, expectedHandleKeyCols)
+	require.False(t, insertRow.IsDelete())
+	require.Equal(t, expectedPrimaryKeyCols, insertRow.PrimaryKeyColumns())
+	require.Equal(t, expectedHandleKeyCols, insertRow.HandleKeyColumns())
 }
 
-func (s *commonDataStructureSuite) TestColumnValueString(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestColumnValueString(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		val      interface{}
 		expected string
@@ -173,23 +169,23 @@ func (s *commonDataStructureSuite) TestColumnValueString(c *check.C) {
 	}
 	for _, tc := range testCases {
 		s := ColumnValueString(tc.val)
-		c.Assert(s, check.Equals, tc.expected)
+		require.Equal(t, tc.expected, s)
 	}
 }
 
-func (s *commonDataStructureSuite) TestFromTiColumnInfo(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestFromTiColumnInfo(t *testing.T) {
+	t.Parallel()
 	col := &ColumnInfo{}
 	col.FromTiColumnInfo(&timodel.ColumnInfo{
 		Name:      timodel.CIStr{O: "col1"},
 		FieldType: types.FieldType{Tp: 3},
 	})
-	c.Assert(col.Name, check.Equals, "col1")
-	c.Assert(col.Type, check.Equals, uint8(3))
+	require.Equal(t, "col1", col.Name)
+	require.Equal(t, uint8(3), col.Type)
 }
 
-func (s *commonDataStructureSuite) TestDDLEventFromJob(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestDDLEventFromJob(t *testing.T) {
+	t.Parallel()
 	job := &timodel.Job{
 		ID:         1071,
 		TableID:    49,
@@ -225,11 +221,11 @@ func (s *commonDataStructureSuite) TestDDLEventFromJob(c *check.C) {
 	}
 	event := &DDLEvent{}
 	event.FromJob(job, preTableInfo)
-	c.Assert(event.StartTs, check.Equals, uint64(420536581131337731))
-	c.Assert(event.TableInfo.TableID, check.Equals, int64(49))
-	c.Assert(event.PreTableInfo.ColumnInfo, check.HasLen, 1)
+	require.Equal(t, uint64(420536581131337731), event.StartTs)
+	require.Equal(t, event.TableInfo.TableID, int64(49))
+	require.Equal(t, 1, len(event.PreTableInfo.ColumnInfo))
 
 	event = &DDLEvent{}
 	event.FromJob(job, nil)
-	c.Assert(event.PreTableInfo, check.IsNil)
+	require.Nil(t, event.PreTableInfo)
 }
