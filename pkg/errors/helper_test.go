@@ -64,3 +64,21 @@ func TestIsRetryableError(t *testing.T) {
 		require.Equal(t, ret, tt.want, "case:%s", tt.name)
 	}
 }
+
+func TestChangefeedFastFailError(t *testing.T) {
+	t.Parallel()
+	err := ErrGCTTLExceeded.FastGenByArgs()
+	rfcCode, _ := RFCCode(err)
+	require.Equal(t, ChangefeedFastFailError(err), true)
+	require.Equal(t, ChangefeedFastFailErrorCode(rfcCode), true)
+
+	err = ErrSnapshotLostByGC.FastGenByArgs()
+	rfcCode, _ = RFCCode(err)
+	require.Equal(t, ChangefeedFastFailError(err), true)
+	require.Equal(t, ChangefeedFastFailErrorCode(rfcCode), true)
+
+	err = ErrStartTsBeforeGC.FastGenByArgs()
+	rfcCode, _ = RFCCode(err)
+	require.Equal(t, ChangefeedFastFailError(err), true)
+	require.Equal(t, ChangefeedFastFailErrorCode(rfcCode), true)
+}
