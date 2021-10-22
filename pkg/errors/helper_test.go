@@ -74,3 +74,21 @@ func (s *helperSuite) TestIsRetryableError(c *check.C) {
 		c.Assert(ret, check.Equals, tt.want, check.Commentf("case:%s", tt.name))
 	}
 }
+
+func TestChangefeedFastFailError(t *testing.T) {
+	t.Parallel()
+	err := ErrGCTTLExceeded.FastGenByArgs()
+	rfcCode, _ := RFCCode(err)
+	require.Equal(t, ChangefeedFastFailError(err), true)
+	require.Equal(t, ChangefeedFastFailErrorCode(rfcCode), true)
+
+	err = ErrSnapshotLostByGC.FastGenByArgs()
+	rfcCode, _ = RFCCode(err)
+	require.Equal(t, ChangefeedFastFailError(err), true)
+	require.Equal(t, ChangefeedFastFailErrorCode(rfcCode), true)
+
+	err = ErrStartTsBeforeGC.FastGenByArgs()
+	rfcCode, _ = RFCCode(err)
+	require.Equal(t, ChangefeedFastFailError(err), true)
+	require.Equal(t, ChangefeedFastFailErrorCode(rfcCode), true)
+}
