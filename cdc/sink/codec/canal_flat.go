@@ -77,6 +77,10 @@ type canalFlatMessage struct {
 	// A Datum should be a string or nil
 	Data []map[string]interface{} `json:"data"`
 	Old  []map[string]interface{} `json:"old"`
+
+	// CheckpointTs is a TiCDC custom field, which does not support by original canal protocol
+	// this is useful for message consumer to reform the original transactions.
+	CheckpointTs uint64 `json:"checkpointTs"`
 	// Used internally by CanalFlatEventBatchEncoder
 	tikvTs uint64
 }
@@ -182,13 +186,20 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) *ca
 	return ret
 }
 
-func (c *CanalFlatEventBatchEncoder) newFlatMessageForCheckpointEvent(ts uint64) *canalFlatMessage {
-	return nil
+func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *canalFlatMessage {
+	return &canalFlatMessage{
+		CheckpointTs: ts,
+	}
 }
 
-// EncodeCheckpointEvent is no-op
+// EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
-	return newResolvedMQMessage(ProtocolCanalJSON, nil, nil, ts), nil
+	msg := c.newFlatMessage4CheckpointEvent(ts)
+	value, err := json.Marshal(msg)
+	if err != nil {
+		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
+	}
+	return newResolvedMQMessage(ProtocolCanalJSON, nil, value, ts), nil
 }
 
 // AppendRowChangedEvent implements the interface EventBatchEncoder
