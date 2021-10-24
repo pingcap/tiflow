@@ -105,6 +105,10 @@ type canalFlatMessage struct {
 	// A Datum should be a string or nil
 	Data []map[string]interface{} `json:"data"`
 	Old  []map[string]interface{} `json:"old"`
+
+	// CheckpointTs is a TiCDC custom field, which does not support by original canal protocol
+	// this is useful for message consumer to reform the original transactions.
+	CheckpointTs uint64 `json:"checkpointTs"`
 	// Used internally by CanalFlatEventBatchEncoder
 	tikvTs uint64
 }
@@ -320,7 +324,6 @@ func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessag
 	if !c.enableTiDBExtension {
 		return nil, nil
 	}
-
 	msg := c.newFlatMessage4CheckpointEvent(ts)
 	value, err := json.Marshal(msg)
 	if err != nil {
