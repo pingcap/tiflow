@@ -121,6 +121,9 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 }
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
+	failpoint.Inject("InjectChangefeedFastFailError", func() error {
+		return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
+	})
 	state := c.state.Info.State
 	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
 		if err := c.gcManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
@@ -134,9 +137,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	c.state = state
 	c.feedStateManager.Tick(state)
 
-	failpoint.Inject("InjectChangefeedFastFailError", func() error {
-		return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
-	})
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	// check stale checkPointTs must call before `feedStateManager.ShouldRunning()`
 	// to ensure an error or stopped changefeed also be checked
