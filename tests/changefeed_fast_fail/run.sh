@@ -9,17 +9,6 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 MAX_RETRIES=20
 
-function check_changefeed_count() {
-	pd_addr=$1
-	expected=$2
-	feed_count=$(cdc cli changefeed list --pd=$pd_addr | jq '.|length')
-	if [[ "$feed_count" != "$expected" ]]; then
-		echo "[$(date)] <<<<< unexpect changefeed count! expect ${expected} got ${feed_count} >>>>>"
-		exit 1
-	fi
-	echo "changefeed count ${feed_count} check pass, pd_addr: $pd_addr"
-}
-
 function check_changefeed_mark_failed_regex() {
 	endpoints=$1
 	changefeedid=$2
@@ -39,7 +28,6 @@ function check_changefeed_mark_failed_regex() {
 }
 
 export -f check_changefeed_mark_failed_regex
-export -f check_changefeed_count
 
 function run() {
 	# it is no need to test kafka
@@ -66,8 +54,13 @@ function run() {
 
 	ensure $MAX_RETRIES check_changefeed_mark_failed_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "ErrGCTTLExceeded"
 	run_cdc_cli changefeed remove -c $changefeedid
-	sleep 1
-	esure $MAX_RETRIES ncheck_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1} 0
+	sleep 2
+	#result=$(curl -X GET "http://127.0.0.1:8300/api/v1/changefeeds")
+	result=$(cdc cli changefeed list)
+	if [[ ! "$result" == "[]" ]]; then
+		echo "changefeed remove failed"
+		exit 1
+	fi
 
 	cleanup_process $CDC_BINARY
 }
