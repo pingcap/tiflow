@@ -412,7 +412,7 @@ func readInt64(r io.Reader) (int64, error) {
 }
 
 // decodeFrameSize pair with encodeFrameSize in writer.file
-// the func is copy from etcd wal/decoder.go
+// the func use code from etcd wal/decoder.go
 func decodeFrameSize(lenField int64) (recBytes int64, padBytes int64) {
 	// the record size is stored in the lower 56 bits of the 64-bit length
 	recBytes = int64(uint64(lenField) & ^(uint64(0xff) << 56))
@@ -426,7 +426,7 @@ func decodeFrameSize(lenField int64) (recBytes int64, padBytes int64) {
 
 // isTornEntry determines whether the last entry of the Log was partially written
 // and corrupted because of a torn write.
-// the func is copy from etcd wal/decoder.go
+// the func use code from etcd wal/decoder.go
 // ref: https://github.com/etcd-io/etcd/pull/5250
 func (r *reader) isTornEntry(data []byte) bool {
 	fileOff := r.lastValidOff + frameSizeBytes
