@@ -1,7 +1,5 @@
 syntax = "proto3";
-package proto;
-
-option go_package = "./proto";
+package pb;
 
 message Record {
     bytes start_ts  = 1;
