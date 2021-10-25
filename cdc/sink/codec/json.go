@@ -24,9 +24,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/cdc/model"
