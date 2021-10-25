@@ -10,29 +10,19 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//go:build !leak
-// +build !leak
 
-package testleak
+package sorter
 
 import (
-	"testing"
+	"context"
 
-	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
-// BeforeTest is a dummy implementation when build tag 'leak' is not set.
-func BeforeTest() {
-}
-
-// AfterTest is a dummy implementation when build tag 'leak' is not set.
-func AfterTest(c *check.C) func() {
-	return func() {
-	}
-}
-
-// AfterTestT is used after all the test cases is finished.
-func AfterTestT(t *testing.T) func() {
-	return func() {
-	}
+// EventSorter accepts unsorted PolymorphicEvents, sort them in background and returns
+// sorted PolymorphicEvents in Output channel
+type EventSorter interface {
+	Run(ctx context.Context) error
+	AddEntry(ctx context.Context, entry *model.PolymorphicEvent)
+	Output() <-chan *model.PolymorphicEvent
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/capture"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -38,9 +39,8 @@ import (
 )
 
 func (s *Server) startStatusHTTP() error {
-	conf := config.GetGlobalServerConfig()
 
-	router := newRouter(s.capture, conf)
+	router := newRouter(capture.NewHTTPHandler(s.capture))
 
 	router.GET("/status", gin.WrapF(s.handleStatus))
 	router.GET("/debug/info", gin.WrapF(s.handleDebugInfo))
