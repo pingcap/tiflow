@@ -14,24 +14,22 @@
 package model
 
 import (
+	"fmt"
 	"math"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-type configSuite struct{}
+func TestFillV1(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&configSuite{})
-
-func (s *configSuite) TestFillV1(c *check.C) {
-	defer testleak.AfterTest(c)()
 	v1Config := `
 {
     "sink-uri":"blackhole://",
@@ -112,8 +110,8 @@ func (s *configSuite) TestFillV1(c *check.C) {
 `
 	cfg := &ChangeFeedInfo{}
 	err := cfg.Unmarshal([]byte(v1Config))
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg, check.DeepEquals, &ChangeFeedInfo{
+	require.Nil(t, err)
+	require.Equal(t, &ChangeFeedInfo{
 		SinkURI: "blackhole://",
 		Opts: map[string]string{
 			"_cyclic_relax_sql_mode": `{"enable":true,"replica-id":1,"filter-replica-ids":[2,3],"id-buckets":4,"sync-ddl":true}`,
@@ -162,11 +160,12 @@ func (s *configSuite) TestFillV1(c *check.C) {
 				SyncDDL:         true,
 			},
 		},
-	})
+	}, cfg)
 }
 
-func (s *configSuite) TestVerifyAndFix(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestVerifyAndFix(t *testing.T) {
+	t.Parallel()
+
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
 		Opts:    map[string]string{},
@@ -179,19 +178,20 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 	}
 
 	err := info.VerifyAndFix()
-	c.Assert(err, check.IsNil)
-	c.Assert(info.Engine, check.Equals, SortUnified)
+	require.Nil(t, err)
+	require.Equal(t, SortUnified, info.Engine)
 
 	marshalConfig1, err := info.Config.Marshal()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defaultConfig := config.GetDefaultReplicaConfig()
 	marshalConfig2, err := defaultConfig.Marshal()
-	c.Assert(err, check.IsNil)
-	c.Assert(marshalConfig1, check.Equals, marshalConfig2)
+	require.Nil(t, err)
+	require.Equal(t, marshalConfig2, marshalConfig1)
 }
 
-func (s *configSuite) TestChangeFeedInfoClone(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestChangeFeedInfoClone(t *testing.T) {
+	t.Parallel()
+
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
 		Opts:    map[string]string{},
@@ -204,22 +204,19 @@ func (s *configSuite) TestChangeFeedInfoClone(c *check.C) {
 	}
 
 	cloned, err := info.Clone()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	sinkURI := "mysql://unix:/var/run/tidb.sock"
 	cloned.SinkURI = sinkURI
 	cloned.Config.EnableOldValue = false
-	c.Assert(cloned.SinkURI, check.Equals, sinkURI)
-	c.Assert(cloned.Config.EnableOldValue, check.IsFalse)
-	c.Assert(info.SinkURI, check.Equals, "blackhole://")
-	c.Assert(info.Config.EnableOldValue, check.IsTrue)
+	require.Equal(t, sinkURI, cloned.SinkURI)
+	require.False(t, cloned.Config.EnableOldValue)
+	require.Equal(t, "blackhole://", info.SinkURI)
+	require.True(t, info.Config.EnableOldValue)
 }
 
-type changefeedSuite struct{}
+func TestCheckErrorHistory(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&changefeedSuite{})
-
-func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
-	defer testleak.AfterTest(c)()
 	now := time.Now()
 	info := &ChangeFeedInfo{
 		ErrorHis: []int64{},
@@ -235,28 +232,28 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 	}
 	time.Sleep(time.Millisecond)
 	needSave, canInit := info.CheckErrorHistory()
-	c.Assert(needSave, check.IsTrue)
-	c.Assert(canInit, check.IsTrue)
-	c.Assert(info.ErrorHis, check.HasLen, ErrorHistoryThreshold-1)
+	require.True(t, needSave)
+	require.True(t, canInit)
+	require.Equal(t, ErrorHistoryThreshold-1, len(info.ErrorHis))
 
 	info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 	needSave, canInit = info.CheckErrorHistory()
-	c.Assert(needSave, check.IsFalse)
-	c.Assert(canInit, check.IsFalse)
+	require.False(t, needSave)
+	require.False(t, canInit)
 }
 
-func (s *changefeedSuite) TestChangefeedInfoStringer(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestChangefeedInfoStringer(t *testing.T) {
+	t.Parallel()
+
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
 		StartTs: 418881574869139457,
 	}
-	str := info.String()
-	c.Check(str, check.Matches, ".*sink-uri\":\"\\*\\*\\*\".*")
+	require.Regexp(t, "^.*sink-uri\":\"\\*\\*\\*\".*$", info.String())
 }
 
-func (s *changefeedSuite) TestValidateChangefeedID(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestValidateChangefeedID(t *testing.T) {
+	t.Parallel()
 
 	tests := []struct {
 		name    string
@@ -327,15 +324,16 @@ func (s *changefeedSuite) TestValidateChangefeedID(c *check.C) {
 	for _, tt := range tests {
 		err := ValidateChangefeedID(tt.id)
 		if !tt.wantErr {
-			c.Assert(err, check.IsNil, check.Commentf("case:%s", tt.name))
+			require.Nil(t, err, fmt.Sprintf("case:%s", tt.name))
 		} else {
-			c.Assert(cerror.ErrInvalidChangefeedID.Equal(err), check.IsTrue, check.Commentf("case:%s", tt.name))
+			require.True(t, cerror.ErrInvalidChangefeedID.Equal(err), fmt.Sprintf("case:%s", tt.name))
 		}
 	}
 }
 
-func (s *changefeedSuite) TestGetTs(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestGetTs(t *testing.T) {
+	t.Parallel()
+
 	var (
 		startTs      uint64 = 418881574869139457
 		targetTs     uint64 = 420891571239139085
@@ -346,15 +344,15 @@ func (s *changefeedSuite) TestGetTs(c *check.C) {
 			CreateTime: createTime,
 		}
 	)
-	c.Assert(info.GetStartTs(), check.Equals, oracle.GoTimeToTS(createTime))
+	require.Equal(t, info.GetStartTs(), oracle.GoTimeToTS(createTime))
 	info.StartTs = startTs
-	c.Assert(info.GetStartTs(), check.Equals, startTs)
+	require.Equal(t, info.GetStartTs(), startTs)
 
-	c.Assert(info.GetTargetTs(), check.Equals, uint64(math.MaxUint64))
+	require.Equal(t, info.GetTargetTs(), uint64(math.MaxUint64))
 	info.TargetTs = targetTs
-	c.Assert(info.GetTargetTs(), check.Equals, targetTs)
+	require.Equal(t, info.GetTargetTs(), targetTs)
 
-	c.Assert(info.GetCheckpointTs(nil), check.Equals, startTs)
+	require.Equal(t, info.GetCheckpointTs(nil), startTs)
 	status := &ChangeFeedStatus{CheckpointTs: checkpointTs}
-	c.Assert(info.GetCheckpointTs(status), check.Equals, checkpointTs)
+	require.Equal(t, info.GetCheckpointTs(status), checkpointTs)
 }
