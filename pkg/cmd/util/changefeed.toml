@@ -36,17 +36,3 @@ dispatchers = [
 # For MQ Sinks, you can configure the protocol of the messages sending to MQ
 # Currently the protocol support default, canal, avro and maxwell. Default is ticdc-open-protocol
 protocol = "default"
-
-[cyclic-replication]
-# 是否开启环形复制
-# Whether to enable cyclic replication
-enable = false
-# 当前 CDC 的复制 ID
-# The replica ID of this capture
-replica-id = 1
-# 需要过滤掉的复制 ID
-# The replica ID should be ignored
-filter-replica-ids = [2,3]
-# 是否同步 DDL
-# Whether to replicate DDL
-sync-ddl = true

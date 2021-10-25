@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -203,15 +202,6 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 		return errors.Annotatef(
 			cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 	}
-	// TODO(neil) find a better way to let sink know cyclic is enabled.
-	if info.Config != nil && info.Config.Cyclic.IsEnabled() {
-		cyclicCfg, err := info.Config.Cyclic.Marshal()
-		if err != nil {
-			return errors.Annotatef(
-				cerror.WrapError(cerror.ErrMarshalFailed, err), "Marshal data: %v", data)
-		}
-		info.Opts[mark.OptCyclicConfig] = cyclicCfg
-	}
 	return nil
 }
 
@@ -242,9 +232,6 @@ func (info *ChangeFeedInfo) VerifyAndFix() error {
 	}
 	if info.Config.Sink == nil {
 		info.Config.Sink = defaultConfig.Sink
-	}
-	if info.Config.Cyclic == nil {
-		info.Config.Cyclic = defaultConfig.Cyclic
 	}
 	if info.Config.Scheduler == nil {
 		info.Config.Scheduler = defaultConfig.Scheduler

@@ -51,9 +51,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Sink: &SinkConfig{
 		Protocol: "default",
 	},
-	Cyclic: &CyclicConfig{
-		Enable: false,
-	},
 	Scheduler: &SchedulerConfig{
 		Tp:          "table-number",
 		PollingTime: -1,
@@ -71,7 +68,6 @@ type replicaConfig struct {
 	Filter           *FilterConfig    `toml:"filter" json:"filter"`
 	Mounter          *MounterConfig   `toml:"mounter" json:"mounter"`
 	Sink             *SinkConfig      `toml:"sink" json:"sink"`
-	Cyclic           *CyclicConfig    `toml:"cyclic-replication" json:"cyclic-replication"`
 	Scheduler        *SchedulerConfig `toml:"scheduler" json:"scheduler"`
 }
 

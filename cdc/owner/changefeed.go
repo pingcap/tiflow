@@ -403,10 +403,6 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		log.Warn("ignore the invalid DDL job", zap.Reflect("job", job))
 		return true, nil
 	}
-	cyclicConfig := c.state.Info.Config.Cyclic
-	if cyclicConfig.IsEnabled() && !cyclicConfig.SyncDDL {
-		return true, nil
-	}
 	if c.ddlEventCache == nil || c.ddlEventCache.CommitTs != job.BinlogInfo.FinishedTS {
 		ddlEvent, err := c.schema.BuildDDLEvent(job)
 		if err != nil {

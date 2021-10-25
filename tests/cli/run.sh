@@ -58,13 +58,6 @@ function run() {
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
 	fi
 
-	run_cdc_cli changefeed cyclic create-marktables \
-		--cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
-
-	# Make sure changefeed is created.
-	check_table_exists tidb_cdc.repl_mark_test_simple ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists tidb_cdc."\`repl_mark_test_simple-dash\`" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-
 	check_changefeed_state $uuid "normal"
 
 	check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1} 1

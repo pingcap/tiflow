@@ -153,8 +153,7 @@ func (t *tablePipelineImpl) Wait() {
 // replicating 1024 tables in the worst case.
 const defaultOutputChannelSize = 64
 
-// There are 5 or 6 runners in table pipeline: header, puller, sorter, mounter,
-// sink, cyclic if cyclic replication is enabled
+// There are 5 runners in table pipeline: header, puller, sorter, mounter and sink
 const defaultRunnersSize = 5
 
 // NewTablePipeline creates a table pipeline
@@ -181,19 +180,11 @@ func NewTablePipeline(ctx cdcContext.Context,
 		zap.Int64("table-id", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
-	config := ctx.ChangefeedVars().Info.Config
-	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
 	runnerSize := defaultRunnersSize
-	if cyclicEnabled {
-		runnerSize++
-	}
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
 	p.AppendNode(ctx, "mounter", newMounterNode())
-	if cyclicEnabled {
-		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
-	}
 	tablePipeline.sinkNode = newSinkNode(sink, replicaInfo.StartTs, targetTs, flowController)
 	p.AppendNode(ctx, "sink", tablePipeline.sinkNode)
 	tablePipeline.p = p

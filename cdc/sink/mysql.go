@@ -34,8 +34,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	tifilter "github.com/pingcap/ticdc/pkg/filter"
@@ -71,6 +69,9 @@ const (
 	backoffMaxDelayInMs = 60 * 1000
 )
 
+// SchemaName is the name of schema where all mark tables are created
+const SchemaName string = "tidb_cdc"
+
 // SyncpointTableName is the name of table where all syncpoint maps sit
 const syncpointTableName string = "syncpoint_v1"
 
@@ -90,7 +91,6 @@ type mysqlSink struct {
 	params *sinkParams
 
 	filter *filter.Filter
-	cyclic *cyclic.Cyclic
 
 	txnCache      *common.UnresolvedTxnCache
 	workers       []*mysqlSinkWorker
@@ -167,13 +167,6 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			}
 			s.txnCache.UpdateCheckpoint(resolvedTs)
 			continue
-		}
-
-		if s.cyclic != nil {
-			// Filter rows if it is origin from downstream.
-			skippedRowCount := cyclic.FilterAndReduceTxns(
-				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
-			s.statistics.SubRowsCount(skippedRowCount)
 		}
 
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
@@ -264,28 +257,6 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
-	return nil
-}
-
-// adjustSQLMode adjust sql mode according to sink config.
-func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
-	// Must relax sql mode to support cyclic replication, as downstream may have
-	// extra columns (not null and no default value).
-	if s.cyclic == nil || !s.cyclic.Enabled() {
-		return nil
-	}
-	var oldMode, newMode string
-	row := s.db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
-	err := row.Scan(&oldMode)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
-	}
-
-	newMode = cyclic.RelaxSQLMode(oldMode)
-	_, err = s.db.ExecContext(ctx, fmt.Sprintf("SET sql_mode = '%s';", newMode))
-	if err != nil {
-		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
-	}
 	return nil
 }
 
@@ -610,20 +581,6 @@ func newMySQLSink(
 		errCh:                           make(chan error, 1),
 		forceReplicate:                  replicaConfig.ForceReplicate,
 		cancel:                          cancel,
-	}
-
-	if val, ok := opts[mark.OptCyclicConfig]; ok {
-		cfg := new(config.CyclicConfig)
-		err := cfg.Unmarshal([]byte(val))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		sink.cyclic = cyclic.NewCyclic(cfg)
-
-		err = sink.adjustSQLMode(ctx)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
 	}
 
 	sink.execWaitNotifier = new(notify.Notifier)
@@ -1093,15 +1050,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		sqls:   sqls,
 		values: values,
 	}
-	if s.cyclic != nil && len(rows) > 0 {
-		// Write mark table with the current replica ID.
-		row := rows[0]
-		updateMark := s.cyclic.UdpateSourceTableCyclicMark(
-			row.Table.Schema, row.Table.Table, uint64(bucket), replicaID, row.StartTs)
-		dmls.markSQL = updateMark
-		// rowCount is used in statistics, and for simplicity,
-		// we do not count mark table rows in rowCount.
-	}
 	dmls.rowCount = rowCount
 	return dmls
 }
@@ -1429,7 +1377,7 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 }
 
 func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
-	database := mark.SchemaName
+	database := SchemaName
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("create sync table: begin Tx fail", zap.Error(err))
@@ -1480,7 +1428,7 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, chec
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	_, err = tx.Exec("insert ignore into "+mark.SchemaName+"."+syncpointTableName+"(cf, primary_ts, secondary_ts) VALUES (?,?,?)", id, checkpointTs, secondaryTs)
+	_, err = tx.Exec("insert ignore into "+SchemaName+"."+syncpointTableName+"(cf, primary_ts, secondary_ts) VALUES (?,?,?)", id, checkpointTs, secondaryTs)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {

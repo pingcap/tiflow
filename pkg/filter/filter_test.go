@@ -42,7 +42,6 @@ func TestShouldUseCustomRules(t *testing.T) {
 		Filter: &config.FilterConfig{
 			Rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
 		},
-		Cyclic: &config.CyclicConfig{Enable: true},
 	})
 	require.Nil(t, err)
 	require.True(t, filter.ShouldIgnoreTable("other", ""))

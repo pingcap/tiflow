@@ -177,21 +177,13 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 
 		case "sort-engine":
 			newInfo.Engine = o.commonChangefeedOptions.sortEngine
-		case "cyclic-replica-id":
-			filter := make([]uint64, 0, len(o.commonChangefeedOptions.cyclicFilterReplicaIDs))
-			for _, id := range o.commonChangefeedOptions.cyclicFilterReplicaIDs {
-				filter = append(filter, uint64(id))
-			}
-			newInfo.Config.Cyclic.FilterReplicaID = filter
-		case "cyclic-sync-ddl":
-			newInfo.Config.Cyclic.SyncDDL = o.commonChangefeedOptions.cyclicSyncDDL
 		case "sync-point":
 			newInfo.SyncPointEnabled = o.commonChangefeedOptions.syncPointEnabled
 		case "sync-interval":
 			newInfo.SyncPointInterval = o.commonChangefeedOptions.syncPointInterval
 		case "sort-dir":
 			log.Warn("this flag cannot be updated and will be ignored", zap.String("flagName", flag.Name))
-		case "changefeed-id", "no-confirm", "cyclic-filter-replica-ids":
+		case "changefeed-id", "no-confirm":
 			// Do nothing, these are some flags from the changefeed command,
 			// we don't use it to update, but we do use these flags.
 		case "interact":

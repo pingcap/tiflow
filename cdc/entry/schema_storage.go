@@ -35,7 +35,6 @@ import (
 // schemaSnapshot stores the source TiDB all schema information
 // schemaSnapshot is a READ ONLY struct
 type schemaSnapshot struct {
-	tableNameToID  map[model.TableName]int64
 	schemaNameToID map[string]int64
 
 	schemas        map[int64]*timodel.DBInfo
@@ -110,7 +109,6 @@ func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, explic
 
 func newEmptySchemaSnapshot(explicitTables bool) *schemaSnapshot {
 	return &schemaSnapshot{
-		tableNameToID:  make(map[model.TableName]int64),
 		schemaNameToID: make(map[string]int64),
 
 		schemas:        make(map[int64]*timodel.DBInfo),
@@ -145,7 +143,6 @@ func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, explicitTabl
 			snap.tableInSchema[schemaID] = append(snap.tableInSchema[schemaID], tableInfo.ID)
 			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
 			snap.tables[tableInfo.ID] = tableInfo
-			snap.tableNameToID[model.TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
 			isEligible := tableInfo.IsEligible(explicitTables)
 			if !isEligible {
 				snap.ineligibleTableID[tableInfo.ID] = struct{}{}
@@ -181,17 +178,8 @@ func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field
 	}
 	for id, tableInfo := range s.tables {
 		logger("[SchemaSnap] --> Tables", zap.Int64("tableID", id), zap.Stringer("tableInfo", tableInfo))
-		// check tableNameToID
-		if tableID, exist := s.tableNameToID[tableInfo.TableName]; !exist || tableID != id {
-			logger("[SchemaSnap] ----> tableNameToID item lost", zap.Stringer("name", tableInfo.TableName), zap.Int64("tableNameToID", s.tableNameToID[tableInfo.TableName]))
-		}
 	}
-	if len(s.tableNameToID) != len(s.tables) {
-		logger("[SchemaSnap] tableNameToID length mismatch tables")
-		for tableName, tableID := range s.tableNameToID {
-			logger("[SchemaSnap] --> tableNameToID", zap.Stringer("tableName", tableName), zap.Int64("tableID", tableID))
-		}
-	}
+
 	for pid, table := range s.partitionTable {
 		logger("[SchemaSnap] --> Partitions", zap.Int64("partitionID", pid), zap.Int64("tableID", table.ID))
 	}
@@ -211,12 +199,6 @@ func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field
 // Clone clones Storage
 func (s *schemaSnapshot) Clone() *schemaSnapshot {
 	clone := *s
-
-	tableNameToID := make(map[model.TableName]int64, len(s.tableNameToID))
-	for k, v := range s.tableNameToID {
-		tableNameToID[k] = v
-	}
-	clone.tableNameToID = tableNameToID
 
 	schemaNameToID := make(map[string]int64, len(s.schemaNameToID))
 	for k, v := range s.schemaNameToID {
@@ -278,25 +260,6 @@ func (s *schemaSnapshot) GetTableNameByID(id int64) (model.TableName, bool) {
 		tableInfo = s.tables[partInfo.ID]
 	}
 	return tableInfo.TableName, true
-}
-
-// GetTableIDByName returns the tableID by table schemaName and tableName
-func (s *schemaSnapshot) GetTableIDByName(schemaName string, tableName string) (int64, bool) {
-	id, ok := s.tableNameToID[model.TableName{
-		Schema: schemaName,
-		Table:  tableName,
-	}]
-	return id, ok
-}
-
-// GetTableByName queries a table by name,
-// the second returned value is false if no table with the specified name is found.
-func (s *schemaSnapshot) GetTableByName(schema, table string) (info *model.TableInfo, ok bool) {
-	id, ok := s.GetTableIDByName(schema, table)
-	if !ok {
-		return nil, ok
-	}
-	return s.TableByID(id)
 }
 
 // SchemaByID returns the DBInfo by schema id
@@ -367,14 +330,12 @@ func (s *schemaSnapshot) dropSchema(id int64) error {
 	}
 
 	for _, tableID := range s.tableInSchema[id] {
-		tableName := s.tables[tableID].TableName
 		if pi := s.tables[tableID].GetPartitionInfo(); pi != nil {
 			for _, partition := range pi.Definitions {
 				delete(s.partitionTable, partition.ID)
 			}
 		}
 		delete(s.tables, tableID)
-		delete(s.tableNameToID, tableName)
 	}
 
 	delete(s.schemas, id)
@@ -425,7 +386,6 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 		}
 	}
 
-	tableName := s.tables[id].TableName
 	delete(s.tables, id)
 	if pi := table.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
@@ -433,7 +393,6 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 			delete(s.ineligibleTableID, partition.ID)
 		}
 	}
-	delete(s.tableNameToID, tableName)
 	delete(s.ineligibleTableID, id)
 
 	log.Debug("drop table success", zap.String("name", table.Name.O), zap.Int64("id", id))
@@ -512,7 +471,6 @@ func (s *schemaSnapshot) createTable(table *model.TableInfo) error {
 			}
 		}
 	}
-	s.tableNameToID[table.TableName] = table.ID
 
 	log.Debug("create table success", zap.String("name", schema.Name.O+"."+table.Name.O), zap.Int64("id", table.ID))
 	return nil

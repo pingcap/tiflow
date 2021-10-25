@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
@@ -992,18 +991,9 @@ func (s MySQLSinkSuite) TestAdjustSQLMode(c *check.C) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	c.Assert(err, check.IsNil)
 	rc := config.GetDefaultReplicaConfig()
-	rc.Cyclic = &config.CyclicConfig{
-		Enable:          true,
-		ReplicaID:       1,
-		FilterReplicaID: []uint64{2},
-	}
 	f, err := filter.NewFilter(rc)
 	c.Assert(err, check.IsNil)
-	cyclicConfig, err := rc.Cyclic.Marshal()
-	c.Assert(err, check.IsNil)
-	opts := map[string]string{
-		mark.OptCyclicConfig: cyclicConfig,
-	}
+	opts := map[string]string{}
 	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, opts)
 	c.Assert(err, check.IsNil)
 

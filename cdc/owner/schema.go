@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/filter"
 	tidbkv "github.com/pingcap/tidb/kv"
 	timeta "github.com/pingcap/tidb/meta"
@@ -150,10 +149,6 @@ func (s *schemaWrap4Owner) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
 	schemaName := tableInfo.TableName.Schema
 	tableName := tableInfo.TableName.Table
 	if s.filter.ShouldIgnoreTable(schemaName, tableName) {
-		return true
-	}
-	if s.config.Cyclic.IsEnabled() && mark.IsMarkTable(schemaName, tableName) {
-		// skip the mark table if cyclic is enabled
 		return true
 	}
 	if !tableInfo.IsEligible(s.config.ForceReplicate) {

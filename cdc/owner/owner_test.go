@@ -295,7 +295,7 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	changefeedID1 := "changefeed-test1"
 	tester.MustUpdate(
 		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID1),
-		[]byte(`{"config":{"cyclic-replication":{}},"state":"failed"}`))
+		[]byte(`{"config":{},"state":"failed"}`))
 	tester.MustApplyPatches()
 	state.Changefeeds[changefeedID1].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -335,7 +335,7 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	changefeedID2 := "changefeed-test2"
 	tester.MustUpdate(
 		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID2),
-		[]byte(`{"config":{"cyclic-replication":{}},"state":"normal"}`))
+		[]byte(`{"config":{},"state":"normal"}`))
 	tester.MustApplyPatches()
 	state.Changefeeds[changefeedID1].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {

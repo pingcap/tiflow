@@ -191,12 +191,6 @@ func (s *utilsSuite) TestAndWriteExampleReplicaTOML(c *check.C) {
 		},
 		Protocol: "default",
 	})
-	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
-		Enable:          false,
-		ReplicaID:       1,
-		FilterReplicaID: []uint64{2, 3},
-		SyncDDL:         true,
-	})
 }
 
 func (s *utilsSuite) TestAndWriteExampleServerTOML(c *check.C) {
