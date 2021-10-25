@@ -127,6 +127,9 @@ B: the broker’s topic partition number, real one.
 ### Scenario Tests
 
 ### Compatibility Tests
+
+Before this, if the user specified partition rule is not matched, use the default one. After this one, if any of the user specified partition expressions is not valid, create changefeed will be failed.
+
 #### Upgrade compatibility
 
 When upgrading from the TiCDC version which does not support this feature yet, the old dispatch rule should be correctly handled, which means changefeed sync data correctly.
