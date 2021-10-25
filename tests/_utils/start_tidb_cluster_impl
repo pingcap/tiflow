@@ -10,6 +10,18 @@ OUT_DIR=
 tidb_config=
 pd_config=
 multiple_upstream_pd=
+random_file_name=
+
+# Random generate the sockets config.
+# Make sure we dont use the same sock.
+randomGenSocketsConf() {
+	date=$(date '+%s%N')
+
+	random_file_name="$OUT_DIR/tidb-config-$date.toml"
+
+	cat "$OUT_DIR/tidb-config.toml" >"$random_file_name"
+	echo "socket = \"/tmp/tidb-$date.sock\"" >>"$random_file_name"
+}
 
 while [[ ${1} ]]; do
 	case "${1}" in
@@ -196,26 +208,29 @@ tikv-server \
 sleep 2
 
 echo "Starting Upstream TiDB..."
+randomGenSocketsConf
 tidb-server \
 	-P ${UP_TIDB_PORT} \
-	-config "$OUT_DIR/tidb-config.toml" \
+	-config "$random_file_name" \
 	--store tikv \
 	--path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
 	--status=${UP_TIDB_STATUS} \
 	--log-file "$OUT_DIR/tidb.log" &
 
+randomGenSocketsConf
 tidb-server \
 	-P ${UP_TIDB_OTHER_PORT} \
-	-config "$OUT_DIR/tidb-config.toml" \
+	-config "$random_file_name" \
 	--store tikv \
 	--path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
 	--status=${UP_TIDB_OTHER_STATUS} \
 	--log-file "$OUT_DIR/tidb_other.log" &
 
 echo "Starting Downstream TiDB..."
+randomGenSocketsConf
 tidb-server \
 	-P ${DOWN_TIDB_PORT} \
-	-config "$OUT_DIR/tidb-config.toml" \
+	-config "$random_file_name" \
 	--store tikv \
 	--path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
 	--status=${DOWN_TIDB_STATUS} \
