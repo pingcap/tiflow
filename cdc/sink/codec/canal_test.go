@@ -16,8 +16,8 @@ package codec
 import (
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/check"
-	mm "github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
+	mm "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"golang.org/x/text/encoding/charmap"
 
 	"github.com/pingcap/ticdc/cdc/model"
