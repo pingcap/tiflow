@@ -121,11 +121,11 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 }
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
-	failpoint.Inject("InjectChangefeedFastFailError", func() error {
-		return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
-	})
 	state := c.state.Info.State
 	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
+		failpoint.Inject("InjectChangefeedFastFailError", func() error {
+			return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
+		})
 		if err := c.gcManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
