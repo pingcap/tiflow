@@ -43,7 +43,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		"capture":    captureAddr,
 		"changefeed": changefeedID,
 	})
-	metricSorterResolvedTsGauge := sorterResolvedTsGauge.WithLabelValues(captureAddr, changefeedID)
 	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(captureAddr, changefeedID)
 	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(captureAddr, changefeedID)
 
@@ -118,7 +117,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			return ctx.Err()
 		case out <- model.NewResolvedPolymorphicEvent(0, ts):
 			metricSorterEventCount.WithLabelValues("resolved").Inc()
-			metricSorterResolvedTsGauge.Set(float64(oracle.ExtractPhysical(ts)))
 			return nil
 		}
 	}
