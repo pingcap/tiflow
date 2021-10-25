@@ -443,7 +443,7 @@ type eventFeedSession struct {
 	errCh chan regionErrorInfo
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
-	// The channel is used to store region that reaches limit
+	// The queue is used to store region that reaches limit
 	rateLimitQueue []regionErrorInfo
 
 	rangeLock      *regionspan.RegionRangeLock
@@ -544,6 +544,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	g.Go(func() error {
 		checkRateLimitInterval := 50 * time.Millisecond
 		timer := time.NewTimer(checkRateLimitInterval)
+		defer timer.Stop()
 		for {
 			select {
 			case <-ctx.Done():
@@ -962,6 +963,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 }
 
 // enqueueError sends error to the eventFeedSession's error channel in a none blocking way
+// TODO: refactor enqueueError to avoid too many goroutines spawned when a lot of regions meet error.
 func (s *eventFeedSession) enqueueError(ctx context.Context, errorInfo regionErrorInfo) {
 	select {
 	case s.errCh <- errorInfo:
