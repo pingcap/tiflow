@@ -18,11 +18,11 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/tikv/client-go/v2/oracle"
 )
 

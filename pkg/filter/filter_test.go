@@ -16,11 +16,10 @@ package filter
 import (
 	"testing"
 
+	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-
-	"github.com/pingcap/check"
-	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/parser/model"
 )
 
 type filterSuite struct{}
