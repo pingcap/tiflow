@@ -14,12 +14,12 @@
 package filter
 
 import (
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	filterV1 "github.com/pingcap/tidb-tools/pkg/filter"
 	filterV2 "github.com/pingcap/tidb-tools/pkg/table-filter"
+	"github.com/pingcap/tidb/parser/model"
 )
 
 // Filter is a event filter implementation.

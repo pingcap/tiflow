@@ -18,8 +18,8 @@ import (
 	"math"
 	"unsafe"
 
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tidb/parser/mysql"
 )
 
 // create byte slice from string without copying

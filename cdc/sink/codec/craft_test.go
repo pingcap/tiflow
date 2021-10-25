@@ -18,9 +18,9 @@ import (
 	"strconv"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tidb/parser/mysql"
 )
 
 type craftBatchSuite struct {
