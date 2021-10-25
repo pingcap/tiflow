@@ -443,6 +443,7 @@ func (o *Owner) updateGCSafepoint(
 	return errors.Trace(err)
 }
 
+// StatusProvider returns a StatusProvider
 func (o *Owner) StatusProvider() StatusProvider {
 	return &ownerStatusProvider{owner: o}
 }

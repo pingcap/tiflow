@@ -106,6 +106,7 @@ func (tp *TaskPosition) String() string {
 	return data
 }
 
+// Clone returns a deep clone of TaskPosition
 func (tp *TaskPosition) Clone() *TaskPosition {
 	ret := &TaskPosition{
 		CheckPointTs: tp.CheckPointTs,
