@@ -3297,3 +3297,207 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	}
 	cancel()
 }
+<<<<<<< HEAD
+=======
+
+// TestPrewriteNotMatchError tests TiKV sends a commit event without a matching
+// prewrite(which is a bug, ref: https://github.com/tikv/tikv/issues/11055,
+// TiCDC catches this error and resets the gRPC stream. TiCDC must not send a
+// new request before closing gRPC stream since currently there is no mechanism
+// to release an existing region connection.
+func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	var requestIds sync.Map
+	var server1Stopped int32 = 0
+	server1StoppedCh := make(chan struct{})
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+	srv1.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
+		if atomic.LoadInt32(&server1Stopped) == int32(1) {
+			return
+		}
+		defer func() {
+			atomic.StoreInt32(&server1Stopped, 1)
+			close(ch1)
+			server1.Stop()
+			server1StoppedCh <- struct{}{}
+		}()
+		for {
+			req, err := server.Recv()
+			if err != nil {
+				log.Error("mock server error", zap.Error(err))
+				return
+			}
+			requestIds.Store(req.RegionId, req.RequestId)
+		}
+	}
+
+	rpcClient, cluster, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	// create two regions to avoid the stream is canceled by no region remained
+	regionID3 := uint64(3)
+	regionID4 := uint64(4)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
+	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
+
+	isPullInit := &mockPullerInit{}
+	lockResolver := txnutil.NewLockerResolver(kvStorage)
+	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
+	eventCh := make(chan model.RegionFeedEvent, 10)
+	baseAllocatedID := currentRequestID()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err = cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockResolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+	}()
+
+	// The expected request ids are agnostic because the kv client could retry
+	// for more than one time, so we wait until the newly started server receives
+	// requests for both two regions.
+	err = retry.Do(context.Background(), func() error {
+		_, ok1 := requestIds.Load(regionID3)
+		_, ok2 := requestIds.Load(regionID4)
+		if ok1 && ok2 {
+			return nil
+		}
+		return errors.New("waiting for kv client requests received by server")
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
+
+	c.Assert(err, check.IsNil)
+	reqID1, _ := requestIds.Load(regionID3)
+	reqID2, _ := requestIds.Load(regionID4)
+	initialized1 := mockInitializedEvent(regionID3, reqID1.(uint64))
+	initialized2 := mockInitializedEvent(regionID4, reqID2.(uint64))
+	ch1 <- initialized1
+	ch1 <- initialized2
+
+	prewriteNotMatchEvent := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  regionID3,
+			RequestId: reqID1.(uint64),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMIT,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("aaaa"),
+						Value:    []byte("commit event before prewrite"),
+						StartTs:  105,
+						CommitTs: 115,
+					}},
+				},
+			},
+		},
+	}}
+	ch1 <- prewriteNotMatchEvent
+
+	<-server1StoppedCh
+	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv2 := newMockChangeDataService(c, ch2)
+	srv2.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
+		for {
+			req, err := server.Recv()
+			if err != nil {
+				log.Error("mock server error", zap.Error(err))
+				return
+			}
+			requestIds.Store(req.RegionId, req.RequestId)
+		}
+	}
+	// Reuse the same listen address as server 1
+	server2, _ := newMockServiceSpecificAddr(ctx, c, srv2, addr1, wg)
+	defer func() {
+		close(ch2)
+		server2.Stop()
+		wg.Wait()
+	}()
+
+	// After the gRPC stream is canceled, two more reqeusts will be sent, so the
+	// allocated id is increased by 2 from baseAllocatedID+2.
+	waitRequestID(c, baseAllocatedID+4)
+	cancel()
+}
+
+func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
+	return newEventFeedSession(ctx,
+		&CDCClient{regionLimiters: defaultRegionEventFeedLimiters},
+		nil, /*regionCache*/
+		nil, /*kvStorage*/
+		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		nil,   /*lockResolver*/
+		nil,   /*isPullerInit*/
+		false, /*enableOldValue*/
+		100,   /*startTs*/
+		nil /*eventCh*/)
+}
+
+func (s *clientSuite) TestCheckRateLimit(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session := createFakeEventFeedSession(ctx)
+	// to avoid execution too slow and enter dead loop
+	maxTrigger := 1000
+	trigger := 0
+	burst := 3
+	for trigger = 0; trigger < maxTrigger; trigger++ {
+		allowed := session.checkRateLimit(1)
+		if !allowed {
+			break
+		}
+	}
+	if trigger == maxTrigger {
+		c.Error("get rate limiter too slow")
+	}
+	c.Assert(trigger, check.GreaterEqual, burst)
+	time.Sleep(100 * time.Millisecond)
+	allowed := session.checkRateLimit(1)
+	c.Assert(allowed, check.IsTrue)
+}
+
+func (s *clientSuite) TestHandleRateLimit(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session := createFakeEventFeedSession(ctx)
+
+	// empty rate limit item, do nothing
+	session.handleRateLimit(ctx)
+	c.Assert(session.rateLimitQueue, check.HasLen, 0)
+	c.Assert(cap(session.rateLimitQueue), check.Equals, defaultRegionRateLimitQueueSize)
+
+	for i := 0; i < defaultRegionRateLimitQueueSize+1; i++ {
+		session.rateLimitQueue = append(session.rateLimitQueue, regionErrorInfo{})
+	}
+	session.handleRateLimit(ctx)
+	c.Assert(session.rateLimitQueue, check.HasLen, 1)
+	c.Assert(cap(session.rateLimitQueue), check.Equals, 1)
+	session.handleRateLimit(ctx)
+	c.Assert(session.rateLimitQueue, check.HasLen, 0)
+	c.Assert(cap(session.rateLimitQueue), check.Equals, 128)
+}
+>>>>>>> 36422c0a9 (kv/client: use region based rate limiter and decouple it from event handler (#3118))
