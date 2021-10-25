@@ -76,6 +76,9 @@ const (
 	// channel work in an asynchronous way, the larger channel can decrease the
 	// frequency of creating new goroutine.
 	defaultRegionChanSize = 128
+
+	// initial size for region rate limit queue
+	defaultRegionRateLimitQueueSize = 128
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -440,6 +443,8 @@ type eventFeedSession struct {
 	errCh chan regionErrorInfo
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
+	// The channel is used to store region that reaches limit
+	rateLimitQueue []regionErrorInfo
 
 	rangeLock      *regionspan.RegionRangeLock
 	enableOldValue bool
@@ -484,6 +489,7 @@ func newEventFeedSession(
 		regionCh:          make(chan singleRegionInfo, defaultRegionChanSize),
 		errCh:             make(chan regionErrorInfo, defaultRegionChanSize),
 		requestRangeCh:    make(chan rangeRequestTask, defaultRegionChanSize),
+		rateLimitQueue:    make([]regionErrorInfo, 0, defaultRegionRateLimitQueueSize),
 		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
 		enableOldValue:    enableOldValue,
 		lockResolver:      lockResolver,
@@ -536,16 +542,21 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	})
 
 	g.Go(func() error {
+		checkRateLimitInterval := 50 * time.Millisecond
+		timer := time.NewTimer(checkRateLimitInterval)
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
+			case <-timer.C:
+				s.handleRateLimit(ctx)
+				timer.Reset(checkRateLimitInterval)
 			case errInfo := <-s.errCh:
 				s.errChSizeGauge.Dec()
 				allowed := s.checkRateLimit(errInfo.singleRegionInfo.verID.GetID())
 				if !allowed {
-					// rate limit triggers, add the error info to the end of error queue
-					s.enqueueError(ctx, errInfo)
+					// rate limit triggers, add the error info to the rate limit queue
+					s.rateLimitQueue = append(s.rateLimitQueue, errInfo)
 				} else {
 					err := s.handleError(ctx, errInfo)
 					if err != nil {
@@ -963,6 +974,29 @@ func (s *eventFeedSession) enqueueError(ctx context.Context, errorInfo regionErr
 			case <-ctx.Done():
 			}
 		}()
+	}
+}
+
+func (s *eventFeedSession) handleRateLimit(ctx context.Context) {
+	var (
+		i       int
+		errInfo regionErrorInfo
+	)
+	if len(s.rateLimitQueue) == 0 {
+		return
+	}
+	for i, errInfo = range s.rateLimitQueue {
+		s.enqueueError(ctx, errInfo)
+		// to avoid too many goroutines spawn, since if the error region count
+		// exceeds the size of errCh, new goroutine will be spawned
+		if i == defaultRegionChanSize-1 {
+			break
+		}
+	}
+	if i == len(s.rateLimitQueue)-1 {
+		s.rateLimitQueue = make([]regionErrorInfo, 0, defaultRegionRateLimitQueueSize)
+	} else {
+		s.rateLimitQueue = append(make([]regionErrorInfo, 0, len(s.rateLimitQueue)-i-1), s.rateLimitQueue[i+1:]...)
 	}
 }
 
