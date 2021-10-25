@@ -953,54 +953,6 @@ func mockTestDB() (*sql.DB, error) {
 	return db, nil
 }
 
-func (s MySQLSinkSuite) TestAdjustSQLMode(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() {
-			dbIndex++
-		}()
-		if dbIndex == 0 {
-			// test db
-			db, err := mockTestDB()
-			c.Assert(err, check.IsNil)
-			return db, nil
-		}
-		// normal db
-		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-		c.Assert(err, check.IsNil)
-		mock.ExpectQuery("SELECT @@SESSION.sql_mode;").
-			WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
-				AddRow("ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
-		mock.ExpectExec("SET sql_mode = 'ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE';").
-			WillReturnResult(sqlmock.NewResult(0, 0))
-		mock.ExpectClose()
-		return db, nil
-	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
-	defer func() {
-		getDBConnImpl = backupGetDBConn
-	}()
-
-	changefeed := "test-changefeed"
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
-	c.Assert(err, check.IsNil)
-	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
-	c.Assert(err, check.IsNil)
-	opts := map[string]string{}
-	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, opts)
-	c.Assert(err, check.IsNil)
-
-	err = sink.Close(ctx)
-	c.Assert(err, check.IsNil)
-}
-
 type mockUnavailableMySQL struct {
 	listener net.Listener
 	quit     chan interface{}
