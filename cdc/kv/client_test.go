@@ -3437,3 +3437,68 @@ func (s *etcdSuite) TestPrewriteNotMatchError(c *check.C) {
 	waitRequestID(c, baseAllocatedID+4)
 	cancel()
 }
+
+func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
+	return newEventFeedSession(ctx,
+		&CDCClient{regionLimiters: defaultRegionEventFeedLimiters},
+		nil, /*regionCache*/
+		nil, /*kvStorage*/
+		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		nil,   /*lockResolver*/
+		nil,   /*isPullerInit*/
+		false, /*enableOldValue*/
+		100,   /*startTs*/
+		nil /*eventCh*/)
+}
+
+func (s *clientSuite) TestCheckRateLimit(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session := createFakeEventFeedSession(ctx)
+	// to avoid execution too slow and enter dead loop
+	maxTrigger := 1000
+	trigger := 0
+	burst := 3
+	for trigger = 0; trigger < maxTrigger; trigger++ {
+		allowed := session.checkRateLimit(1)
+		if !allowed {
+			break
+		}
+	}
+	if trigger == maxTrigger {
+		c.Error("get rate limiter too slow")
+	}
+	c.Assert(trigger, check.GreaterEqual, burst)
+	time.Sleep(100 * time.Millisecond)
+	allowed := session.checkRateLimit(1)
+	c.Assert(allowed, check.IsTrue)
+}
+
+func (s *clientSuite) TestHandleRateLimit(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session := createFakeEventFeedSession(ctx)
+
+	// empty rate limit item, do nothing
+	session.handleRateLimit(ctx)
+	c.Assert(session.rateLimitQueue, check.HasLen, 0)
+	c.Assert(cap(session.rateLimitQueue), check.Equals, defaultRegionRateLimitQueueSize)
+
+	for i := 0; i < defaultRegionRateLimitQueueSize+1; i++ {
+		session.rateLimitQueue = append(session.rateLimitQueue, regionErrorInfo{})
+	}
+	session.handleRateLimit(ctx)
+	c.Assert(session.rateLimitQueue, check.HasLen, 1)
+	c.Assert(cap(session.rateLimitQueue), check.Equals, 1)
+	session.handleRateLimit(ctx)
+	c.Assert(session.rateLimitQueue, check.HasLen, 0)
+	c.Assert(cap(session.rateLimitQueue), check.Equals, 128)
+}
