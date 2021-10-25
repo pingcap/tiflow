@@ -395,7 +395,7 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
 	defer cancel()
 	ms := newMySQLSink4Test(ctx, c)
 	for i, tc := range testCases {
-		dmls := ms.prepareDMLs(tc.input, 0, 0)
+		dmls := ms.prepareDMLs(tc.input)
 		c.Assert(dmls, check.DeepEquals, tc.expected, check.Commentf("%d", i))
 	}
 }

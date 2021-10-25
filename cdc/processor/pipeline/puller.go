@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -45,7 +44,7 @@ func newPullerNode(
 	}
 }
 
-func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
+func (n *pullerNode) tableSpan() []regionspan.Span {
 	// start table puller
 	spans := make([]regionspan.Span, 0, 4)
 	spans = append(spans, regionspan.GetTableSpan(n.tableID))
@@ -61,7 +60,7 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	// NOTICE: always pull the old value internally
 	// See also: TODO(hi-rustin): add issue link here.
 	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, ctx.GlobalVars().GrpcPool, ctx.GlobalVars().KVStorage,
-		n.replicaInfo.StartTs, n.tableSpan(ctx), true)
+		n.replicaInfo.StartTs, n.tableSpan(), true)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
 		return nil

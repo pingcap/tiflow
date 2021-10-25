@@ -974,7 +974,7 @@ type preparedDMLs struct {
 }
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
-func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64, bucket int) *preparedDMLs {
+func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 	sqls := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 	replaces := make(map[string][][]interface{})
@@ -1065,7 +1065,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 		time.Sleep(time.Second * 2)
 		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
 	})
-	dmls := s.prepareDMLs(rows, replicaID, bucket)
+	dmls := s.prepareDMLs(rows)
 	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, bucket); err != nil {
 		log.Error("execute DMLs failed", zap.String("err", err.Error()))
