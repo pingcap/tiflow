@@ -277,8 +277,7 @@ func (s *scheduler) handleJobs(jobs []*schedulerJob) {
 					return status, false, nil
 				}
 				status.AddTable(job.TableID, &model.TableReplicaInfo{
-					StartTs:     job.BoundaryTs,
-					MarkTableID: 0, // mark table ID will be set in processors
+					StartTs: job.BoundaryTs,
 				}, job.BoundaryTs)
 			case schedulerJobTypeRemoveTable:
 				failpoint.Inject("OwnerRemoveTableError", func() {

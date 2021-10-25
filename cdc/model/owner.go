@@ -197,8 +197,7 @@ func (w *TaskWorkload) Marshal() (string, error) {
 
 // TableReplicaInfo records the table replica info
 type TableReplicaInfo struct {
-	StartTs     Ts      `json:"start-ts"`
-	MarkTableID TableID `json:"mark-table-id"`
+	StartTs Ts `json:"start-ts"`
 }
 
 // Clone clones a TableReplicaInfo
@@ -309,8 +308,7 @@ func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID, checkpoin
 			ts = table.StartTs
 		}
 		snap.Tables[tableID] = &TableReplicaInfo{
-			StartTs:     ts,
-			MarkTableID: table.MarkTableID,
+			StartTs: ts,
 		}
 	}
 	return snap

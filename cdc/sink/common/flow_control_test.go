@@ -18,7 +18,6 @@ import (
 	"math/rand"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/pingcap/check"
@@ -498,103 +497,4 @@ func (s *flowControlSuite) TestFlowControlConsumeLargerThanQuota(c *check.C) {
 		return nil
 	})
 	c.Assert(err, check.ErrorMatches, ".*ErrFlowControllerEventLargerThanQuota.*")
-}
-
-func BenchmarkTableFlowController(B *testing.B) {
-	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*5)
-	defer cancel()
-	errg, ctx := errgroup.WithContext(ctx)
-	mockedRowsCh := make(chan *commitTsSizeEntry, 102400)
-	flowController := NewTableFlowController(20 * 1024 * 1024) // 20M
-
-	errg.Go(func() error {
-		lastCommitTs := uint64(1)
-		for i := 0; i < B.N; i++ {
-			if rand.Int()%15 == 0 {
-				lastCommitTs += 10
-			}
-			size := uint64(1024 + rand.Int()%1024)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case mockedRowsCh <- &commitTsSizeEntry{
-				CommitTs: lastCommitTs,
-				Size:     size,
-			}:
-			}
-		}
-
-		close(mockedRowsCh)
-		return nil
-	})
-
-	eventCh := make(chan *mockedEvent, 102400)
-	errg.Go(func() error {
-		defer close(eventCh)
-		resolvedTs := uint64(0)
-		for {
-			var mockedRow *commitTsSizeEntry
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case mockedRow = <-mockedRowsCh:
-			}
-
-			if mockedRow == nil {
-				break
-			}
-
-			if resolvedTs != mockedRow.CommitTs {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case eventCh <- &mockedEvent{
-					resolvedTs: resolvedTs,
-				}:
-				}
-				resolvedTs = mockedRow.CommitTs
-			}
-			err := flowController.Consume(mockedRow.CommitTs, mockedRow.Size, dummyCallBack)
-			if err != nil {
-				B.Fatal(err)
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case eventCh <- &mockedEvent{
-				size: mockedRow.Size,
-			}:
-			}
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case eventCh <- &mockedEvent{
-			resolvedTs: resolvedTs,
-		}:
-		}
-
-		return nil
-	})
-
-	errg.Go(func() error {
-		for {
-			var event *mockedEvent
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case event = <-eventCh:
-			}
-
-			if event == nil {
-				break
-			}
-
-			if event.size == 0 {
-				flowController.Release(event.resolvedTs)
-			}
-		}
-
-		return nil
-	})
 }

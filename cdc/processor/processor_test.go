@@ -65,8 +65,8 @@ type mockTablePipeline struct {
 	canceled     bool
 }
 
-func (m *mockTablePipeline) ID() (tableID int64, markTableID int64) {
-	return m.tableID, 0
+func (m *mockTablePipeline) ID() (tableID int64) {
+	return m.tableID
 }
 
 func (m *mockTablePipeline) Name() string {

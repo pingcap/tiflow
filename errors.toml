@@ -176,11 +176,6 @@ error = '''
 craft codec invalid data
 '''
 
-["CDC:ErrCreateMarkTableFailed"]
-error = '''
-create mark table failed
-'''
-
 ["CDC:ErrDDLEventIgnored"]
 error = '''
 ddl event is ignored

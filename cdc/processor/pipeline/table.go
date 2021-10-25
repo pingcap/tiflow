@@ -37,8 +37,8 @@ const (
 
 // TablePipeline is a pipeline which capture the change log from tikv in a table
 type TablePipeline interface {
-	// ID returns the ID of source table and mark table
-	ID() (tableID, markTableID int64)
+	// ID returns the ID of source table
+	ID() (tableID int64)
 	// Name returns the quoted schema and table name
 	Name() string
 	// ResolvedTs returns the resolved ts in this table pipeline
@@ -62,9 +62,8 @@ type TablePipeline interface {
 type tablePipelineImpl struct {
 	p *pipeline.Pipeline
 
-	tableID     int64
-	markTableID int64
-	tableName   string // quoted schema and table, used in metircs only
+	tableID   int64
+	tableName string // quoted schema and table, used in metircs only
 
 	sinkNode *sinkNode
 	cancel   context.CancelFunc
@@ -130,8 +129,8 @@ func (t *tablePipelineImpl) Status() TableStatus {
 }
 
 // ID returns the ID of source table and mark table
-func (t *tablePipelineImpl) ID() (tableID, markTableID int64) {
-	return t.tableID, t.markTableID
+func (t *tablePipelineImpl) ID() (tableID int64) {
+	return t.tableID
 }
 
 // Name returns the quoted schema and table name
@@ -167,10 +166,9 @@ func NewTablePipeline(ctx cdcContext.Context,
 	targetTs model.Ts) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	tablePipeline := &tablePipelineImpl{
-		tableID:     tableID,
-		markTableID: replicaInfo.MarkTableID,
-		tableName:   tableName,
-		cancel:      cancel,
+		tableID:   tableID,
+		tableName: tableName,
+		cancel:    cancel,
 	}
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota

@@ -236,7 +236,7 @@ func TestTaskStatusMarshal(t *testing.T) {
 			1: {StartTs: 420875942036766723},
 		},
 	}
-	expected := `{"tables":{"1":{"start-ts":420875942036766723,"mark-table-id":0}},"operation":null,"admin-job-type":0}`
+	expected := `{"tables":{"1":{"start-ts":420875942036766723}},"operation":null,"admin-job-type":0}`
 
 	data, err := status.Marshal()
 	require.Nil(t, err)
