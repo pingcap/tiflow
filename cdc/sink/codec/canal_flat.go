@@ -189,6 +189,8 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) *ca
 func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *canalFlatMessage {
 	return &canalFlatMessage{
 		CheckpointTs: ts,
+		// `WATERMARK` is a TiCDC custom event type, alias of `checkpoint`
+		EventType: "WATERMARK",
 	}
 }
 
