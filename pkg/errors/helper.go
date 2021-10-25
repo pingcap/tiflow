@@ -30,7 +30,10 @@ func WrapError(rfcError *errors.Error, err error) error {
 	return rfcError.Wrap(err).GenWithStackByCause()
 }
 
-// ChangeFeedFastFailError represents some error that should be fast failed
+// ChangeFeedFastFailError is read only.
+// If this type of error occurs in a changefeed, it means that the data it
+// wants to replicate has been or will be GC. So it makes no sense to try to
+// resume the changefeed, and the changefeed should immediately be failed.
 var ChangeFeedFastFailError = []*errors.Error{
 	ErrGCTTLExceeded, ErrSnapshotLostByGC, ErrStartTsBeforeGC,
 }
