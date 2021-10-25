@@ -1,4 +1,5 @@
 // Copyright 2021 PingCAP, Inc.
+// Copyright 2015 CoreOS, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -240,6 +241,8 @@ func (w *Writer) writeUint64(n uint64, buf []byte) error {
 	return err
 }
 
+// the func is copy from etcd wal/encoder.go
+// ref: https://github.com/etcd-io/etcd/pull/5250
 func encodeFrameSize(dataBytes int) (lenField uint64, padBytes int) {
 	lenField = uint64(dataBytes)
 	// force 8 byte alignment so length never gets a torn write
