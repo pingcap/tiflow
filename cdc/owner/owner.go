@@ -284,7 +284,7 @@ func (o *Owner) handleJobs() {
 	for _, job := range jobs {
 		changefeedID := job.changefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
-		if !exist {
+		if !exist && job.tp != ownerJobTypeQuery {
 			log.Warn("changefeed not found when handle a job", zap.Reflect("job", job))
 			continue
 		}

@@ -16,16 +16,24 @@ package owner
 import (
 	"context"
 
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
 type StatusProvider interface {
-	// GetAllChangeFeedStatuses returns all changefeeds' runtime status
+	// GetAllChangeFeedStatuses returns all changefeeds' runtime status.
 	GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error)
+
+	// GetChangeFeedStatus returns a changefeeds' runtime status.
+	GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatus, error)
 
 	// GetAllChangeFeedInfo returns all changefeeds' info.
 	GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error)
+
+	// GetChangeFeedInfo returns a changefeeds' info.
+	GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error)
 
 	// GetAllTaskStatuses returns the task statuses for the specified changefeed.
 	GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error)
@@ -73,6 +81,18 @@ func (p *ownerStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map
 	return query.data.(map[model.ChangeFeedID]*model.ChangeFeedStatus), nil
 }
 
+func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatus, error) {
+	statuses, err := p.GetAllChangeFeedStatuses(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	status, exist := statuses[changefeedID]
+	if !exist {
+		return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(changefeedID)
+	}
+	return status, nil
+}
+
 func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
 	query := &ownerQuery{
 		tp: ownerQueryAllChangeFeedInfo,
@@ -81,6 +101,18 @@ func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[mod
 		return nil, errors.Trace(err)
 	}
 	return query.data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
+}
+
+func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error) {
+	infos, err := p.GetAllChangeFeedInfo(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	info, exist := infos[changefeedID]
+	if !exist {
+		return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(changefeedID)
+	}
+	return info, nil
 }
 
 func (p *ownerStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error) {
