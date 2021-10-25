@@ -15,6 +15,8 @@ package p2p
 
 import (
 	"context"
+	"github.com/prometheus/client_golang/prometheus"
+	gRPCPeer "google.golang.org/grpc/peer"
 	"io"
 	"net"
 	"sync"
@@ -34,22 +36,21 @@ import (
 	"google.golang.org/grpc"
 )
 
-
 // MessageClientConfig is used to configure MessageClient
 type MessageClientConfig struct {
 	// The size of the sending channel used to buffer
 	// messages before they go to gRPC.
-	SendChannelSize         int
+	SendChannelSize int
 	// The maximum duration for which messages wait to be batched.
-	BatchSendInterval       time.Duration
+	BatchSendInterval time.Duration
 	// The maximum size of a batch.
-	MaxBatchBytes           int
+	MaxBatchBytes int
 	// The limit of the rate at which the connection to the server is retried.
 	RetryRateLimitPerSecond float64
 	// The dial timeout for the gRPC client
-	DialTimeout             time.Duration
+	DialTimeout time.Duration
 	// The advertised address of this node. Used for logging and monitoring purposes.
-	AdvertisedAddr          string
+	AdvertisedAddr string
 }
 
 // MessageClient is a client used to send peer messages.
@@ -111,6 +112,12 @@ func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverI
 			zap.Error(ret))
 	}()
 
+	metricsClientCount := clientCount.With(prometheus.Labels{
+		"to": addr,
+	})
+	metricsClientCount.Inc()
+	defer metricsClientCount.Dec()
+
 	securityOption, err := credential.ToGRPCDialOption()
 	if err != nil {
 		return errors.Trace(err)
@@ -134,7 +141,9 @@ func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverI
 			securityOption,
 			grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 				return net.DialTimeout(network, s, c.config.DialTimeout)
-			}))
+			}),
+			// We do not need a unary interceptor since we are not making any unary calls.
+			grpc.WithStreamInterceptor(grpcClientMetrics.StreamClientInterceptor()))
 		if err != nil {
 			log.Warn("gRPC dial error, retrying", zap.Error(err))
 			continue
@@ -199,6 +208,15 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 	if err := c.retrySending(ctx, stream); err != nil {
 		return errors.Trace(err)
 	}
+
+	peerAddr := "unknown"
+	peer, ok := gRPCPeer.FromContext(stream.Context())
+	if ok {
+		peerAddr = peer.Addr.String()
+	}
+	metricsClientMessageCount := clientMessageCount.With(prometheus.Labels{
+		"to": peerAddr,
+	})
 
 	var (
 		batchedMessages []*messageEntry
@@ -269,6 +287,8 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 			tpk.sentMessages.PushBack(msg)
 			tpk.sentMessageMu.Unlock()
 
+			metricsClientMessageCount.Inc()
+
 			batchedMessages = append(batchedMessages, msg)
 			batchedBytes += len(msg.content) + len(msg.topic)
 			if batchedBytes >= c.config.MaxBatchBytes {
@@ -328,6 +348,15 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 }
 
 func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
+	peerAddr := "unknown"
+	peer, ok := gRPCPeer.FromContext(stream.Context())
+	if ok {
+		peerAddr = peer.Addr.String()
+	}
+	metricsClientAckCount := clientAckCount.With(prometheus.Labels{
+		"from": peerAddr,
+	})
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -347,6 +376,8 @@ func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
 		default:
 			return cerrors.ErrPeerMessageServerClosed.GenWithStackByArgs(resp.GetErrorMessage())
 		}
+
+		metricsClientAckCount.Inc()
 
 		for _, ack := range resp.GetAck() {
 			c.topicMu.RLock()

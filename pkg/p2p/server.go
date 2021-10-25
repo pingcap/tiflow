@@ -15,7 +15,6 @@ package p2p
 
 import (
 	"context"
-	"github.com/prometheus/client_golang/prometheus"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -27,6 +26,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/workerpool"
 	"github.com/pingcap/ticdc/proto/p2p"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
@@ -39,13 +39,13 @@ type MessageServerConfig struct {
 	// The maximum number of entries to be cached for topics with no handler registered
 	MaxTopicPendingCount int
 	// The maximum number of unhandled internal tasks for the main thread.
-	MaxPendingTaskCount  int
+	MaxPendingTaskCount int
 	// The size of the channel for pending messages before sending them to gRPC.
-	SendChannelSize      int
+	SendChannelSize int
 	// The interval between ACKs.
-	AckInterval          time.Duration
+	AckInterval time.Duration
 	// The size of the goroutine pool for running the handlers.
-	WorkerPoolSize       int
+	WorkerPoolSize int
 }
 
 // MessageServer is an implementation of the gRPC server for the peer-to-peer system
@@ -154,7 +154,7 @@ func (m *MessageServer) run(ctx context.Context) error {
 			switch task := task.(type) {
 			case taskOnMessageBatch:
 				for _, entry := range task.messageEntries {
-					if err := m.handleMessage(ctx, task.streamMeta.SenderID, entry); err != nil {
+					if err := m.handleMessage(ctx, task.streamMeta, entry); err != nil {
 						return errors.Trace(err)
 					}
 				}
@@ -234,6 +234,7 @@ func (m *MessageServer) tick(ctx context.Context) error {
 			continue
 		}
 
+		peer.metricsAckCount.Inc()
 		err := peer.sender.Send(ctx, p2p.SendMessageResponse{
 			Ack: acks,
 		})
@@ -288,18 +289,25 @@ func (m *MessageServer) AddHandler(
 	fn func(string, interface{}) error) (chan struct{}, <-chan error, error) {
 	tp := reflect.TypeOf(tpi)
 
+	metricsServerRepeatedMessageCount := serverRepeatedMessageCount.MustCurryWith(prometheus.Labels{
+		"topic": topic,
+	})
+
 	poolHandle := m.pool.RegisterEvent(func(ctx context.Context, argsI interface{}) error {
 		args := argsI.(poolEventArgs)
-		senderID := args.senderID
+		sm := args.streamMeta
 		entry := args.entry
 		e := reflect.New(tp.Elem()).Interface()
 
 		m.acksMapLock.Lock()
-		lastAck := m.getAck(NodeID(senderID), Topic(entry.GetTopic()))
+		lastAck := m.getAck(sm.SenderID, entry.GetTopic())
 		if lastAck >= entry.Sequence {
-			// TODO add metrics
+			metricsServerRepeatedMessageCount.With(prometheus.Labels{
+				"from": sm.SenderAdvertisedAddr,
+			}).Inc()
+
 			log.Debug("skipping peer message",
-				zap.String("sender-id", senderID),
+				zap.String("sender-id", sm.SenderID),
 				zap.String("topic", topic),
 				zap.Int64("skipped-Seq", entry.Sequence),
 				zap.Int64("last-ack", lastAck))
@@ -317,12 +325,12 @@ func (m *MessageServer) AddHandler(
 			return cerror.WrapError(cerror.ErrPeerMessageDecodeError, err)
 		}
 
-		if err := fn(senderID, e); err != nil {
+		if err := fn(sm.SenderID, e); err != nil {
 			return errors.Trace(err)
 		}
 
 		m.acksMapLock.Lock()
-		m.setAck(senderID, entry.GetTopic(), entry.GetSequence())
+		m.setAck(sm.SenderID, entry.GetTopic(), entry.GetSequence())
 		m.acksMapLock.Unlock()
 
 		return nil
@@ -381,14 +389,6 @@ func (m *MessageServer) RemoveHandler(ctx context.Context, topic string) (chan s
 	return doneCh, nil
 }
 
-func (m *MessageServer) doRemoveHandler(topic string) {
-	if handler, ok := m.handlers[topic]; ok {
-		handler.poolHandle.Unregister()
-		log.Debug("handler deregistered", zap.String("topic", topic))
-	}
-	delete(m.handlers, topic)
-}
-
 func (m *MessageServer) registerHandler(ctx context.Context, topic string, handler *handler, doneCh chan struct{}) error {
 	defer close(doneCh)
 
@@ -413,7 +413,7 @@ func (m *MessageServer) handlePendingMessages(ctx context.Context, topic string,
 		}
 
 		for _, entry := range entries {
-			if err := m.handleMessage(ctx, entry.SenderID, entry.Entry); err != nil {
+			if err := m.handleMessage(ctx, entry.StreamMeta, entry.Entry); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -438,11 +438,7 @@ func (m *MessageServer) registerPeer(
 	peer, ok := m.peers[streamMeta.SenderID]
 	if !ok {
 		// no existing peer
-		m.peers[streamMeta.SenderID] = &cdcPeer{
-			PeerID:   streamMeta.SenderID,
-			Epoch:    streamMeta.Epoch,
-			sender:   sender,
-		}
+		m.peers[streamMeta.SenderID] = newCDCPeer(streamMeta.SenderID, streamMeta.Epoch, sender)
 		m.peerLock.Unlock()
 	} else {
 		m.peerLock.Unlock()
@@ -459,11 +455,7 @@ func (m *MessageServer) registerPeer(
 			err := cerror.ErrPeerMessageStaleConnection.GenWithStackByArgs(peer.Epoch /* old */, streamMeta.Epoch /* new */)
 			m.deregisterPeer(ctx, peer, err)
 			m.peerLock.Lock()
-			m.peers[streamMeta.SenderID] = &cdcPeer{
-				PeerID:   streamMeta.SenderID,
-				Epoch:    streamMeta.Epoch,
-				sender:   sender,
-			}
+			m.peers[streamMeta.SenderID] = newCDCPeer(streamMeta.SenderID, streamMeta.Epoch, sender)
 			m.peerLock.Unlock()
 		} else {
 			log.Warn("incoming connection is duplicate",
@@ -585,6 +577,13 @@ func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, send
 		return errors.Trace(err)
 	}
 
+	metricsServerMessageCount := serverMessageCount.With(prometheus.Labels{
+		"from": sm.SenderAdvertisedAddr,
+	})
+	metricsServerMessageBatchHistogram := serverMessageBatchHistogram.With(prometheus.Labels{
+		"from": sm.SenderAdvertisedAddr,
+	})
+
 	for {
 		failpoint.Inject("ServerInjectServerRestart", func() {
 			_ = stream.Send(&p2p.SendMessageResponse{
@@ -598,10 +597,13 @@ func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, send
 			return errors.Trace(err)
 		}
 
+		batchSize := len(packet.GetEntries())
 		log.Debug("received packet", zap.String("sender", sm.SenderID),
-			zap.Int("num-entries", len(packet.GetEntries())))
+			zap.Int("num-entries", batchSize))
+		metricsServerMessageBatchHistogram.Observe(float64(batchSize))
 
 		if len(packet.GetEntries()) > 0 {
+			metricsServerMessageCount.Inc()
 			// See the comment above on why use scheduleTaskBlocking.
 			if err := m.scheduleTaskBlocking(stream.Context(), taskOnMessageBatch{
 				streamMeta:     sm,
@@ -613,11 +615,11 @@ func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, send
 	}
 }
 
-func (m *MessageServer) handleMessage(ctx context.Context, senderID string, entry *p2p.MessageEntry) error {
+func (m *MessageServer) handleMessage(ctx context.Context, streamMeta *streamMeta, entry *p2p.MessageEntry) error {
 	topic := entry.GetTopic()
 	pendingMessageKey := topicSenderPair{
 		Topic:    topic,
-		SenderID: senderID,
+		SenderID: streamMeta.SenderID,
 	}
 	handler, ok := m.handlers[topic]
 	if !ok {
@@ -627,7 +629,7 @@ func (m *MessageServer) handleMessage(ctx context.Context, senderID string, entr
 			log.Warn("Topic congested because no handler has been registered", zap.String("topic", topic))
 			delete(m.pendingMessages, pendingMessageKey)
 			m.peerLock.RLock()
-			peer, ok := m.peers[senderID]
+			peer, ok := m.peers[streamMeta.SenderID]
 			m.peerLock.RUnlock()
 			if ok {
 				m.deregisterPeer(ctx, peer, cerror.ErrPeerMessageTopicCongested.FastGenByArgs())
@@ -635,7 +637,7 @@ func (m *MessageServer) handleMessage(ctx context.Context, senderID string, entr
 			return nil
 		}
 		m.pendingMessages[pendingMessageKey] = append(pendingEntries, pendingMessageEntry{
-			SenderID: senderID,
+			StreamMeta: streamMeta,
 			Entry:    entry,
 		})
 
@@ -644,7 +646,7 @@ func (m *MessageServer) handleMessage(ctx context.Context, senderID string, entr
 
 	// handler is found
 	if err := handler.poolHandle.AddEvent(ctx, poolEventArgs{
-		senderID: senderID,
+		streamMeta: streamMeta,
 		entry:    entry,
 	}); err != nil {
 		return errors.Trace(err)
@@ -679,8 +681,8 @@ type topicSenderPair struct {
 }
 
 type pendingMessageEntry struct {
-	SenderID string
-	Entry    *p2p.MessageEntry
+	StreamMeta *streamMeta
+	Entry      *p2p.MessageEntry
 }
 
 type handler struct {
@@ -733,9 +735,23 @@ func (s *streamSender) Close() {
 }
 
 type cdcPeer struct {
-	PeerID   string
-	Epoch    int64
-	sender   *streamSender
+	PeerID string
+	Epoch  int64
+
+	sender *streamSender
+
+	metricsAckCount prometheus.Counter
+}
+
+func newCDCPeer(senderID NodeID, epoch int64, sender *streamSender) *cdcPeer {
+	return &cdcPeer{
+		PeerID: senderID,
+		Epoch:  epoch,
+		sender: sender,
+		metricsAckCount: serverAckCount.With(prometheus.Labels{
+			"to": senderID,
+		}),
+	}
 }
 
 func (p *cdcPeer) abortWithError(ctx context.Context, err error) {
@@ -773,6 +789,6 @@ func errorToRPCResponse(err error) p2p.SendMessageResponse {
 }
 
 type poolEventArgs struct {
-	senderID string
+	streamMeta *streamMeta
 	entry    *p2p.MessageEntry
 }

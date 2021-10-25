@@ -129,8 +129,6 @@ func (m *messageRouterImpl) GetClient(target NodeID) *MessageClient {
 	}
 
 	m.clients[target] = cliWrapper
-
-	// TODO add metrics for active client count
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
