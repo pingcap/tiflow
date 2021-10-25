@@ -19,10 +19,10 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/errors"
-	pmodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	pmodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 )
 
 /// create string from byte slice without copying
