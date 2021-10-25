@@ -670,12 +670,12 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	require.Nil(t, err)
 	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver, false)
 	require.Nil(t, err)
-	_, ok := snap.GetTableByName("test", "simple_test1")
-	require.True(t, ok)
-	tableID, ok := snap.GetTableIDByName("test2", "simple_test5")
-	require.True(t, ok)
-	require.True(t, snap.IsIneligibleTableID(tableID))
-	dbInfo, ok := snap.SchemaByTableID(tableID)
+	tableInfo := getTableInfo(snap, "test", "simple_test1")
+	require.NotNil(t, tableInfo)
+	tableInfo = getTableInfo(snap, "test2", "simple_test5")
+	require.NotNil(t, tableInfo)
+	require.True(t, snap.IsIneligibleTableID(tableInfo.ID))
+	dbInfo, ok := snap.SchemaByTableID(tableInfo.ID)
 	require.True(t, ok)
 	require.Equal(t, dbInfo.Name.O, "test2")
 	require.Len(t, snap.tableInSchema, 3)
@@ -707,7 +707,6 @@ func TestSnapshotClone(t *testing.T) {
 	require.Nil(t, err)
 
 	clone := snap.Clone()
-	require.Equal(t, clone.tableNameToID, snap.tableNameToID)
 	require.Equal(t, clone.schemaNameToID, snap.schemaNameToID)
 	require.Equal(t, clone.truncateTableID, snap.truncateTableID)
 	require.Equal(t, clone.ineligibleTableID, snap.ineligibleTableID)
@@ -963,4 +962,13 @@ func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
 		return nil, errors.Trace(err)
 	}
 	return jobs, nil
+}
+
+func getTableInfo(snap *schemaSnapshot, schemaName, tableName string) *model.TableInfo {
+	for _, info := range snap.tables {
+		if info.TableName.Schema == schemaName && info.TableName.Table == tableName {
+			return info
+		}
+	}
+	return nil
 }
