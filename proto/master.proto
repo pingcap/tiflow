@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package pb;
+
+// I'm trying to phase out the communication protocal.
+// - system level
+//   - Register Executor. After a executor bootstrapped, it has to register itself to join the cluster.
+
+
+service Master {
+    rpc RegisterExecutor(RegisterExecutorRequest) returns(RegisterExecutorResponse) {}
+
+    rpc SubmitJob(SubmitJobRequest) returns(SubmitJobResponse) {
+        // TODO: Support HTTP api
+        //option (google.api.http) = {
+        //    post: "/apis/v1/jobs"
+        //    body: "*"
+        //};
+    }
+
+    //GetMembers returns the available master members
+    //rpc GetMembers(GetMembersRequest) {}
+
+    //rpc Heartbeat() {}
+    // TODO: Support more interface.
+
+    // - PutClusterConfig
+}
+
+message SubmitJobRequest {
+    // For compatibility, we still use config file to present a job.
+    enum JobType {
+        DM = 0;
+        CDC = 1;
+        Benchmark = 2;
+    }
+    string config = 1;
+    // User name, token, etc...
+    string user = 2;
+    // TODO: Resouce Limit
+}
+
+enum ErrorCode {
+    None = 0;
+    NotLeader = 1;
+}
+
+message SubmitJobResponse {
+    ErrorCode err = 1;
+    string err_message = 2;
+}
+
+message RegisterExecutorRequest {
+    // dm need 'worker-name' to locate the worker.
+    // TODO: Do we really need a "worker name"? Can we use address to identify an executor?
+    string name = 1;
+    string address = 2;
+    string version = 3;
+}
+
+message RegisterExecutorResponse {
+    ErrorCode err = 1;
+    string err_message = 2;
+}
