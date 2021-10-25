@@ -14,6 +14,7 @@
 package scheduler
 
 import (
+	"github.com/pingcap/ticdc/cdc/scheduler/util"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,14 +23,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
-)
-
-const (
-	// TODO add a config
-	defaultSendCheckpointInterval = time.Millisecond * 200
 )
 
 type Agent interface {
@@ -45,8 +42,8 @@ type Agent interface {
 type TableExecutor interface {
 	AddTable(ctx context.Context, tableID model.TableID, boundaryTs model.Ts) error
 	RemoveTable(ctx context.Context, tableID model.TableID, boundaryTs model.Ts) (bool, error)
-	IsAddTableFinished(ctx context.Context, tableID model.TableID) (bool, error)
-	IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (bool, error)
+	IsAddTableFinished(ctx context.Context, tableID model.TableID) bool
+	IsRemoveTableFinished(ctx context.Context, tableID model.TableID) bool
 
 	GetAllCurrentTables() []model.TableID
 	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
@@ -105,14 +102,20 @@ func NewBaseAgent(
 	}
 }
 
+type agentOperationStatus int32
+
+const (
+	operationReceived = agentOperationStatus(iota)
+	operationProcessed
+	operationFinished
+)
+
 type AgentOperation struct {
 	TableID    model.TableID
 	BoundaryTs model.Ts
 	IsDelete   bool
 
-	// for internal use by scheduler
-	processed bool
-	finished  bool
+	status agentOperationStatus
 }
 
 type ownerInfo struct {
@@ -154,6 +157,9 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 			running = append(running, tableID)
 		}
 
+		util.SorterTableIDs(running)
+		util.SorterTableIDs(adding)
+		util.SorterTableIDs(removing)
 		done, err := a.communicator.SyncTaskStatuses(ctx, running, adding, removing)
 		if err != nil {
 			a.agentMu.Unlock()
@@ -182,45 +188,54 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 		a.tableOperations[op.TableID] = op
 	}
 
-	for _, op := range a.tableOperations {
-		if !op.processed {
+	for tableID, op := range a.tableOperations {
+		switch op.status {
+		case operationReceived:
 			if !op.IsDelete {
 				// add table
 				if err := a.executor.AddTable(ctx, op.TableID, op.BoundaryTs); err != nil {
 					return errors.Trace(err)
 				}
-				op.processed = true
+				op.status = operationProcessed
 			} else {
 				// delete table
 				done, err := a.executor.RemoveTable(ctx, op.TableID, op.BoundaryTs)
 				if err != nil {
 					return errors.Trace(err)
 				}
-				op.processed = done
+				if done {
+					op.status = operationProcessed
+				} else {
+					break
+				}
 			}
-		}
-		if op.processed && !op.finished {
+			fallthrough
+		case operationProcessed:
 			var (
 				done bool
 				err  error
 			)
 			if !op.IsDelete {
-				done, err = a.executor.IsAddTableFinished(ctx, op.TableID)
+				done = a.executor.IsAddTableFinished(ctx, op.TableID)
 			} else {
-				done, err = a.executor.IsRemoveTableFinished(ctx, op.TableID)
+				done = a.executor.IsRemoveTableFinished(ctx, op.TableID)
 			}
 			if err != nil {
 				return errors.Trace(err)
 			}
-			op.finished = done
-		}
-		if op.processed && op.finished {
+			if done {
+				op.status = operationFinished
+			} else {
+				break
+			}
+			fallthrough
+		case operationFinished:
 			done, err := a.communicator.FinishTableOperation(ctx, op.TableID)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			if done {
-				delete(a.tableOperations, op.TableID)
+				delete(a.tableOperations, tableID)
 			}
 		}
 	}
@@ -246,7 +261,8 @@ func (a *BaseAgent) sendCheckpoint(ctx context.Context) error {
 		return nil
 	}
 
-	if time.Since(a.lastSendCheckpointTime) < defaultSendCheckpointInterval {
+	sendCheckpointInterval := config.GetGlobalServerConfig().SchedulerV2.ProcessorCheckpointInterval
+	if time.Since(a.lastSendCheckpointTime) < time.Duration(sendCheckpointInterval) {
 		return nil
 	}
 
@@ -347,6 +363,9 @@ func (a *BaseAgent) checkOwnerInfo(ownerCaptureID model.CaptureID, ownerRev int6
 		return false
 	}
 	if a.ownerInfo.OwnerCaptureID != ownerCaptureID {
+		// This panic will happen only if two messages have been received
+		// with the same ownerRev but with different ownerIDs.
+		// This should never happen unless the Election package is buggy.
 		a.logger.Panic("owner IDs do not match",
 			zap.String("expected", a.ownerInfo.OwnerCaptureID),
 			zap.String("actual", ownerCaptureID))

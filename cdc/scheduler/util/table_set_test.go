@@ -164,6 +164,14 @@ func TestTableSetCaptures(t *testing.T) {
 			Status:    0,
 		},
 	}, allTables)
+
+	ok = ts.RemoveTableRecord(1)
+	require.True(t, ok)
+	ok = ts.RemoveTableRecord(2)
+	require.True(t, ok)
+
+	captureToTableMap = ts.GetAllTablesGroupedByCaptures()
+	require.Len(t, captureToTableMap, 0)
 }
 
 func TestCountTableByStatus(t *testing.T) {

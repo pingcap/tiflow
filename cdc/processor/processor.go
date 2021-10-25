@@ -115,7 +115,7 @@ func (p *processor) RemoveTable(ctx cdcContext.Context, tableID model.TableID, b
 }
 
 // IsAddTableFinished implements the interface TableExecutor
-func (p *processor) IsAddTableFinished(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
+func (p *processor) IsAddTableFinished(ctx cdcContext.Context, tableID model.TableID) bool {
 	table, exist := p.tables[tableID]
 	if !exist {
 		log.Panic("table which was added is not found",
@@ -126,28 +126,28 @@ func (p *processor) IsAddTableFinished(ctx cdcContext.Context, tableID model.Tab
 	localCheckpointTs := p.messenger.LastSentCheckpointTs()
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 	if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
-		return false, nil
+		return false
 	}
 	if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
 		log.Debug("Operation done signal received",
 			cdcContext.ZapFieldChangefeed(ctx),
 			zap.Int64("tableID", tableID))
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 // IsRemoveTableFinished implements the interface TableExecutor
-func (p *processor) IsRemoveTableFinished(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
+func (p *processor) IsRemoveTableFinished(ctx cdcContext.Context, tableID model.TableID) bool {
 	table, exist := p.tables[tableID]
 	if !exist {
 		log.Warn("table which was added is not found",
 			cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
-		return true, nil
+		return true
 	}
 	if table.Status() != tablepipeline.TableStatusStopped {
 		log.Debug("the table is still not stopped", zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
-		return false, nil
+		return false
 	}
 
 	table.Cancel()
@@ -157,7 +157,7 @@ func (p *processor) IsRemoveTableFinished(ctx cdcContext.Context, tableID model.
 		cdcContext.ZapFieldChangefeed(ctx),
 		zap.Int64("tableID", tableID))
 
-	return true, nil
+	return true
 }
 
 // GetAllCurrentTables implements the interface TableExecutor
