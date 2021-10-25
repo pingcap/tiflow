@@ -156,7 +156,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 		name    string
 		args    arg
 		wantRet []io.ReadCloser
-		wantErr bool
+		wantErr string
 	}{
 		{
 			name: "dir not exist",
@@ -166,7 +166,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 				startTs:   0,
 				endTs:     12,
 			},
-			wantErr: true,
+			wantErr: ".*CDC:ErrRedoFileOp*.",
 		},
 		{
 			name: "happy",
@@ -205,13 +205,12 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 				startTs:   0,
 				endTs:     12,
 			},
-			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		ret, err := openSelectedFiles(ctx, tt.args.dir, tt.args.fixedName, tt.args.startTs, tt.args.endTs, 100)
-		if !tt.wantErr {
+		if tt.wantErr == "" {
 			require.Nil(t, err, tt.name)
 			require.Equal(t, len(tt.wantRet), len(ret), tt.name)
 			for _, closer := range tt.wantRet {
@@ -246,7 +245,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 				}
 			}
 		} else {
-			require.NotNil(t, err, tt.name)
+			require.Regexp(t, tt.wantErr, err.Error(), tt.name)
 		}
 	}
 }
