@@ -10,6 +10,18 @@ OUT_DIR=
 tidb_config=
 pd_config=
 multiple_upstream_pd=
+random_file_name=
+
+# Random generate the sockets config.
+# Make sure we dont use the same sock.
+randomGenSocketsConf() {
+	date=$(date '+%s%N')
+
+	random_file_name="$OUT_DIR/tidb-config-$date.toml"
+
+	cat "$OUT_DIR/tidb-config.toml" >"$random_file_name"
+	echo "socket = \"/tmp/tidb-$date.sock\"" >>"$random_file_name"
+}
 
 while [[ ${1} ]]; do
 	case "${1}" in
@@ -94,25 +106,52 @@ pd-server \
 	--log-file "$OUT_DIR/down_pd.log" \
 	--data-dir "$OUT_DIR/down_pd" &
 
-# wait until PD is online...
+# wait until upstream PD is online...
+echo "Verifying upstream PD is started..."
 for idx in $(seq 1 $pd_count); do
 	host="UP_PD_HOST_$idx"
 	port="UP_PD_PORT_$idx"
 
+	i=0
 	while ! curl -o /dev/null -sf http://${!host}:${!port}/pd/api/v1/version; do
+		i=$((i + 1))
+		if [ "$i" -gt 60 ]; then
+			echo 'Failed to start upstream PD'
+			exit 1
+		fi
 		sleep 1
 	done
 
+	i=0
 	while [ -z "$(curl http://${!host}:${!port}/pd/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
+		i=$((i + 1))
+		if [ "$i" -gt 60 ]; then
+			echo 'Failed to start upstream PD'
+			exit 1
+		fi
 		sleep 1
 	done
 done
 
+# wait until downstream PD is online...
+echo "Verifying downstream PD is started..."
+i=0
 while ! curl -o /dev/null -sf http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/version; do
+	i=$((i + 1))
+	if [ "$i" -gt 60 ]; then
+		echo 'Failed to start downstream PD'
+		exit 1
+	fi
 	sleep 1
 done
 
+i=0
 while [ -z "$(curl http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
+	i=$((i + 1))
+	if [ "$i" -gt 60 ]; then
+		echo 'Failed to start downstream PD'
+		exit 1
+	fi
 	sleep 1
 done
 
@@ -169,26 +208,29 @@ tikv-server \
 sleep 2
 
 echo "Starting Upstream TiDB..."
+randomGenSocketsConf
 tidb-server \
 	-P ${UP_TIDB_PORT} \
-	-config "$OUT_DIR/tidb-config.toml" \
+	-config "$random_file_name" \
 	--store tikv \
 	--path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
 	--status=${UP_TIDB_STATUS} \
 	--log-file "$OUT_DIR/tidb.log" &
 
+randomGenSocketsConf
 tidb-server \
 	-P ${UP_TIDB_OTHER_PORT} \
-	-config "$OUT_DIR/tidb-config.toml" \
+	-config "$random_file_name" \
 	--store tikv \
 	--path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
 	--status=${UP_TIDB_OTHER_STATUS} \
 	--log-file "$OUT_DIR/tidb_other.log" &
 
 echo "Starting Downstream TiDB..."
+randomGenSocketsConf
 tidb-server \
 	-P ${DOWN_TIDB_PORT} \
-	-config "$OUT_DIR/tidb-config.toml" \
+	-config "$random_file_name" \
 	--store tikv \
 	--path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
 	--status=${DOWN_TIDB_STATUS} \

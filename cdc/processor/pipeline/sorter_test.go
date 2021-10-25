@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter/memory"
+	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/leakutil"
@@ -32,7 +32,7 @@ import (
 func TestMain(m *testing.M) {
 	leakutil.SetUpLeakTest(
 		m,
-		goleak.IgnoreTopFunction("github.com/pingcap/ticdc/cdc/puller/sorter.newBackEndPool.func1"),
+		goleak.IgnoreTopFunction("github.com/pingcap/ticdc/cdc/sorter/unified.newBackEndPool.func1"),
 	)
 }
 
@@ -42,10 +42,10 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 
 	// GlobalServerConfig overrides dir parameter in NewUnifiedSorter.
 	config.GetGlobalServerConfig().Sorter.SortDir = dir
-	_, err := sorter.NewUnifiedSorter(dir, "test-cf", "test", 0, captureAddr)
+	_, err := unified.NewUnifiedSorter(dir, "test-cf", "test", 0, captureAddr)
 	require.Nil(t, err)
 
-	sorter.ResetGlobalPoolWithoutCleanup()
+	unified.ResetGlobalPoolWithoutCleanup()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.Engine = model.SortUnified
 	ctx.ChangefeedVars().Info.SortDir = dir
@@ -57,7 +57,7 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 func TestSorterResolvedTs(t *testing.T) {
 	t.Parallel()
 	sn := newSorterNode("tableName", 1, 1, nil, nil)
-	sn.sorter = puller.NewEntrySorter()
+	sn.sorter = memory.NewEntrySorter()
 	require.EqualValues(t, 1, sn.ResolvedTs())
 	nctx := pipeline.NewNodeContext(
 		cdcContext.NewContext(context.Background(), nil),

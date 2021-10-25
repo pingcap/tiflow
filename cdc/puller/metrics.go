@@ -14,13 +14,7 @@
 package puller
 
 import (
-	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
-)
-
-const (
-	defaultMetricInterval = time.Second * 15
 )
 
 var (
@@ -68,43 +62,6 @@ var (
 			Help:      "Puller event channel size",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 8),
 		}, []string{"capture", "changefeed"})
-	entrySorterResolvedChanSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "entry_sorter_resolved_chan_size",
-			Help:      "Puller entry sorter resolved channel size",
-		}, []string{"capture", "changefeed", "table"})
-	entrySorterOutputChanSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "entry_sorter_output_chan_size",
-			Help:      "Puller entry sorter output channel size",
-		}, []string{"capture", "changefeed", "table"})
-	entrySorterUnsortedSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "entry_sorter_unsorted_size",
-			Help:      "Puller entry sorter unsorted items size",
-		}, []string{"capture", "changefeed", "table"})
-	entrySorterSortDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "entry_sorter_sort",
-			Help:      "Bucketed histogram of processing time (s) of sort in entry sorter.",
-			Buckets:   prometheus.ExponentialBuckets(0.000001, 10, 10),
-		}, []string{"capture", "changefeed", "table"})
-	entrySorterMergeDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "entry_sorter_merge",
-			Help:      "Bucketed histogram of processing time (s) of merge in entry sorter.",
-			Buckets:   prometheus.ExponentialBuckets(0.000001, 10, 10),
-		}, []string{"capture", "changefeed", "table"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -115,9 +72,4 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(memBufferSizeGauge)
 	registry.MustRegister(outputChanSizeHistogram)
 	registry.MustRegister(eventChanSizeHistogram)
-	registry.MustRegister(entrySorterResolvedChanSizeGauge)
-	registry.MustRegister(entrySorterOutputChanSizeGauge)
-	registry.MustRegister(entrySorterUnsortedSizeGauge)
-	registry.MustRegister(entrySorterSortDuration)
-	registry.MustRegister(entrySorterMergeDuration)
 }

@@ -24,9 +24,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/cdc/model"
@@ -36,7 +36,7 @@ const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes
-	DefaultMaxMessageBytes int = 64 * 1024 * 1024 // 64M
+	DefaultMaxMessageBytes int = 1 * 1024 * 1024 // 1M
 	// DefaultMaxBatchSize sets the default value for max-batch-size
 	DefaultMaxBatchSize int = 16
 )
@@ -431,6 +431,15 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		d.valueBuf.Write(valueLenByte[:])
 		d.valueBuf.Write(value)
 	} else {
+		// for single message that longer than max-message-size, do not send it.
+		// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
+		length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
+		if length > d.maxKafkaMessageSize {
+			log.Warn("Single message too large",
+				zap.Int("max-message-size", d.maxKafkaMessageSize), zap.Int("length", length), zap.Any("table", e.Table))
+			return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
+		}
+
 		if len(d.messageBuf) == 0 ||
 			d.curBatchSize >= d.maxBatchSize ||
 			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxKafkaMessageSize {
@@ -453,7 +462,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 		if message.Length() > d.maxKafkaMessageSize {
 			// `len(d.messageBuf) == 1` is implied
-			log.Warn("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
+			log.Debug("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
 				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxKafkaMessageSize))
 		}
 		d.curBatchSize++

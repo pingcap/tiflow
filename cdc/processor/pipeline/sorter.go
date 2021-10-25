@@ -23,8 +23,9 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/puller"
-	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter/memory"
+	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"go.uber.org/zap"
@@ -36,7 +37,7 @@ const (
 )
 
 type sorterNode struct {
-	sorter puller.EventSorter
+	sorter sorter.EventSorter
 
 	tableID   model.TableID
 	tableName string // quoted schema and table, used in metircs only
@@ -69,22 +70,22 @@ func newSorterNode(
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
-	var sorter puller.EventSorter
+	var sorter sorter.EventSorter
 	sortEngine := ctx.ChangefeedVars().Info.Engine
 	switch sortEngine {
 	case model.SortInMemory:
-		sorter = puller.NewEntrySorter()
+		sorter = memory.NewEntrySorter()
 	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
 		if sortEngine == model.SortInFile {
 			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
 				zap.String("changefeed-id", ctx.ChangefeedVars().ID), zap.String("table-name", n.tableName))
 		}
 		sortDir := ctx.ChangefeedVars().Info.SortDir
-		err := psorter.UnifiedSorterCheckDir(sortDir)
+		err := unified.UnifiedSorterCheckDir(sortDir)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		sorter, err = psorter.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+		sorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 		if err != nil {
 			return errors.Trace(err)
 		}
