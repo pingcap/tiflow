@@ -138,7 +138,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	c.feedStateManager.Tick(state)
 
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	// check stale checkPointTs must call before `feedStateManager.ShouldRunning()`
+	// check stale checkPointTs must be called before `feedStateManager.ShouldRunning()`
 	// to ensure an error or stopped changefeed also be checked
 	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
 		return errors.Trace(err)
