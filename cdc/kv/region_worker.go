@@ -228,17 +228,12 @@ func (w *regionWorker) checkRegionStateEmpty() (empty bool) {
 
 // checkShouldExit checks whether the region worker should exit, if should exit
 // return an error
-func (w *regionWorker) checkShouldExit(addr string) error {
+func (w *regionWorker) checkShouldExit() error {
 	empty := w.checkRegionStateEmpty()
 	// If there is not region maintained by this region worker, exit it and
 	// cancel the gRPC stream.
 	if empty {
-		cancel, ok := w.session.getStreamCancel(addr)
-		if ok {
-			cancel()
-		} else {
-			log.Warn("gRPC stream cancel func not found", zap.String("addr", addr))
-		}
+		w.cancelStream(time.Duration(0))
 		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 	}
 	return nil
@@ -257,7 +252,7 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 		zap.String("error", err.Error()))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
 	if state.isStopped() {
-		return w.checkShouldExit(state.sri.rpcCtx.Addr)
+		return w.checkShouldExit()
 	}
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
 	state.markStopped()
@@ -291,7 +286,13 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	// check and cancel gRPC stream before reconnecting region, in case of the
 	// scenario that region connects to the same TiKV store again and reuses
 	// resource in this region worker by accident.
-	retErr := w.checkShouldExit(state.sri.rpcCtx.Addr)
+	retErr := w.checkShouldExit()
+
+	// `ErrPrewriteNotMatch` would cause duplicated request to the same region,
+	// so cancel the original gRPC stream before restarts a new stream.
+	if cerror.ErrPrewriteNotMatch.Equal(err) {
+		w.cancelStream(time.Second)
+	}
 
 	revokeToken := !state.initialized
 	err2 := w.session.onRegionFail(ctx, regionErrorInfo{
@@ -585,20 +586,26 @@ func (w *regionWorker) collectWorkpoolError(ctx context.Context) error {
 
 func (w *regionWorker) checkErrorReconnect(err error) error {
 	if errors.Cause(err) == errReconnect {
-		cancel, ok := w.session.getStreamCancel(w.storeAddr)
-		if ok {
-			// cancel the stream to trigger strem.Recv with context cancel error
-			// Note use context cancel is the only way to terminate a gRPC stream
-			cancel()
-			// Failover in stream.Recv has 0-100ms delay, the onRegionFail
-			// should be called after stream has been deleted. Add a delay here
-			// to avoid too frequent region rebuilt.
-			time.Sleep(time.Second)
-		}
+		w.cancelStream(time.Second)
 		// if stream is already deleted, just ignore errReconnect
 		return nil
 	}
 	return err
+}
+
+func (w *regionWorker) cancelStream(delay time.Duration) {
+	cancel, ok := w.session.getStreamCancel(w.storeAddr)
+	if ok {
+		// cancel the stream to trigger strem.Recv with context cancel error
+		// Note use context cancel is the only way to terminate a gRPC stream
+		cancel()
+		// Failover in stream.Recv has 0-100ms delay, the onRegionFail
+		// should be called after stream has been deleted. Add a delay here
+		// to avoid too frequent region rebuilt.
+		time.Sleep(delay)
+	} else {
+		log.Warn("gRPC stream cancel func not found", zap.String("addr", w.storeAddr))
+	}
 }
 
 func (w *regionWorker) run(parentCtx context.Context) error {
