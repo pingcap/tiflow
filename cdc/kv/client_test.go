@@ -3297,15 +3297,13 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	}
 	cancel()
 }
-<<<<<<< HEAD
-=======
 
 // TestPrewriteNotMatchError tests TiKV sends a commit event without a matching
 // prewrite(which is a bug, ref: https://github.com/tikv/tikv/issues/11055,
 // TiCDC catches this error and resets the gRPC stream. TiCDC must not send a
 // new request before closing gRPC stream since currently there is no mechanism
 // to release an existing region connection.
-func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
+func (s *etcdSuite) TestPrewriteNotMatchError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
@@ -3338,7 +3336,7 @@ func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
 		}
 	}
 
-	rpcClient, cluster, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -3449,7 +3447,7 @@ func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
 		nil /*eventCh*/)
 }
 
-func (s *clientSuite) TestCheckRateLimit(c *check.C) {
+func (s *etcdSuite) TestCheckRateLimit(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
@@ -3476,7 +3474,7 @@ func (s *clientSuite) TestCheckRateLimit(c *check.C) {
 	c.Assert(allowed, check.IsTrue)
 }
 
-func (s *clientSuite) TestHandleRateLimit(c *check.C) {
+func (s *etcdSuite) TestHandleRateLimit(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
@@ -3500,4 +3498,3 @@ func (s *clientSuite) TestHandleRateLimit(c *check.C) {
 	c.Assert(session.rateLimitQueue, check.HasLen, 0)
 	c.Assert(cap(session.rateLimitQueue), check.Equals, 128)
 }
->>>>>>> 36422c0a9 (kv/client: use region based rate limiter and decouple it from event handler (#3118))
