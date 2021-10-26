@@ -64,7 +64,7 @@ func (s *Credential) ToTLSConfig() (*tls.Config, error) {
 }
 
 // ToTLSConfigWithVerify generates tls's config from *Security and requires
-// // the remote common name to be verified.
+// the remote common name to be verified.
 func (s *Credential) ToTLSConfigWithVerify() (*tls.Config, error) {
 	cfg, err := utils.ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, s.CertAllowedCN)
 	return cfg, cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
