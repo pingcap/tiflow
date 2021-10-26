@@ -201,7 +201,15 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 	case pipeline.MessageTypePolymorphicEvent:
 		rawKV := msg.PolymorphicEvent.RawKV
 		if rawKV != nil && rawKV.OpType == model.OpTypeResolved {
-			// Note that resolved ts could fall back here, if puller falls back.
+			// Puller resolved ts should not fall back.
+			resolvedTs := rawKV.CRTs
+			oldResolvedTs := atomic.SwapUint64(&n.resolvedTs, resolvedTs)
+			if oldResolvedTs > resolvedTs {
+				log.Panic("resolved ts regression",
+					zap.Int64("tableID", n.tableID),
+					zap.Uint64("resolvedTs", resolvedTs),
+					zap.Uint64("oldResolvedTs", oldResolvedTs))
+			}
 			atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 		}
 		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
