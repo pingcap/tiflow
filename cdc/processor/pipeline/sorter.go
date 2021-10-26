@@ -23,12 +23,11 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
-	psorter "github.com/pingcap/ticdc/cdc/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
-	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -38,7 +37,7 @@ const (
 )
 
 type sorterNode struct {
-	sorter psorter.EventSorter
+	sorter sorter.EventSorter
 
 	tableID   model.TableID
 	tableName string // quoted schema and table, used in metircs only
@@ -71,7 +70,7 @@ func newSorterNode(
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
-	var sorter psorter.EventSorter
+	var sorter sorter.EventSorter
 	sortEngine := ctx.ChangefeedVars().Info.Engine
 	switch sortEngine {
 	case model.SortInMemory:
@@ -113,10 +112,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
-		changefeedID := ctx.ChangefeedVars().ID
-		metricSorterResolvedTsGauge := psorter.ResolvedTsGauge.WithLabelValues(captureAddr, changefeedID)
-		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(changefeedID, captureAddr)
+		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
@@ -147,7 +143,6 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 						if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
-							metricSorterResolvedTsGauge.Set(float64(oracle.ExtractPhysical(lastCRTs)))
 							ctx.SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
 						}
 					}
@@ -159,7 +154,6 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
-							metricSorterResolvedTsGauge.Set(float64(oracle.ExtractPhysical(lastCRTs)))
 							ctx.SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
 						}
 						return nil
@@ -207,15 +201,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 	case pipeline.MessageTypePolymorphicEvent:
 		rawKV := msg.PolymorphicEvent.RawKV
 		if rawKV != nil && rawKV.OpType == model.OpTypeResolved {
-			// Puller resolved ts should not fall back.
-			resolvedTs := rawKV.CRTs
-			oldResolvedTs := atomic.SwapUint64(&n.resolvedTs, resolvedTs)
-			if oldResolvedTs > resolvedTs {
-				log.Panic("resolved ts regression",
-					zap.Int64("tableID", n.tableID),
-					zap.Uint64("resolvedTs", resolvedTs),
-					zap.Uint64("oldResolvedTs", oldResolvedTs))
-			}
+			// Note that resolved ts could fall back here, if puller falls back.
 			atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 		}
 		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)

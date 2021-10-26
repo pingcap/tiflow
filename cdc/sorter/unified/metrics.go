@@ -32,6 +32,13 @@ var (
 		Help:      "the number of events output by the sorter",
 	}, []string{"capture", "changefeed", "type"})
 
+	sorterResolvedTsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "ticdc",
+		Subsystem: "sorter",
+		Name:      "resolved_ts_gauge",
+		Help:      "the resolved ts of the sorter",
+	}, []string{"capture", "changefeed"})
+
 	sorterMergerStartTsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
@@ -81,6 +88,7 @@ var (
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(sorterConsumeCount)
 	registry.MustRegister(sorterEventCount)
+	registry.MustRegister(sorterResolvedTsGauge)
 	registry.MustRegister(sorterMergerStartTsGauge)
 	registry.MustRegister(sorterInMemoryDataSizeGauge)
 	registry.MustRegister(sorterOnDiskDataSizeGauge)
