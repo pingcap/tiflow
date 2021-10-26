@@ -253,6 +253,15 @@ func (b *dsgSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) 
 
 func (b *dsgSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	log.Debug("dsgSocketSink: Checkpoint Event", zap.Uint64("ts", ts))
+	
+	commitTs,err:=socket.JddmClientByCheckPoint(b.sinkURI.Host,ts)
+	//commitTs,err:=socket.JddmClientFlush("127.0.0.1:9889",resolvedTs)
+	if err != nil {
+		fmt.Println("err=", err) //出错退出
+		return 0, nil
+	}
+	log.Debug(" result checkPointTs============>>>",zap.Uint64("commitTs", commitTs))	
+	
 	return nil
 }
 
