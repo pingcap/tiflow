@@ -30,7 +30,7 @@ import (
 )
 
 // newRouter create a router for OpenAPI
-func newRouter(capture2 *capture.Capture) *gin.Engine {
+func newRouter(captureHandler capture.HTTPHandler) *gin.Engine {
 	// discard gin log output
 	gin.DefaultWriter = io.Discard
 
@@ -38,8 +38,6 @@ func newRouter(capture2 *capture.Capture) *gin.Engine {
 
 	// request will timeout after 10 second
 	router.Use(timeoutMiddleware(time.Second * 10))
-
-	captureHandler := capture.NewHTTPHandler(capture2)
 
 	// OpenAPI online docs
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -83,7 +81,7 @@ func newRouter(capture2 *capture.Capture) *gin.Engine {
 	}
 
 	// pprof debug API
-	pprofGroup := router.Group("/debug/pprof")
+	pprofGroup := router.Group("/debug/pprof/")
 	{
 		pprofGroup.GET("", gin.WrapF(pprof.Index))
 		pprofGroup.GET("/:any", gin.WrapF(pprof.Index))
@@ -91,6 +89,7 @@ func newRouter(capture2 *capture.Capture) *gin.Engine {
 		pprofGroup.GET("/profile", gin.WrapF(pprof.Profile))
 		pprofGroup.GET("/symbol", gin.WrapF(pprof.Symbol))
 		pprofGroup.GET("/trace", gin.WrapF(pprof.Trace))
+		pprofGroup.GET("/threadcreate", gin.WrapF(pprof.Handler("threadcreate").ServeHTTP))
 	}
 
 	return router

@@ -19,14 +19,15 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/util"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -77,21 +78,19 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	}, nil
 }
 
-const ddlPullerName = "DDL_PULLER"
-
 func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	h.cancel = cancel
 	log.Debug("DDL puller started", zap.String("changefeed-id", ctx.ChangefeedVars().ID))
-	stdCtx := util.PutTableInfoInCtx(ctx, -1, ddlPullerName)
+	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
+	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	errg, stdCtx := errgroup.WithContext(stdCtx)
-	ctx = cdcContext.WithStd(ctx, stdCtx)
 
 	errg.Go(func() error {
-		return h.puller.Run(ctx)
+		return h.puller.Run(stdCtx)
 	})
 
-	rawDDLCh := puller.SortOutput(ctx, h.puller.Output())
+	rawDDLCh := memory.SortOutput(stdCtx, h.puller.Output())
 
 	receiveDDL := func(rawDDL *model.RawKVEntry) error {
 		if rawDDL == nil {
@@ -130,8 +129,8 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	errg.Go(func() error {
 		for {
 			select {
-			case <-ctx.Done():
-				return ctx.Err()
+			case <-stdCtx.Done():
+				return stdCtx.Err()
 			case e := <-rawDDLCh:
 				if err := receiveDDL(e); err != nil {
 					return errors.Trace(err)

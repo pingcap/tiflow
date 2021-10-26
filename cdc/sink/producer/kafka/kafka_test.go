@@ -15,6 +15,8 @@ package kafka
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -62,6 +65,39 @@ func (s *kafkaSuite) TestClientID(c *check.C) {
 	}
 }
 
+func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
+	defer testleak.AfterTest(c)
+	cfg := NewConfig()
+
+	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
+		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
+	maxMessageSize := "4096" // 4kb
+	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
+
+	sinkURI, err := url.Parse(uri)
+	c.Assert(err, check.IsNil)
+
+	replicaConfig := config.GetDefaultReplicaConfig()
+
+	opts := make(map[string]string)
+	err = cfg.Initialize(sinkURI, replicaConfig, opts)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
+	c.Assert(cfg.ReplicationFactor, check.Equals, int16(3))
+	c.Assert(cfg.Version, check.Equals, "2.6.0")
+	c.Assert(cfg.MaxMessageBytes, check.Equals, 4096)
+
+	expectedOpts := map[string]string{
+		"max-message-bytes": maxMessageSize,
+		"max-batch-size":    "5",
+	}
+	for k, v := range opts {
+		c.Assert(v, check.Equals, expectedOpts[k])
+	}
+}
+
 func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -86,7 +122,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	}
 
 	errCh := make(chan error, 1)
-	config := NewKafkaConfig()
+	config := NewConfig()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0
 	// We use a smaller version in the following producer tests.
 	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac030c15cf08e9e57925/async_producer_test.go#L1445-L1447
@@ -95,7 +131,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	config.TopicPreProcess = false
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
-	newSaramaConfigImpl = func(ctx context.Context, config Config) (*sarama.Config, error) {
+	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
 		cfg, err := newSaramaConfigImplBak(ctx, config)
 		c.Assert(err, check.IsNil)
 		cfg.Producer.Flush.MaxMessages = 1
@@ -205,7 +241,7 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 		"DescribeConfigsRequest": sarama.NewMockDescribeConfigsResponse(c),
 	})
 
-	config := NewKafkaConfig()
+	config := NewConfig()
 	config.PartitionNum = int32(0)
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
@@ -238,7 +274,7 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 	})
 	defer broker.Close()
 
-	config := NewKafkaConfig()
+	config := NewConfig()
 	config.PartitionNum = int32(0)
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
@@ -250,7 +286,7 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.Background()
-	config := NewKafkaConfig()
+	config := NewConfig()
 	config.Version = "invalid"
 	_, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
@@ -286,7 +322,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	_, err = newSaramaConfigImpl(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*no such file or directory")
 
-	saslConfig := NewKafkaConfig()
+	saslConfig := NewConfig()
 	saslConfig.Version = "2.6.0"
 	saslConfig.ClientID = "test-sasl-scram"
 	saslConfig.SaslScram = &security.SaslScram{
@@ -307,7 +343,7 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	errCh := make(chan error, 1)
-	config := NewKafkaConfig()
+	config := NewConfig()
 	config.Version = "invalid"
 	_, err := NewKafkaSaramaProducer(ctx, "127.0.0.1:1111", "topic", config, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
@@ -316,4 +352,118 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.PartitionNum = int32(-1)
 	_, err = NewKafkaSaramaProducer(ctx, "127.0.0.1:1111", "topic", config, errCh)
 	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
+}
+
+func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
+	defer testleak.AfterTest(c)()
+	topic := "unit_test_4"
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	leader := sarama.NewMockBroker(c, 2)
+	defer leader.Close()
+	metadataResponse := new(sarama.MetadataResponse)
+	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
+	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
+	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
+	leader.Returns(metadataResponse)
+	leader.Returns(metadataResponse)
+
+	config := NewConfig()
+	// Because the sarama mock broker is not compatible with version larger than 1.0.0
+	// We use a smaller version in the following producer tests.
+	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac030c15cf08e9e57925/async_producer_test.go#L1445-L1447
+	config.Version = "0.9.0.0"
+	config.PartitionNum = int32(2)
+	config.TopicPreProcess = false
+
+	newSaramaConfigImplBak := newSaramaConfigImpl
+	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
+		cfg, err := newSaramaConfigImplBak(ctx, config)
+		c.Assert(err, check.IsNil)
+		cfg.Producer.Flush.MaxMessages = 1
+		cfg.Producer.Retry.Max = 2
+		cfg.Producer.MaxMessageBytes = 8
+		return cfg, err
+	}
+	defer func() {
+		newSaramaConfigImpl = newSaramaConfigImplBak
+	}()
+
+	errCh := make(chan error, 1)
+	producer, err := NewKafkaSaramaProducer(ctx, leader.Addr(), topic, config, errCh)
+	defer func() {
+		err := producer.Close()
+		c.Assert(err, check.IsNil)
+	}()
+
+	c.Assert(err, check.IsNil)
+	c.Assert(producer, check.NotNil)
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 20; i++ {
+			err = producer.SendMessage(ctx, &codec.MQMessage{
+				Key:   []byte("test-key-1"),
+				Value: []byte("test-value"),
+			}, int32(0))
+			c.Assert(err, check.IsNil)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-ctx.Done():
+			c.Fatal("TestProducerSendMessageFailed timed out")
+		case err := <-errCh:
+			c.Assert(err, check.ErrorMatches, ".*too large.*")
+		}
+	}()
+
+	wg.Wait()
+}
+
+func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
+	defer testleak.AfterTest(c)()
+	topic := "unit_test_4"
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	leader := sarama.NewMockBroker(c, 2)
+	defer leader.Close()
+	metadataResponse := new(sarama.MetadataResponse)
+	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
+	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
+	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
+	leader.Returns(metadataResponse)
+	leader.Returns(metadataResponse)
+
+	config := NewConfig()
+	// Because the sarama mock broker is not compatible with version larger than 1.0.0
+	// We use a smaller version in the following producer tests.
+	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac030c15cf08e9e57925/async_producer_test.go#L1445-L1447
+	config.Version = "0.9.0.0"
+	config.PartitionNum = int32(2)
+	config.TopicPreProcess = false
+
+	errCh := make(chan error, 1)
+	producer, err := NewKafkaSaramaProducer(ctx, leader.Addr(), topic, config, errCh)
+	defer func() {
+		err := producer.Close()
+		c.Assert(err, check.IsNil)
+	}()
+
+	c.Assert(err, check.IsNil)
+	c.Assert(producer, check.NotNil)
+
+	err = producer.Close()
+	c.Assert(err, check.IsNil)
+
+	err = producer.Close()
+	c.Assert(err, check.IsNil)
 }
