@@ -75,35 +75,34 @@ func (s *helperSuite) TestIsRetryableError(c *check.C) {
 	}
 }
 
-func TestChangefeedFastFailError(t *testing.T) {
-	t.Parallel()
+func (s *helperSuite) TestChangefeedFastFailError(c *check.C) {
 	err := ErrGCTTLExceeded.FastGenByArgs()
 	rfcCode, _ := RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	c.Assert(ChangefeedFastFailError(err), check.IsTrue)
+	c.Assert(ChangefeedFastFailErrorCode(rfcCode), check.IsTrue)
 
 	err = ErrGCTTLExceeded.GenWithStack("aa")
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	c.Assert(ChangefeedFastFailError(err), check.IsTrue)
+	c.Assert(ChangefeedFastFailErrorCode(rfcCode), check.IsTrue)
 
 	err = ErrGCTTLExceeded.Wrap(errors.New("aa"))
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	c.Assert(ChangefeedFastFailError(err), check.IsTrue)
+	c.Assert(ChangefeedFastFailErrorCode(rfcCode), check.IsTrue)
 
 	err = ErrSnapshotLostByGC.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	c.Assert(ChangefeedFastFailError(err), check.IsTrue)
+	c.Assert(ChangefeedFastFailErrorCode(rfcCode), check.IsTrue)
 
 	err = ErrStartTsBeforeGC.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	c.Assert(ChangefeedFastFailError(err), check.IsTrue)
+	c.Assert(ChangefeedFastFailErrorCode(rfcCode), check.IsTrue)
 
 	err = ErrToTLSConfigFailed.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, false, ChangefeedFastFailError(err))
-	require.Equal(t, false, ChangefeedFastFailErrorCode(rfcCode))
+	c.Assert(ChangefeedFastFailError(err), check.IsFalse)
+	c.Assert(ChangefeedFastFailErrorCode(rfcCode), check.IsFalse)
 }

@@ -41,7 +41,7 @@ var gcSafepointUpdateInterval = 1 * time.Minute
 type GcManager interface {
 	updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error
 	currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error)
-	checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error
+	checkStaleCheckpointTs(ctx cdcContext.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts) error
 }
 
 type gcManager struct {
@@ -128,18 +128,21 @@ func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, 
 	return m.pdPhysicalTimeCache, nil
 }
 
-func (m *gcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
+func (m *gcManager) checkStaleCheckpointTs(
+	ctx cdcContext.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
+) error {
+	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
 		pdTime, err := m.currentTimeFromPDCached(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if pdTime.Sub(oracle.GetTimeFromTS(checkpointTs)) > time.Duration(m.gcTTL)*time.Second {
-			return cerror.ErrGCTTLExceeded.GenWithStackByArgs(checkpointTs, ctx.ChangefeedVars().ID)
+		if pdTime.Sub(oracle.GetTimeFromTS(gcSafepointUpperBound)) > time.Duration(m.gcTTL)*time.Second {
+			return cerror.ErrGCTTLExceeded.GenWithStackByArgs(checkpointTs, changefeedID)
 		}
 	} else {
 		// if `isTiCDCBlockGC` is false, it means there is another service gc point less than the min checkpoint ts.
-		if checkpointTs < m.lastSafePointTs {
+		if gcSafepointUpperBound < m.lastSafePointTs {
 			return cerror.ErrSnapshotLostByGC.GenWithStackByArgs(checkpointTs, m.lastSafePointTs)
 		}
 	}
