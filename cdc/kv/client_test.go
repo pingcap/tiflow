@@ -3308,7 +3308,7 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 // TiCDC catches this error and resets the gRPC stream. TiCDC must not send a
 // new request before closing gRPC stream since currently there is no mechanism
 // to release an existing region connection.
-func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
+func (s *etcdSuite) TestPrewriteNotMatchError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
@@ -3341,7 +3341,7 @@ func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
 		}
 	}
 
-	rpcClient, cluster, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
