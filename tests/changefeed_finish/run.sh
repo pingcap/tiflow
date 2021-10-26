@@ -12,19 +12,15 @@ MAX_RETRIES=10
 function check_changefeed_is_finished() {
 	pd=$1
 	changefeed=$2
-	state=$(cdc cli changefeed query -s -c=$changefeed | jq ".state" | tr -d '"')
+	query=$(cdc cli changefeed query -c=$changefeed)
+	echo "$query"
+	state=$(echo "$query" | jq ".state" | tr -d '"')
 	if [[ ! "$state" -eq "finished" ]]; then
 		echo "state $state is not finished"
 		exit 1
 	fi
 
-	info=$(cdc cli changefeed query -c=$changefeed | sed "/has been deleted/d" | jq ".info")
-	if [[ ! "$info" -eq "null" ]]; then
-		echo "unexpected changefeed info $info, should be null"
-		exit 1
-	fi
-
-	status_length=$(cdc cli changefeed query -c=$changefeed | sed "/has been deleted/d" | jq '."task-status"|length')
+	status_length=$(echo "$query" | sed "/has been deleted/d" | jq '."task-status"|length')
 	if [[ ! "$status_length" -eq "0" ]]; then
 		echo "unexpected task status length $status_length, should be 0"
 		exit 1
