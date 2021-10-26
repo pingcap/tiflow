@@ -3478,7 +3478,7 @@ func (s *clientSuite) TestCheckRateLimit(c *check.C) {
 	c.Assert(allowed, check.IsTrue)
 }
 
-func (s *clientSuite) TestHandleRateLimit(c *check.C) {
+func (s *etcdSuite) TestHandleRateLimit(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
