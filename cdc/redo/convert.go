@@ -8,14 +8,16 @@
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
-// See the License for the specific language governing pemissions and
+// See the License for the specific language governing permissions and
 // limitations under the License.
 
 package redo
 
 import (
-	pmodel "github.com/pingcap/parser/model"
+	"bytes"
+
 	"github.com/pingcap/ticdc/cdc/model"
+	pmodel "github.com/pingcap/tidb/parser/model"
 )
 
 // RowToRedo converts row changed event to redo log row
@@ -28,6 +30,15 @@ func RowToRedo(row *model.RowChangedEvent) *model.RedoRowChangedEvent {
 	for _, column := range row.Columns {
 		var redoColumn *model.RedoColumn
 		if column != nil {
+			// workaround msgp issue(Decode replaces empty slices with nil https://github.com/tinylib/msgp/issues/247)
+			// if []byte("") send with RowChangedEvent after UnmarshalMsg,
+			// the value will become nil, which is unexpected.
+			switch v := column.Value.(type) {
+			case []byte:
+				if bytes.Equal(v, []byte("")) {
+					column.Value = ""
+				}
+			}
 			redoColumn = &model.RedoColumn{Column: column, Flag: uint64(column.Flag)}
 		}
 		redoLog.Columns = append(redoLog.Columns, redoColumn)
@@ -35,6 +46,12 @@ func RowToRedo(row *model.RowChangedEvent) *model.RedoRowChangedEvent {
 	for _, column := range row.PreColumns {
 		var redoColumn *model.RedoColumn
 		if column != nil {
+			switch v := column.Value.(type) {
+			case []byte:
+				if bytes.Equal(v, []byte("")) {
+					column.Value = ""
+				}
+			}
 			redoColumn = &model.RedoColumn{Column: column, Flag: uint64(column.Flag)}
 		}
 		redoLog.PreColumns = append(redoLog.PreColumns, redoColumn)
