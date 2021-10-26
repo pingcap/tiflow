@@ -19,7 +19,6 @@ import (
 	"reflect"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -36,7 +35,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 )
 
 var (
@@ -136,7 +134,6 @@ for event processing to increase throughput.
 type regionWorker struct {
 	parentCtx context.Context
 	session   *eventFeedSession
-	limiter   *rate.Limiter
 
 	inputCh  chan *regionStatefulEvent
 	outputCh chan<- model.RegionFeedEvent
@@ -157,11 +154,10 @@ type regionWorker struct {
 	storeAddr      string
 }
 
-func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter, addr string) *regionWorker {
+func newRegionWorker(s *eventFeedSession, addr string) *regionWorker {
 	cfg := config.GetGlobalServerConfig().KVClient
 	worker := &regionWorker{
 		session:        s,
-		limiter:        limiter,
 		inputCh:        make(chan *regionStatefulEvent, regionWorkerInputChanSize),
 		outputCh:       s.eventCh,
 		errorCh:        make(chan error, 1),
@@ -254,24 +250,6 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	state.markStopped()
 	w.delRegionState(regionID)
 	failpoint.Inject("kvClientSingleFeedProcessDelay", nil)
-	now := time.Now()
-	delay := w.limiter.ReserveN(now, 1).Delay()
-	if delay != 0 {
-		log.Info("EventFeed retry rate limited",
-			zap.Duration("delay", delay), zap.Reflect("regionID", regionID))
-		t := time.NewTimer(delay)
-		defer t.Stop()
-		select {
-		case <-t.C:
-			// We can proceed.
-		case <-ctx.Done():
-			revokeToken := !state.initialized
-			return w.session.onRegionFail(w.parentCtx, regionErrorInfo{
-				singleRegionInfo: state.sri,
-				err:              err,
-			}, revokeToken)
-		}
-	}
 
 	failpoint.Inject("kvClientErrUnreachable", func() {
 		if err == errUnreachable {
@@ -394,8 +372,8 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 }
 
 func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEvent) error {
-	if event.finishedCounter != nil {
-		atomic.AddInt32(event.finishedCounter, -1)
+	if event.finishedCallbackCh != nil {
+		event.finishedCallbackCh <- struct{}{}
 		return nil
 	}
 	var err error
@@ -534,13 +512,14 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			// Send a dummy event to each worker pool handler, after each of these
 			// events are processed, we can ensure all events sent to worker pool
 			// from this region worker are processed.
-			counter := int32(len(w.handles))
+			finishedCallbackCh := make(chan struct{}, len(w.handles))
 			for _, handle := range w.handles {
-				err = handle.AddEvent(ctx, &regionStatefulEvent{finishedCounter: &counter})
+				err = handle.AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
 				if err != nil {
 					return err
 				}
 			}
+			counter := len(w.handles)
 		checkEventsProcessed:
 			for {
 				select {
@@ -548,8 +527,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 					return errors.Trace(ctx.Err())
 				case err = <-w.errorCh:
 					return err
-				case <-time.After(50 * time.Millisecond):
-					if atomic.LoadInt32(&counter) == 0 {
+				case <-finishedCallbackCh:
+					counter--
+					if counter == 0 {
 						break checkEventsProcessed
 					}
 				}
