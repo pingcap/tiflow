@@ -39,8 +39,8 @@ import (
 )
 
 func (s *Server) startStatusHTTP() error {
-
-	router := newRouter(capture.NewHTTPHandler(s.capture))
+	conf := config.GetGlobalServerConfig()
+	router := newRouter(capture.NewHTTPHandler(s.capture), conf)
 
 	router.GET("/status", gin.WrapF(s.handleStatus))
 	router.GET("/debug/info", gin.WrapF(s.handleDebugInfo))

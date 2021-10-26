@@ -36,7 +36,7 @@ import (
 
 // newRouter create a router for OpenAPI
 
-func newRouter(captureHandler capture.HTTPHandler) *gin.Engine {
+func newRouter(captureHandler capture.HTTPHandler, conf *config.ServerConfig) *gin.Engine {
 	// discard gin log output
 	gin.DefaultWriter = io.Discard
 
