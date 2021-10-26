@@ -14,8 +14,8 @@
 package redo
 
 import (
-	pmodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
+	pmodel "github.com/pingcap/tidb/parser/model"
 )
 
 // RowToRedo converts row changed event to redo log row
