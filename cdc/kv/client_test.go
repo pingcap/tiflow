@@ -3292,7 +3292,7 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 // TiCDC catches this error and resets the gRPC stream. TiCDC must not send a
 // new request before closing gRPC stream since currently there is no mechanism
 // to release an existing region connection.
-func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
+func (s *etcdSuite) TestPrewriteNotMatchError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
@@ -3325,7 +3325,9 @@ func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
 		}
 	}
 
-	rpcClient, cluster, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
+	cluster := mocktikv.NewCluster()
+	mvccStore := mocktikv.MustNewMVCCStore()
+	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -3340,11 +3342,8 @@ func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
-	isPullInit := &mockPullerInit{}
-	lockResolver := txnutil.NewLockerResolver(kvStorage)
-	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
+	lockResolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
 	defer grpcPool.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	baseAllocatedID := currentRequestID()
 
