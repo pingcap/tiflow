@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
-	"go.uber.org/zap"
 )
 
 // Dispatcher is an abstraction for dispatching rows into different target destination.
@@ -55,26 +54,25 @@ var rules = map[string]dispatchRule{
 
 // fromString decide which partition dispatcher rule to use by parsing the given `s`.
 // if no one matched, use default.
-func (r *dispatchRule) fromString(s string) {
+func (r *dispatchRule) fromString(s string) error {
 	s = strings.ToLower(s)
 	rule, ok := rules[s]
 	if ok {
 		*r = rule
-		return
+		return nil
 	}
 
 	if tryGetDispatchRuleByPartitionIndex(s) {
 		*r = dispatchRuleByPartitionIndex
-		return
+		return nil
 	}
 
 	if tryGetDispatchRuleByColumns(s) {
 		*r = dispatchRuleByColumns
-		return
+		return nil
 	}
 
-	*r = dispatchRuleDefault
-	log.Warn("can't support dispatch rule, using default rule", zap.String("rule", s))
+	return cerror.ErrDispatcherRuleInvalid.GenWithStack("can't create dispatch rule by s = %s", s)
 }
 
 type dispatcherSwitcher struct {
@@ -113,7 +111,7 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 	for _, ruleConfig := range ruleConfigs {
 		f, err := filter.Parse(ruleConfig.Matcher)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
+			return nil, cerror.WrapError(cerror.ErrDispatcherRuleInvalid, err)
 		}
 		if !cfg.CaseSensitive {
 			f = filter.CaseInsensitive(f)
@@ -124,7 +122,9 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 			rule dispatchRule
 		)
 		partitionRule := ruleConfig.GetPartitionRule()
-		rule.fromString(partitionRule)
+		if err := rule.fromString(partitionRule); err != nil {
+			return nil, err
+		}
 
 		switch rule {
 		case dispatchRuleRowID, dispatchRuleIndexValue, dispatchRulePK:
@@ -143,7 +143,7 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		case dispatchRuleByPartitionIndex:
 			targetPartition, err := strconv.Atoi(partitionRule)
 			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
+				return nil, cerror.WrapError(cerror.ErrDispatcherRuleInvalid, err)
 			}
 			if err := validateTargetPartitionIndex(int32(targetPartition), partitionNum); err != nil {
 				return nil, err
@@ -171,12 +171,12 @@ func tryGetDispatchRuleByPartitionIndex(s string) bool {
 
 func validateTargetPartitionIndex(target, partitionNum int32) error {
 	if target < 0 {
-		return cerror.ErrFilterRuleInvalid.GenWithStack(
+		return cerror.ErrDispatcherRuleInvalid.GenWithStack(
 			"can't create partition dispatcher by target partition not a positive integer")
 	}
 
 	if target >= partitionNum {
-		return cerror.ErrFilterRuleInvalid.GenWithStack(
+		return cerror.ErrDispatcherRuleInvalid.GenWithStack(
 			"can't create partition dispatcher by target partition(%d) >= partitionNum(%d)",
 			target, partitionNum)
 	}
