@@ -3451,7 +3451,7 @@ func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
 		nil /*eventCh*/)
 }
 
-func (s *clientSuite) TestCheckRateLimit(c *check.C) {
+func (s *etcdSuite) TestCheckRateLimit(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
