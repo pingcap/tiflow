@@ -119,6 +119,9 @@ var (
 	ErrSinkInvalidConfig         = errors.Normalize("sink config invalid", errors.RFCCodeText("CDC:ErrSinkInvalidConfig"))
 	ErrCraftCodecInvalidData     = errors.Normalize("craft codec invalid data", errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"))
 
+	// mqSink related errors
+	ErrDispatcherRuleInvalid = errors.Normalize("dispatcher rule is invalid", errors.RFCCodeText("CDC:ErrDispatcherRuleInvalid"))
+
 	// utilities related errors
 	ErrToTLSConfigFailed         = errors.Normalize("generate tls config failed", errors.RFCCodeText("CDC:ErrToTLSConfigFailed"))
 	ErrCheckClusterVersionFromPD = errors.Normalize("failed to request PD", errors.RFCCodeText("CDC:ErrCheckClusterVersionFromPD"))
