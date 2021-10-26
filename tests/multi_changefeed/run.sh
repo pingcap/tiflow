@@ -19,7 +19,7 @@ function check_old_value_enabled() {
 	# When old value is turned on, we will have both column and pre-column in the update.
 	# So here we have 2 (pre val) and 3 (new val).
 	update_with_old_value_count=$(grep "EmitRowChangedEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep '\"columns\\\":\[' | grep 'value\\\":2' | grep -c 'value\\\":3')
-	if [[ "$update_with_old_value_count" -eq 0 ]]; then
+	if [[ "$update_with_old_value_count" -ne 1 ]]; then
 		echo "can't found update row with old value"
 		exit 1
 	fi
@@ -28,7 +28,7 @@ function check_old_value_enabled() {
 	# When old value is turned off, we only have the column in the update.
 	# So here we only have 3 (new val).
 	update_without_old_value_count=$(grep "EmitRowChangedEvents" "$1/cdc.log" | grep 'pre\-columns\\\":null' | grep -c 'value\\\":3')
-	if [[ "$update_without_old_value_count" -eq 0 ]]; then
+	if [[ "$update_without_old_value_count" -ne 1 ]]; then
 		echo "can't found update row without old value"
 		exit 1
 	fi
@@ -38,7 +38,7 @@ function check_old_value_enabled() {
 	# When old value is turned on, the pre-column in our delete will include all the columns.
 	# So here we have 1 (id) and 3 (val).
 	delete_with_old_value_count=$(grep "EmitRowChangedEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep 'columns\\\":null' | grep 'value\\\":1' | grep -c 'value\\\":3')
-	if [[ "$delete_with_old_value_count" -eq 0 ]]; then
+	if [[ "$delete_with_old_value_count" -ne 1 ]]; then
 		echo "can't found delete row with old value"
 		exit 1
 	fi
@@ -47,7 +47,7 @@ function check_old_value_enabled() {
 	# When old value is turned off, the pre-column in our delete will only include the handle columns.
 	# So here we only have 1 (id).
 	delete_without_old_value_count=$(grep "EmitRowChangedEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep 'columns\\\":null' | grep -c 'value\\\":1},null')
-	if [[ "$delete_without_old_value_count" -eq 0 ]]; then
+	if [[ "$delete_without_old_value_count" -ne 1 ]]; then
 		echo "can't found delete row without old value"
 		exit 1
 	fi
