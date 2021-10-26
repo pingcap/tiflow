@@ -64,6 +64,7 @@ type processor struct {
 	mounter       entry.Mounter
 	sinkManager   *sink.Manager
 	redoManager   redo.LogManager
+	lastRedoFlush time.Time
 
 	initialized bool
 	errCh       chan error
@@ -86,11 +87,12 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	advertiseAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	p := &processor{
-		tables:       make(map[model.TableID]tablepipeline.TablePipeline),
-		errCh:        make(chan error, 1),
-		changefeedID: changefeedID,
-		captureInfo:  ctx.GlobalVars().CaptureInfo,
-		cancel:       func() {},
+		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
+		errCh:         make(chan error, 1),
+		changefeedID:  changefeedID,
+		captureInfo:   ctx.GlobalVars().CaptureInfo,
+		cancel:        func() {},
+		lastRedoFlush: time.Now(),
 
 		metricResolvedTsGauge:       resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricResolvedTsLagGauge:    resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
@@ -180,6 +182,9 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	}
 	if err := p.checkTablesNum(ctx); err != nil {
 		return nil, errors.Trace(err)
+	}
+	if err := p.flushRedoLogMeta(ctx); err != nil {
+		return nil, err
 	}
 	p.handlePosition()
 	p.pushResolvedTs2Table()
@@ -775,6 +780,20 @@ func (p *processor) doGCSchemaStorage() {
 	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs).Add(-schemaStorageGCLag)
 	gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
 	p.schemaStorage.DoGC(gcTs)
+}
+
+// flushRedoLogMeta flushes redo log meta, including resolved-ts and checkpoint-ts
+func (p *processor) flushRedoLogMeta(ctx context.Context) error {
+	if p.redoManager.Enabled() &&
+		time.Since(p.lastRedoFlush).Milliseconds() > p.changefeed.Info.Config.Consistent.FlushIntervalInMs {
+		st := p.changefeed.Status
+		err := p.redoManager.FlushResolvedAndCheckpointTs(ctx, st.ResolvedTs, st.CheckpointTs)
+		if err != nil {
+			return err
+		}
+		p.lastRedoFlush = time.Now()
+	}
+	return nil
 }
 
 func (p *processor) Close() error {

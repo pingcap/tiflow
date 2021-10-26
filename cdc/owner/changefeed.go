@@ -482,14 +482,6 @@ func (c *changefeed) updateStatus(ctx context.Context, barrierTs model.Ts) error
 		return status, changed, nil
 	})
 
-	if c.redoManager.Enabled() {
-		err := c.redoManager.FlushResolvedAndCheckpointTs(ctx, resolvedTs, checkpointTs)
-		if err != nil {
-			return err
-		}
-		log.Debug("flush redo log meta", zap.Uint64("resolved-ts", resolvedTs), zap.Uint64("checkpoint-ts", checkpointTs))
-	}
-
 	phyTs := oracle.ExtractPhysical(checkpointTs)
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
 	// It is more accurate to get tso from PD, but in most cases since we have
