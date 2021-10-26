@@ -24,6 +24,36 @@ type SwitcherSuite struct{}
 
 var _ = check.Suite(&SwitcherSuite{})
 
+func (s SwitcherSuite) TestParseDispatchRule(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	var r dispatchRule
+	for k, v := range rules {
+		err := r.parse(k)
+		c.Assert(err, check.IsNil)
+		c.Assert(r, check.Equals, v)
+	}
+
+	err := r.parse("invalid")
+	c.Assert(err, check.NotNil)
+
+	// -1 is not a valid partition index, it will fail later when create the dispatcher.
+	err = r.parse("-1")
+	c.Assert(err, check.IsNil)
+
+	err = r.parse("3.1415")
+	c.Assert(err, check.NotNil)
+
+	// err = r.parse("[]")
+	// c.Assert(err, check.IsNil)
+	//
+	// err = r.parse("[,]")
+	// c.Assert(err, check.IsNil)
+	//
+	// err = r.parse("[][][][]")
+	// c.Assert(err, check.IsNil)
+}
+
 func (s SwitcherSuite) TestSwitcher(c *check.C) {
 	defer testleak.AfterTest(c)()
 	d, err := NewDispatcher(config.GetDefaultReplicaConfig(), 4)

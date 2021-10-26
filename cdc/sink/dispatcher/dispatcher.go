@@ -52,9 +52,9 @@ var rules = map[string]dispatchRule{
 	"pk":          dispatchRulePK,
 }
 
-// fromString decide which partition dispatcher rule to use by parsing the given `s`.
+// parse decide which partition dispatcher rule to use by parsing the given `s`.
 // if no one matched, use default.
-func (r *dispatchRule) fromString(s string) error {
+func (r *dispatchRule) parse(s string) error {
 	s = strings.ToLower(s)
 	rule, ok := rules[s]
 	if ok {
@@ -122,7 +122,7 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 			rule dispatchRule
 		)
 		partitionRule := ruleConfig.GetPartitionRule()
-		if err := rule.fromString(partitionRule); err != nil {
+		if err := rule.parse(partitionRule); err != nil {
 			return nil, err
 		}
 
