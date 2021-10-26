@@ -13,7 +13,7 @@
 
 package codec
 
-import "github.com/pingcap/parser/mysql"
+import "github.com/pingcap/tidb/parser/mysql"
 
 // JavaSQLType is the sql type defined in class java.sql.Types in java sdk
 type JavaSQLType int32

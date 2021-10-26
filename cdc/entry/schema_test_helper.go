@@ -15,11 +15,11 @@ package entry
 
 import (
 	"github.com/pingcap/check"
-	timodel "github.com/pingcap/parser/model"
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	timeta "github.com/pingcap/tidb/meta"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util/testkit"

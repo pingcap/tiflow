@@ -1,6 +1,6 @@
 # TiCDC
 
-[![Build Status](https://internal.pingcap.net/idc-jenkins/job/build_cdc_multi_branch/job/master/badge/icon)](https://internal.pingcap.net/idc-jenkins/job/build_cdc_multi_branch/job/master)
+[![Build Status](https://github.com/pingcap/ticdc/actions/workflows/check_and_build.yaml/badge.svg?branch=master)](https://github.com/pingcap/ticdc/actions/workflows/check_and_build.yaml?query=event%3Apush+branch%3Amaster)
 [![codecov](https://codecov.io/gh/pingcap/ticdc/branch/master/graph/badge.svg)](https://codecov.io/gh/pingcap/ticdc)
 [![Coverage Status](https://coveralls.io/repos/github/pingcap/ticdc/badge.svg)](https://coveralls.io/github/pingcap/ticdc)
 [![LICENSE](https://img.shields.io/github/license/pingcap/ticdc.svg)](https://github.com/pingcap/ticdc/blob/master/LICENSE)
