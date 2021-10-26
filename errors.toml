@@ -336,6 +336,11 @@ error = '''
 json codec invalid data
 '''
 
+["CDC:ErrJSONCodecRowTooLarge"]
+error = '''
+json codec single row too large
+'''
+
 ["CDC:ErrKVStorageBackoffFailed"]
 error = '''
 backoff failed
@@ -453,7 +458,7 @@ MySQL connection error
 
 ["CDC:ErrMySQLInvalidConfig"]
 error = '''
-MySQL config invaldi
+MySQL config invalid
 '''
 
 ["CDC:ErrMySQLQueryError"]
