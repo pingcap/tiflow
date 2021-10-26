@@ -837,7 +837,7 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
 
 	verifyArr := make([]byte,4)
-
+	
 	verifyArr[0] = 0x06
 	verifyArr[1] = 0xce
 	verifyArr[2] = 0x01
