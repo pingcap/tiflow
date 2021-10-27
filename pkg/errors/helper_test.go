@@ -76,6 +76,8 @@ func (s *helperSuite) TestIsRetryableError(c *check.C) {
 }
 
 func (s *helperSuite) TestChangefeedFastFailError(c *check.C) {
+	defer testleak.AfterTest(c)()
+
 	err := ErrGCTTLExceeded.FastGenByArgs()
 	rfcCode, _ := RFCCode(err)
 	c.Assert(ChangefeedFastFailError(err), check.IsTrue)
