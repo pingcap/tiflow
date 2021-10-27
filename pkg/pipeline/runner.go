@@ -46,7 +46,7 @@ func newNodeRunner(name string, node Node, previous runner, outputChanSize int) 
 }
 
 func (r *nodeRunner) run(ctx context.Context) error {
-	nodeCtx := newNodeContext(ctx, Message{}, r.outputCh)
+	nodeCtx := NewNodeContext(ctx, Message{}, r.outputCh)
 	defer close(r.outputCh)
 	defer func() {
 		err := r.node.Destroy(nodeCtx)
