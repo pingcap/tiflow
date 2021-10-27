@@ -671,9 +671,19 @@ error = '''
 redo log config invalid
 '''
 
+["CDC:ErrRedoDownloadFailed"]
+error = '''
+redo log down load to local failed
+'''
+
 ["CDC:ErrRedoFileOp"]
 error = '''
 redo file operation
+'''
+
+["CDC:ErrRedoMetaFileNotFound"]
+error = '''
+no redo meta file found in dir: %s
 '''
 
 ["CDC:ErrRedoMetaInitialize"]
@@ -819,6 +829,11 @@ this api supports GET method only
 ["CDC:ErrSupportPostOnly"]
 error = '''
 this api supports POST method only
+'''
+
+["CDC:ErrTCPServerClosed"]
+error = '''
+The TCP server has been closed
 '''
 
 ["CDC:ErrTableIneligible"]

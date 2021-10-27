@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -48,14 +49,21 @@ type sorterNode struct {
 
 	wg     errgroup.Group
 	cancel context.CancelFunc
+
+	// The latest resolved ts that sorter has received.
+	resolvedTs model.Ts
 }
 
-func newSorterNode(tableName string, tableID model.TableID, flowController tableFlowController, mounter entry.Mounter) pipeline.Node {
+func newSorterNode(
+	tableName string, tableID model.TableID, startTs model.Ts,
+	flowController tableFlowController, mounter entry.Mounter,
+) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
 		tableID:        tableID,
 		flowController: flowController,
 		mounter:        mounter,
+		resolvedTs:     startTs,
 	}
 }
 
@@ -191,6 +199,19 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
+		rawKV := msg.PolymorphicEvent.RawKV
+		if rawKV != nil && rawKV.OpType == model.OpTypeResolved {
+			// Puller resolved ts should not fall back.
+			resolvedTs := rawKV.CRTs
+			oldResolvedTs := atomic.SwapUint64(&n.resolvedTs, resolvedTs)
+			if oldResolvedTs > resolvedTs {
+				log.Panic("resolved ts regression",
+					zap.Int64("tableID", n.tableID),
+					zap.Uint64("resolvedTs", resolvedTs),
+					zap.Uint64("oldResolvedTs", oldResolvedTs))
+			}
+			atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
+		}
 		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
 	default:
 		ctx.SendToNextNode(msg)
@@ -202,4 +223,8 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
 	return n.wg.Wait()
+}
+
+func (n *sorterNode) ResolvedTs() model.Ts {
+	return atomic.LoadUint64(&n.resolvedTs)
 }
