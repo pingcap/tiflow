@@ -85,7 +85,7 @@ type LogWriterConfig struct {
 	FlushIntervalInMs int64
 	S3Storage         bool
 	// S3URI should be like S3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-	S3URI *url.URL
+	S3URI url.URL
 }
 
 // LogWriter implement the RedoLogWriter interface
@@ -153,7 +153,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 		}
 		if cfg.S3Storage {
 			var s3storage storage.ExternalStorage
-			s3storage, errInit = common.InitS3storage(ctx, *cfg.S3URI)
+			s3storage, errInit = common.InitS3storage(ctx, cfg.S3URI)
 			if errInit != nil {
 				return
 			}
@@ -258,8 +258,8 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.R
 		}
 
 		rl := redoLogPool.Get().(*model.RedoLog)
-		rl.Row = r
-		rl.DDL = nil
+		rl.RedoRow = r
+		rl.RedoDDL = nil
 		rl.Type = model.RedoLogTypeRow
 		// TODO: crc check
 		data, err := rl.MarshalMsg(nil)
@@ -297,8 +297,8 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error 
 	rl := redoLogPool.Get().(*model.RedoLog)
 	defer redoLogPool.Put(rl)
 
-	rl.DDL = ddl
-	rl.Row = nil
+	rl.RedoDDL = ddl
+	rl.RedoRow = nil
 	rl.Type = model.RedoLogTypeDDL
 	data, err := rl.MarshalMsg(nil)
 	if err != nil {
