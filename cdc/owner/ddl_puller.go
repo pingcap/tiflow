@@ -19,14 +19,15 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/util"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -89,7 +90,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 		return h.puller.Run(stdCtx)
 	})
 
-	rawDDLCh := puller.SortOutput(stdCtx, h.puller.Output())
+	rawDDLCh := memory.SortOutput(stdCtx, h.puller.Output())
 
 	receiveDDL := func(rawDDL *model.RawKVEntry) error {
 		if rawDDL == nil {
