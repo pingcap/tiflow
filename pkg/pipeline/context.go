@@ -28,10 +28,11 @@ type NodeContext interface {
 type nodeContext struct {
 	context.Context
 	msg      Message
-	outputCh chan Message
+	outputCh chan<- Message
 }
 
-func newNodeContext(ctx context.Context, msg Message, outputCh chan Message) NodeContext {
+// NewNodeContext returns a new NodeContext.
+func NewNodeContext(ctx context.Context, msg Message, outputCh chan<- Message) NodeContext {
 	return &nodeContext{
 		Context:  ctx,
 		msg:      msg,
