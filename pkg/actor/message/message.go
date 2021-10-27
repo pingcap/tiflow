@@ -15,6 +15,7 @@ package message
 
 import (
 	"github.com/pingcap/ticdc/cdc/model"
+	sorter "github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
 )
 
 // Type is the type of Message
@@ -24,7 +25,10 @@ type Type int
 const (
 	TypeUnknown Type = iota
 	TypeTick
+	TypeStop
+	TypeTest
 	TypeBarrier
+	TypeSorter
 	// Add a new type when adding a new message.
 )
 
@@ -34,6 +38,11 @@ type Message struct {
 	Tp Type
 	// BarrierTs
 	BarrierTs model.Ts
+	// Leveldb sorter task
+	// TODO: find a way to hide it behind an interface while saving
+	//       memory allocation.
+	// See https://cs.opensource.google/go/go/+/refs/tags/go1.17.2:src/runtime/iface.go;l=325
+	SorterTask sorter.Task
 }
 
 // TickMessage creates the message of Tick
@@ -43,10 +52,25 @@ func TickMessage() Message {
 	}
 }
 
+// StopMessage creates the message of Tick
+func StopMessage() Message {
+	return Message{
+		Tp: TypeStop,
+	}
+}
+
 // BarrierMessage creates the message of Command
 func BarrierMessage(barrierTs model.Ts) Message {
 	return Message{
 		Tp:        TypeBarrier,
 		BarrierTs: barrierTs,
+	}
+}
+
+// SorterMessage creates the message of sorter
+func SorterMessage(task sorter.Task) Message {
+	return Message{
+		Tp:         TypeSorter,
+		SorterTask: task,
 	}
 }
