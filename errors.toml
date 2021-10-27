@@ -831,6 +831,11 @@ error = '''
 this api supports POST method only
 '''
 
+["CDC:ErrTCPServerClosed"]
+error = '''
+The TCP server has been closed
+'''
+
 ["CDC:ErrTableIneligible"]
 error = '''
 some tables are not eligible to replicate(%v), if you want to ignore these tables, please set ignore_ineligible_table to true
