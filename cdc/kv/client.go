@@ -76,6 +76,9 @@ const (
 	// channel work in an asynchronous way, the larger channel can decrease the
 	// frequency of creating new goroutine.
 	defaultRegionChanSize = 128
+
+	// initial size for region rate limit queue
+	defaultRegionRateLimitQueueSize = 128
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -96,9 +99,9 @@ type regionStatefulEvent struct {
 	// regionID is used for load balancer, we don't use fields in state to reduce lock usage
 	regionID uint64
 
-	// finishedCounter is used to mark events that are sent from a give region
+	// finishedCallbackCh is used to mark events that are sent from a give region
 	// worker to this worker(one of the workers in worker pool) are all processed.
-	finishedCounter *int32
+	finishedCallbackCh chan struct{}
 }
 
 var (
@@ -430,6 +433,8 @@ type eventFeedSession struct {
 	errCh chan regionErrorInfo
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
+	// The queue is used to store region that reaches limit
+	rateLimitQueue []regionErrorInfo
 
 	rangeLock      *regionspan.RegionRangeLock
 	enableOldValue bool
@@ -474,6 +479,7 @@ func newEventFeedSession(
 		regionCh:          make(chan singleRegionInfo, defaultRegionChanSize),
 		errCh:             make(chan regionErrorInfo, defaultRegionChanSize),
 		requestRangeCh:    make(chan rangeRequestTask, defaultRegionChanSize),
+		rateLimitQueue:    make([]regionErrorInfo, 0, defaultRegionRateLimitQueueSize),
 		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
 		enableOldValue:    enableOldValue,
 		lockResolver:      lockResolver,
@@ -526,15 +532,27 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	})
 
 	g.Go(func() error {
+		checkRateLimitInterval := 50 * time.Millisecond
+		timer := time.NewTimer(checkRateLimitInterval)
+		defer timer.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
+			case <-timer.C:
+				s.handleRateLimit(ctx)
+				timer.Reset(checkRateLimitInterval)
 			case errInfo := <-s.errCh:
 				s.errChSizeGauge.Dec()
-				err := s.handleError(ctx, errInfo)
-				if err != nil {
-					return err
+				allowed := s.checkRateLimit(errInfo.singleRegionInfo.verID.GetID())
+				if !allowed {
+					// rate limit triggers, add the error info to the rate limit queue
+					s.rateLimitQueue = append(s.rateLimitQueue, errInfo)
+				} else {
+					err := s.handleError(ctx, errInfo)
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -627,18 +645,7 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 	if revokeToken {
 		s.regionRouter.Release(errorInfo.rpcCtx.Addr)
 	}
-	select {
-	case s.errCh <- errorInfo:
-		s.errChSizeGauge.Inc()
-	default:
-		go func() {
-			select {
-			case s.errCh <- errorInfo:
-				s.errChSizeGauge.Inc()
-			case <-ctx.Done():
-			}
-		}()
-	}
+	s.enqueueError(ctx, errorInfo)
 	return nil
 }
 
@@ -744,10 +751,9 @@ func (s *eventFeedSession) requestRegionToStore(
 			}
 			s.addStream(rpcCtx.Addr, stream, streamCancel)
 
-			limiter := s.client.getRegionLimiter(regionID)
 			g.Go(func() error {
 				defer s.deleteStream(rpcCtx.Addr)
-				return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client, pendingRegions, limiter)
+				return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client, pendingRegions)
 			})
 		}
 
@@ -946,6 +952,58 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 	}
 }
 
+// enqueueError sends error to the eventFeedSession's error channel in a none blocking way
+// TODO: refactor enqueueError to avoid too many goroutines spawned when a lot of regions meet error.
+func (s *eventFeedSession) enqueueError(ctx context.Context, errorInfo regionErrorInfo) {
+	select {
+	case s.errCh <- errorInfo:
+		s.errChSizeGauge.Inc()
+	default:
+		go func() {
+			select {
+			case s.errCh <- errorInfo:
+				s.errChSizeGauge.Inc()
+			case <-ctx.Done():
+			}
+		}()
+	}
+}
+
+func (s *eventFeedSession) handleRateLimit(ctx context.Context) {
+	var (
+		i       int
+		errInfo regionErrorInfo
+	)
+	if len(s.rateLimitQueue) == 0 {
+		return
+	}
+	for i, errInfo = range s.rateLimitQueue {
+		s.enqueueError(ctx, errInfo)
+		// to avoid too many goroutines spawn, since if the error region count
+		// exceeds the size of errCh, new goroutine will be spawned
+		if i == defaultRegionChanSize-1 {
+			break
+		}
+	}
+	if i == len(s.rateLimitQueue)-1 {
+		s.rateLimitQueue = make([]regionErrorInfo, 0, defaultRegionRateLimitQueueSize)
+	} else {
+		s.rateLimitQueue = append(make([]regionErrorInfo, 0, len(s.rateLimitQueue)-i-1), s.rateLimitQueue[i+1:]...)
+	}
+}
+
+// checkRateLimit checks whether a region can be reconnected based on its rate limiter
+func (s *eventFeedSession) checkRateLimit(regionID uint64) (allowed bool) {
+	limiter := s.client.getRegionLimiter(regionID)
+	// use Limiter.Allow here since if exceed the rate limit, we skip this region
+	// and try it later.
+	allowed = limiter.Allow()
+	if !allowed {
+		log.Info("EventFeed retry rate limited", zap.Uint64("regionID", regionID))
+	}
+	return
+}
+
 // handleError handles error returned by a region. If some new EventFeed connection should be established, the region
 // info will be sent to `regionCh`. Note if region channel is full, this function will be blocked.
 // CAUTION: Note that this should only be invoked in a context that the region is not locked, otherwise use onRegionFail
@@ -1025,7 +1083,6 @@ func (s *eventFeedSession) receiveFromStream(
 	storeID uint64,
 	stream cdcpb.ChangeData_EventFeedClient,
 	pendingRegions *syncRegionFeedStateMap,
-	limiter *rate.Limiter,
 ) error {
 	// Cancel the pending regions if the stream failed. Otherwise it will remain unhandled in the pendingRegions list
 	// however not registered in the new reconnected stream.
@@ -1053,7 +1110,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 	// always create a new region worker, because `receiveFromStreamV2` is ensured
 	// to call exactly once from outter code logic
-	worker := newRegionWorker(s, limiter, addr)
+	worker := newRegionWorker(s, addr)
 
 	defer func() {
 		worker.evictAllRegions() //nolint:errcheck

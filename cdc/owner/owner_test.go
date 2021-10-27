@@ -31,8 +31,7 @@ import (
 
 var _ = check.Suite(&ownerSuite{})
 
-type ownerSuite struct {
-}
+type ownerSuite struct{}
 
 type mockGcManager struct {
 	GcManager
