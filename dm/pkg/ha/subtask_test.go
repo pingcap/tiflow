@@ -18,7 +18,7 @@ import (
 
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/config"
 )
 
 const (

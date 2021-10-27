@@ -27,10 +27,10 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser"
 
-	"github.com/pingcap/dm/pkg/binlog/common"
-	"github.com/pingcap/dm/pkg/binlog/event"
-	"github.com/pingcap/dm/pkg/gtid"
-	"github.com/pingcap/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
+	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
 var _ = check.Suite(&testFileWriterSuite{})

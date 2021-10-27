@@ -30,8 +30,8 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/integration"
 
-	"github.com/pingcap/dm/dm/common"
-	"github.com/pingcap/dm/pkg/etcdutil"
+	"github.com/pingcap/ticdc/dm/dm/common"
+	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
 )
 
 var etcdTestCli *clientv3.Client

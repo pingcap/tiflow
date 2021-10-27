@@ -44,24 +44,24 @@ import (
 	"go.etcd.io/etcd/integration"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/dm/checker"
-	common2 "github.com/pingcap/dm/dm/common"
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/ctl/common"
-	"github.com/pingcap/dm/dm/master/scheduler"
-	"github.com/pingcap/dm/dm/master/shardddl"
-	"github.com/pingcap/dm/dm/master/workerrpc"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/dm/pbmock"
-	"github.com/pingcap/dm/pkg/conn"
-	"github.com/pingcap/dm/pkg/cputil"
-	"github.com/pingcap/dm/pkg/etcdutil"
-	"github.com/pingcap/dm/pkg/ha"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/shardddl/optimism"
-	"github.com/pingcap/dm/pkg/shardddl/pessimism"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/checker"
+	common2 "github.com/pingcap/ticdc/dm/dm/common"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/ctl/common"
+	"github.com/pingcap/ticdc/dm/dm/master/scheduler"
+	"github.com/pingcap/ticdc/dm/dm/master/shardddl"
+	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/dm/pbmock"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
+	"github.com/pingcap/ticdc/dm/pkg/cputil"
+	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
+	"github.com/pingcap/ticdc/dm/pkg/ha"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/shardddl/optimism"
+	"github.com/pingcap/ticdc/dm/pkg/shardddl/pessimism"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // use task config from integration test `sharding`.
@@ -2074,12 +2074,12 @@ func (t *testMaster) subTaskStageMatch(c *check.C, s *scheduler.Scheduler, task,
 }
 
 func (t *testMaster) TestGRPCLongResponse(c *check.C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/dm/master/LongRPCResponse", `return()`), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/LongRPCResponse", `return()`), check.IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/dm/master/LongRPCResponse")
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/dm/ctl/common/SkipUpdateMasterClient", `return()`), check.IsNil)
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/LongRPCResponse")
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/ctl/common/SkipUpdateMasterClient", `return()`), check.IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/dm/ctl/common/SkipUpdateMasterClient")
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dm/ctl/common/SkipUpdateMasterClient")
 
 	masterAddr := tempurl.Alloc()[len("http://"):]
 	lis, err := net.Listen("tcp", masterAddr)

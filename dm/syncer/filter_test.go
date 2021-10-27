@@ -24,11 +24,11 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/pkg/conn"
-	tcontext "github.com/pingcap/dm/pkg/context"
-	"github.com/pingcap/dm/pkg/schema"
-	"github.com/pingcap/dm/syncer/dbconn"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
+	"github.com/pingcap/ticdc/dm/pkg/schema"
+	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
 
 type testFilterSuite struct {

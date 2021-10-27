@@ -16,7 +16,7 @@ package retry
 import (
 	"time"
 
-	tcontext "github.com/pingcap/dm/pkg/context"
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 )
 
 // backoffStrategy represents enum of retry wait interval.

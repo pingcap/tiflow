@@ -19,8 +19,8 @@ function prepare_data() {
 function run() {
 	failpoints=(
 		# 1152 is ErrAbortingConnection
-		"github.com/pingcap/dm/syncer/LoadCheckpointFailed=return(1152)"
-		"github.com/pingcap/dm/syncer/dbconn/GetMasterStatusFailed=return(1152)"
+		"github.com/pingcap/ticdc/dm/syncer/LoadCheckpointFailed=return(1152)"
+		"github.com/pingcap/ticdc/dm/syncer/dbconn/GetMasterStatusFailed=return(1152)"
 	)
 
 	for ((i = 0; i < ${#failpoints[@]}; i++)); do

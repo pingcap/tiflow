@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	. "github.com/pingcap/check"
+
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"

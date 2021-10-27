@@ -21,9 +21,9 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/streamer"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/streamer"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 // timeArgs represents args needed by timeStrategy.

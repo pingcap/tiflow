@@ -27,13 +27,13 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/pkg/binlog"
-	"github.com/pingcap/dm/pkg/binlog/common"
-	"github.com/pingcap/dm/pkg/binlog/event"
-	bw "github.com/pingcap/dm/pkg/binlog/writer"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/pkg/binlog"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
+	bw "github.com/pingcap/ticdc/dm/pkg/binlog/writer"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // FileConfig is the configuration used by the FileWriter.

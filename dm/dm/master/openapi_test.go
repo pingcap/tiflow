@@ -30,16 +30,16 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/integration"
 
-	"github.com/pingcap/dm/checker"
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/master/workerrpc"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/dm/pbmock"
-	"github.com/pingcap/dm/openapi"
-	"github.com/pingcap/dm/openapi/fixtures"
-	"github.com/pingcap/dm/pkg/ha"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/checker"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/dm/pbmock"
+	"github.com/pingcap/ticdc/dm/openapi"
+	"github.com/pingcap/ticdc/dm/openapi/fixtures"
+	"github.com/pingcap/ticdc/dm/pkg/ha"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 var openAPITestSuite = check.SerialSuites(&openAPISuite{})
@@ -339,7 +339,7 @@ func (t *openAPISuite) TestRelayAPI(c *check.C) {
 func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := setupServer(ctx, c)
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
 	checker.CheckSyncConfigFunc = mockCheckSyncConfig
 	ctrl := gomock.NewController(c)
 	defer func() {
@@ -429,7 +429,7 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(result5.Code(), check.Equals, http.StatusNoContent)
 	subTaskM = s.scheduler.GetSubTaskCfgsByTask(task.Name)
 	c.Assert(len(subTaskM) == 0, check.IsTrue)
-	c.Assert(failpoint.Disable("github.com/pingcap/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
 
 	// list tasks
 	result6 := testutil.NewRequest().Get(taskURL).Go(t.testT, s.echo)

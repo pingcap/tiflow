@@ -20,7 +20,7 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/pkg/gtid"
 )
 
 var _ = Suite(&testDDLSuite{})

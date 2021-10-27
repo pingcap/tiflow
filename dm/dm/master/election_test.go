@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/tikv/pd/pkg/tempurl"
 
-	"github.com/pingcap/dm/pkg/etcdutil"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 var _ = check.Suite(&testElectionSuite{})
@@ -78,9 +78,9 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	c.Assert(leaderID, check.Equals, cfg1.Name)
 
 	// fail to start scheduler/pessimism/optimism
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/dm/master/FailToStartLeader", `return("dm-master-2")`), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/FailToStartLeader", `return("dm-master-2")`), check.IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/dm/master/FailToStartLeader")
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/FailToStartLeader")
 
 	s1.election.Resign()
 	time.Sleep(1 * time.Second)
@@ -91,7 +91,7 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	c.Assert(leaderID, check.Equals, cfg1.Name)
 
 	//nolint:errcheck
-	failpoint.Disable("github.com/pingcap/dm/dm/master/FailToStartLeader")
+	failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/FailToStartLeader")
 	s1.election.Resign()
 	time.Sleep(1 * time.Second)
 

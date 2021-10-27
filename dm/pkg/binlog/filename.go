@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 const (

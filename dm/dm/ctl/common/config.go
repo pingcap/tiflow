@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"

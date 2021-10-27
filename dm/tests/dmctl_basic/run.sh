@@ -162,7 +162,7 @@ function test_operate_task_bound_to_a_source() {
 
 function run() {
 	inject_points=(
-		"github.com/pingcap/dm/pkg/streamer/SetHeartbeatInterval=return(1)"
+		"github.com/pingcap/ticdc/dm/pkg/streamer/SetHeartbeatInterval=return(1)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 

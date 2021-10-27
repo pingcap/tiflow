@@ -28,8 +28,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type echoNode struct {
-}
+type echoNode struct{}
 
 func (e echoNode) Init(ctx NodeContext) error {
 	ctx.SendToNextNode(PolymorphicEventMessage(&model.PolymorphicEvent{

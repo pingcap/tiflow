@@ -26,8 +26,8 @@ import (
 	"github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 // genDMLParam stores pruned columns, data as well as the original columns, data, index.

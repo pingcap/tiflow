@@ -19,7 +19,7 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/util/mock"
 
-	"github.com/pingcap/dm/pkg/binlog"
+	"github.com/pingcap/ticdc/dm/pkg/binlog"
 )
 
 var _ = Suite(&testJobSuite{})

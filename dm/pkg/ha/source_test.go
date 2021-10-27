@@ -25,7 +25,7 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/integration"
 
-	"github.com/pingcap/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/config"
 )
 
 const (

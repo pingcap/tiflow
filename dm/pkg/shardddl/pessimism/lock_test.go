@@ -16,7 +16,7 @@ package pessimism
 import (
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 type testLock struct{}

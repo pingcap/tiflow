@@ -17,7 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/dm/pb"
 )
 
 // CmdType represents the concrete request type in Request or response type in Response.

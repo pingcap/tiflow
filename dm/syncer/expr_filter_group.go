@@ -22,9 +22,9 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // ExprFilterGroup groups many related fields about expression filter.

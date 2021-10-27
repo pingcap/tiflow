@@ -21,11 +21,11 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/pkg/binlog/common"
-	br "github.com/pingcap/dm/pkg/binlog/reader"
-	"github.com/pingcap/dm/pkg/gtid"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
+	br "github.com/pingcap/ticdc/dm/pkg/binlog/reader"
+	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 // Result represents a read operation result.

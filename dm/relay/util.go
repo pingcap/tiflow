@@ -18,7 +18,7 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // isNewServer checks whether is connecting to a new server.

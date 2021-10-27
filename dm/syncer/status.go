@@ -20,11 +20,11 @@ import (
 
 	"github.com/pingcap/failpoint"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/pkg/binlog"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/syncer/metrics"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/binlog"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/syncer/metrics"
 )
 
 // Status implements Unit.Status.

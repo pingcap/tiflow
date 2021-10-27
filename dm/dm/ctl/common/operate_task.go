@@ -16,7 +16,7 @@ package common
 import (
 	"context"
 
-	"github.com/pingcap/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/dm/pb"
 )
 
 // OperateTask does operation on task.

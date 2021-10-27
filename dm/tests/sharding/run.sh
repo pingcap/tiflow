@@ -42,7 +42,7 @@ function run() {
 	#
 	# now, for pessimistic shard DDL, owner and non-owner will reach a stage often not at the same time,
 	# in order to simply the check and resume flow, only enable the failpoint for one DM-worker.
-	export GO_FAILPOINTS="github.com/pingcap/dm/syncer/FlushCheckpointStage=return(2)"
+	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/FlushCheckpointStage=return(2)"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1

@@ -17,8 +17,8 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 
-	parserpkg "github.com/pingcap/dm/pkg/parser"
-	"github.com/pingcap/dm/pkg/utils"
+	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // CheckIsDDL checks input SQL whether is a valid DDL statement.

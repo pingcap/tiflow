@@ -21,8 +21,8 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/dm/pkg/conn"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 var _ = Suite(&testUtilSuite{})

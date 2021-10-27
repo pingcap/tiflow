@@ -22,10 +22,10 @@ import (
 	"strings"
 	"unsafe"
 
-	tcontext "github.com/pingcap/dm/pkg/context"
-	parserpkg "github.com/pingcap/dm/pkg/parser"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
+	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 
 	"github.com/pingcap/errors"
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"

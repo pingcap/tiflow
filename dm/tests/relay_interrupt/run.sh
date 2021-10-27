@@ -23,8 +23,8 @@ function prepare_data2() {
 function run() {
 	failpoints=(
 		# 1152 is ErrAbortingConnection
-		"github.com/pingcap/dm/pkg/utils/GetGlobalVariableFailed=return(\"server_uuid,1152\")"
-		"github.com/pingcap/dm/pkg/utils/GetSessionVariableFailed=return(\"sql_mode,1152\")"
+		"github.com/pingcap/ticdc/dm/pkg/utils/GetGlobalVariableFailed=return(\"server_uuid,1152\")"
+		"github.com/pingcap/ticdc/dm/pkg/utils/GetSessionVariableFailed=return(\"sql_mode,1152\")"
 	)
 
 	for ((i = 0; i < ${#failpoints[@]}; i++)); do
@@ -103,7 +103,7 @@ function run() {
 
 		echo "read binlog from relay log failed, and will use remote binlog"
 		kill_dm_worker
-		export GO_FAILPOINTS="github.com/pingcap/dm/pkg/streamer/GetEventFromLocalFailed=return()"
+		export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/pkg/streamer/GetEventFromLocalFailed=return()"
 		run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 		check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 		prepare_data2 $i

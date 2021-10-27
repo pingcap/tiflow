@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 
-	"github.com/pingcap/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/pkg/gtid"
 )
 
 var _ = Suite(&testDBSuite{})

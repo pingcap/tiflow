@@ -24,10 +24,10 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/pkg/conn"
-	tcontext "github.com/pingcap/dm/pkg/context"
-	"github.com/pingcap/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
+	"github.com/pingcap/ticdc/dm/pkg/gtid"
 )
 
 func TestSuite(t *testing.T) {
@@ -101,12 +101,12 @@ func (t *testSchema) TestSchemaV106ToV20x(c *C) {
 		endGS, _ = gtid.ParserGTID(gmysql.MySQLFlavor, "ccb992ad-a557-11ea-ba6a-0242ac140002:1-16")
 	)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/pkg/v1dbschema/MockGetGTIDsForPos", `return("ccb992ad-a557-11ea-ba6a-0242ac140002:10-16")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/v1dbschema/MockGetGTIDsForPos", `return("ccb992ad-a557-11ea-ba6a-0242ac140002:10-16")`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/pkg/v1dbschema/MockGetGTIDsForPos")
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/pkg/utils/GetGTIDPurged", `return("ccb992ad-a557-11ea-ba6a-0242ac140002:1-9")`), IsNil)
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/v1dbschema/MockGetGTIDsForPos")
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/utils/GetGTIDPurged", `return("ccb992ad-a557-11ea-ba6a-0242ac140002:1-9")`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/pkg/utils/GetGTIDPurged")
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/utils/GetGTIDPurged")
 
 	// update schema without GTID enabled.
 	// mock updateSyncerCheckpoint

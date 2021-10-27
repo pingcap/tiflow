@@ -31,16 +31,16 @@ import (
 	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/dm/unit"
-	"github.com/pingcap/dm/pkg/binlog"
-	"github.com/pingcap/dm/pkg/gtid"
-	"github.com/pingcap/dm/pkg/ha"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/streamer"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/dm/unit"
+	"github.com/pingcap/ticdc/dm/pkg/binlog"
+	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/pkg/ha"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/streamer"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // do not forget to update this path if the file removed/renamed.
@@ -65,12 +65,12 @@ func (t *testServer) SetUpSuite(c *C) {
 	c.Assert(err, IsNil)
 
 	getMinLocForSubTaskFunc = getFakeLocForSubTask
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/dm/worker/MockGetSourceCfgFromETCD", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/worker/MockGetSourceCfgFromETCD", `return(true)`), IsNil)
 }
 
 func (t *testServer) TearDownSuite(c *C) {
 	getMinLocForSubTaskFunc = getMinLocForSubTask
-	c.Assert(failpoint.Disable("github.com/pingcap/dm/dm/worker/MockGetSourceCfgFromETCD"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/worker/MockGetSourceCfgFromETCD"), IsNil)
 }
 
 func createMockETCD(dir string, host string) (*embed.Etcd, error) {
@@ -295,7 +295,7 @@ func (t *testServer) TestHandleSourceBoundAfterError(c *C) {
 	}), IsTrue)
 
 	// enable failpoint
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/pkg/ha/FailToGetSourceCfg", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/ha/FailToGetSourceCfg", `return(true)`), IsNil)
 	sourceCfg := loadSourceConfigWithoutPassword(c)
 	sourceCfg.EnableRelay = false
 	_, err = ha.PutSourceCfg(etcdCli, sourceCfg)
@@ -331,7 +331,7 @@ func (t *testServer) TestHandleSourceBoundAfterError(c *C) {
 	// stop watching and disable failpoint
 	cancel()
 	wg.Wait()
-	c.Assert(failpoint.Disable("github.com/pingcap/dm/pkg/ha/FailToGetSourceCfg"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/ha/FailToGetSourceCfg"), IsNil)
 
 	_, err = ha.PutSourceBound(etcdCli, sourceBound)
 	c.Assert(err, IsNil)

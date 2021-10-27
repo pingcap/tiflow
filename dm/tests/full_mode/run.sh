@@ -7,7 +7,7 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function fail_acquire_global_lock() {
-	export GO_FAILPOINTS="github.com/pingcap/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
@@ -85,7 +85,7 @@ function escape_schema() {
 	run_sql_file $cur/data/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_count 'Query OK, 0 rows affected' 7
 
-	export GO_FAILPOINTS='github.com/pingcap/dm/dumpling/SkipRemovingDumplingMetrics=return("")'
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/dumpling/SkipRemovingDumplingMetrics=return("")'
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT

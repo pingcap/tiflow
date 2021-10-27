@@ -16,7 +16,7 @@ package metrics
 import (
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/pingcap/dm/pkg/metricsproxy"
+	"github.com/pingcap/ticdc/dm/pkg/metricsproxy"
 )
 
 // for BinlogEventCost metric stage field.

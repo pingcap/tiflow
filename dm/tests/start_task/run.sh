@@ -66,8 +66,8 @@ function run() {
 	lazy_init_tracker
 	failpoints=(
 		# 1152 is ErrAbortingConnection
-		"github.com/pingcap/dm/pkg/utils/FetchTargetDoTablesFailed=return(1152)"
-		"github.com/pingcap/dm/pkg/utils/FetchAllDoTablesFailed=return(1152)"
+		"github.com/pingcap/ticdc/dm/pkg/utils/FetchTargetDoTablesFailed=return(1152)"
+		"github.com/pingcap/ticdc/dm/pkg/utils/FetchAllDoTablesFailed=return(1152)"
 	)
 
 	for ((i = 0; i < ${#failpoints[@]}; i++)); do

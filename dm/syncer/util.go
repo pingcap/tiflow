@@ -16,16 +16,16 @@ package syncer
 import (
 	"fmt"
 
-	dcontext "github.com/pingcap/dumpling/v4/context"
-	"github.com/pingcap/dumpling/v4/export"
-	dlog "github.com/pingcap/dumpling/v4/log"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	dcontext "github.com/pingcap/tidb/dumpling/context"
+	"github.com/pingcap/tidb/dumpling/export"
+	dlog "github.com/pingcap/tidb/dumpling/log"
 	"github.com/pingcap/tidb/parser/ast"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/pkg/conn"
-	tcontext "github.com/pingcap/dm/pkg/context"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 func toBinlogType(enableRelay bool) BinlogType {

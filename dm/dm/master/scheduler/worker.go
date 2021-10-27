@@ -18,11 +18,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/master/metrics"
-	"github.com/pingcap/dm/dm/master/workerrpc"
-	"github.com/pingcap/dm/pkg/ha"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/master/metrics"
+	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
+	"github.com/pingcap/ticdc/dm/pkg/ha"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 // WorkerStage represents the stage of a DM-worker instance.

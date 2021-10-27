@@ -20,8 +20,8 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/replication"
 
-	"github.com/pingcap/dm/pkg/gtid"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 // GenCreateDatabaseEvents generates binlog events for `CREATE DATABASE`.

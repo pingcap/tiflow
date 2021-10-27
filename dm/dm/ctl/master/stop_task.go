@@ -16,7 +16,7 @@ package master
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/pingcap/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/dm/pb"
 )
 
 // NewStopTaskCmd creates a StopTask command.

@@ -21,9 +21,9 @@ import (
 	"github.com/rakyll/statik/fs"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/dm/portal"
-	_ "github.com/pingcap/dm/dm/portal/statik"
-	"github.com/pingcap/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/dm/portal"
+	_ "github.com/pingcap/ticdc/dm/dm/portal/statik"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
 func main() {

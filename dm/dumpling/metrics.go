@@ -14,12 +14,12 @@
 package dumpling
 
 import (
-	"github.com/pingcap/dumpling/v4/export"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/pkg/metricsproxy"
+	"github.com/pingcap/ticdc/dm/pkg/metricsproxy"
 )
 
 // should alert.

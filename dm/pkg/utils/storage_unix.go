@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build !windows
 // +build !windows
 
 package utils
@@ -20,7 +21,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 // GetStorageSize gets storage's capacity and available size.

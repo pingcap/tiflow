@@ -1,4 +1,4 @@
-name: chaos
+name: DM Chaos
 
 # Controls when the action will run. Triggers the workflow on pull request
 # events but only for the master and release-2.0 branch
@@ -6,7 +6,6 @@ on:
   pull_request:
     branches:
       - master
-      - release-2.0
   schedule:
     - cron: "0,30 17-22 * * *" # run at minute 0 and 30 every hour from 01:00 ~ 06:00 UTC+8
 
@@ -52,14 +51,14 @@ jobs:
         uses: actions/cache@v2
         with:
           path: ~/go/pkg/mod
-          key: ${{ runner.os }}-dm-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-ticdc-${{ hashFiles('go.sum') }}
 
-      - name: Cache tools
+      - name: Cache Tools
+        id: cache-tools
         uses: actions/cache@v2
         with:
-          path: |
-            **/tools
-          key: ${{ runner.os }}-dm-tools-${{ hashFiles('**/tools/go.sum') }}
+          path: tools/bin
+          key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
 
       # Set up Kubernetes IN Docker
       # - name: Set up kind cluster
@@ -105,14 +104,14 @@ jobs:
           sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld
 
       - name: Build DM binary
-        run: make dm-master dm-worker dmctl chaos-case
+        run: make dm-master dm-worker dmctl dm-chaos-case
 
       # NOTE: we also copy config files into `bin` directory,
       # so we only need to send `bin` as the context into docker daemon when building image.
       - name: Build DM docker image
         run: |
-          cp -r $GITHUB_WORKSPACE/chaos/cases/conf/ $GITHUB_WORKSPACE/bin/
-          docker build -f $GITHUB_WORKSPACE/chaos/manifests/Dockerfile -t dm:chaos $GITHUB_WORKSPACE/bin
+          cp -r $GITHUB_WORKSPACE/dm/chaos/cases/conf/ $GITHUB_WORKSPACE/bin/
+          docker build -f $GITHUB_WORKSPACE/dm/chaos/manifests/Dockerfile -t dm:chaos $GITHUB_WORKSPACE/bin
           docker image list
       # Load DM docker image into KIND, see https://kind.sigs.k8s.io/docs/user/quick-start/#loading-an-image-into-your-cluster
       # - name: Load DM docker image into KIND
@@ -122,9 +121,9 @@ jobs:
       # Set up upstream instances
       - name: Set up sources
         run: |
-          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/sources.yaml
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/sources.yaml
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/sources.yaml
+          kubectl apply -f $GITHUB_WORKSPACE/dm/chaos/manifests/sources.yaml
+          kubectl get -f $GITHUB_WORKSPACE/dm/chaos/manifests/sources.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/sources.yaml
       - name: Wait for sources ready # kubectl wait --all not working
         run: |
           kubectl wait --for=condition=Ready pod/mysql57-0 --timeout=300s || true
@@ -152,9 +151,9 @@ jobs:
       # Set up downstream TiDB instance (deploy a TiDB with mockTiKV, not a TidbCluster managed by TiDB-operator)
       - name: Set up TiDB
         run: |
-          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/tidb.yaml
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/tidb.yaml
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/tidb.yaml
+          kubectl apply -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
+          kubectl get -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
       - name: Wait for TiDB ready
         run: |
           kubectl wait --for=condition=Ready pod/tidb-0 --timeout=300s || true
@@ -176,9 +175,9 @@ jobs:
 
       - name: Set up DM-master
         run: |
-          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/dm-master.yaml
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/dm-master.yaml
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/dm-master.yaml
+          kubectl apply -f $GITHUB_WORKSPACE/dm/chaos/manifests/dm-master.yaml
+          kubectl get -f $GITHUB_WORKSPACE/dm/chaos/manifests/dm-master.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/dm-master.yaml
       # NOTE: even some DM-master instances are not ready, we still continue and let chaos test cases to check again.
       - name: Wait for DM-master ready
         run: |
@@ -213,9 +212,9 @@ jobs:
 
       - name: Set up DM-worker
         run: |
-          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/dm-worker.yaml
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/dm-worker.yaml
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/dm-worker.yaml
+          kubectl apply -f $GITHUB_WORKSPACE/dm/chaos/manifests/dm-worker.yaml
+          kubectl get -f $GITHUB_WORKSPACE/dm/chaos/manifests/dm-worker.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/dm-worker.yaml
       # NOTE: even some DM-worker instances are not ready, we still continue and let chaos test cases to check again.
       - name: Wait for DM-worker ready
         run: |
@@ -251,14 +250,14 @@ jobs:
       # NOTE: we sleep a while when check members ready in cases before applying any chaos operations.
       - name: Set up chaos test cases
         run: |
-          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/cases.yaml
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/cases.yaml
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/cases.yaml
+          kubectl apply -f $GITHUB_WORKSPACE/dm/chaos/manifests/cases.yaml
+          kubectl get -f $GITHUB_WORKSPACE/dm/chaos/manifests/cases.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/cases.yaml
           sleep 60
 
       - name: Encode chaos-mesh action
         run: |
-          echo CFG_BASE64=$(base64 -w 0 $GITHUB_WORKSPACE/chaos/manifests/${{ matrix.chaos-obj }}.yaml) >> $GITHUB_ENV
+          echo CFG_BASE64=$(base64 -w 0 $GITHUB_WORKSPACE/dm/chaos/manifests/${{ matrix.chaos-obj }}.yaml) >> $GITHUB_ENV
 
       - name: Run chaos mesh action
         uses: chaos-mesh/chaos-mesh-action@master
@@ -269,7 +268,7 @@ jobs:
       # check whether complete with 1m * 20 times.
       - name: Wait for chaos test case complete
         run: |
-          $GITHUB_WORKSPACE/chaos/scripts/check-case.sh
+          $GITHUB_WORKSPACE/dm/chaos/scripts/check-case.sh
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
@@ -298,7 +297,7 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
         uses: Ilshidur/action-slack@2.1.0
         with:
-          args: "chaos job failed, see https://github.com/pingcap/dm/actions/runs/{{ GITHUB_RUN_ID }}"
+          args: "chaos job failed, see https://github.com/pingcap/ticdc/actions/runs/{{ GITHUB_RUN_ID }}"
 
       # Debug via SSH if previous steps failed
       - name: Set up tmate session

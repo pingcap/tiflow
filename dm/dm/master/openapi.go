@@ -24,14 +24,14 @@ import (
 	echomiddleware "github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/checker"
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/ctl/common"
-	"github.com/pingcap/dm/dm/master/scheduler"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/openapi"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/checker"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/ctl/common"
+	"github.com/pingcap/ticdc/dm/dm/master/scheduler"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/openapi"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 const (

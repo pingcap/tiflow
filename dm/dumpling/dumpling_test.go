@@ -18,13 +18,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/dumpling/v4/export"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/dumpling/export"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 
 	. "github.com/pingcap/check"
 )
@@ -72,9 +72,9 @@ func (d *testDumplingSuite) TestDumpling(c *C) {
 	c.Assert(err, IsNil)
 	resultCh := make(chan pb.ProcessResult, 1)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/dumpling/dumpUnitProcessNoError", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessNoError", `return(true)`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/dumpling/dumpUnitProcessNoError")
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessNoError")
 
 	dumpling.Process(ctx, resultCh)
 	c.Assert(len(resultCh), Equals, 1)
@@ -82,11 +82,11 @@ func (d *testDumplingSuite) TestDumpling(c *C) {
 	c.Assert(result.IsCanceled, IsFalse)
 	c.Assert(len(result.Errors), Equals, 0)
 	//nolint:errcheck
-	failpoint.Disable("github.com/pingcap/dm/dumpling/dumpUnitProcessNoError")
+	failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessNoError")
 
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/dumpling/dumpUnitProcessWithError", `return("unknown error")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessWithError", `return("unknown error")`), IsNil)
 	// nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/dumpling/dumpUnitProcessWithError")
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessWithError")
 
 	// return error
 	dumpling.Process(ctx, resultCh)
@@ -96,15 +96,15 @@ func (d *testDumplingSuite) TestDumpling(c *C) {
 	c.Assert(len(result.Errors), Equals, 1)
 	c.Assert(result.Errors[0].Message, Equals, "unknown error")
 	// nolint:errcheck
-	failpoint.Disable("github.com/pingcap/dm/dumpling/dumpUnitProcessWithError")
+	failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessWithError")
 
 	// cancel
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/dumpling/dumpUnitProcessCancel", `return("unknown error")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessCancel", `return("unknown error")`), IsNil)
 	// nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/dumpling/dumpUnitProcessCancel")
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/dumpling/dumpUnitProcessForever", `return(true)`), IsNil)
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessCancel")
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessForever", `return(true)`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/dumpling/dumpUnitProcessForever")
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessForever")
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel2()

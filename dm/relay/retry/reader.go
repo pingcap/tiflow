@@ -19,9 +19,9 @@ import (
 
 	"github.com/pingcap/failpoint"
 
-	"github.com/pingcap/dm/pkg/backoff"
-	"github.com/pingcap/dm/pkg/retry"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/backoff"
+	"github.com/pingcap/ticdc/dm/pkg/retry"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 // ReaderRetryConfig is the configuration used for binlog reader retry backoff.

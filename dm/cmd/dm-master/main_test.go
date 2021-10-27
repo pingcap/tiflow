@@ -17,13 +17,13 @@ package main
 
 //nolint: gofumpt
 import (
-	_ "github.com/pingcap/dm/pkg/printinit"
-
 	"fmt"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	_ "github.com/pingcap/ticdc/dm/pkg/printinit"
 )
 
 func TestRunMain(_ *testing.T) {

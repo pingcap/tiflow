@@ -28,7 +28,7 @@ function test_cant_dail_upstream() {
 
 	kill_dm_worker
 
-	export GO_FAILPOINTS="github.com/pingcap/dm/pkg/conn/failDBPing=return()"
+	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/pkg/conn/failDBPing=return()"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 
@@ -85,7 +85,7 @@ function test_kill_dump_connection() {
 function run() {
 	test_cant_dail_upstream
 
-	export GO_FAILPOINTS="github.com/pingcap/dm/relay/ReportRelayLogSpaceInBackground=return(1)"
+	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/relay/ReportRelayLogSpaceInBackground=return(1)"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'

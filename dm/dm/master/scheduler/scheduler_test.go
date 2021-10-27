@@ -26,13 +26,13 @@ import (
 	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.etcd.io/etcd/integration"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/master/workerrpc"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/pkg/ha"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/ha"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 const (
@@ -1212,11 +1212,11 @@ func (t *testScheduler) TestTransferSource(c *C) {
 	// now we have (worker1, nil) (worker2, source2) (worker3, source3) (worker4, source1)
 
 	// test fail halfway won't left old worker unbound
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/dm/master/scheduler/failToReplaceSourceBound", `return()`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/scheduler/failToReplaceSourceBound", `return()`), IsNil)
 	c.Assert(s.TransferSource(sourceID1, workerName1), NotNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker4)
 	c.Assert(worker1.Stage(), Equals, WorkerFree)
-	c.Assert(failpoint.Disable("github.com/pingcap/dm/dm/master/scheduler/failToReplaceSourceBound"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/scheduler/failToReplaceSourceBound"), IsNil)
 
 	// test can't transfer when there's any running task on the source
 	s.expectSubTaskStages.Store("test", map[string]ha.Stage{sourceID1: {Expect: pb.Stage_Running}})
@@ -1359,12 +1359,12 @@ func (t *testScheduler) TestCloseAllWorkers(c *C) {
 		c.Assert(err, IsNil)
 	}
 
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/dm/master/scheduler/failToRecoverWorkersBounds", "return"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/scheduler/failToRecoverWorkersBounds", "return"), IsNil)
 	// Test closed when fail to start
 	c.Assert(s.Start(ctx, etcdTestCli), ErrorMatches, "failToRecoverWorkersBounds")
 	c.Assert(s.workers, HasLen, 3)
 	checkAllWorkersClosed(c, s, true)
-	c.Assert(failpoint.Disable("github.com/pingcap/dm/dm/master/scheduler/failToRecoverWorkersBounds"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/scheduler/failToRecoverWorkersBounds"), IsNil)
 
 	s.workers = map[string]*Worker{}
 	c.Assert(s.Start(ctx, etcdTestCli), IsNil)

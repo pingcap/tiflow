@@ -19,8 +19,8 @@ import (
 
 	"github.com/pingcap/errors"
 
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // getNextUUID gets (the nextUUID and its suffix) after the current UUID.

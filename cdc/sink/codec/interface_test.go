@@ -22,8 +22,7 @@ import (
 	"github.com/pingcap/tidb/parser/types"
 )
 
-type codecInterfaceSuite struct {
-}
+type codecInterfaceSuite struct{}
 
 var _ = check.Suite(&codecInterfaceSuite{})
 

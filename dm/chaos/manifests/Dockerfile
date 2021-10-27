@@ -3,7 +3,7 @@ RUN apk add --no-cache tzdata
 ADD dm-master /dm-master
 ADD dm-worker /dm-worker
 ADD dmctl /dmctl
-ADD chaos-case /chaos-case
+ADD dm-chaos-case /chaos-case
 ADD conf /conf
 
 RUN chmod +x /dm-master

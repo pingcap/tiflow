@@ -2,7 +2,7 @@
 
 set -eu
 
-CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 trap "cd $PWD" EXIT
 cd $CUR

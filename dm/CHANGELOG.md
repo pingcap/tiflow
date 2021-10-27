@@ -540,7 +540,7 @@ All notable changes to this project will be documented in this file.
 - Remove the restriction of "the next shard DDL statement cannot be executed unless the current shard DDL operation is completely finished in shard merge scene for binlog replication" [#177](https://github.com/pingcap/dm/pull/177)
 - Support retry task on the `invalid connection` error for binlog replication [#66](https://github.com/pingcap/dm/pull/66)
 - Support generating `-schema-create.sql` files automatically for full migration [#186](https://github.com/pingcap/dm/pull/186)
-- Use [TiDB SQL Parser](https://github.com/pingcap/parser) to parse and restore DDL statements in binlog query events, and remove the `use db` statement when replicating to downstream [#54](https://github.com/pingcap/dm/pull/54)
+- Use [TiDB SQL Parser](https://github.com/pingcap/tidb/tree/master/parser) to parse and restore DDL statements in binlog query events, and remove the `use db` statement when replicating to downstream [#54](https://github.com/pingcap/dm/pull/54)
 - Support migrating tables with generated column for full migration and binlog replication [#42](https://github.com/pingcap/dm/pull/42) [#60](https://github.com/pingcap/dm/pull/60)
 - Support appending the task name as a suffix to the dumped data directory (`dir` in the task configuration file) for full migration [#100](https://github.com/pingcap/dm/pull/100)
 - Support resuming tasks automatically after the DM-worker process restarted [#88](https://github.com/pingcap/dm/pull/88) [#116](https://github.com/pingcap/dm/pull/116)

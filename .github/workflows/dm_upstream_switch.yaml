@@ -1,10 +1,9 @@
-name: Upstream database switch
+name: Upstream Database Switch
 
 on:
   push:
     branches:
       - master
-      - release-2.0
   schedule:
     - cron: "3 22 * * *" # run at minute 06:03 UTC+8
 
@@ -26,25 +25,25 @@ jobs:
         uses: actions/cache@v2
         with:
           path: ~/go/pkg/mod
-          key: ${{ runner.os }}-dm-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-ticdc-${{ hashFiles('go.sum') }}
 
-      - name: Cache tools
+      - name: Cache Tools
+        id: cache-tools
         uses: actions/cache@v2
         with:
-          path: |
-            **/tools
-          key: ${{ runner.os }}-dm-tools-${{ hashFiles('**/tools/go.sum') }}
+          path: tools/bin
+          key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
 
       - name: Build DM binary
         run: make dm_integration_test_build
 
       - name: Setup containers
         run: |
-          docker-compose -f ./tests/upstream_switch/docker-compose.yml up -d
+          docker-compose -f ./dm/tests/upstream_switch/docker-compose.yml up -d
 
       - name: Run test cases
         run: |
-          bash ./tests/upstream_switch/case.sh
+          bash ./dm/tests/upstream_switch/case.sh
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
@@ -73,7 +72,7 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
         uses: Ilshidur/action-slack@2.1.0
         with:
-          args: "upstream-switch job failed, see https://github.com/pingcap/dm/actions/runs/{{ GITHUB_RUN_ID }}"
+          args: "upstream-switch job failed, see https://github.com/pingcap/ticdc/actions/runs/{{ GITHUB_RUN_ID }}"
 
       # Debug via SSH if previous steps failed
       - name: Set up tmate session

@@ -21,14 +21,14 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/pkg/binlog"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/streamer"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/relay"
-	"github.com/pingcap/dm/relay/purger"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/binlog"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/streamer"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/relay"
+	"github.com/pingcap/ticdc/dm/relay/purger"
 )
 
 // RelayHolder for relay unit.

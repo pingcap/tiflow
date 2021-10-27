@@ -17,8 +17,8 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/pkg/etcdutil"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
 )
 
 // PutRelayStageRelayConfigSourceBound puts the following data in one txn.
