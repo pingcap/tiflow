@@ -263,11 +263,43 @@ func (s *outputSuite) TestManyTs(c *check.C) {
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
 	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{CommitTs: 1}}), nil)), check.IsNil)
+		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
+			CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{
+				CommitTs: 1,
+				Columns: []*model.Column{
+					{
+						Name:  "col1",
+						Flag:  model.BinaryFlag,
+						Value: "col1-value-updated",
+					},
+					{
+						Name:  "col2",
+						Flag:  model.HandleKeyFlag,
+						Value: "col2-value",
+					},
+				},
+			},
+		}), nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
 	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{CommitTs: 2}}), nil)), check.IsNil)
+		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
+			CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{
+				CommitTs: 2,
+				Columns: []*model.Column{
+					{
+						Name:  "col1",
+						Flag:  model.BinaryFlag,
+						Value: "col1-value-updated",
+					},
+					{
+						Name:  "col2",
+						Flag:  model.HandleKeyFlag,
+						Value: "col2-value",
+					},
+				},
+			},
+		}), nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
 	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
@@ -283,8 +315,40 @@ func (s *outputSuite) TestManyTs(c *check.C) {
 		resolvedTs model.Ts
 		row        *model.RowChangedEvent
 	}{
-		{row: &model.RowChangedEvent{CommitTs: 1}},
-		{row: &model.RowChangedEvent{CommitTs: 2}},
+		{
+			row: &model.RowChangedEvent{
+				CommitTs: 1,
+				Columns: []*model.Column{
+					{
+						Name:  "col1",
+						Flag:  model.BinaryFlag,
+						Value: "col1-value-updated",
+					},
+					{
+						Name:  "col2",
+						Flag:  model.HandleKeyFlag,
+						Value: "col2-value",
+					},
+				},
+			},
+		},
+		{
+			row: &model.RowChangedEvent{
+				CommitTs: 2,
+				Columns: []*model.Column{
+					{
+						Name:  "col1",
+						Flag:  model.BinaryFlag,
+						Value: "col1-value-updated",
+					},
+					{
+						Name:  "col2",
+						Flag:  model.HandleKeyFlag,
+						Value: "col2-value",
+					},
+				},
+			},
+		},
 		{resolvedTs: 1},
 	})
 	sink.Reset()
