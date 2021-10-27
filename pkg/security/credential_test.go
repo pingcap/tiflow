@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package security
 
 import (
 	"testing"
@@ -19,20 +19,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMarshalUnmarshal(t *testing.T) {
-	t.Parallel()
-
-	info := &CaptureInfo{
-		ID:            "9ff52aca-aea6-4022-8ec4-fbee3f2c7890",
-		AdvertiseAddr: "127.0.0.1:8300",
-		Version:       "dev",
+func TestGetCommonName(t *testing.T) {
+	cd := &Credential{
+		CAPath:   "../../tests/_certificates/ca.pem",
+		CertPath: "../../tests/_certificates/server.pem",
+		KeyPath:  "../../tests/_certificates/server-key.pem",
 	}
-	expected := `{"id":"9ff52aca-aea6-4022-8ec4-fbee3f2c7890","address":"127.0.0.1:8300","version":"dev"}`
-	data, err := info.Marshal()
+	cn, err := cd.getSelfCommonName()
 	require.Nil(t, err)
-	require.Equal(t, expected, string(data))
-	decodedInfo := &CaptureInfo{}
-	err = decodedInfo.Unmarshal(data)
-	require.Nil(t, err)
-	require.Equal(t, info, decodedInfo)
+	require.Equal(t, "tidb-server", cn)
+
+	cd.CertPath = "../../tests/_certificates/server-key.pem"
+	_, err = cd.getSelfCommonName()
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "failed to decode PEM block to certificate")
 }

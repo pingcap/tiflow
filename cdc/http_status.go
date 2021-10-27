@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/capture"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -38,7 +39,7 @@ import (
 )
 
 func (s *Server) startStatusHTTP() error {
-	router := newRouter(s.capture)
+	router := newRouter(capture.NewHTTPHandler(s.capture))
 
 	router.GET("/status", gin.WrapF(s.handleStatus))
 	router.GET("/debug/info", gin.WrapF(s.handleDebugInfo))
@@ -58,6 +59,11 @@ func (s *Server) startStatusHTTP() error {
 	router.Any("/metrics", gin.WrapH(promhttp.Handler()))
 
 	conf := config.GetGlobalServerConfig()
+	err := conf.Security.AddSelfCommonName()
+	if err != nil {
+		log.Error("status server set tls config failed", zap.Error(err))
+		return errors.Trace(err)
+	}
 	tlsConfig, err := conf.Security.ToTLSConfigWithVerify()
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))
