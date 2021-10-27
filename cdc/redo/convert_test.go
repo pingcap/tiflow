@@ -76,6 +76,48 @@ func TestRowRedoConvert(t *testing.T) {
 	require.Equal(t, row, LogToRow(redoLog2.RedoRow))
 }
 
+func TestRowRedoConvertWithEmptySlice(t *testing.T) {
+	t.Parallel()
+	row := &model.RowChangedEvent{
+		StartTs:  100,
+		CommitTs: 120,
+		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},
+		PreColumns: []*model.Column{{
+			Name:  "a1",
+			Type:  mysql.TypeLong,
+			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+			Value: int64(1),
+		}, {
+			Name:  "a2",
+			Type:  mysql.TypeVarchar,
+			Value: []byte(""), // empty slice should be marshal and unmarshal safely
+		}},
+		Columns: []*model.Column{{
+			Name:  "a1",
+			Type:  mysql.TypeLong,
+			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+			Value: int64(2),
+		}, {
+			Name:  "a2",
+			Type:  mysql.TypeVarchar,
+			Value: []byte(""),
+		}},
+		IndexColumns: [][]int{{1}},
+	}
+	rowRedo := RowToRedo(row)
+	redoLog := &model.RedoLog{
+		RedoRow: rowRedo,
+		Type:    model.RedoLogTypeRow,
+	}
+	data, err := redoLog.MarshalMsg(nil)
+	require.Nil(t, err)
+
+	redoLog2 := &model.RedoLog{}
+	_, err = redoLog2.UnmarshalMsg(data)
+	require.Nil(t, err)
+	require.Equal(t, row, LogToRow(redoLog2.RedoRow))
+}
+
 func TestDDLRedoConvert(t *testing.T) {
 	t.Parallel()
 	ddl := &model.DDLEvent{
