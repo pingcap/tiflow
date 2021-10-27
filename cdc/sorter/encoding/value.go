@@ -11,22 +11,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package unified
+package encoding
 
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-type msgPackGenSerde struct {
+// SerializerDeserializer is the interface encodes and decodes model.PolymorphicEvent.
+type SerializerDeserializer interface {
+	Marshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error)
+	Unmarshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error)
 }
 
-func (m *msgPackGenSerde) marshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error) {
+// MsgPackGenSerde encodes model.PolymorphicEvent into bytes and decodes
+// model.PolymorphicEvent from bytes.
+type MsgPackGenSerde struct {
+}
+
+// Marshal encodes model.PolymorphicEvent into bytes.
+func (m *MsgPackGenSerde) Marshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error) {
 	bytes = bytes[:0]
 	return event.RawKV.MarshalMsg(bytes)
 }
 
-func (m *msgPackGenSerde) unmarshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error) {
+// Unmarshal decodes model.PolymorphicEvent from bytes.
+func (m *MsgPackGenSerde) Unmarshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error) {
 	if event.RawKV == nil {
 		event.RawKV = new(model.RawKVEntry)
 	}
