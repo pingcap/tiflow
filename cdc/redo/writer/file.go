@@ -1,4 +1,5 @@
 // Copyright 2021 PingCAP, Inc.
+// Copyright 2015 CoreOS, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -89,7 +90,7 @@ type FileWriterConfig struct {
 	MaxLogSize        int64
 	FlushIntervalInMs int64
 	S3Storage         bool
-	S3URI             *url.URL
+	S3URI             url.URL
 }
 
 // Option define the writerOptions
@@ -141,9 +142,12 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 	if cfg.MaxLogSize == 0 {
 		cfg.MaxLogSize = defaultMaxLogSize
 	}
+	var s3storage storage.ExternalStorage
 	if cfg.S3Storage {
-		if cfg.S3URI == nil {
-			return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("S3URI can not be nil"))
+		var err error
+		s3storage, err = common.InitS3storage(ctx, cfg.S3URI)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -155,14 +159,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		cfg:       cfg,
 		op:        op,
 		uint64buf: make([]byte, 8),
-	}
-
-	if cfg.S3Storage {
-		s3storage, err := common.InitS3storage(ctx, *cfg.S3URI)
-		if err != nil {
-			return nil, err
-		}
-		w.storage = s3storage
+		storage:   s3storage,
 	}
 
 	w.state.Store(started)
@@ -244,6 +241,8 @@ func (w *Writer) writeUint64(n uint64, buf []byte) error {
 	return err
 }
 
+// the func uses code from etcd wal/encoder.go
+// ref: https://github.com/etcd-io/etcd/pull/5250
 func encodeFrameSize(dataBytes int) (lenField uint64, padBytes int) {
 	lenField = uint64(dataBytes)
 	// force 8 byte alignment so length never gets a torn write
