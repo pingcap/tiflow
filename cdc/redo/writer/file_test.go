@@ -191,7 +191,7 @@ func TestNewWriter(t *testing.T) {
 	_, err = NewWriter(ctx, &FileWriterConfig{
 		Dir:       "sdfsf",
 		S3Storage: true,
-		S3URI:     s3URI,
+		S3URI:     *s3URI,
 	})
 	require.Nil(t, err)
 	time.Sleep(time.Duration(defaultFlushIntervalInMs+1000) * time.Millisecond)

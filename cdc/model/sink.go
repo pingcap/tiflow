@@ -233,9 +233,9 @@ const (
 // more info https://github.com/tinylib/msgp/issues/158, https://github.com/tinylib/msgp/issues/149
 // so define a RedoColumn, RedoDDLEvent instead of using the Column, DDLEvent
 type RedoLog struct {
-	Row  *RedoRowChangedEvent `msg:"row"`
-	DDL  *RedoDDLEvent        `msg:"ddl"`
-	Type RedoLogType          `msg:"type"`
+	RedoRow *RedoRowChangedEvent `msg:"row"`
+	RedoDDL *RedoDDLEvent        `msg:"ddl"`
+	Type    RedoLogType          `msg:"type"`
 }
 
 // RedoRowChangedEvent represents the DML event used in RedoLog
