@@ -851,6 +851,11 @@ error = '''
 table %d not found in schema snapshot
 '''
 
+["CDC:ErrStartAStoppedLevelDBSystem"]
+error = '''
+start a stopped leveldb system
+'''
+
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
 fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
