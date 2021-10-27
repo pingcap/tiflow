@@ -1,0 +1,23 @@
+---
+name: test
+task-mode: all
+is-sharding: false
+clean-dump-file: false
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    block-allow-list:  "instance"
+
+  - source-id: "mysql-replica-02"
+    block-allow-list:  "instance"
+
+black-white-list: # compatible with deprecated config
+  instance:
+    do-dbs: ["gtid"]
+

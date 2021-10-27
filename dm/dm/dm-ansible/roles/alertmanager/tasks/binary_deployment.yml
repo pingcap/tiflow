@@ -1,0 +1,28 @@
+---
+
+- name: create alertmanager deploy directories
+  file:
+    path: '{{ item }}'
+    state: directory
+    mode: 0755
+    owner: '{{ deploy_user }}'
+    group: '{{ deploy_user }}'
+  become: true
+  with_items:
+    - "{{ alertmanager_log_dir }}"
+    - "{{ alertmanager_data_dir }}"
+
+- name: deploy alertmanager binary
+  copy:
+    src: "{{ resources_dir }}/bin/alertmanager"
+    dest: "{{ deploy_dir }}/bin/"
+    mode: 0755
+
+- name: create alertmanager run script
+  template:
+    src: "run_{{ role_name }}.sh.j2"
+    dest: "{{ deploy_dir }}/scripts/run_{{ role_name }}.sh"
+    mode: "0755"
+    backup: yes
+
+- include_tasks: "systemd_deployment.yml"

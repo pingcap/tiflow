@@ -1,0 +1,43 @@
+version: "3.7"
+
+networks:
+  db-networks:
+    ipam: # for static IP
+      config:
+        - subnet: "172.28.128.0/24"
+
+# re-usable extension fields, https://docs.docker.com/compose/compose-file/#extension-fields.
+x-node: &default-node
+  privileged: true
+  restart: always
+  environment:
+    MYSQL_ROOT_PASSWORD: "123456"
+
+services:
+  mysql1: # upstream MySQL-1
+    <<: *default-node
+    container_name: mysql1
+    hostname: mysql1
+    ports:
+      - "3306:3306"
+    networks:
+      db-networks:
+        ipv4_address: 172.28.128.4
+    image: mysql:5.7.32
+    command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --server-id=1 --binlog-format=ROW --gtid_mode=ON --enforce-gtid-consistency=true
+    volumes:
+      - /tmp/mysql1-data:/var/lib/mysql
+
+  mysql2: # upstream MySQL-2
+    <<: *default-node
+    container_name: mysql2
+    hostname: mysql2
+    ports:
+      - "3307:3306"
+    networks:
+      db-networks:
+        ipv4_address: 172.28.128.5
+    image: mysql:8.0.23
+    command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --server-id=1 --binlog-format=ROW --gtid_mode=ON --enforce-gtid-consistency=true
+    volumes:
+      - /tmp/mysql2-data:/var/lib/mysql

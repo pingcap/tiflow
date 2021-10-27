@@ -1,0 +1,9 @@
+---
+
+# default configuration for alertmanager
+
+alertmanager_data_dir: "{{ deploy_dir }}/data.alertmanager"
+
+alertmanager_log_level: info
+alertmanager_log_dir: "{{ deploy_dir }}/log"
+alertmanager_log_filename: "alertmanager.log"

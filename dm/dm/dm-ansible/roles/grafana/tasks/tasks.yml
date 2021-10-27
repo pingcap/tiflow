@@ -1,0 +1,19 @@
+---
+
+- name: create grafana deploy directories
+  file:
+    path: '{{ item }}'
+    state: directory
+    mode: 0755
+    owner: '{{ deploy_user }}'
+    group: '{{ deploy_user }}'
+  become: true
+  with_items:
+    - "{{ grafana_log_dir }}"
+    - "{{ grafana_data_dir }}"
+    - "{{ deploy_dir }}/opt"
+
+- name: push data source file
+  template: src=data_source.json.j2 dest={{ grafana_data_dir }}/data_source.json mode=0644
+
+- include_tasks: "binary_deployment.yml"

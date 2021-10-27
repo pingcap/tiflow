@@ -1,0 +1,52 @@
+---
+name: test
+task-mode: all
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    black-white-list: "instance"
+    expression-filters:
+      - "even_c"
+      - "future_date"
+      - "pythagorean"
+      - "update_old_lt_100"
+      - "update_new_lt_100"
+      - "update_old_and_new"
+
+expression-filter:
+  even_c:
+    schema: "expr_filter"
+    table: "t2"
+    insert-value-expr: "c % 2 = 0"
+  future_date:
+    schema: "expr_filter"
+    table: "t3"
+    insert-value-expr: "ts > NOW()"
+  pythagorean:
+    schema: "expr_filter"
+    table: "t4"
+    insert-value-expr: "a*a + b*b = c*c"
+  update_old_lt_100:
+    schema: "expr_filter"
+    table: "t5"
+    update-old-value-expr: "c > 100"
+  update_new_lt_100:
+    schema: "expr_filter"
+    table: "t5"
+    update-new-value-expr: "c > 100"
+  update_old_and_new:
+    schema: "expr_filter"
+    table: "t5"
+    update-old-value-expr: "c = 1"
+    update-new-value-expr: "c = 2"
+
+
+black-white-list: # compatible with deprecated config
+  instance:
+    do-dbs: ["expr_filter"]

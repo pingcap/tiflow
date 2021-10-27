@@ -1,0 +1,10 @@
+---
+
+- name: deploy dmctl binary
+  copy: src="{{ resources_dir }}/bin/dmctl" dest="{{ playbook_dir }}/dmctl/" mode=0755
+
+- name: create dmctl configuration file
+  template: src=dmctl.toml.j2 dest={{ playbook_dir }}/dmctl/dmctl.toml mode=0644 backup=yes
+
+- name: create dmctl script
+  template: src=dmctl.sh.j2 dest={{ playbook_dir }}/dmctl/dmctl.sh mode=0755 backup=yes
