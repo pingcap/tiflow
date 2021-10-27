@@ -368,6 +368,26 @@ func (s *outputSuite) TestManyTs(c *check.C) {
 	c.Assert(node.CheckpointTs(), check.Equals, uint64(2))
 }
 
+func (s *outputSuite) TestIgnoreEmptyRowChangeEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID: "changefeed-id-test-ignore-empty-row-change-event",
+		Info: &model.ChangeFeedInfo{
+			StartTs: oracle.GoTimeToTS(time.Now()),
+			Config:  config.GetDefaultReplicaConfig(),
+		},
+	})
+	sink := &mockSink{}
+	node := newSinkNode(sink, 0, 10, &mockFlowController{})
+	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
+
+	// empty row, no Columns and PreColumns.
+	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
+		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{CommitTs: 1}}), nil)), check.IsNil)
+	c.Assert(node.eventBuffer, check.HasLen, 0)
+}
+
 func (s *outputSuite) TestSplitUpdateEventWhenEnableOldValue(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
