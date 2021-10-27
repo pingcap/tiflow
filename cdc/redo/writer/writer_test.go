@@ -15,7 +15,6 @@ package writer
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -25,12 +24,14 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/multierr"
 )
 
 func TestLogWriterWriteLog(t *testing.T) {
@@ -45,7 +46,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 		wantTs    uint64
 		isRunning bool
 		writerErr error
-		wantErr   bool
+		wantErr   error
 	}{
 		{
 			name: "happy",
@@ -78,7 +79,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 				},
 			},
 			writerErr: errors.New("err"),
-			wantErr:   true,
+			wantErr:   errors.New("err"),
 			isRunning: true,
 		},
 		{
@@ -100,7 +101,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			},
 			writerErr: cerror.ErrRedoWriterStopped,
 			isRunning: false,
-			wantErr:   true,
+			wantErr:   cerror.ErrRedoWriterStopped,
 		},
 		{
 			name: "context cancel",
@@ -111,7 +112,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			},
 			writerErr: nil,
 			isRunning: true,
-			wantErr:   true,
+			wantErr:   context.Canceled,
 		},
 	}
 
@@ -132,8 +133,8 @@ func TestLogWriterWriteLog(t *testing.T) {
 		}
 
 		_, err := writer.WriteLog(tt.args.ctx, tt.args.tableID, tt.args.rows)
-		if tt.wantErr {
-			require.NotNil(t, err, tt.name)
+		if tt.wantErr != nil {
+			require.Truef(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
 		} else {
 			require.Nil(t, err, tt.name)
 		}
@@ -152,7 +153,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 		wantTs    uint64
 		isRunning bool
 		writerErr error
-		wantErr   bool
+		wantErr   error
 	}{
 		{
 			name: "happy",
@@ -172,7 +173,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 				ddl:     &model.RedoDDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
 			},
 			writerErr: errors.New("err"),
-			wantErr:   true,
+			wantErr:   errors.New("err"),
 			isRunning: true,
 		},
 		{
@@ -194,7 +195,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 			},
 			writerErr: cerror.ErrRedoWriterStopped,
 			isRunning: false,
-			wantErr:   true,
+			wantErr:   cerror.ErrRedoWriterStopped,
 		},
 		{
 			name: "context cancel",
@@ -205,7 +206,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 			},
 			writerErr: nil,
 			isRunning: true,
-			wantErr:   true,
+			wantErr:   context.Canceled,
 		},
 	}
 
@@ -227,8 +228,8 @@ func TestLogWriterSendDDL(t *testing.T) {
 		}
 
 		err := writer.SendDDL(tt.args.ctx, tt.args.ddl)
-		if tt.wantErr {
-			require.NotNil(t, err, tt.name)
+		if tt.wantErr != nil {
+			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
 		} else {
 			require.Nil(t, err, tt.name)
 		}
@@ -247,7 +248,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 		wantTs    uint64
 		isRunning bool
 		flushErr  error
-		wantErr   bool
+		wantErr   error
 	}{
 		{
 			name: "happy",
@@ -267,7 +268,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 				ts:      1,
 			},
 			flushErr:  errors.New("err"),
-			wantErr:   true,
+			wantErr:   multierr.Append(errors.New("err"), errors.New("err")),
 			isRunning: true,
 		},
 		{
@@ -279,7 +280,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 			},
 			flushErr:  cerror.ErrRedoWriterStopped,
 			isRunning: false,
-			wantErr:   true,
+			wantErr:   cerror.ErrRedoWriterStopped,
 		},
 		{
 			name: "context cancel",
@@ -290,7 +291,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 			},
 			flushErr:  nil,
 			isRunning: true,
-			wantErr:   true,
+			wantErr:   context.Canceled,
 		},
 	}
 
@@ -330,8 +331,8 @@ func TestLogWriterFlushLog(t *testing.T) {
 			tt.args.ctx = ctx
 		}
 		err := writer.FlushLog(tt.args.ctx, tt.args.tableID, tt.args.ts)
-		if tt.wantErr {
-			require.NotNil(t, err, tt.name)
+		if tt.wantErr != nil {
+			require.True(t, errors.ErrorEqual(tt.wantErr, err), err.Error()+tt.wantErr.Error())
 		} else {
 			require.Nil(t, err, tt.name)
 			require.Equal(t, tt.args.ts, writer.meta.ResolvedTsList[tt.args.tableID], tt.name)
@@ -350,7 +351,7 @@ func TestLogWriterEmitCheckpointTs(t *testing.T) {
 		wantTs    uint64
 		isRunning bool
 		flushErr  error
-		wantErr   bool
+		wantErr   error
 	}{
 		{
 			name: "happy",
@@ -369,7 +370,7 @@ func TestLogWriterEmitCheckpointTs(t *testing.T) {
 			},
 			flushErr:  cerror.ErrRedoWriterStopped,
 			isRunning: false,
-			wantErr:   true,
+			wantErr:   cerror.ErrRedoWriterStopped,
 		},
 		{
 			name: "context cancel",
@@ -379,7 +380,7 @@ func TestLogWriterEmitCheckpointTs(t *testing.T) {
 			},
 			flushErr:  nil,
 			isRunning: true,
-			wantErr:   true,
+			wantErr:   context.Canceled,
 		},
 	}
 
@@ -419,8 +420,8 @@ func TestLogWriterEmitCheckpointTs(t *testing.T) {
 			tt.args.ctx = ctx
 		}
 		err := writer.EmitCheckpointTs(tt.args.ctx, tt.args.ts)
-		if tt.wantErr {
-			require.NotNil(t, err, tt.name)
+		if tt.wantErr != nil {
+			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
 		} else {
 			require.Nil(t, err, tt.name)
 			require.Equal(t, tt.args.ts, writer.meta.CheckPointTs, tt.name)
@@ -440,7 +441,7 @@ func TestLogWriterEmitResolvedTs(t *testing.T) {
 		wantTs    uint64
 		isRunning bool
 		flushErr  error
-		wantErr   bool
+		wantErr   error
 	}{
 		{
 			name: "happy",
@@ -459,7 +460,7 @@ func TestLogWriterEmitResolvedTs(t *testing.T) {
 			},
 			flushErr:  cerror.ErrRedoWriterStopped,
 			isRunning: false,
-			wantErr:   true,
+			wantErr:   cerror.ErrRedoWriterStopped,
 		},
 		{
 			name: "context cancel",
@@ -469,7 +470,7 @@ func TestLogWriterEmitResolvedTs(t *testing.T) {
 			},
 			flushErr:  nil,
 			isRunning: true,
-			wantErr:   true,
+			wantErr:   context.Canceled,
 		},
 	}
 
@@ -508,8 +509,8 @@ func TestLogWriterEmitResolvedTs(t *testing.T) {
 			tt.args.ctx = ctx
 		}
 		err := writer.EmitResolvedTs(tt.args.ctx, tt.args.ts)
-		if tt.wantErr {
-			require.NotNil(t, err, tt.name)
+		if tt.wantErr != nil {
+			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
 		} else {
 			require.Nil(t, err, tt.name)
 			require.Equal(t, tt.args.ts, writer.meta.ResolvedTs, tt.name)
@@ -527,7 +528,7 @@ func TestLogWriterGetCurrentResolvedTs(t *testing.T) {
 		name    string
 		args    arg
 		wantTs  map[int64]uint64
-		wantErr bool
+		wantErr error
 	}{
 		{
 			name: "happy",
@@ -549,7 +550,7 @@ func TestLogWriterGetCurrentResolvedTs(t *testing.T) {
 			args: arg{
 				ctx: context.Background(),
 			},
-			wantErr: true,
+			wantErr: context.Canceled,
 		},
 	}
 
@@ -585,8 +586,8 @@ func TestLogWriterGetCurrentResolvedTs(t *testing.T) {
 			_ = writer.FlushLog(tt.args.ctx, k, v)
 		}
 		ret, err := writer.GetCurrentResolvedTs(tt.args.ctx, tt.args.tableIDs)
-		if tt.wantErr {
-			require.NotNil(t, err, tt.name, err.Error())
+		if tt.wantErr != nil {
+			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name, err.Error())
 		} else {
 			require.Nil(t, err, tt.name)
 			require.Equal(t, len(ret), len(tt.wantTs))
