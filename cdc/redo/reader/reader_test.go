@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/redo/writer"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/multierr"
 )
 
 func TestNewLogReader(t *testing.T) {
@@ -94,7 +95,7 @@ func TestLogReaderResetReader(t *testing.T) {
 		name                   string
 		args                   arg
 		readerErr              error
-		wantErr                bool
+		wantErr                string
 		wantStartTs, wantEndTs uint64
 		rowFleName             string
 		ddlFleName             string
@@ -122,7 +123,7 @@ func TestLogReaderResetReader(t *testing.T) {
 				checkPointTs: 0,
 				resolvedTs:   200,
 			},
-			wantErr: true,
+			wantErr: context.Canceled.Error(),
 		},
 		{
 			name: "invalid ts",
@@ -133,7 +134,7 @@ func TestLogReaderResetReader(t *testing.T) {
 				checkPointTs: 0,
 				resolvedTs:   200,
 			},
-			wantErr: true,
+			wantErr: ".*should match the boundary*.",
 		},
 		{
 			name: "invalid ts",
@@ -144,7 +145,7 @@ func TestLogReaderResetReader(t *testing.T) {
 				checkPointTs: 0,
 				resolvedTs:   200,
 			},
-			wantErr: true,
+			wantErr: ".*should match the boundary*.",
 		},
 		{
 			name: "reader close err",
@@ -155,7 +156,7 @@ func TestLogReaderResetReader(t *testing.T) {
 				checkPointTs: 0,
 				resolvedTs:   200,
 			},
-			wantErr:   true,
+			wantErr:   "err",
 			readerErr: errors.New("err"),
 		},
 	}
@@ -180,8 +181,8 @@ func TestLogReaderResetReader(t *testing.T) {
 			tt.args.ctx = ctx
 		}
 		err := r.ResetReader(tt.args.ctx, tt.args.startTs, tt.args.endTs)
-		if tt.wantErr {
-			require.NotNil(t, err, tt.name)
+		if tt.wantErr != "" {
+			require.Regexp(t, tt.wantErr, err, tt.name)
 		} else {
 			require.Nil(t, err, tt.name)
 			mockReader.AssertNumberOfCalls(t, "Close", 2)
@@ -233,7 +234,7 @@ func TestLogReaderReadMeta(t *testing.T) {
 		name                             string
 		dir                              string
 		wantCheckPointTs, wantResolvedTs uint64
-		wantErr                          bool
+		wantErr                          string
 	}{
 		{
 			name:             "happy",
@@ -244,19 +245,19 @@ func TestLogReaderReadMeta(t *testing.T) {
 		{
 			name:    "no meta file",
 			dir:     dir1,
-			wantErr: true,
+			wantErr: ".*no redo meta file found in dir*.",
 		},
 		{
 			name:    "wrong dir",
 			dir:     "xxx",
-			wantErr: true,
+			wantErr: ".*can't read log file directory*.",
 		},
 		{
 			name:             "context cancel",
 			dir:              dir,
 			wantCheckPointTs: meta.CheckPointTs,
 			wantResolvedTs:   meta.ResolvedTs,
-			wantErr:          true,
+			wantErr:          context.Canceled.Error(),
 		},
 	}
 	for _, tt := range tests {
@@ -272,8 +273,8 @@ func TestLogReaderReadMeta(t *testing.T) {
 			ctx = ctx1
 		}
 		cts, rts, err := l.ReadMeta(ctx)
-		if tt.wantErr {
-			require.NotNil(t, err, tt.name)
+		if tt.wantErr != "" {
+			require.Regexp(t, tt.wantErr, err, tt.name)
 		} else {
 			require.Nil(t, err, tt.name)
 			require.Equal(t, tt.wantCheckPointTs, cts, tt.name)
@@ -290,7 +291,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 	tests := []struct {
 		name       string
 		args       arg
-		wantErr    bool
+		wantErr    error
 		readerErr  error
 		readerErr1 error
 		readerRet  *model.RedoLog
@@ -341,7 +342,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: context.Canceled,
 		},
 		{
 			name: "happy1",
@@ -414,7 +415,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 			},
 			readerErr:  errors.New("xx"),
 			readerErr1: errors.New("xx"),
-			wantErr:    true,
+			wantErr:    errors.New("xx"),
 		},
 	}
 
@@ -448,8 +449,8 @@ func TestLogReaderReadNextLog(t *testing.T) {
 			tt.args.ctx = ctx1
 		}
 		ret, err := l.ReadNextLog(tt.args.ctx, tt.args.maxNum)
-		if tt.wantErr {
-			require.NotNil(t, err, tt.name)
+		if tt.wantErr != nil {
+			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
 			require.Equal(t, 0, len(ret), tt.name)
 		} else {
 			require.Nil(t, err, tt.name)
@@ -478,7 +479,7 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 	tests := []struct {
 		name       string
 		args       arg
-		wantErr    bool
+		wantErr    error
 		readerErr  error
 		readerErr1 error
 		readerRet  *model.RedoLog
@@ -525,7 +526,7 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: context.Canceled,
 		},
 		{
 			name: "happy1",
@@ -592,7 +593,7 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 			},
 			readerErr:  errors.New("xx"),
 			readerErr1: errors.New("xx"),
-			wantErr:    true,
+			wantErr:    errors.New("xx"),
 		},
 	}
 
@@ -625,8 +626,8 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 			tt.args.ctx = ctx1
 		}
 		ret, err := l.ReadNextDDL(tt.args.ctx, tt.args.maxNum)
-		if tt.wantErr {
-			require.NotNil(t, err, tt.name)
+		if tt.wantErr != nil {
+			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
 			require.Equal(t, 0, len(ret), tt.name)
 		} else {
 			require.Nil(t, err, tt.name)
@@ -649,7 +650,7 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 func TestLogReaderClose(t *testing.T) {
 	tests := []struct {
 		name    string
-		wantErr bool
+		wantErr error
 		err     error
 	}{
 		{
@@ -658,7 +659,7 @@ func TestLogReaderClose(t *testing.T) {
 		{
 			name:    "err",
 			err:     errors.New("xx"),
-			wantErr: true,
+			wantErr: multierr.Append(errors.New("xx"), errors.New("xx")),
 		},
 	}
 
@@ -671,8 +672,8 @@ func TestLogReaderClose(t *testing.T) {
 		}
 		err := l.Close()
 		mockReader.AssertNumberOfCalls(t, "Close", 2)
-		if tt.wantErr {
-			require.NotNil(t, err, tt.name)
+		if tt.wantErr != nil {
+			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
 		} else {
 			require.Nil(t, err, tt.name)
 		}
