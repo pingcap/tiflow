@@ -1,0 +1,17 @@
+---
+
+- include_tasks: "binary_deployment.yml"
+
+- name: create alertmanager configuration file
+  copy:
+    src: "{{ playbook_dir }}/conf/alertmanager.yml"
+    dest: "{{ deploy_dir }}/conf/alertmanager.yml"
+    mode: 0644
+    backup: yes
+  register: alertmanager_conf_st
+
+- name: backup alertmanager configure file
+  command: mv "{{ alertmanager_conf_st.backup_file }}" "{{ backup_dir }}"
+  when:
+    - alertmanager_conf_st.changed
+    - alertmanager_conf_st.backup_file is defined

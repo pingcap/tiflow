@@ -1,0 +1,28 @@
+---
+
+- name: setting absent kernel params
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_set: yes
+    ignoreerrors: yes
+    state: absent
+  with_items:
+    - { name: 'net.ipv4.tcp_tw_recycle', value: 0 }
+
+- name: setting present kernel params
+  sysctl: name="{{ item.name }}" value="{{ item.value }}" ignoreerrors=yes state=present
+  with_items:
+    - { name: 'net.core.somaxconn', value: 32768 }
+    - { name: 'vm.swappiness', value: 0 }
+    - { name: 'net.ipv4.tcp_syncookies', value: 0 }
+    - { name: 'fs.file-max', value: 1000000 }
+
+- name: update /etc/security/limits.conf
+  blockinfile:
+    dest: /etc/security/limits.conf
+    insertbefore: '# End of file'
+    block: |
+      {{ deploy_user }}        soft        nofile        1000000
+      {{ deploy_user }}        hard        nofile        1000000
+      {{ deploy_user }}        soft        stack         10240

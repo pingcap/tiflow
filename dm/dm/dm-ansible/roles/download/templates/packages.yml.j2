@@ -1,0 +1,20 @@
+---
+
+dm_packages:
+  - name: dm
+    version: {{ dm_version }}
+    url: http://download.pingcap.org/dm-{{ dm_version }}-linux-amd64.tar.gz
+  - name: dm-portal
+    version: latest
+    url: https://download.pingcap.org/dm-portal-latest-linux-amd64.tar.gz
+
+monitoring_packages:
+  - name: prometheus
+    version: 2.8.1
+    url: "https://download.pingcap.org/prometheus-2.8.1.linux-amd64.tar.gz"
+  - name: alertmanager
+    version: 0.17.0
+    url: "http://download.pingcap.org/alertmanager-0.17.0.linux-amd64.tar.gz"
+  - name: grafana
+    version: 6.1.6
+    url: "https://download.pingcap.org/grafana-6.1.6.linux-amd64.tar.gz"

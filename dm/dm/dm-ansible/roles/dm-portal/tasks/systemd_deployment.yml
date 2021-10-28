@@ -1,0 +1,8 @@
+---
+
+- name: create dm-portal systemd service
+  include_role:
+    name: systemd
+  vars:
+    this_role_name: dm-portal
+    service_name: dm-portal-{{ dm_portal_port }}

@@ -1,0 +1,39 @@
+---
+name: upgrade_via_tiup
+task-mode: all
+is-sharding: true
+enable-heartbeat: true
+case-sensitive: true
+
+target-database:
+  host: tidb
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    black-white-list:  "instance"
+    route-rules: ["sharding-route-rules-table", "sharding-route-rules-schema"]
+
+  - source-id: "mariadb-replica-02"
+    black-white-list:  "instance"
+    route-rules: ["sharding-route-rules-table", "sharding-route-rules-schema"]
+
+black-white-list:
+  instance:
+    do-dbs: ["~^[sS]harding[\\d]+"]
+    do-tables:
+    -  db-name: "~^[sS]harding[\\d]+"
+       tbl-name: "~^[tT][\\d]+"
+
+routes:
+  sharding-route-rules-table:
+    schema-pattern: "[sS]harding*"
+    table-pattern: "[tT]*"
+    target-schema: db_target
+    target-table: t_target
+
+  sharding-route-rules-schema:
+    schema-pattern: "[sS]harding*"
+    target-schema: db_target

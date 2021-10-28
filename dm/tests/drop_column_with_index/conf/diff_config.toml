@@ -1,0 +1,40 @@
+# diff Configuration.
+
+log-level = "info"
+
+chunk-size = 1000
+
+check-thread-count = 4
+
+sample-percent = 100
+
+use-checksum = true
+
+fix-sql-file = "fix.sql"
+
+# tables need to check.
+[[check-tables]]
+schema = "drop_column_with_index"
+tables = ["~t.*"]
+
+[[table-config]]
+schema = "drop_column_with_index"
+table = "t1"
+
+[[table-config.source-tables]]
+instance-id = "source-1"
+schema = "drop_column_with_index"
+table  = "t1"
+
+[[source-db]]
+host = "127.0.0.1"
+port = 3306
+user = "root"
+password = "123456"
+instance-id = "source-1"
+
+[target-db]
+host = "127.0.0.1"
+port = 4000
+user = "test"
+password = "123456"

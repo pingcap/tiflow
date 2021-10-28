@@ -1,0 +1,48 @@
+---
+global:
+  scrape_interval:     15s # By default, scrape targets every 15 seconds.
+  evaluation_interval: 15s # How frequently to evaluate rules.
+  # scrape_timeout is set to the global default (10s).
+  external_labels:
+    cluster: '{{ cluster_name }}'
+{% for item in prometheus_extra_labels %}
+    {{ item.label }}: "{{ item.value }}"
+{% endfor %}
+
+# Load and evaluate rules in this file every 'evaluation_interval' seconds.
+rule_files:
+  - 'dm_worker.rules.yml'
+
+{% set alertmanager_host = hostvars[groups.alertmanager_servers[0]].ansible_host | default(hostvars[groups.alertmanager_servers[0]].inventory_hostname)
+    if groups.get('alertmanager_servers', []) else '' -%}
+{% set alertmanager_port = hostvars[groups.alertmanager_servers[0]].alertmanager_port if alertmanager_host else '' -%}
+
+{% if alertmanager_host %}
+alerting:
+ alertmanagers:
+ - static_configs:
+   - targets:
+     - '{{ alertmanager_host }}:{{ alertmanager_port }}'
+{% else %}
+# alerting:
+#  alertmanagers:
+#  - static_configs:
+#    - targets:
+#      - 'alertmanager_host:9093'
+{% endif %}
+
+{% set dm_worker_status_addrs = [] -%}
+{% for host in groups.dm_worker_servers -%}
+  {% set dm_worker_ip = hostvars[host].ansible_host | default(hostvars[host].inventory_hostname) -%}
+  {% set dm_worker_port = hostvars[host].dm_worker_port -%}
+  {% set _ = dm_worker_status_addrs.append("%s:%s" % (dm_worker_ip, dm_worker_port)) -%}
+{% endfor -%}
+
+scrape_configs:
+  - job_name: "dm_worker"
+    honor_labels: true # don't overwrite job & instance labels
+    static_configs:
+    - targets:
+{% for dm_worker_status_addr in dm_worker_status_addrs %}
+      - '{{ dm_worker_status_addr }}'
+{% endfor %}

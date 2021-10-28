@@ -1,0 +1,51 @@
+#!/bin/bash
+# tools to run dmctl from command line
+# parameter 1: work directory
+# parameter 2: master-addr port
+# parameter 3: ssl-ca path
+# parameter 4: ssl-cert path
+# parameter 5: ssl-key path
+# parameter 6: command
+
+workdir=$1
+master_addr=$2
+ssl_ca=$3
+ssl_cert=$4
+ssl_key=$5
+cmd=$6
+
+shift 6
+
+PWD=$(pwd)
+binary=$PWD/bin/dmctl.test
+ts=$(date +"%s")
+dmctl_log=$workdir/dmctl.$ts.log
+pid=$$
+
+all_matched=true
+echo "dmctl test cmd: \"$cmd\""
+for ((k = 0; k < 10; k++)); do
+	echo "$cmd" | $binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.dmctl.$ts.$pid.out" DEVEL -master-addr=$master_addr --ssl-ca $ssl_ca --ssl-cert $ssl_cert --ssl-key $ssl_key >$dmctl_log 2>&1
+	all_matched=true
+	for ((i = 1; i < $#; i += 2)); do
+		j=$((i + 1))
+		value=${!i}
+		expected=${!j}
+		got=$(sed "s/$value/$value\n/g" $dmctl_log | grep -c "$value")
+		if [ "$got" != "$expected" ]; then
+			echo "command: $cmd $value count: $got != expected: $expected"
+			cat $dmctl_log
+			all_matched=false
+			break
+		fi
+	done
+	if $all_matched; then
+		exit 0
+	fi
+
+	sleep 2
+done
+# gocovmerge doesn't support merge profiles with different modes, however atomic
+# mode and count mode have the same profile format, so we need to unify cover
+# mode before running gocovmerge. As coverage file is not generated synchronously,
+# we will patch covermode before `make coverage`

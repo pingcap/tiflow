@@ -1,0 +1,12 @@
+# Master Configuration.
+name = "master2"
+master-addr = ":8361"
+advertise-addr = "127.0.0.1:8361"
+peer-urls = "http://127.0.0.1:8292"
+initial-cluster = "master1=https://127.0.0.1:8291,master2=http://127.0.0.1:8292,master3=127.0.0.1:8293"
+
+ssl-ca = "dir-placeholer/ca.pem"
+ssl-cert = "dir-placeholer/dm.pem"
+ssl-key = "dir-placeholer/dm.key"
+cert-allowed-cn = ["dm"]
+auto-compaction-retention = "3s"

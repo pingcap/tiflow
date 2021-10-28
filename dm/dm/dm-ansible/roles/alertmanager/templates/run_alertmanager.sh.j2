@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+ulimit -n 1000000
+
+DEPLOY_DIR={{ deploy_dir }}
+cd "${DEPLOY_DIR}" || exit 1
+
+# WARNING: This file was auto-generated. Do not edit!
+#          All your edit might be overwritten!
+exec > >(tee -i -a "{{ alertmanager_log_dir }}/{{ alertmanager_log_filename }}")
+exec 2>&1
+
+exec bin/alertmanager \
+    --config.file="conf/alertmanager.yml" \
+    --storage.path="{{ alertmanager_data_dir }}" \
+    --data.retention=120h \
+    --log.level="{{ alertmanager_log_level }}" \
+    --web.listen-address=":{{ alertmanager_port }}"

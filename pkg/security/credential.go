@@ -15,6 +15,9 @@ package security
 
 import (
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
+	"os"
 
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb-tools/pkg/utils"
@@ -61,8 +64,41 @@ func (s *Credential) ToTLSConfig() (*tls.Config, error) {
 }
 
 // ToTLSConfigWithVerify generates tls's config from *Security and requires
-// verifing remote cert common name.
+// the remote common name to be verified.
 func (s *Credential) ToTLSConfigWithVerify() (*tls.Config, error) {
 	cfg, err := utils.ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, s.CertAllowedCN)
 	return cfg, cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
+}
+
+func (s *Credential) getSelfCommonName() (string, error) {
+	if s.CertPath == "" {
+		return "", nil
+	}
+	data, err := os.ReadFile(s.CertPath)
+	if err != nil {
+		return "", cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
+	}
+	block, _ := pem.Decode(data)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return "", cerror.ErrToTLSConfigFailed.GenWithStack("failed to decode PEM block to certificate")
+	}
+	certificate, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
+	}
+	return certificate.Subject.CommonName, nil
+}
+
+// AddSelfCommonName add Common Name in certificate that specified by s.CertPath
+// to s.CertAllowedCN
+func (s *Credential) AddSelfCommonName() error {
+	cn, err := s.getSelfCommonName()
+	if err != nil {
+		return err
+	}
+	if cn == "" {
+		return nil
+	}
+	s.CertAllowedCN = append(s.CertAllowedCN, cn)
+	return nil
 }

@@ -1,0 +1,66 @@
+---
+
+# The Playbook of DM
+
+- import_playbook: stop.yml
+
+
+- hosts: alertmanager_servers
+  tasks:
+    - name: clean systemd config
+      file: path="/etc/systemd/system/{{ item }}" state=absent
+      become: true
+      with_items:
+        - alertmanager-{{ alertmanager_port }}.service
+
+
+- hosts: prometheus_servers
+  tasks:
+    - name: clean systemd config
+      file: path="/etc/systemd/system/{{ item }}" state=absent
+      become: true
+      with_items:
+        - prometheus-{{ prometheus_port }}.service
+
+
+- hosts: grafana_servers
+  tasks:
+    - name: clean systemd config
+      file: path="/etc/systemd/system/{{ item }}" state=absent
+      become: true
+      with_items:
+        - grafana-{{ grafana_port }}.service
+
+- hosts: dm_worker_servers 
+  tasks:
+    - name: clean systemd config
+      file: path="/etc/systemd/system/{{ item }}" state=absent
+      become: true
+      with_items:
+        - dm-worker-{{ dm_worker_port }}.service
+
+
+- hosts: dm_master_servers
+  tasks:
+    - name: clean systemd config
+      file: path="/etc/systemd/system/{{ item }}" state=absent
+      become: true
+      with_items:
+        - dm-master-{{ dm_master_port }}.service 
+
+- hosts: dm_portal_servers
+  tasks:
+    - name: clean systemd config
+      file: path="/etc/systemd/system/{{ item }}" state=absent
+      become: true
+      with_items:
+        - dm-portal-{{ dm_portal_port }}.service 
+
+
+- hosts: all
+  tasks:
+    - name: using rm command to clean up deploy_dir
+      shell: "rm -rf {{ deploy_dir }}/*"
+
+    - name: cleaning up deploy dir
+      file: path={{ deploy_dir }} state=absent

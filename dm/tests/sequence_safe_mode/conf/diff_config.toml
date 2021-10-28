@@ -1,0 +1,54 @@
+# diff Configuration.
+
+log-level = "info"
+
+chunk-size = 1000
+
+check-thread-count = 4
+
+sample-percent = 100
+
+use-checksum = true
+
+fix-sql-file = "fix.sql"
+
+# tables need to check.
+[[check-tables]]
+schema = "sequence_safe_mode_target"
+tables = ["t_target"]
+
+[[table-config]]
+schema = "sequence_safe_mode_target"
+table = "t_target"
+ignore-columns = ["id"]
+is-sharding = true
+
+[[table-config.source-tables]]
+instance-id = "source-1"
+schema = "sequence_safe_mode_test"
+table  = "~t.*"
+
+[[table-config.source-tables]]
+instance-id = "source-2"
+schema = "sequence_safe_mode_test"
+table  = "~t.*"
+
+[[source-db]]
+host = "127.0.0.1"
+port = 3306
+user = "root"
+password = "123456"
+instance-id = "source-1"
+
+[[source-db]]
+host = "127.0.0.1"
+port = 3307
+user = "root"
+password = "123456"
+instance-id = "source-2"
+
+[target-db]
+host = "127.0.0.1"
+port = 4000
+user = "test"
+password = "123456"

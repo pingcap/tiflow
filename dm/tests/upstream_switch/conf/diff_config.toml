@@ -1,0 +1,41 @@
+use-checksum = true
+
+# tables need to check.
+[[check-tables]]
+schema = "db_pessimistic"
+tables = ["tb"]
+
+[[table-config]]
+schema = "db_pessimistic"
+table = "tb"
+is-sharding = true
+
+[[table-config.source-tables]]
+instance-id = "mysql-replica-01"
+schema = "db_pessimistic"
+table  = "~t.*"
+
+[[table-config.source-tables]]
+instance-id = "mysql-replica-02"
+schema = "db_pessimistic"
+table  = "~t.*"
+
+[[source-db]]
+host = "172.28.128.2"
+port = 3306
+user = "root"
+password = "123456"
+instance-id = "mysql-replica-01"
+
+[[source-db]]
+host = "172.28.128.3"
+port = 3306
+user = "root"
+password = "123456"
+instance-id = "mysql-replica-02"
+
+[target-db]
+host = "172.28.128.8"
+port = 4000
+user = "root"
+password = ""

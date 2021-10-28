@@ -46,8 +46,7 @@ func Test(t *testing.T) { check.TestingT(t) }
 
 var _ = check.Suite(&etcdWorkerSuite{})
 
-type etcdWorkerSuite struct {
-}
+type etcdWorkerSuite struct{}
 
 type simpleReactor struct {
 	state     *simpleReactorState

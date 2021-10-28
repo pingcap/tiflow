@@ -31,7 +31,7 @@ func TestParseLogFileName(t *testing.T) {
 		args         arg
 		wantTs       uint64
 		wantFileType string
-		wantErr      bool
+		wantErr      string
 	}{
 		{
 			name: "happy row .log",
@@ -92,13 +92,13 @@ func TestParseLogFileName(t *testing.T) {
 			args: arg{
 				name: fmt.Sprintf("%s_%s_%d_%s%d%s", "cp", "test", time.Now().Unix(), DefaultDDLLogFileType, 1, LogEXT) + TmpEXT,
 			},
-			wantErr: true,
+			wantErr: ".*bad log name*.",
 		},
 	}
 	for _, tt := range tests {
 		ts, fileType, err := ParseLogFileName(tt.args.name)
-		if tt.wantErr {
-			require.NotNil(t, err, tt.name)
+		if tt.wantErr != "" {
+			require.Regexp(t, tt.wantErr, err, tt.name)
 		} else {
 			require.Nil(t, err, tt.name)
 			require.EqualValues(t, tt.wantTs, ts, tt.name)

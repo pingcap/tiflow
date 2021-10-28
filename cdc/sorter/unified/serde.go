@@ -18,8 +18,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-type msgPackGenSerde struct {
-}
+type msgPackGenSerde struct{}
 
 func (m *msgPackGenSerde) marshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error) {
 	bytes = bytes[:0]
