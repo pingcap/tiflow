@@ -85,6 +85,7 @@ syncers:
     worker-count: 16
     batch: 100
     checkpoint-flush-interval: 1
+    compact: true
 
 filters:
   user-filter-1:

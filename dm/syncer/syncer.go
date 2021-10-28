@@ -268,7 +268,11 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier 
 
 func (s *Syncer) newJobChans() {
 	s.closeJobChans()
-	s.dmlJobCh = make(chan *job, s.cfg.QueueSize)
+	chanSize := s.cfg.QueueSize * s.cfg.WorkerCount / 2
+	if s.cfg.Compact {
+		chanSize /= 2
+	}
+	s.dmlJobCh = make(chan *job, chanSize)
 	s.ddlJobCh = make(chan *job, s.cfg.QueueSize)
 	s.jobsClosed.Store(false)
 }
@@ -1267,8 +1271,11 @@ func (s *Syncer) fatalFunc(job *job, err error) {
 func (s *Syncer) syncDML() {
 	defer s.wg.Done()
 
-	// TODO: add compactor
-	causalityCh := causalityWrap(s.dmlJobCh, s)
+	dmlJobCh := s.dmlJobCh
+	if s.cfg.Compact {
+		dmlJobCh = compactorWrap(dmlJobCh, s)
+	}
+	causalityCh := causalityWrap(dmlJobCh, s)
 	flushCh := dmlWorkerWrap(causalityCh, s)
 
 	for range flushCh {
