@@ -78,7 +78,7 @@ func (h *HTTPHandler) ListChangefeed(c *gin.Context) {
 	// get all changefeed status
 	statuses, err := statusProvider.GetAllChangeFeedStatuses(ctx)
 	if err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 	// get all changefeed infos
@@ -575,7 +575,7 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 	}
 	status, exist := statuses[captureID]
 	if !exist {
-		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID)))
+		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
 	}
 
 	positions, err := statusProvider.GetTaskPositions(ctx, changefeedID)
@@ -585,7 +585,7 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 	}
 	position, exist := positions[captureID]
 	if !exist {
-		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID)))
+		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
 	}
 
 	processorDetail := &model.ProcessorDetail{CheckPointTs: position.CheckPointTs, ResolvedTs: position.ResolvedTs, Error: position.Error}
