@@ -193,12 +193,13 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 		return nil
 	} else {
 
-		rowDataList := make([]*vo.BatchRowsInfo,0);
-		
+		//rowDataList := make([]*vo.BatchRowsInfo,0);
+		rowInfos := make([]*vo.RowInfos, 0);
+
 		for _, row := range rows {
 			log.Info("show::::::::::::::::::::::::::::: row", zap.Any("row", row))
 
-			
+
 			log.Info("PreColumns: ", zap.Any("", row.PreColumns))
 			log.Info("Columns: ", zap.Any("", row.Columns))
 			if len(row.PreColumns) == 0 {
@@ -211,11 +212,10 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 				//update
 				eventTypeValue = 3
 			}
-			
+
 			schemaName = row.Table.Schema
 			tableName = row.Table.Table
 
-			rowInfos := make([]*vo.RowInfos, 0);
 
 			rowdata := new(vo.RowInfos)
 
@@ -260,18 +260,18 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 			rowdata.ColumnList = columnInfos
 			rowdata.OperType = eventTypeValue
 			rowInfos = append(rowInfos,rowdata)
-			
-			
-			rowDataList = append(rowDataList,rowInfos);
-			
+
+
+			//rowDataList = append(rowDataList,rowInfos);
+
 			//socket.JddmClient("127.0.0.1:9889",rowInfos)
 
 
 		}
-		
+
 		//send
-		socket.JddmClientByRowList(b.sinkURI.Host,rowDataList)
-		
+		socket.JddmClient(b.sinkURI.Host,rowInfos)
+
 	}
 
 	rowsCount := len(rows)
@@ -364,15 +364,15 @@ func (b *dsgSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) 
 
 func (b *dsgSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	log.Debug("dsgSocketSink: Checkpoint Event", zap.Uint64("ts", ts))
-	
+
 	commitTs,err:=socket.JddmClientByCheckPoint(b.sinkURI.Host,ts)
 	//commitTs,err:=socket.JddmClientFlush("127.0.0.1:9889",resolvedTs)
 	if err != nil {
 		fmt.Println("err=", err) //出错退出
-		return 0, nil
+		return nil
 	}
-	log.Debug(" result checkPointTs============>>>",zap.Uint64("commitTs", commitTs))	
-	
+	log.Debug(" result checkPointTs============>>>",zap.Uint64("commitTs", commitTs))
+
 	return nil
 }
 

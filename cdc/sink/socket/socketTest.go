@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"container/list"
 	"fmt"
-
 	"github.com/pingcap/ticdc/cdc/sink/publicUtils"
 	"github.com/pingcap/ticdc/cdc/sink/vo"
 	"log"
@@ -271,11 +270,11 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 
 
 }
-
+/*
 func JddmClientByRowList(host string, rowListInfos []*vo.BatchRowsInfo){
 
-	/*fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
-	serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)*/
+	//fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
+	//serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)
 
 	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
 
@@ -333,8 +332,8 @@ func JddmClientByRowList(host string, rowListInfos []*vo.BatchRowsInfo){
 	}
 
 
-}
-
+}*/
+/*
 func createBytesFromRowInfoList(rowInfos []*vo.BatchRowsInfo) []byte{
 
 	//var buffer bytes.Buffer
@@ -352,6 +351,7 @@ func createBytesFromRowInfoList(rowInfos []*vo.BatchRowsInfo) []byte{
 
 	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
 	sendBatchRowsArr :=new(bytes.Buffer)
+
 	for _, rowInfo := range rowInfos {
 
 		//当前时间戳
@@ -398,16 +398,17 @@ func createBytesFromRowInfoList(rowInfos []*vo.BatchRowsInfo) []byte{
 
 		fmt.Printf(" allColumnArrByRow[%d]Arr %s \n",len(buffer.Bytes()),publicUtils.BytestoHex(buffer.Bytes()))
 	}
-	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()))
+	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes())+4)
 	sendBatchRowsArr.Write(lengthArr)
 	sendBatchRowsArr.Write(verifyArr)
+	sendBatchRowsArr.Write(publicUtils.IntegerToBytes(len(rowInfos)))
 	sendBatchRowsArr.Write(buffer.Bytes())
 	fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
 
 
 	return sendBatchRowsArr.Bytes()
 
-}
+}*/
 
 
 func createBytesFromRowInfo(rowInfos []*vo.RowInfos) []byte{
@@ -988,7 +989,7 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
 
 	verifyArr := make([]byte,4)
-	
+
 	verifyArr[0] = 0x06
 	verifyArr[1] = 0xce
 	verifyArr[2] = 0x01
