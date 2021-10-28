@@ -51,8 +51,10 @@ import (
 )
 
 const (
-	defaultWorkerCount         = 16
-	defaultMaxTxnRow           = 256
+	// expose these two variables for redo log applier
+	DefaultWorkerCount = 16
+	DefaultMaxTxnRow   = 256
+
 	defaultDMLMaxRetryTime     = 8
 	defaultDDLMaxRetryTime     = 20
 	defaultTiDBTxnMode         = "optimistic"
@@ -314,8 +316,8 @@ func (s *sinkParams) Clone() *sinkParams {
 }
 
 var defaultParams = &sinkParams{
-	workerCount:         defaultWorkerCount,
-	maxTxnRow:           defaultMaxTxnRow,
+	workerCount:         DefaultWorkerCount,
+	maxTxnRow:           DefaultMaxTxnRow,
 	tidbTxnMode:         defaultTiDBTxnMode,
 	batchReplaceEnabled: defaultBatchReplaceEnabled,
 	batchReplaceSize:    defaultBatchReplaceSize,
@@ -504,7 +506,8 @@ func parseSinkURI(ctx context.Context, sinkURI *url.URL, opts map[string]string)
 	return params, nil
 }
 
-var getDBConnImpl = getDBConn
+// GetDBConnImpl is the implement holder to get db connection. Export it for tests
+var GetDBConnImpl = getDBConn
 
 func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsnStr)
@@ -567,7 +570,7 @@ func newMySQLSink(
 	dsn.Params["readTimeout"] = params.readTimeout
 	dsn.Params["writeTimeout"] = params.writeTimeout
 	dsn.Params["timeout"] = params.dialTimeout
-	testDB, err := getDBConnImpl(ctx, dsn.FormatDSN())
+	testDB, err := GetDBConnImpl(ctx, dsn.FormatDSN())
 	if err != nil {
 		return nil, err
 	}
@@ -577,7 +580,7 @@ func newMySQLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	db, err := getDBConnImpl(ctx, dsnStr)
+	db, err := GetDBConnImpl(ctx, dsnStr)
 	if err != nil {
 		return nil, err
 	}
