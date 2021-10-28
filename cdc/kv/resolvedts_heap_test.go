@@ -20,8 +20,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-type rtsHeapSuite struct {
-}
+type rtsHeapSuite struct{}
 
 var _ = check.Suite(&rtsHeapSuite{})
 

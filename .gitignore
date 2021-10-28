@@ -30,6 +30,8 @@ bin
 .DS_Store
 .devcontainer
 .vscode
+vendor
+.python-version
 
 cscope.*
 **/*.swp
@@ -47,3 +49,10 @@ docker/logs
 integration/integration
 
 *.tmp
+
+# DM related files
+/dm/monitoring/dashboards/*.json
+/dm/monitoring/rules/dm_worker.rules.yml
+syncer.meta
+relay_log/*
+dumped_data/*

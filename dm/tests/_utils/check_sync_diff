@@ -1,0 +1,44 @@
+#!/bin/bash
+# parameter 1: work directory
+# parameter 2: config file for sync_diff_inspector
+# parameter 3: max check times
+# parameter 4: check diff should fail or not
+
+workdir=$1
+conf=$2
+if [ $# -ge 3 ]; then
+	check_time=$3
+else
+	check_time=10
+fi
+
+PWD=$(pwd)
+binary=$PWD/bin/sync_diff_inspector
+LOG=$workdir/sync_diff_inspector.log
+
+cd $workdir
+i=0
+while [ $i -lt $check_time ]; do
+	$binary --config=$conf >$LOG 2>&1
+	ret=$?
+	if [ "$ret" == 0 ]; then
+		echo "check diff successfully"
+		if [[ $4 = "fail" ]]; then
+			exit 1
+		fi
+		break
+	fi
+	((i++))
+	echo "check diff failed $i-th time, retry later"
+	sleep 2
+done
+
+if [ $i -ge $check_time ]; then
+	echo "check diff failed at last"
+	if [[ $4 != "fail" ]]; then
+		# show \n and other blanks
+		printf "$(cat $LOG)\n"
+		exit 1
+	fi
+fi
+cd $PWD

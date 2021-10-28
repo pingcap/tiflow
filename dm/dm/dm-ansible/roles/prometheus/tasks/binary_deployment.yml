@@ -1,0 +1,16 @@
+---
+
+- name: deploy prometheus binary
+  copy:
+    src: "{{ resources_dir }}/bin/prometheus"
+    dest: "{{ deploy_dir }}/bin/"
+    mode: 0755
+
+- name: create prometheus run script
+  template:
+    src: "run_{{ role_name }}.sh.j2"
+    dest: "{{ deploy_dir }}/scripts/run_{{ role_name }}.sh"
+    mode: "0755"
+    backup: yes
+
+- include_tasks: "systemd_deployment.yml"

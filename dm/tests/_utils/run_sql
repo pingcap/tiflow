@@ -1,0 +1,15 @@
+#!/bin/bash
+# parameter 1: sql command
+# parameter 2: port
+# parameter 3: password
+
+set -eu
+
+TIDB_PORT=4000
+user="root"
+if [[ "$2" = $TIDB_PORT ]]; then
+	user="test"
+fi
+
+echo "[$(date)] Executing SQL: $1" >"$TEST_DIR/sql_res.$TEST_NAME.txt"
+mysql -u$user -h127.0.0.1 -P$2 -p$3 --default-character-set utf8 -E -e "$1" >>"$TEST_DIR/sql_res.$TEST_NAME.txt"

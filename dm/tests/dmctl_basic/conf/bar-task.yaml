@@ -1,0 +1,19 @@
+name: bar-task
+task-mode: all
+shard-mode: pessimistic
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    block-allow-list:  "instance"
+  - source-id: "mysql-replica-02"
+    block-allow-list:  "instance"
+
+block-allow-list:
+  instance:
+    do-dbs: ["dmctl_command_dummy"]

@@ -1,0 +1,24 @@
+---
+
+- name: create dm-portal deploy directories
+  file:
+    path: '{{ item }}'
+    state: directory
+    mode: 0755
+    owner: '{{ deploy_user }}'
+    group: '{{ deploy_user }}'
+  become: true
+  with_items:
+    - "{{ dm_portal_log_dir }}"
+
+- name: deploy dm-portal binary
+  copy: src="{{ resources_dir }}/bin/dm-portal" dest="{{ deploy_dir }}/bin/" mode=0755
+
+- name: create dm-portal run script
+  template:
+    src: "run_{{ role_name }}.sh.j2"
+    dest: "{{ deploy_dir }}/scripts/run_{{ role_name }}.sh"
+    mode: "0755"
+    backup: yes
+
+- include_tasks: "systemd_deployment.yml"

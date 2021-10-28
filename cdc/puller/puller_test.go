@@ -35,8 +35,7 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
-type pullerSuite struct {
-}
+type pullerSuite struct{}
 
 var _ = check.Suite(&pullerSuite{})
 

@@ -1,0 +1,74 @@
+---
+name: test
+task-mode: "full"
+is-sharding: false
+meta-schema: "dm_meta"
+# enable-heartbeat: true
+heartbeat-update-interval: 1
+heartbeat-report-interval: 1
+clean-dump-file: false
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "test"
+  password: "/Q7B9DizNLLTTfiZHv9WoEAKamfpIUs="
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    meta:
+      binlog-name: binlog-name-placeholder-1
+      binlog-pos: 4
+    block-allow-list:  "instance"
+    mydumper-config-name: "global"
+    loader-config-name: "global"
+    syncer-config-name: "global"
+
+  - source-id: "mysql-replica-02"
+    meta:
+      binlog-name: binlog-name-placeholder-2
+      binlog-pos: 4
+    block-allow-list:  "instance"
+    route-rules: ["route-rule"]
+    mydumper-config-name: "global"
+    loader-config-name: "global"
+    syncer-config-name: "global"
+
+block-allow-list:
+  instance:
+    do-dbs: ["dm_syncer", "dm_syncer_do_db"]
+    ignore-dbs: ["~^dm_syncer_ignore_"]
+    do-tables:
+      - db-name: "dm_syncer"
+        tbl-name: "~t.*"
+      - db-name: "dm_syncer_do_db"
+        tbl-name: "~^dm_syncer_do_db_."
+      - db-name: "dm_syncer"
+        tbl-name: "~^dm_syncer_route_rules_."
+    ignore-tables:
+      - db-name: "~^dm_syncer_ignore_"
+        tbl-name: "~^dm_syncer_ignore_db_."
+
+mydumpers:
+  global:
+    threads: 4
+    chunk-filesize: 64
+    skip-tz-utc: true
+    extra-args: ""
+
+loaders:
+  global:
+    pool-size: 16
+    dir: "./dumped_data"
+
+syncers:
+  global:
+    worker-count: 16
+    batch: 100
+
+routes:
+  route-rule:
+    schema-pattern: "dm_syncer"
+    table-pattern: "dm_syncer_route_rules_*"
+    target-schema: "dm_syncer"
+    target-table: "dm_syncer_route_rule"

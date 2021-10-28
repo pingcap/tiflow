@@ -1,0 +1,122 @@
+---
+
+# The Playbook of DM
+
+- name: check config locally
+  hosts: localhost
+  any_errors_fatal: true
+  tags:
+    - always
+  roles:
+    - check_config_static
+
+- name: rolling update dm-master
+  hosts: dm_master_servers
+  any_errors_fatal: true
+  serial: 1
+  tags:
+    - dm-master
+
+  pre_tasks:
+    - name: stop dm-master by systemd
+      become: true
+      systemd: name=dm-master-{{ dm_master_port }}.service state=stopped enabled=no
+
+    - name: wait for dm-master down
+      wait_for: |
+        host={{ ansible_host }} port={{ dm_master_port }} state=stopped
+
+  roles:
+    - dm-master
+
+  post_tasks:
+    - name: start dm-master by systemd
+      become: true
+      systemd: name=dm-master-{{ dm_master_port }}.service state=started enabled=no
+
+    - name: wait for dm-master up
+      wait_for: |
+        host={{ ansible_host }} port={{ dm_master_port }} state=started
+    
+    - name: wait until dm_master is available
+      uri:
+        url: "http://{{ ansible_host }}:{{ dm_master_port }}/apis/v1alpha1/status/"
+        return_content: yes
+      register: dm_master_http_result
+      until: dm_master_http_result.status == 200 and 'true' in dm_master_http_result.content
+      retries: 12
+      delay: 5
+
+- name: rolling update dm-worker
+  hosts: dm_worker_servers
+  any_errors_fatal: true
+  serial: 1
+  tags:
+    - dm-worker
+
+  pre_tasks:
+    - name: stop dm-worker by systemd
+      become: true
+      systemd: name=dm-worker-{{ dm_worker_port }}.service state=stopped enabled=no
+
+    - name: wait for dm-worker down
+      wait_for: |
+        host={{ ansible_host }} port={{ dm_worker_port }} state=stopped
+
+  roles:
+    - dm-worker
+
+  post_tasks:
+    - name: start dm-worker by systemd
+      become: true
+      systemd: name=dm-worker-{{ dm_worker_port }}.service state=started enabled=no
+
+    - name: wait for dm-worker up
+      wait_for: |
+        host={{ ansible_host }} port={{ dm_worker_port }} state=started
+    
+    - name: wait until dm_worker is available
+      uri:
+        url: "http://{{ ansible_host }}:{{ dm_worker_port }}/status"
+        return_content: yes
+      register: dm_worker_http_result
+      until: dm_worker_http_result.status == 200
+      retries: 12
+      delay: 5
+
+- name: rolling update dm-portal
+  hosts: dm_portal_servers
+  any_errors_fatal: true
+  serial: 1
+  tags:
+    - dm-portal
+
+  pre_tasks:
+    - name: stop dm-portal by systemd
+      become: true
+      systemd: name=dm-portal-{{ dm_portal_port }}.service state=stopped enabled=no
+
+    - name: wait for dm-master down
+      wait_for: |
+        host={{ ansible_host }} port={{ dm_portal_port }} state=stopped
+
+  roles:
+    - dm-portal
+
+  post_tasks:
+    - name: start dm-portal by systemd
+      become: true
+      systemd: name=dm-portal-{{ dm_portal_port }}.service state=started enabled=no
+
+    - name: wait for dm-portal up
+      wait_for: |
+        host={{ ansible_host }} port={{ dm_portal_port }} state=started
+
+- name: deploying dmctl
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags:
+    - dmctl
+  roles:
+    - dmctl

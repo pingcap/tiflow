@@ -1,0 +1,14 @@
+#!/bin/sh
+
+set -eu
+
+log=$1
+text=$2
+
+got=$(grep "$text" $log | wc -l)
+
+if [ $got -ne 0 ]; then
+	cat $log
+	echo "$log contain $text"
+	exit 1
+fi

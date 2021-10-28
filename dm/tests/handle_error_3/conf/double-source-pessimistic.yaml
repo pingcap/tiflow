@@ -1,0 +1,59 @@
+---
+name: test
+task-mode: all
+is-sharding: true
+shard-mode: "pessimistic"
+meta-schema: "dm_meta"
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "test"
+  password: "/Q7B9DizNLLTTfiZHv9WoEAKamfpIUs="
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    block-allow-list:  "instance"
+    route-rules: ["sharding-table-rules1","sharding-table-rules2"]
+    mydumper-config-name: "global"
+    loader-config-name: "global"
+    syncer-config-name: "global"
+  - source-id: "mysql-replica-02"
+    block-allow-list:  "instance"
+    route-rules: ["sharding-table-rules1","sharding-table-rules2"]
+    mydumper-config-name: "global"
+    loader-config-name: "global"
+    syncer-config-name: "global"
+
+block-allow-list:
+  instance:
+    do-dbs: ["handle_error"]
+
+routes:
+  sharding-table-rules1:
+    schema-pattern: "handle_error"
+    target-schema: "handle_error"
+    table-pattern: "tb*"
+    target-table: "tb"
+  sharding-table-rules2:
+    schema-pattern: "handle_error"
+    target-schema: "handle_error"
+    table-pattern: "ta*"
+    target-table: "ta"
+
+mydumpers:
+  global:
+    threads: 4
+    chunk-filesize: 64
+    skip-tz-utc: true
+    extra-args: ""
+
+loaders:
+  global:
+    pool-size: 16
+    dir: "./dumped_data"
+
+syncers:
+  global:
+    worker-count: 16
+    batch: 100

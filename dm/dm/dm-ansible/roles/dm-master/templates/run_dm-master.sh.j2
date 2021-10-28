@@ -1,0 +1,36 @@
+#!/bin/bash
+set -e
+ulimit -n 1000000
+
+DEPLOY_DIR={{ deploy_dir }}
+cd "${DEPLOY_DIR}" || exit 1
+
+{% set my_ip = hostvars[inventory_hostname].ansible_host | default(hostvars[inventory_hostname].inventory_hostname) -%}
+{% set my_port = hostvars[inventory_hostname].dm_master_port -%}
+{% set my_separator = "_" %}
+{% set my_hostname = hostvars[inventory_hostname]['ansible_hostname'] | default(hostvars[inventory_hostname].inventory_hostname) -%}
+{% set my_peer_id = my_separator ~ my_hostname ~ my_separator ~ my_port %}
+
+{% set all_dm_master = [] -%}
+{% for host in groups.dm_master_servers -%}
+  {% set other_ip = hostvars[host].ansible_host | default(hostvars[host].inventory_hostname) -%}
+  {% set other_port = hostvars[host]['dm_master_port'] -%}
+  {% set other_peer_port = hostvars[host]['dm_master_peer_port'] -%}
+  {% set other_dm_master_name_surfix = hostvars[host]['ansible_hostname'] | default(hostvars[host].inventory_hostname) -%}
+  {% set other_dm_master_name = dm_master_name_prefix ~ my_separator ~ other_dm_master_name_surfix ~ my_separator ~ other_port -%}
+  {% set _ = all_dm_master.append("%s=%s://%s:%s" % (other_dm_master_name, 'http', other_ip, other_peer_port)) -%}
+{% endfor -%}
+
+# WARNING: This file was auto-generated. Do not edit!
+#          All your edit might be overwritten!
+
+exec bin/dm-master \
+    --name="{{ dm_master_name_prefix }}{{ my_peer_id }}" \
+    --master-addr="{{ my_ip }}:{{ dm_master_port }}" \
+    --advertise-addr="{{ my_ip }}:{{ dm_master_port }}" \
+    --peer-urls="http://{{ my_ip }}:{{ dm_master_peer_port }}" \
+    --advertise-peer-urls="http://{{ my_ip }}:{{ dm_master_peer_port }}" \
+    --initial-cluster="{{ all_dm_master | join(',') }}" \
+    --data-dir="{{ dm_master_data_dir }}" \
+    -L="{{ dm_master_log_level }}" \
+    --log-file="{{ dm_master_log_dir }}/{{ dm_master_log_file }}" >> "{{ dm_master_log_dir }}/{{ dm_master_stdout_log_file }}" 2>> "{{ dm_master_log_dir }}/{{ dm_master_stderr_log_file }}"

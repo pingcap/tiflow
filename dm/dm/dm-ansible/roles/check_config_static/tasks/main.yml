@@ -1,0 +1,25 @@
+---
+
+- name: Ensure dm-master host exists
+  fail: msg="One dm-master host should be specified in inventory.ini file."
+  when: groups['dm_master_servers'] | length < 1
+
+- name: Ensure dm-worker host exists
+  fail: msg="One, or more dm-worker hosts should be specified in inventory.ini file."
+  when: groups['dm_worker_servers'] | length < 1
+
+- name: Ensure prometheus host exists
+  fail: msg="One prometheus host should be specified in inventory.ini file."
+  when: groups['prometheus_servers'] | length != 1
+
+- name: Ensure grafana host exists
+  fail: msg="One grafana host should be specified in inventory.ini file."
+  when: groups['grafana_servers'] | length != 1
+
+- name: Ensure alertmanager host exists
+  fail: msg="One alertmanager host should be specified in inventory.ini file."
+  when: groups['alertmanager_servers'] | length != 1
+
+- name: Check ansible_user variable
+  fail: msg="ansible_user == 'root' is not supported, please ssh via normal user"
+  when: ansible_user == 'root'

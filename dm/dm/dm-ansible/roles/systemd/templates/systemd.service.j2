@@ -1,0 +1,15 @@
+[Unit]
+Description={{ service_name }} service
+After=syslog.target network.target remote-fs.target nss-lookup.target
+
+[Service]
+LimitNOFILE=1000000
+#LimitCORE=infinity
+LimitSTACK=10485760
+User={{ deploy_user }}
+ExecStart={{ deploy_dir }}/scripts/run_{{ this_role_name }}.sh
+Restart=always
+RestartSec=15s
+
+[Install]
+WantedBy=multi-user.target

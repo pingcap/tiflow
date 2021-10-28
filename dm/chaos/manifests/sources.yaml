@@ -1,0 +1,161 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sources
+  labels:
+    app: sources
+spec:
+  ports:
+    - name: mysql57
+      port: 3306
+      targetPort: 3306
+    - name: mysql8
+      port: 3307
+      targetPort: 3306
+    - name: mariadb
+      port: 3308
+      targetPort: 3306
+  selector:
+    app: sources
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql57
+  labels:
+    app: sources
+spec:
+  selector:
+    matchLabels:
+      app: sources
+  serviceName: sources
+  replicas: 1
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: sources
+    spec:
+      containers:
+        - name: mysql57
+          image: mysql:5.7
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: "/var/lib/mysql"
+              name: mysql57
+          env:
+            - name: MYSQL_ALLOW_EMPTY_PASSWORD
+              value: "true"
+          ports:
+            - containerPort: 3306
+              name: mysql57
+          args:
+            - "--server-id=1"
+            - "--log-bin=/var/lib/mysql/mysql-bin"
+            - "--enforce-gtid-consistency=ON"
+            - "--gtid-mode=ON"
+            - "--binlog-format=ROW"
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql57
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql8
+  labels:
+    app: sources
+spec:
+  selector:
+    matchLabels:
+      app: sources
+  serviceName: sources
+  replicas: 1
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: sources
+    spec:
+      containers:
+        - name: mysql8
+          image: mysql:8.0.23 # use latest after TiDB support utf8mb3
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: "/var/lib/mysql"
+              name: mysql8
+          env:
+            - name: MYSQL_ALLOW_EMPTY_PASSWORD
+              value: "true"
+          ports:
+            - containerPort: 3306
+              name: mysql8
+          args:
+            - "--server-id=1"
+            - "--log-bin=/var/lib/mysql/mysql-bin"
+            - "--enforce-gtid-consistency=ON"
+            - "--gtid-mode=ON"
+            - "--binlog-format=ROW"
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql8
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mariadb
+  labels:
+    app: sources
+spec:
+  selector:
+    matchLabels:
+      app: sources
+  serviceName: sources
+  replicas: 1
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: sources
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:10.6.0 # use latest after TiDB support utf8mb3
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: "/var/lib/mysql"
+              name: mariadb
+          env:
+            - name: MYSQL_ALLOW_EMPTY_PASSWORD
+              value: "true"
+          ports:
+            - containerPort: 3306
+              name: mariadb
+          args:
+            - "--log-bin=/var/lib/mysql/mysql-bin"
+            - "--binlog-format=ROW"
+            - "--explicit-defaults-for-timestamp=ON" # mariadb does not support setting it by session
+  volumeClaimTemplates:
+    - metadata:
+        name: mariadb
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
