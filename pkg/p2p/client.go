@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/p2p/util"
+
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -56,7 +58,7 @@ type MessageClientConfig struct {
 // MessageClient is a client used to send peer messages.
 // `Run` must be running before sending any message.
 type MessageClient struct {
-	sendCh chan *messageEntry
+	sendCh chan *p2p.MessageEntry
 
 	topicMu sync.RWMutex
 	topics  map[string]*topicEntry
@@ -82,17 +84,11 @@ type topicEntry struct {
 	lastSent Seq
 }
 
-type messageEntry struct {
-	topic   Topic
-	content []byte
-	seq     Seq
-}
-
 // NewMessageClient creates a new MessageClient
 // senderID is an identifier for the local node.
 func NewMessageClient(senderID NodeID, config *MessageClientConfig) *MessageClient {
 	return &MessageClient{
-		sendCh:   make(chan *messageEntry, config.SendChannelSize),
+		sendCh:   make(chan *p2p.MessageEntry, config.SendChannelSize),
 		topics:   make(map[string]*topicEntry),
 		senderID: senderID,
 		closeCh:  make(chan struct{}),
@@ -211,48 +207,24 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 		"to": peerAddr,
 	})
 
-	var (
-		batchedMessages []*messageEntry
-		batchedBytes    int
-	)
-
 	ticker := time.NewTicker(c.config.BatchSendInterval)
 	defer ticker.Stop()
 
-	batchSendFn := func() error {
-		if len(batchedMessages) == 0 {
-			return nil
-		}
-
-		var entries []*p2p.MessageEntry
-		for _, msg := range batchedMessages {
-			entries = append(entries, &p2p.MessageEntry{
-				Topic:    msg.topic,
-				Content:  msg.content,
-				Sequence: msg.seq,
+	batchSender := newBatchSender(
+		128,
+		c.config.MaxBatchBytes,
+		func(packet *p2p.MessagePacket) error {
+			failpoint.Inject("ClientInjectStreamFailure", func() {
+				log.Info("ClientInjectStreamFailure failpoint triggered")
+				failpoint.Return(io.EOF)
 			})
 
-			log.Debug("sending msg",
-				zap.String("topic", msg.topic),
-				zap.Int64("seq", msg.seq))
-		}
-
-		failpoint.Inject("ClientInjectStreamFailure", func() {
-			log.Info("ClientInjectStreamFailure failpoint triggered")
-			failpoint.Return(io.EOF)
-		})
-
-		if err := stream.Send(&p2p.MessagePacket{
-			Entries: entries,
-		}); err != nil {
-			return errors.Trace(err)
-		}
-
-		batchedMessages = batchedMessages[:0]
-		batchedBytes = 0
-
-		return nil
-	}
+			if err := stream.Send(packet); err != nil {
+				return errors.Trace(err)
+			}
+			return nil
+		},
+	)
 
 	for {
 		select {
@@ -265,15 +237,15 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 			}
 
 			c.topicMu.RLock()
-			tpk, ok := c.topics[msg.topic]
+			tpk, ok := c.topics[msg.Topic]
 			c.topicMu.RUnlock()
 			if !ok {
 				// This line should never be reachable unless there is a bug in this file.
-				log.Panic("topic not found. Report a bug", zap.String("topic", msg.topic))
+				log.Panic("topic not found. Report a bug", zap.String("topic", msg.Topic))
 			}
 
-			if old := atomic.SwapInt64(&tpk.lastSent, msg.seq); old != 0 && msg.seq > old+1 {
-				log.Panic("seq is skipped, bug?", zap.String("topic", msg.topic), zap.Int64("seq", msg.seq))
+			if old := atomic.SwapInt64(&tpk.lastSent, msg.Sequence); old != 0 && msg.Sequence > old+1 {
+				log.Panic("seq is skipped, bug?", zap.String("topic", msg.Topic), zap.Int64("seq", msg.Sequence))
 			}
 
 			tpk.sentMessageMu.Lock()
@@ -282,15 +254,11 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 
 			metricsClientMessageCount.Inc()
 
-			batchedMessages = append(batchedMessages, msg)
-			batchedBytes += len(msg.content) + len(msg.topic)
-			if batchedBytes >= c.config.MaxBatchBytes {
-				if err := batchSendFn(); err != nil {
-					return errors.Trace(err)
-				}
+			if err := batchSender.Push(msg); err != nil {
+				return errors.Trace(err)
 			}
 		case <-ticker.C:
-			if err := batchSendFn(); err != nil {
+			if err := batchSender.ForceSend(); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -316,14 +284,14 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 		var entries []*p2p.MessageEntry
 		tpk.sentMessageMu.Lock()
 		for i := 0; i < tpk.sentMessages.Len(); i++ {
-			msg := tpk.sentMessages.Peek(i).(*messageEntry)
+			msg := tpk.sentMessages.Peek(i).(*p2p.MessageEntry)
 			log.Debug("retry sending msg",
-				zap.String("topic", msg.topic),
-				zap.Int64("seq", msg.seq))
+				zap.String("topic", msg.Topic),
+				zap.Int64("seq", msg.Sequence))
 			entries = append(entries, &p2p.MessageEntry{
-				Topic:    msg.topic,
-				Content:  msg.content,
-				Sequence: msg.seq,
+				Topic:    msg.Topic,
+				Content:  msg.Content,
+				Sequence: msg.Sequence,
 			})
 		}
 
@@ -382,7 +350,7 @@ func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
 
 			atomic.StoreInt64(&tpk.ack, ack.GetLastSeq())
 			tpk.sentMessageMu.Lock()
-			for !tpk.sentMessages.Empty() && tpk.sentMessages.Front().(*messageEntry).seq <= ack.GetLastSeq() {
+			for !tpk.sentMessages.Empty() && tpk.sentMessages.Front().(*p2p.MessageEntry).Sequence <= ack.GetLastSeq() {
 				tpk.sentMessages.PopFront()
 			}
 			tpk.sentMessageMu.Unlock()
@@ -429,10 +397,10 @@ func (c *MessageClient) sendMessage(ctx context.Context, topic Topic, value inte
 		return 0, cerrors.WrapError(cerrors.ErrPeerMessageEncodeError, err)
 	}
 
-	msg := &messageEntry{
-		topic:   topic,
-		content: data,
-		seq:     nextSeq,
+	msg := &p2p.MessageEntry{
+		Topic:    topic,
+		Content:  data,
+		Sequence: nextSeq,
 	}
 
 	if nonblocking {
@@ -471,4 +439,40 @@ func (c *MessageClient) CurrentAck(topic Topic) (Seq, bool) {
 	}
 
 	return atomic.LoadInt64(&tpk.ack), true
+}
+
+type batchSenderState struct {
+	*p2p.MessagePacket
+	byteCount int
+}
+
+func newBatchSender(batchSize int, maxBytes int, sendFn func(packet *p2p.MessagePacket) error) *util.BatchSender {
+	return &util.BatchSender{
+		Init: func() util.State {
+			return &batchSenderState{
+				MessagePacket: &p2p.MessagePacket{},
+				byteCount:     0,
+			}
+		},
+		Append: func(stateI util.State, itemI util.Item) util.State {
+			state := stateI.(*batchSenderState)
+			item := itemI.(*p2p.MessageEntry)
+			state.Entries = append(state.Entries, item)
+			state.byteCount += len(item.Topic) + len(item.Content)
+			return state
+		},
+		SendFn: func(state util.State) error {
+			return sendFn(state.(*batchSenderState).MessagePacket)
+		},
+		Cond: func(stateI util.State) bool {
+			state := stateI.(*batchSenderState)
+			if state.byteCount >= maxBytes {
+				return true
+			}
+			if len(state.Entries) >= batchSize {
+				return true
+			}
+			return false
+		},
+	}
 }
