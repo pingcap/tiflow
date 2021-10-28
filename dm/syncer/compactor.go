@@ -117,9 +117,7 @@ func (c *compactor) flushBuffer() {
 	for _, j := range c.buffer {
 		if j != nil {
 			// set safemode for all jobs by first job in buffer.
-			if c.safeMode {
-				j.dml.safeMode = true
-			}
+			j.dml.safeMode = c.safeMode
 			c.outCh <- j
 		}
 	}
@@ -149,11 +147,7 @@ func (c *compactor) compactJob(j *job) {
 	key := j.dml.identifyKey()
 	prevPos, ok := tableKeyMap[key]
 	// if no such key in the buffer, add it
-	if !ok || prevPos >= len(c.buffer) {
-		// should not happen, avoid panic
-		if ok {
-			c.logger.Error("cannot find previous job by key", zap.String("key", key), zap.Int("pos", prevPos))
-		}
+	if !ok {
 		tableKeyMap[key] = len(c.buffer)
 		c.buffer = append(c.buffer, j)
 		return
