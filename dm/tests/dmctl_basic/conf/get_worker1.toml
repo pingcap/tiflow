@@ -1,0 +1,14 @@
+name = "worker1"
+log-level = "debug"
+log-file = "/tmp/dm_test/dmctl_basic/worker1/log/dm-worker.log"
+log-format = "text"
+log-rotate = ""
+join = "http://127.0.0.1:8261"
+worker-addr = "0.0.0.0:8262"
+advertise-addr = "127.0.0.1:8262"
+config-file = "/tmp/dm_test/dmctl_basic/worker1/dm-worker.toml"
+keepalive-ttl = 60
+relay-keepalive-ttl = 1800
+ssl-ca = ""
+ssl-cert = ""
+ssl-key = ""

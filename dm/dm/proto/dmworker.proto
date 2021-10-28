@@ -1,0 +1,375 @@
+syntax = "proto3";
+
+package pb;
+
+
+service Worker {
+    rpc QueryStatus (QueryStatusRequest) returns (QueryStatusResponse) {}
+
+    // PurgeRelay purges relay log files for this dm-worker
+    rpc PurgeRelay (PurgeRelayRequest) returns (CommonWorkerResponse) {}
+
+    // Operate (get/set/remove) schema for a specified upstream table.
+    // a `set`/`remove` operation should be an one-time operation (only take effect once),
+    // so we use a gRPC method rather than a etcd operation now (no persistent operation state).
+    rpc OperateSchema(OperateWorkerSchemaRequest) returns(CommonWorkerResponse) {}
+
+    rpc OperateV1Meta(OperateV1MetaRequest) returns(OperateV1MetaResponse) {}
+
+    rpc HandleError(HandleWorkerErrorRequest) returns(CommonWorkerResponse) {}
+
+    rpc GetWorkerCfg(GetWorkerCfgRequest) returns(GetWorkerCfgResponse) {}
+}
+
+enum TaskOp {
+    InvalidOp = 0;  // placeholder
+    Stop = 1;
+    Pause = 2;
+    Resume = 3;
+    Start = 4;
+    Update = 5;
+    AutoResume = 6;
+}
+
+message QueryStatusRequest {
+    string name = 1; // sub task's name, empty for all sub tasks
+}
+
+message CommonWorkerResponse {
+    bool result = 1;
+    string msg = 2; // when result is true, msg is empty
+    string source = 3; // source ID, set by dm-master
+    string worker = 4; // worker name, set by dm-worker config
+}
+
+// QueryStatusResponse represents status response for query on a dm-worker
+// status: dm-worker's current sub tasks' status
+message QueryStatusResponse {
+    bool result = 1;
+    string msg = 2;
+    SourceStatus sourceStatus = 3;
+    repeated SubTaskStatus subTaskStatus = 4;
+}
+
+// Stage represents current stage for a (sub) task
+// a (sub) task should be always in one stage of the following stages
+// (sub) task can transfer from on stage to some special other stages
+// New: initial stage when a sub task is created
+//      can not be transferred from other stages
+//      transfers to Running when initialize with no error
+// Running: indicates the sub task is processing
+//          is transferred from New when created successfully
+//          is transferred from Paused when resuming is requested
+//          transfers to Paused when error occurred or requested from external
+//          transfers to Stopped when requested from external
+//          transfers to Finished when sub task processing completed (no Syncer used)
+// Paused: indicates the processing is paused, and can be resume from external request
+//         is transferred from Running when error occurred or requested from external
+//         transfers to Running when resuming is requested from external
+//         transfers to Stopped when requested from external
+// Stopped: indicates the processing is stopped, and can not be resume (or re-run) again
+//          is transferred from Running / Paused when requested from external
+//          can not transfer to any stages
+// Finished: indicates the processing is finished, and no need to re-run
+//           is transferred from Running when processing completed
+//           should not transfer to any stages
+enum Stage {
+    InvalidStage = 0; // placeholder
+    New = 1;
+    Running = 2;
+    Paused = 3;
+    Stopped = 4;
+    Finished = 5;
+
+    Pausing = 6;
+    Resuming = 7;
+    Stopping = 8;
+}
+
+// CheckStatus represents status for check unit
+// adds fields later
+message CheckStatus {
+    bool  passed = 1;
+    int32 total = 2;
+    int32 successful = 3;
+    int32 failed = 4;
+    int32 warning = 5;
+
+    bytes detail = 6;
+}
+
+// DumpStatus represents status for dump unit
+// add fields later
+message DumpStatus {
+}
+
+// LoadStatus represents status for load unit
+message LoadStatus {
+    int64 finishedBytes = 1;
+    int64 totalBytes = 2;
+    string progress = 3;
+    string metaBinlog = 4;
+    string metaBinlogGTID = 5;
+}
+
+// ShardingGroup represents a DDL sharding group, this is used by SyncStatus, and is differ from ShardingGroup in syncer pkg
+// target: target table name
+// DDL: in syncing DDL
+// firstPos: first DDL binlog pos for this group
+// synced: synced source tables
+// unsynced: unsynced source tables
+message ShardingGroup {
+    string target = 1;
+    repeated string DDLs = 2;
+    string firstLocation = 3;
+    repeated string synced = 4;
+    repeated string unsynced = 5;
+}
+
+// SyncStatus represents status for sync unit
+message SyncStatus {
+    int64 totalEvents = 1;
+    int64 totalTps = 2;
+    int64 recentTps = 3;
+    string masterBinlog = 4;
+    string masterBinlogGtid = 5;
+    string syncerBinlog = 6;
+    string syncerBinlogGtid = 7;
+    repeated string blockingDDLs = 8; // sharding DDL which current is blocking
+    repeated ShardingGroup unresolvedGroups = 9; // sharding groups which current are un-resolved
+    bool synced = 10;  // whether sync is catched-up in this moment
+    string binlogType = 11;
+    int64 secondsBehindMaster = 12; // sync unit delay seconds behind master.
+}
+
+// SourceStatus represents status for source runing on dm-worker
+message SourceStatus {
+    string source = 1; // sourceID, set by dm-master
+    string worker = 2; // bounded worker name for this source
+    ProcessResult result = 3;
+    RelayStatus relayStatus = 4;
+}
+
+// RelayStatus represents status for relay unit.
+message RelayStatus {
+    string masterBinlog = 1;
+    string masterBinlogGtid = 2;
+    string relaySubDir = 3;
+    string relayBinlog = 4;
+    string relayBinlogGtid = 5;
+    bool relayCatchUpMaster = 6;
+    Stage stage = 7;
+    ProcessResult result = 8;
+}
+
+// SubTaskStatus represents status for a sub task
+// name: sub task'name, when starting a sub task the name should be unique
+// stage: sub task's current stage
+// unit: sub task's current dm unit's UnitType
+// result: current unit's process result, when the stage is Running, no result
+// unresolvedDDLLockID: un-resolved sharding DDL lock ID (ref DDLLockInfo)
+//                      if needed, we can put this to SyncStatus
+// status: current unit's statistics
+//         for Load, includes total bytes, progress, etc.
+//         for Sync, includes TPS, binlog meta, etc.
+message SubTaskStatus {
+    string name = 1;
+    Stage stage = 2;
+    UnitType unit = 3;
+    ProcessResult result = 4;
+    string unresolvedDDLLockID = 5;
+    oneof status {
+        string msg = 6; // message when error occurred
+        CheckStatus check = 7;
+        DumpStatus dump = 8;
+        LoadStatus load = 9;
+        SyncStatus sync = 10;
+    }
+}
+
+// SubTaskStatusList used for internal jsonpb marshal
+message SubTaskStatusList {
+    repeated SubTaskStatus status = 1;
+}
+
+// CheckError represents error for check unit
+// adds fields later
+message CheckError {
+    string msg = 1;
+}
+
+// DumpError represents error for dump unit
+// add fields later
+message DumpError {
+    string msg = 1;
+}
+
+// LoadError represents error for load unit
+message LoadError {
+    string msg = 1;
+}
+
+// SyncSQLError represents a sql error in sync unit
+message SyncSQLError {
+    string msg = 1;
+    string failedBinlogPosition = 2;
+    string errorSQL = 3;
+}
+
+// SyncError represents error list for sync unit
+message SyncError {
+    repeated SyncSQLError errors = 1;
+}
+
+// SourceError represents error for start/stop source on dm-worker
+message SourceError {
+    string source = 1;
+    string worker = 2;
+    string SourceError = 3;
+    RelayError RelayError = 4; // RelayError represents error for relay unit.
+}
+
+// RelayError represents error for relay unit.
+message RelayError {
+    string msg = 1;
+}
+
+// SubTaskError represents error for a sub task during running
+// name: sub task'name, when starting a sub task the name should be unique
+// stage: sub task's current stage
+// unit: sub task's current dm unit's UnitType
+// error: current unit's error information
+//         for Sync, includes failed sql, failed sql pos in binlog, etc.
+message SubTaskError {
+    string name = 1;
+    Stage stage = 2;
+    UnitType unit = 3;
+    oneof error {
+        string msg = 4; // message when error occurred
+        CheckError check = 5;
+        DumpError dump = 6;
+        LoadError load = 7;
+        SyncError sync = 8;
+    }
+}
+
+// SubTaskErrorList used for internal jsonpb marshal
+message SubTaskErrorList {
+    repeated SubTaskError error = 1;
+}
+
+// UnitType represents the dm unit's type
+enum UnitType {
+    InvalidUnit = 0; // placeholder
+    Check = 1;
+    Dump = 2;
+    Load = 3;
+    Sync = 4;
+    Relay = 100; // relay is a special unit
+}
+
+// ProcessResult represents results produced by a dm unit
+// isCanceled: indicates whether the process is canceled from external
+//             when Stop or Pause is requested from external, isCanceled will be true
+// errors: includes all (potential) errors occured when processing
+message ProcessResult {
+    bool isCanceled = 1;
+    repeated ProcessError errors = 2;
+    bytes detail = 3;
+}
+
+// ProcessError is same as terror used in dm
+// NOTE: currently stack trace is not supported, `Message` is the `terror.Error.getMsg` result
+// and `RawCause` is the `Error` result of error from `terror.Error.Cause()`.
+message ProcessError {
+    int32 ErrCode = 1;
+    string ErrClass = 2;
+    string ErrScope = 3;
+    string ErrLevel = 4;
+    string Message = 5;
+    string RawCause = 6;
+    string Workaround = 7;
+}
+
+// RelayOp differs from TaskOp
+enum RelayOp {
+    InvalidRelayOp = 0;  // placeholder
+    StopRelay = 1;
+    PauseRelay = 2;
+    ResumeRelay = 3;
+}
+
+// PurgeRelayRequest represents a request to purge relay log files for this dm-worker
+// inactive: whether purge inactive relay log files
+// time: whether purge relay log files before this time, the number of seconds elapsed since January 1, 1970 UTC
+// filename: whether purge relay log files before this filename
+// subDir: specify relay sub directory for @filename
+message PurgeRelayRequest {
+    bool inactive = 1;
+    int64 time = 2;
+    string filename = 3;
+    string subDir = 4;
+}
+
+enum SchemaOp {
+    InvalidSchemaOp = 0;
+    GetSchema = 1;
+    SetSchema = 2;
+    RemoveSchema = 3;
+}
+
+message OperateWorkerSchemaRequest {
+    SchemaOp op = 1; // operation type
+    string task = 2; // task name
+    string source = 3; // source ID
+    string database = 4; // database name
+    string table = 5; // table name
+    string schema = 6; // schema content, a `CREATE TABLE` statement
+    bool flush = 7; // flush table info and checkpoint
+    bool sync = 8; // sync the table info to master
+}
+
+// copied `TaskMeta` from release-1.0 branch.
+message V1SubTaskMeta {
+    TaskOp op = 1;
+    Stage stage = 2; // the stage of sub-task after we apply some operations
+    string name = 3; // sub task's name
+    bytes task = 4; // (sub) task's configuration
+}
+
+enum V1MetaOp {
+    InvalidV1MetaOp = 0;
+    GetV1Meta = 1;
+    RemoveV1Meta = 2;
+}
+
+message OperateV1MetaRequest {
+    V1MetaOp op = 1;
+}
+
+message OperateV1MetaResponse {
+    bool result = 1;
+    string msg = 2; // error message if failed.
+    map<string, V1SubTaskMeta> meta = 3; // subtasks' meta for `get` operation.
+}
+
+enum ErrorOp {
+    InvalidErrorOp = 0;
+    Skip = 1; // skip the error event
+    Replace = 2; // replace the error event with a specified SQL
+    Revert = 3; // remove the error operator
+}
+
+message HandleWorkerErrorRequest {
+    ErrorOp op = 1; // operation type
+    string task = 2; // task name
+    string binlogPos = 3; // binlog-pos (that's file:pos format)
+    repeated string sqls = 4; // sqls (use for replace)
+}
+
+message GetWorkerCfgRequest {
+}
+
+message GetWorkerCfgResponse {
+    string cfg = 1;
+}

@@ -1,0 +1,44 @@
+# diff Configuration.
+
+log-level = "info"
+
+chunk-size = 20
+
+check-thread-count = 4
+
+sample-percent = 100
+
+use-checksum = true
+
+use-checkpoint = false
+
+fix-sql-file = "fix.sql"
+
+# tables need to check.
+[[check-tables]]
+schema = "print_status"
+tables = ["~t.*"]
+
+[[table-config]]
+schema = "print_status"
+table = "t_1"
+# currently ignore check float and timestamp field
+ignore-columns = ["c5", "c9", "c11", "c15"]
+
+[[table-config.source-tables]]
+instance-id = "source-1"
+schema = "print_status"
+table  = "t_1"
+
+[[source-db]]
+host = "127.0.0.1"
+port = 3306
+user = "root"
+password = "123456"
+instance-id = "source-1"
+
+[target-db]
+host = "127.0.0.1"
+port = 4000
+user = "test"
+password = "123456"

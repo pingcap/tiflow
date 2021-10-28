@@ -1,0 +1,6 @@
+#!/bin/bash
+# parameter 1: trace server port
+
+set -eu
+
+curl -s -d {} "http://127.0.0.1:$1/events/truncate"

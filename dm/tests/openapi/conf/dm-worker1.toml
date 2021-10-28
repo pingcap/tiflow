@@ -1,0 +1,3 @@
+name = "worker1"
+join = "127.0.0.1:8261"
+keepalive-ttl = 10

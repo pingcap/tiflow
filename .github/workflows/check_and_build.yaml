@@ -44,18 +44,40 @@ jobs:
       with:
         go-version: '1.16.4'
 
-    - name: Cache Lint Tools
-      id: cache-lint-tools
+    - name: Cache Tools
+      id: cache-tools
       uses: actions/cache@v2
       with:
         path: tools/bin
-        # See: https://docs.github.com/en/actions/advanced-guides/caching-dependencies-to-speed-up-workflows
-        # We compile tools from tools/check/go.mod, and also download some tools directly from the Makefile.
-        # So we have to calculate hash for both files here.
-        key: ${{ runner.os }}-cdc-lint-tools-${{ hashFiles('tools/check/go.sum') }}-${{ hashFiles('Makefile') }}
-
+        key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
     - name: Check
       run: make check
 
     - name: Build
       run: make build
+
+  arm_build:
+    if: ${{ github.ref != 'refs/heads/master' }}
+    runs-on: ubuntu-latest
+    name: Make Build
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [aarch64]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: build on ${{ matrix.arch }}
+        uses: uraimo/run-on-arch-action@v2.0.5
+        with:
+          arch: ${{ matrix.arch }}
+          distro: ubuntu20.04
+          # Not required, but speeds up builds
+          githubToken: ${{ github.token }}
+          run: |
+            apt update -y && apt install -y make gnupg ca-certificates gcc git
+            echo 'deb http://ppa.launchpad.net/longsleep/golang-backports/ubuntu focal main' > /etc/apt/sources.list
+            apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys F6BC817356A3D45E
+            apt update -y && apt install -y golang-go
+            make build

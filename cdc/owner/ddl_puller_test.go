@@ -31,8 +31,7 @@ import (
 
 var _ = check.Suite(&ddlPullerSuite{})
 
-type ddlPullerSuite struct {
-}
+type ddlPullerSuite struct{}
 
 type mockPuller struct {
 	c          *check.C

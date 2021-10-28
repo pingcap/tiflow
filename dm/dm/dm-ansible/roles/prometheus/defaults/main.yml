@@ -1,0 +1,11 @@
+---
+
+# default configuration for prometheus
+prometheus_data_dir: "{{ deploy_dir }}/prometheus.data.metrics"
+
+prometheus_log_level: info
+prometheus_log_dir: "{{ deploy_dir }}/log"
+prometheus_log_filename: "prometheus.log"
+
+prometheus_extra_labels:
+  - { label: "monitor", value: "prometheus" }

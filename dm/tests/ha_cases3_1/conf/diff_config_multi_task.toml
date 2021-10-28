@@ -1,0 +1,56 @@
+# diff Configuration.
+
+log-level = "info"
+
+chunk-size = 1000
+
+check-thread-count = 4
+
+sample-percent = 100
+
+use-checksum = true
+
+fix-sql-file = "fix.sql"
+
+# tables need to check.
+[[check-tables]]
+schema = "ha_test2"
+tables = ["ta", "tb"]
+
+[[table-config]]
+schema = "ha_test2"
+table = "ta"
+
+    [[table-config.source-tables]]
+    instance-id = "source-1"
+    schema = "ha_test2"
+    table  = "ta"
+
+[[table-config]]
+schema = "ha_test2"
+table = "tb"
+
+    [[table-config.source-tables]]
+        instance-id = "source-2"
+        schema = "ha_test2"
+        table  = "tb"
+
+[[source-db]]
+    host = "127.0.0.1"
+    port = 3306
+    user = "root"
+    password = "123456"
+    instance-id = "source-1"
+
+[[source-db]]
+    host = "127.0.0.1"
+    port = 3307
+    user = "root"
+    password = "123456"
+    instance-id = "source-2"
+
+[target-db]
+    host = "127.0.0.1"
+    port = 4000
+    user = "test"
+    password = "123456"

@@ -59,6 +59,12 @@ func (s *Server) startStatusHTTP() error {
 	prometheus.DefaultGatherer = registry
 	router.Any("/metrics", gin.WrapH(promhttp.Handler()))
 
+	err := conf.Security.AddSelfCommonName()
+	if err != nil {
+		log.Error("status server set tls config failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+  
 	tlsConfig, err := conf.Security.ToTLSConfigWithVerify()
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))

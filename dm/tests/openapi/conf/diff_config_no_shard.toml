@@ -1,0 +1,56 @@
+# diff Configuration.
+
+log-level = "info"
+
+chunk-size = 10
+
+check-thread-count = 4
+
+sample-percent = 100
+
+use-checksum = true
+
+fix-sql-file = "fix.sql"
+
+# tables need to check.
+[[check-tables]]
+schema = "openapi"
+tables = ["~^.*"]
+
+[[table-config]]
+schema = "openapi"
+table = "t1"
+
+[[table-config.source-tables]]
+instance-id = "source-1"
+schema = "openapi"
+table = "t1"
+
+[[table-config]]
+schema = "openapi"
+table = "t2"
+
+[[table-config.source-tables]]
+instance-id = "source-2"
+schema = "openapi"
+table = "t2"
+
+[[source-db]]
+host = "127.0.0.1"
+instance-id = "source-1"
+password = "123456"
+port = 3306
+user = "root"
+
+[[source-db]]
+host = "127.0.0.1"
+instance-id = "source-2"
+password = "123456"
+port = 3307
+user = "root"
+
+[target-db]
+host = "127.0.0.1"
+password = ""
+port = 4000
+user = "root"

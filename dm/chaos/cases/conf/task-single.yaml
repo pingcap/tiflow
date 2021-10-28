@@ -1,0 +1,21 @@
+---
+name: "task_single"
+task-mode: all
+
+target-database:
+  host: "tidb-0.tidb"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  -
+    source-id: "replica-01"
+    black-white-list:  "instance"
+    mydumper-thread: 4
+    loader-thread: 16
+    syncer-thread: 16
+
+black-white-list:
+  instance:
+    do-dbs: ["db_single"]

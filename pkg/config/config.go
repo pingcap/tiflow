@@ -32,6 +32,9 @@ import (
 const (
 	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
 	DefaultSortDir = "/tmp/sorter"
+
+	// DefaultRedoDir is the sub directory path of data-dir.
+	DefaultRedoDir = "/redo"
 )
 
 func init() {
@@ -58,21 +61,29 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Tp:          "table-number",
 		PollingTime: -1,
 	},
+	Consistent: &ConsistentConfig{
+		Level:             "normal",
+		MaxLogSize:        64,
+		FlushIntervalInMs: 1000,
+		Storage:           "local",
+		S3URI:             "",
+	},
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	CaseSensitive    bool             `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue   bool             `toml:"enable-old-value" json:"enable-old-value"`
-	ForceReplicate   bool             `toml:"force-replicate" json:"force-replicate"`
-	CheckGCSafePoint bool             `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
-	Filter           *FilterConfig    `toml:"filter" json:"filter"`
-	Mounter          *MounterConfig   `toml:"mounter" json:"mounter"`
-	Sink             *SinkConfig      `toml:"sink" json:"sink"`
-	Cyclic           *CyclicConfig    `toml:"cyclic-replication" json:"cyclic-replication"`
-	Scheduler        *SchedulerConfig `toml:"scheduler" json:"scheduler"`
+	CaseSensitive    bool              `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue   bool              `toml:"enable-old-value" json:"enable-old-value"`
+	ForceReplicate   bool              `toml:"force-replicate" json:"force-replicate"`
+	CheckGCSafePoint bool              `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+	Filter           *FilterConfig     `toml:"filter" json:"filter"`
+	Mounter          *MounterConfig    `toml:"mounter" json:"mounter"`
+	Sink             *SinkConfig       `toml:"sink" json:"sink"`
+	Cyclic           *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
+	Scheduler        *SchedulerConfig  `toml:"scheduler" json:"scheduler"`
+	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig

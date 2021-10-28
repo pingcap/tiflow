@@ -1,0 +1,174 @@
+---
+name: test
+task-mode: all
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    black-white-list: "instance"
+    expression-filters:
+      - "c_null"
+      - "bit"
+      - "tinyint"
+      - "smallint"
+      - "mediumint"
+      - "int"
+      - "bigint"
+      - "decimal"
+      - "float"
+      - "double"
+      - "date"
+      - "datetime"
+      - "timestamp"
+      - "time"
+      - "year"
+      - "char"
+      - "varchar"
+      - "binary"
+      - "varbinary"
+      - "tinyblob"
+      - "tinytext"
+      - "blob"
+      - "text"
+      - "mediumblob"
+      - "mediumtext"
+      - "longblob"
+      - "longtext"
+      - "enum"
+      - "set"
+      - "json"
+
+expression-filter:
+  c_null:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_null IS NOT NULL"
+
+  bit:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_bit = b'1111'"
+  tinyint:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_tinyint >= 25"
+  smallint:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_smallint >= 25"
+  mediumint:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_mediumint >= 25"
+  int:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_int >= 25"
+  bigint:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_bigint >= 25"
+  decimal:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_decimal >= 25"
+  float:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_float >= 25"
+  double:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_double >= 25"
+
+  date:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_date = '2021-06-22'"
+  datetime:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_datetime = '2021-01-01 12:34:56.789'"
+  timestamp:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_timestamp = '2021-01-01 12:34:56.5678+08:00'"
+  time:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_time = '-838:58:50.12345'"
+  year:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_year = '2021'"
+
+  char:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_char = '2234'"
+  varchar:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_varchar = '4234'"
+  binary:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_binary = 'b'"
+  varbinary:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_varbinary = 'd'"
+  tinyblob:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_tinyblob = 'b'"
+  tinytext:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_tinytext = 'd'"
+  blob:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_blob = 'asdf'"
+  text:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_text = 'asd'"
+  mediumblob:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_mediumblob = 'asdf'"
+  mediumtext:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_mediumtext = 'asdf'"
+  longblob:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_longblob = 'asdf'"
+  longtext:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_longtext = 'asdf'"
+  enum:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_enum = 'b'"
+  set:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_set = 'b,c'"
+
+  json:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: 'c_json->"$.id" = 2'
+
+black-white-list: # compatible with deprecated config
+  instance:
+    do-dbs: ["expr_filter"]

@@ -1,0 +1,31 @@
+enable-gtid: true
+auto-fix-gtid: false
+relay-dir: relay-dir
+meta-dir: ""
+flavor: mysql
+charset: ""
+enable-relay: true
+relay-binlog-name: ""
+relay-binlog-gtid: ""
+source-id: mysql-replica-01
+from:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  max-allowed-packet: null
+  session: {}
+  security: null
+purge:
+  interval: 3600
+  expires: 0
+  remain-space: 15
+checker:
+  check-enable: false
+  backoff-rollback: 5m0s
+  backoff-max: 5m0s
+  check-interval: 5s
+  backoff-min: 1s
+  backoff-jitter: true
+  backoff-factor: 2
+server-id: 123456
+tracer: {}

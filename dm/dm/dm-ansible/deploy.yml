@@ -1,0 +1,70 @@
+---
+
+# The Playbook of DM
+
+- name: check config locally
+  hosts: localhost
+  any_errors_fatal: true
+  tags:
+    - always
+  roles:
+    - check_config_static
+
+- name: initializing system config
+  hosts: all
+  gather_facts: false
+  become: true
+  roles:
+    - bootstrap
+
+- name: deploying prometheus
+  hosts: prometheus_servers
+  tags:
+    - prometheus
+  roles:
+    - prometheus
+
+- name: deploying grafana
+  hosts: grafana_servers
+  tags:
+    - grafana
+  roles:
+    - grafana
+
+- name: deploying alertmanager
+  hosts: alertmanager_servers
+  tags:
+    - alertmanager
+  roles:
+    - alertmanager
+
+- name: deploying dm-worker
+  hosts: dm_worker_servers
+  any_errors_fatal: true
+  tags:
+    - dm-worker
+  roles:
+    - dm-worker
+
+- name: deploying dm-master
+  hosts: dm_master_servers
+  any_errors_fatal: true
+  tags:
+    - dm-master
+  roles:
+    - dm-master
+
+- name: deploying dmctl
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - dmctl
+
+- name: deploying dm-portal
+  hosts: dm_portal_servers
+  any_errors_fatal: true
+  tags:
+    - dm-portal
+  roles:
+    - dm-portal

@@ -1,0 +1,5 @@
+---
+
+dependencies:
+  - { role: 'common_dir', when: 'grafana_exec_vars_only == false' }
+

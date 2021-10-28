@@ -1,0 +1,8 @@
+---
+
+- name: create dm-worker systemd service
+  include_role:
+    name: systemd
+  vars:
+    this_role_name: dm-worker
+    service_name: dm-worker-{{ dm_worker_port }}
