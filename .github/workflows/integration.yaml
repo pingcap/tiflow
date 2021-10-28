@@ -65,12 +65,6 @@ jobs:
         if: ${{ failure() }}
         run: docker-compose -f docker-compose-avro.yml logs -t
 
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: logs
-          path: ${{ github.workspace }}/docker/logs/*
-
       - name: Clean Up
         if: ${{ always() }}
         run: |
@@ -126,12 +120,6 @@ jobs:
       - name: Try to dump container logs
         if: ${{ failure() }}
         run: docker-compose -f docker-compose-avro.yml logs -t
-
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: logs
-          path: ${{ github.workspace }}/docker/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
@@ -189,12 +177,6 @@ jobs:
         if: ${{ failure() }}
         run: docker-compose -f docker-compose-canal.yml logs -t
 
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: logs
-          path: ${{ github.workspace }}/docker/logs/*
-
       - name: Clean Up
         if: ${{ always() }}
         run: |
@@ -251,12 +233,6 @@ jobs:
         if: ${{ failure() }}
         run: docker-compose -f docker-compose-canal.yml logs -t
 
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: logs
-          path: ${{ github.workspace }}/docker/logs/*
-
       - name: Clean Up
         if: ${{ always() }}
         run: |
@@ -312,12 +288,6 @@ jobs:
       - name: Try to dump container logs
         if: ${{ failure() }}
         run: docker-compose -f docker-compose-avro.yml logs -t
-
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: logs
-          path: ${{ github.workspace }}/docker/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
