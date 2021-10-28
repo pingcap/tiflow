@@ -130,7 +130,7 @@ type ManagerImpl struct {
 
 // NewManager creates a new Manager
 func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *ManagerOptions) (*ManagerImpl, error) {
-	// return a nil Manager if no consistent config or normal consistent level
+	// return a disabled Manager if no consistent config or normal consistent level
 	if cfg == nil || consistentLevelType(cfg.Level) == consistentLevelNormal {
 		return &ManagerImpl{enabled: false}, nil
 	}
