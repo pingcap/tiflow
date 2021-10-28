@@ -66,6 +66,8 @@ func TestConsistentConfig(t *testing.T) {
 	}
 }
 
+// TestLogManagerInProcessor tests how redo log manager is used in processor,
+// where the redo log manager needs to handle DMLs and redo log meta data
 func TestLogManagerInProcessor(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -153,8 +155,13 @@ func TestLogManagerInProcessor(t *testing.T) {
 		require.Nil(t, err)
 	}
 	checkResovledTs(logMgr, flushResolvedTs)
+
+	err = logMgr.FlushResolvedAndCheckpointTs(ctx, 200 /*resolvedTs*/, 120 /*CheckPointTs*/)
+	require.Nil(t, err)
 }
 
+// TestLogManagerInOwner tests how redo log manager is used in owner,
+// where the redo log manager needs to handle DDL event only.
 func TestLogManagerInOwner(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -172,8 +179,5 @@ func TestLogManagerInOwner(t *testing.T) {
 
 	ddl := &model.DDLEvent{StartTs: 100, CommitTs: 120, Query: "CREATE TABLE `TEST.T1`"}
 	err = logMgr.EmitDDLEvent(ctx, ddl)
-	require.Nil(t, err)
-
-	err = logMgr.FlushResolvedAndCheckpointTs(ctx, 130 /*resolvedTs*/, 120 /*CheckPointTs*/)
 	require.Nil(t, err)
 }
