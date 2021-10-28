@@ -190,7 +190,7 @@ func (m *ManagerImpl) Enabled() bool {
 }
 
 // EmitRowChangedEvents sends row changed events to a log buffer, the log buffer
-// will be consumed by a background goroutine, which convers row chagned events
+// will be consumed by a background goroutine, which converts row chagned events
 // to redo logs and sends to log writer. Note this function is non-blocking if
 // the channel is not full, otherwise if the channel is always full after timeout,
 // error ErrBufferLogTimeout will be returned.
