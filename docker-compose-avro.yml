@@ -139,6 +139,7 @@ services:
       - --config=/tikv.toml
       - --log-file=/logs/upstream-tikv0.log
       - --log-level=debug
+      - --log-rotation-size=500MB
     depends_on:
       - "upstream-pd"
     restart: on-failure
@@ -157,6 +158,7 @@ services:
       - --config=/tikv.toml
       - --log-file=/logs/upstream-tikv1.log
       - --log-level=debug
+      - --log-rotation-size=500MB
     depends_on:
       - "upstream-pd"
     restart: on-failure
@@ -175,6 +177,7 @@ services:
       - --config=/tikv.toml
       - --log-file=/logs/upstream-tikv2.log
       - --log-level=debug
+      - --log-rotation-size=500MB
     depends_on:
       - "upstream-pd"
     restart: on-failure
