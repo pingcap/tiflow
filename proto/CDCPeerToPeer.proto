@@ -1,0 +1,53 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package p2p;
+
+option optimize_for = SPEED;
+
+service CDCPeerToPeer {
+  rpc SendMessage(stream MessagePacket) returns (stream SendMessageResponse);
+}
+
+message MessageEntry {
+  string topic = 1;
+  bytes content = 2;
+  int64 sequence = 3;
+}
+
+message MessagePacket {
+  repeated MessageEntry entries = 1;
+}
+
+message Ack {
+  string topic = 1;
+  int64 last_seq = 2;
+}
+
+enum ExitReason {
+  NONE = 0;
+  CONGESTED = 1;
+  CAPTURE_SUICIDE = 2;
+  STALE_CONNECTION = 3;
+  DUPLICATE_CONNECTION = 4;
+  CAPTURE_ID_MISMATCH = 5;
+  OTHER = 100;
+}
+
+message SendMessageResponse {
+  repeated Ack ack = 1;
+  ExitReason exit_reason = 2;
+  string error_message = 3;
+}

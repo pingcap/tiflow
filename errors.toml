@@ -606,6 +606,11 @@ error = '''
 etcd api call error
 '''
 
+["CDC:ErrPeerMessageIllegalMeta"]
+error = '''
+peer-to-peer message server received an RPC call with illegal metadata
+'''
+
 ["CDC:ErrPendingRegionCancel"]
 error = '''
 pending region cancelled due to stream disconnecting
