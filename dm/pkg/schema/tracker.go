@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pingcap/errors"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	dterror "github.com/pingcap/ticdc/dm/pkg/terror"
@@ -28,6 +27,7 @@ import (
 	tidbConfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
+	"github.com/pingcap/tidb/errors"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser"
