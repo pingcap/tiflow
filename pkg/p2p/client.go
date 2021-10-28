@@ -168,13 +168,6 @@ func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverI
 			continue
 		}
 
-		if err != nil {
-			cancelStream()
-			_ = conn.Close()
-			log.Warn("send metadata to peer failed, retrying", zap.Error(err))
-			continue
-		}
-
 		if err := c.run(ctx, clientStream, cancelStream); err != nil {
 			cancelStream()
 			_ = conn.Close()
