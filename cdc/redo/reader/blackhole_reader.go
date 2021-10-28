@@ -46,3 +46,8 @@ func (br *BlackHoleReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents ui
 func (br *BlackHoleReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
 	return 0, 1, nil
 }
+
+// Close implement the Close interface
+func (br *BlackHoleReader) Close() error {
+	return nil
+}
