@@ -201,12 +201,13 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 	tableID model.TableID,
 	rows ...*model.RowChangedEvent,
 ) error {
+	timer := time.NewTimer(logBufferTimeout)
+	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return nil
-	case <-time.After(logBufferTimeout):
+	case <-timer.C:
 		return cerror.ErrBufferLogTimeout.GenWithStackByArgs()
-
 	case m.logBuffer <- cacheRows{
 		tableID: tableID,
 		rows:    rows,
