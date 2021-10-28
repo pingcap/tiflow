@@ -57,7 +57,7 @@ jobs:
         with:
           args: "upgrade job failed, see https://github.com/pingcap/ticdc/actions/runs/{{ GITHUB_RUN_ID }}"
 
-       Debug via SSH if previous steps failed
+      # Debug via SSH if previous steps failed
       - name: Set up tmate session
         if: ${{ failure() }}
         uses: mxschmitt/action-tmate@v3
