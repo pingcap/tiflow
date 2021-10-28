@@ -112,7 +112,15 @@ kafka_consumer:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl tools/bin/go-junit-report tools/bin/gocov tools/bin/gocov-xml
+unit_test: check_failpoint_ctl
+	mkdir -p "$(TEST_DIR)"
+	$(FAILPOINT_ENABLE)
+	@export log_level=error;\
+	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES_WITHOUT_DM) \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+
+unit_test_in_verify_ci: check_failpoint_ctl tools/bin/go-junit-report tools/bin/gocov tools/bin/gocov-xml
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -258,7 +266,15 @@ dm_generate_openapi: tools/bin/oapi-codegen
 	cd dm && ../tools/bin/oapi-codegen --config=openapi/spec/server-gen-cfg.yaml openapi/spec/dm.yaml
 	cd dm && ../tools/bin/oapi-codegen --config=openapi/spec/types-gen-cfg.yaml openapi/spec/dm.yaml
 
-dm_unit_test: check_failpoint_ctl tools/bin/go-junit-report tools/bin/gocov tools/bin/gocov-xml
+dm_unit_test: check_failpoint_ctl
+	mkdir -p $(DM_TEST_DIR)
+	$(FAILPOINT_ENABLE)
+	@export log_level=error; \
+	$(GOTEST) -timeout 5m -covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(DM_PACKAGES) \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+
+dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/go-junit-report tools/bin/gocov tools/bin/gocov-xml
 	mkdir -p $(DM_TEST_DIR)
 	$(FAILPOINT_ENABLE)
 	@export log_level=error; \
