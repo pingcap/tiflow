@@ -97,7 +97,7 @@ func newServerWrapperForTesting(t *testing.T) (server *ServerWrapper, newClient 
 }
 
 func TestServerWrapperBasics(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
 	serverWrapper, newClient, cancelServer := newServerWrapperForTesting(t)
