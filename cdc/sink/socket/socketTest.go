@@ -364,6 +364,10 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()))
 	sendBatchRowsArr.Write(lengthArr)
 	sendBatchRowsArr.Write(verifyArr)
+	//增加行数
+	sendBatchRowsArr.Write(publicUtils.IntegerToBytes(len(rowInfos)))
+
+
 	sendBatchRowsArr.Write(buffer.Bytes())
 	fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
 

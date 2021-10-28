@@ -179,6 +179,7 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 		columnVo := new(vo.ColumnVo)
 
 		columnVo.ColumnName = column.Name
+		//columnVo.ColumnValue = model.ColumnValueString(column.Value)
 		columnVo.ColumnValue = model.ColumnValueString(column.Value)
 		columnVo.IsPkFlag = column.Flag.IsPrimaryKey()
 		columnVo.CFlag = colFlag
