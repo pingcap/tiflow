@@ -87,6 +87,7 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 	if len(rows) == 0 {
 		return nil
 	} else {
+		rowInfos := make([]*vo.RowInfos, 0);
 
 		for _, row := range rows {
 			log.Info("show::::::::::::::::::::::::::::: row", zap.Any("row", row))
@@ -107,7 +108,6 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 			schemaName = row.Table.Schema
 			tableName = row.Table.Table
 
-			rowInfos := make([]*vo.RowInfos, 0);
 
 			rowdata := new(vo.RowInfos)
 
@@ -152,15 +152,16 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 			rowdata.ColumnList = columnInfos
 			rowdata.OperType = eventTypeValue
 			rowInfos = append(rowInfos,rowdata)
-			//send
-			socket.JddmClient(b.sinkURI.Host,rowInfos)
-			//socket.JddmClient("127.0.0.1:9889",rowInfos)
+
 
 
 		}
+		//send
+		socket.JddmClient(b.sinkURI.Host,rowInfos)
 	}
 
 
+	//socket.JddmClient("127.0.0.1:9889",rowInfos)
 
 
 	rowsCount := len(rows)

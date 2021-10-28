@@ -361,15 +361,17 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 
 		fmt.Printf(" allColumnArrByRow[%d]Arr %s \n",len(buffer.Bytes()),publicUtils.BytestoHex(buffer.Bytes()))
 	}
-	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()))
+	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes())+4)
 	sendBatchRowsArr.Write(lengthArr)
 	sendBatchRowsArr.Write(verifyArr)
 	//增加行数
 	sendBatchRowsArr.Write(publicUtils.IntegerToBytes(len(rowInfos)))
-
+	fmt.Printf(" rowCount = %d\n", len(rowInfos))
 
 	sendBatchRowsArr.Write(buffer.Bytes())
-	fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
+	//fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
+	fmt.Printf(" allColumnArrByRow[%d]Arr %s \n",len(buffer.Bytes()),publicUtils.BytestoHex(buffer.Bytes()))
+
 
 
 	return sendBatchRowsArr.Bytes()
