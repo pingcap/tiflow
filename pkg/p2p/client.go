@@ -244,8 +244,11 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 				log.Panic("topic not found. Report a bug", zap.String("topic", msg.Topic))
 			}
 
-			if old := atomic.SwapInt64(&tpk.lastSent, msg.Sequence); old != 0 && msg.Sequence > old+1 {
-				log.Panic("seq is skipped, bug?", zap.String("topic", msg.Topic), zap.Int64("seq", msg.Sequence))
+			// We want to assert that `msg.Sequence` is continuous within a topic.
+			if old := atomic.SwapInt64(&tpk.lastSent, msg.Sequence); old != 0 && msg.Sequence != old+1 {
+				log.Panic("unexpected seq of message",
+					zap.String("topic", msg.Topic),
+					zap.Int64("seq", msg.Sequence))
 			}
 
 			tpk.sentMessageMu.Lock()
