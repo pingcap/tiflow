@@ -745,8 +745,8 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 	param2.batchReplaceEnabled = false
 	param2.maxTxnRow = 1
 	c.Assert(param1, check.DeepEquals, &sinkParams{
-		workerCount:         defaultWorkerCount,
-		maxTxnRow:           defaultMaxTxnRow,
+		workerCount:         DefaultWorkerCount,
+		maxTxnRow:           DefaultMaxTxnRow,
 		tidbTxnMode:         defaultTiDBTxnMode,
 		batchReplaceEnabled: defaultBatchReplaceEnabled,
 		batchReplaceSize:    defaultBatchReplaceSize,
@@ -757,7 +757,7 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 	})
 	c.Assert(param2, check.DeepEquals, &sinkParams{
 		changefeedID:        "123",
-		workerCount:         defaultWorkerCount,
+		workerCount:         DefaultWorkerCount,
 		maxTxnRow:           1,
 		tidbTxnMode:         defaultTiDBTxnMode,
 		batchReplaceEnabled: false,

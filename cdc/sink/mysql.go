@@ -51,8 +51,10 @@ import (
 )
 
 const (
-	defaultWorkerCount         = 16
-	defaultMaxTxnRow           = 256
+	// expose these two variables for redo log applier
+	DefaultWorkerCount = 16
+	DefaultMaxTxnRow   = 256
+
 	defaultDMLMaxRetryTime     = 8
 	defaultDDLMaxRetryTime     = 20
 	defaultTiDBTxnMode         = "optimistic"
@@ -314,8 +316,8 @@ func (s *sinkParams) Clone() *sinkParams {
 }
 
 var defaultParams = &sinkParams{
-	workerCount:         defaultWorkerCount,
-	maxTxnRow:           defaultMaxTxnRow,
+	workerCount:         DefaultWorkerCount,
+	maxTxnRow:           DefaultMaxTxnRow,
 	tidbTxnMode:         defaultTiDBTxnMode,
 	batchReplaceEnabled: defaultBatchReplaceEnabled,
 	batchReplaceSize:    defaultBatchReplaceSize,

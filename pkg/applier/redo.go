@@ -32,10 +32,8 @@ import (
 
 const (
 	applierChangefeed = "redo-applier"
-	// use the same value as defaultMaxTxnRow in MySQL sink
-	emitBatch = 256
-	// use defaultWorkerCount(16) * defaultMaxTxnRow(256) in MySQL sink
-	readBatch = 16 * 256
+	emitBatch         = sink.DefaultMaxTxnRow
+	readBatch         = sink.DefaultWorkerCount * emitBatch
 )
 
 var errApplyFinished = errors.New("apply finished, can exit safely")
