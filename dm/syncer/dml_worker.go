@@ -32,13 +32,14 @@ import (
 
 // DMLWorker is used to sync dml.
 type DMLWorker struct {
-	batch       int
-	workerCount int
-	chanSize    int
-	toDBConns   []*dbconn.DBConn
-	tctx        *tcontext.Context
-	wg          sync.WaitGroup // counts conflict/flush jobs in all DML job channels.
-	logger      log.Logger
+	batch        int
+	workerCount  int
+	chanSize     int
+	multipleRows bool
+	toDBConns    []*dbconn.DBConn
+	tctx         *tcontext.Context
+	wg           sync.WaitGroup // counts conflict/flush jobs in all DML job channels.
+	logger       log.Logger
 
 	// for metrics
 	task   string
@@ -67,6 +68,7 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		batch:        syncer.cfg.Batch,
 		workerCount:  syncer.cfg.WorkerCount,
 		chanSize:     chanSize,
+		multipleRows: syncer.cfg.MultipleRows,
 		task:         syncer.cfg.Name,
 		source:       syncer.cfg.SourceID,
 		worker:       syncer.cfg.WorkerName,
@@ -218,13 +220,11 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		}
 	})
 
-	queries := make([]string, 0, len(jobs))
-	args := make([][]interface{}, 0, len(jobs))
+	dmls := make([]*DML, 0, len(jobs))
 	for _, j := range jobs {
-		query, arg := j.dml.genSQL()
-		queries = append(queries, query...)
-		args = append(args, arg...)
+		dmls = append(dmls, j.dml)
 	}
+	queries, args := w.genDMLs(dmls)
 	failpoint.Inject("WaitUserCancel", func(v failpoint.Value) {
 		t := v.(int)
 		time.Sleep(time.Duration(t) * time.Second)
@@ -239,4 +239,20 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 			affect, err = 0, terror.ErrDBExecuteFailed.Delegate(errors.New("SafeModeExit"), "mock")
 		}
 	})
+}
+
+// genDMLs generate DMLs in single row mode or multiple rows mode.
+func (w *DMLWorker) genDMLs(dmls []*DML) ([]string, [][]interface{}) {
+	if w.multipleRows {
+		return genDMLsWithSameOp(dmls)
+	}
+
+	queries := make([]string, 0, len(dmls))
+	args := make([][]interface{}, 0, len(dmls))
+	for _, dml := range dmls {
+		query, arg := dml.genSQL()
+		queries = append(queries, query...)
+		args = append(args, arg...)
+	}
+	return queries, args
 }

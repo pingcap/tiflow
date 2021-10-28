@@ -30,6 +30,29 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
+type dmlOp int64
+
+const (
+	insertDML                  = dmlOp(insert)
+	updateDML                  = dmlOp(update)
+	deleteDML                  = dmlOp(del)
+	insertOnDuplicateDML dmlOp = iota + 1
+)
+
+func (op dmlOp) String() (str string) {
+	switch op {
+	case insertDML:
+		return "insert"
+	case updateDML:
+		return "update"
+	case deleteDML:
+		return "delete"
+	case insertOnDuplicateDML:
+		return "insert on duplicate update"
+	}
+	return
+}
+
 // genDMLParam stores pruned columns, data as well as the original columns, data, index.
 type genDMLParam struct {
 	targetTableID   string              // as a key in map like `schema`.`table`
@@ -734,7 +757,7 @@ func (dml *DML) genDeleteSQL() ([]string, [][]interface{}) {
 // if in safemode, generates a `INSERT ON DUPLICATE UPDATE` statement.
 func (dml *DML) genInsertSQL() ([]string, [][]interface{}) {
 	var buf strings.Builder
-	buf.Grow(256)
+	buf.Grow(1024)
 	buf.WriteString("INSERT INTO ")
 	buf.WriteString(dml.targetTableID)
 	buf.WriteString(" (")
@@ -766,4 +789,260 @@ func (dml *DML) genInsertSQL() ([]string, [][]interface{}) {
 		}
 	}
 	return []string{buf.String()}, [][]interface{}{dml.values}
+}
+
+// valuesHolder gens values holder like (?,?,?).
+func valuesHolder(n int) string {
+	builder := new(strings.Builder)
+	builder.WriteByte('(')
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			builder.WriteString(",")
+		}
+		builder.WriteString("?")
+	}
+	builder.WriteByte(')')
+	return builder.String()
+}
+
+// genInsertOnDuplicateSQLMultipleRows generates a `INSERT` with multiple rows like 'INSERT INTO tb(a,b) VALUES (1,1),(2,2)'
+// if onDuplicate, generates a `INSERT ON DUPLICATE KEY UPDATE` statement like 'INSERT INTO tb(a,b) VALUES (1,1),(2,2) ON DUPLICATE KEY UPDATE a=VALUES(a),b=VALUES(b)'.
+func genInsertOnDuplicateSQLMultipleRows(onDuplicate bool, dmls []*DML) ([]string, [][]interface{}) {
+	if len(dmls) == 0 {
+		return nil, nil
+	}
+
+	var buf strings.Builder
+	buf.Grow(1024)
+	buf.WriteString("INSERT INTO")
+	buf.WriteString(" " + dmls[0].targetTableID + " (")
+	for i, column := range dmls[0].columns {
+		if i != len(dmls[0].columns)-1 {
+			buf.WriteString("`" + strings.ReplaceAll(column.Name.O, "`", "``") + "`,")
+		} else {
+			buf.WriteString("`" + strings.ReplaceAll(column.Name.O, "`", "``") + "`)")
+		}
+	}
+	buf.WriteString(" VALUES ")
+
+	holder := valuesHolder(len(dmls[0].columns))
+	for i := range dmls {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		buf.WriteString(holder)
+	}
+
+	if onDuplicate {
+		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
+		for i, column := range dmls[0].columns {
+			col := strings.ReplaceAll(column.Name.O, "`", "``")
+			buf.WriteString("`" + col + "`=VALUES(`" + col + "`)")
+			if i != len(dmls[0].columns)-1 {
+				buf.WriteByte(',')
+			}
+		}
+	}
+
+	args := make([]interface{}, 0, len(dmls)*len(dmls[0].columns))
+	for _, dml := range dmls {
+		args = append(args, dml.values...)
+	}
+	return []string{buf.String()}, [][]interface{}{args}
+}
+
+// genDeleteSQLMultipleRows generates delete statement with multiple rows like 'DELETE FROM tb WHERE (a,b) IN (1,1),(2,2)'.
+func genDeleteSQLMultipleRows(dmls []*DML) ([]string, [][]interface{}) {
+	if len(dmls) == 0 {
+		return nil, nil
+	}
+
+	var buf strings.Builder
+	buf.Grow(1024)
+	buf.WriteString("DELETE FROM ")
+	buf.WriteString(dmls[0].targetTableID)
+	buf.WriteString(" WHERE (")
+
+	whereColumns, _ := dmls[0].whereColumnsAndValues()
+	for i, column := range whereColumns {
+		if i != len(whereColumns)-1 {
+			buf.WriteString("`" + strings.ReplaceAll(column, "`", "``") + "`,")
+		} else {
+			buf.WriteString("`" + strings.ReplaceAll(column, "`", "``") + "`)")
+		}
+	}
+	buf.WriteString(" IN (")
+
+	holder := valuesHolder(len(whereColumns))
+	args := make([]interface{}, 0, len(dmls)*len(dmls[0].columns))
+	for i, dml := range dmls {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		buf.WriteString(holder)
+		_, whereValues := dml.whereColumnsAndValues()
+		args = append(args, whereValues...)
+	}
+	buf.WriteString(")")
+	return []string{buf.String()}, [][]interface{}{args}
+}
+
+// genMultipleRows generates multiple rows SQL with different opType.
+func genSQLMultipleRows(op dmlOp, dmls []*DML) (queries []string, args [][]interface{}) {
+	if len(dmls) > 1 {
+		log.L().Debug("generate DMLs with multiple rows", zap.Stringer("op", op), zap.Stringer("original op", dmls[0].op), zap.Int("rows", len(dmls)))
+	}
+	switch op {
+	case insertDML:
+		return genInsertOnDuplicateSQLMultipleRows(false, dmls)
+	case insertOnDuplicateDML:
+		return genInsertOnDuplicateSQLMultipleRows(true, dmls)
+	case deleteDML:
+		return genDeleteSQLMultipleRows(dmls)
+	}
+	return
+}
+
+// sameColumns check whether two DMLs have same columns.
+func sameColumns(lhs *DML, rhs *DML) bool {
+	// if source table is same, columns will be same.
+	if lhs.sourceTable.Schema == rhs.sourceTable.Schema && lhs.sourceTable.Name == rhs.sourceTable.Name {
+		return true
+	}
+
+	var lhsCols, rhsCols []string
+	if lhs.op == del {
+		lhsCols, _ = lhs.whereColumnsAndValues()
+		rhsCols, _ = rhs.whereColumnsAndValues()
+	} else {
+		lhsCols = lhs.columnNames()
+		rhsCols = rhs.columnNames()
+	}
+	if len(lhsCols) != len(rhsCols) {
+		return false
+	}
+	for i := 0; i < len(lhsCols); i++ {
+		if lhsCols[i] != rhsCols[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// genDMLsWithSameCols group and gen dmls by same columns.
+// in optimistic shard mode, different upstream tables may have different columns.
+// e.g.
+// insert into tb(a,b,c) values(1,1,1)
+// insert into tb(a,b,d) values(2,2,2)
+// we can only combine DMLs with same column names.
+// all dmls should have same opType and same tableName.
+func genDMLsWithSameCols(op dmlOp, dmls []*DML) ([]string, [][]interface{}) {
+	queries := make([]string, 0, len(dmls))
+	args := make([][]interface{}, 0, len(dmls))
+	var lastDML *DML
+	var query []string
+	var arg [][]interface{}
+	groupDMLs := make([]*DML, 0, len(dmls))
+
+	// group dmls by same columns
+	for i, dml := range dmls {
+		if i == 0 {
+			lastDML = dml
+		}
+		if !sameColumns(lastDML, dml) {
+			query, arg = genSQLMultipleRows(op, groupDMLs)
+			queries = append(queries, query...)
+			args = append(args, arg...)
+
+			groupDMLs = groupDMLs[0:0]
+			lastDML = dml
+		}
+		groupDMLs = append(groupDMLs, dml)
+	}
+	if len(groupDMLs) > 0 {
+		query, arg = genSQLMultipleRows(op, groupDMLs)
+		queries = append(queries, query...)
+		args = append(args, arg...)
+	}
+	return queries, args
+}
+
+// genDMLsWithSameTable groups and generates dmls with same table.
+// all the dmls should have same dmlOp.
+func genDMLsWithSameTable(op dmlOp, dmls []*DML) ([]string, [][]interface{}) {
+	queries := make([]string, 0, len(dmls))
+	args := make([][]interface{}, 0, len(dmls))
+	var lastTable string
+	groupDMLs := make([]*DML, 0, len(dmls))
+
+	// for updateDML, generate SQLs one by one
+	if op == updateDML {
+		for _, dml := range dmls {
+			query, arg := dml.genUpdateSQL()
+			queries = append(queries, query...)
+			args = append(args, arg...)
+		}
+		return queries, args
+	}
+
+	// group dmls with same table
+	for i, dml := range dmls {
+		if i == 0 {
+			lastTable = dml.targetTableID
+		}
+		if lastTable != dml.targetTableID {
+			query, arg := genDMLsWithSameCols(op, groupDMLs)
+			queries = append(queries, query...)
+			args = append(args, arg...)
+
+			groupDMLs = groupDMLs[0:0]
+			lastTable = dml.targetTableID
+		}
+		groupDMLs = append(groupDMLs, dml)
+	}
+	if len(groupDMLs) > 0 {
+		query, arg := genDMLsWithSameCols(op, groupDMLs)
+		queries = append(queries, query...)
+		args = append(args, arg...)
+	}
+	return queries, args
+}
+
+// genDMLsWithSameOp groups and generates dmls by dmlOp.
+func genDMLsWithSameOp(dmls []*DML) ([]string, [][]interface{}) {
+	queries := make([]string, 0, len(dmls))
+	args := make([][]interface{}, 0, len(dmls))
+	var lastOp dmlOp
+	groupDMLs := make([]*DML, 0, len(dmls))
+
+	// group dmls with same dmlOp
+	for i, dml := range dmls {
+		curOp := dmlOp(dml.op)
+		// if update statement didn't update identify values, regard it as insert on duplicate.
+		// if insert with safemode, regard it as insert on duplicate.
+		if curOp == updateDML && !dml.updateIdentify() || curOp == insertDML && dml.safeMode {
+			curOp = insertOnDuplicateDML
+		}
+
+		if i == 0 {
+			lastOp = curOp
+		}
+
+		// now there are 4 situations: [insert, insert on duplicate(insert with safemode/update without identify keys), update(update identify keys), delete]
+		if lastOp != curOp {
+			query, arg := genDMLsWithSameTable(lastOp, groupDMLs)
+			queries = append(queries, query...)
+			args = append(args, arg...)
+
+			groupDMLs = groupDMLs[0:0]
+			lastOp = curOp
+		}
+		groupDMLs = append(groupDMLs, dml)
+	}
+	if len(groupDMLs) > 0 {
+		query, arg := genDMLsWithSameTable(lastOp, groupDMLs)
+		queries = append(queries, query...)
+		args = append(args, arg...)
+	}
+	return queries, args
 }
