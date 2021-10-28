@@ -228,9 +228,9 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 		},
 	}
 
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/syncer/SkipFlushCompactor", `return()`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/syncer/SkipFlushCompactor", `return()`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/syncer/SkipFlushCompactor")
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/syncer/SkipFlushCompactor")
 
 	outCh := compactorWrap(inCh, syncer)
 
