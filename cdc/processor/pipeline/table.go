@@ -160,11 +160,6 @@ func (t *tablePipelineImpl) Wait() {
 	t.p.Wait()
 }
 
-// ReplConfig implements TablePipeline.ReplConfig
-func (t *tablePipelineImpl) ReplConfig() *serverConfig.ReplicaConfig {
-	return t.replConfig
-}
-
 // Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
 // replicating 1024 tables in the worst case.
 const defaultOutputChannelSize = 64
