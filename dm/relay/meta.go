@@ -234,6 +234,13 @@ func (lm *LocalMeta) doFlush() error {
 		return terror.ErrRelayNoCurrentUUID.Generate()
 	}
 
+	// it happens when switching to a new server, and meta is reset,
+	// but at that time we don't know the exact binlog filename, so we assign minCheckpoint to it
+	// and that should not be flushed into meta file
+	if lm.BinLogName == "" {
+		return nil
+	}
+
 	var buf bytes.Buffer
 	enc := toml.NewEncoder(&buf)
 	err := enc.Encode(lm)
