@@ -1,7 +1,7 @@
 package vo
 
 type BatchRowsInfo struct{
-
+	
 	RowList    []*RowInfos
 }
 

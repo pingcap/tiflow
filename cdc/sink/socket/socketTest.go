@@ -133,17 +133,6 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 		return
 	}
 
-	// 声明链表
-	l := list.New()
-	// 数据添加到尾部
-	l.PushBack(4)
-	l.PushBack(5)
-	l.PushBack(6)
-
-	// 遍历
-	for e := l.Front(); e != nil; e = e.Next() {
-	     fmt.Printf("%v\n", e.Value)
-	}
 
 }
 
@@ -275,30 +264,153 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 	//createBytesFromRowInfoList(rowInfos);
 	***/
 
-	_, err = conn.Write(createBytesFromRowInfoList(rowInfos))
+	_, err = conn.Write(createBytesFromRowInfo(rowInfos))
 	if err != nil {
 		return
-	}
-
-	// 声明链表
-	l := list.New()
-	// 数据添加到尾部
-	l.PushBack(4)
-	l.PushBack(5)
-	l.PushBack(6)
-
-	// 遍历
-	for e := l.Front(); e != nil; e = e.Next() {
-		fmt.Printf("%v\n", e.Value)
 	}
 
 
 }
 
+func JddmClientByRowList(host string, rowListInfos []*vo.BatchRowsInfo){
+
+	/*fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
+	serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)*/
+
+	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
+
+	conn, err := net.Dial("tcp", host)
+	if err != nil {
+		fmt.Println("Error dialing", err.Error())
+		return
+	}
+
+	//serviceNum := 1742
+	//// 前4bytes消息长度
+	//lengthArr := make([]byte,4)
+
+
+	//serviceNumArr := publicUtils.IntTo2Bytes(serviceNum)
+	//tradCodeArr := publicUtils.IntTo2Bytes(113)
+	// 4-8bytes服务号和主次命令
+	//verifyArr := make([]byte,4)
+	verifyArr := make([]byte,4)
+	//serviceNumArr := make([]byte,4)
+
+	verifyArr[0] = 0x06
+	verifyArr[1] = 0xce
+	verifyArr[2] = 0x01
+	verifyArr[3] = 0x16
+	//serviceNumArr = intTo4Bytes(serviceNum)
+	//fmt.Printf(" %s \n",publicUtils.BytestoHex(verifyArr))
+	//verifyArr[0] := 0x06;
+	//verifyArr[1] := 0xCE;
+
+	//校验码
+	//verifyArr[2] := 0x01;
+	//verifyArr[3] := 0x13;
+
+	defer conn.Close()
+
+
+	sendMsg :=" Connect Server Test  !";
+	clientSendArr := make([]byte,8+len(sendMsg))
+	lengthArr := publicUtils.IntegerToBytes(len(sendMsg));
+	//fmt.Printf(" %s \n",publicUtils.BytestoHex(lengthArr))
+	publicUtils.BlockByteArrCopy([]byte(lengthArr),0,clientSendArr,0,len(lengthArr))
+	publicUtils.BlockByteArrCopy([]byte(verifyArr),0,clientSendArr,4,len(verifyArr))
+	publicUtils.BlockByteArrCopy([]byte(sendMsg),0,clientSendArr,8,len(sendMsg))
+	fmt.Printf(" SendByte[]Arr %s \n",publicUtils.BytestoHex(clientSendArr))
 
 
 
-func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
+	fmt.Println("rowInfos：：：：：：：：：：：：：：：：：：：：：：：：",rowListInfos)
+
+
+	_, err = conn.Write(createBytesFromRowInfoList(rowListInfos))
+	if err != nil {
+		return
+	}
+
+
+}
+
+func createBytesFromRowInfoList(rowInfos []*vo.BatchRowsInfo) []byte{
+
+	//var buffer bytes.Buffer
+	//colsArr = make([]byte,0)
+	fmt.Printf(" rowCount = %d\n", len(rowInfos))
+
+
+	verifyArr := make([]byte,4)
+	//serviceNumArr := make([]byte,4)
+
+	verifyArr[0] = 0x06
+	verifyArr[1] = 0xce
+	verifyArr[2] = 0x01
+	verifyArr[3] = 0x15
+
+	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
+	sendBatchRowsArr :=new(bytes.Buffer)
+	for _, rowInfo := range rowInfos {
+
+		//当前时间戳
+	    t1 := time.Now().Unix()  //1564552562
+	    fmt.Println(t1)
+
+		fmt.Println(rowInfo.TableName+"::::"+rowInfo.SchemaName)
+
+		buffer.Write(publicUtils.LongToBytes(rowInfo.StartTimer))
+		buffer.Write(publicUtils.LongToBytes(rowInfo.CommitTimer))
+		buffer.Write(publicUtils.LongToBytes(rowInfo.ObjnNo))
+		buffer.Write(publicUtils.LongToBytes(rowInfo.RowID))
+		buffer.Write(publicUtils.Int32ToBytes(rowInfo.ColumnNo))
+
+		operTypeArr := make([]byte,4)
+		if rowInfo.OperType==2{
+			operTypeArr[3]=byte('I')
+			//publicUtils.BlockByteArrCopy([]byte("I"),0,operTypeArr,0,len(rowInfo.SchemaName))
+
+		}else if rowInfo.OperType == 4{
+			operTypeArr[3]=byte('D')
+		}else if rowInfo.OperType == 3{
+			operTypeArr[3]=byte('U')
+		}
+
+		buffer.Write(operTypeArr)
+		schemaNameArr := make([]byte,1+len(rowInfo.SchemaName))
+		publicUtils.BlockByteArrCopy([]byte(rowInfo.SchemaName),0,schemaNameArr,0,len(rowInfo.SchemaName))
+		buffer.Write(schemaNameArr)
+		tableNameArr := make([]byte,1+len(rowInfo.TableName))
+		publicUtils.BlockByteArrCopy([]byte(rowInfo.TableName),0,tableNameArr,0,len(rowInfo.TableName))
+		buffer.Write(tableNameArr)
+
+
+
+		for _,col2 := range rowInfo.ColumnList{
+			//fmt.Println("value:"+col2.ColumnValue+"::name::"+col2.ColumnName)
+			//fmt.Println（"%s",col.ColumnValue)
+
+			//allColumnArrByRow = append(allColumnArrByRow,columnInfoVoToByte(col2))
+			//colsArr = append(colsArr)
+			buffer.Write(columnInfoVoToByte(col2))
+		}
+
+		fmt.Printf(" allColumnArrByRow[%d]Arr %s \n",len(buffer.Bytes()),publicUtils.BytestoHex(buffer.Bytes()))
+	}
+	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()))
+	sendBatchRowsArr.Write(lengthArr)
+	sendBatchRowsArr.Write(verifyArr)
+	sendBatchRowsArr.Write(buffer.Bytes())
+	fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
+
+
+	return sendBatchRowsArr.Bytes()
+
+}
+
+
+func createBytesFromRowInfo(rowInfos []*vo.RowInfos) []byte{
 
 	//var buffer bytes.Buffer
 	//colsArr = make([]byte,0)
@@ -796,7 +908,7 @@ func Log(v ...interface{}) {
     log.Println(v...)
 }
 
-func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
+func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 
 	//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
 
@@ -809,6 +921,74 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
 	verifyArr := make([]byte,4)
 
+	verifyArr[0] = 0x06
+	verifyArr[1] = 0xce
+	verifyArr[2] = 0x01
+	verifyArr[3] = 0x23
+
+	defer conn.Close()
+
+	//fmt.Println("resolvedTs：：：：：：：：：：：：：：：：：：：：：：：：",resolvedTs)
+
+	//=============================================
+
+	_, err = conn.Write(createBytesFromResolvedTs(resolvedTs))
+	if err != nil {
+		return 0, nil
+	}
+
+	// 声明链表
+	l := list.New()
+	// 数据添加到尾部
+	l.PushBack(4)
+	l.PushBack(5)
+	l.PushBack(6)
+
+	// 遍历
+	/*for e := l.Front(); e != nil; e = e.Next() {
+		fmt.Printf("%v\n", e.Value)
+	}*/
+
+	//创建切片
+	buf := make([]byte, 1024)
+
+	//1 等待客户端通过conn发送信息
+	//2 如果没有writer发送就一直阻塞在这
+	re, err := conn.Read(buf)
+	if err != nil {
+		fmt.Println("服务器read err=", err) //出错退出
+		return 0, nil
+	}
+	//3. 显示读取内容到终端
+
+	//fmt.Print("read:::::::::::::::",string(buf[:re]))
+	_ = buf[:re]
+	//fmt.Print("\nread:::::::::::::::",tt)
+	//fmt.Print("\n")
+	_ = buf[:4]
+	//fmt.Print("\n",publicUtils.BytestoHex(tt1))
+	result := buf[4:re]
+	commitTs := publicUtils.BytesToLong(result)
+	//fmt.Print("\nCommitTs:::::::::",commitTs)
+
+	return uint64(commitTs), err
+
+}
+
+
+func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
+
+	//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
+
+	conn, err := net.Dial("tcp", host)
+	if err != nil {
+		fmt.Println("Error dialing", err.Error())
+		return 0, nil
+	}
+
+
+	verifyArr := make([]byte,4)
+	
 	verifyArr[0] = 0x06
 	verifyArr[1] = 0xce
 	verifyArr[2] = 0x01
@@ -862,6 +1042,7 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 	return uint64(commitTs), err
 
 }
+
 
 func createBytesFromResolvedTs(resolvedTs uint64)  []byte{
 
