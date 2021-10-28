@@ -1,0 +1,49 @@
+# diff Configuration.
+
+log-level = "info"
+
+chunk-size = 1000
+
+check-thread-count = 4
+
+sample-percent = 100
+
+use-checksum = true
+
+fix-sql-file = "fix.sql"
+
+# tables need to check.
+[[check-tables]]
+schema = "only_dml"
+tables = ["~t.*"]
+
+[[table-config]]
+schema = "only_dml"
+table = "t1"
+
+[[table-config.source-tables]]
+instance-id = "source-1"
+schema = "fake_rotate_event"
+table = "t1"
+
+[[table-config]]
+schema = "fake_rotate_event"
+table = "t2"
+
+[[table-config.source-tables]]
+instance-id = "source-2"
+schema = "fake_rotate_event"
+table = "t2"
+
+[[source-db]]
+host = "127.0.0.1"
+instance-id = "source-1"
+password = "123456"
+port = 3306
+user = "root"
+
+[target-db]
+host = "127.0.0.1"
+password = "123456"
+port = 4000
+user = "test"

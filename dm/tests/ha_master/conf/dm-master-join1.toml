@@ -1,0 +1,7 @@
+# Master Configuration.
+name = "master1"
+master-addr = ":8261"
+advertise-addr = "localhost:8261"
+peer-urls = "http://localhost:8291"
+join = "localhost:8461,localhost:8561,localhost:8661"
+auto-compaction-retention = "3s"

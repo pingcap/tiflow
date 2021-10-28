@@ -1,0 +1,58 @@
+# diff Configuration.
+
+log-level = "info"
+
+chunk-size = 1000
+
+check-thread-count = 4
+
+sample-percent = 100
+
+use-checksum = true
+
+fix-sql-file = "fix.sql"
+
+# tables need to check.
+[[check-tables]]
+schema = "dm_syncer_do_db"
+tables = ["~^dm_syncer_do_db_."]
+
+[[table-config]]
+schema = "dm_syncer_do_db"
+table = "dm_syncer_do_db_1"
+
+[[table-config.source-tables]]
+instance-id = "source-1"
+schema = "dm_syncer_do_db"
+table  = "dm_syncer_do_db_1"
+
+[[table-config]]
+schema = "dm_syncer_do_db"
+table = "dm_syncer_do_db_2"
+
+[[table-config.source-tables]]
+instance-id = "source-1"
+schema = "dm_syncer_do_db"
+table  = "dm_syncer_do_db_2"
+
+[[table-config]]
+schema = "dm_syncer_do_db"
+table = "dm_syncer_do_db_3"
+
+[[table-config.source-tables]]
+instance-id = "source-1"
+schema = "dm_syncer_do_db"
+table  = "dm_syncer_do_db_3"
+
+[[source-db]]
+host = "127.0.0.1"
+port = 3306
+user = "root"
+password = "123456"
+instance-id = "source-1"
+
+[target-db]
+host = "127.0.0.1"
+port = 4000
+user = "test"
+password = "123456"

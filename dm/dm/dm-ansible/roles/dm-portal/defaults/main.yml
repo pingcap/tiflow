@@ -1,0 +1,11 @@
+---
+
+# default configuration for dm-portal
+
+dm_portal_port: "8280"
+dm_portal_task_file_path: "/tmp"
+dm_portal_log_dir: "{{ deploy_dir }}/log"
+dm_portal_log_file: "dm-portal.log"
+dm_portal_stdout_log_file: "dm-portal-stdout.log"
+dm_portal_stderr_log_file: "dm-portal-stderr.log"
+

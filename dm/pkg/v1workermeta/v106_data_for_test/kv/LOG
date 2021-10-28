@@ -1,0 +1,41 @@
+=============== Jul 30, 2020 (CST) ===============
+17:37:40.285523 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+17:37:40.300602 db@open opening
+17:37:40.303449 version@stat F·[] S·0B[] Sc·[]
+17:37:40.309060 db@janitor F·2 G·0
+17:37:40.309151 db@open done T·8.4825ms
+17:37:40.309283 db@close closing
+17:37:40.309393 db@close done T·106.1µs
+=============== Jul 30, 2020 (CST) ===============
+17:37:40.309640 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+17:37:40.309995 version@stat F·[] S·0B[] Sc·[]
+17:37:40.310109 db@open opening
+17:37:40.310237 journal@recovery F·1
+17:37:40.311567 journal@recovery recovering @1
+17:37:40.315870 memdb@flush created L0@2 N·1 S·171B "!DM..ion,v1":"!DM..ion,v1"
+17:37:40.350192 version@stat F·[1] S·171B[171B] Sc·[0.12]
+17:37:40.363951 db@janitor F·3 G·0
+17:37:40.363997 db@open done T·53.7976ms
+17:48:16.448855 memdb@flush N·1 S·1KiB
+17:48:16.457843 memdb@flush created L0@6 N·1 S·992B "!DM..\x00\x00\x01,v3":"!DM..\x00\x00\x01,v3"
+17:48:16.457923 version@stat F·[2] S·1KiB[1KiB] Sc·[0.25]
+17:48:16.460879 memdb@flush committed F·1 T·11.9635ms
+17:48:16.460933 journal@remove removed @3
+17:48:16.464950 transaction@flush created L0@7 N·3 S·1KiB "!DM..\x00\x00\x01,v4":"!DM..ter,v5"
+17:48:16.464974 version@stat F·[3] S·2KiB[2KiB] Sc·[0.38]
+17:49:50.438166 memdb@flush N·1 S·1KiB
+17:49:50.445032 memdb@flush created L0@9 N·1 S·1KiB "!DM..\x00\x00\x02,v7":"!DM..\x00\x00\x02,v7"
+17:49:50.445158 version@stat F·[4] S·3KiB[3KiB] Sc·[0.50]
+17:49:50.448517 memdb@flush committed F·1 T·10.1245ms
+17:49:50.448593 journal@remove removed @5
+17:49:50.455917 transaction@flush created L0@10 N·3 S·1KiB "!DM..\x00\x00\x02,v8":"!DM..ter,v9"
+17:49:50.455940 version@stat F·[5] S·4KiB[4KiB] Sc·[0.62]
+17:51:25.390510 memdb@flush N·1 S·55B
+17:51:25.398377 memdb@flush created L0@12 N·1 S·156B "!DM..\x00\x00\x03,v11":"!DM..\x00\x00\x03,v11"
+17:51:25.398427 version@stat F·[6] S·4KiB[4KiB] Sc·[0.75]
+17:51:25.401746 memdb@flush committed F·1 T·11.0166ms
+17:51:25.401860 journal@remove removed @8
+17:51:25.408788 transaction@flush created L0@13 N·3 S·1KiB "!DM..\x00\x00\x03,v12":"!DM..ter,v13"
+17:51:25.408901 version@stat F·[7] S·5KiB[5KiB] Sc·[0.88]
+17:51:53.968120 db@close closing
+17:51:53.968517 db@close done T·378.9µs

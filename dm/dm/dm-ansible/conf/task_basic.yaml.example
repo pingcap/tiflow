@@ -1,0 +1,46 @@
+---
+name: test # global unique
+task-mode: all  # full/incremental/all
+
+target-database:
+  host: "192.168.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:             # one or more source database, config more source database for sharding merge
+  -
+    source-id: "instance118-4306" # unique in all instances, used as id when save checkpoints, configs, etc.
+    block-allow-list:  "instance"
+
+    # number of threads to use for dump data
+    mydumper-thread: 4
+
+    # number of threads to use for load data
+    loader-thread: 16
+
+    # number of threads to use for replicate binlog
+    syncer-thread: 16
+
+  -
+    source-id: "instance118-5306"
+    block-allow-list: "instance"
+
+    # number of threads to use for dump data
+    mydumper-thread: 4
+
+    # number of threads to use for load data
+    loader-thread: 16
+
+    # number of threads to use for replicate binlog
+    syncer-thread: 16
+
+block-allow-list:
+  instance:
+    do-dbs: ["~^test.*", "do"]        # allow list of upstream schemas needs to be replicated, regular expression (starts with ~) is supported
+    do-tables:                        # allow list of upstream tables needs to be replicated, (db-name, tbl-name) regular expression (starts with ~) is supported
+    - db-name: "~^test.*"
+      tbl-name: "~^t.*"
+    - db-name: "do"
+      tbl-name: "do"
+

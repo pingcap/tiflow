@@ -1,0 +1,7 @@
+# DM-Master6 Configuration.
+name = "master6"
+master-addr = ":8761"
+advertise-addr = "127.0.0.1:8761"
+peer-urls = "http://127.0.0.1:8296"
+join = "127.0.0.1:8261,127.0.0.1:8361,127.0.0.1:8461,127.0.0.1:8561,127.0.0.1:8661"
+auto-compaction-retention = "3s"

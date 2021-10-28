@@ -1,0 +1,54 @@
+---
+
+- name: create prometheus deploy directories
+  file:
+    path: '{{ item }}'
+    state: directory
+    mode: 0755
+    owner: '{{ deploy_user }}'
+    group: '{{ deploy_user }}'
+  become: true
+  with_items:
+    - "{{ prometheus_log_dir }}"
+    - "{{ prometheus_data_dir }}"
+
+- name: create prometheus configuration file
+  template:
+    src: prometheus.yml.j2
+    dest: "{{ deploy_dir }}/conf/prometheus.yml"
+    mode: 0644
+    backup: yes
+  register: prometheus_conf_st
+
+- name: backup prometheus configuration file
+  command: mv "{{ prometheus_conf_st.backup_file }}" "{{ backup_dir }}"
+  when:
+    - prometheus_conf_st.changed
+    - prometheus_conf_st.backup_file is defined
+
+- name: deploy alert rules file
+  copy:
+    src: "{{ playbook_dir }}/conf/{{ item }}"
+    dest: "{{ deploy_dir }}/conf/{{ item }}"
+    mode: 0644
+    backup: yes
+  with_items:
+    - dm_worker.rules.yml
+  register: alert_rules_st
+
+- name: backup alert rules file
+  command: mv "{{ item.backup_file }}" "{{ backup_dir }}"
+  when:
+    - item.changed
+    - item.backup_file is defined
+  with_items: "{{ alert_rules_st.results }}"
+
+- name: set alert rules label
+  replace:
+    dest: "{{ deploy_dir }}/conf/{{ item }}"
+    regexp: "ENV_LABELS_ENV"
+    replace: "{{ cluster_name }}"
+  with_items:
+    - dm_worker.rules.yml
+
+- include_tasks: "binary_deployment.yml"

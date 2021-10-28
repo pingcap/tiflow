@@ -1,0 +1,30 @@
+#!/bin/bash
+set -e
+ulimit -n 1000000
+
+DEPLOY_DIR={{ deploy_dir }}
+cd "${DEPLOY_DIR}" || exit 1
+
+{% set my_ip = hostvars[inventory_hostname].ansible_host | default(hostvars[inventory_hostname].inventory_hostname) -%}
+{% set my_port = hostvars[inventory_hostname].dm_worker_port -%}
+{% set my_separator = "_" %}
+{% set my_hostname = hostvars[inventory_hostname]['ansible_hostname'] | default(hostvars[inventory_hostname].inventory_hostname) -%}
+{% set my_peer_id = my_separator ~ my_hostname ~ my_separator ~ my_port %}
+
+{% set all_dm_master = [] -%}
+{% for host in groups.dm_master_servers -%}
+  {% set other_ip = hostvars[host].ansible_host | default(hostvars[host].inventory_hostname) -%}
+  {% set other_port = hostvars[host]['dm_master_port'] -%}
+  {% set _ = all_dm_master.append("%s:%s" % (other_ip, other_port)) -%}
+{% endfor -%}
+
+# WARNING: This file was auto-generated. Do not edit!
+#          All your edit might be overwritten!
+
+exec bin/dm-worker \
+    --name="{{ dm_worker_name_prefix }}{{ my_peer_id }}" \
+    --worker-addr="{{ my_ip }}:{{ dm_worker_port }}" \
+    --advertise-addr="{{ my_ip }}:{{ dm_worker_port }}" \
+    --join="{{ all_dm_master | join(',') }}" \
+    -L="{{ dm_worker_log_level }}" \
+    --log-file="{{ dm_worker_log_dir }}/{{ dm_worker_log_file }}" >> "{{ dm_worker_log_dir }}/{{ dm_worker_stdout_log_file }}" 2>> "{{ dm_worker_log_dir }}/{{ dm_worker_stderr_log_file }}"

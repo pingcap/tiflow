@@ -1,0 +1,41 @@
+use-checksum = true
+
+# tables need to check.
+[[check-tables]]
+schema = "pes_db_target"
+tables = ["t_target"]
+
+[[table-config]]
+schema = "pes_db_target"
+table = "t_target"
+is-sharding = true
+
+[[table-config.source-tables]]
+instance-id = "source-1"
+schema = "pes_Sharding1"
+table  = "~[Tt].*"
+
+[[table-config.source-tables]]
+instance-id = "source-2"
+schema = "pes_sharding2"
+table  = "~[Tt].*"
+
+[[source-db]]
+host = "mysql1"
+port = 3306
+user = "root"
+password = ""
+instance-id = "source-1"
+
+[[source-db]]
+host = "mariadb2"
+port = 3306
+user = "root"
+password = ""
+instance-id = "source-2"
+
+[target-db]
+host = "tidb"
+port = 4000
+user = "root"
+password = ""

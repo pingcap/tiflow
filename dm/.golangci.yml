@@ -1,0 +1,127 @@
+linters:
+  disable-all: true
+  enable:
+    - asciicheck
+    - bodyclose
+    - deadcode
+    - depguard
+    - dogsled
+    - dupl
+    - errcheck
+    - exportloopref
+    - gocritic
+    - godot
+    - goprintffuncname
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - noctx
+    - prealloc
+    - revive
+    - rowserrcheck
+    - staticcheck
+    - structcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - varcheck
+    - whitespace
+    - durationcheck
+    - gofumpt
+    - goheader
+    - gomodguard
+    - ifshort
+    - importas
+    - makezero
+    - nilerr
+    - predeclared
+    - sqlclosecheck
+    - thelper
+    - tparallel
+    - wastedassign
+
+  # don't enable:
+  # - testpackage
+  # - lll
+  # - wsl
+  # - gochecknoglobals
+  # - godox
+  # - gomnd
+  # - goerr113
+  # - exhaustive
+  # - wrapcheck
+  # - nlreturn
+  # - exhaustivestruct
+  # - errorlint
+  # - forcetypeassert
+  # - paralleltest
+  # - forbidigo
+  # - gosec
+  # - goconst
+  # - interfacer
+  # - scopelint
+
+  # already cover:
+  # - gci
+  # - goimports
+  # - gofmt
+
+  # better to fix them
+  # - funlen
+  # - gocognit
+  # - nestif
+  # - gocyclo
+  # - cyclop
+  # - gomoddirectives
+  # - gochecknoinits
+  # - maligned
+
+linters-settings:
+  govet:
+    # report about shadowed variables
+    check-shadowing: true
+  revive:
+    ignoreGeneratedHeader: false
+    severity: "error"
+    confidence: 0.8
+    errorCode: -1
+    warningCode: -1
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: var-naming
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: indent-error-flow
+      - name: superfluous-else
+      - name: modifies-parameter
+      - name: unreachable-code
+
+issues:
+  include:
+    - EXC0003
+
+  exclude-rules:
+    # TODO Remove it.
+    # Exclude some staticcheck messages
+    - linters:
+        - staticcheck
+      text: "SA1019:"
+
+  # Fix found issues (if it's supported by the linter)
+  fix: false
+
+run:
+  # timeout for analysis, e.g. 30s, 5m, default is 1m
+  timeout: 5m
