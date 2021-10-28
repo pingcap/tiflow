@@ -268,6 +268,9 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier 
 
 func (s *Syncer) newJobChans() {
 	s.closeJobChans()
+	// DM originally cached s.cfg.QueueSize * s.cfg.WorkerCount dml jobs in memory in 2.0.X.
+	// Now if compact: false, dmlJobCh and dmlWorker will both cached s.cfg.QueueSize * s.cfg.WorkerCount/2 jobs. 
+	// If compact: true, dmlJobCh, compactor buffer, compactor output channel and dmlWorker will all cached s.cfg.QueueSize * s.cfg.WorkerCount/4 jobs.
 	chanSize := s.cfg.QueueSize * s.cfg.WorkerCount / 2
 	if s.cfg.Compact {
 		chanSize /= 2

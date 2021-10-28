@@ -39,6 +39,8 @@ type compactor struct {
 
 // compactorWrap creates and runs a compactor instance.
 func compactorWrap(inCh chan *job, syncer *Syncer) chan *job {
+	// Actually we can use a larger compact buffer-size, but if so, when user pause-task/stop-task, they may need to wait a longer time to wait all jobs flushed.
+	// TODO: implement ping-pong buffer.
 	bufferSize := syncer.cfg.QueueSize * syncer.cfg.WorkerCount / 4
 	compactor := &compactor{
 		inCh:       inCh,
