@@ -465,7 +465,7 @@ func (s *schemaSnapshot) updatePartition(tbl *model.TableInfo) error {
 		if _, ok := s.partitionTable[partition.ID]; ok {
 			log.Debug("add table partition success",
 				zap.String("name", tbl.Name.O), zap.Int64("tid", id),
-				zap.Reflect("add partition id", partition.ID))
+				zap.Int64("add partition id", partition.ID))
 		}
 		s.partitionTable[partition.ID] = tbl
 		if !tbl.IsEligible(s.explicitTables) {
@@ -481,7 +481,7 @@ func (s *schemaSnapshot) updatePartition(tbl *model.TableInfo) error {
 		delete(s.ineligibleTableID, pid)
 		log.Debug("drop table partition success",
 			zap.String("name", tbl.Name.O), zap.Int64("tid", id),
-			zap.Reflect("truncated partition id", pid))
+			zap.Int64("truncated partition id", pid))
 	}
 
 	return nil
