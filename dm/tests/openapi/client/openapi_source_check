@@ -195,17 +195,19 @@ def transfer_source_success(source_name, worker_name):
     assert resp.status_code == 200
 
 
-def get_source_schemas_and_tables_success(source_name):
+def get_source_schemas_and_tables_success(source_name, schema_name="", table_name=""):
     schema_url = API_ENDPOINT + "/" + source_name + "/schemas"
     schema_resp = requests.get(url=schema_url)
     assert schema_resp.status_code == 200
     print("get_source_schemas_and_tables_success schema_resp=", schema_resp.json())
     schema_list = schema_resp.json()
-    assert "openapi" in schema_list
+    assert schema_name in schema_list
 
     table_url = API_ENDPOINT + "/" + source_name + "/schemas/openapi"
     table_resp = requests.get(url=table_url)
     print("get_source_schemas_and_tables_success table_resp=", table_resp.json())
+    table_list = table_resp.json()
+    assert table_name in table_list
 
 
 if __name__ == "__main__":

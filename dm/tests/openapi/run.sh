@@ -53,8 +53,9 @@ function test_source() {
 		"query-status -s mysql-01" \
 		"\"worker\": \"worker2\"" 1
 
+	init_noshard_data # init table in database openapi for test get schema and table
 	# test get source schemas and tables
-	openapi_source_check "get_source_schemas_and_tables_success" "mysql-01"
+	openapi_source_check "get_source_schemas_and_tables_success" "mysql-01" "openapi" "t1"
 
 	# delete source success
 	openapi_source_check "delete_source_success" "mysql-01"
@@ -78,10 +79,7 @@ function test_relay() {
 	openapi_source_check "create_source1_success"
 
 	# we need make sure that source is bounded by worker1 because we will start relay on worker1
-	# todo: use openapi to transfer source
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"transfer-source mysql-01 worker1" \
-		"\"result\": true" 1
+	openapi_source_check "transfer_source_success" "mysql-01" "worker1"
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s mysql-01" \
@@ -134,6 +132,7 @@ function test_relay() {
 	openapi_source_check "get_source_status_success_no_relay" "mysql-01"
 
 	openapi_source_check "start_relay_success_with_two_worker" "mysql-01" "worker1" "worker2"
+	openapi_source_check "list_source_with_status_success" 1 2               #source 1 status_list will have two items
 	openapi_source_check "get_source_status_success" "mysql-01" 2            # have two source status
 	openapi_source_check "get_source_status_success_with_relay" "mysql-01" 0 # check worker1 relay status
 	openapi_source_check "get_source_status_success_with_relay" "mysql-01" 1 # check worker2 relay status
