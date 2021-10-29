@@ -875,7 +875,7 @@ type SyncerConfigForDowngrade struct {
 	SafeMode                bool   `yaml:"safe-mode"`
 	EnableANSIQuotes        bool   `yaml:"enable-ansi-quotes"`
 
-	Compact bool `yaml:"compact,omitempty"`
+	Compact      bool `yaml:"compact,omitempty"`
 	MultipleRows bool `yaml:"multipleRows,omitempty"`
 }
 

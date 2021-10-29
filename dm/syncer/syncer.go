@@ -268,13 +268,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier 
 
 func (s *Syncer) newJobChans() {
 	s.closeJobChans()
-	// DM originally cached s.cfg.QueueSize * s.cfg.WorkerCount dml jobs in memory in 2.0.X.
-	// Now if compact: false, dmlJobCh and dmlWorker will both cached s.cfg.QueueSize * s.cfg.WorkerCount/2 jobs.
-	// If compact: true, dmlJobCh, compactor buffer, compactor output channel and dmlWorker will all cached s.cfg.QueueSize * s.cfg.WorkerCount/4 jobs.
-	chanSize := s.cfg.QueueSize * s.cfg.WorkerCount / 2
-	if s.cfg.Compact {
-		chanSize /= 2
-	}
+	chanSize := calculateChanSize(s.cfg.QueueSize, s.cfg.WorkerCount, s.cfg.Compact)
 	s.dmlJobCh = make(chan *job, chanSize)
 	s.ddlJobCh = make(chan *job, s.cfg.QueueSize)
 	s.jobsClosed.Store(false)
@@ -3358,4 +3352,15 @@ func (s *Syncer) delLoadTask() error {
 	}
 	s.tctx.Logger.Info("delete load worker in etcd for all mode", zap.String("task", s.cfg.Name), zap.String("source", s.cfg.SourceID))
 	return nil
+}
+
+// DM originally cached s.cfg.QueueSize * s.cfg.WorkerCount dml jobs in memory in 2.0.X.
+// Now if compact: false, dmlJobCh and dmlWorker will both cached s.cfg.QueueSize * s.cfg.WorkerCount/2 jobs.
+// If compact: true, dmlJobCh, compactor buffer, compactor output channel and dmlWorker will all cached s.cfg.QueueSize * s.cfg.WorkerCount/4 jobs.
+func calculateChanSize(queueSize, workerCount int, compact bool) int {
+	chanSize := queueSize * workerCount / 2
+	if compact {
+		chanSize /= 2
+	}
+	return chanSize
 }
