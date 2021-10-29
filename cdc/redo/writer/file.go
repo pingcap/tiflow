@@ -430,11 +430,7 @@ func (w *Writer) GC(checkPointTs uint64) error {
 		err := os.Remove(filepath.Join(w.cfg.Dir, f.Name()))
 		errs = multierr.Append(errs, err)
 	}
-	if errs != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, errs)
-	}
-
-	return nil
+	return cerror.WrapError(cerror.ErrRedoFileOp, errs)
 }
 
 // deleteFilesInStorages delete files in both local storage and s3, delete in s3 first, if success try to delete in local.
