@@ -235,8 +235,7 @@ enum EventType {
     XAROLLBACK  =		14;
     /** MASTER HEARTBEAT **/
     MHEARTBEAT  =       15;
-
-		/** TiCDC CUSTOMIZED**/
+		/** TiCDC CUSTOMIZED **/
 		WATERMARK = 16;
 }
 
