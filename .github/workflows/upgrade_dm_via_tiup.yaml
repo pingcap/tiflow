@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - master
+    paths:
+      - "dm/**"
   schedule:
     - cron: "3 22 * * *" # run at minute 06:03 UTC+8
   workflow_dispatch:
