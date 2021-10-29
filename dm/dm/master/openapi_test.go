@@ -357,7 +357,7 @@ func (t *openAPISuite) TestRelayAPI(c *check.C) {
 
 	// test pause relay
 	pauseRelayURL := fmt.Sprintf("%s/%s/pause-relay", baseURL, source1.SourceName)
-	result = testutil.NewRequest().Patch(pauseRelayURL).Go(t.testT, s.echo)
+	result = testutil.NewRequest().Post(pauseRelayURL).Go(t.testT, s.echo)
 	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	relayWorkers, err = s.scheduler.GetRelayWorkers(source1Name)
 	c.Assert(err, check.IsNil)
@@ -365,7 +365,7 @@ func (t *openAPISuite) TestRelayAPI(c *check.C) {
 
 	// test resume relay
 	resumeRelayURL := fmt.Sprintf("%s/%s/resume-relay", baseURL, source1.SourceName)
-	result = testutil.NewRequest().Patch(resumeRelayURL).Go(t.testT, s.echo)
+	result = testutil.NewRequest().Post(resumeRelayURL).Go(t.testT, s.echo)
 	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	relayWorkers, err = s.scheduler.GetRelayWorkers(source1Name)
 	c.Assert(err, check.IsNil)
@@ -401,7 +401,7 @@ func (t *openAPISuite) TestRelayAPI(c *check.C) {
 func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := setupServer(ctx, c)
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
 	checker.CheckSyncConfigFunc = mockCheckSyncConfig
 	ctrl := gomock.NewController(c)
 	defer func() {
@@ -491,7 +491,7 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(result5.Code(), check.Equals, http.StatusNoContent)
 	subTaskM = s.scheduler.GetSubTaskCfgsByTask(task.Name)
 	c.Assert(len(subTaskM) == 0, check.IsTrue)
-	c.Assert(failpoint.Disable("github.com/pingcap/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
 
 	// list tasks
 	result6 := testutil.NewRequest().Get(taskURL).Go(t.testT, s.echo)
