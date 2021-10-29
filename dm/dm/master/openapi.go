@@ -497,8 +497,8 @@ func (s *Server) DMAPIGetTaskStatus(ctx echo.Context, taskName string, params op
 	return ctx.JSON(http.StatusOK, resp)
 }
 
-// DMAPPauseTask pause task url is: (POST /api/v1/tasks/{task-name}/pause).
-func (s *Server) DMAPPauseTask(ctx echo.Context, taskName string) error {
+// DMAPIPauseTask pause task url is: (POST /api/v1/tasks/{task-name}/pause).
+func (s *Server) DMAPIPauseTask(ctx echo.Context, taskName string) error {
 	var sourceName openapi.SchemaNameList
 	if err := ctx.Bind(&sourceName); err != nil {
 		return err
@@ -580,8 +580,8 @@ func (s *Server) DMAPIGetTaskSourceTableList(ctx echo.Context, taskName string, 
 	return ctx.JSON(http.StatusOK, tableList)
 }
 
-// DMAPIGetTaskSourceTableStructure get task source table structure url is: (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name}).
-func (s *Server) DMAPIGetTaskSourceTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error {
+// DMAPIGetTableStructure get task source table structure url is: (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name}).
+func (s *Server) DMAPIGetTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
 		return terror.ErrWorkerNoStart.Generate()
@@ -612,8 +612,8 @@ func (s *Server) DMAPIGetTaskSourceTableStructure(ctx echo.Context, taskName str
 	return ctx.JSON(http.StatusOK, taskTableStruct)
 }
 
-// DMAPIDeleteTaskSourceTableStructure delete task source table structure url is: (DELETE /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name}).
-func (s *Server) DMAPIDeleteTaskSourceTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error {
+// DMAPIDeleteTableStructure delete task source table structure url is: (DELETE /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name}).
+func (s *Server) DMAPIDeleteTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
 		return terror.ErrWorkerNoStart.Generate()
@@ -639,8 +639,8 @@ func (s *Server) DMAPIDeleteTaskSourceTableStructure(ctx echo.Context, taskName 
 	return ctx.NoContent(http.StatusNoContent)
 }
 
-// DMAPIOperateTaskSourceTableStructure operate task source table structure url is: (PUT /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name}).
-func (s *Server) DMAPIOperateTaskSourceTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error {
+// DMAPIOperateTableStructure operate task source table structure url is: (PUT /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name}).
+func (s *Server) DMAPIOperateTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error {
 	var req openapi.OperateTaskTableStructureRequest
 	if err := ctx.Bind(&req); err != nil {
 		return err

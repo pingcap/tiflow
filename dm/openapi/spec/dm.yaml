@@ -455,7 +455,7 @@ paths:
       tags:
         - task
       summary: "pause task"
-      operationId: "DMAPPauseTask"
+      operationId: "DMAPIPauseTask"
       parameters:
         - name: task-name
           in: path
@@ -588,7 +588,7 @@ paths:
       tags:
         - task
       summary: "get task source table structure"
-      operationId: "DMAPIGetTaskSourceTableStructure"
+      operationId: "DMAPIGetTableStructure"
       parameters:
         - name: task-name
           in: path
@@ -635,7 +635,7 @@ paths:
       tags:
         - task
       summary: "operate task source table structure"
-      operationId: "DMAPIOperateTaskSourceTableStructure"
+      operationId: "DMAPIOperateTableStructure"
       parameters:
         - name: task-name
           in: path
@@ -684,7 +684,7 @@ paths:
       tags:
         - task
       summary: "delete task source table structure"
-      operationId: "DMAPIDeleteTaskSourceTableStructure"
+      operationId: "DMAPIDeleteTableStructure"
       parameters:
         - name: task-name
           in: path
