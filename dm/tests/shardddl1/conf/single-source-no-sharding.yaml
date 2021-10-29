@@ -46,5 +46,7 @@ loaders:
 
 syncers:
   global:
-    worker-count: 16
-    batch: 100
+    worker-count: 10
+    batch: 10
+    queue-size: 100
+    compact: true
