@@ -1,4 +1,4 @@
-name: CDC Integration Tests
+name: CDC Integration Tests Cron
 
 on:
   schedule:

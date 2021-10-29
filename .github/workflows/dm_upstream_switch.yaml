@@ -10,8 +10,6 @@ on:
       - "go.sum"
       - "Makefile"
       - ".github/**"
-  schedule:
-    - cron: "3 22 * * *" # run at minute 06:03 UTC+8
 
 jobs:
   upstream-database-switch:
