@@ -556,6 +556,7 @@ func setupServer(ctx context.Context, c *check.C) *Server {
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
 
 	s1 := NewServer(cfg1)
