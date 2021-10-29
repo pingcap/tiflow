@@ -238,6 +238,7 @@ type SyncerConfig struct {
 	QueueSize   int    `yaml:"queue-size" toml:"queue-size" json:"queue-size"`
 	// checkpoint flush interval in seconds.
 	CheckpointFlushInterval int  `yaml:"checkpoint-flush-interval" toml:"checkpoint-flush-interval" json:"checkpoint-flush-interval"`
+	// TODO: add this two new config items for openapi.
 	Compact                 bool `yaml:"compact" toml:"compact" json:"compact"`
 	MultipleRows            bool `yaml:"multiple-rows" toml:"multiple-rows" json:"multiple-rows"`
 

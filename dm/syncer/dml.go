@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/parser/model"
@@ -30,6 +31,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
+// this type is used to generate DML SQL, opType is used to mark type in binlog.
 type dmlOp int64
 
 const (
@@ -685,7 +687,7 @@ func (dml *DML) genWhere(buf *strings.Builder) []interface{} {
 			buf.WriteString(" AND ")
 		}
 		buf.WriteByte('`')
-		buf.WriteString(strings.ReplaceAll(col, "`", "``"))
+		buf.WriteString(dbutil.ColumnName(col))
 		if whereValues[i] == nil {
 			buf.WriteString("` IS ?")
 		} else {
@@ -725,9 +727,9 @@ func (dml *DML) genUpdateSQL() ([]string, [][]interface{}) {
 
 	for i, column := range dml.columns {
 		if i == len(dml.columns)-1 {
-			fmt.Fprintf(&buf, "`%s` = ?", strings.ReplaceAll(column.Name.O, "`", "``"))
+			fmt.Fprintf(&buf, "`%s` = ?", dbutil.ColumnName(column.Name.O))
 		} else {
-			fmt.Fprintf(&buf, "`%s` = ?, ", strings.ReplaceAll(column.Name.O, "`", "``"))
+			fmt.Fprintf(&buf, "`%s` = ?, ", dbutil.ColumnName(column.Name.O))
 		}
 	}
 
@@ -763,9 +765,9 @@ func (dml *DML) genInsertSQL() ([]string, [][]interface{}) {
 	buf.WriteString(" (")
 	for i, column := range dml.columns {
 		if i != len(dml.columns)-1 {
-			buf.WriteString("`" + strings.ReplaceAll(column.Name.O, "`", "``") + "`,")
+			buf.WriteString("`" + dbutil.ColumnName(column.Name.O) + "`,")
 		} else {
-			buf.WriteString("`" + strings.ReplaceAll(column.Name.O, "`", "``") + "`)")
+			buf.WriteString("`" + dbutil.ColumnName(column.Name.O) + "`)")
 		}
 	}
 	buf.WriteString(" VALUES (")
@@ -781,7 +783,7 @@ func (dml *DML) genInsertSQL() ([]string, [][]interface{}) {
 	if dml.safeMode {
 		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
 		for i, column := range dml.columns {
-			col := strings.ReplaceAll(column.Name.O, "`", "``")
+			col := dbutil.ColumnName(column.Name.O)
 			buf.WriteString("`" + col + "`=VALUES(`" + col + "`)")
 			if i != len(dml.columns)-1 {
 				buf.WriteByte(',')
@@ -818,9 +820,9 @@ func genInsertOnDuplicateSQLMultipleRows(onDuplicate bool, dmls []*DML) ([]strin
 	buf.WriteString(" " + dmls[0].targetTableID + " (")
 	for i, column := range dmls[0].columns {
 		if i != len(dmls[0].columns)-1 {
-			buf.WriteString("`" + strings.ReplaceAll(column.Name.O, "`", "``") + "`,")
+			buf.WriteString("`" + dbutil.ColumnName(column.Name.O) + "`,")
 		} else {
-			buf.WriteString("`" + strings.ReplaceAll(column.Name.O, "`", "``") + "`)")
+			buf.WriteString("`" + dbutil.ColumnName(column.Name.O) + "`)")
 		}
 	}
 	buf.WriteString(" VALUES ")
@@ -836,7 +838,7 @@ func genInsertOnDuplicateSQLMultipleRows(onDuplicate bool, dmls []*DML) ([]strin
 	if onDuplicate {
 		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
 		for i, column := range dmls[0].columns {
-			col := strings.ReplaceAll(column.Name.O, "`", "``")
+			col := dbutil.ColumnName(column.Name.O)
 			buf.WriteString("`" + col + "`=VALUES(`" + col + "`)")
 			if i != len(dmls[0].columns)-1 {
 				buf.WriteByte(',')
@@ -866,9 +868,9 @@ func genDeleteSQLMultipleRows(dmls []*DML) ([]string, [][]interface{}) {
 	whereColumns, _ := dmls[0].whereColumnsAndValues()
 	for i, column := range whereColumns {
 		if i != len(whereColumns)-1 {
-			buf.WriteString("`" + strings.ReplaceAll(column, "`", "``") + "`,")
+			buf.WriteString("`" + dbutil.ColumnName(column) + "`,")
 		} else {
-			buf.WriteString("`" + strings.ReplaceAll(column, "`", "``") + "`)")
+			buf.WriteString("`" + dbutil.ColumnName(column) + "`)")
 		}
 	}
 	buf.WriteString(" IN (")
@@ -881,6 +883,7 @@ func genDeleteSQLMultipleRows(dmls []*DML) ([]string, [][]interface{}) {
 		}
 		buf.WriteString(holder)
 		_, whereValues := dml.whereColumnsAndValues()
+		// whereValues will have same length because we have checked it in genDMLsWithSameCols.
 		args = append(args, whereValues...)
 	}
 	buf.WriteString(")")
@@ -1009,6 +1012,7 @@ func genDMLsWithSameTable(op dmlOp, dmls []*DML) ([]string, [][]interface{}) {
 }
 
 // genDMLsWithSameOp groups and generates dmls by dmlOp.
+// TODO: implement a volcano iterator interface for genDMLsWithSameXXX.
 func genDMLsWithSameOp(dmls []*DML) ([]string, [][]interface{}) {
 	queries := make([]string, 0, len(dmls))
 	args := make([][]interface{}, 0, len(dmls))
@@ -1020,7 +1024,7 @@ func genDMLsWithSameOp(dmls []*DML) ([]string, [][]interface{}) {
 		curOp := dmlOp(dml.op)
 		// if update statement didn't update identify values, regard it as insert on duplicate.
 		// if insert with safemode, regard it as insert on duplicate.
-		if curOp == updateDML && !dml.updateIdentify() || curOp == insertDML && dml.safeMode {
+		if (curOp == updateDML && !dml.updateIdentify()) || (curOp == insertDML && dml.safeMode) {
 			curOp = insertOnDuplicateDML
 		}
 
