@@ -272,13 +272,13 @@ function test_noshard_task() {
 	openapi_task_check "get_task_list" 1
 
 	# stop  task
-	openapi_task_check "pause_task_success" "$task_name" "mysql-01"
+	openapi_task_check "pause_task_success" "$task_name" "mysql-02"
 
 	# opreate schema
-	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-01"
+	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-02"
 
 	# resume task
-	openapi_task_check "resume_task_success" "$task_name" "mysql-01"
+	openapi_task_check "resume_task_success" "$task_name" "mysql-02"
 
 	# stop task success
 	openapi_task_check "stop_task_success" "$task_name"

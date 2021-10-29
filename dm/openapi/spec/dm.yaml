@@ -513,7 +513,7 @@ paths:
       tags:
         - task
       summary: "get task source schema list"
-      operationId: "DMAPIGetTaskSourceSchemaList"
+      operationId: "DMAPIGetSchemaListByTaskAndSource"
       parameters:
         - name: task-name
           in: path
@@ -547,7 +547,7 @@ paths:
       tags:
         - task
       summary: "get task source table list"
-      operationId: "DMAPIGetTaskSourceTableList"
+      operationId: "DMAPIGetTableListByTaskAndSource"
       parameters:
         - name: task-name
           in: path

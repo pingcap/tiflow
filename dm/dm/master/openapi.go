@@ -587,8 +587,8 @@ func (s *Server) DMAPIResumeTask(ctx echo.Context, taskName string) error {
 	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Running, taskName, sourceName...)
 }
 
-// DMAPIGetTaskSourceSchemaList get task source schema list url is: (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas).
-func (s *Server) DMAPIGetTaskSourceSchemaList(ctx echo.Context, taskName string, sourceName string) error {
+// DMAPIGetSchemaListByTaskAndSource get task source schema list url is: (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas).
+func (s *Server) DMAPIGetSchemaListByTaskAndSource(ctx echo.Context, taskName string, sourceName string) error {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
 		return terror.ErrWorkerNoStart.Generate()
@@ -616,8 +616,8 @@ func (s *Server) DMAPIGetTaskSourceSchemaList(ctx echo.Context, taskName string,
 	return ctx.JSON(http.StatusOK, schemaList)
 }
 
-// DMAPIGetTaskSourceTableList get task source table list url is: (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}).
-func (s *Server) DMAPIGetTaskSourceTableList(ctx echo.Context, taskName string, sourceName string, schemaName string) error {
+// DMAPIGetTableListByTaskAndSource get task source table list url is: (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}).
+func (s *Server) DMAPIGetTableListByTaskAndSource(ctx echo.Context, taskName string, sourceName string, schemaName string) error {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
 		return terror.ErrWorkerNoStart.Generate()
