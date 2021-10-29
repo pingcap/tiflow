@@ -200,7 +200,7 @@ func (s *Server) DMAPIGetSourceList(ctx echo.Context, params openapi.DMAPIGetSou
 func (s *Server) DMAPIDeleteSource(ctx echo.Context, sourceName string, params openapi.DMAPIDeleteSourceParams) error {
 	// force means delete source and stop all task of this source
 	if params.Force != nil && *params.Force {
-		// TODO(ehco) concurrent stop task
+		// TODO(ehco) stop task concurrently
 		newCtx := ctx.Request().Context()
 		for _, taskName := range s.scheduler.GetTaskNameListBySourceName(sourceName) {
 			if _, err := s.OperateTask(newCtx, &pb.OperateTaskRequest{
