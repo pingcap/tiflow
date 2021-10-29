@@ -21,10 +21,8 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/kafka/Consumer"
 	"github.com/pingcap/ticdc/pkg/logutil"
@@ -64,26 +62,6 @@ func init() {
 	if err != nil {
 		log.Fatal("init logger failed", zap.Error(err))
 	}
-}
-
-func waitTopicCreated(address []string, topic string, cfg *sarama.Config) error {
-	admin, err := sarama.NewClusterAdmin(address, cfg)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer admin.Close()
-	for i := 0; i <= 30; i++ {
-		topics, err := admin.ListTopics()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if _, ok := topics[topic]; ok {
-			return nil
-		}
-		log.Info("wait the topic created", zap.String("topic", topic))
-		time.Sleep(1 * time.Second)
-	}
-	return errors.Errorf("wait the topic(%s) created timeout", topic)
 }
 
 func main() {
