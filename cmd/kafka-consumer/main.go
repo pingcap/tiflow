@@ -74,6 +74,9 @@ func main() {
 		log.Panic("initialize consumer config failed", zap.Error(err))
 	}
 
+	config.WithTimezone()
+	config.WithDownstream()
+
 	/**
 	 * Construct a new Sarama configuration.
 	 * The Kafka cluster version has to be defined before the consumer/producer is initialized.
@@ -108,7 +111,7 @@ func main() {
 	 */
 
 	ctx := context.Background()
-	consumer, err := config.NewConsumer(ctx)
+	consumer, err := Consumer.New(ctx, config)
 	if err != nil {
 		log.Panic("creating consumer failed", zap.Error(err))
 	}

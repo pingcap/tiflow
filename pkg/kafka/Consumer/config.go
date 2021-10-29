@@ -23,8 +23,8 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/google/uuid"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
 )
@@ -38,6 +38,8 @@ type Config struct {
 	maxMessageBytes int
 	maxBatchSize    int
 
+	timezone string
+
 	upstreamURI *url.URL
 
 	downstreamStr string
@@ -46,6 +48,7 @@ type Config struct {
 
 func NewConfig() *Config {
 	return &Config{
+		timezone:        "system",
 		downstreamStr:   downstreamURIStr,
 		GroupID:         fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String()),
 		maxMessageBytes: math.MaxInt,

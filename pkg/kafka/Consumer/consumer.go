@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
@@ -55,15 +56,14 @@ type Consumer struct {
 	maxBatchSize     int
 }
 
-// NewConsumer creates a new cdc kafka consumer
-func (c *Config) NewConsumer(ctx context.Context) (*Consumer, error) {
-	// TODO support filter in downstream sink
-	tz, err := util.GetTimezone(timezone)
+// New return a kafka consumer
+func New(ctx context.Context, c *Config) (*Consumer, error) {
+	tz, err := util.GetTimezone(c.timezone)
 	if err != nil {
 		return nil, errors.Annotate(err, "can not load timezone")
 	}
 	ctx = util.PutTimezoneInCtx(ctx, tz)
-	filter, err := cdcfilter.NewFilter(config.GetDefaultReplicaConfig())
+	filter, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
