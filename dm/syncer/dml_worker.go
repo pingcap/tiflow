@@ -224,7 +224,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 	for _, j := range jobs {
 		dmls = append(dmls, j.dml)
 	}
-	queries, args := w.genDMLs(dmls)
+	queries, args := w.genSQLs(dmls)
 	failpoint.Inject("WaitUserCancel", func(v failpoint.Value) {
 		t := v.(int)
 		time.Sleep(time.Duration(t) * time.Second)
@@ -241,8 +241,8 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 	})
 }
 
-// genDMLs generate DMLs in single row mode or multiple rows mode.
-func (w *DMLWorker) genDMLs(dmls []*DML) ([]string, [][]interface{}) {
+// genSQLs generate SQLs in single row mode or multiple rows mode.
+func (w *DMLWorker) genSQLs(dmls []*DML) ([]string, [][]interface{}) {
 	if w.multipleRows {
 		return genDMLsWithSameOp(dmls)
 	}

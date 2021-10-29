@@ -32,16 +32,16 @@ import (
 )
 
 // this type is used to generate DML SQL, opType is used to mark type in binlog.
-type dmlOp int64
+type dmlOpType int64
 
 const (
-	insertDML                  = dmlOp(insert)
-	updateDML                  = dmlOp(update)
-	deleteDML                  = dmlOp(del)
-	insertOnDuplicateDML dmlOp = iota + 1
+	insertDML                      = dmlOpType(insert)
+	updateDML                      = dmlOpType(update)
+	deleteDML                      = dmlOpType(del)
+	insertOnDuplicateDML dmlOpType = iota + 1
 )
 
-func (op dmlOp) String() (str string) {
+func (op dmlOpType) String() (str string) {
 	switch op {
 	case insertDML:
 		return "insert"
@@ -891,8 +891,8 @@ func genDeleteSQLMultipleRows(dmls []*DML) ([]string, [][]interface{}) {
 	return []string{buf.String()}, [][]interface{}{args}
 }
 
-// genSQLMultipleRows generates multiple rows SQL with different dmlOp.
-func genSQLMultipleRows(op dmlOp, dmls []*DML) (queries []string, args [][]interface{}) {
+// genSQLMultipleRows generates multiple rows SQL with different dmlOpType.
+func genSQLMultipleRows(op dmlOpType, dmls []*DML) (queries []string, args [][]interface{}) {
 	if len(dmls) > 1 {
 		log.L().Debug("generate DMLs with multiple rows", zap.Stringer("op", op), zap.Stringer("original op", dmls[0].op), zap.Int("rows", len(dmls)))
 	}
@@ -939,8 +939,8 @@ func sameColumns(lhs *DML, rhs *DML) bool {
 // insert into tb(a,b,c) values(1,1,1)
 // insert into tb(a,b,d) values(2,2,2)
 // we can only combine DMLs with same column names.
-// all dmls should have same opType and same tableName.
-func genDMLsWithSameCols(op dmlOp, dmls []*DML) ([]string, [][]interface{}) {
+// all dmls should have same dmlOpType and same tableName.
+func genDMLsWithSameCols(op dmlOpType, dmls []*DML) ([]string, [][]interface{}) {
 	queries := make([]string, 0, len(dmls))
 	args := make([][]interface{}, 0, len(dmls))
 	var lastDML *DML
@@ -972,8 +972,8 @@ func genDMLsWithSameCols(op dmlOp, dmls []*DML) ([]string, [][]interface{}) {
 }
 
 // genDMLsWithSameTable groups and generates dmls with same table.
-// all the dmls should have same dmlOp.
-func genDMLsWithSameTable(op dmlOp, dmls []*DML) ([]string, [][]interface{}) {
+// all the dmls should have same dmlOpType.
+func genDMLsWithSameTable(op dmlOpType, dmls []*DML) ([]string, [][]interface{}) {
 	queries := make([]string, 0, len(dmls))
 	args := make([][]interface{}, 0, len(dmls))
 	var lastTable string
@@ -1012,17 +1012,17 @@ func genDMLsWithSameTable(op dmlOp, dmls []*DML) ([]string, [][]interface{}) {
 	return queries, args
 }
 
-// genDMLsWithSameOp groups and generates dmls by dmlOp.
+// genDMLsWithSameOp groups and generates dmls by dmlOpType.
 // TODO: implement a volcano iterator interface for genDMLsWithSameXXX.
 func genDMLsWithSameOp(dmls []*DML) ([]string, [][]interface{}) {
 	queries := make([]string, 0, len(dmls))
 	args := make([][]interface{}, 0, len(dmls))
-	var lastOp dmlOp
+	var lastOp dmlOpType
 	groupDMLs := make([]*DML, 0, len(dmls))
 
 	// group dmls with same dmlOp
 	for i, dml := range dmls {
-		curOp := dmlOp(dml.op)
+		curOp := dmlOpType(dml.op)
 		// if update statement didn't update identify values, regard it as insert on duplicate.
 		// if insert with safemode, regard it as insert on duplicate.
 		if (curOp == updateDML && !dml.updateIdentify()) || (curOp == insertDML && dml.safeMode) {
