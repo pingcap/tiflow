@@ -311,12 +311,6 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 	if err != nil {
 		return err
 	}
-	if cfg.EnableRelay {
-		stage := ha.NewRelayStage(pb.Stage_Running, cfg.SourceID)
-		if _, err2 := ha.PutRelayStage(s.etcdCli, stage); err2 != nil {
-			return err2
-		}
-	}
 
 	// 3. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg
@@ -2057,7 +2051,13 @@ func (s *Scheduler) boundSourceToWorker(source string, w *Worker) error {
 	// 1. put the bound relationship into etcd.
 	var err error
 	bound := ha.NewSourceBound(source, w.BaseInfo().Name)
-	_, err = ha.PutSourceBound(s.etcdCli, bound)
+	sourceCfg, ok := s.sourceCfgs[source]
+	if ok && sourceCfg.EnableRelay {
+		stage := ha.NewRelayStage(pb.Stage_Running, source)
+		_, err = ha.PutRelayStageSourceBound(s.etcdCli, stage, bound)
+	} else {
+		_, err = ha.PutSourceBound(s.etcdCli, bound)
+	}
 	if err != nil {
 		return err
 	}

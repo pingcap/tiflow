@@ -340,6 +340,10 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 					}
 					rev = rev1
 					if relaySource == nil {
+						if w := s.getWorker(false); w != nil && w.startedRelayBySourceCfg {
+							break
+						}
+						log.L().Info("didn't found relay config after etcd retryable error")
 						err = s.disableRelay("")
 						if err != nil {
 							log.L().Error("fail to disableRelay after etcd retryable error", zap.Error(err))
@@ -702,6 +706,7 @@ func (s *Server) disableHandleSubtasks(source string) error {
 
 	// now the worker is unbound, stop relay if it's started by source config
 	if w.cfg.EnableRelay && w.startedRelayBySourceCfg {
+		log.L().Info("stop relay because the source is unbound")
 		w.DisableRelay()
 	}
 
