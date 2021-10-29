@@ -23,8 +23,8 @@ import (
 
 func TestEncodeKey(t *testing.T) {
 	t.Parallel()
-	mustLess := func(uida, uidb uint32, tableIDa, tableIDb uint64, a, b *model.PolymorphicEvent) {
-		keya, keyb := EncodeKey(uida, tableIDa, a), EncodeKey(uidb, tableIDb, b)
+	mustLess := func(uniqueIDa, uniqueIDb uint32, tableIDa, tableIDb uint64, a, b *model.PolymorphicEvent) {
+		keya, keyb := EncodeKey(uniqueIDa, tableIDa, a), EncodeKey(uniqueIDb, tableIDb, b)
 		require.Equal(t, bytes.Compare(keya, keyb), -1)
 		require.Equal(t, len(keya), cap(keya))
 		require.Equal(t, len(keyb), cap(keyb))
@@ -137,8 +137,8 @@ func TestEncodeKey(t *testing.T) {
 
 func TestEncodeTsKey(t *testing.T) {
 	t.Parallel()
-	mustLess := func(uida, uidb uint32, tableIDa, tableIDb uint64, a *model.PolymorphicEvent, b uint64) {
-		keya, keyb := EncodeKey(uida, tableIDa, a), EncodeTsKey(uidb, tableIDb, b)
+	mustLess := func(uniqueIDa, uniqueIDb uint32, tableIDa, tableIDb uint64, a *model.PolymorphicEvent, b uint64) {
+		keya, keyb := EncodeKey(uniqueIDa, tableIDa, a), EncodeTsKey(uniqueIDb, tableIDb, b)
 		require.Equal(t, bytes.Compare(keya, keyb), -1)
 		require.Equal(t, len(keya), cap(keya))
 		require.Equal(t, len(keyb), cap(keyb))

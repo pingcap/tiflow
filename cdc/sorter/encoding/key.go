@@ -21,11 +21,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// DecodeKey decodes a key to uid, tableID, startTs, CRTs.
-func DecodeKey(key []byte) (uid uint32, tableID uint64, startTs, CRTs uint64) {
-	// uid, tableID, CRTs, startTs, Key, Put/Delete
-	// uid
-	uid = binary.BigEndian.Uint32(key)
+// DecodeKey decodes a key to uniqueID, tableID, startTs, CRTs.
+func DecodeKey(key []byte) (uniqueID uint32, tableID uint64, startTs, CRTs uint64) {
+	// uniqueID, tableID, CRTs, startTs, Key, Put/Delete
+	// uniqueID
+	uniqueID = binary.BigEndian.Uint32(key)
 	// table ID
 	tableID = binary.BigEndian.Uint64(key[4:])
 	// CRTs
@@ -37,13 +37,13 @@ func DecodeKey(key []byte) (uid uint32, tableID uint64, startTs, CRTs uint64) {
 	return
 }
 
-// EncodeTsKey encodes uid, tableID, CRTs.
-func EncodeTsKey(uid uint32, tableID uint64, ts uint64) []byte {
-	// uid, tableID, CRTs.
+// EncodeTsKey encodes uniqueID, tableID, CRTs.
+func EncodeTsKey(uniqueID uint32, tableID uint64, ts uint64) []byte {
+	// uniqueID, tableID, CRTs.
 	buf := make([]byte, 0, 4+8+8)
 	uint64Buf := [8]byte{}
-	// uid
-	binary.BigEndian.PutUint32(uint64Buf[:], uid)
+	// uniqueID
+	binary.BigEndian.PutUint32(uint64Buf[:], uniqueID)
 	buf = append(buf, uint64Buf[:4]...)
 	// tableID
 	binary.BigEndian.PutUint64(uint64Buf[:], tableID)
@@ -54,17 +54,17 @@ func EncodeTsKey(uid uint32, tableID uint64, ts uint64) []byte {
 }
 
 // EncodeKey encodes a key accroding to event.
-// Format: uid, tableID, CRTs, startTs, Put/Delete, Key.
-func EncodeKey(uid uint32, tableID uint64, event *model.PolymorphicEvent) []byte {
+// Format: uniqueID, tableID, CRTs, startTs, Put/Delete, Key.
+func EncodeKey(uniqueID uint32, tableID uint64, event *model.PolymorphicEvent) []byte {
 	if event.RawKV == nil {
 		log.Panic("rawkv must not be nil", zap.Any("event", event))
 	}
-	// uid, tableID, CRTs, startTs, Put/Delete, Key
+	// uniqueID, tableID, CRTs, startTs, Put/Delete, Key
 	length := 4 + 8 + 8 + 8 + 2 + len(event.RawKV.Key)
 	buf := make([]byte, 0, length)
 	uint64Buf := [8]byte{}
-	// uid
-	binary.BigEndian.PutUint32(uint64Buf[:], uid)
+	// uniqueID
+	binary.BigEndian.PutUint32(uint64Buf[:], uniqueID)
 	buf = append(buf, uint64Buf[:4]...)
 	// table ID
 	binary.BigEndian.PutUint64(uint64Buf[:], tableID)
