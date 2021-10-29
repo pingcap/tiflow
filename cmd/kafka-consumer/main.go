@@ -24,8 +24,10 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/kafka"
 	"github.com/pingcap/ticdc/pkg/kafka/Consumer"
 	"github.com/pingcap/ticdc/pkg/logutil"
+	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
 )
 
@@ -76,24 +78,42 @@ func main() {
 	 * Construct a new Sarama configuration.
 	 * The Kafka cluster version has to be defined before the consumer/producer is initialized.
 	 */
-	saramaConfig, err := newSaramaConfig(config.Version)
+	saramaConfig, err := Consumer.NewSaramaConfig(config.Version, &security.Credential{
+		CAPath:   ca,
+		CertPath: cert,
+		KeyPath:  key,
+	})
 	if err != nil {
-		log.Panic("Error creating saramaConfig config", zap.Error(err))
+		log.Panic("creating saramaConfig failed", zap.Error(err))
 	}
 
-	if err := waitTopicCreated(config.BrokerEndpoints, config.Topic, saramaConfig); err != nil {
+	admin, err := kafka.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		log.Panic("create cluster admin failed", zap.Error(err))
+	}
+	defer admin.Close()
+
+	if err := admin.WaitTopicCreated(config.Topic); err != nil {
 		log.Panic("wait topic created failed", zap.Error(err))
 	}
+
+	count, err := admin.GetPartitionCount(config.Topic)
+	if err != nil {
+		log.Panic("get partition count failed", zap.Error(err))
+	}
+	config.PartitionCount = count
 
 	/**
 	 * Setup a new Sarama consumer group
 	 */
-	consumer, err := config.NewConsumer(context.TODO())
+
+	ctx := context.Background()
+	consumer, err := config.NewConsumer(ctx)
 	if err != nil {
-		log.Fatal("Error creating consumer", zap.Error(err))
+		log.Panic("creating consumer failed", zap.Error(err))
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	client, err := sarama.NewConsumerGroup(config.BrokerEndpoints, config.GroupID, saramaConfig)
 	if err != nil {
 		log.Fatal("Error creating consumer group client", zap.Error(err))

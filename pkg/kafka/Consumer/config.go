@@ -32,7 +32,7 @@ import (
 type Config struct {
 	BrokerEndpoints []string
 	Topic           string
-	partitionCount  int32
+	PartitionCount  int32
 	GroupID         string
 	Version         string
 	maxMessageBytes int
@@ -53,8 +53,7 @@ func NewConfig() *Config {
 	}
 }
 
-func (c *Config) Initialize(upstream string, partitionCount int32) error {
-	c.partitionCount = partitionCount
+func (c *Config) Initialize(upstream string) error {
 	uri, err := url.Parse(upstream)
 	if err != nil {
 		return errors.Trace(err)
@@ -108,7 +107,7 @@ func (c *Config) Initialize(upstream string, partitionCount int32) error {
 	return nil
 }
 
-func NewSaramaConfig(version, ca, cert, key string) (*sarama.Config, error) {
+func NewSaramaConfig(version string, credential *security.Credential) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
 	v, err := sarama.ParseKafkaVersion(version)
@@ -124,16 +123,11 @@ func NewSaramaConfig(version, ca, cert, key string) (*sarama.Config, error) {
 	config.Consumer.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 
-	if len(ca) != 0 {
-		config.Net.TLS.Enable = true
-		config.Net.TLS.Config, err = (&security.Credential{
-			CAPath:   ca,
-			CertPath: cert,
-			KeyPath:  key,
-		}).ToTLSConfig()
-		if err != nil {
+	if credential != nil {
+		if config.Net.TLS.Config, err = credential.ToTLSConfig(); err != nil {
 			return nil, errors.Trace(err)
 		}
+		config.Net.TLS.Enable = true
 	}
 
 	return config, err
