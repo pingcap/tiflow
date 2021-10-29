@@ -46,8 +46,6 @@ import (
 )
 
 const (
-	schemaStorageGCLag = time.Minute * 20
-
 	backoffBaseDelayInMs = 5
 	maxTries             = 3
 )
@@ -753,9 +751,7 @@ func (p *processor) doGCSchemaStorage() {
 		// schemaStorage is nil only in test
 		return
 	}
-	// Delay GC to accommodate pullers starting from a startTs that's too small
-	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
-	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs).Add(-schemaStorageGCLag)
+	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs)
 	gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
 	p.schemaStorage.DoGC(gcTs)
 }
