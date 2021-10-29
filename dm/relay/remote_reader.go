@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package reader
+package relay
 
 import (
 	"context"
@@ -28,8 +28,8 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
-// Result represents a read operation result.
-type Result struct {
+// RResult represents a read operation result.
+type RResult struct {
 	Event *replication.BinlogEvent
 }
 
@@ -48,11 +48,11 @@ type Reader interface {
 
 	// GetEvent gets the binlog event one by one, it will block if no event can be read.
 	// You can pass a context (like Cancel) to break the block.
-	GetEvent(ctx context.Context) (Result, error)
+	GetEvent(ctx context.Context) (RResult, error)
 }
 
-// Config is the configuration used by the Reader.
-type Config struct {
+// RConfig is the configuration used by the Reader.
+type RConfig struct {
 	SyncConfig replication.BinlogSyncerConfig
 	Pos        mysql.Position
 	GTIDs      gtid.Set
@@ -61,8 +61,8 @@ type Config struct {
 }
 
 // reader implements Reader interface.
-type reader struct {
-	cfg *Config
+type remoteReader struct {
+	cfg *RConfig
 
 	mu    sync.RWMutex
 	stage common.Stage
@@ -74,8 +74,8 @@ type reader struct {
 }
 
 // NewReader creates a Reader instance.
-func NewReader(cfg *Config) Reader {
-	return &reader{
+func NewReader(cfg *RConfig) Reader {
+	return &remoteReader{
 		cfg:    cfg,
 		in:     br.NewTCPReader(cfg.SyncConfig),
 		out:    make(chan *replication.BinlogEvent),
@@ -84,7 +84,7 @@ func NewReader(cfg *Config) Reader {
 }
 
 // Start implements Reader.Start.
-func (r *reader) Start() error {
+func (r *remoteReader) Start() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -109,7 +109,7 @@ func (r *reader) Start() error {
 }
 
 // Close implements Reader.Close.
-func (r *reader) Close() error {
+func (r *remoteReader) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -124,11 +124,11 @@ func (r *reader) Close() error {
 
 // GetEvent implements Reader.GetEvent.
 // NOTE: can only close the reader after this returned.
-func (r *reader) GetEvent(ctx context.Context) (Result, error) {
+func (r *remoteReader) GetEvent(ctx context.Context) (RResult, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var result Result
+	var result RResult
 	if r.stage != common.StagePrepared {
 		return result, terror.ErrRelayReaderNeedStart.Generate(r.stage, common.StagePrepared)
 	}
@@ -148,13 +148,13 @@ func (r *reader) GetEvent(ctx context.Context) (Result, error) {
 	}
 }
 
-func (r *reader) setUpReaderByGTID() error {
+func (r *remoteReader) setUpReaderByGTID() error {
 	gs := r.cfg.GTIDs
 	r.logger.Info("start sync", zap.String("master", r.cfg.MasterID), zap.Stringer("from GTID set", gs))
 	return r.in.StartSyncByGTID(gs)
 }
 
-func (r *reader) setUpReaderByPos() error {
+func (r *remoteReader) setUpReaderByPos() error {
 	pos := r.cfg.Pos
 	r.logger.Info("start sync", zap.String("master", r.cfg.MasterID), zap.Stringer("from position", pos))
 	return r.in.StartSyncByPos(pos)

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package streamer
+package relay
 
 import (
 	"bytes"
@@ -61,11 +61,11 @@ func (t *testReaderSuite) SetUpSuite(c *C) {
 	t.lastPos = 0
 	t.lastGTID, err = gtid.ParserGTID(gmysql.MySQLFlavor, "ba8f633f-1f15-11eb-b1c7-0242ac110002:0")
 	c.Assert(err, IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/streamer/SetHeartbeatInterval", "return(10000)"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/relay/SetHeartbeatInterval", "return(10000)"), IsNil)
 }
 
 func (t *testReaderSuite) TearDownSuite(c *C) {
-	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/streamer/SetHeartbeatInterval"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/relay/SetHeartbeatInterval"), IsNil)
 }
 
 func (t *testReaderSuite) TestParseFileBase(c *C) {
@@ -957,10 +957,10 @@ func (t *testReaderSuite) TestReParseUsingGTID(c *C) {
 	_, err = f.Write(replication.BinLogFileHeader)
 	c.Assert(err, IsNil)
 
-	meta := Meta{BinLogName: file, BinLogPos: latestPos, BinlogGTID: startGTID.String()}
+	meta := LocalMeta{BinLogName: file, BinLogPos: latestPos, BinlogGTID: startGTID.String()}
 	metaFile, err := os.Create(path.Join(uuidDir, utils.MetaFilename))
 	c.Assert(err, IsNil)
-	c.Assert(toml.NewEncoder(metaFile).Encode(meta), IsNil)
+	c.Assert(toml.NewEncoder(metaFile).Encode(&meta), IsNil)
 	c.Assert(metaFile.Close(), IsNil)
 
 	// prepare some regular events,
@@ -1181,10 +1181,10 @@ func (t *testReaderSuite) writeUUIDs(c *C, relayDir string, uuids []string) []by
 }
 
 func (t *testReaderSuite) createMetaFile(c *C, relayDirPath, binlogFileName string, pos uint32, gtid string) {
-	meta := Meta{BinLogName: binlogFileName, BinLogPos: pos, BinlogGTID: gtid}
+	meta := LocalMeta{BinLogName: binlogFileName, BinLogPos: pos, BinlogGTID: gtid}
 	metaFile, err2 := os.Create(path.Join(relayDirPath, utils.MetaFilename))
 	c.Assert(err2, IsNil)
-	err := toml.NewEncoder(metaFile).Encode(meta)
+	err := toml.NewEncoder(metaFile).Encode(&meta)
 	c.Assert(err, IsNil)
 	metaFile.Close()
 }

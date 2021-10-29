@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package retry
+package relay
 
 import (
 	"context"
@@ -23,7 +23,7 @@ import (
 	. "github.com/pingcap/check"
 )
 
-func TestSuite(t *testing.T) {
+func TestReaderRetrySuite(t *testing.T) {
 	TestingT(t)
 }
 

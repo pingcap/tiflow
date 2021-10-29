@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package streamer
+package relay
 
 import (
 	"context"
@@ -219,7 +219,7 @@ func (r *relayLogFileChecker) relayLogUpdatedOrNewCreated(ctx context.Context, u
 	// binlog file may have rotated if we read nothing last time(either it's the first read or after notified)
 	lastReadCnt := r.endOffset - r.beginOffset
 	if lastReadCnt == 0 {
-		meta := &Meta{}
+		meta := &LocalMeta{}
 		_, err := toml.DecodeFile(filepath.Join(r.latestRelayLogDir, utils.MetaFilename), meta)
 		if err != nil {
 			errCh <- terror.Annotate(err, "decode relay meta toml file failed")

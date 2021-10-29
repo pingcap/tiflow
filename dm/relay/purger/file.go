@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/relay"
 )
 
 // subRelayFiles represents relay log files in one sub directory.
@@ -107,7 +108,7 @@ func collectRelayFilesBeforeFileAndTime(logger log.Logger, relayBaseDir string, 
 		)
 		if i+1 == len(uuids) {
 			// same sub dir, only collect relay files newer than safeRelay.filename
-			shortFiles, err = streamer.CollectBinlogFilesCmp(dir, safeFilename, streamer.FileCmpLess)
+			shortFiles, err = relay.CollectBinlogFilesCmp(dir, safeFilename, relay.FileCmpLess)
 			if err != nil {
 				return nil, terror.Annotatef(err, "dir %s", dir)
 			}
@@ -117,7 +118,7 @@ func collectRelayFilesBeforeFileAndTime(logger log.Logger, relayBaseDir string, 
 				continue
 			}
 			// earlier sub dir, collect all relay files
-			shortFiles, err = streamer.CollectAllBinlogFiles(dir)
+			shortFiles, err = relay.CollectAllBinlogFiles(dir)
 			if err != nil {
 				return nil, terror.Annotatef(err, "dir %s", dir)
 			}
