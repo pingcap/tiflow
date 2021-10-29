@@ -1050,6 +1050,21 @@ func cloneValues(dest, src reflect.Value) {
 		srcType = srcType.Elem()
 	}
 
+	if destType.Kind() == reflect.Map {
+		destMap := reflect.MakeMap(destType)
+		for _, k := range src.MapKeys() {
+			if src.MapIndex(k).Type().Kind() == reflect.Ptr {
+				newVal := reflect.New(destType.Elem().Elem())
+				cloneValues(newVal, src.MapIndex(k))
+				destMap.SetMapIndex(k, newVal)
+			} else {
+				cloneValues(destMap.MapIndex(k).Addr(), src.MapIndex(k).Addr())
+			}
+		}
+		dest.Set(destMap)
+		return
+	}
+
 	if destType.Kind() == reflect.Slice {
 		slice := reflect.MakeSlice(destType, src.Len(), src.Cap())
 		for i := 0; i < src.Len(); i++ {

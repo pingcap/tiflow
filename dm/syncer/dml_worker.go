@@ -59,10 +59,14 @@ type DMLWorker struct {
 
 // dmlWorkerWrap creates and runs a dmlWorker instance and returns flush job channel.
 func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
+	chanSize := syncer.cfg.QueueSize / 2
+	if syncer.cfg.Compact {
+		chanSize /= 2
+	}
 	dmlWorker := &DMLWorker{
 		batch:        syncer.cfg.Batch,
 		workerCount:  syncer.cfg.WorkerCount,
-		chanSize:     syncer.cfg.QueueSize,
+		chanSize:     chanSize,
 		task:         syncer.cfg.Name,
 		source:       syncer.cfg.SourceID,
 		worker:       syncer.cfg.WorkerName,
