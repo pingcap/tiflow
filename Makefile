@@ -63,6 +63,12 @@ ifeq ($(RELEASE_VERSION),)
 	endif
 endif
 
+ifeq ($(ARCH),$(MAC))
+	LN := gln
+else
+	LN := ln
+endif
+
 BUILDTS := $(shell date -u '+%Y-%m-%d %H:%M:%S')
 GITHASH := $(shell git rev-parse HEAD)
 GITBRANCH := $(shell git rev-parse --abbrev-ref HEAD)
@@ -299,7 +305,7 @@ dm_integration_test: check_third_party_binary_for_dm install_test_python_dep
 	@which bin/dm-master.test
 	@which bin/dm-worker.test
 	@which bin/dm-syncer.test
-	ln -srf bin dm/
+	$(LN) -srf bin dm/
 	cd dm && ./tests/run.sh $(CASE)
 
 dm_compatibility_test: check_third_party_binary_for_dm
