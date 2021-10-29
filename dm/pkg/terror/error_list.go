@@ -1266,7 +1266,7 @@ var (
 	ErrSchedulerLatchInUse                = New(codeSchedulerLatchInUse, ClassScheduler, ScopeInternal, LevelLow, "when %s, resource %s is in use by other client", "Please try again later")
 	ErrSchedulerSourceCfgUpdate           = New(codeSchedulerSourceCfgUpdate, ClassScheduler, ScopeInternal, LevelLow, "source can only update relay-log related parts for now", "")
 	ErrSchedulerWrongWorkerInput          = New(codeSchedulerWrongWorkerInput, ClassScheduler, ScopeInternal, LevelMedium, "require DM master to modify worker [%s] with source [%s], but currently the worker is bound to source [%s]", "")
-	ErrSchedulerCantTransferToRelayWorker = New(codeSchedulerCantTransferToRelayWorker, ClassScheduler, ScopeInternal, LevelMedium, "require DM worker to be bound to source [%s], but it has been started relay for source [%s]", "")
+	ErrSchedulerBoundDiffWithStartedRelay = New(codeSchedulerCantTransferToRelayWorker, ClassScheduler, ScopeInternal, LevelMedium, "require DM worker [%s] to be bound to source [%s], but it has been started relay for source [%s]", "If you intend to bind the source with worker, you can stop-relay for current source.")
 
 	// dmctl.
 	ErrCtlGRPCCreateConn = New(codeCtlGRPCCreateConn, ClassDMCtl, ScopeInternal, LevelHigh, "can not create grpc connection", "Please check your network connection.")
