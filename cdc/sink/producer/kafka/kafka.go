@@ -459,12 +459,17 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, e
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-
-	if err := config.AdjustPartitionNum(topic, admin); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
+	defer func() {
+		if err := admin.Close(); err != nil {
+			log.Warn("close kafka cluster admin failed", zap.Error(err))
+		}
+	}()
 
 	if config.TopicPreProcess {
+		if err := config.AdjustPartitionNum(topic, admin); err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		}
+
 		if err := admin.CreateTopic(topic, &sarama.TopicDetail{
 			NumPartitions:     config.PartitionNum,
 			ReplicationFactor: config.ReplicationFactor,
