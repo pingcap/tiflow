@@ -6,6 +6,10 @@ on:
       - master
     paths:
       - "dm/**"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - ".github/**"
   schedule:
     - cron: "3 22 * * *" # run at minute 06:03 UTC+8
 

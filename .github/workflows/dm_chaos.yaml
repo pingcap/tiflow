@@ -8,6 +8,10 @@ on:
       - master
     paths:
       - "dm/**"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - ".github/**"
   schedule:
     - cron: "0,30 17-22 * * *" # run at minute 0 and 30 every hour from 01:00 ~ 06:00 UTC+8
 
