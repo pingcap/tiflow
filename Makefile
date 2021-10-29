@@ -325,6 +325,7 @@ dm_compatibility_test: check_third_party_binary_for_dm
 	@which bin/dm-worker.test.current
 	@which bin/dm-master.test.previous
 	@which bin/dm-worker.test.previous
+	ln -srf bin dm/
 	cd dm && ./tests/compatibility_run.sh ${CASE}
 
 dm_coverage: tools/bin/gocovmerge tools/bin/goveralls

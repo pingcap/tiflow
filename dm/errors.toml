@@ -3119,9 +3119,9 @@ workaround = ""
 tags = ["internal", "medium"]
 
 [error.DM-scheduler-46027]
-message = "require DM worker to be bound to source [%s], but it has been started relay for source [%s]"
+message = "require DM worker [%s] to be bound to source [%s], but it has been started relay for source [%s]"
 description = ""
-workaround = ""
+workaround = "If you intend to bind the source with worker, you can stop-relay for current source."
 tags = ["internal", "medium"]
 
 [error.DM-dmctl-48001]
