@@ -751,9 +751,7 @@ func (p *processor) doGCSchemaStorage() {
 		// schemaStorage is nil only in test
 		return
 	}
-	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs)
-	gcTs := oracle.ComposeTS(gcTime.UnixMilli(), 0)
-	p.schemaStorage.DoGC(gcTs)
+	p.schemaStorage.DoGC(p.changefeed.Status.CheckpointTs - 1)
 }
 
 func (p *processor) Close() error {
