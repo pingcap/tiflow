@@ -485,7 +485,6 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		lm.currentUUID = backupUuid
 	}
 
-
 	// reader return valid event
 	reader2.err = nil
 	reader2.result.Event = rotateEv
