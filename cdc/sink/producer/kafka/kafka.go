@@ -35,12 +35,16 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
+
+	kafkaPkg "github.com/pingcap/ticdc/pkg/kafka"
 )
 
 const defaultPartitionNum = 4
 
 // Config stores the Kafka configuration
 type Config struct {
+	BrokerEndpoints []string
+
 	PartitionNum      int32
 	ReplicationFactor int16
 
@@ -70,6 +74,8 @@ func NewConfig() *Config {
 
 // Initialize the kafka configuration
 func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
+	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
+
 	s := sinkURI.Query().Get("partition-num")
 	if s != "" {
 		a, err := strconv.Atoi(s)
@@ -160,6 +166,68 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 	}
 
 	return nil
+}
+
+func (c *Config) Validate() error {
+	if c.PartitionNum < 0 {
+		return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
+	}
+
+	return nil
+}
+
+// SetPartitionNum gets partition number from existing topic
+func (c *Config) SetPartitionNum(topic string) error {
+	admin, err := kafkaPkg.NewAdmin(c.BrokerEndpoints)
+
+	// func kafkaTopicPreProcess(topic, address string, config *Config, cfg *sarama.Config) (int32, error) {
+	// 	admin, err := kafka.NewAdmin(strings.Split(address, ","), cfg)
+	// 	if err != nil {
+	// 		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	// 	}
+	// 	defer func() {
+	// 		err := admin.Close()
+	// 		if err != nil {
+	// 			log.Warn("close admin client failed", zap.Error(err))
+	// 		}
+	// 	}()
+	// 	partitionNum := config.PartitionNum
+	//
+	// 	count, err := admin.GetPartitionCount(topic)
+	// 	if err != nil {
+	// 		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	// 	}
+	//
+	// 	if count != 0 {
+	// 		log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", count))
+	// 		if partitionNum == 0 {
+	// 			partitionNum = count
+	// 		} else if partitionNum < count {
+	// 			log.Warn("partition number assigned in sink-uri is less than that of topic", zap.Int32("topic partition num", count))
+	// 		} else if partitionNum > count {
+	// 			return 0, cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
+	// 				"partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, count)
+	// 		}
+	// 	} else {
+	// 		if partitionNum == 0 {
+	// 			partitionNum = defaultPartitionNum
+	// 			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
+	// 		}
+	// 		log.Info("create a topic", zap.String("topic", topic),
+	// 			zap.Int32("partition_num", partitionNum),
+	// 			zap.Int16("replication_factor", config.ReplicationFactor))
+	// 		err := admin.CreateTopic(topic, &sarama.TopicDetail{
+	// 			NumPartitions:     partitionNum,
+	// 			ReplicationFactor: config.ReplicationFactor,
+	// 		}, false)
+	// 		// TODO idenfity the cause of "Topic with this name already exists"
+	// 		if err != nil && !strings.Contains(err.Error(), "already exists") {
+	// 			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	// 		}
+	// 	}
+	//
+	// 	return partitionNum, nil
+	// }
 }
 
 type kafkaSaramaProducer struct {
@@ -379,56 +447,6 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
-// kafkaTopicPreProcess gets partition number from existing topic, if topic doesn't
-// exit, creates it automatically.
-func kafkaTopicPreProcess(topic, address string, config *Config, cfg *sarama.Config) (int32, error) {
-	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
-	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-	defer func() {
-		err := admin.Close()
-		if err != nil {
-			log.Warn("close admin client failed", zap.Error(err))
-		}
-	}()
-	topics, err := admin.ListTopics()
-	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-	partitionNum := config.PartitionNum
-	topicDetail, exist := topics[topic]
-	if exist {
-		log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
-		if partitionNum == 0 {
-			partitionNum = topicDetail.NumPartitions
-		} else if partitionNum < topicDetail.NumPartitions {
-			log.Warn("partition number assigned in sink-uri is less than that of topic", zap.Int32("topic partition num", topicDetail.NumPartitions))
-		} else if partitionNum > topicDetail.NumPartitions {
-			return 0, cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
-				"partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, topicDetail.NumPartitions)
-		}
-	} else {
-		if partitionNum == 0 {
-			partitionNum = defaultPartitionNum
-			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
-		}
-		log.Info("create a topic", zap.String("topic", topic),
-			zap.Int32("partition_num", partitionNum),
-			zap.Int16("replication_factor", config.ReplicationFactor))
-		err := admin.CreateTopic(topic, &sarama.TopicDetail{
-			NumPartitions:     partitionNum,
-			ReplicationFactor: config.ReplicationFactor,
-		}, false)
-		// TODO idenfity the cause of "Topic with this name already exists"
-		if err != nil && !strings.Contains(err.Error(), "already exists") {
-			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-		}
-	}
-
-	return partitionNum, nil
-}
-
 var newSaramaConfigImpl = newSaramaConfig
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
@@ -437,9 +455,6 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
-	}
-	if config.PartitionNum < 0 {
-		return nil, cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(config.PartitionNum)
 	}
 	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
 	if err != nil {
