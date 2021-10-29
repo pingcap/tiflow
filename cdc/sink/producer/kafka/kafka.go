@@ -182,6 +182,14 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 	return nil
 }
 
+func (c *Config) Validate() error {
+	if c.PartitionNum < 0 {
+		return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
+	}
+
+	return nil
+}
+
 type kafkaSaramaProducer struct {
 	// clientLock is used to protect concurrent access of asyncClient and syncClient.
 	// Since we don't close these two clients (which have an input chan) from the
