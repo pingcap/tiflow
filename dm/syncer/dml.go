@@ -686,12 +686,11 @@ func (dml *DML) genWhere(buf *strings.Builder) []interface{} {
 		if i != 0 {
 			buf.WriteString(" AND ")
 		}
-		buf.WriteByte('`')
 		buf.WriteString(dbutil.ColumnName(col))
 		if whereValues[i] == nil {
-			buf.WriteString("` IS ?")
+			buf.WriteString(" IS ?")
 		} else {
-			buf.WriteString("` = ?")
+			buf.WriteString(" = ?")
 		}
 	}
 	return whereValues
@@ -727,9 +726,9 @@ func (dml *DML) genUpdateSQL() ([]string, [][]interface{}) {
 
 	for i, column := range dml.columns {
 		if i == len(dml.columns)-1 {
-			fmt.Fprintf(&buf, "`%s` = ?", dbutil.ColumnName(column.Name.O))
+			fmt.Fprintf(&buf, "%s = ?", dbutil.ColumnName(column.Name.O))
 		} else {
-			fmt.Fprintf(&buf, "`%s` = ?, ", dbutil.ColumnName(column.Name.O))
+			fmt.Fprintf(&buf, "%s = ?, ", dbutil.ColumnName(column.Name.O))
 		}
 	}
 
@@ -764,10 +763,11 @@ func (dml *DML) genInsertSQL() ([]string, [][]interface{}) {
 	buf.WriteString(dml.targetTableID)
 	buf.WriteString(" (")
 	for i, column := range dml.columns {
+		buf.WriteString(dbutil.ColumnName(column.Name.O))
 		if i != len(dml.columns)-1 {
-			buf.WriteString("`" + dbutil.ColumnName(column.Name.O) + "`,")
+			buf.WriteByte(',')
 		} else {
-			buf.WriteString("`" + dbutil.ColumnName(column.Name.O) + "`)")
+			buf.WriteByte(')')
 		}
 	}
 	buf.WriteString(" VALUES (")
@@ -784,7 +784,7 @@ func (dml *DML) genInsertSQL() ([]string, [][]interface{}) {
 		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
 		for i, column := range dml.columns {
 			col := dbutil.ColumnName(column.Name.O)
-			buf.WriteString("`" + col + "`=VALUES(`" + col + "`)")
+			buf.WriteString(col + "=VALUES(" + col + ")")
 			if i != len(dml.columns)-1 {
 				buf.WriteByte(',')
 			}
@@ -819,10 +819,11 @@ func genInsertOnDuplicateSQLMultipleRows(onDuplicate bool, dmls []*DML) ([]strin
 	buf.WriteString("INSERT INTO")
 	buf.WriteString(" " + dmls[0].targetTableID + " (")
 	for i, column := range dmls[0].columns {
+		buf.WriteString(dbutil.ColumnName(column.Name.O))
 		if i != len(dmls[0].columns)-1 {
-			buf.WriteString("`" + dbutil.ColumnName(column.Name.O) + "`,")
+			buf.WriteByte(',')
 		} else {
-			buf.WriteString("`" + dbutil.ColumnName(column.Name.O) + "`)")
+			buf.WriteByte(')')
 		}
 	}
 	buf.WriteString(" VALUES ")
@@ -839,7 +840,7 @@ func genInsertOnDuplicateSQLMultipleRows(onDuplicate bool, dmls []*DML) ([]strin
 		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
 		for i, column := range dmls[0].columns {
 			col := dbutil.ColumnName(column.Name.O)
-			buf.WriteString("`" + col + "`=VALUES(`" + col + "`)")
+			buf.WriteString(col + "=VALUES(" + col + ")")
 			if i != len(dmls[0].columns)-1 {
 				buf.WriteByte(',')
 			}
@@ -868,9 +869,9 @@ func genDeleteSQLMultipleRows(dmls []*DML) ([]string, [][]interface{}) {
 	whereColumns, _ := dmls[0].whereColumnsAndValues()
 	for i, column := range whereColumns {
 		if i != len(whereColumns)-1 {
-			buf.WriteString("`" + dbutil.ColumnName(column) + "`,")
+			buf.WriteString(dbutil.ColumnName(column) + ",")
 		} else {
-			buf.WriteString("`" + dbutil.ColumnName(column) + "`)")
+			buf.WriteString(dbutil.ColumnName(column) + ")")
 		}
 	}
 	buf.WriteString(" IN (")

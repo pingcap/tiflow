@@ -333,9 +333,9 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 	p := parser.New()
 	se := mock.NewContext()
 	schema11 := "create table dba.tba(id int primary key, col1 int unique not null, name varchar(24))"
-	schema12 := schema11
-	schema21 := "create table dba.tba(id int primary key, col2 int unique not null, name varchar(24))"
-	schema22 := "create table dba.tbb(id int primary key, col3 int unique not null, name varchar(24))"
+	schema12 := "create table dba.tbb(id int primary key, col1 int unique not null, name varchar(24))"
+	schema21 := "create table dbb.tba(id int primary key, col2 int unique not null, name varchar(24))"
+	schema22 := "create table dbb.tbb(id int primary key, col3 int unique not null, name varchar(24))"
 	ti11, err := createTableInfo(p, se, 0, schema11)
 	c.Assert(err, IsNil)
 	ti12, err := createTableInfo(p, se, 0, schema12)
