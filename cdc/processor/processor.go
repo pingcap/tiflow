@@ -752,7 +752,7 @@ func (p *processor) doGCSchemaStorage() {
 		return
 	}
 	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs)
-	gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
+	gcTs := oracle.ComposeTS(gcTime.UnixMilli(), 0)
 	p.schemaStorage.DoGC(gcTs)
 }
 
