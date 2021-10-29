@@ -53,39 +53,38 @@ func TestMaybeWrite(t *testing.T) {
 	err = ldb.db.Stats(&stats)
 	require.Nil(t, err)
 	writeBase := stats.IOWrite
-	wb := &leveldb.Batch{}
 
 	// Empty batch
-	err = ldb.maybeWrite(wb, false)
+	err = ldb.maybeWrite(false)
 	require.Nil(t, err)
 	err = ldb.db.Stats(&stats)
 	require.Nil(t, err)
 	require.Equal(t, stats.IOWrite, writeBase)
 
 	// Empty batch, force write
-	err = ldb.maybeWrite(wb, true)
+	err = ldb.maybeWrite(true)
 	require.Nil(t, err)
 	err = ldb.db.Stats(&stats)
 	require.Nil(t, err)
 	require.Equal(t, stats.IOWrite, writeBase)
 
 	// None empty batch
-	wb.Put([]byte("abc"), []byte("abc"))
-	err = ldb.maybeWrite(wb, false)
+	ldb.wb.Put([]byte("abc"), []byte("abc"))
+	err = ldb.maybeWrite(false)
 	require.Nil(t, err)
-	require.Equal(t, wb.Len(), 1)
+	require.Equal(t, ldb.wb.Len(), 1)
 
 	// None empty batch
-	err = ldb.maybeWrite(wb, true)
+	err = ldb.maybeWrite(true)
 	require.Nil(t, err)
-	require.Equal(t, wb.Len(), 0)
+	require.Equal(t, ldb.wb.Len(), 0)
 
-	wb.Put([]byte("abc"), []byte("abc"))
+	ldb.wb.Put([]byte("abc"), []byte("abc"))
 	ldb.wbSize = 1
-	require.Greater(t, len(wb.Dump()), ldb.wbSize)
-	err = ldb.maybeWrite(wb, false)
+	require.Greater(t, len(ldb.wb.Dump()), ldb.wbSize)
+	err = ldb.maybeWrite(false)
 	require.Nil(t, err)
-	require.Equal(t, wb.Len(), 0)
+	require.Equal(t, ldb.wb.Len(), 0)
 
 	// Close leveldb.
 	closed := !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})

@@ -23,7 +23,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/sorter/encoding"
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
 	"github.com/pingcap/ticdc/pkg/actor"
 	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
@@ -32,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
+	"github.com/syndtr/goleveldb/leveldb/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 )
@@ -77,14 +77,13 @@ func OpenDB(ctx context.Context, id int, cfg *config.SorterConfig) (*leveldb.DB,
 type LevelActor struct {
 	id       actor.ID
 	db       *leveldb.DB
-	iterSema *semaphore.Weighted
+	wb       *leveldb.Batch
 	wbSize   int
+	iterSema *semaphore.Weighted
 	closedWg *sync.WaitGroup
 
-	serde *encoding.MsgPackGenSerde
-
 	metricWriteDuration prometheus.Observer
-	metricWriteBytes    prometheus.Counter
+	metricWriteBytes    prometheus.Observer
 }
 
 var _ actor.Actor = (*LevelActor)(nil)
@@ -97,6 +96,7 @@ func NewLevelDBActor(
 	idTag := fmt.Sprint(id)
 	// Write batch size should be larger than block size to save CPU.
 	wbSize := cfg.BlockSize * 16
+	wb := leveldb.MakeBatch(wbSize)
 	// IterCount limits the total number of opened iterators to release leveldb
 	// resources (memtables and SST files) in time.
 	iterSema := semaphore.NewWeighted(int64(cfg.LevelDBConcurrency))
@@ -105,14 +105,13 @@ func NewLevelDBActor(
 	return &LevelActor{
 		id:       actor.ID(id),
 		db:       db,
+		wb:       wb,
 		iterSema: iterSema,
 		wbSize:   wbSize,
 		closedWg: wg,
 
-		serde: &encoding.MsgPackGenSerde{},
-
-		metricWriteDuration: sorterWriteHistogram.WithLabelValues(captureAddr, idTag),
-		metricWriteBytes:    sorterWriteBytes.WithLabelValues(captureAddr, idTag),
+		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(captureAddr, idTag),
+		metricWriteBytes:    sorterWriteBytesHistogram.WithLabelValues(captureAddr, idTag),
 	}, mb, nil
 }
 
@@ -121,17 +120,23 @@ func (ldb *LevelActor) close(err error) {
 	ldb.closedWg.Done()
 }
 
-func (ldb *LevelActor) maybeWrite(batch *leveldb.Batch, force bool) error {
-	bytes := len(batch.Dump())
+func (ldb *LevelActor) maybeWrite(force bool) error {
+	bytes := len(ldb.wb.Dump())
 	if bytes >= ldb.wbSize || (force && bytes != 0) {
 		startTime := time.Now()
-		err := ldb.db.Write(batch, nil)
+		err := ldb.db.Write(ldb.wb, nil)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		ldb.metricWriteDuration.Observe(time.Since(startTime).Seconds())
-		ldb.metricWriteBytes.Add(float64(bytes))
-		batch.Reset()
+		ldb.metricWriteBytes.Observe(float64(bytes))
+
+		// Reset write batch or reclaim memory if it grows too large.
+		if cap(ldb.wb.Dump()) <= 2*ldb.wbSize {
+			ldb.wb.Reset()
+		} else {
+			ldb.wb = leveldb.MakeBatch(ldb.wbSize)
+		}
 	}
 	return nil
 }
@@ -145,7 +150,8 @@ func (ldb *LevelActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 		return false
 	default:
 	}
-	var batch leveldb.Batch
+	var iterChs []chan message.LimitedIterator
+	var iterRanges []*util.Range
 	for i := range tasks {
 		var task message.Task
 		msg := tasks[i]
@@ -158,41 +164,47 @@ func (ldb *LevelActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 		default:
 			log.Panic("unexpected message", zap.Any("message", msg))
 		}
-		_, events, needIter, iterCh := task.TableID, task.Events, task.NeedIter, task.IterCh
+		events, needIter, iterCh := task.Events, task.NeedIter, task.IterCh
 
 		for k, v := range events {
 			if len(v) != 0 {
-				batch.Put([]byte(k), v)
+				ldb.wb.Put([]byte(k), v)
 			} else {
 				// Delete the key if value is empty
-				batch.Delete([]byte(k))
+				ldb.wb.Delete([]byte(k))
 			}
 
 			forceWrite := false
-			if err := ldb.maybeWrite(&batch, forceWrite); err != nil {
+			if err := ldb.maybeWrite(forceWrite); err != nil {
 				log.Panic("leveldb error", zap.Error(err))
 			}
 		}
-
-		forceWrite := true
-		if err := ldb.maybeWrite(&batch, forceWrite); err != nil {
-			log.Panic("leveldb error", zap.Error(err))
-		}
-
 		if needIter {
-			err := ldb.iterSema.Acquire(ctx, 1)
-			if err != nil {
-				if errors.Cause(err) == context.Canceled {
-					ldb.close(err)
-					return false
-				}
-				log.Panic("leveldb error, acquire iter", zap.Error(err))
+			iterChs = append(iterChs, iterCh)
+			iterRanges = append(iterRanges, task.Irange)
+		} else {
+			close(iterCh)
+		}
+	}
+
+	// Force write only if there is a task requires an iterator.
+	forceWrite := len(iterChs) != 0
+	if err := ldb.maybeWrite(forceWrite); err != nil {
+		log.Panic("leveldb error", zap.Error(err))
+	}
+	for i := range iterChs {
+		iterCh := iterChs[i]
+		err := ldb.iterSema.Acquire(ctx, 1)
+		if err != nil {
+			if errors.Cause(err) == context.Canceled {
+				return false
 			}
-			iter := ldb.db.NewIterator(task.Irange, nil)
-			iterCh <- message.LimitedIterator{
-				Iterator: iter,
-				Sema:     ldb.iterSema,
-			}
+			log.Panic("leveldb error, acquire iter", zap.Error(err))
+		}
+		iter := ldb.db.NewIterator(iterRanges[i], nil)
+		iterCh <- message.LimitedIterator{
+			Iterator: iter,
+			Sema:     ldb.iterSema,
 		}
 		close(iterCh)
 	}

@@ -18,17 +18,18 @@ import (
 )
 
 var (
-	sorterWriteBytes = prometheus.NewCounterVec(prometheus.CounterOpts{
+	sorterWriteBytesHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
-		Name:      "total_write_bytes",
-		Help:      "The total number of write bytes by the sorter",
+		Name:      "leveldb_write_bytes",
+		Help:      "Bucketed histogram of sorter write batch bytes",
+		Buckets:   prometheus.ExponentialBuckets(16, 2.0, 20),
 	}, []string{"capture", "id"})
 
-	sorterWriteHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	sorterWriteDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
-		Name:      "write_duration_seconds",
+		Name:      "leveldb_write_duration_seconds",
 		Help:      "Bucketed histogram of sorter write duration",
 		Buckets:   prometheus.ExponentialBuckets(0.004, 2.0, 20),
 	}, []string{"capture", "id"})
@@ -36,6 +37,6 @@ var (
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(sorterWriteHistogram)
-	registry.MustRegister(sorterWriteBytes)
+	registry.MustRegister(sorterWriteDurationHistogram)
+	registry.MustRegister(sorterWriteBytesHistogram)
 }
