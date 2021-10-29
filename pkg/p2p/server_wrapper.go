@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/modern-go/reflect2"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/proto/p2p"
 	"go.uber.org/zap"
@@ -89,7 +90,9 @@ func (s *ServerWrapper) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 		s.wrappedStreamsMu.Unlock()
 		wrappedStream.cancel()
 	}()
-	return s.innerServer.SendMessage(wrappedStream)
+
+	failpoint.Inject("ServerWrapperSendMessageDelay", func() {})
+	return innerServer.SendMessage(wrappedStream)
 }
 
 // Reset resets the inner server object in the ServerWrapper

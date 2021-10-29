@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/proto/p2p"
 	"github.com/stretchr/testify/mock"
@@ -140,4 +141,46 @@ func TestServerWrapperBasics(t *testing.T) {
 	st, ok = status.FromError(err)
 	require.True(t, ok)
 	require.Equal(t, codes.Canceled, st.Code())
+}
+
+func TestServerWrapperDelayed(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	serverWrapper, newClient, cancelServer := newServerWrapperForTesting(t)
+	defer cancelServer()
+
+	client, closeClient := newClient()
+	defer closeClient()
+
+	err := failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ServerWrapperSendMessageDelay", "pause")
+	require.NoError(t, err)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ServerWrapperSendMessageDelay")
+	}()
+
+	innerServer := &mockGrpcService{t: t}
+
+	serverWrapper.Reset(innerServer)
+	innerServer.On("OnNewMessage", &p2p.MessagePacket{})
+
+	// initiates a stream to an empty server
+	clientStream, err := client.SendMessage(ctx)
+	require.NoError(t, err)
+
+	err = clientStream.Send(&p2p.MessagePacket{})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		serverWrapper.wrappedStreamsMu.Lock()
+		defer serverWrapper.wrappedStreamsMu.Unlock()
+		return len(serverWrapper.wrappedStreams) > 0
+	}, time.Second*1, time.Millisecond*20)
+
+	serverWrapper.Reset(nil)
+
+	_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ServerWrapperSendMessageDelay")
+
+	time.Sleep(100 * time.Millisecond)
+	innerServer.AssertExpectations(t)
 }
