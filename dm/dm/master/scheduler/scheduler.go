@@ -311,6 +311,12 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 	if err != nil {
 		return err
 	}
+	if cfg.EnableRelay {
+		stage := ha.NewRelayStage(pb.Stage_Running, cfg.SourceID)
+		if _, err2 := ha.PutRelayStage(s.etcdCli, stage); err2 != nil {
+			return err2
+		}
+	}
 
 	// 3. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg

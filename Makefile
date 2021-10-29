@@ -286,6 +286,24 @@ dm_integration_test_build: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh
 
+dm_integration_test_build_worker: check_failpoint_ctl
+	$(FAILPOINT_ENABLE)
+	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
+		-coverpkg=github.com/pingcap/ticdc/dm/... \
+		-o bin/dm-worker.test github.com/pingcap/ticdc/dm/cmd/dm-worker \
+		|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+	./dm/tests/prepare_tools.sh
+
+dm_integration_test_build_master: check_failpoint_ctl
+	$(FAILPOINT_ENABLE)
+	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
+		-coverpkg=github.com/pingcap/ticdc/dm/... \
+		-o bin/dm-master.test github.com/pingcap/ticdc/dm/cmd/dm-master \
+		|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+	./dm/tests/prepare_tools.sh
+
 install_test_python_dep:
 	@echo "install python requirments for test"
 	pip install --user -q -r ./dm/tests/requirements.txt
@@ -299,7 +317,7 @@ dm_integration_test: check_third_party_binary_for_dm install_test_python_dep
 	@which bin/dm-master.test
 	@which bin/dm-worker.test
 	@which bin/dm-syncer.test
-	ln -srf bin dm/
+	cd dm && ln -sf ../bin
 	cd dm && ./tests/run.sh $(CASE)
 
 dm_compatibility_test: check_third_party_binary_for_dm
@@ -307,7 +325,7 @@ dm_compatibility_test: check_third_party_binary_for_dm
 	@which bin/dm-worker.test.current
 	@which bin/dm-master.test.previous
 	@which bin/dm-worker.test.previous
-	ln -srf bin dm/
+	cd dm && ln -sf ../bin
 	cd dm && ./tests/compatibility_run.sh ${CASE}
 
 dm_coverage: tools/bin/gocovmerge tools/bin/goveralls

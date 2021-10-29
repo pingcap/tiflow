@@ -77,9 +77,6 @@ type Server struct {
 
 	// relay status will never be put in server.sourceStatus
 	sourceStatus pb.SourceStatus
-
-	// TODO: this should belong to source worker
-	startedRelayBySourceCfg bool
 }
 
 // NewServer creates a new Server.
@@ -677,12 +674,12 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 	}
 
 	if sourceCfg.EnableRelay {
+		w.startedRelayBySourceCfg = true
 		if err2 := w.EnableRelay(); err2 != nil {
 			log.L().Error("found a `enable-relay: true` source, but failed to enable relay for DM worker",
 				zap.Error(err2))
 			return err2
 		}
-		s.startedRelayBySourceCfg = true
 	}
 
 	if err2 := w.EnableHandleSubtasks(); err2 != nil {
@@ -704,7 +701,7 @@ func (s *Server) disableHandleSubtasks(source string) error {
 	w.DisableHandleSubtasks()
 
 	// now the worker is unbound, stop relay if it's started by source config
-	if w.cfg.EnableRelay && s.startedRelayBySourceCfg {
+	if w.cfg.EnableRelay && w.startedRelayBySourceCfg {
 		w.DisableRelay()
 	}
 
