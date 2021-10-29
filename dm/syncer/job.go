@@ -82,6 +82,12 @@ type job struct {
 	jobAddTime  time.Time // job commit time
 }
 
+func (j *job) clone() *job {
+	newJob := &job{}
+	*newJob = *j
+	return newJob
+}
+
 func (j *job) String() string {
 	// only output some important information, maybe useful in execution.
 	var dmlStr string
