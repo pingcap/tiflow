@@ -104,22 +104,57 @@ func (s *Server) GetDocHTML(ctx echo.Context) error {
 
 // DMAPIGetClusterMasterList get cluster master node list url is:(GET /api/v1/cluster/masters).
 func (s *Server) DMAPIGetClusterMasterList(ctx echo.Context) error {
-	return nil
+	newCtx := ctx.Request().Context()
+	memberMasters, err := s.listMemberMaster(newCtx, nil)
+	if err != nil {
+		return err
+	}
+	masterCnt := len(memberMasters.Master.Masters)
+	masters := make([]openapi.ClusterMaster, masterCnt)
+	for idx, master := range memberMasters.Master.Masters {
+		masters[idx] = openapi.ClusterMaster{
+			Name:   master.GetName(),
+			Alive:  master.GetAlive(),
+			Addr:   master.GetPeerURLs()[0],
+			Leader: master.GetName() == s.cfg.Name, // only leader can handle request
+		}
+	}
+	resp := &openapi.GetClusterMasterListResponse{Total: masterCnt, Data: masters}
+	return ctx.JSON(http.StatusOK, resp)
 }
 
 // DMAPIOfflineMasterNode offline master node url is: (DELETE /api/v1/cluster/masters/{master-name}).
 func (s *Server) DMAPIOfflineMasterNode(ctx echo.Context, masterName string) error {
-	return nil
+	newCtx := ctx.Request().Context()
+	if err := s.deleteMasterByName(newCtx, masterName); err != nil {
+		return err
+	}
+	return ctx.NoContent(http.StatusNoContent)
 }
 
 // DMAPIGetClusterWorkerList get cluster worker node list url is: (GET /api/v1/cluster/workers).
 func (s *Server) DMAPIGetClusterWorkerList(ctx echo.Context) error {
-	return nil
+	memberWorkers := s.listMemberWorker(nil)
+	workerCnt := len(memberWorkers.Worker.Workers)
+	workers := make([]openapi.ClusterWorker, workerCnt)
+	for idx, worker := range memberWorkers.Worker.Workers {
+		workers[idx] = openapi.ClusterWorker{
+			Name:            worker.GetName(),
+			Addr:            worker.GetAddr(),
+			BoundSourceName: worker.GetSource(),
+			BoundStage:      worker.GetStage(),
+		}
+	}
+	resp := &openapi.GetClusterWorkerListResponse{Total: workerCnt, Data: workers}
+	return ctx.JSON(http.StatusOK, resp)
 }
 
 // DMAPIOfflineWorkerNode offline worker node url is: (DELETE /api/v1/cluster/workers/{worker-name}).
 func (s *Server) DMAPIOfflineWorkerNode(ctx echo.Context, workerName string) error {
-	return nil
+	if err := s.scheduler.RemoveWorker(workerName); err != nil {
+		return err
+	}
+	return ctx.NoContent(http.StatusNoContent)
 }
 
 // DMAPICreateSource url is:(POST /api/v1/sources).
