@@ -208,15 +208,17 @@ function test_noshard_task() {
 	# create source succesfully
 	openapi_source_check "create_source1_success"
 	openapi_source_check "list_source_success" 1
+
 	# get source status success
-	# openapi_source_check "get_source_status_success" "mysql-01"
+	openapi_source_check "get_source_status_success" "mysql-01"
 
 	# create source succesfully
 	openapi_source_check "create_source2_success"
 	# get source list success
 	openapi_source_check "list_source_success" 2
+
 	# get source status success
-	# openapi_source_check "get_source_status_success" "mysql-02"
+	openapi_source_check "get_source_status_success" "mysql-02"
 
 	# start task success: not vaild task create request
 	openapi_task_check "start_task_failed"
@@ -239,6 +241,16 @@ function test_noshard_task() {
 
 	# get task list
 	openapi_task_check "get_task_list" 1
+
+	# stop  task
+	openapi_task_check "pause_task_success" "$task_name" "mysql-01"
+
+	# opreate schema
+	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-01"
+
+	# resume task
+	openapi_task_check "resume_task_success" "$task_name" "mysql-01"
+
 	# stop task success
 	openapi_task_check "stop_task_success" "$task_name"
 
@@ -251,27 +263,9 @@ function test_noshard_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK SUCCESS"
 }
 
-function test_cluster() {
-	# list master and worker node
-	openapi_cluster_check "list_master_success" 2
-
-	openapi_cluster_check "list_worker_success" 2
-
-	# delete master node
-	openapi_cluster_check "delete_master_with_retry_success" "master2"
-	openapi_cluster_check "list_master_success" 1
-
-	# delete worker node fialed because of worker is still online
-	openapi_cluster_check "delete_worker_failed" "worker1"
-	kill_dm_worker
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
-
-	openapi_cluster_check "delete_worker_with_retry_success" "worker1"
-	openapi_cluster_check "list_worker_success" 1
-}
-
 function run() {
+	make install_test_python_dep
+
 	# run dm-master1
 	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $cur/conf/dm-master1.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1
@@ -290,8 +284,6 @@ function run() {
 
 	test_shard_task
 	test_noshard_task
-
-	test_cluster
 }
 
 cleanup_data openapi

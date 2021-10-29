@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -32,12 +33,33 @@ import (
 )
 
 // OperateSchema operates schema for an upstream table.
-func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (createTableStr string, err error) {
+func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (msg string, err error) {
 	sourceTable := &filter.Table{
 		Schema: req.Database,
 		Name:   req.Table,
 	}
 	switch req.Op {
+	case pb.SchemaOp_ListSchema:
+		allSchema := s.schemaTracker.AllSchemas()
+		schemaList := make([]string, len(allSchema))
+		for i, schema := range allSchema {
+			schemaList[i] = schema.Name.String()
+		}
+		schemaListJSON, err := json.Marshal(schemaList)
+		if err != nil {
+			return "", err
+		}
+		return string(schemaListJSON), err
+	case pb.SchemaOp_ListTable:
+		tables, err := s.schemaTracker.ListSchemaTables(req.Database)
+		if err != nil {
+			return "", err
+		}
+		tableListJSON, err := json.Marshal(tables)
+		if err != nil {
+			return "", err
+		}
+		return string(tableListJSON), err
 	case pb.SchemaOp_GetSchema:
 		// we only try to get schema from schema-tracker now.
 		// in other words, we can not get the schema if any DDL/DML has been replicated, or set a schema previously.

@@ -221,6 +221,21 @@ func (tr *Tracker) AllSchemas() []*model.DBInfo {
 	return filteredSchemas
 }
 
+// ListSchemaTables lists all tables in the schema.
+func (tr *Tracker) ListSchemaTables(schema string) ([]string, error) {
+	allSchemas := tr.AllSchemas()
+	for _, db := range allSchemas {
+		if db.Name.String() == schema {
+			tables := make([]string, len(db.Tables))
+			for i, t := range db.Tables {
+				tables[i] = t.Name.String()
+			}
+			return tables, nil
+		}
+	}
+	return nil, errors.New("can not this schema in tracker")
+}
+
 // GetSingleColumnIndices returns indices of input column if input column only has single-column indices
 // returns nil if input column has no indices, or has multi-column indices.
 func (tr *Tracker) GetSingleColumnIndices(db, tbl, col string) ([]*model.IndexInfo, error) {
