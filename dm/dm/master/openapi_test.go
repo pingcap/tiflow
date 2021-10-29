@@ -188,7 +188,7 @@ func (t *openAPISuite) TestSourceAPI(c *check.C) {
 	// test get source schema and table
 	mockDB := conn.InitMockDB(c)
 	schemaName := "information_schema"
-	mockDB.ExpectQuery("SHOW DATABASES;").WillReturnRows(sqlmock.NewRows([]string{"Database"}).AddRow(schemaName))
+	mockDB.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}).AddRow(schemaName))
 
 	schemaURL := fmt.Sprintf("%s/%s/schemas", baseURL, source1.SourceName)
 	result = testutil.NewRequest().Get(schemaURL).Go(t.testT, s.echo)
