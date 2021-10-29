@@ -442,6 +442,95 @@ func (dml *DML) String() string {
 	return fmt.Sprintf("[safemode: %t, targetTableID: %s, op: %s, columns: %v, oldValues: %v, values: %v]", dml.safeMode, dml.targetTableID, dml.op.String(), dml.columnNames(), dml.originOldValues, dml.originValues)
 }
 
+// updateToDelAndInsert turns updateDML to delDML and insertDML.
+func updateToDelAndInsert(updateDML *DML) (*DML, *DML) {
+	delDML := &DML{}
+	*delDML = *updateDML
+	delDML.op = del
+	// use oldValues of update as values of delete and reset oldValues
+	delDML.values = updateDML.oldValues
+	delDML.originValues = updateDML.originOldValues
+	delDML.oldValues = nil
+	delDML.originOldValues = nil
+
+	insertDML := &DML{}
+	*insertDML = *updateDML
+	insertDML.op = insert
+	// reset oldValues
+	insertDML.oldValues = nil
+	insertDML.originOldValues = nil
+
+	return delDML, insertDML
+}
+
+// identifyColumns gets columns of unique not null index.
+// This is used for compact.
+func (dml *DML) identifyColumns() []string {
+	if defaultIndexColumns := findFitIndex(dml.sourceTableInfo); defaultIndexColumns != nil {
+		columns := make([]string, 0, len(defaultIndexColumns.Columns))
+		for _, column := range defaultIndexColumns.Columns {
+			columns = append(columns, column.Name.O)
+		}
+		return columns
+	}
+	return nil
+}
+
+// identifyValues gets values of unique not null index.
+// This is used for compact.
+func (dml *DML) identifyValues() []interface{} {
+	if defaultIndexColumns := findFitIndex(dml.sourceTableInfo); defaultIndexColumns != nil {
+		values := make([]interface{}, 0, len(defaultIndexColumns.Columns))
+		for _, column := range defaultIndexColumns.Columns {
+			values = append(values, dml.values[column.Offset])
+		}
+		return values
+	}
+	return nil
+}
+
+// oldIdentifyValues gets old values of unique not null index.
+// only for update SQL.
+func (dml *DML) oldIdentifyValues() []interface{} {
+	if defaultIndexColumns := findFitIndex(dml.sourceTableInfo); defaultIndexColumns != nil {
+		values := make([]interface{}, 0, len(defaultIndexColumns.Columns))
+		for _, column := range defaultIndexColumns.Columns {
+			values = append(values, dml.oldValues[column.Offset])
+		}
+		return values
+	}
+	return nil
+}
+
+// identifyKey use identifyValues to gen key.
+// This is used for compact.
+// PK or (UK + NOT NULL).
+func (dml *DML) identifyKey() string {
+	return genKey(dml.identifyValues())
+}
+
+// updateIdentify check whether a update sql update its identify values.
+func (dml *DML) updateIdentify() bool {
+	if len(dml.oldValues) == 0 {
+		return false
+	}
+
+	values := dml.identifyValues()
+	oldValues := dml.oldIdentifyValues()
+
+	if len(values) != len(oldValues) {
+		return true
+	}
+
+	for i := 0; i < len(values); i++ {
+		if values[i] != oldValues[i] {
+			return true
+		}
+	}
+
+	return false
+}
+
 // identifyKeys gens keys by unique not null value.
 // This is used for causality.
 // PK or (UK + NOT NULL) or (UK + NULL + NOT NULL VALUE).
@@ -490,6 +579,20 @@ func (dml *DML) whereColumnsAndValues() ([]string, []interface{}) {
 		columnNames = append(columnNames, column.Name.O)
 	}
 	return columnNames, values
+}
+
+// genKey gens key by values e.g. "a.1.b".
+// This is used for compact.
+func genKey(values []interface{}) string {
+	builder := new(strings.Builder)
+	for i, v := range values {
+		if i != 0 {
+			builder.WriteString(".")
+		}
+		fmt.Fprintf(builder, "%v", v)
+	}
+
+	return builder.String()
 }
 
 // genKeyList format keys.
