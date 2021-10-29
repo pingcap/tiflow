@@ -132,7 +132,7 @@ function test_relay() {
 	openapi_source_check "get_source_status_success_no_relay" "mysql-01"
 
 	openapi_source_check "start_relay_success_with_two_worker" "mysql-01" "worker1" "worker2"
-	openapi_source_check "list_source_with_status_success" 1 2               #source 1 status_list will have two items
+	openapi_source_check "list_source_with_status_success" 1 2               # source 1 status_list will have two items
 	openapi_source_check "get_source_status_success" "mysql-01" 2            # have two source status
 	openapi_source_check "get_source_status_success_with_relay" "mysql-01" 0 # check worker1 relay status
 	openapi_source_check "get_source_status_success_with_relay" "mysql-01" 1 # check worker2 relay status
