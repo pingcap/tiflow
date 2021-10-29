@@ -806,6 +806,11 @@ func (s *schemaStorageImpl) DoGC(ts uint64) {
 			s.snaps[i].PrintStatus(log.Debug)
 		}
 	}
+	// Sets the pointers to nil so that the snaps can be
+	// GC'd by Go runtime in time.
+	for i := 0; i < startIdx; i++ {
+		s.snaps[i] = nil
+	}
 	s.snaps = s.snaps[startIdx:]
 	atomic.StoreUint64(&s.gcTs, s.snaps[0].currentTs)
 	log.Info("finished gc in schema storage", zap.Uint64("gcTs", s.snaps[0].currentTs))
