@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sorter/encoding"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -39,12 +40,12 @@ var openFDCount int64
 
 type fileBackEnd struct {
 	fileName string
-	serde    serializerDeserializer
+	serde    encoding.SerializerDeserializer
 	borrowed int32
 	size     int64
 }
 
-func newFileBackEnd(fileName string, serde serializerDeserializer) (*fileBackEnd, error) {
+func newFileBackEnd(fileName string, serde encoding.SerializerDeserializer) (*fileBackEnd, error) {
 	f, err := os.Create(fileName)
 	if err != nil {
 		return nil, errors.Trace(wrapIOError(err))
@@ -250,7 +251,7 @@ func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 	}
 
 	event := new(model.PolymorphicEvent)
-	_, err = r.backEnd.serde.unmarshal(event, rawBytesBuf)
+	_, err = r.backEnd.serde.Unmarshal(event, rawBytesBuf)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -346,7 +347,7 @@ func (w *fileBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 	var err error
 	// Note, do not hold the buffer in writer to avoid hogging memory.
 	var rawBytesBuf []byte
-	rawBytesBuf, err = w.backEnd.serde.marshal(event, rawBytesBuf)
+	rawBytesBuf, err = w.backEnd.serde.Marshal(event, rawBytesBuf)
 	if err != nil {
 		return errors.Trace(wrapIOError(err))
 	}
