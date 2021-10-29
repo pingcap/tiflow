@@ -84,7 +84,7 @@ const (
 	EventType_XAROLLBACK EventType = 14
 	//* MASTER HEARTBEAT *
 	EventType_MHEARTBEAT EventType = 15
-	//* TiCDC CUSTOMIZED*
+	//* TiCDC CUSTOMIZED *
 	EventType_WATERMARK EventType = 16
 )
 
