@@ -15,9 +15,12 @@ package kafka
 
 import (
 	"strings"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 type Admin struct {
@@ -60,4 +63,20 @@ func (admin *Admin) CreateTopic(topic string, detail *sarama.TopicDetail) error 
 		}
 	}
 	return nil
+}
+
+func (admin *Admin) WaitTopicCreated(topic string) error {
+	for i := 0; i <= 30; i++ {
+		topics, err := admin.ListTopics()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if _, ok := topics[topic]; ok {
+			return nil
+		}
+		log.Info("wait the topic created", zap.String("topic", topic))
+		time.Sleep(1 * time.Second)
+	}
+	return errors.Errorf("wait the topic(%s) created timeout", topic)
 }
