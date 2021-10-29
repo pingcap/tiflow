@@ -41,8 +41,8 @@ import (
 
 const defaultPartitionNum = 4
 
-// Config stores user specified Kafka producer configuration
-type Config struct {
+// TopicInfo stores user specified topic configuration
+type TopicInfo struct {
 	BrokerEndpoints []string
 
 	PartitionNum      int32
@@ -59,8 +59,8 @@ type Config struct {
 }
 
 // NewConfig returns a default Kafka configuration
-func NewConfig() *Config {
-	return &Config{
+func NewTopicInfo() *TopicInfo {
+	return &TopicInfo{
 		Version: "2.4.0",
 		// MaxMessageBytes will be used to initialize producer, we set the default value (1M) identical to kafka broker.
 		MaxMessageBytes:   1 * 1024 * 1024,
@@ -73,7 +73,7 @@ func NewConfig() *Config {
 }
 
 // Initialize the kafka configuration
-func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
+func (c *TopicInfo) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
 	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 
 	s := sinkURI.Query().Get("partition-num")
@@ -168,7 +168,7 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 	return nil
 }
 
-func (c *Config) Validate() error {
+func (c *TopicInfo) Validate() error {
 	if c.PartitionNum < 0 {
 		return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
 	}
@@ -177,7 +177,7 @@ func (c *Config) Validate() error {
 }
 
 // AdjustPartitionNum gets partition number from existing topic
-func (c *Config) AdjustPartitionNum(topic string, admin *kafkaPkg.Admin) error {
+func (c *TopicInfo) AdjustPartitionNum(topic string, admin *kafkaPkg.Admin) error {
 	count, err := admin.GetPartitionCount(topic)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -425,7 +425,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 var newSaramaConfigImpl = newSaramaConfig
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, topic string, config *TopicInfo, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
@@ -520,7 +520,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 }
 
 // NewSaramaConfig return the default config and set the according version and metrics
-func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
+func newSaramaConfig(ctx context.Context, c *TopicInfo) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
 	version, err := sarama.ParseKafkaVersion(c.Version)
