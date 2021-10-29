@@ -10,6 +10,15 @@ on:
       - "go.sum"
       - "Makefile"
       - ".github/**"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "dm/**"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - ".github/**"
 
 jobs:
   upstream-database-switch:

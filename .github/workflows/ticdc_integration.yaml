@@ -5,12 +5,12 @@ name: CDC Integration Tests
 on:
   push:
     branches: [master]
-    paths:
-      - "!dm/**"
+    paths-ignore:
+      - 'dm/**':
   pull_request:
     branches: [master]
-    paths:
-      - "!dm/**"
+    paths-ignore:
+      - 'dm/**':
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
