@@ -20,9 +20,11 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,6 +37,7 @@ import (
 	pioutil "go.etcd.io/etcd/pkg/ioutil"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -47,13 +50,6 @@ const (
 const (
 	defaultFlushIntervalInMs = 1000
 	defaultS3Timeout         = 3 * time.Second
-)
-
-const (
-	// stopped defines the state value of a Writer which has been stopped
-	stopped bool = false
-	// started defines the state value of a Writer which is currently started
-	started bool = true
 )
 
 var (
@@ -119,7 +115,7 @@ type Writer struct {
 	commitTS atomic.Uint64
 	// the ts send with the event
 	eventCommitTS atomic.Uint64
-	state         atomic.Bool
+	running       atomic.Bool
 	gcRunning     atomic.Bool
 	size          int64
 	file          *os.File
@@ -162,7 +158,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		storage:   s3storage,
 	}
 
-	w.state.Store(started)
+	w.running.Store(true)
 	go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
 
 	return w, nil
@@ -266,13 +262,13 @@ func (w *Writer) Close() error {
 		return err
 	}
 
-	w.state.Store(stopped)
+	w.running.Store(false)
 	return nil
 }
 
 // IsRunning implement IsRunning interface
 func (w *Writer) IsRunning() bool {
-	return w.state.Load()
+	return w.running.Load()
 }
 
 func (w *Writer) isGCRunning() bool {
@@ -403,18 +399,30 @@ func (w *Writer) rotate() error {
 	return w.openNew()
 }
 
-// GC implement GC interface
+// GC implement GC interface, if checkPointTs == math.MaxInt32 means remove all logs
 func (w *Writer) GC(checkPointTs uint64) error {
-	if !w.IsRunning() || w.isGCRunning() {
+	if w.isGCRunning() {
 		return nil
 	}
 
 	w.gcRunning.Store(true)
 	defer w.gcRunning.Store(false)
 
+	// if checkPointTs == math.MaxInt32 means remove all logs, stop write first
+	if checkPointTs == math.MaxInt32 {
+		err := w.Close()
+		if err != nil {
+			return err
+		}
+	}
+
 	remove, err := w.getShouldRemovedFiles(checkPointTs)
 	if err != nil {
 		return err
+	}
+
+	if w.cfg.S3Storage {
+		return w.deleteFilesInStorages(remove)
 	}
 
 	var errs error
@@ -422,37 +430,57 @@ func (w *Writer) GC(checkPointTs uint64) error {
 		err := os.Remove(filepath.Join(w.cfg.Dir, f.Name()))
 		errs = multierr.Append(errs, err)
 	}
-
 	if errs != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errs)
-	}
-
-	if w.cfg.S3Storage {
-		// since if fail delete in s3, do not block any path, so just log the error if any
-		go func() {
-			var errs error
-			for _, f := range remove {
-				err := w.storage.DeleteFile(context.Background(), f.Name())
-				errs = multierr.Append(errs, err)
-			}
-			if errs != nil {
-				errs = cerror.WrapError(cerror.ErrS3StorageAPI, errs)
-				log.Warn("delete redo log in s3 fail", zap.Error(errs))
-			}
-		}()
 	}
 
 	return nil
 }
 
+// deleteFilesInStorages delete files in both local storage and s3, delete in s3 first, if success try to delete in local.
+// if delete in local then s3, s3 fail the file will still exist in s3.
+// for normal case should be fine, but in changefeed remove case, if new created changefeed with the same name,
+// the file in s3 will belong to the new one, which may cause error if used to apply for recovery.
+func (w *Writer) deleteFilesInStorages(remove []os.FileInfo) error {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
+	defer cancel()
+
+	eg, eCtx := errgroup.WithContext(ctx)
+	for _, f := range remove {
+		name := f.Name()
+		eg.Go(func() error {
+			err := w.storage.DeleteFile(eCtx, name)
+			if err != nil {
+				// if fail then retry, may end up with notExit err, ignore the error
+				if !isNotExistInS3(err) {
+					return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+				}
+			}
+
+			err = os.Remove(filepath.Join(w.cfg.Dir, name))
+			return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		})
+	}
+	return eg.Wait()
+}
+
 // shouldRemoved remove the file which commitTs in file name (max commitTs of all event ts in the file) < checkPointTs,
 // since all event ts < checkPointTs already sent to sink, the log is not needed any more for recovery
-func (w *Writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error) {
-	if filepath.Ext(f.Name()) != common.LogEXT {
+// if checkPointTs == MaxInt32 means remove all logs written by the fileWriter
+func (w *Writer) shouldRemoved(checkPointTs uint64, name string) (bool, error) {
+	ext := filepath.Ext(name)
+	if checkPointTs == math.MaxInt32 {
+		// may exist .tmp file cause by not closed safely
+		if filepath.Ext(name) == common.TmpEXT {
+			name = strings.TrimSuffix(name, common.TmpEXT)
+			ext = filepath.Ext(name)
+		}
+	}
+	if ext != common.LogEXT {
 		return false, nil
 	}
 
-	commitTs, fileType, err := common.ParseLogFileName(f.Name())
+	commitTs, fileType, err := common.ParseLogFileName(name)
 	if err != nil {
 		return false, err
 	}
@@ -468,7 +496,7 @@ func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, erro
 
 	logFiles := []os.FileInfo{}
 	for _, f := range files {
-		ret, err := w.shouldRemoved(checkPointTs, f)
+		ret, err := w.shouldRemoved(checkPointTs, f.Name())
 		if err != nil {
 			log.Warn("check removed log file fail",
 				zap.String("log file", f.Name()),

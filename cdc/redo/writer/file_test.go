@@ -17,14 +17,16 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	"github.com/pingcap/ticdc/pkg/leakutil"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
@@ -57,7 +59,7 @@ func TestWriterWrite(t *testing.T) {
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		},
 		uint64buf: make([]byte, 8),
-		state:     *atomic.NewBool(started),
+		running:   *atomic.NewBool(true),
 	}
 
 	w.eventCommitTS.Store(1)
@@ -103,23 +105,6 @@ func TestWriterGC(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	controller := gomock.NewController(t)
-	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_1.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_1.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_1.log.tmp").Return(nil).Times(1)
-
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_2.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp").Return(nil).Times(1)
-
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_3.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_3.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_3.log.tmp").Return(nil).Times(1)
-
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_1.log").Return(errors.New("ignore err")).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_2.log").Return(errors.New("ignore err")).Times(1)
-
 	megabyte = 1
 	cfg := &FileWriterConfig{
 		Dir:               dir,
@@ -129,14 +114,13 @@ func TestWriterGC(t *testing.T) {
 		FileType:          common.DefaultRowLogFileType,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		FlushIntervalInMs: 5,
-		S3Storage:         true,
+		S3Storage:         false,
 	}
 	w := &Writer{
 		cfg:       cfg,
 		uint64buf: make([]byte, 8),
-		storage:   mockStorage,
 	}
-	w.state.Store(started)
+	w.running.Store(true)
 	w.eventCommitTS.Store(1)
 	_, err = w.Write([]byte("t1111"))
 	require.Nil(t, err)
@@ -165,6 +149,74 @@ func TestWriterGC(t *testing.T) {
 	require.Nil(t, err, files[0].Name())
 	require.EqualValues(t, 3, ts)
 	require.Equal(t, common.DefaultRowLogFileType, fileType)
+
+	time.Sleep(time.Duration(100) * time.Millisecond)
+}
+
+func TestWriterGCAll(t *testing.T) {
+	dir, err := ioutil.TempDir("", "redo-GC-All")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	controller := gomock.NewController(t)
+	mockStorage := mockstorage.NewMockExternalStorage(controller)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_1.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_1.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_1.log.tmp").Return(nil).Times(1)
+
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_2.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp").Return(nil).Times(1)
+
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_3.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_3.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_3.log.tmp").Return(nil).Times(1)
+
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_1.log").Return(awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp").Return(awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_3.log").Return(nil).Times(1)
+
+	megabyte = 1
+	cfg := &FileWriterConfig{
+		Dir:               dir,
+		ChangeFeedID:      "test",
+		CaptureID:         "cp",
+		MaxLogSize:        10,
+		FileType:          common.DefaultRowLogFileType,
+		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+		FlushIntervalInMs: 5,
+		S3Storage:         true,
+	}
+	w := &Writer{
+		cfg:       cfg,
+		uint64buf: make([]byte, 8),
+		storage:   mockStorage,
+	}
+	w.running.Store(true)
+	w.eventCommitTS.Store(1)
+	_, err = w.Write([]byte("t1111"))
+	require.Nil(t, err)
+	w.eventCommitTS.Store(2)
+	_, err = w.Write([]byte("t2222"))
+	require.Nil(t, err)
+	w.eventCommitTS.Store(3)
+	_, err = w.Write([]byte("t3333"))
+	require.Nil(t, err)
+
+	files, err := ioutil.ReadDir(w.cfg.Dir)
+	require.Nil(t, err)
+	require.Equal(t, 3, len(files), "should have 3 log file")
+
+	// create a tmp file
+	err = os.Rename(filepath.Join(w.cfg.Dir, "cp_test_946688461_row_2.log"), filepath.Join(w.cfg.Dir, "cp_test_946688461_row_2.log.tmp"))
+	require.Nil(t, err)
+
+	err = w.GC(math.MaxInt32)
+	require.Nil(t, err)
+
+	files, err = ioutil.ReadDir(w.cfg.Dir)
+	require.Nil(t, err)
+	require.Equal(t, 0, len(files), "should have 0 log left after GC")
 
 	time.Sleep(time.Duration(100) * time.Millisecond)
 }
@@ -215,7 +267,7 @@ func TestNewWriter(t *testing.T) {
 		uint64buf: make([]byte, 8),
 		storage:   mockStorage,
 	}
-	w.state.Store(started)
+	w.running.Store(true)
 	_, err = w.Write([]byte("test"))
 	require.Nil(t, err)
 	//
@@ -224,5 +276,5 @@ func TestNewWriter(t *testing.T) {
 
 	err = w.Close()
 	require.Nil(t, err)
-	require.Equal(t, w.state.Load(), stopped)
+	require.Equal(t, w.running.Load(), false)
 }

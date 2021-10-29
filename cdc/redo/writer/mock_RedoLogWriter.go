@@ -41,6 +41,20 @@ func (_m *MockRedoLogWriter) Close() error {
 	return r0
 }
 
+// DeleteAllLogs provides a mock function with given fields: ctx
+func (_m *MockRedoLogWriter) DeleteAllLogs(ctx context.Context) error {
+	ret := _m.Called(ctx)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = rf(ctx)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // EmitCheckpointTs provides a mock function with given fields: ctx, ts
 func (_m *MockRedoLogWriter) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	ret := _m.Called(ctx, ts)

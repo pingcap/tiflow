@@ -18,12 +18,15 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -59,6 +62,9 @@ type RedoLogWriter interface {
 
 	// GetCurrentResolvedTs return all the ResolvedTs list for given tableIDs
 	GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) (resolvedTsList map[int64]uint64, err error)
+
+	// DeleteAllLogs delete all log files related to the changefeed
+	DeleteAllLogs(ctx context.Context) error
 }
 
 var defaultGCIntervalInMs = 5000
@@ -388,6 +394,50 @@ func (l *LogWriter) GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) 
 	}
 
 	return ret, nil
+}
+
+// 	DeleteAllLogs implement the DeleteAllLogs api
+func (l *LogWriter) DeleteAllLogs(ctx context.Context) error {
+	var err error
+	err = multierr.Append(err, l.rowWriter.GC(uint64(math.MaxUint32)))
+	err = multierr.Append(err, l.ddlWriter.GC(uint64(math.MaxUint32)))
+	err = multierr.Append(err, l.deleteMetaFile(ctx))
+	if err != nil {
+		return err
+	}
+
+	return cerror.WrapError(cerror.ErrRedoFileOp, os.RemoveAll(l.cfg.Dir))
+}
+
+func isNotExistInS3(err error) bool {
+	if err != nil {
+		if aerr, ok := errors.Cause(err).(awserr.Error); ok { // nolint:errorlint
+			switch aerr.Code() {
+			case s3.ErrCodeNoSuchKey:
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (l *LogWriter) deleteMetaFile(ctx context.Context) error {
+	// if fail then retry, may end up with notExit err, ignore the error
+	err := os.Remove(l.filePath())
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		}
+	}
+	if l.cfg.S3Storage {
+		err = l.storage.DeleteFile(ctx, l.getMetafileName())
+		if err != nil {
+			if !isNotExistInS3(err) {
+				return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+			}
+		}
+	}
+	return nil
 }
 
 // Close implements RedoLogWriter.Close.

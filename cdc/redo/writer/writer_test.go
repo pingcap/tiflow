@@ -17,12 +17,15 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -707,6 +710,66 @@ func TestWriterRedoGC(t *testing.T) {
 			mockWriter.AssertCalled(t, "GC", mock.Anything)
 		} else {
 			mockWriter.AssertNotCalled(t, "GC", mock.Anything)
+		}
+	}
+}
+
+func TestLogWriterDeleteAllLogs(t *testing.T) {
+	tests := []struct {
+		name    string
+		gcErr   error
+		s3Err   error
+		wantErr error
+	}{
+		{
+			name: "happy",
+		},
+		{
+			name:    "gc err",
+			gcErr:   errors.New("gc"),
+			wantErr: multierr.Append(errors.New("gc"), errors.New("gc")),
+		},
+		{
+			name:  "s3 notExit err",
+			s3Err: awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil),
+		},
+		{
+			name:    "s3 normal err",
+			s3Err:   errors.New("s3"),
+			wantErr: errors.New("s3"),
+		},
+	}
+
+	for _, tt := range tests {
+		controller := gomock.NewController(t)
+		mockStorage := mockstorage.NewMockExternalStorage(controller)
+		mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test-cf_meta.meta").Return(tt.s3Err).Times(1)
+
+		mockWriter := &mockFileWriter{}
+		mockWriter.On("GC", uint64(math.MaxUint32)).Return(tt.gcErr)
+
+		cfg := &LogWriterConfig{
+			Dir:               "dir",
+			ChangeFeedID:      "test-cf",
+			CaptureID:         "cp",
+			MaxLogSize:        10,
+			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+			FlushIntervalInMs: 5,
+			S3Storage:         true,
+		}
+		writer := LogWriter{
+			rowWriter: mockWriter,
+			ddlWriter: mockWriter,
+			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			cfg:       cfg,
+			storage:   mockStorage,
+		}
+
+		err := writer.DeleteAllLogs(context.Background())
+		if tt.wantErr != nil {
+			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
+		} else {
+			require.Nil(t, err, tt.name)
 		}
 	}
 }
