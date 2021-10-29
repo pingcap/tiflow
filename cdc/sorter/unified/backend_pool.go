@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	sencoding "github.com/pingcap/ticdc/cdc/sorter/encoding"
+	sorterencoding "github.com/pingcap/ticdc/cdc/sorter/encoding"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filelock"
@@ -194,7 +194,7 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 		return nil, errors.Trace(err)
 	}
 
-	ret, err := newFileBackEnd(fname, &sencoding.MsgPackGenSerde{})
+	ret, err := newFileBackEnd(fname, &sorterencoding.MsgPackGenSerde{})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
