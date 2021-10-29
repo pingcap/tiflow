@@ -729,7 +729,8 @@ func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema
 		snap, err = s.getSnapshot(ts)
 		now := time.Now()
 		if now.Sub(logTime) >= 30*time.Second && isRetryable(err) {
-			log.Warn("GetSnapshot is taking too long, DDL puller stuck?", zap.Uint64("ts", ts))
+			log.Warn("GetSnapshot is taking too long, DDL puller stuck?",
+				zap.Uint64("ts", ts), zap.Duration("duration", now.Sub(startTime)))
 			logTime = now
 		}
 		return err
