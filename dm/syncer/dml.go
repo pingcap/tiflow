@@ -887,7 +887,7 @@ func genDeleteSQLMultipleRows(dmls []*DML) ([]string, [][]interface{}) {
 	return []string{buf.String()}, [][]interface{}{args}
 }
 
-// genMultipleRows generates multiple rows SQL with different opType.
+// genSQLMultipleRows generates multiple rows SQL with different dmlOp.
 func genSQLMultipleRows(op dmlOp, dmls []*DML) (queries []string, args [][]interface{}) {
 	if len(dmls) > 1 {
 		log.L().Debug("generate DMLs with multiple rows", zap.Stringer("op", op), zap.Stringer("original op", dmls[0].op), zap.Int("rows", len(dmls)))
