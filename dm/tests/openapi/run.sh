@@ -44,6 +44,18 @@ function test_source() {
 	# get source list success
 	openapi_source_check "list_source_success" 1
 
+	# get source list with status
+	openapi_source_check "list_source_with_status_success" 1 1
+
+	# transfer source
+	openapi_source_check "transfer_source_success" "mysql-01" "worker2"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s mysql-01" \
+		"\"worker\": \"worker2\"" 1
+
+	# test get source schemas and tables
+	openapi_source_check "get_source_schemas_and_tables_success" "mysql-01"
+
 	# delete source success
 	openapi_source_check "delete_source_success" "mysql-01"
 
@@ -81,7 +93,6 @@ function test_relay() {
 
 	# start relay success
 	openapi_source_check "start_relay_success" "mysql-01" "worker1"
-
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s mysql-01" \
 		"\"worker\": \"worker1\"" 1 \
@@ -93,6 +104,21 @@ function test_relay() {
 	# get source status success
 	openapi_source_check "get_source_status_success" "mysql-01"
 	openapi_source_check "get_source_status_success_with_relay" "mysql-01"
+
+	# pause relay success
+	openapi_source_check "pause_relay_success" "mysql-01"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s mysql-01" \
+		"\"worker\": \"worker1\"" 1 \
+		"\"stage\": \"Paused\"" 1
+
+	# resume relay success
+	openapi_source_check "resume_relay_success" "mysql-01"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s mysql-01" \
+		"\"worker\": \"worker1\"" 1 \
+		"\"stage\": \"Running\"" 1 \
+		"\"relayCatchUpMaster\": true" 1
 
 	# stop relay failed: not pass worker name
 	openapi_source_check "stop_relay_failed" "mysql-01" "no-worker"
@@ -123,8 +149,6 @@ function test_relay() {
 
 	# delete source success
 	openapi_source_check "delete_source_success" "mysql-01"
-
-	# TODO add transfer-source test when openapi support this
 
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: RELAY SUCCESS"
 
@@ -237,13 +261,19 @@ function test_noshard_task() {
 	# get task status success
 	openapi_task_check "get_task_status_success" "$task_name" 2
 
+	# delte source with force
+	openapi_source_check "delete_source_with_force_success" "mysql-01"
+
+	# after delete source-1, there is only one subtask status
+	openapi_task_check "get_task_status_success" "$task_name" 1
+
 	# get task list
 	openapi_task_check "get_task_list" 1
+
 	# stop task success
 	openapi_task_check "stop_task_success" "$task_name"
 
 	# delete source success
-	openapi_source_check "delete_source_success" "mysql-01"
 	openapi_source_check "delete_source_success" "mysql-02"
 	openapi_source_check "list_source_success" 0
 	run_sql_tidb "DROP DATABASE if exists openapi;"

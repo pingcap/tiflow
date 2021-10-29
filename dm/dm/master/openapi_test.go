@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/deepmap/oapi-codegen/pkg/testutil"
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/check"
@@ -37,6 +38,7 @@ import (
 	"github.com/pingcap/ticdc/dm/dm/pbmock"
 	"github.com/pingcap/ticdc/dm/openapi"
 	"github.com/pingcap/ticdc/dm/openapi/fixtures"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
 	"github.com/pingcap/ticdc/dm/pkg/ha"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
@@ -164,44 +166,72 @@ func (t *openAPISuite) TestSourceAPI(c *check.C) {
 
 	// create source with same name will failed
 	source2 := source1
-	result2 := testutil.NewRequest().Post(baseURL).WithJsonBody(source2).Go(t.testT, s.echo)
+	result = testutil.NewRequest().Post(baseURL).WithJsonBody(source2).Go(t.testT, s.echo)
 	// check http status code
-	c.Assert(result2.Code(), check.Equals, http.StatusBadRequest)
+	c.Assert(result.Code(), check.Equals, http.StatusBadRequest)
 	var errResp openapi.ErrorWithMessage
-	err = result2.UnmarshalBodyToObject(&errResp)
+	err = result.UnmarshalBodyToObject(&errResp)
 	c.Assert(err, check.IsNil)
 	c.Assert(errResp.ErrorCode, check.Equals, int(terror.ErrSchedulerSourceCfgExist.Code()))
 
 	// list source
-	result3 := testutil.NewRequest().Get(baseURL).Go(t.testT, s.echo)
+	result = testutil.NewRequest().Get(baseURL).Go(t.testT, s.echo)
 	// check http status code
-	c.Assert(result3.Code(), check.Equals, http.StatusOK)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	var resultListSource openapi.GetSourceListResponse
-	err = result3.UnmarshalBodyToObject(&resultListSource)
+	err = result.UnmarshalBodyToObject(&resultListSource)
 	c.Assert(err, check.IsNil)
 	c.Assert(resultListSource.Data, check.HasLen, 1)
 	c.Assert(resultListSource.Total, check.Equals, 1)
 	c.Assert(resultListSource.Data[0].SourceName, check.Equals, source1.SourceName)
 
-	// delete source
-	result4 := testutil.NewRequest().Delete(fmt.Sprintf("%s/%s", baseURL, source1.SourceName)).Go(t.testT, s.echo)
+	// test get source schema and table
+	mockDB := conn.InitMockDB(c)
+	schemaName := "information_schema"
+	mockDB.ExpectQuery("SHOW DATABASES;").WillReturnRows(sqlmock.NewRows([]string{"Database"}).AddRow(schemaName))
+
+	schemaURL := fmt.Sprintf("%s/%s/schemas", baseURL, source1.SourceName)
+	result = testutil.NewRequest().Get(schemaURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	var schemaNameList openapi.SchemaNameList
+	err = result.UnmarshalBodyToObject(&schemaNameList)
+	c.Assert(err, check.IsNil)
+	c.Assert(schemaNameList, check.HasLen, 1)
+	c.Assert(schemaNameList[0], check.Equals, schemaName)
+	c.Assert(mockDB.ExpectationsWereMet(), check.IsNil)
+
+	mockDB = conn.InitMockDB(c)
+	tableName := "CHARACTER_SETS"
+	mockDB.ExpectQuery("SHOW TABLES FROM " + schemaName).WillReturnRows(sqlmock.NewRows([]string{"Tables_in_information_schema"}).AddRow(tableName))
+	tableURL := fmt.Sprintf("%s/%s/schemas/%s", baseURL, source1.SourceName, schemaName)
+	result = testutil.NewRequest().Get(tableURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	var tableNameList openapi.TableNameList
+	err = result.UnmarshalBodyToObject(&tableNameList)
+	c.Assert(err, check.IsNil)
+	c.Assert(tableNameList, check.HasLen, 1)
+	c.Assert(tableNameList[0], check.Equals, tableName)
+	c.Assert(mockDB.ExpectationsWereMet(), check.IsNil)
+
+	// delete source with --force
+	result = testutil.NewRequest().Delete(fmt.Sprintf("%s/%s?force=true", baseURL, source1.SourceName)).Go(t.testT, s.echo)
 	// check http status code
-	c.Assert(result4.Code(), check.Equals, http.StatusNoContent)
+	c.Assert(result.Code(), check.Equals, http.StatusNoContent)
 
 	// delete again will failed
-	result5 := testutil.NewRequest().Delete(fmt.Sprintf("%s/%s", baseURL, source1.SourceName)).Go(t.testT, s.echo)
-	c.Assert(result5.Code(), check.Equals, http.StatusBadRequest)
+	result = testutil.NewRequest().Delete(fmt.Sprintf("%s/%s", baseURL, source1.SourceName)).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusBadRequest)
 	var errResp2 openapi.ErrorWithMessage
-	err = result5.UnmarshalBodyToObject(&errResp2)
+	err = result.UnmarshalBodyToObject(&errResp2)
 	c.Assert(err, check.IsNil)
 	c.Assert(errResp2.ErrorCode, check.Equals, int(terror.ErrSchedulerSourceCfgNotExist.Code()))
 
 	// list source
-	result6 := testutil.NewRequest().Get(baseURL).Go(t.testT, s.echo)
+	result = testutil.NewRequest().Get(baseURL).Go(t.testT, s.echo)
 	// check http status code
-	c.Assert(result6.Code(), check.Equals, http.StatusOK)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	var resultListSource2 openapi.GetSourceListResponse
-	err = result6.UnmarshalBodyToObject(&resultListSource2)
+	err = result.UnmarshalBodyToObject(&resultListSource2)
 	c.Assert(err, check.IsNil)
 	c.Assert(resultListSource2.Data, check.HasLen, 0)
 	c.Assert(resultListSource2.Total, check.Equals, 0)
@@ -234,11 +264,11 @@ func (t *openAPISuite) TestRelayAPI(c *check.C) {
 
 	// get source status
 	source1StatusURL := fmt.Sprintf("%s/%s/status", baseURL, source1.SourceName)
-	result2 := testutil.NewRequest().Get(source1StatusURL).Go(t.testT, s.echo)
-	c.Assert(result2.Code(), check.Equals, http.StatusOK)
+	result = testutil.NewRequest().Get(source1StatusURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
 
 	var getSourceStatusResponse openapi.GetSourceStatusResponse
-	err := result2.UnmarshalBodyToObject(&getSourceStatusResponse)
+	err := result.UnmarshalBodyToObject(&getSourceStatusResponse)
 	c.Assert(err, check.IsNil)
 	c.Assert(getSourceStatusResponse.Data[0].SourceName, check.Equals, source1.SourceName)
 	c.Assert(getSourceStatusResponse.Data[0].WorkerName, check.Equals, "") // no worker bound
@@ -264,22 +294,38 @@ func (t *openAPISuite) TestRelayAPI(c *check.C) {
 	s.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
 
 	// get source status again,source should be bounded by worker1,but relay not started
-	result3 := testutil.NewRequest().Get(source1StatusURL).Go(t.testT, s.echo)
-	c.Assert(result3.Code(), check.Equals, http.StatusOK)
+	result = testutil.NewRequest().Get(source1StatusURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	var getSourceStatusResponse2 openapi.GetSourceStatusResponse
-	err = result3.UnmarshalBodyToObject(&getSourceStatusResponse2)
+	err = result.UnmarshalBodyToObject(&getSourceStatusResponse2)
 	c.Assert(err, check.IsNil)
 	c.Assert(getSourceStatusResponse2.Data[0].SourceName, check.Equals, source1.SourceName)
 	c.Assert(getSourceStatusResponse2.Data[0].WorkerName, check.Equals, workerName1) // worker1 is bound
 	c.Assert(getSourceStatusResponse2.Data[0].RelayStatus, check.IsNil)              // not start relay
 	c.Assert(getSourceStatusResponse2.Total, check.Equals, 1)
 
+	// list source with status
+	result = testutil.NewRequest().Get(baseURL+"?with_status=true").Go(t.testT, s.echo)
+	// check http status code
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	var resultListSource openapi.GetSourceListResponse
+	err = result.UnmarshalBodyToObject(&resultListSource)
+	c.Assert(err, check.IsNil)
+	c.Assert(resultListSource.Data, check.HasLen, 1)
+	c.Assert(resultListSource.Total, check.Equals, 1)
+	c.Assert(resultListSource.Data[0].SourceName, check.Equals, source1.SourceName)
+	statusList := *resultListSource.Data[0].StatusList
+	c.Assert(statusList, check.HasLen, 1)
+	status := statusList[0]
+	c.Assert(status.WorkerName, check.Equals, workerName1)
+	c.Assert(status.RelayStatus, check.IsNil)
+
 	// start relay
 	startRelayURL := fmt.Sprintf("%s/%s/start-relay", baseURL, source1.SourceName)
 	openAPIStartRelayReq := openapi.StartRelayRequest{WorkerNameList: []string{workerName1}}
-	result4 := testutil.NewRequest().Post(startRelayURL).WithJsonBody(openAPIStartRelayReq).Go(t.testT, s.echo)
+	result = testutil.NewRequest().Post(startRelayURL).WithJsonBody(openAPIStartRelayReq).Go(t.testT, s.echo)
 	// check http status code
-	c.Assert(result4.Code(), check.Equals, http.StatusOK)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	relayWorkers, err := s.scheduler.GetRelayWorkers(source1Name)
 	c.Assert(err, check.IsNil)
 	c.Assert(relayWorkers, check.HasLen, 1)
@@ -289,10 +335,10 @@ func (t *openAPISuite) TestRelayAPI(c *check.C) {
 	mockRelayQueryStatus(mockWorkerClient, source1.SourceName, workerName1, pb.Stage_Running)
 	s.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
 	// get source status again, relay status should not be nil
-	result5 := testutil.NewRequest().Get(source1StatusURL).Go(t.testT, s.echo)
-	c.Assert(result5.Code(), check.Equals, http.StatusOK)
+	result = testutil.NewRequest().Get(source1StatusURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	var getSourceStatusResponse3 openapi.GetSourceStatusResponse
-	err = result5.UnmarshalBodyToObject(&getSourceStatusResponse3)
+	err = result.UnmarshalBodyToObject(&getSourceStatusResponse3)
 	c.Assert(err, check.IsNil)
 	c.Assert(getSourceStatusResponse3.Data[0].RelayStatus.Stage, check.Equals, pb.Stage_Running.String())
 
@@ -301,19 +347,35 @@ func (t *openAPISuite) TestRelayAPI(c *check.C) {
 	mockRelayQueryStatus(mockWorkerClient, source1.SourceName, workerName1, pb.Stage_Paused)
 	s.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
 	// get source status again, error message should not be nil
-	result6 := testutil.NewRequest().Get(source1StatusURL).Go(t.testT, s.echo)
-	c.Assert(result6.Code(), check.Equals, http.StatusOK)
+	result = testutil.NewRequest().Get(source1StatusURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	var getSourceStatusResponse4 openapi.GetSourceStatusResponse
-	err = result6.UnmarshalBodyToObject(&getSourceStatusResponse4)
+	err = result.UnmarshalBodyToObject(&getSourceStatusResponse4)
 	c.Assert(err, check.IsNil)
 	c.Assert(*getSourceStatusResponse4.Data[0].ErrorMsg, check.Equals, "some error happened")
 	c.Assert(getSourceStatusResponse4.Data[0].WorkerName, check.Equals, workerName1)
 
+	// test pause relay
+	pauseRelayURL := fmt.Sprintf("%s/%s/pause-relay", baseURL, source1.SourceName)
+	result = testutil.NewRequest().Patch(pauseRelayURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	relayWorkers, err = s.scheduler.GetRelayWorkers(source1Name)
+	c.Assert(err, check.IsNil)
+	c.Assert(relayWorkers, check.HasLen, 1) // pause relay will not affect relay workers
+
+	// test resume relay
+	resumeRelayURL := fmt.Sprintf("%s/%s/resume-relay", baseURL, source1.SourceName)
+	result = testutil.NewRequest().Patch(resumeRelayURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	relayWorkers, err = s.scheduler.GetRelayWorkers(source1Name)
+	c.Assert(err, check.IsNil)
+	c.Assert(relayWorkers, check.HasLen, 1) // pause relay will not affect relay workers
+
 	// test stop relay
 	stopRelayURL := fmt.Sprintf("%s/%s/stop-relay", baseURL, source1.SourceName)
 	stopRelayReq := openapi.StopRelayRequest{WorkerNameList: []string{workerName1}}
-	result7 := testutil.NewRequest().Post(stopRelayURL).WithJsonBody(stopRelayReq).Go(t.testT, s.echo)
-	c.Assert(result7.Code(), check.Equals, http.StatusOK)
+	result = testutil.NewRequest().Post(stopRelayURL).WithJsonBody(stopRelayReq).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	relayWorkers, err = s.scheduler.GetRelayWorkers(source1Name)
 	c.Assert(err, check.IsNil)
 	c.Assert(relayWorkers, check.HasLen, 0)
@@ -323,11 +385,11 @@ func (t *openAPISuite) TestRelayAPI(c *check.C) {
 	mockRelayQueryStatus(mockWorkerClient, source1.SourceName, workerName1, pb.Stage_InvalidStage)
 	s.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
 	// get source status again,source
-	result8 := testutil.NewRequest().Get(source1StatusURL).Go(t.testT, s.echo)
-	c.Assert(result8.Code(), check.Equals, http.StatusOK)
+	result = testutil.NewRequest().Get(source1StatusURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
 
 	var getSourceStatusResponse5 openapi.GetSourceStatusResponse
-	err = result8.UnmarshalBodyToObject(&getSourceStatusResponse5)
+	err = result.UnmarshalBodyToObject(&getSourceStatusResponse5)
 	c.Assert(err, check.IsNil)
 	c.Assert(getSourceStatusResponse5.Data[0].SourceName, check.Equals, source1.SourceName)
 	c.Assert(getSourceStatusResponse5.Data[0].WorkerName, check.Equals, workerName1) // worker1 is bound
@@ -339,7 +401,7 @@ func (t *openAPISuite) TestRelayAPI(c *check.C) {
 func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := setupServer(ctx, c)
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
 	checker.CheckSyncConfigFunc = mockCheckSyncConfig
 	ctrl := gomock.NewController(c)
 	defer func() {
@@ -429,7 +491,7 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(result5.Code(), check.Equals, http.StatusNoContent)
 	subTaskM = s.scheduler.GetSubTaskCfgsByTask(task.Name)
 	c.Assert(len(subTaskM) == 0, check.IsTrue)
-	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
 
 	// list tasks
 	result6 := testutil.NewRequest().Get(taskURL).Go(t.testT, s.echo)

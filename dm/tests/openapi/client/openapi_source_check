@@ -56,6 +56,16 @@ def list_source_success(source_count):
     assert data["total"] == int(source_count)
 
 
+def list_source_with_status_success(source_count, status_count):
+    resp = requests.get(url=API_ENDPOINT + "?with_status=true")
+    assert resp.status_code == 200
+    data = resp.json()
+    print("list_source_with_status_success resp=", data)
+    assert data["total"] == int(source_count)
+    for i in range(int(source_count)):
+        assert len(data["data"][i]["status_list"]) == int(status_count)
+
+
 def list_source_with_redirect(source_count):
     resp = requests.get(url=API_ENDPOINT_NOT_LEADER)
     assert resp.status_code == 200
@@ -68,6 +78,12 @@ def delete_source_success(source_name):
     resp = requests.delete(url=API_ENDPOINT + "/" + source_name)
     assert resp.status_code == 204
     print("delete_source_success")
+
+
+def delete_source_with_force_success(source_name):
+    resp = requests.delete(url=API_ENDPOINT + "/" + source_name + "?force=true")
+    assert resp.status_code == 204
+    print("delete_source_with_force_success")
 
 
 def delete_source_failed(source_name):
@@ -93,6 +109,18 @@ def start_relay_success(source_name, worker_name):
         "purge": {"interval": 3600, "expires": 0, "remain_space": 15},
     }
     resp = requests.post(url=url, json=req)
+    assert resp.status_code == 200
+
+
+def pause_relay_success(source_name):
+    url = API_ENDPOINT + "/" + source_name + "/pause-relay"
+    resp = requests.post(url=url)
+    assert resp.status_code == 200
+
+
+def resume_relay_success(source_name):
+    url = API_ENDPOINT + "/" + source_name + "/resume-relay"
+    resp = requests.post(url=url)
     assert resp.status_code == 200
 
 
@@ -158,6 +186,28 @@ def stop_relay_success(source_name, worker_name):
     assert resp.status_code == 200
 
 
+def transfer_source_success(source_name, worker_name):
+    url = API_ENDPOINT + "/" + source_name + "/transfer"
+    req = {
+        "worker_name": worker_name,
+    }
+    resp = requests.post(url=url, json=req)
+    assert resp.status_code == 200
+
+
+def get_source_schemas_and_tables_success(source_name):
+    schema_url = API_ENDPOINT + "/" + source_name + "/schemas"
+    schema_resp = requests.get(url=schema_url)
+    assert schema_resp.status_code == 200
+    print("get_source_schemas_and_tables_success schema_resp=", schema_resp.json())
+    schema_list = schema_resp.json()
+    assert "openapi" in schema_list
+
+    table_url = API_ENDPOINT + "/" + source_name + "/schemas/openapi"
+    table_resp = requests.get(url=table_url)
+    print("get_source_schemas_and_tables_success table_resp=", table_resp.json())
+
+
 if __name__ == "__main__":
     FUNC_MAP = {
         "create_source_failed": create_source_failed,
@@ -165,9 +215,13 @@ if __name__ == "__main__":
         "create_source2_success": create_source2_success,
         "list_source_success": list_source_success,
         "list_source_with_redirect": list_source_with_redirect,
+        "list_source_with_status_success": list_source_with_status_success,
         "delete_source_failed": delete_source_failed,
         "delete_source_success": delete_source_success,
+        "delete_source_with_force_success": delete_source_with_force_success,
         "start_relay_failed": start_relay_failed,
+        "pause_relay_success": pause_relay_success,
+        "resume_relay_success": resume_relay_success,
         "start_relay_success": start_relay_success,
         "start_relay_success_with_two_worker": start_relay_success_with_two_worker,
         "stop_relay_failed": stop_relay_failed,
@@ -176,6 +230,8 @@ if __name__ == "__main__":
         "get_source_status_success": get_source_status_success,
         "get_source_status_success_with_relay": get_source_status_success_with_relay,
         "get_source_status_success_no_relay": get_source_status_success_no_relay,
+        "transfer_source_success": transfer_source_success,
+        "get_source_schemas_and_tables_success": get_source_schemas_and_tables_success,
     }
 
     func = FUNC_MAP[sys.argv[1]]
