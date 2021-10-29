@@ -464,7 +464,6 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, e
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	partitionNum := config.PartitionNum
 	if config.TopicPreProcess {
 		if err := admin.CreateTopic(topic, &sarama.TopicDetail{
 			NumPartitions:     config.PartitionNum,
@@ -483,11 +482,11 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, e
 		asyncClient:  asyncClient,
 		syncClient:   syncClient,
 		topic:        topic,
-		partitionNum: partitionNum,
+		partitionNum: config.PartitionNum,
 		partitionOffset: make([]struct {
 			flushed uint64
 			sent    uint64
-		}, partitionNum),
+		}, config.PartitionNum),
 		flushedNotifier: notifier,
 		flushedReceiver: flushedReceiver,
 		closeCh:         make(chan struct{}),
