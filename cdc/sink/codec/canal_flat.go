@@ -186,6 +186,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) *ca
 	return ret
 }
 
+// newFlatMessage4CheckpointEvent return a `WATERMARK` event typed message
 func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *canalFlatMessage {
 	return &canalFlatMessage{
 		CheckpointTs: ts,
