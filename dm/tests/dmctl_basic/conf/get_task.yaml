@@ -149,6 +149,7 @@ syncers:
     batch: 100
     queue-size: 1024
     checkpoint-flush-interval: 1
+    compact: true
     max-retry: 0
     auto-fix-gtid: false
     enable-gtid: false
