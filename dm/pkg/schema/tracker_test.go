@@ -873,7 +873,7 @@ func (s *trackerSuite) TestReTrackDownStreamIndex(c *C) {
 
 	// just table
 	targetTables := []*filter.Table{{Schema: "test", Name: "a"}, {Schema: "test", Name: "test"}}
-	tracker.RemoveDownstreamSchema(targetTables)
+	tracker.RemoveDownstreamSchema(tcontext.Background(), targetTables)
 	_, ok = tracker.dsTracker.tableInfos[tableID]
 	c.Assert(ok, IsFalse)
 
@@ -885,7 +885,7 @@ func (s *trackerSuite) TestReTrackDownStreamIndex(c *C) {
 	_, ok = tracker.dsTracker.tableInfos[tableID]
 	c.Assert(ok, IsTrue)
 
-	tracker.RemoveDownstreamSchema(targetTables)
+	tracker.RemoveDownstreamSchema(tcontext.Background(), targetTables)
 	_, ok = tracker.dsTracker.tableInfos[tableID]
 	c.Assert(ok, IsFalse)
 
@@ -899,7 +899,7 @@ func (s *trackerSuite) TestReTrackDownStreamIndex(c *C) {
 
 	// just schema
 	targetTables = []*filter.Table{{Schema: "test", Name: "a"}, {Schema: "test", Name: ""}}
-	tracker.RemoveDownstreamSchema(targetTables)
+	tracker.RemoveDownstreamSchema(tcontext.Background(), targetTables)
 	_, ok = tracker.dsTracker.tableInfos[tableID]
 	c.Assert(ok, IsFalse)
 
@@ -911,7 +911,7 @@ func (s *trackerSuite) TestReTrackDownStreamIndex(c *C) {
 	_, ok = tracker.dsTracker.tableInfos[tableID]
 	c.Assert(ok, IsTrue)
 
-	tracker.RemoveDownstreamSchema(targetTables)
+	tracker.RemoveDownstreamSchema(tcontext.Background(), targetTables)
 	_, ok = tracker.dsTracker.tableInfos[tableID]
 	c.Assert(ok, IsFalse)
 

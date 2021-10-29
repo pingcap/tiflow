@@ -44,7 +44,7 @@ function run() {
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1<100;" "count(1): 6"
 
 	# downstream create diff uk
-	run_sql "alter table ${db}.${tb} add unique key(c2);" $TIDB_PORT $TIDB_PASSWORD
+	run_sql_tidb "alter table ${db}.${tb} add unique key(c2);"
 
 	# db1 increment data with update and delete
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -56,9 +56,9 @@ function run() {
 	check_log_contain_with_retry '\[DeleteWhereColumnsCheck\] \[Columns="\[c2\]"\]' $WORK_DIR/worker1/log/dm-worker.log
 
 	# alter schema to test pk
-	run_sql "alter table ${db}.${tb} add primary key(c3);" $TIDB_PORT $TIDB_PASSWORD
-	run_sql "alter table ${db1}.${tb1} drop column c2;" $MYSQL_PORT1 $MYSQL_PASSWORD1
-	run_sql "alter table ${db2}.${tb2} drop column c2;" $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql_tidb "alter table ${db}.${tb} add primary key(c3);"
+	run_sql_source1 "alter table ${db1}.${tb1} drop column c2;"
+	run_sql_source2 "alter table ${db2}.${tb2} drop column c2;"
 
 	# db2 increment data with update and delete
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2

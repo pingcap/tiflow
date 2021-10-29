@@ -730,62 +730,51 @@ func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTabl
 		return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
 	}
 
-	rows, err := s.ddlDBConn.QuerySQL(tctx, "SHOW CREATE TABLE "+targetTable.String())
+	createSQL, err := utils.GetTableCreateSql(tctx.Ctx, s.ddlDBConn.BaseConn.DBConn, targetTable.String())
 	if err != nil {
 		return terror.ErrSchemaTrackerCannotFetchDownstreamTable.Delegate(err, targetTable, sourceTable)
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var tableName, createSQL string
-		if err = rows.Scan(&tableName, &createSQL); err != nil {
-			return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
-		}
+	// rename the table back to original.
+	var createNode ast.StmtNode
+	createNode, err = parser2.ParseOneStmt(createSQL, "", "")
+	if err != nil {
+		return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
+	}
+	createStmt := createNode.(*ast.CreateTableStmt)
+	createStmt.IfNotExists = true
+	createStmt.Table.Schema = model.NewCIStr(sourceTable.Schema)
+	createStmt.Table.Name = model.NewCIStr(sourceTable.Name)
 
-		// rename the table back to original.
-		var createNode ast.StmtNode
-		createNode, err = parser2.ParseOneStmt(createSQL, "", "")
-		if err != nil {
-			return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
-		}
-		createStmt := createNode.(*ast.CreateTableStmt)
-		createStmt.IfNotExists = true
-		createStmt.Table.Schema = model.NewCIStr(sourceTable.Schema)
-		createStmt.Table.Name = model.NewCIStr(sourceTable.Name)
-
-		// schema tracker sets non-clustered index, so can't handle auto_random.
-		if v, _ := s.schemaTracker.GetSystemVar(schema.TiDBClusteredIndex); v == "OFF" {
-			for _, col := range createStmt.Cols {
-				for i, opt := range col.Options {
-					if opt.Tp == ast.ColumnOptionAutoRandom {
-						// col.Options is unordered
-						col.Options[i] = col.Options[len(col.Options)-1]
-						col.Options = col.Options[:len(col.Options)-1]
-						break
-					}
+	// schema tracker sets non-clustered index, so can't handle auto_random.
+	if v, _ := s.schemaTracker.GetSystemVar(schema.TiDBClusteredIndex); v == "OFF" {
+		for _, col := range createStmt.Cols {
+			for i, opt := range col.Options {
+				if opt.Tp == ast.ColumnOptionAutoRandom {
+					// col.Options is unordered
+					col.Options[i] = col.Options[len(col.Options)-1]
+					col.Options = col.Options[:len(col.Options)-1]
+					break
 				}
 			}
 		}
-
-		var newCreateSQLBuilder strings.Builder
-		restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, &newCreateSQLBuilder)
-		if err = createStmt.Restore(restoreCtx); err != nil {
-			return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
-		}
-		newCreateSQL := newCreateSQLBuilder.String()
-		tctx.L().Debug("reverse-synchronized table schema",
-			zap.Stringer("sourceTable", sourceTable),
-			zap.Stringer("targetTable", targetTable),
-			zap.String("sql", newCreateSQL),
-		)
-		if err = s.schemaTracker.Exec(tctx.Ctx, sourceTable.Schema, newCreateSQL); err != nil {
-			return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
-		}
 	}
 
-	if err = rows.Err(); err != nil {
-		return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
+	var newCreateSQLBuilder strings.Builder
+	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, &newCreateSQLBuilder)
+	if err = createStmt.Restore(restoreCtx); err != nil {
+		return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
 	}
+	newCreateSQL := newCreateSQLBuilder.String()
+	tctx.L().Debug("reverse-synchronized table schema",
+		zap.Stringer("sourceTable", sourceTable),
+		zap.Stringer("targetTable", targetTable),
+		zap.String("sql", newCreateSQL),
+	)
+	if err = s.schemaTracker.Exec(tctx.Ctx, sourceTable.Schema, newCreateSQL); err != nil {
+		return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
+	}
+
 	return nil
 }
 
@@ -2728,7 +2717,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 	}
 
 	if shouldReTrackDownstreamIndex {
-		s.schemaTracker.RemoveDownstreamSchema(targetTables)
+		s.schemaTracker.RemoveDownstreamSchema(s.tctx, targetTables)
 	}
 
 	if shouldSchemaExist {

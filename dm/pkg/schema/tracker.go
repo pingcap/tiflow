@@ -18,12 +18,9 @@ import (
 	"fmt"
 	"strings"
 
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	dterror "github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tidbConfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
@@ -40,7 +37,12 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/mock"
-	"go.uber.org/zap"
+
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	dterror "github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
 
 const (
@@ -64,7 +66,7 @@ type Tracker struct {
 	store     kv.Storage
 	dom       *domain.Domain
 	se        session.Session
-	dsTracker *downstreamTracker // downstream tracker tableid -> createTableStmt
+	dsTracker *downstreamTracker
 }
 
 // downstreamTracker tracks downstream schema.
@@ -364,10 +366,10 @@ func (tr *Tracker) GetSystemVar(name string) (string, bool) {
 func (tr *Tracker) GetDownStreamIndexInfo(tctx *tcontext.Context, tableID string, originTi *model.TableInfo) (*model.IndexInfo, error) {
 	dti, ok := tr.dsTracker.tableInfos[tableID]
 	if !ok {
-		log.L().Info("Downstream schema tracker init. ", zap.String("tableID", tableID))
+		tctx.Logger.Info("Downstream schema tracker init. ", zap.String("tableID", tableID))
 		ti, err := tr.getTableInfoByCreateStmt(tctx, tableID)
 		if err != nil {
-			log.L().Error("Init dowstream schema info error. ", zap.String("tableID", tableID), zap.Error(err))
+			tctx.Logger.Error("Init dowstream schema info error. ", zap.String("tableID", tableID), zap.Error(err))
 			return nil, err
 		}
 
@@ -404,7 +406,7 @@ func (tr *Tracker) GetAvailableDownStreamUKIndexInfo(tableID string, data []inte
 }
 
 // RemoveDownstreamSchema just remove schema or table in downstreamTrack.
-func (tr *Tracker) RemoveDownstreamSchema(targetTables []*filter.Table) {
+func (tr *Tracker) RemoveDownstreamSchema(tctx *tcontext.Context, targetTables []*filter.Table) {
 	if len(targetTables) == 0 {
 		return
 	}
@@ -418,13 +420,13 @@ func (tr *Tracker) RemoveDownstreamSchema(targetTables []*filter.Table) {
 				for k := range tr.dsTracker.tableInfos {
 					if strings.HasPrefix(k, tableID+".") {
 						delete(tr.dsTracker.tableInfos, k)
-						log.L().Info("Remove downstream schema tracker", zap.String("tableID", tableID))
+						tctx.Logger.Info("Remove downstream schema tracker", zap.String("tableID", tableID))
 					}
 				}
 			}
 		} else {
 			delete(tr.dsTracker.tableInfos, tableID)
-			log.L().Info("Remove downstream schema tracker", zap.String("tableID", tableID))
+			tctx.Logger.Info("Remove downstream schema tracker", zap.String("tableID", tableID))
 		}
 	}
 }
@@ -437,21 +439,12 @@ func (tr *Tracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID stri
 			return nil, err
 		}
 	}
-
-	querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tableID)
-	rows, err := tr.dsTracker.downstreamConn.QuerySQL(tctx, querySQL)
+	createStr, err := utils.GetTableCreateSql(tctx.Ctx, tr.dsTracker.downstreamConn.BaseConn.DBConn, tableID)
 	if err != nil {
 		return nil, dterror.ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt.Delegate(err, tableID)
 	}
-	defer rows.Close()
-	var tableName, createStr string
-	if rows.Next() {
-		if err = rows.Scan(&tableName, &createStr); err != nil {
-			return nil, dterror.DBErrorAdapt(rows.Err(), dterror.ErrDBDriverError)
-		}
-	}
 
-	log.L().Info("Show create table info", zap.String("tableID", tableID), zap.String("create string", createStr))
+	tctx.Logger.Info("Show create table info", zap.String("tableID", tableID), zap.String("create string", createStr))
 	// parse create table stmt.
 	stmtNode, err := tr.dsTracker.stmtParser.ParseOneStmt(createStr, "", "")
 	if err != nil {
@@ -494,6 +487,9 @@ func getDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *downstream
 	}
 
 	for _, idx := range ti.Indices {
+		if !idx.Primary && !idx.Unique {
+			continue
+		}
 		indexRedict := redirectIndexKeys(idx, originTi)
 		if indexRedict == nil {
 			continue
