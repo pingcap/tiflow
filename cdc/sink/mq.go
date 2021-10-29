@@ -396,11 +396,8 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-	if err := config.SetPartitionNum(topic); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
 
-	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -41,7 +41,7 @@ import (
 
 const defaultPartitionNum = 4
 
-// Config stores the Kafka configuration
+// Config stores user specified Kafka producer configuration
 type Config struct {
 	BrokerEndpoints []string
 
@@ -191,58 +191,33 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// SetPartitionNum gets partition number from existing topic
-func (c *Config) SetPartitionNum(topic string) error {
-	admin, err := kafkaPkg.NewAdmin(c.BrokerEndpoints)
+// AdjustPartitionNum gets partition number from existing topic
+func (c *Config) AdjustPartitionNum(topic string, admin *kafkaPkg.Admin) error {
+	count, err := admin.GetPartitionCount(topic)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
 
-	// func kafkaTopicPreProcess(topic, address string, config *Config, cfg *sarama.Config) (int32, error) {
-	// 	admin, err := kafka.NewAdmin(strings.Split(address, ","), cfg)
-	// 	if err != nil {
-	// 		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	// 	}
-	// 	defer func() {
-	// 		err := admin.Close()
-	// 		if err != nil {
-	// 			log.Warn("close admin client failed", zap.Error(err))
-	// 		}
-	// 	}()
-	// 	partitionNum := config.PartitionNum
-	//
-	// 	count, err := admin.GetPartitionCount(topic)
-	// 	if err != nil {
-	// 		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	// 	}
-	//
-	// 	if count != 0 {
-	// 		log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", count))
-	// 		if partitionNum == 0 {
-	// 			partitionNum = count
-	// 		} else if partitionNum < count {
-	// 			log.Warn("partition number assigned in sink-uri is less than that of topic", zap.Int32("topic partition num", count))
-	// 		} else if partitionNum > count {
-	// 			return 0, cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
-	// 				"partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, count)
-	// 		}
-	// 	} else {
-	// 		if partitionNum == 0 {
-	// 			partitionNum = defaultPartitionNum
-	// 			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
-	// 		}
-	// 		log.Info("create a topic", zap.String("topic", topic),
-	// 			zap.Int32("partition_num", partitionNum),
-	// 			zap.Int16("replication_factor", config.ReplicationFactor))
-	// 		err := admin.CreateTopic(topic, &sarama.TopicDetail{
-	// 			NumPartitions:     partitionNum,
-	// 			ReplicationFactor: config.ReplicationFactor,
-	// 		}, false)
-	// 		// TODO idenfity the cause of "Topic with this name already exists"
-	// 		if err != nil && !strings.Contains(err.Error(), "already exists") {
-	// 			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	// 		}
-	// 	}
-	//
-	// 	return partitionNum, nil
-	// }
+	if count == 0 {
+		c.PartitionNum = defaultPartitionNum
+		log.Warn("topic not found and partition number is not specified, using default partition number",
+			zap.String("topic", topic), zap.Int32("partition_num", c.PartitionNum))
+		return nil
+	}
+
+	log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", count))
+	if c.PartitionNum == 0 {
+		c.PartitionNum = count
+		return nil
+	}
+
+	if c.PartitionNum < count {
+		log.Warn("partition number assigned in sink-uri is less than that of topic", zap.Int32("topic partition num", count))
+		return nil
+	}
+
+	return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
+		"partition number(%d) assigned in sink-uri is more than that of topic(%d)", c.PartitionNum, count)
 }
 
 type kafkaSaramaProducer struct {
@@ -465,26 +440,37 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 var newSaramaConfigImpl = newSaramaConfig
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
 	}
-	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
+	asyncClient, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-	syncClient, err := sarama.NewSyncProducer(strings.Split(address, ","), cfg)
+	syncClient, err := sarama.NewSyncProducer(config.BrokerEndpoints, cfg)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
+	admin, err := kafkaPkg.NewAdmin(config.BrokerEndpoints, cfg)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	if err := config.AdjustPartitionNum(topic, admin); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
 	partitionNum := config.PartitionNum
 	if config.TopicPreProcess {
-		partitionNum, err = kafkaTopicPreProcess(topic, address, config, cfg)
-		if err != nil {
-			return nil, err
+		if err := admin.CreateTopic(topic, &sarama.TopicDetail{
+			NumPartitions:     config.PartitionNum,
+			ReplicationFactor: config.ReplicationFactor,
+		}); err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
 	}
 

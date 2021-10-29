@@ -14,6 +14,8 @@
 package kafka
 
 import (
+	"strings"
+
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 )
@@ -49,4 +51,13 @@ func (admin *Admin) GetPartitionCount(topic string) (int32, error) {
 	}
 
 	return detail.NumPartitions, nil
+}
+
+func (admin *Admin) CreateTopic(topic string, detail *sarama.TopicDetail) error {
+	if err := admin.ClusterAdmin.CreateTopic(topic, detail, false); err != nil {
+		if !strings.Contains(err.Error(), "already exists") {
+			return errors.Trace(err)
+		}
+	}
+	return nil
 }
