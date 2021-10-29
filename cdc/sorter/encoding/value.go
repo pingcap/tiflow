@@ -26,8 +26,7 @@ type SerializerDeserializer interface {
 
 // MsgPackGenSerde encodes model.PolymorphicEvent into bytes and decodes
 // model.PolymorphicEvent from bytes.
-type MsgPackGenSerde struct {
-}
+type MsgPackGenSerde struct{}
 
 // Marshal encodes model.PolymorphicEvent into bytes.
 func (m *MsgPackGenSerde) Marshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error) {
