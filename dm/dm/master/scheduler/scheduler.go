@@ -121,9 +121,10 @@ type Scheduler struct {
 	// a mirror of bounds whose element is not deleted when worker unbound. worker -> SourceBound
 	lastBound map[string]ha.SourceBound
 
+	// TODO: seems this memory status is useless.
 	// expectant relay stages for sources, source ID -> stage.
 	// add:
-	// - bound the source to a worker (at first time). // TODO: change this to add a relay-enabled source
+	// - bound the source to a worker (at first time).
 	// - recover from etcd (calling `recoverSources`).
 	// update:
 	// - update stage by user request (calling `UpdateExpectRelayStage`).
