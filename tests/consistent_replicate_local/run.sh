@@ -24,7 +24,7 @@ function check_resolved_ts() {
 export -f check_resolved_ts
 
 function run() {
-	# TODO: sink kafka sink, since this is a MySQL eventual consistent test
+	# we only support eventually consistent replication with MySQL sink
 	if [ "$SINK_TYPE" == "kafka" ]; then
 		return
 	fi
