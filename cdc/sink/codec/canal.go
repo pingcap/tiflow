@@ -303,9 +303,8 @@ func (b *canalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error
 
 // NewCanalEntryBuilder creates a new canalEntryBuilder
 func NewCanalEntryBuilder() *canalEntryBuilder {
-	d := charmap.ISO8859_1.NewDecoder()
 	return &canalEntryBuilder{
-		bytesDecoder: d,
+		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
 	}
 }
 
