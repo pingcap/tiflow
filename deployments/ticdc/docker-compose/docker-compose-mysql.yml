@@ -5,7 +5,7 @@
       controller:
         image: ticdc:latest
         build:
-          context: .
+          context: ../../../
           dockerfile: ../docker/dev.Dockerfile
         volumes:
           - /data
@@ -23,7 +23,7 @@
       capturer0:
         image: ticdc:latest
         build:
-          context: .
+          context: ../../../
           dockerfile: ../docker/dev.Dockerfile
         volumes:
           - /data
@@ -48,7 +48,7 @@
       capturer1:
         image: ticdc:latest
         build:
-          context: .
+          context: ../../../
           dockerfile: ../docker/dev.Dockerfile
         volumes:
           - /data
@@ -73,7 +73,7 @@
       capturer2:
         image: ticdc:latest
         build:
-          context: .
+          context: ../../../
           dockerfile: ../docker/dev.Dockerfile
         volumes:
           - /data
