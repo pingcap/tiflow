@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/redo"
 )
 
 type tableSink struct {
@@ -27,7 +28,8 @@ type tableSink struct {
 	manager *Manager
 	buffer  []*model.RowChangedEvent
 	// emittedTs means all of events which of commitTs less than or equal to emittedTs is sent to backendSink
-	emittedTs model.Ts
+	emittedTs   model.Ts
+	redoManager redo.LogManager
 }
 
 func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
@@ -38,6 +40,9 @@ func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.buffer = append(t.buffer, rows...)
 	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
+	if t.redoManager.Enabled() {
+		return t.redoManager.EmitRowChangedEvents(ctx, t.tableID, rows...)
+	}
 	return nil
 }
 
@@ -46,12 +51,19 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	return nil
 }
 
+// FlushRowChangedEvents flushes sorted rows to sink manager, note the resolvedTs
+// is required to be no more than global resolvedTs, table barrierTs and table
+// redo log watermarkTs.
 func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	i := sort.Search(len(t.buffer), func(i int) bool {
 		return t.buffer[i].CommitTs > resolvedTs
 	})
 	if i == 0 {
 		atomic.StoreUint64(&t.emittedTs, resolvedTs)
+		ckpt, err := t.flushRedoLogs(ctx, resolvedTs)
+		if err != nil {
+			return ckpt, err
+		}
 		return t.manager.flushBackendSink(ctx)
 	}
 	resolvedRows := t.buffer[:i]
@@ -62,11 +74,35 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		return t.manager.getCheckpointTs(), errors.Trace(err)
 	}
 	atomic.StoreUint64(&t.emittedTs, resolvedTs)
+	ckpt, err := t.flushRedoLogs(ctx, resolvedTs)
+	if err != nil {
+		return ckpt, err
+	}
 	return t.manager.flushBackendSink(ctx)
 }
 
-func (t *tableSink) getEmittedTs() uint64 {
-	return atomic.LoadUint64(&t.emittedTs)
+func (t *tableSink) flushRedoLogs(ctx context.Context, resolvedTs uint64) (uint64, error) {
+	if t.redoManager.Enabled() {
+		err := t.redoManager.FlushLog(ctx, t.tableID, resolvedTs)
+		if err != nil {
+			return t.manager.getCheckpointTs(), err
+		}
+	}
+	return 0, nil
+}
+
+// getResolvedTs returns resolved ts, which means all events before resolved ts
+// have been sent to sink manager, if redo log is enabled, it also means all events
+// before resolved ts have been persisted to redo log storage.
+func (t *tableSink) getResolvedTs() uint64 {
+	ts := atomic.LoadUint64(&t.emittedTs)
+	if t.redoManager.Enabled() {
+		redoResolvedTs := t.redoManager.GetMinResolvedTs()
+		if redoResolvedTs < ts {
+			ts = redoResolvedTs
+		}
+	}
+	return ts
 }
 
 func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {

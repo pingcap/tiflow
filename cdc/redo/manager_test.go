@@ -38,6 +38,18 @@ func TestConsistentConfig(t *testing.T) {
 		require.Equal(t, lc.valid, IsValidConsistentLevel(lc.level))
 	}
 
+	levelEnableCases := []struct {
+		level      string
+		consistent bool
+	}{
+		{"invalid-level", false},
+		{"normal", false},
+		{"eventual", true},
+	}
+	for _, lc := range levelEnableCases {
+		require.Equal(t, lc.consistent, IsConsistentEnabled(lc.level))
+	}
+
 	storageCases := []struct {
 		storage string
 		valid   bool
