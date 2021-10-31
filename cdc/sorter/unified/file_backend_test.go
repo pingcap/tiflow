@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sorter/encoding"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
@@ -48,7 +49,7 @@ func (s *fileBackendSuite) TestNoSpace(c *check.C) {
 
 	fb := &fileBackEnd{
 		fileName: "/dev/full",
-		serde:    &msgPackGenSerde{},
+		serde:    &encoding.MsgPackGenSerde{},
 	}
 	w, err := fb.writer()
 	c.Assert(err, check.IsNil)
