@@ -197,7 +197,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *
 	return &canalFlatMessage{
 		CheckpointTs: ts,
 		// `WATERMARK` is a TiCDC custom event type, alias of `checkpoint`
-		EventType: "WATERMARK",
+		EventType: canal.EventType_WATERMARK.String(),
 	}
 }
 
