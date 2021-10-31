@@ -28,7 +28,7 @@ import (
 
 const (
 	kafkaHealthCheckURI     = "http://127.0.0.1:18083"
-	dockerComposeFilePath   = "/docker-compose-avro.yml"
+	dockerComposeFilePath   = "/deployments/ticdc/docker-compose/docker-compose-avro.yml"
 	controllerContainerName = "ticdc_controller_1"
 	// The upstream PD endpoint in docker-compose network.
 	upstreamPD = "http://upstream-pd:2379"

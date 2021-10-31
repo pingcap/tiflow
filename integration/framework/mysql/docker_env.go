@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	dockerComposeFilePath   = "/docker-compose-mysql.yml"
+	dockerComposeFilePath   = "/deployments/ticdc/docker-compose/docker-compose-mysql.yml"
 	controllerContainerName = "ticdc_controller_1"
 	// The upstream PD endpoint in docker-compose network.
 	upstreamPD = "http://upstream-pd:2379"
