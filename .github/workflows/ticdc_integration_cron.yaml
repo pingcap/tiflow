@@ -74,7 +74,7 @@ jobs:
         if: ${{ always() }}
         with:
           name: logs
-          path: ${{ github.workspace }}/docker/logs/*
+          path: ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
@@ -136,7 +136,7 @@ jobs:
         if: ${{ always() }}
         with:
           name: logs
-          path: ${{ github.workspace }}/docker/logs/*
+          path: ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
