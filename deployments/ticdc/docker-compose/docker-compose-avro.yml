@@ -10,7 +10,7 @@ services:
     volumes:
       - /data
       - ./logs:/logs
-      - ./configs:/config
+      - ./configs:/configs
     command:
       - /usr/bin/socat
       - -v
