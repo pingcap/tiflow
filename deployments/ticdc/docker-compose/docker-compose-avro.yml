@@ -6,7 +6,7 @@ services:
     image: ticdc:latest
     build:
       context: ../../../
-      dockerfile: ../docker/dev.Dockerfile
+      dockerfile: ./deployments/ticdc/docker/dev.Dockerfile
     volumes:
       - /data
       - ./logs:/logs
@@ -33,7 +33,7 @@ services:
     image: ticdc:latest
     build:
       context: ../../../
-      dockerfile: ../docker/dev.Dockerfile
+      dockerfile: ./deployments/ticdc/docker/dev.Dockerfile
     volumes:
       - /data
       - ./logs:/logs
@@ -58,7 +58,7 @@ services:
     image: ticdc:latest
     build:
       context: ../../../
-      dockerfile: ../docker/dev.Dockerfile
+      dockerfile: ./deployments/ticdc/docker/dev.Dockerfile
     volumes:
       - /data
       - ./logs:/logs
@@ -83,7 +83,7 @@ services:
     image: ticdc:latest
     build:
       context: ../../../
-      dockerfile: ../docker/dev.Dockerfile
+      dockerfile: ./deployments/ticdc/docker/dev.Dockerfile
     volumes:
       - /data
       - ./logs:/logs

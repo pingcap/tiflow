@@ -6,7 +6,7 @@ services:
     image: ticdc:latest
     build:
       context: ../../../
-      dockerfile: ../docker/Dockerfile
+      dockerfile: ./deployments/ticdc/docker/Dockerfile
     volumes:
       - /data
       - ./logs:/logs
@@ -27,7 +27,7 @@ services:
     image: ticdc:latest
     build:
       context: ../../../
-      dockerfile: ../docker/Dockerfile
+      dockerfile: ./deployments/ticdc/docker/Dockerfile
     volumes:
       - /data
       - ./logs:/logs
@@ -51,7 +51,7 @@ services:
     image: ticdc:latest
     build:
       context: ../../../
-      dockerfile: ../docker/Dockerfile
+      dockerfile: ./deployments/ticdc/docker/Dockerfile
     volumes:
       - /data
       - ./logs:/logs
@@ -75,7 +75,7 @@ services:
     image: ticdc:latest
     build:
       context: ../../../
-      dockerfile: ../docker/Dockerfile
+      dockerfile: ./deployments/ticdc/docker/Dockerfile
     volumes:
       - /data
       - ./logs:/logs
@@ -326,7 +326,7 @@ services:
     image: canal-adapter:latest
     build:
       context: ../../../scripts/canal/
-      dockerfile: ../docker/Dockerfile
+      dockerfile: ./deployments/ticdc/docker/Dockerfile
     ports:
       - 8081:8081
     volumes:
