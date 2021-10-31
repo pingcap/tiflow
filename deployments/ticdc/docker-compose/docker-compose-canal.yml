@@ -325,8 +325,8 @@ services:
   canal-adapter:
     image: canal-adapter:latest
     build:
-      context: ../../../scripts/canal/
-      dockerfile: ./docker/Dockerfile
+      context: ../../../scripts/canal/docker
+      dockerfile: ./Dockerfile
     ports:
       - 8081:8081
     volumes:
