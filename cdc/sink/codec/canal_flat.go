@@ -365,3 +365,99 @@ func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 	}
 	return nil
 }
+
+// CanalFlatEventBatchDecoder decodes the byte of a batch into the original messages.
+type CanalFlatEventBatchDecoder struct {
+	// headers *craft.Headers
+	// decoder *craft.MessageDecoder
+	// index   int
+	//
+	// allocator *craft.SliceAllocator
+}
+
+// HasNext implements the EventBatchDecoder interface
+func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
+	// if b.index >= b.headers.Count() {
+	// 	return model.MqMessageTypeUnknown, false, nil
+	// }
+	// return b.headers.GetType(b.index), true, nil
+	return model.MqMessageTypeUnknown, false, nil
+}
+
+// NextRowChangedEvent implements the EventBatchDecoder interface
+func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+	// ty, hasNext, err := b.HasNext()
+	// if err != nil {
+	// 	return nil, errors.Trace(err)
+	// }
+	// if !hasNext || ty != model.MqMessageTypeRow {
+	// 	return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("not found row changed event message")
+	// }
+	// oldValue, newValue, err := b.decoder.RowChangedEvent(b.index)
+	// if err != nil {
+	// 	return nil, errors.Trace(err)
+	// }
+	// ev := &model.RowChangedEvent{}
+	// if oldValue != nil {
+	// 	if ev.PreColumns, err = oldValue.ToModel(); err != nil {
+	// 		return nil, errors.Trace(err)
+	// 	}
+	// }
+	// if newValue != nil {
+	// 	if ev.Columns, err = newValue.ToModel(); err != nil {
+	// 		return nil, errors.Trace(err)
+	// 	}
+	// }
+	// ev.CommitTs = b.headers.GetTs(b.index)
+	// ev.Table = &model.TableName{
+	// 	Schema: b.headers.GetSchema(b.index),
+	// 	Table:  b.headers.GetTable(b.index),
+	// }
+	// partition := b.headers.GetPartition(b.index)
+	// if partition >= 0 {
+	// 	ev.Table.TableID = partition
+	// 	ev.Table.IsPartition = true
+	// }
+	// b.index++
+	// return ev, nil
+	return nil, nil
+}
+
+// NextDDLEvent implements the EventBatchDecoder interface
+func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+	// if b.nextKey == nil {
+	// 	if err := b.decodeNextKey(); err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+	// b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
+	// if b.nextKey.Type != model.MqMessageTypeDDL {
+	// 	return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found ddl event message")
+	// }
+	// valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
+	// value := b.valueBytes[8 : valueLen+8]
+	// b.valueBytes = b.valueBytes[valueLen+8:]
+	// ddlMsg := new(mqMessageDDL)
+	// if err := ddlMsg.Decode(value); err != nil {
+	// 	return nil, errors.Trace(err)
+	// }
+	// ddlEvent := mqMessageToDDLEvent(b.nextKey, ddlMsg)
+	// b.nextKey = nil
+	// return ddlEvent, nil
+	return nil, nil
+}
+
+// NextResolvedEvent implements the EventBatchDecoder interface
+func (b *CanalFlatEventBatchDecoder) NextResolvedEvent() (uint64, error) {
+	// ty, hasNext, err := b.HasNext()
+	// if err != nil {
+	// 	return 0, errors.Trace(err)
+	// }
+	// if !hasNext || ty != model.MqMessageTypeResolved {
+	// 	return 0, cerror.ErrCraftCodecInvalidData.GenWithStack("not found resolved event message")
+	// }
+	// ts := b.headers.GetTs(b.index)
+	// b.index++
+	// return ts, nil
+	return 0, nil
+}
