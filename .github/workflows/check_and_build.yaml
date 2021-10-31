@@ -26,6 +26,7 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Build
+      working-directory: ./deployments/ticdc/docker
       run: docker build .
 
   make_check_build:
