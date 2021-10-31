@@ -51,7 +51,7 @@ For details, see [Deploy TiCDC](https://docs.pingcap.com/tidb/stable/deploy-ticd
 
 ```sh
 # Start TiDB cluster
-$ docker-compose -f docker-compose-mysql.yml up -d
+$ docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql.yml up -d
 
 # Attach to control container to run TiCDC
 $ docker exec -it ticdc_controller_1 sh
