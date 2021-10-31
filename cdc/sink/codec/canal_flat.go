@@ -308,6 +308,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) can
 	}
 }
 
+<<<<<<< HEAD
 func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *canalFlatMessageWithTiDBExtension {
 	return &canalFlatMessageWithTiDBExtension{
 		canalFlatMessage: &canalFlatMessage{
@@ -318,6 +319,14 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *
 			BuildTime:     time.Now().UnixNano() / int64(time.Millisecond), // converts to milliseconds
 		},
 		Extensions: &tidbExtension{WatermarkTs: ts},
+=======
+// newFlatMessage4CheckpointEvent return a `WATERMARK` event typed message
+func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *canalFlatMessage {
+	return &canalFlatMessage{
+		CheckpointTs: ts,
+		// `WATERMARK` is a TiCDC custom event type, alias of `checkpoint`
+		EventType: canal.EventType_WATERMARK.String(),
+>>>>>>> 22c64066f (use canal proto type.)
 	}
 }
 
