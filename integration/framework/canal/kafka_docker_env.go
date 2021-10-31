@@ -27,7 +27,7 @@ import (
 
 const (
 	dockerComposeFilePath   = "/deployments/ticdc/docker-compose/docker-compose-canal.yml"
-	controllerContainerName = "docker-compose_controller_1"
+	controllerContainerName = "ticdc_controller"
 	// The upstream PD endpoint in docker-compose network.
 	upstreamPD = "http://upstream-pd:2379"
 )

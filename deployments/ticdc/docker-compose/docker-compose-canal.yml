@@ -4,6 +4,7 @@ version: '2.1'
 services:
   controller:
     image: ticdc:latest
+    container_name: ticdc_controller
     build:
       context: ../../../
       dockerfile: ./deployments/ticdc/docker/Dockerfile
