@@ -54,7 +54,7 @@ For details, see [Deploy TiCDC](https://docs.pingcap.com/tidb/stable/deploy-ticd
 $ docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql.yml up -d
 
 # Attach to control container to run TiCDC
-$ docker exec -it docker-compose_controller_1 sh
+$ docker exec -it ticdc_controller sh
 
 # Start to feed the changes on the upstream tidb, and sink to the downstream tidb
 $ ./cdc cli changefeed create --pd http://upstream-pd:2379 --sink-uri mysql://root@downstream-tidb:4000/
