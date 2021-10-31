@@ -64,7 +64,8 @@ jobs:
       - name: Run Integration Framework
         timeout-minutes: 45
         run: |
-          $GITHUB_WORKSPACE/integration/integration -protocol=mysql
+          cd $GITHUB_WORKSPACE/integration
+          ./integration -protocol=mysql
 
       - name: Try to dump container logs
         if: ${{ failure() }}
@@ -125,7 +126,8 @@ jobs:
       - name: Run Integration Framework
         timeout-minutes: 45
         run: |
-          $GITHUB_WORKSPACE/integration/integration -protocol=simple-mysql-checking-old-value
+          cd $GITHUB_WORKSPACE/integration
+          ./integration -protocol=simple-mysql-checking-old-value
 
       - name: Try to dump container logs
         if: ${{ failure() }}
@@ -186,7 +188,8 @@ jobs:
       - name: Run Integration Framework
         timeout-minutes: 45
         run: |
-          $GITHUB_WORKSPACE/integration/integration -protocol=canalJson
+          cd $GITHUB_WORKSPACE/integration
+          ./integration -protocol=canalJson
 
       - name: Try to dump container logs
         if: ${{ failure() }}
