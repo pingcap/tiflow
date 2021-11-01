@@ -161,7 +161,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		IsDDL:         false,
 		EventType:     header.GetEventType().String(),
 		ExecutionTime: header.ExecuteTime,
-		BuildTime:     time.Now().UnixMilli(),
+		BuildTime:     time.Now().UnixNano() / 1e6,
 		Query:         "",
 		SQLType:       sqlType,
 		MySQLType:     mysqlType,
@@ -188,7 +188,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) *ca
 		IsDDL:         true,
 		EventType:     header.GetEventType().String(),
 		ExecutionTime: header.ExecuteTime,
-		BuildTime:     time.Now().UnixMilli(),
+		BuildTime:     time.Now().UnixNano() / 1e6,
 		Query:         e.Query,
 		tikvTs:        e.CommitTs,
 	}
