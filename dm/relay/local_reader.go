@@ -16,6 +16,7 @@ package relay
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -397,12 +398,42 @@ func (r *BinlogReader) parseDirAsPossible(ctx context.Context, s *LocalStreamer,
 	}
 }
 
+type binlogFileParseState struct {
+	// readonly states
+	possibleLast              bool
+	fullPath                  string
+	relayLogFile, relayLogDir string
+	currentUUID               string
+
+	f *os.File
+
+	// states may change
+	replaceWithHeartbeat bool
+	formatDescEventRead  bool
+	latestPos            int64
+}
+
 // parseFileAsPossible parses single relay log file as far as possible.
-func (r *BinlogReader) parseFileAsPossible(ctx context.Context, s *LocalStreamer, relayLogFile string, offset int64, relayLogDir string, firstParse bool, currentUUID string, possibleLast bool) (needSwitch bool, latestPos int64, nextUUID string, nextBinlogName string, err error) {
-	var needReParse bool
-	latestPos = offset
-	replaceWithHeartbeat := false
-	r.tctx.L().Debug("start to parse relay log file", zap.String("file", relayLogFile), zap.Int64("position", latestPos), zap.String("directory", relayLogDir))
+func (r *BinlogReader) parseFileAsPossible(ctx context.Context, s *LocalStreamer, relayLogFile string, offset int64, relayLogDir string, firstParse bool, currentUUID string, possibleLast bool) (bool, int64, string, string, error) {
+	r.tctx.L().Debug("start to parse relay log file", zap.String("file", relayLogFile), zap.Int64("position", offset), zap.String("directory", relayLogDir))
+
+	fullPath := filepath.Join(relayLogDir, relayLogFile)
+	f, err := os.Open(fullPath)
+	if err != nil {
+		return false, 0, "", "", errors.Trace(err)
+	}
+	defer f.Close()
+
+	state := &binlogFileParseState{
+		possibleLast:         possibleLast,
+		fullPath:             fullPath,
+		relayLogFile:         relayLogFile,
+		relayLogDir:          relayLogDir,
+		currentUUID:          currentUUID,
+		f:                    f,
+		latestPos:            offset,
+		replaceWithHeartbeat: false,
+	}
 
 	for {
 		select {
@@ -410,16 +441,16 @@ func (r *BinlogReader) parseFileAsPossible(ctx context.Context, s *LocalStreamer
 			return false, 0, "", "", ctx.Err()
 		default:
 		}
-		needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, replaceWithHeartbeat, err = r.parseFile(ctx, s, relayLogFile, latestPos, relayLogDir, firstParse, currentUUID, possibleLast, replaceWithHeartbeat)
+		needSwitch, needReParse, nextUUID, nextBinlogName, err := r.parseFile(ctx, s, firstParse, state)
 		if err != nil {
-			return false, 0, "", "", terror.Annotatef(err, "parse relay log file %s from offset %d in dir %s", relayLogFile, latestPos, relayLogDir)
+			return false, 0, "", "", terror.Annotatef(err, "parse relay log file %s from offset %d in dir %s", relayLogFile, state.latestPos, relayLogDir)
 		}
 		firstParse = false // set to false to handle the `continue` below
 		if needReParse {
 			r.tctx.L().Debug("continue to re-parse relay log file", zap.String("file", relayLogFile), zap.String("directory", relayLogDir))
 			continue // should continue to parse this file
 		}
-		return needSwitch, latestPos, nextUUID, nextBinlogName, nil
+		return needSwitch, state.latestPos, nextUUID, nextBinlogName, nil
 	}
 }
 
@@ -428,21 +459,16 @@ func (r *BinlogReader) parseFileAsPossible(ctx context.Context, s *LocalStreamer
 func (r *BinlogReader) parseFile(
 	ctx context.Context,
 	s *LocalStreamer,
-	relayLogFile string,
-	offset int64,
-	relayLogDir string,
 	firstParse bool,
-	currentUUID string,
-	possibleLast bool,
-	replaceWithHeartbeat bool,
-) (needSwitch, needReParse bool, latestPos int64, nextUUID, nextBinlogName string, currentReplaceFlag bool, err error) {
-	_, suffixInt, err := utils.ParseSuffixForUUID(currentUUID)
+	state *binlogFileParseState,
+) (needSwitch, needReParse bool, nextUUID, nextBinlogName string, err error) {
+	_, suffixInt, err := utils.ParseSuffixForUUID(state.currentUUID)
 	if err != nil {
-		return false, false, 0, "", "", false, err
+		return false, false, "", "", err
 	}
 
 	uuidSuffix := utils.SuffixIntToStr(suffixInt) // current UUID's suffix, which will be added to binlog name
-	latestPos = offset                            // set to argument passed in
+	offset := state.latestPos
 
 	onEventFunc := func(e *replication.BinlogEvent) error {
 		r.tctx.L().Debug("read event", zap.Reflect("header", e.Header))
@@ -455,7 +481,7 @@ func (r *BinlogReader) parseFile(
 				return nil
 			}
 			// else just update lastPos
-			latestPos = int64(e.Header.LogPos)
+			state.latestPos = int64(e.Header.LogPos)
 		case *replication.RotateEvent:
 			// add master UUID suffix to pos.Name
 			parsed, _ := binlog.ParseFilename(string(ev.NextLogName))
@@ -464,7 +490,7 @@ func (r *BinlogReader) parseFile(
 
 			if e.Header.Timestamp != 0 && e.Header.LogPos != 0 {
 				// not fake rotate event, update file pos
-				latestPos = int64(e.Header.LogPos)
+				state.latestPos = int64(e.Header.LogPos)
 			} else {
 				r.tctx.L().Debug("skip fake rotate event", zap.Reflect("header", e.Header))
 			}
@@ -480,35 +506,35 @@ func (r *BinlogReader) parseFile(
 			r.tctx.L().Info("rotate binlog", zap.Stringer("position", currentPos))
 		case *replication.GTIDEvent:
 			if r.prevGset == nil {
-				latestPos = int64(e.Header.LogPos)
+				state.latestPos = int64(e.Header.LogPos)
 				break
 			}
 			u, _ := uuid.FromBytes(ev.SID)
-			replaceWithHeartbeat, err = r.advanceCurrentGtidSet(fmt.Sprintf("%s:%d", u.String(), ev.GNO))
+			state.replaceWithHeartbeat, err = r.advanceCurrentGtidSet(fmt.Sprintf("%s:%d", u.String(), ev.GNO))
 			if err != nil {
 				return errors.Trace(err)
 			}
-			latestPos = int64(e.Header.LogPos)
+			state.latestPos = int64(e.Header.LogPos)
 		case *replication.MariadbGTIDEvent:
 			if r.prevGset == nil {
-				latestPos = int64(e.Header.LogPos)
+				state.latestPos = int64(e.Header.LogPos)
 				break
 			}
 			GTID := ev.GTID
-			replaceWithHeartbeat, err = r.advanceCurrentGtidSet(fmt.Sprintf("%d-%d-%d", GTID.DomainID, GTID.ServerID, GTID.SequenceNumber))
+			state.replaceWithHeartbeat, err = r.advanceCurrentGtidSet(fmt.Sprintf("%d-%d-%d", GTID.DomainID, GTID.ServerID, GTID.SequenceNumber))
 			if err != nil {
 				return errors.Trace(err)
 			}
-			latestPos = int64(e.Header.LogPos)
+			state.latestPos = int64(e.Header.LogPos)
 		case *replication.XIDEvent:
 			ev.GSet = r.getCurrentGtidSet()
-			latestPos = int64(e.Header.LogPos)
+			state.latestPos = int64(e.Header.LogPos)
 		case *replication.QueryEvent:
 			ev.GSet = r.getCurrentGtidSet()
-			latestPos = int64(e.Header.LogPos)
+			state.latestPos = int64(e.Header.LogPos)
 		default:
 			// update file pos
-			latestPos = int64(e.Header.LogPos)
+			state.latestPos = int64(e.Header.LogPos)
 		}
 
 		// align with MySQL
@@ -516,7 +542,7 @@ func (r *BinlogReader) parseFile(
 		// replace it with HEARTBEAT event
 		// for Mariadb, it will bee replaced with MARIADB_GTID_LIST_EVENT
 		// In DM, we replace both of them with HEARTBEAT event
-		if replaceWithHeartbeat {
+		if state.replaceWithHeartbeat {
 			switch e.Event.(type) {
 			// Only replace transaction event
 			// Other events such as FormatDescriptionEvent, RotateEvent, etc. should be the same as before
@@ -534,29 +560,43 @@ func (r *BinlogReader) parseFile(
 		return nil
 	}
 
-	fullPath := filepath.Join(relayLogDir, relayLogFile)
-
 	if firstParse {
 		// if the file is the first time to parse, send a fake ROTATE_EVENT before parse binlog file
 		// ref: https://github.com/mysql/mysql-server/blob/4f1d7cf5fcb11a3f84cff27e37100d7295e7d5ca/sql/rpl_binlog_sender.cc#L248
-		e, err2 := utils.GenFakeRotateEvent(relayLogFile, uint64(offset), r.latestServerID)
+		e, err2 := utils.GenFakeRotateEvent(state.relayLogFile, uint64(offset), r.latestServerID)
 		if err2 != nil {
-			return false, false, 0, "", "", false, terror.Annotatef(err2, "generate fake RotateEvent for (%s: %d)", relayLogFile, offset)
+			return false, false, "", "", terror.Annotatef(err2, "generate fake RotateEvent for (%s: %d)", state.relayLogFile, offset)
 		}
 		err2 = onEventFunc(e)
 		if err2 != nil {
-			return false, false, 0, "", "", false, terror.Annotatef(err2, "send event %+v", e.Header)
+			return false, false, "", "", terror.Annotatef(err2, "send event %+v", e.Header)
 		}
-		r.tctx.L().Info("start parse relay log file", zap.String("file", fullPath), zap.Int64("offset", offset))
+		r.tctx.L().Info("start parse relay log file", zap.String("file", state.fullPath), zap.Int64("offset", offset))
+
 	} else {
-		r.tctx.L().Debug("start parse relay log file", zap.String("file", fullPath), zap.Int64("offset", offset))
+		r.tctx.L().Debug("start parse relay log file", zap.String("file", state.fullPath), zap.Int64("offset", offset))
 	}
 
-	// use parser.ParseFile directly now, if needed we can change to use FileReader.
-	err = r.parser.ParseFile(fullPath, offset, onEventFunc)
+	// parser needs the FormatDescriptionEvent to work correctly
+	if !state.formatDescEventRead {
+		if err = r.parseFormatDescEvent(state); err != nil {
+			if state.possibleLast && isIgnorableParseError(err) {
+				return r.waitBinlogChanged(ctx, state, offset)
+			}
+			return false, false, "", "", terror.ErrParserParseRelayLog.Delegate(err, state.fullPath)
+		}
+	}
+
+	// we need to seek explicitly, as parser may read in-complete event and return error(ignorable) last time
+	// and offset may be messed up
+	if _, err = state.f.Seek(offset, io.SeekStart); err != nil {
+		return false, false, "", "", terror.ErrParserParseRelayLog.Delegate(err, state.fullPath)
+	}
+
+	err = r.parser.ParseReader(state.f, onEventFunc)
 	if err != nil {
-		if possibleLast && isIgnorableParseError(err) {
-			r.tctx.L().Warn("fail to parse relay log file, meet some ignorable error", zap.String("file", fullPath), zap.Int64("offset", offset), zap.Error(err))
+		if state.possibleLast && isIgnorableParseError(err) {
+			r.tctx.L().Warn("fail to parse relay log file, meet some ignorable error", zap.String("file", state.fullPath), zap.Int64("offset", offset), zap.Error(err))
 			// the file is truncated, we send a mock event with `IGNORABLE_EVENT` to notify the the consumer
 			// TODO: should add a integration test for this
 			e := &replication.BinlogEvent{
@@ -567,18 +607,23 @@ func (r *BinlogReader) parseFile(
 			}
 			s.ch <- e
 		} else {
-			r.tctx.L().Error("parse relay log file", zap.String("file", fullPath), zap.Int64("offset", offset), zap.Error(err))
-			return false, false, 0, "", "", false, terror.ErrParserParseRelayLog.Delegate(err, fullPath)
+			r.tctx.L().Error("parse relay log file", zap.String("file", state.fullPath), zap.Int64("offset", offset), zap.Error(err))
+			return false, false, "", "", terror.ErrParserParseRelayLog.Delegate(err, state.fullPath)
 		}
 	}
-	r.tctx.L().Debug("parse relay log file", zap.String("file", fullPath), zap.Int64("offset", latestPos))
+	r.tctx.L().Debug("parse relay log file", zap.String("file", state.fullPath), zap.Int64("offset", state.latestPos))
 
-	if !possibleLast {
+	if !state.possibleLast {
 		// there are more relay log files in current sub directory, continue to re-collect them
-		r.tctx.L().Info("more relay log files need to parse", zap.String("directory", relayLogDir))
-		return false, false, latestPos, "", "", false, nil
+		r.tctx.L().Info("more relay log files need to parse", zap.String("directory", state.relayLogDir))
+		return false, false, "", "", nil
 	}
 
+	return r.waitBinlogChanged(ctx, state, offset)
+}
+
+func (r *BinlogReader) waitBinlogChanged(ctx context.Context, state *binlogFileParseState, beginOffset int64) (
+	needSwitch, needReParse bool, nextUUID, nextBinlogName string, err error) {
 	switchCh := make(chan SwitchPath, 1)
 	updatePathCh := make(chan string, 1)
 	updateErrCh := make(chan error, 1)
@@ -595,36 +640,63 @@ func (r *BinlogReader) parseFile(
 		checker := relayLogFileChecker{
 			notifier:          r,
 			relayDir:          r.cfg.RelayDir,
-			currentUUID:       currentUUID,
-			latestRelayLogDir: relayLogDir,
-			latestFilePath:    fullPath,
-			latestFile:        relayLogFile,
-			beginOffset:       offset,
+			currentUUID:       state.currentUUID,
+			latestRelayLogDir: state.relayLogDir,
+			latestFilePath:    state.fullPath,
+			latestFile:        state.relayLogFile,
+			beginOffset:       beginOffset,
 			endOffset:         latestPos,
 		}
 		// TODO no need to be a goroutine now, maybe refactored when refactoring parseFile itself.
 		checker.relayLogUpdatedOrNewCreated(newCtx, updatePathCh, switchCh, updateErrCh)
-	}(latestPos)
+	}(state.latestPos)
 
 	select {
 	case <-ctx.Done():
-		return false, false, 0, "", "", false, nil
+		return false, false, "", "", nil
 	case switchResp := <-switchCh:
 		// update new uuid
-		if err = r.updateUUIDs(); err != nil {
-			return false, false, 0, "", "", false, nil
+		if err := r.updateUUIDs(); err != nil {
+			return false, false, "", "", nil
 		}
-		return true, false, 0, switchResp.nextUUID, switchResp.nextBinlogName, false, nil
+		return true, false, switchResp.nextUUID, switchResp.nextBinlogName, nil
 	case updatePath := <-updatePathCh:
-		if strings.HasSuffix(updatePath, relayLogFile) {
+		if strings.HasSuffix(updatePath, state.relayLogFile) {
 			// current relay log file updated, need to re-parse it
-			return false, true, latestPos, "", "", replaceWithHeartbeat, nil
+			return false, true, "", "", nil
 		}
 		// need parse next relay log file or re-collect files
-		return false, false, latestPos, "", "", false, nil
+		return false, false, "", "", nil
 	case err := <-updateErrCh:
-		return false, false, 0, "", "", false, err
+		return false, false, "", "", err
 	}
+}
+
+func (r *BinlogReader) parseFormatDescEvent(state *binlogFileParseState) error {
+	// FORMAT_DESCRIPTION event should always be read by default (despite that fact passed offset may be higher than 4)
+	if _, err := state.f.Seek(4, io.SeekStart); err != nil {
+		return errors.Errorf("seek to 4, error %v", err)
+	}
+
+	onEvent := func(e *replication.BinlogEvent) error {
+		switch e.Event.(type) {
+		case *replication.FormatDescriptionEvent:
+			return nil
+		}
+		// the first event in binlog file must be FORMAT_DESCRIPTION event.
+		return errors.New("corrupted binlog file")
+	}
+	eofWhenReadHeader, err := r.parser.ParseSingleEvent(state.f, onEvent)
+	if err != nil {
+		return errors.Annotatef(err, "parse FormatDescriptionEvent")
+	}
+	if eofWhenReadHeader {
+		// when parser met EOF when reading event header, ParseSingleEvent returns nil error
+		// return EOF so isIgnorableParseError can capture
+		return io.EOF
+	}
+	state.formatDescEventRead = true
+	return nil
 }
 
 // updateUUIDs re-parses UUID index file and updates UUID list.
