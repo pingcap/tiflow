@@ -58,14 +58,10 @@ func startStopRelay(cmd *cobra.Command, op pb.RelayOpV2) error {
 		return err
 	}
 
-	if len(cmd.Flags().Args()) == 0 {
+	if len(cmd.Flags().Args()) == 0 && len(sources) == 0 {
+		// all args empty
 		cmd.SetOut(os.Stdout)
-		if len(sources) == 0 {
-			// all args empty
-			common.PrintCmdUsage(cmd)
-		} else {
-			common.PrintLinesf("must specify at least one worker")
-		}
+		common.PrintCmdUsage(cmd)
 		return errors.New("please check output to see error")
 	}
 

@@ -636,6 +636,8 @@ const (
 	codeSchedulerSourceCfgUpdate
 	codeSchedulerWrongWorkerInput
 	codeSchedulerCantTransferToRelayWorker
+	codeSchedulerStartRelayOnSpecified
+	codeSchedulerStopRelayOnSpecified
 )
 
 // dmctl error code.
@@ -1267,6 +1269,8 @@ var (
 	ErrSchedulerSourceCfgUpdate           = New(codeSchedulerSourceCfgUpdate, ClassScheduler, ScopeInternal, LevelLow, "source can only update relay-log related parts for now", "")
 	ErrSchedulerWrongWorkerInput          = New(codeSchedulerWrongWorkerInput, ClassScheduler, ScopeInternal, LevelMedium, "require DM master to modify worker [%s] with source [%s], but currently the worker is bound to source [%s]", "")
 	ErrSchedulerBoundDiffWithStartedRelay = New(codeSchedulerCantTransferToRelayWorker, ClassScheduler, ScopeInternal, LevelMedium, "require DM worker [%s] to be bound to source [%s], but it has been started relay for source [%s]", "If you intend to bind the source with worker, you can stop-relay for current source.")
+	ErrSchedulerStartRelayOnSpecified     = New(codeSchedulerStartRelayOnSpecified, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` with worker name for workers %v, so it can't `start-relay` without worker name now", "Please stop all relay workers first, or specify worker name for `start-relay`.")
+	ErrSchedulerStopRelayOnSpecified      = New(codeSchedulerStopRelayOnSpecified, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` with worker name for workers %v, so it can't `stop-relay` without worker name now", "Please specify worker names for `start-relay`.")
 
 	// dmctl.
 	ErrCtlGRPCCreateConn = New(codeCtlGRPCCreateConn, ClassDMCtl, ScopeInternal, LevelHigh, "can not create grpc connection", "Please check your network connection.")

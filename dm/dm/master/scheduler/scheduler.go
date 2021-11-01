@@ -1087,6 +1087,22 @@ func (s *Scheduler) StartRelay(source string, workers []string) error {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
 	startedWorkers := s.relayWorkers[source]
+
+	// quick path for `start-relay` without worker name
+	if len(workers) == 0 {
+		if len(startedWorkers) != 0 {
+			return terror
+		}
+		sourceCfg := s.sourceCfgs[source]
+		sourceCfg.EnableRelay = true
+		_, err := ha.PutSourceCfg(s.etcdCli, sourceCfg)
+		if err != nil {
+			return err
+		}
+		s.sourceCfgs[source] = sourceCfg
+		return nil
+	}
+
 	if startedWorkers == nil {
 		startedWorkers = map[string]struct{}{}
 		s.relayWorkers[source] = startedWorkers
