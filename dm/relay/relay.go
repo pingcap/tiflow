@@ -123,17 +123,21 @@ type Relay struct {
 		sync.RWMutex
 		info *pkgstreamer.RelayLogInfo
 	}
+
+	writer    Writer
 	listeners map[Listener]struct{} // make it a set to make it easier to remove listener
 }
 
 // NewRealRelay creates an instance of Relay.
 func NewRealRelay(cfg *Config) Process {
-	return &Relay{
+	r := &Relay{
 		cfg:       cfg,
 		meta:      NewLocalMeta(cfg.Flavor, cfg.RelayDir),
 		logger:    log.With(zap.String("component", "relay log")),
 		listeners: make(map[Listener]struct{}),
 	}
+	r.writer = NewFileWriter(r.logger)
+	return r
 }
 
 // Init implements the dm.Unit interface.
@@ -281,12 +285,11 @@ func (r *Relay) process(ctx context.Context) error {
 		}
 	}()
 
-	writer2, err := r.setUpWriter(parser2)
-	if err != nil {
-		return err
-	}
+	uuid, pos := r.meta.Pos()
+	r.writer.Init(r.meta.Dir(), pos.Name)
+	r.logger.Info("started underlying writer", zap.String("UUID", uuid), zap.String("filename", pos.Name))
 	defer func() {
-		err = writer2.Close()
+		err = r.writer.Close()
 		if err != nil {
 			r.logger.Error("fail to close binlog event writer", zap.Error(err))
 		}
@@ -304,7 +307,7 @@ func (r *Relay) process(ctx context.Context) error {
 	// handles binlog events with retry mechanism.
 	// it only do the retry for some binlog reader error now.
 	for {
-		eventIdx, err := r.handleEvents(ctx, reader2, transformer2, writer2)
+		eventIdx, err := r.handleEvents(ctx, reader2, transformer2)
 	checkError:
 		if err == nil {
 			return nil
@@ -392,25 +395,20 @@ func (r *Relay) tryRecoverLatestFile(ctx context.Context, parser2 *parser.Parser
 	}
 
 	// setup a special writer to do the recovering
-	cfg := &FileConfig{
-		RelayDir: r.meta.Dir(),
-		Filename: latestPos.Name,
-	}
-	writer2 := NewFileWriter(r.logger, cfg, parser2)
-	err := writer2.Start()
-	if err != nil {
-		return terror.Annotatef(err, "start recover writer for UUID %s with config %+v", uuid, cfg)
-	}
+	binlogDir := r.meta.Dir()
+	writer2 := NewFileWriter(r.logger)
+	writer2.Init(binlogDir, latestPos.Name)
 	defer func() {
 		err2 := writer2.Close()
 		if err2 != nil {
-			r.logger.Error("fail to close recover writer", zap.String("UUID", uuid), zap.Reflect("config", cfg), log.ShortError(err2))
+			r.logger.Error("fail to close recover writer", zap.String("binlog dir", binlogDir),
+				zap.String("filename", latestPos.Name), log.ShortError(err2))
 		}
 	}()
-	r.logger.Info("started recover writer", zap.String("UUID", uuid), zap.Reflect("config", cfg))
+	r.logger.Info("started recover writer", zap.String("binlog dir", binlogDir), zap.String("filename", latestPos.Name))
 
 	// NOTE: recover a relay log file with too many binlog events may take a little long time.
-	result, err := writer2.Recover(ctx)
+	result, err := writer2.Recover(ctx, parser2)
 	if err == nil {
 		relayLogHasMore := result.LatestPos.Compare(latestPos) > 0 ||
 			(result.LatestGTIDs != nil && !result.LatestGTIDs.Equal(latestGTID) && result.LatestGTIDs.Contain(latestGTID))
@@ -448,7 +446,7 @@ func (r *Relay) tryRecoverLatestFile(ctx context.Context, parser2 *parser.Parser
 			}
 		}
 	}
-	return terror.Annotatef(err, "recover for UUID %s with config %+v", uuid, cfg)
+	return terror.Annotatef(err, "recover for UUID %s with config %s, %s", uuid, binlogDir, latestPos.Name)
 }
 
 // handleEvents handles binlog events, including:
@@ -461,7 +459,6 @@ func (r *Relay) handleEvents(
 	ctx context.Context,
 	reader2 Reader,
 	transformer2 transformer.Transformer,
-	writer2 Writer,
 ) (int, error) {
 	var (
 		_, lastPos  = r.meta.Pos()
@@ -570,7 +567,7 @@ func (r *Relay) handleEvents(
 		// 3. save events into file
 		writeTimer := time.Now()
 		r.logger.Debug("writing binlog event", zap.Reflect("header", e.Header))
-		wResult, err := writer2.WriteEvent(e)
+		wResult, err := r.writer.WriteEvent(e)
 		if err != nil {
 			relayLogWriteErrorCounter.Inc()
 			return eventIndex, err
@@ -841,22 +838,6 @@ func (r *Relay) setUpReader(ctx context.Context) (Reader, error) {
 
 	r.logger.Info("started underlying reader", zap.String("UUID", uuid))
 	return reader2, nil
-}
-
-// setUpWriter setups the underlying writer used to writer binlog events into file or other places.
-func (r *Relay) setUpWriter(parser2 *parser.Parser) (Writer, error) {
-	uuid, pos := r.meta.Pos()
-	cfg := &FileConfig{
-		RelayDir: r.meta.Dir(),
-		Filename: pos.Name,
-	}
-	writer2 := NewFileWriter(r.logger, cfg, parser2)
-	if err := writer2.Start(); err != nil {
-		return nil, terror.Annotatef(err, "start writer for UUID %s with config %+v", uuid, cfg)
-	}
-
-	r.logger.Info("started underlying writer", zap.String("UUID", uuid), zap.Reflect("config", cfg))
-	return writer2, nil
 }
 
 func (r *Relay) masterNode() string {
