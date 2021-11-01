@@ -17,7 +17,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
@@ -28,7 +27,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
 	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/log"
@@ -65,9 +63,6 @@ type RecoverResult struct {
 //   4. rotate binlog(relay) file if needed
 //   5. rollback/discard unfinished binlog entries(events or transactions)
 type Writer interface {
-	// Start prepares the writer for writing binlog events.
-	Start() error
-
 	// Close closes the writer and release the resource.
 	Close() error
 
@@ -96,9 +91,6 @@ type FileConfig struct {
 type FileWriter struct {
 	cfg *FileConfig
 
-	mu    sync.Mutex
-	stage common.Stage
-
 	// underlying binlog writer,
 	// it will be created/started until needed.
 	out *BinlogWriter
@@ -122,58 +114,23 @@ func NewFileWriter(logger log.Logger, cfg *FileConfig, parser2 *parser.Parser) W
 	return w
 }
 
-// Start implements Writer.Start.
-func (w *FileWriter) Start() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.stage != common.StageNew {
-		return terror.ErrRelayWriterNotStateNew.Generate(w.stage, common.StageNew)
-	}
-	w.stage = common.StagePrepared
-
-	return nil
-}
-
 // Close implements Writer.Close.
 func (w *FileWriter) Close() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.stage != common.StagePrepared {
-		return terror.ErrRelayWriterStateCannotClose.Generate(w.stage, common.StagePrepared)
-	}
-
 	var err error
 	if w.out != nil {
 		err = w.out.Close()
 	}
 
-	w.stage = common.StageClosed
 	return err
 }
 
 // Recover implements Writer.Recover.
 func (w *FileWriter) Recover(ctx context.Context) (RecoverResult, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.stage != common.StagePrepared {
-		return RecoverResult{}, terror.ErrRelayWriterNeedStart.Generate(w.stage, common.StagePrepared)
-	}
-
 	return w.doRecovering(ctx)
 }
 
 // WriteEvent implements Writer.WriteEvent.
 func (w *FileWriter) WriteEvent(ev *replication.BinlogEvent) (WResult, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.stage != common.StagePrepared {
-		return WResult{}, terror.ErrRelayWriterNeedStart.Generate(w.stage, common.StagePrepared)
-	}
-
 	switch ev.Event.(type) {
 	case *replication.FormatDescriptionEvent:
 		return w.handleFormatDescriptionEvent(ev)
@@ -186,13 +143,6 @@ func (w *FileWriter) WriteEvent(ev *replication.BinlogEvent) (WResult, error) {
 
 // Flush implements Writer.Flush.
 func (w *FileWriter) Flush() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.stage != common.StagePrepared {
-		return terror.ErrRelayWriterNeedStart.Generate(w.stage, common.StagePrepared)
-	}
-
 	if w.out != nil {
 		return w.out.Flush()
 	}
