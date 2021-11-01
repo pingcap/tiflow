@@ -16,7 +16,6 @@ package redo
 import (
 	"context"
 	"math"
-	"net/url"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -29,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"go.uber.org/zap"
 )
 
@@ -37,7 +37,7 @@ var updateRtsInterval = time.Second
 type consistentLevelType string
 
 const (
-	consistentLevelNormal   consistentLevelType = "normal"
+	consistentLevelNone     consistentLevelType = "none"
 	consistentLevelEventual consistentLevelType = "eventual"
 )
 
@@ -58,7 +58,7 @@ const (
 // IsValidConsistentLevel checks whether a give consistent level is valid
 func IsValidConsistentLevel(level string) bool {
 	switch consistentLevelType(level) {
-	case consistentLevelNormal, consistentLevelEventual:
+	case consistentLevelNone, consistentLevelEventual:
 		return true
 	default:
 		return false
@@ -77,7 +77,7 @@ func IsValidConsistentStorage(storage string) bool {
 
 // IsConsistentEnabled returns whether the consistent feature is enabled
 func IsConsistentEnabled(level string) bool {
-	return IsValidConsistentLevel(level) && consistentLevelType(level) != consistentLevelNormal
+	return IsValidConsistentLevel(level) && consistentLevelType(level) != consistentLevelNone
 }
 
 // IsS3StorageEnabled returns whether s3 storage is enabled
@@ -117,9 +117,9 @@ type cacheRows struct {
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
 // redo log resolved ts. It implements LogManager interface.
 type ManagerImpl struct {
-	enabled bool
-	level   consistentLevelType
-	storage consistentStorage
+	enabled     bool
+	level       consistentLevelType
+	storageType consistentStorage
 
 	logBuffer chan cacheRows
 	writer    writer.RedoLogWriter
@@ -136,23 +136,34 @@ type ManagerImpl struct {
 // NewManager creates a new Manager
 func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *ManagerOptions) (*ManagerImpl, error) {
 	// return a disabled Manager if no consistent config or normal consistent level
-	if cfg == nil || consistentLevelType(cfg.Level) == consistentLevelNormal {
+	if cfg == nil || consistentLevelType(cfg.Level) == consistentLevelNone {
 		return &ManagerImpl{enabled: false}, nil
 	}
-	m := &ManagerImpl{
-		enabled:   true,
-		level:     consistentLevelType(cfg.Level),
-		storage:   consistentStorage(cfg.Storage),
-		rtsMap:    make(map[model.TableID]uint64),
-		logBuffer: make(chan cacheRows, logBufferChanSize),
+	uri, err := storage.ParseRawURL(cfg.Storage)
+	if err != nil {
+		return nil, err
 	}
-	switch m.storage {
+	m := &ManagerImpl{
+		enabled:     true,
+		level:       consistentLevelType(cfg.Level),
+		storageType: consistentStorage(uri.Scheme),
+		rtsMap:      make(map[model.TableID]uint64),
+		logBuffer:   make(chan cacheRows, logBufferChanSize),
+	}
+
+	switch m.storageType {
 	case consistentStorageBlackhole:
 		m.writer = writer.NewBlackHoleWriter()
 	case consistentStorageLocal, consistentStorageS3:
 		globalConf := config.GetGlobalServerConfig()
 		changeFeedID := util.ChangefeedIDFromCtx(ctx)
+		// We use a temporary dir to storage redo logs before flushing to other backends, such as S3
 		redoDir := filepath.Join(globalConf.DataDir, config.DefaultRedoDir, changeFeedID)
+		if m.storageType == consistentStorageLocal {
+			// When using local as backend, the uri path should be an NFS path.
+			redoDir = uri.Path
+		}
+
 		writerCfg := &writer.LogWriterConfig{
 			Dir:               redoDir,
 			CaptureID:         util.CaptureAddrFromCtx(ctx),
@@ -160,14 +171,10 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 			CreateTime:        time.Now(),
 			MaxLogSize:        cfg.MaxLogSize,
 			FlushIntervalInMs: cfg.FlushIntervalInMs,
-			S3Storage:         cfg.Storage == string(consistentStorageS3),
+			S3Storage:         m.storageType == consistentStorageS3,
 		}
 		if writerCfg.S3Storage {
-			s3URI, err := url.Parse(cfg.S3URI)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrInvalidS3URI, err)
-			}
-			writerCfg.S3URI = *s3URI
+			writerCfg.S3URI = *uri
 		}
 		writer, err := writer.NewLogWriter(ctx, writerCfg)
 		if err != nil {
@@ -175,8 +182,9 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		}
 		m.writer = writer
 	default:
-		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storage)
+		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storageType)
 	}
+
 	if opts.EnableBgRunner {
 		go m.bgUpdateResolvedTs(ctx, opts.ErrCh)
 		go m.bgWriteLog(ctx, opts.ErrCh)
