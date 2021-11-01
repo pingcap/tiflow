@@ -43,7 +43,6 @@ type RedoApplierConfig struct {
 	SinkURI string
 	Storage string
 	Dir     string
-	S3URI   string
 }
 
 // RedoApplier implements a redo log applier
@@ -62,19 +61,22 @@ func NewRedoApplier(cfg *RedoApplierConfig) *RedoApplier {
 }
 
 // toLogReaderConfig is an adapter to translate from applier config to redo reader config
-func (rac *RedoApplierConfig) toLogReaderConfig() (*reader.LogReaderConfig, error) {
+// returns storageType, *reader.toLogReaderConfig and error
+func (rac *RedoApplierConfig) toLogReaderConfig() (string, *reader.LogReaderConfig, error) {
+	uri, err := url.Parse(rac.Storage)
+	if err != nil {
+		return "", nil, cerror.WrapError(cerror.ErrConsistentStorage, err)
+	}
 	cfg := &reader.LogReaderConfig{
-		Dir:       rac.Dir,
-		S3Storage: redo.IsS3StorageEnabled(rac.Storage),
+		Dir:       uri.Path,
+		S3Storage: redo.IsS3StorageEnabled(uri.Scheme),
 	}
 	if cfg.S3Storage {
-		s3URI, err := url.Parse(rac.S3URI)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrInvalidS3URI, err)
-		}
-		cfg.S3URI = *s3URI
+		cfg.S3URI = *uri
+		// If use s3 as backend, applier will download redo logs to local dir.
+		cfg.Dir = rac.Dir
 	}
-	return cfg, nil
+	return uri.Scheme, cfg, nil
 }
 
 func (ra *RedoApplier) catchError(ctx context.Context) error {
@@ -172,11 +174,11 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 var createRedoReader = createRedoReaderImpl
 
 func createRedoReaderImpl(ctx context.Context, cfg *RedoApplierConfig) (reader.RedoLogReader, error) {
-	readerCfg, err := cfg.toLogReaderConfig()
+	storageType, readerCfg, err := cfg.toLogReaderConfig()
 	if err != nil {
 		return nil, err
 	}
-	return redo.NewRedoReader(ctx, cfg.Storage, readerCfg)
+	return redo.NewRedoReader(ctx, storageType, readerCfg)
 }
 
 // ReadMeta creates a new redo applier and read meta from reader
