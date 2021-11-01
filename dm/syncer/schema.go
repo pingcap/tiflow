@@ -47,7 +47,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		}
 		schemaListJSON, err := json.Marshal(schemaList)
 		if err != nil {
-			return "", err
+			return "", terror.ErrSchemaTrackerMarshalJSON.Delegate(err, schemaList)
 		}
 		return string(schemaListJSON), err
 	case pb.SchemaOp_ListTable:
@@ -57,7 +57,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		}
 		tableListJSON, err := json.Marshal(tables)
 		if err != nil {
-			return "", err
+			return "", terror.ErrSchemaTrackerMarshalJSON.Delegate(err, tables)
 		}
 		return string(tableListJSON), err
 	case pb.SchemaOp_GetSchema:

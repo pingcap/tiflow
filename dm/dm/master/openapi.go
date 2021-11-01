@@ -611,7 +611,7 @@ func (s *Server) DMAPIGetSchemaListByTaskAndSource(ctx echo.Context, taskName st
 	}
 	schemaList := openapi.SchemaNameList{}
 	if err := json.Unmarshal([]byte(resp.OperateSchema.Msg), &schemaList); err != nil {
-		return err
+		return terror.ErrSchemaTrackerUnMarshalJSON.Delegate(err, resp.OperateSchema.Msg)
 	}
 	return ctx.JSON(http.StatusOK, schemaList)
 }
@@ -641,7 +641,7 @@ func (s *Server) DMAPIGetTableListByTaskAndSource(ctx echo.Context, taskName str
 	}
 	tableList := openapi.TableNameList{}
 	if err := json.Unmarshal([]byte(resp.OperateSchema.Msg), &tableList); err != nil {
-		return err
+		return terror.ErrSchemaTrackerUnMarshalJSON.Delegate(err, resp.OperateSchema.Msg)
 	}
 	return ctx.JSON(http.StatusOK, tableList)
 }

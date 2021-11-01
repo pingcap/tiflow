@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	dmterror "github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 const (
@@ -233,7 +234,7 @@ func (tr *Tracker) ListSchemaTables(schema string) ([]string, error) {
 			return tables, nil
 		}
 	}
-	return nil, errors.New("can not find this schema in tracker")
+	return nil, dmterror.ErrSchemaTrackerUnSchemaNotExist.Generate(schema)
 }
 
 // GetSingleColumnIndices returns indices of input column if input column only has single-column indices
