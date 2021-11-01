@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	tijson "github.com/pingcap/tidb/types/json"
-	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
 
@@ -527,21 +526,9 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 }
 
 type avroEventBatchEncoderBuilder struct {
-	credential *security.Credential
-	opts       map[string]string
-
+	opts               map[string]string
 	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
-
-	initialized *atomic.Bool
-}
-
-func newAvroEventBatchEncoderBuilder(credential *security.Credential, opts map[string]string) EncoderBuilder {
-	return &avroEventBatchEncoderBuilder{
-		credential:  credential,
-		opts:        opts,
-		initialized: atomic.NewBool(false),
-	}
 }
 
 const (
@@ -549,37 +536,32 @@ const (
 	valueSchemaSuffix = "-value"
 )
 
-// newSchemaManagers initialize the `keySchemaManager` and `valueSchemaManager` in an atomic way.
-func (b *avroEventBatchEncoderBuilder) newSchemaManagers(ctx context.Context) error {
-	registryURI, ok := b.opts["registry"]
+func newAvroEventBatchEncoderBuilder(credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
+	registryURI, ok := opts["registry"]
 	if !ok {
-		return cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
+		return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
 	}
 
-	keySchemaManager, err := NewAvroSchemaManager(ctx, b.credential, registryURI, keySchemaSuffix)
+	ctx := context.Background()
+	keySchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, keySchemaSuffix)
 	if err != nil {
-		return err
+		return nil, errors.Trace(err)
 	}
-	b.keySchemaManager = keySchemaManager
 
-	valueSchemaManager, err := NewAvroSchemaManager(ctx, b.credential, registryURI, valueSchemaSuffix)
+	valueSchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, valueSchemaSuffix)
 	if err != nil {
-		return err
+		return nil, errors.Trace(err)
 	}
-	b.valueSchemaManager = valueSchemaManager
 
-	return nil
+	return &avroEventBatchEncoderBuilder{
+		opts:               opts,
+		keySchemaManager:   keySchemaManager,
+		valueSchemaManager: valueSchemaManager,
+	}, nil
 }
 
 // Build an AvroEventBatchEncoder.
 func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
-	if !b.initialized.Load() {
-		if err := b.newSchemaManagers(ctx); err != nil {
-			return nil, cerror.WrapError(cerror.ErrPrepareAvroFailed, err)
-		}
-		b.initialized.Store(true)
-	}
-
 	encoder := newAvroEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)

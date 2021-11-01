@@ -182,22 +182,22 @@ type EncoderBuilder interface {
 }
 
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(p Protocol, credential *security.Credential, opts map[string]string) EncoderBuilder {
+func NewEventBatchEncoderBuilder(p Protocol, credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
 	switch p {
 	case ProtocolDefault:
-		return newJSONEventBatchEncoderBuilder(opts)
+		return newJSONEventBatchEncoderBuilder(opts), nil
 	case ProtocolCanal:
-		return newCanalEventBatchEncoderBuilder(opts)
+		return newCanalEventBatchEncoderBuilder(opts), nil
 	case ProtocolAvro:
 		return newAvroEventBatchEncoderBuilder(credential, opts)
 	case ProtocolMaxwell:
-		return newMaxwellEventBatchEncoderBuilder(opts)
+		return newMaxwellEventBatchEncoderBuilder(opts), nil
 	case ProtocolCanalJSON:
-		return newCanalFlatEventBatchEncoderBuilder(opts)
+		return newCanalFlatEventBatchEncoderBuilder(opts), nil
 	case ProtocolCraft:
-		return newCraftEventBatchEncoderBuilder(opts)
+		return newCraftEventBatchEncoderBuilder(opts), nil
 	default:
 		log.Warn("unknown codec protocol value of EventBatchEncoder", zap.Int("protocol_value", int(p)))
-		return newJSONEventBatchEncoderBuilder(opts)
+		return newJSONEventBatchEncoderBuilder(opts), nil
 	}
 }
