@@ -2962,6 +2962,24 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-schema-tracker-44013]
+message = "can not marshal struct maybe `%v` is unable to serialize"
+description = ""
+workaround = ""
+tags = ["downstream", "high"]
+
+[error.DM-schema-tracker-44014]
+message = "can not unmarshal json maybe `%s` is not proper JSON"
+description = ""
+workaround = ""
+tags = ["downstream", "high"]
+
+[error.DM-schema-tracker-44015]
+message = "can not find `%s` in tracker"
+description = ""
+workaround = ""
+tags = ["downstream", "high"]
+
 [error.DM-scheduler-46001]
 message = "the scheduler has not started"
 description = ""
