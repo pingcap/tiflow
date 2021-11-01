@@ -66,7 +66,7 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 	c.Assert(err, ErrorMatches, fmt.Sprintf(".*%s.*", common.StageNew))
 
 	// start
-	err = w.Start()
+	err = w.Open()
 	c.Assert(err, IsNil)
 
 	// check status, stagePrepared
@@ -78,7 +78,7 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 	c.Assert(fwStatus.Offset, Equals, int64(allData.Len()))
 
 	// re-prepare is invalid
-	err = w.Start()
+	err = w.Open()
 	c.Assert(err, NotNil)
 
 	// write the data

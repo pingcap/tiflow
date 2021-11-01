@@ -75,10 +75,6 @@ type Writer interface {
 	// WriteEvent writes an binlog event's data into disk or any other places.
 	// It is not safe for concurrent use by multiple goroutines.
 	WriteEvent(ev *replication.BinlogEvent) (WResult, error)
-
-	// Flush flushes the buffered data to a stable storage or sends through the network.
-	// It is not safe for concurrent use by multiple goroutines.
-	Flush() error
 }
 
 // FileConfig is the configuration used by the FileWriter.
@@ -111,17 +107,13 @@ func NewFileWriter(logger log.Logger, cfg *FileConfig, parser2 *parser.Parser) W
 		logger: logger.WithFields(zap.String("sub component", "relay writer")),
 	}
 	w.filename.Store(cfg.Filename) // set the startup filename
+	w.out = NewBinlogWriter(w.logger)
 	return w
 }
 
 // Close implements Writer.Close.
 func (w *FileWriter) Close() error {
-	var err error
-	if w.out != nil {
-		err = w.out.Close()
-	}
-
-	return err
+	return w.out.Close()
 }
 
 // Recover implements Writer.Recover.
@@ -141,21 +133,10 @@ func (w *FileWriter) WriteEvent(ev *replication.BinlogEvent) (WResult, error) {
 	}
 }
 
-// Flush implements Writer.Flush.
-func (w *FileWriter) Flush() error {
-	if w.out != nil {
-		return w.out.Flush()
-	}
-	return terror.ErrRelayWriterNotOpened.Generate()
-}
-
 // offset returns the current offset of the binlog file.
 // it is only used for testing now.
 func (w *FileWriter) offset() int64 {
-	if w.out == nil {
-		return 0
-	}
-	status := w.out.Status().(*BinlogWriterStatus)
+	status := w.out.Status()
 	return status.Offset
 }
 
@@ -166,12 +147,10 @@ func (w *FileWriter) offset() int64 {
 //   4. write the FormatDescriptionEvent if not exists one
 func (w *FileWriter) handleFormatDescriptionEvent(ev *replication.BinlogEvent) (WResult, error) {
 	// close the previous binlog file
-	if w.out != nil {
-		w.logger.Info("closing previous underlying binlog writer", zap.Reflect("status", w.out.Status()))
-		err := w.out.Close()
-		if err != nil {
-			return WResult{}, terror.Annotate(err, "close previous underlying binlog writer")
-		}
+	w.logger.Info("closing previous underlying binlog writer", zap.Reflect("status", w.out.Status()))
+	err := w.out.Close()
+	if err != nil {
+		return WResult{}, terror.Annotate(err, "close previous underlying binlog writer")
 	}
 
 	// verify filename
@@ -181,15 +160,10 @@ func (w *FileWriter) handleFormatDescriptionEvent(ev *replication.BinlogEvent) (
 
 	// open/create a new binlog file
 	filename := filepath.Join(w.cfg.RelayDir, w.filename.Load())
-	outCfg := &BinlogWriterConfig{
-		Filename: filename,
-	}
-	out := NewBinlogWriter(w.logger, outCfg)
-	err := out.Start()
+	err = w.out.Open(filename)
 	if err != nil {
 		return WResult{}, terror.Annotatef(err, "start underlying binlog writer for %s", filename)
 	}
-	w.out = out
 	w.logger.Info("open underlying binlog writer", zap.Reflect("status", w.out.Status()))
 
 	// write the binlog file header if not exists
@@ -260,9 +234,6 @@ func (w *FileWriter) handleRotateEvent(ev *replication.BinlogEvent) (result WRes
 			Ignore:       true,
 			IgnoreReason: ignoreReasonFakeRotate,
 		}, nil
-	} else if w.out == nil {
-		// if not open a binlog file yet, then non-fake RotateEvent can't be handled
-		return result, terror.ErrRelayWriterRotateEvWithNoWriter.Generate(ev.Header)
 	}
 
 	result, err = w.handlePotentialHoleOrDuplicate(ev)
@@ -335,10 +306,7 @@ func (w *FileWriter) handlePotentialHoleOrDuplicate(ev *replication.BinlogEvent)
 func (w *FileWriter) handleFileHoleExist(ev *replication.BinlogEvent) (bool, error) {
 	// 1. detect whether a hole exists
 	evStartPos := int64(ev.Header.LogPos - ev.Header.EventSize)
-	outFs, ok := w.out.Status().(*BinlogWriterStatus)
-	if !ok {
-		return false, terror.ErrRelayWriterStatusNotValid.Generate(w.out.Status())
-	}
+	outFs := w.out.Status()
 	fileOffset := outFs.Offset
 	holeSize := evStartPos - fileOffset
 	if holeSize <= 0 {
