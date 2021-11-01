@@ -288,7 +288,6 @@ dm_integration_test_build: check_failpoint_ctl
 
 install_test_python_dep:
 	@echo "install python requirments for test"
-	pip install --user -q -r ./dm/tests/requirements.txt
 
 check_third_party_binary_for_dm:
 	@which bin/tidb-server
