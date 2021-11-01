@@ -35,6 +35,12 @@ type TableRecord struct {
 // The meaning of its value can be defined by the user of TableSet.
 type TableStatus int32
 
+const (
+	AddingTable = TableStatus(iota)
+	RemovingTable
+	RunningTable
+)
+
 // NewTableSet creates a new TableSet.
 func NewTableSet() *TableSet {
 	return &TableSet{
