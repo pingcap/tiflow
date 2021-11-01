@@ -17,7 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"math"
+	"math/big"
 	"os"
 	"path/filepath"
 	"sync"
@@ -746,7 +746,7 @@ func TestLogWriterDeleteAllLogs(t *testing.T) {
 		mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test-cf_meta.meta").Return(tt.s3Err).Times(1)
 
 		mockWriter := &mockFileWriter{}
-		mockWriter.On("GC", uint64(math.MaxUint32)).Return(tt.gcErr)
+		mockWriter.On("GC", new(big.Int).SetInt64(-1)).Return(tt.gcErr)
 
 		cfg := &LogWriterConfig{
 			Dir:               "dir",

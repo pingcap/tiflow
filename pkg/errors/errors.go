@@ -88,6 +88,7 @@ var (
 	ErrRedoFileOp                = errors.Normalize("redo file operation", errors.RFCCodeText("CDC:ErrRedoFileOp"))
 	ErrRedoMetaFileNotFound      = errors.Normalize("no redo meta file found in dir: %s", errors.RFCCodeText("CDC:ErrRedoMetaFileNotFound"))
 	ErrRedoMetaInitialize        = errors.Normalize("initialize meta for redo log", errors.RFCCodeText("CDC:ErrRedoMetaInitialize"))
+	ErrRedoCheckPointTsInvalid   = errors.Normalize("redo log checkPointTs %s is invalid, checkPointTs should >= %d", errors.RFCCodeText("CDC:ErrRedoCheckPointTsInvalid"))
 	ErrFileSizeExceed            = errors.Normalize("rawData size %d exceeds maximum file size %d", errors.RFCCodeText("CDC:ErrFileSizeExceed"))
 	ErrFileSinkMetaAlreadyExists = errors.Normalize("file sink meta file already exists", errors.RFCCodeText("CDC:ErrFileSinkMetaAlreadyExists"))
 	ErrS3SinkWriteStorage        = errors.Normalize("write to storage", errors.RFCCodeText("CDC:ErrS3SinkWriteStorage"))

@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
+	"math/big"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -237,8 +237,8 @@ func (l *LogWriter) gc() error {
 	l.metaLock.RUnlock()
 
 	var err error
-	err = multierr.Append(err, l.rowWriter.GC(ts))
-	err = multierr.Append(err, l.ddlWriter.GC(ts))
+	err = multierr.Append(err, l.rowWriter.GC(new(big.Int).SetUint64(ts)))
+	err = multierr.Append(err, l.ddlWriter.GC(new(big.Int).SetUint64(ts)))
 	return err
 }
 
@@ -399,8 +399,8 @@ func (l *LogWriter) GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) 
 // 	DeleteAllLogs implement the DeleteAllLogs api
 func (l *LogWriter) DeleteAllLogs(ctx context.Context) error {
 	var err error
-	err = multierr.Append(err, l.rowWriter.GC(uint64(math.MaxUint32)))
-	err = multierr.Append(err, l.ddlWriter.GC(uint64(math.MaxUint32)))
+	err = multierr.Append(err, l.rowWriter.GC(new(big.Int).SetInt64(gcAllTs)))
+	err = multierr.Append(err, l.ddlWriter.GC(new(big.Int).SetInt64(gcAllTs)))
 	err = multierr.Append(err, l.deleteMetaFile(ctx))
 	if err != nil {
 		return err

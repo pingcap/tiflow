@@ -686,6 +686,11 @@ error = '''
 the reactor has done its job and should no longer be executed
 '''
 
+["CDC:ErrRedoCheckPointTsInvalid"]
+error = '''
+redo log checkPointTs %s is invalid, checkPointTs should >= %d
+'''
+
 ["CDC:ErrRedoConfigInvalid"]
 error = '''
 redo log config invalid

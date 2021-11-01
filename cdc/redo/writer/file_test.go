@@ -17,7 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"math"
+	"math/big"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -135,7 +135,7 @@ func TestWriterGC(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, 3, len(files), "should have 3 log file")
 
-	err = w.GC(3)
+	err = w.GC(new(big.Int).SetInt64(3))
 	require.Nil(t, err)
 
 	err = w.Close()
@@ -211,7 +211,7 @@ func TestWriterGCAll(t *testing.T) {
 	err = os.Rename(filepath.Join(w.cfg.Dir, "cp_test_946688461_row_2.log"), filepath.Join(w.cfg.Dir, "cp_test_946688461_row_2.log.tmp"))
 	require.Nil(t, err)
 
-	err = w.GC(math.MaxInt32)
+	err = w.GC(new(big.Int).SetInt64(-1))
 	require.Nil(t, err)
 
 	files, err = ioutil.ReadDir(w.cfg.Dir)

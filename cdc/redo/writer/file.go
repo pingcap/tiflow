@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
+	"math/big"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -52,6 +52,11 @@ const (
 	defaultS3Timeout         = 3 * time.Second
 )
 
+const (
+	// gcAllTs define the ts used in gc, if checkPointTs == gcAllTs means remove all logs
+	gcAllTs = -1
+)
+
 var (
 	// for easy testing, not set to const
 	megabyte          int64 = 1024 * 1024
@@ -66,7 +71,7 @@ type fileWriter interface {
 	// AdvanceTs receive the commitTs in the event from caller
 	AdvanceTs(commitTs uint64)
 	// GC run gc to remove useless files base on the checkPointTs
-	GC(checkPointTs uint64) error
+	GC(checkPointTs *big.Int) error
 	// IsRunning check the fileWriter status
 	IsRunning() bool
 }
@@ -399,8 +404,8 @@ func (w *Writer) rotate() error {
 	return w.openNew()
 }
 
-// GC implement GC interface, if checkPointTs == math.MaxInt32 means remove all logs
-func (w *Writer) GC(checkPointTs uint64) error {
+// GC implement GC interface, if checkPointTs == gcAllTs means remove all logs
+func (w *Writer) GC(checkPointTs *big.Int) error {
 	if w.isGCRunning() {
 		return nil
 	}
@@ -408,8 +413,11 @@ func (w *Writer) GC(checkPointTs uint64) error {
 	w.gcRunning.Store(true)
 	defer w.gcRunning.Store(false)
 
-	// if checkPointTs == math.MaxInt32 means remove all logs, stop write first
-	if checkPointTs == math.MaxInt32 {
+	if checkPointTs == nil {
+		return cerror.ErrRedoCheckPointTsInvalid.GenWithStackByArgs(checkPointTs.String(), gcAllTs)
+	}
+	// if checkPointTs == gcAllTs means remove all logs, stop write first
+	if checkPointTs.IsInt64() && checkPointTs.Int64() == gcAllTs {
 		err := w.Close()
 		if err != nil {
 			return err
@@ -462,16 +470,26 @@ func (w *Writer) deleteFilesInStorages(remove []os.FileInfo) error {
 
 // shouldRemoved remove the file which commitTs in file name (max commitTs of all event ts in the file) < checkPointTs,
 // since all event ts < checkPointTs already sent to sink, the log is not needed any more for recovery
-// if checkPointTs == MaxInt32 means remove all logs written by the fileWriter
-func (w *Writer) shouldRemoved(checkPointTs uint64, name string) (bool, error) {
+// if checkPointTs == gcAllTs means remove all logs written by the fileWriter
+func (w *Writer) shouldRemoved(checkPointTs *big.Int, name string) (bool, error) {
 	ext := filepath.Ext(name)
-	if checkPointTs == math.MaxInt32 {
-		// may exist .tmp file cause by not closed safely
-		if filepath.Ext(name) == common.TmpEXT {
-			name = strings.TrimSuffix(name, common.TmpEXT)
-			ext = filepath.Ext(name)
+	tsShouldRM := false
+
+	if checkPointTs.IsInt64() {
+		// gcAllTs ==-1 by default
+		if checkPointTs.Int64() < gcAllTs {
+			return false, cerror.ErrRedoCheckPointTsInvalid.GenWithStackByArgs(checkPointTs.String(), gcAllTs)
+		}
+		if checkPointTs.Int64() == gcAllTs {
+			tsShouldRM = true
+			// may exist .tmp file cause by not closed safely
+			if filepath.Ext(name) == common.TmpEXT {
+				name = strings.TrimSuffix(name, common.TmpEXT)
+				ext = filepath.Ext(name)
+			}
 		}
 	}
+
 	if ext != common.LogEXT {
 		return false, nil
 	}
@@ -481,10 +499,10 @@ func (w *Writer) shouldRemoved(checkPointTs uint64, name string) (bool, error) {
 		return false, err
 	}
 
-	return commitTs < checkPointTs && fileType == w.cfg.FileType, nil
+	return (tsShouldRM || commitTs < checkPointTs.Uint64()) && fileType == w.cfg.FileType, nil
 }
 
-func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, error) {
+func (w *Writer) getShouldRemovedFiles(checkPointTs *big.Int) ([]os.FileInfo, error) {
 	files, err := ioutil.ReadDir(w.cfg.Dir)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotatef(err, "can't read log file directory: %s", w.cfg.Dir))
