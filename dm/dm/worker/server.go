@@ -340,10 +340,10 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 					}
 					rev = rev1
 					if relaySource == nil {
-						if w := s.getWorker(false); w != nil && w.startedRelayBySourceCfg {
+						if w := s.getWorker(true); w != nil && w.startedRelayBySourceCfg {
 							break
 						}
-						log.L().Info("didn't found relay config after etcd retryable error")
+						log.L().Info("didn't found relay config after etcd retryable error. Will stop relay now")
 						err = s.disableRelay("")
 						if err != nil {
 							log.L().Error("fail to disableRelay after etcd retryable error", zap.Error(err))
