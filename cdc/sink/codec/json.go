@@ -429,9 +429,9 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		// for single message that longer than max-message-size, do not send it.
 		// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 		length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
-		if length > d.maxKafkaMessageSize {
+		if length > d.maxMessageSize {
 			log.Warn("Single message too large",
-				zap.Int("max-message-size", d.maxKafkaMessageSize), zap.Int("length", length), zap.Any("table", e.Table))
+				zap.Int("max-message-size", d.maxMessageSize), zap.Int("length", length), zap.Any("table", e.Table))
 			return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
 		}
 

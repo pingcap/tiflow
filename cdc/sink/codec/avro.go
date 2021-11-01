@@ -544,6 +544,11 @@ func newAvroEventBatchEncoderBuilder(credential *security.Credential, opts map[s
 	}
 }
 
+const (
+	keySchemaSuffix   = "-key"
+	valueSchemaSuffix = "-value"
+)
+
 // newSchemaManagers initialize the `keySchemaManager` and `valueSchemaManager` in an atomic way.
 func (b *avroEventBatchEncoderBuilder) newSchemaManagers(ctx context.Context) error {
 	registryURI, ok := b.opts["registry"]
@@ -551,13 +556,13 @@ func (b *avroEventBatchEncoderBuilder) newSchemaManagers(ctx context.Context) er
 		return cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
 	}
 
-	keySchemaManager, err := NewAvroSchemaManager(ctx, b.credential, registryURI, "-key")
+	keySchemaManager, err := NewAvroSchemaManager(ctx, b.credential, registryURI, keySchemaSuffix)
 	if err != nil {
 		return err
 	}
 	b.keySchemaManager = keySchemaManager
 
-	valueSchemaManager, err := NewAvroSchemaManager(ctx, b.credential, registryURI, "-value")
+	valueSchemaManager, err := NewAvroSchemaManager(ctx, b.credential, registryURI, valueSchemaSuffix)
 	if err != nil {
 		return err
 	}
