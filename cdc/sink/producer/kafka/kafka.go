@@ -77,6 +77,9 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 			return err
 		}
 		c.PartitionNum = int32(a)
+		if c.PartitionNum <= 0 {
+			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
+		}
 	}
 
 	s = sinkURI.Query().Get("replication-factor")
@@ -447,9 +450,6 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
-	}
-	if config.PartitionNum < 0 {
-		return nil, cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(config.PartitionNum)
 	}
 	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
 	if err != nil {
