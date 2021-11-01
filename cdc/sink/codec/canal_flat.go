@@ -35,8 +35,7 @@ type CanalFlatEventBatchEncoder struct {
 // NewCanalFlatEventBatchEncoder creates a new CanalFlatEventBatchEncoder
 func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 	return &CanalFlatEventBatchEncoder{
-		builder: NewCanalEntryBuilder(),
-		// this may cause frequent slice reallocation.
+		builder:       NewCanalEntryBuilder(),
 		unresolvedBuf: make([]*canalFlatMessage, 0),
 		resolvedBuf:   make([]*canalFlatMessage, 0),
 	}
