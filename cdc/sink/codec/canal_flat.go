@@ -16,6 +16,7 @@ package codec
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -71,8 +72,8 @@ type canalFlatMessage struct {
 	EventType string   `json:"type"`
 	// officially the timestamp of the event which generate the message executed, in milliseconds
 	ExecutionTime int64 `json:"es"`
-	// officially the timestamp of building the MQ message, in milliseconds, actually ignored
-	BuildTime uint64 `json:"ts"`
+	// officially the timestamp of building the MQ message, in milliseconds
+	BuildTime int64 `json:"ts"`
 	// SQL that generate the change event, DDL or Query
 	Query string `json:"sql"`
 	// only works for INSERT / UPDATE / DELETE event, record each column's java representation type.
@@ -157,7 +158,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		IsDDL:         false,
 		EventType:     header.GetEventType().String(),
 		ExecutionTime: header.ExecuteTime,
-		BuildTime:     0, // ignored by both Canal Adapter and Flink
+		BuildTime:     time.Now().UnixMilli(),
 		Query:         "",
 		SQLType:       sqlType,
 		MySQLType:     mysqlType,
@@ -184,7 +185,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) *ca
 		IsDDL:         true,
 		EventType:     header.GetEventType().String(),
 		ExecutionTime: header.ExecuteTime,
-		BuildTime:     0, // ignored by both Canal Adapter and Flink
+		BuildTime:     time.Now().UnixMilli(),
 		Query:         e.Query,
 		tikvTs:        e.CommitTs,
 	}
