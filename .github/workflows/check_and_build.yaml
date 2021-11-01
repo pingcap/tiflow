@@ -57,7 +57,6 @@ jobs:
       run: make build
 
   arm_build:
-    if: ${{ github.ref != 'refs/heads/master' }}
     runs-on: ubuntu-latest
     name: Make Build
     strategy:
