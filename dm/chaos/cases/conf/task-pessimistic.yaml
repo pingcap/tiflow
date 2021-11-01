@@ -41,3 +41,4 @@ black-white-list:
 syncers:
   global:
     compact: true
+    multiple-rows: true
