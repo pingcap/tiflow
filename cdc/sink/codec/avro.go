@@ -51,8 +51,8 @@ type avroEncodeResult struct {
 	registryID int
 }
 
-// NewAvroEventBatchEncoder creates an AvroEventBatchEncoder
-func NewAvroEventBatchEncoder() EventBatchEncoder {
+// newAvroEventBatchEncoder creates an AvroEventBatchEncoder
+func newAvroEventBatchEncoder() *AvroEventBatchEncoder {
 	return &AvroEventBatchEncoder{
 		valueSchemaManager: nil,
 		keySchemaManager:   nil,
@@ -580,7 +580,7 @@ func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEnc
 		b.initialized.Store(true)
 	}
 
-	encoder := NewAvroEventBatchEncoder().(*AvroEventBatchEncoder)
+	encoder := newAvroEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
