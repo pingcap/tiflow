@@ -382,11 +382,6 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	scheme := strings.ToLower(sinkURI.Scheme)
-	if scheme != "kafka" && scheme != "kafka+ssl" {
-		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("can't create MQ sink with unsupported scheme: %s", scheme)
-	}
-
 	config := kafka.NewConfig()
 	if err := config.Initialize(sinkURI, replicaConfig, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
