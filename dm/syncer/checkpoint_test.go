@@ -173,7 +173,7 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec("(162)?"+flushCheckPointSQL).WithArgs(cpid, "", "", pos1.Name, pos1.Pos, "", "", 0, "", "null", true).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
-	err = cp.FlushPointsExcept(tctx, nil, nil, nil)
+	err = cp.FlushPointsExcept(tctx, cp.Snapshot().id, nil, nil, nil)
 	c.Log(errors.ErrorStack(err))
 	c.Assert(err, IsNil)
 	c.Assert(cp.GlobalPoint().Position, Equals, pos1)
@@ -214,7 +214,7 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec("(202)?"+flushCheckPointSQL).WithArgs(cpid, "", "", pos2.Name, pos2.Pos, "", "", 0, "", "null", true).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
-	err = cp.FlushPointsExcept(tctx, nil, nil, nil)
+	err = cp.FlushPointsExcept(tctx, cp.Snapshot().id, nil, nil, nil)
 	c.Assert(err, IsNil)
 	cp.Rollback(s.tracker)
 	c.Assert(cp.GlobalPoint().Position, Equals, pos2)
@@ -271,12 +271,10 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	s.cfg.Dir = dir
 	c.Assert(cp.LoadMeta(), IsNil)
 
-	// should flush because globalPointSaveTime is zero
-	s.mock.ExpectBegin()
-	s.mock.ExpectExec("(202)?"+flushCheckPointSQL).WithArgs(cpid, "", "", pos1.Name, pos1.Pos, "", "", 0, "", "null", true).WillReturnResult(sqlmock.NewResult(0, 1))
-	s.mock.ExpectCommit()
-	err = cp.FlushPointsExcept(tctx, nil, nil, nil)
-	c.Assert(err, IsNil)
+	// should not flush because there is no change and snapshot id is 0.
+	snapshot := cp.Snapshot()
+	c.Assert(snapshot.id, Equals, 0)
+
 	s.mock.ExpectQuery(loadCheckPointSQL).WillReturnRows(sqlmock.NewRows(nil))
 	err = cp.Load(tctx)
 	c.Assert(err, IsNil)
@@ -310,11 +308,13 @@ SHOW MASTER STATUS: /* AFTER CONNECTION POOL ESTABLISHED */
 	c.Assert(err, IsNil)
 	c.Assert(cp.LoadMeta(), IsNil)
 
-	// should flush because globalPointSaveTime is zero
+	// should flush because exitSafeModeLocation is true
+	snapshot = cp.Snapshot()
+	c.Assert(snapshot.id, Greater, 0)
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec("(202)?"+flushCheckPointSQL).WithArgs(cpid, "", "", pos1.Name, pos1.Pos, "", pos2.Name, pos2.Pos, "", "null", true).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
-	err = cp.FlushPointsExcept(tctx, nil, nil, nil)
+	err = cp.FlushPointsExcept(tctx, snapshot.id, nil, nil, nil)
 	c.Assert(err, IsNil)
 	s.mock.ExpectQuery(loadCheckPointSQL).WillReturnRows(sqlmock.NewRows(nil))
 	err = cp.Load(tctx)
@@ -367,7 +367,7 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec("(284)?"+flushCheckPointSQL).WithArgs(cpid, table.Schema, table.Name, pos2.Name, pos2.Pos, "", "", 0, "", sqlmock.AnyArg(), false).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
-	err = cp.FlushPointsExcept(tctx, nil, nil, nil)
+	err = cp.FlushPointsExcept(tctx, cp.Snapshot().id, nil, nil, nil)
 	c.Assert(err, IsNil)
 	cp.Rollback(s.tracker)
 	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
@@ -399,12 +399,12 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	cp.SaveTablePoint(table, binlog.Location{Position: pos1}, ti)
 	rcp := cp.(*RemoteCheckPoint)
 	c.Assert(rcp.points[schemaName][tableName].TableInfo(), NotNil)
-	c.Assert(rcp.points[schemaName][tableName].flushedTI, IsNil)
+	c.Assert(rcp.points[schemaName][tableName].flushedLocation.ti, IsNil)
 
 	cp.Rollback(s.tracker)
 	rcp = cp.(*RemoteCheckPoint)
 	c.Assert(rcp.points[schemaName][tableName].TableInfo(), IsNil)
-	c.Assert(rcp.points[schemaName][tableName].flushedTI, IsNil)
+	c.Assert(rcp.points[schemaName][tableName].flushedLocation.ti, IsNil)
 
 	_, err = s.tracker.GetTableInfo(table)
 	c.Assert(strings.Contains(err.Error(), "doesn't exist"), IsTrue)
@@ -419,7 +419,7 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec(flushCheckPointSQL).WithArgs(cpid, schemaName, tableName, pos1.Name, pos1.Pos, "", "", 0, "", string(tiBytes), false).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
-	c.Assert(cp.FlushPointsExcept(tctx, nil, nil, nil), IsNil)
+	c.Assert(cp.FlushPointsExcept(tctx, cp.Snapshot().id, nil, nil, nil), IsNil)
 	err = s.tracker.Exec(ctx, schemaName, "alter table "+tableName+" add c2 int;")
 	c.Assert(err, IsNil)
 	ti2, err := s.tracker.GetTableInfo(table)
@@ -454,7 +454,7 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec("(320)?"+flushCheckPointSQL).WithArgs(cpid, "", "", pos2.Name, pos2.Pos, "", "", 0, "", "null", true).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
-	err = cp.FlushPointsExcept(tctx, []*filter.Table{table}, nil, nil)
+	err = cp.FlushPointsExcept(tctx, cp.Snapshot().id, []*filter.Table{table}, nil, nil)
 	c.Assert(err, IsNil)
 	cp.Rollback(s.tracker)
 	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
@@ -478,6 +478,6 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(cp.GlobalPoint(), DeepEquals, binlog.InitLocation(pos2, gs))
 	rcp = cp.(*RemoteCheckPoint)
 	c.Assert(rcp.points[schemaName][tableName].TableInfo(), NotNil)
-	c.Assert(rcp.points[schemaName][tableName].flushedTI, NotNil)
+	c.Assert(rcp.points[schemaName][tableName].flushedLocation.ti, NotNil)
 	c.Assert(*rcp.safeModeExitPoint, DeepEquals, binlog.InitLocation(pos2, gs))
 }

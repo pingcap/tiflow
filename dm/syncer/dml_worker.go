@@ -38,7 +38,6 @@ type DMLWorker struct {
 	multipleRows bool
 	toDBConns    []*dbconn.DBConn
 	tctx         *tcontext.Context
-	wg           sync.WaitGroup // counts conflict/flush jobs in all DML job channels.
 	logger       log.Logger
 
 	// for metrics
@@ -120,16 +119,17 @@ func (w *DMLWorker) run() {
 		if j.tp == flush || j.tp == conflict {
 			if j.tp == conflict {
 				w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+				j.wg = &sync.WaitGroup{}
+				j.wg.Add(len(jobChs))
 			}
-			w.wg.Add(w.workerCount)
 			// flush for every DML queue
 			for i, jobCh := range jobChs {
 				startTime := time.Now()
 				jobCh <- j
 				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
 			}
-			w.wg.Wait()
 			if j.tp == conflict {
+				j.wg.Wait()
 				w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
 			} else {
 				w.flushCh <- j
@@ -173,7 +173,7 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 
 		w.executeBatchJobs(queueID, jobs)
 		if j.tp == conflict || j.tp == flush {
-			w.wg.Done()
+			j.wg.Done()
 		}
 
 		jobs = jobs[0:0]

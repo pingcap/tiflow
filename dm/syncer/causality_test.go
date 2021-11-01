@@ -30,7 +30,7 @@ import (
 
 func (s *testSyncerSuite) TestDetectConflict(c *C) {
 	ca := &causality{
-		relations: make(map[string]string),
+		relations: newRollingMap(),
 	}
 	caseData := []string{"test_1", "test_2", "test_3"}
 	excepted := map[string]string{
@@ -38,17 +38,27 @@ func (s *testSyncerSuite) TestDetectConflict(c *C) {
 		"test_2": "test_1",
 		"test_3": "test_1",
 	}
+
+	assertRelationsEq := func(expectMap map[string]string) {
+		c.Assert(ca.relations.len(), Equals, len(expectMap))
+		for k, expV := range expectMap {
+			v, ok := ca.relations.get(k)
+			c.Assert(ok, IsTrue)
+			c.Assert(v, Equals, expV)
+		}
+	}
+
 	c.Assert(ca.detectConflict(caseData), IsFalse)
-	ca.add(caseData)
-	c.Assert(ca.relations, DeepEquals, excepted)
+	ca.add(caseData, 1)
+	assertRelationsEq(excepted)
 	c.Assert(ca.detectConflict([]string{"test_4"}), IsFalse)
-	ca.add([]string{"test_4"})
+	ca.add([]string{"test_4"}, 2)
 	excepted["test_4"] = "test_4"
-	c.Assert(ca.relations, DeepEquals, excepted)
+	assertRelationsEq(excepted)
 	conflictData := []string{"test_4", "test_3"}
 	c.Assert(ca.detectConflict(conflictData), IsTrue)
-	ca.reset()
-	c.Assert(ca.relations, HasLen, 0)
+	ca.relations.clear()
+	c.Assert(ca.relations.len(), Equals, 0)
 }
 
 func (s *testSyncerSuite) TestCasuality(c *C) {

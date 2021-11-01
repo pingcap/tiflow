@@ -814,6 +814,11 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		streamerProducer: mockStreamerProducer,
 		streamer:         mockStreamer,
 	}
+	syncer.flushCpWorker = &checkpointFlushWorker{
+		input:        make(chan *flushCpTask, 16),
+		cp:           syncer.checkpoint,
+		afterFlushFn: syncer.afterFlushCheckpoint,
+	}
 
 	syncer.addJobFunc = syncer.addJobToMemory
 
@@ -944,6 +949,11 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		streamerProducer: mockStreamerProducer,
 		streamer:         mockStreamer,
 	}
+	syncer.flushCpWorker = &checkpointFlushWorker{
+		input:        make(chan *flushCpTask, 16),
+		cp:           syncer.checkpoint,
+		afterFlushFn: syncer.afterFlushCheckpoint,
+	}
 
 	// When crossing safeModeExitPoint, will generate a flush sql
 	checkPointMock.ExpectBegin()
@@ -1064,6 +1074,11 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	syncer.streamerController = &StreamerController{
 		streamerProducer: mockStreamerProducer,
 		streamer:         mockStreamer,
+	}
+	syncer.flushCpWorker = &checkpointFlushWorker{
+		input:        make(chan *flushCpTask, 16),
+		cp:           syncer.checkpoint,
+		afterFlushFn: syncer.afterFlushCheckpoint,
 	}
 
 	syncer.addJobFunc = syncer.addJobToMemory
