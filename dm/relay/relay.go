@@ -478,6 +478,7 @@ func (r *Relay) handleEvents(
 		}
 	}
 
+	firstEvent := true
 	for {
 		// 1. read events from upstream server
 		readTimer := time.Now()
@@ -558,6 +559,17 @@ func (r *Relay) handleEvents(
 			}
 		}
 
+		if firstEvent {
+			// on the first event we got, which must be a fake rotate event, save and flush meta once to make sure
+			// meta file exists before binlog file exists(lastPos.Name cannot be empty now)
+			// when switch from A to B then back to A, meta's been assigned to minCheckpoint, since it's taken as a new server.
+			// and meta file is not created when relay resumed.
+			firstEvent = false
+			if err2 := r.saveAndFlushMeta(lastPos, lastGTID); err2 != nil {
+				return 0, err2
+			}
+		}
+
 		// 3. save events into file
 		writeTimer := time.Now()
 		r.logger.Debug("writing binlog event", zap.Reflect("header", e.Header))
@@ -617,14 +629,18 @@ func (r *Relay) handleEvents(
 		if tResult.NextLogName != "" && !utils.IsFakeRotateEvent(e.Header) {
 			// if the binlog is rotated, we need to save and flush the next binlog filename to meta
 			lastPos.Name = tResult.NextLogName
-			if err := r.SaveMeta(lastPos, lastGTID); err != nil {
-				return 0, terror.Annotatef(err, "save position %s, GTID sets %v into meta", lastPos, lastGTID)
-			}
-			if err := r.FlushMeta(); err != nil {
+			if err := r.saveAndFlushMeta(lastPos, lastGTID); err != nil {
 				return 0, err
 			}
 		}
 	}
+}
+
+func (r *Relay) saveAndFlushMeta(lastPos mysql.Position, lastGTID gtid.Set) error {
+	if err := r.SaveMeta(lastPos, lastGTID); err != nil {
+		return terror.Annotatef(err, "save position %s, GTID sets %v into meta", lastPos, lastGTID)
+	}
+	return r.FlushMeta()
 }
 
 // tryUpdateActiveRelayLog tries to update current active relay log file.
