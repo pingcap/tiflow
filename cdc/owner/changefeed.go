@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/redo"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
@@ -42,6 +43,7 @@ type changefeed struct {
 	barriers         *barriers
 	feedStateManager *feedStateManager
 	gcManager        gc.Manager
+	redoManager      redo.LogManager
 
 	schema      *schemaWrap4Owner
 	sink        AsyncSink
@@ -265,6 +267,14 @@ LOOP:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
+	stdCtx := util.PutChangefeedIDInCtx(cancelCtx, c.id)
+	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
+	redoManager, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
+	if err != nil {
+		return err
+	}
+	c.redoManager = redoManager
+
 	// init metrics
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
@@ -424,6 +434,12 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		}
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
 		c.ddlEventCache = ddlEvent
+		if c.redoManager.Enabled() {
+			err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
+			if err != nil {
+				return false, err
+			}
+		}
 	}
 	if job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
 		log.Warn("ignore the DDL job of ineligible table", zap.Reflect("job", job))
