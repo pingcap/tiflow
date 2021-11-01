@@ -288,7 +288,6 @@ dm_integration_test_build: check_failpoint_ctl
 
 install_test_python_dep:
 	@echo "install python requirments for test"
-	pip install --user -q -r ./dm/tests/requirements.txt
 
 check_third_party_binary_for_dm:
 	@which bin/tidb-server
@@ -307,6 +306,7 @@ dm_compatibility_test: check_third_party_binary_for_dm
 	@which bin/dm-worker.test.current
 	@which bin/dm-master.test.previous
 	@which bin/dm-worker.test.previous
+	ln -srf bin dm/
 	cd dm && ./tests/compatibility_run.sh ${CASE}
 
 dm_coverage: tools/bin/gocovmerge tools/bin/goveralls

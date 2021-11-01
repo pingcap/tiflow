@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tidbConfig "github.com/pingcap/tidb/config"
@@ -37,6 +35,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/mock"
+	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
@@ -420,7 +419,7 @@ func (tr *Tracker) RemoveDownstreamSchema(tctx *tcontext.Context, targetTables [
 				for k := range tr.dsTracker.tableInfos {
 					if strings.HasPrefix(k, tableID+".") {
 						delete(tr.dsTracker.tableInfos, k)
-						tctx.Logger.Info("Remove downstream schema tracker", zap.String("tableID", tableID))
+						tctx.Logger.Info("Remove downstream schema tracker", zap.String("tableID", k))
 					}
 				}
 			}
@@ -531,7 +530,7 @@ func redirectIndexKeys(index *model.IndexInfo, originTi *model.TableInfo) *model
 
 	columns := make([]*model.IndexColumn, 0, len(index.Columns))
 	for _, key := range index.Columns {
-		if originColumn := model.FindColumnInfo(originTi.Columns, key.Name.O); originColumn != nil {
+		if originColumn := model.FindColumnInfo(originTi.Columns, key.Name.L); originColumn != nil {
 			column := &model.IndexColumn{
 				Name:   key.Name,
 				Offset: originColumn.Offset,

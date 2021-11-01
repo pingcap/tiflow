@@ -238,6 +238,9 @@ type SyncerConfig struct {
 	QueueSize   int    `yaml:"queue-size" toml:"queue-size" json:"queue-size"`
 	// checkpoint flush interval in seconds.
 	CheckpointFlushInterval int `yaml:"checkpoint-flush-interval" toml:"checkpoint-flush-interval" json:"checkpoint-flush-interval"`
+	// TODO: add this two new config items for openapi.
+	Compact      bool `yaml:"compact" toml:"compact" json:"compact"`
+	MultipleRows bool `yaml:"multiple-rows" toml:"multiple-rows" json:"multiple-rows"`
 
 	// deprecated
 	MaxRetry int `yaml:"max-retry" toml:"max-retry" json:"max-retry"`
@@ -857,34 +860,78 @@ func NewMySQLInstancesForDowngrade(mysqlInstances []*MySQLInstance) []*MySQLInst
 	return mysqlInstancesForDowngrade
 }
 
+// SyncerConfigForDowngrade is the base configuration for syncer in v2.0.
+// This config is used for downgrade(config export) from a higher dmctl version.
+// When we add any new config item into SyncerConfig, we should update it also.
+type SyncerConfigForDowngrade struct {
+	MetaFile                string `yaml:"meta-file"`
+	WorkerCount             int    `yaml:"worker-count"`
+	Batch                   int    `yaml:"batch"`
+	QueueSize               int    `yaml:"queue-size"`
+	CheckpointFlushInterval int    `yaml:"checkpoint-flush-interval"`
+	MaxRetry                int    `yaml:"max-retry"`
+	AutoFixGTID             bool   `yaml:"auto-fix-gtid"`
+	EnableGTID              bool   `yaml:"enable-gtid"`
+	DisableCausality        bool   `yaml:"disable-detect"`
+	SafeMode                bool   `yaml:"safe-mode"`
+	EnableANSIQuotes        bool   `yaml:"enable-ansi-quotes"`
+
+	Compact      bool `yaml:"compact,omitempty"`
+	MultipleRows bool `yaml:"multipleRows,omitempty"`
+}
+
+// NewSyncerConfigsForDowngrade converts SyncerConfig to SyncerConfigForDowngrade.
+func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[string]*SyncerConfigForDowngrade {
+	syncerConfigsForDowngrade := make(map[string]*SyncerConfigForDowngrade, len(syncerConfigs))
+	for configName, syncerConfig := range syncerConfigs {
+		newSyncerConfig := &SyncerConfigForDowngrade{
+			MetaFile:                syncerConfig.MetaFile,
+			WorkerCount:             syncerConfig.WorkerCount,
+			Batch:                   syncerConfig.Batch,
+			QueueSize:               syncerConfig.QueueSize,
+			CheckpointFlushInterval: syncerConfig.CheckpointFlushInterval,
+			MaxRetry:                syncerConfig.MaxRetry,
+			AutoFixGTID:             syncerConfig.AutoFixGTID,
+			EnableGTID:              syncerConfig.EnableGTID,
+			DisableCausality:        syncerConfig.DisableCausality,
+			SafeMode:                syncerConfig.SafeMode,
+			EnableANSIQuotes:        syncerConfig.EnableANSIQuotes,
+			Compact:                 syncerConfig.Compact,
+			MultipleRows:            syncerConfig.MultipleRows,
+		}
+		syncerConfigsForDowngrade[configName] = newSyncerConfig
+	}
+	return syncerConfigsForDowngrade
+}
+
 // TaskConfigForDowngrade is the base configuration for task in v2.0.
 // This config is used for downgrade(config export) from a higher dmctl version.
 // When we add any new config item into SourceConfig, we should update it also.
 type TaskConfigForDowngrade struct {
-	Name                    string                         `yaml:"name"`
-	TaskMode                string                         `yaml:"task-mode"`
-	IsSharding              bool                           `yaml:"is-sharding"`
-	ShardMode               string                         `yaml:"shard-mode"`
-	IgnoreCheckingItems     []string                       `yaml:"ignore-checking-items"`
-	MetaSchema              string                         `yaml:"meta-schema"`
-	EnableHeartbeat         bool                           `yaml:"enable-heartbeat"`
-	HeartbeatUpdateInterval int                            `yaml:"heartbeat-update-interval"`
-	HeartbeatReportInterval int                            `yaml:"heartbeat-report-interval"`
-	Timezone                string                         `yaml:"timezone"`
-	CaseSensitive           bool                           `yaml:"case-sensitive"`
-	TargetDB                *DBConfig                      `yaml:"target-database"`
-	OnlineDDLScheme         string                         `yaml:"online-ddl-scheme"`
-	Routes                  map[string]*router.TableRule   `yaml:"routes"`
-	Filters                 map[string]*bf.BinlogEventRule `yaml:"filters"`
-	ColumnMappings          map[string]*column.Rule        `yaml:"column-mappings"`
-	BWList                  map[string]*filter.Rules       `yaml:"black-white-list"`
-	BAList                  map[string]*filter.Rules       `yaml:"block-allow-list"`
-	Mydumpers               map[string]*MydumperConfig     `yaml:"mydumpers"`
-	Loaders                 map[string]*LoaderConfig       `yaml:"loaders"`
-	Syncers                 map[string]*SyncerConfig       `yaml:"syncers"`
-	CleanDumpFile           bool                           `yaml:"clean-dump-file"`
-	EnableANSIQuotes        bool                           `yaml:"ansi-quotes"`
-	RemoveMeta              bool                           `yaml:"remove-meta"`
+	Name                    string                               `yaml:"name"`
+	TaskMode                string                               `yaml:"task-mode"`
+	IsSharding              bool                                 `yaml:"is-sharding"`
+	ShardMode               string                               `yaml:"shard-mode"`
+	IgnoreCheckingItems     []string                             `yaml:"ignore-checking-items"`
+	MetaSchema              string                               `yaml:"meta-schema"`
+	EnableHeartbeat         bool                                 `yaml:"enable-heartbeat"`
+	HeartbeatUpdateInterval int                                  `yaml:"heartbeat-update-interval"`
+	HeartbeatReportInterval int                                  `yaml:"heartbeat-report-interval"`
+	Timezone                string                               `yaml:"timezone"`
+	CaseSensitive           bool                                 `yaml:"case-sensitive"`
+	TargetDB                *DBConfig                            `yaml:"target-database"`
+	OnlineDDLScheme         string                               `yaml:"online-ddl-scheme"`
+	Routes                  map[string]*router.TableRule         `yaml:"routes"`
+	Filters                 map[string]*bf.BinlogEventRule       `yaml:"filters"`
+	ColumnMappings          map[string]*column.Rule              `yaml:"column-mappings"`
+	BWList                  map[string]*filter.Rules             `yaml:"black-white-list"`
+	BAList                  map[string]*filter.Rules             `yaml:"block-allow-list"`
+	Mydumpers               map[string]*MydumperConfig           `yaml:"mydumpers"`
+	Loaders                 map[string]*LoaderConfig             `yaml:"loaders"`
+	Syncers                 map[string]*SyncerConfigForDowngrade `yaml:"syncers"`
+	CleanDumpFile           bool                                 `yaml:"clean-dump-file"`
+	EnableANSIQuotes        bool                                 `yaml:"ansi-quotes"`
+	RemoveMeta              bool                                 `yaml:"remove-meta"`
 	// new config item
 	MySQLInstances   []*MySQLInstanceForDowngrade `yaml:"mysql-instances"`
 	ExprFilter       map[string]*ExpressionFilter `yaml:"expression-filter,omitempty"`
@@ -916,7 +963,7 @@ func NewTaskConfigForDowngrade(taskConfig *TaskConfig) *TaskConfigForDowngrade {
 		BAList:                  taskConfig.BAList,
 		Mydumpers:               taskConfig.Mydumpers,
 		Loaders:                 taskConfig.Loaders,
-		Syncers:                 taskConfig.Syncers,
+		Syncers:                 NewSyncerConfigsForDowngrade(taskConfig.Syncers),
 		CleanDumpFile:           taskConfig.CleanDumpFile,
 		EnableANSIQuotes:        taskConfig.EnableANSIQuotes,
 		RemoveMeta:              taskConfig.RemoveMeta,

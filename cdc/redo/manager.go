@@ -75,6 +75,11 @@ func IsValidConsistentStorage(storage string) bool {
 	}
 }
 
+// IsConsistentEnabled returns whether the consistent feature is enabled
+func IsConsistentEnabled(level string) bool {
+	return IsValidConsistentLevel(level) && consistentLevelType(level) != consistentLevelNormal
+}
+
 // IsS3StorageEnabled returns whether s3 storage is enabled
 func IsS3StorageEnabled(storage string) bool {
 	return consistentStorage(storage) == consistentStorageS3
@@ -210,7 +215,10 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 		return cerror.ErrBufferLogTimeout.GenWithStackByArgs()
 	case m.logBuffer <- cacheRows{
 		tableID: tableID,
-		rows:    rows,
+		// Because the pipeline sink doesn't hold slice memory after EmitRowChangedEvents,
+		// we copy to a new slice to manage memory in redo manager itself, which
+		// is the same behavior as sink mananger.
+		rows: append(make([]*model.RowChangedEvent, 0, len(rows)), rows...),
 	}:
 	}
 	return nil

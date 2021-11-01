@@ -25,18 +25,16 @@ function run() {
 
 	# worker will inject delete/update sql check
 	inject_points=(
-		"github.com/pingcap/dm/syncer/DownstreamTrackerWhereCheck=return()"
+		"github.com/pingcap/ticdc/dm/syncer/DownstreamTrackerWhereCheck=return()"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+	dmctl_operate_source create $cur/conf/source1.yaml $SOURCE_ID1
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
+	dmctl_operate_source create $cur/conf/source2.yaml $SOURCE_ID2
 
 	# start DM task
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
