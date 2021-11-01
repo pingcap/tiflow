@@ -122,7 +122,10 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
 	state := c.state.Info.State
 	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
-		if err := c.gcManager.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
+		failpoint.Inject("InjectChangefeedFastFailError", func() error {
+			return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
+		})
+		if err := c.gcManager.checkStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -132,14 +135,17 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	c.state = state
 	c.feedStateManager.Tick(state)
+
+	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	// check stale checkPointTs must be called before `feedStateManager.ShouldRunning()`
+	// to ensure an error or stopped changefeed also be checked
+	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
+		return errors.Trace(err)
+	}
+
 	if !c.feedStateManager.ShouldRunning() {
 		c.releaseResources()
 		return nil
-	}
-
-	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
-		return errors.Trace(err)
 	}
 
 	if !c.preflightCheck(captures) {
