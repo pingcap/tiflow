@@ -89,10 +89,10 @@ func newServerWrapperForTesting(t *testing.T) (server *ServerWrapper, newClient 
 			}))
 		require.NoError(t, err)
 
-		cancel := func() {
+		cancel2 := func() {
 			_ = conn.Close()
 		}
-		return p2p.NewCDCPeerToPeerClient(conn), cancel
+		return p2p.NewCDCPeerToPeerClient(conn), cancel2
 	}
 	return
 }

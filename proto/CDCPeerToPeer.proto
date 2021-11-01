@@ -72,13 +72,13 @@ message Ack {
 }
 
 enum ExitReason {
-  NONE = 0;
-  CONGESTED = 1;
-  CAPTURE_SUICIDE = 2;
-  STALE_CONNECTION = 3;
-  DUPLICATE_CONNECTION = 4;
-  CAPTURE_ID_MISMATCH = 5;
-  OTHER = 100;
+  UNKNOWN = 0;
+  OK = 1;
+  CONGESTED = 2;
+  CAPTURE_SUICIDE = 3;
+  STALE_CONNECTION = 4;
+  DUPLICATE_CONNECTION = 5;
+  CAPTURE_ID_MISMATCH = 6;
 }
 
 message SendMessageResponse {
