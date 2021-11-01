@@ -6,7 +6,8 @@ package p2p
 import (
 	context "context"
 	fmt "fmt"
-	proto "github.com/golang/protobuf/proto"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -24,7 +25,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type ExitReason int32
 
@@ -129,8 +130,91 @@ func (m *MessageEntry) GetSequence() int64 {
 	return 0
 }
 
+type StreamMeta struct {
+	// fields required for correctness
+	SenderId   string `protobuf:"bytes,1,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
+	ReceiverId string `protobuf:"bytes,2,opt,name=receiver_id,json=receiverId,proto3" json:"receiver_id,omitempty"`
+	Epoch      int64  `protobuf:"varint,3,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	// fields required for compatibility check
+	ClientVersion string `protobuf:"bytes,50,opt,name=client_version,json=clientVersion,proto3" json:"client_version,omitempty"`
+	// fields for metrics, logging, debugging, etc.
+	SenderAdvertisedAddr string   `protobuf:"bytes,100,opt,name=sender_advertised_addr,json=senderAdvertisedAddr,proto3" json:"sender_advertised_addr,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *StreamMeta) Reset()         { *m = StreamMeta{} }
+func (m *StreamMeta) String() string { return proto.CompactTextString(m) }
+func (*StreamMeta) ProtoMessage()    {}
+func (*StreamMeta) Descriptor() ([]byte, []int) {
+	return fileDescriptor_6560df28dddfd2cc, []int{1}
+}
+func (m *StreamMeta) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StreamMeta) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_StreamMeta.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *StreamMeta) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StreamMeta.Merge(m, src)
+}
+func (m *StreamMeta) XXX_Size() int {
+	return m.Size()
+}
+func (m *StreamMeta) XXX_DiscardUnknown() {
+	xxx_messageInfo_StreamMeta.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StreamMeta proto.InternalMessageInfo
+
+func (m *StreamMeta) GetSenderId() string {
+	if m != nil {
+		return m.SenderId
+	}
+	return ""
+}
+
+func (m *StreamMeta) GetReceiverId() string {
+	if m != nil {
+		return m.ReceiverId
+	}
+	return ""
+}
+
+func (m *StreamMeta) GetEpoch() int64 {
+	if m != nil {
+		return m.Epoch
+	}
+	return 0
+}
+
+func (m *StreamMeta) GetClientVersion() string {
+	if m != nil {
+		return m.ClientVersion
+	}
+	return ""
+}
+
+func (m *StreamMeta) GetSenderAdvertisedAddr() string {
+	if m != nil {
+		return m.SenderAdvertisedAddr
+	}
+	return ""
+}
+
 type MessagePacket struct {
-	Entries              []*MessageEntry `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	Meta                 *StreamMeta     `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Entries              []*MessageEntry `protobuf:"bytes,2,rep,name=entries,proto3" json:"entries,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
 	XXX_unrecognized     []byte          `json:"-"`
 	XXX_sizecache        int32           `json:"-"`
@@ -140,7 +224,7 @@ func (m *MessagePacket) Reset()         { *m = MessagePacket{} }
 func (m *MessagePacket) String() string { return proto.CompactTextString(m) }
 func (*MessagePacket) ProtoMessage()    {}
 func (*MessagePacket) Descriptor() ([]byte, []int) {
-	return fileDescriptor_6560df28dddfd2cc, []int{1}
+	return fileDescriptor_6560df28dddfd2cc, []int{2}
 }
 func (m *MessagePacket) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -169,6 +253,13 @@ func (m *MessagePacket) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_MessagePacket proto.InternalMessageInfo
 
+func (m *MessagePacket) GetMeta() *StreamMeta {
+	if m != nil {
+		return m.Meta
+	}
+	return nil
+}
+
 func (m *MessagePacket) GetEntries() []*MessageEntry {
 	if m != nil {
 		return m.Entries
@@ -188,7 +279,7 @@ func (m *Ack) Reset()         { *m = Ack{} }
 func (m *Ack) String() string { return proto.CompactTextString(m) }
 func (*Ack) ProtoMessage()    {}
 func (*Ack) Descriptor() ([]byte, []int) {
-	return fileDescriptor_6560df28dddfd2cc, []int{2}
+	return fileDescriptor_6560df28dddfd2cc, []int{3}
 }
 func (m *Ack) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -244,7 +335,7 @@ func (m *SendMessageResponse) Reset()         { *m = SendMessageResponse{} }
 func (m *SendMessageResponse) String() string { return proto.CompactTextString(m) }
 func (*SendMessageResponse) ProtoMessage()    {}
 func (*SendMessageResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_6560df28dddfd2cc, []int{3}
+	return fileDescriptor_6560df28dddfd2cc, []int{4}
 }
 func (m *SendMessageResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -297,6 +388,7 @@ func (m *SendMessageResponse) GetErrorMessage() string {
 func init() {
 	proto.RegisterEnum("p2p.ExitReason", ExitReason_name, ExitReason_value)
 	proto.RegisterType((*MessageEntry)(nil), "p2p.MessageEntry")
+	proto.RegisterType((*StreamMeta)(nil), "p2p.StreamMeta")
 	proto.RegisterType((*MessagePacket)(nil), "p2p.MessagePacket")
 	proto.RegisterType((*Ack)(nil), "p2p.Ack")
 	proto.RegisterType((*SendMessageResponse)(nil), "p2p.SendMessageResponse")
@@ -305,35 +397,43 @@ func init() {
 func init() { proto.RegisterFile("CDCPeerToPeer.proto", fileDescriptor_6560df28dddfd2cc) }
 
 var fileDescriptor_6560df28dddfd2cc = []byte{
-	// 438 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x52, 0x41, 0x8b, 0xd3, 0x40,
-	0x14, 0xde, 0xd9, 0x6c, 0x6d, 0xfb, 0xda, 0xba, 0xf1, 0xb5, 0x60, 0xec, 0xa1, 0x94, 0x7a, 0x29,
-	0x0a, 0x65, 0x89, 0xe0, 0x49, 0x90, 0x98, 0x0c, 0x36, 0xb0, 0x4d, 0xc2, 0x24, 0xbd, 0x78, 0x09,
-	0x31, 0xfb, 0x90, 0x52, 0x4d, 0xd2, 0xcc, 0x08, 0xeb, 0x3f, 0xf0, 0xe4, 0xd9, 0x9f, 0xe4, 0xd1,
-	0x9f, 0x20, 0xf5, 0x8f, 0x48, 0xa7, 0xed, 0xda, 0x05, 0xbd, 0x84, 0x7c, 0xdf, 0xbc, 0xf9, 0xbe,
-	0x6f, 0xde, 0x7b, 0xd0, 0x77, 0x3d, 0x37, 0x22, 0xaa, 0x93, 0x72, 0xf7, 0x9d, 0x55, 0x75, 0xa9,
-	0x4a, 0x34, 0x2a, 0xbb, 0x9a, 0xbc, 0x83, 0xee, 0x82, 0xa4, 0xcc, 0x3e, 0x10, 0x2f, 0x54, 0xfd,
-	0x05, 0x07, 0xd0, 0x50, 0x65, 0xb5, 0xca, 0x2d, 0x36, 0x66, 0xd3, 0xb6, 0xd8, 0x03, 0xb4, 0xa0,
-	0x99, 0x97, 0x85, 0xa2, 0x42, 0x59, 0xe7, 0x63, 0x36, 0xed, 0x8a, 0x23, 0xc4, 0x21, 0xb4, 0x24,
-	0x6d, 0x3e, 0x53, 0x91, 0x93, 0x65, 0x8c, 0xd9, 0xd4, 0x10, 0x77, 0x78, 0xf2, 0x0a, 0x7a, 0x07,
-	0xed, 0x28, 0xcb, 0xd7, 0xa4, 0xf0, 0x39, 0x34, 0xa9, 0x50, 0xf5, 0x8a, 0xa4, 0xc5, 0xc6, 0xc6,
-	0xb4, 0x63, 0x3f, 0x9a, 0x55, 0x76, 0x35, 0x3b, 0x0d, 0x20, 0x8e, 0x15, 0x93, 0x97, 0x60, 0x38,
-	0xf9, 0xfa, 0x3f, 0x81, 0x9e, 0x40, 0xeb, 0x63, 0x26, 0x55, 0x2a, 0x69, 0xa3, 0x13, 0x19, 0xa2,
-	0xb9, 0xc3, 0x31, 0x6d, 0x26, 0x5f, 0x19, 0xf4, 0x63, 0x2a, 0x6e, 0x0e, 0xaa, 0x82, 0x64, 0x55,
-	0x16, 0x92, 0x70, 0x08, 0x46, 0x96, 0xaf, 0x0f, 0xc6, 0x2d, 0x6d, 0xec, 0xe4, 0x6b, 0xb1, 0x23,
-	0xf1, 0x0a, 0x3a, 0x74, 0xbb, 0x52, 0x69, 0x4d, 0x99, 0x2c, 0x0b, 0xad, 0xf8, 0xd0, 0xbe, 0xd4,
-	0x35, 0xfc, 0x76, 0xa5, 0x84, 0xa6, 0x05, 0xd0, 0xdd, 0x3f, 0x3e, 0x85, 0x1e, 0xd5, 0x75, 0x59,
-	0xa7, 0x9f, 0xf6, 0x36, 0xfa, 0xf1, 0x6d, 0xd1, 0xd5, 0xe4, 0xc1, 0xfa, 0xd9, 0x37, 0x06, 0xf0,
-	0xf7, 0x3e, 0xb6, 0xe0, 0x22, 0x08, 0x03, 0x6e, 0x9e, 0x61, 0x0f, 0xda, 0x6e, 0x18, 0xbc, 0xe5,
-	0x71, 0xc2, 0x3d, 0x93, 0x61, 0x1f, 0x2e, 0x5d, 0x27, 0x4a, 0x96, 0x82, 0xa7, 0xf1, 0xd2, 0x77,
-	0x7d, 0x8f, 0x9b, 0xe7, 0x38, 0x00, 0x33, 0x4e, 0x9c, 0x6b, 0x9e, 0xba, 0x61, 0x10, 0x70, 0x37,
-	0xf1, 0xc3, 0xc0, 0x34, 0xd0, 0x82, 0x81, 0xb7, 0x8c, 0xae, 0x7d, 0xd7, 0x49, 0xee, 0x9d, 0x5c,
-	0xe0, 0x63, 0xe8, 0x1f, 0x45, 0x7c, 0x2f, 0x5d, 0xf8, 0xf1, 0xc2, 0x49, 0xdc, 0xb9, 0xd9, 0xc0,
-	0x36, 0x34, 0xc2, 0x64, 0xce, 0x85, 0x79, 0x63, 0x47, 0xd0, 0xbb, 0xb7, 0x09, 0xf8, 0x1a, 0x3a,
-	0x27, 0xbd, 0x42, 0x3c, 0x9d, 0xc7, 0x7e, 0x68, 0x43, 0x4b, 0x73, 0xff, 0xe8, 0xe8, 0x94, 0x5d,
-	0xb1, 0x37, 0xf8, 0x63, 0x3b, 0x62, 0x3f, 0xb7, 0x23, 0xf6, 0x6b, 0x3b, 0x62, 0xdf, 0x7f, 0x8f,
-	0xce, 0xe6, 0xec, 0xfd, 0x03, 0xbd, 0x5f, 0x2f, 0xfe, 0x04, 0x00, 0x00, 0xff, 0xff, 0x52, 0xce,
-	0x82, 0x47, 0x76, 0x02, 0x00, 0x00,
+	// 563 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x53, 0x51, 0x6f, 0xd3, 0x3c,
+	0x14, 0xfd, 0xdc, 0x6c, 0xdf, 0xda, 0xdb, 0x76, 0x0b, 0x6e, 0x05, 0xa1, 0x48, 0xa3, 0xea, 0x84,
+	0x54, 0x81, 0x34, 0xa6, 0x82, 0x78, 0x45, 0x21, 0x8d, 0x58, 0xa4, 0x35, 0xad, 0x9c, 0x8c, 0x07,
+	0x5e, 0xa2, 0x10, 0x5f, 0x8d, 0xa8, 0x5b, 0x9c, 0xd9, 0x66, 0x1a, 0xff, 0x80, 0x27, 0xfe, 0x11,
+	0xef, 0x3c, 0xf2, 0x13, 0xd0, 0x7e, 0x09, 0xaa, 0x93, 0x6e, 0x9d, 0x10, 0x2f, 0x96, 0xcf, 0x39,
+	0xd7, 0xf7, 0xd8, 0xe7, 0xca, 0xd0, 0xf3, 0xa6, 0xde, 0x02, 0x51, 0xc6, 0x62, 0xb5, 0x1e, 0x96,
+	0x52, 0x68, 0x41, 0xad, 0x72, 0x52, 0x0e, 0xfa, 0x67, 0xe2, 0x4c, 0x18, 0xfc, 0x72, 0xb5, 0xab,
+	0xa4, 0xd1, 0x47, 0xe8, 0xcc, 0x50, 0xa9, 0xf4, 0x0c, 0xfd, 0x42, 0xcb, 0xaf, 0xb4, 0x0f, 0xdb,
+	0x5a, 0x94, 0x79, 0xe6, 0x90, 0x21, 0x19, 0xb7, 0x58, 0x05, 0xa8, 0x03, 0x3b, 0x99, 0x28, 0x34,
+	0x16, 0xda, 0x69, 0x0c, 0xc9, 0xb8, 0xc3, 0xd6, 0x90, 0x0e, 0xa0, 0xa9, 0xf0, 0xf2, 0x0b, 0x16,
+	0x19, 0x3a, 0xd6, 0x90, 0x8c, 0x2d, 0x76, 0x8b, 0x47, 0x3f, 0x08, 0x40, 0xa4, 0x25, 0xa6, 0x17,
+	0x33, 0xd4, 0x29, 0x7d, 0x02, 0x2d, 0x85, 0x05, 0x47, 0x99, 0xe4, 0xbc, 0x6e, 0xdf, 0xac, 0x88,
+	0x80, 0xd3, 0xa7, 0xd0, 0x96, 0x98, 0x61, 0x7e, 0x55, 0xc9, 0x0d, 0x23, 0xc3, 0x9a, 0x0a, 0xf8,
+	0xea, 0x62, 0x58, 0x8a, 0xec, 0x73, 0xed, 0x52, 0x01, 0xfa, 0x0c, 0x76, 0xb3, 0xf3, 0x1c, 0x0b,
+	0x9d, 0x5c, 0xa1, 0x54, 0xb9, 0x28, 0x9c, 0x89, 0x39, 0xd9, 0xad, 0xd8, 0x0f, 0x15, 0x49, 0x5f,
+	0xc3, 0xc3, 0xda, 0x3a, 0xe5, 0x57, 0x28, 0x75, 0xae, 0x90, 0x27, 0x29, 0xe7, 0xd2, 0xe1, 0xa6,
+	0xbc, 0x5f, 0xa9, 0xee, 0xad, 0xe8, 0x72, 0x2e, 0x47, 0x29, 0x74, 0xeb, 0x6c, 0x16, 0x69, 0xb6,
+	0x44, 0x4d, 0x0f, 0x60, 0xeb, 0x02, 0x75, 0x6a, 0x2e, 0xdf, 0x9e, 0xec, 0x1d, 0x96, 0x93, 0xf2,
+	0xf0, 0xee, 0x81, 0xcc, 0x88, 0xf4, 0x05, 0xec, 0x60, 0xa1, 0x65, 0x8e, 0xca, 0x69, 0x0c, 0xad,
+	0x71, 0x7b, 0xf2, 0xc0, 0xd4, 0x6d, 0xa6, 0xcc, 0xd6, 0x15, 0xa3, 0x37, 0x60, 0xb9, 0xd9, 0xf2,
+	0x1f, 0xa9, 0x3f, 0x86, 0xe6, 0x79, 0xaa, 0x74, 0xa2, 0xf0, 0xd2, 0x04, 0x62, 0xb1, 0x9d, 0x15,
+	0x8e, 0xf0, 0x72, 0xf4, 0x8d, 0x40, 0x2f, 0xc2, 0x82, 0xd7, 0x5d, 0x19, 0xaa, 0x52, 0x14, 0x0a,
+	0xe9, 0x00, 0xac, 0x34, 0x5b, 0x3a, 0xc4, 0x18, 0x37, 0x8d, 0xb1, 0x9b, 0x2d, 0xd9, 0x8a, 0xa4,
+	0x47, 0xd0, 0xc6, 0xeb, 0x5c, 0x27, 0x12, 0x53, 0x25, 0x0a, 0xd3, 0x71, 0xb7, 0x7e, 0x84, 0x7f,
+	0x9d, 0x6b, 0x66, 0x68, 0x06, 0x78, 0xbb, 0xa7, 0x07, 0xd0, 0x45, 0x29, 0x85, 0x4c, 0x2e, 0x2a,
+	0x1b, 0x93, 0x7d, 0x8b, 0x75, 0x0c, 0x59, 0x5b, 0x3f, 0xff, 0x4e, 0x00, 0xee, 0xce, 0xd3, 0x26,
+	0x6c, 0x85, 0xf3, 0xd0, 0xb7, 0xff, 0xa3, 0x5d, 0x68, 0x79, 0xf3, 0xf0, 0xbd, 0x1f, 0xc5, 0xfe,
+	0xd4, 0x26, 0xb4, 0x07, 0x7b, 0x9e, 0xbb, 0x88, 0x4f, 0x99, 0x9f, 0x44, 0xa7, 0x81, 0x17, 0x4c,
+	0x7d, 0xbb, 0x41, 0xfb, 0x60, 0x47, 0xb1, 0x7b, 0xe2, 0x27, 0xde, 0x3c, 0x0c, 0x7d, 0x2f, 0x0e,
+	0xe6, 0xa1, 0x6d, 0x51, 0x07, 0xfa, 0xd3, 0xd3, 0xc5, 0x49, 0xe0, 0xb9, 0xf1, 0x3d, 0x65, 0x8b,
+	0x3e, 0x82, 0xde, 0xba, 0x49, 0x30, 0x4d, 0x66, 0x41, 0x34, 0x73, 0x63, 0xef, 0xd8, 0xde, 0xa6,
+	0x2d, 0xd8, 0x9e, 0xc7, 0xc7, 0x3e, 0xb3, 0xf9, 0x64, 0x01, 0xdd, 0x7b, 0x9f, 0x80, 0xbe, 0x85,
+	0xf6, 0x46, 0x56, 0x94, 0x6e, 0xce, 0xa3, 0x9a, 0xec, 0xc0, 0xa9, 0x66, 0xf9, 0x77, 0xa2, 0x63,
+	0x72, 0x44, 0xde, 0x75, 0x7e, 0xde, 0xec, 0x93, 0x5f, 0x37, 0xfb, 0xe4, 0xf7, 0xcd, 0x3e, 0xf9,
+	0xf4, 0xbf, 0xf9, 0x39, 0xaf, 0xfe, 0x04, 0x00, 0x00, 0xff, 0xff, 0x2c, 0x00, 0x8a, 0xc0, 0x6b,
+	0x03, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -494,6 +594,70 @@ func (m *MessageEntry) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *StreamMeta) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StreamMeta) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *StreamMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.SenderAdvertisedAddr) > 0 {
+		i -= len(m.SenderAdvertisedAddr)
+		copy(dAtA[i:], m.SenderAdvertisedAddr)
+		i = encodeVarintCDCPeerToPeer(dAtA, i, uint64(len(m.SenderAdvertisedAddr)))
+		i--
+		dAtA[i] = 0x6
+		i--
+		dAtA[i] = 0xa2
+	}
+	if len(m.ClientVersion) > 0 {
+		i -= len(m.ClientVersion)
+		copy(dAtA[i:], m.ClientVersion)
+		i = encodeVarintCDCPeerToPeer(dAtA, i, uint64(len(m.ClientVersion)))
+		i--
+		dAtA[i] = 0x3
+		i--
+		dAtA[i] = 0x92
+	}
+	if m.Epoch != 0 {
+		i = encodeVarintCDCPeerToPeer(dAtA, i, uint64(m.Epoch))
+		i--
+		dAtA[i] = 0x18
+	}
+	if len(m.ReceiverId) > 0 {
+		i -= len(m.ReceiverId)
+		copy(dAtA[i:], m.ReceiverId)
+		i = encodeVarintCDCPeerToPeer(dAtA, i, uint64(len(m.ReceiverId)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.SenderId) > 0 {
+		i -= len(m.SenderId)
+		copy(dAtA[i:], m.SenderId)
+		i = encodeVarintCDCPeerToPeer(dAtA, i, uint64(len(m.SenderId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *MessagePacket) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -529,8 +693,20 @@ func (m *MessagePacket) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				i = encodeVarintCDCPeerToPeer(dAtA, i, uint64(size))
 			}
 			i--
-			dAtA[i] = 0xa
+			dAtA[i] = 0x12
 		}
+	}
+	if m.Meta != nil {
+		{
+			size, err := m.Meta.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintCDCPeerToPeer(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
 }
@@ -661,12 +837,47 @@ func (m *MessageEntry) Size() (n int) {
 	return n
 }
 
+func (m *StreamMeta) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.SenderId)
+	if l > 0 {
+		n += 1 + l + sovCDCPeerToPeer(uint64(l))
+	}
+	l = len(m.ReceiverId)
+	if l > 0 {
+		n += 1 + l + sovCDCPeerToPeer(uint64(l))
+	}
+	if m.Epoch != 0 {
+		n += 1 + sovCDCPeerToPeer(uint64(m.Epoch))
+	}
+	l = len(m.ClientVersion)
+	if l > 0 {
+		n += 2 + l + sovCDCPeerToPeer(uint64(l))
+	}
+	l = len(m.SenderAdvertisedAddr)
+	if l > 0 {
+		n += 2 + l + sovCDCPeerToPeer(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *MessagePacket) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
+	if m.Meta != nil {
+		l = m.Meta.Size()
+		n += 1 + l + sovCDCPeerToPeer(uint64(l))
+	}
 	if len(m.Entries) > 0 {
 		for _, e := range m.Entries {
 			l = e.Size()
@@ -865,6 +1076,204 @@ func (m *MessageEntry) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *StreamMeta) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowCDCPeerToPeer
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StreamMeta: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StreamMeta: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SenderId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowCDCPeerToPeer
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthCDCPeerToPeer
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthCDCPeerToPeer
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SenderId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReceiverId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowCDCPeerToPeer
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthCDCPeerToPeer
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthCDCPeerToPeer
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ReceiverId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Epoch", wireType)
+			}
+			m.Epoch = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowCDCPeerToPeer
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Epoch |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 50:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClientVersion", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowCDCPeerToPeer
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthCDCPeerToPeer
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthCDCPeerToPeer
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ClientVersion = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 100:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SenderAdvertisedAddr", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowCDCPeerToPeer
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthCDCPeerToPeer
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthCDCPeerToPeer
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SenderAdvertisedAddr = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipCDCPeerToPeer(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthCDCPeerToPeer
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *MessagePacket) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -895,6 +1304,42 @@ func (m *MessagePacket) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Meta", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowCDCPeerToPeer
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthCDCPeerToPeer
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthCDCPeerToPeer
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Meta == nil {
+				m.Meta = &StreamMeta{}
+			}
+			if err := m.Meta.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Entries", wireType)
 			}

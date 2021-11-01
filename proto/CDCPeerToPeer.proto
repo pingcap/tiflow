@@ -15,24 +15,59 @@ syntax = "proto3";
 
 package p2p;
 
-option optimize_for = SPEED;
+import "gogoproto/gogo.proto";
+
+option(gogoproto.sizer_all) = true;
+// Use generated code to lower performance overhead.
+option(gogoproto.marshaler_all) = true;
+option(gogoproto.unmarshaler_all) = true;
 
 service CDCPeerToPeer {
+  // A bidirectional stream from the sender (client) to the receiver (server)
+  // The send direction is used to carry the serialized payload, and the
+  // reply direction is used to receive ACKs (progress information) from the server.
   rpc SendMessage(stream MessagePacket) returns (stream SendMessageResponse);
 }
 
+// MessageEntry represents a single message.
 message MessageEntry {
+  // topic is used to separate messages into order-guaranteed logical streams.
   string topic = 1;
+
+  // serialized payload. The format and schema is defined by the business logic
+  // using the peer-to-peer mechanism.
   bytes content = 2;
+
+  // monotonically increase.
   int64 sequence = 3;
 }
 
+// Metadata associated with one client-server bidirectional stream.
+message StreamMeta {
+  // fields required for correctness
+  string sender_id = 1;
+  string receiver_id = 2;
+  int64 epoch = 3; // monotonically increasing between two given node processes.
+
+  // fields required for compatibility check
+  string client_version = 50;
+
+  // fields for metrics, logging, debugging, etc.
+  string sender_advertised_addr = 100;
+}
+
 message MessagePacket {
-  repeated MessageEntry entries = 1;
+  StreamMeta meta = 1;
+
+  // multiple messages can be batched.
+  repeated MessageEntry entries = 2;
 }
 
 message Ack {
   string topic = 1;
+
+  // the sequence of an already processed message.
+  // Must be monotonically increasing for a given topic and two given node processes.
   int64 last_seq = 2;
 }
 
