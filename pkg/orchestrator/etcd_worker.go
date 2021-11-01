@@ -189,6 +189,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			if !rl.Allow() {
 				continue
 			}
+			// it is safe that a batch of updates has been applied to worker.state before worker.reactor.Tick
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
 				if !cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
