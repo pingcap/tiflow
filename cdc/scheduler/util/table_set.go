@@ -40,7 +40,6 @@ func (r *TableRecord) Clone() *TableRecord {
 }
 
 // TableStatus is a type representing the table's replication status.
-// The meaning of its value can be defined by the user of TableSet.
 type TableStatus int32
 
 const (
