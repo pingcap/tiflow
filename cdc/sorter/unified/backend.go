@@ -32,8 +32,3 @@ type backEndWriter interface {
 	dataSize() uint64
 	flushAndClose() error
 }
-
-type serializerDeserializer interface {
-	marshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error)
-	unmarshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error)
-}

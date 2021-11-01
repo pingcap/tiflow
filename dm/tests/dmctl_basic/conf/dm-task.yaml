@@ -86,6 +86,7 @@ syncers:
     batch: 100
     checkpoint-flush-interval: 1
     compact: true
+    multiple-rows: true
 
 filters:
   user-filter-1:
