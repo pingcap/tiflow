@@ -591,7 +591,7 @@ func (s *Server) DMAPIResumeTask(ctx echo.Context, taskName string) error {
 func (s *Server) DMAPIGetSchemaListByTaskAndSource(ctx echo.Context, taskName string, sourceName string) error {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
-		return terror.ErrWorkerNoStart.Generate()
+		return terror.ErrWorkerNoStart
 	}
 	workerReq := workerrpc.Request{
 		Type: workerrpc.CmdOperateSchema,
@@ -620,7 +620,7 @@ func (s *Server) DMAPIGetSchemaListByTaskAndSource(ctx echo.Context, taskName st
 func (s *Server) DMAPIGetTableListByTaskAndSource(ctx echo.Context, taskName string, sourceName string, schemaName string) error {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
-		return terror.ErrWorkerNoStart.Generate()
+		return terror.ErrWorkerNoStart
 	}
 	workerReq := workerrpc.Request{
 		Type: workerrpc.CmdOperateSchema,
@@ -650,7 +650,7 @@ func (s *Server) DMAPIGetTableListByTaskAndSource(ctx echo.Context, taskName str
 func (s *Server) DMAPIGetTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
-		return terror.ErrWorkerNoStart.Generate()
+		return terror.ErrWorkerNoStart
 	}
 	workerReq := workerrpc.Request{
 		Type: workerrpc.CmdOperateSchema,
@@ -682,7 +682,7 @@ func (s *Server) DMAPIGetTableStructure(ctx echo.Context, taskName string, sourc
 func (s *Server) DMAPIDeleteTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
-		return terror.ErrWorkerNoStart.Generate()
+		return terror.ErrWorkerNoStart
 	}
 	workerReq := workerrpc.Request{
 		Type: workerrpc.CmdOperateSchema,
@@ -713,7 +713,7 @@ func (s *Server) DMAPIOperateTableStructure(ctx echo.Context, taskName string, s
 	}
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
-		return terror.ErrWorkerNoStart.Generate()
+		return terror.ErrWorkerNoStart
 	}
 	opReq := &pb.OperateWorkerSchemaRequest{
 		Op:       pb.SchemaOp_SetSchema,

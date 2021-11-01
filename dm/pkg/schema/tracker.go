@@ -233,7 +233,7 @@ func (tr *Tracker) ListSchemaTables(schema string) ([]string, error) {
 			return tables, nil
 		}
 	}
-	return nil, errors.New("can not this schema in tracker")
+	return nil, errors.New("can not find this schema in tracker")
 }
 
 // GetSingleColumnIndices returns indices of input column if input column only has single-column indices

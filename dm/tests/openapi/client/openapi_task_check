@@ -4,6 +4,7 @@ import requests
 
 NO_SHARD_TASK_NAME = "test-no-shard"
 SHARD_TASK_NAME = "test-shard"
+ILLEGAL_CHAR_TASK_NAME='t-Ë!s`t'
 SOURCE1_NAME = "mysql-01"
 SOURCE2_NAME = "mysql-02"
 
@@ -198,24 +199,30 @@ def resume_task_success(task_name, source_name):
     assert resp.status_code == 200
 
 
-def operate_schema_and_table_success(task_name, source_name):
+def operate_schema_and_table_success(task_name, source_name, schema_name, table_name):
     schema_url = API_ENDPOINT + "/" + task_name + "/sources/" + source_name + "/schemas"
-    resp = requests.get(url=schema_url)
-    assert resp.status_code == 200
-    print("get_task_schema_success schema resp=", resp.json())
-    assert len(resp.json()) > 0
+    schema_resp = requests.get(url=schema_url)
+    assert schema_resp.status_code == 200
+    print("get_task_schema_success schema resp=", schema_resp.json())
+    assert len(schema_resp.json()) > 0
 
-    schema_name = resp.json()[0]
+    schema_list = schema_resp.json()
+    assert schema_name in schema_list
     table_url = schema_url + "/" + schema_name
-    resp = requests.get(url=table_url)
-    assert resp.status_code == 200
-    print("get_task_schema_success table resp=", resp.json())
+    table_resp = requests.get(url=table_url)
+    assert table_resp.status_code == 200
+    print("get_task_schema_success table resp=", table_resp.json())
+    table_list = table_resp.json()
+    assert table_name in table_list
 
-    table_name = resp.json()[0]
     single_table_url = table_url + "/" + table_name
-    resp = requests.get(url=single_table_url)
-    assert resp.status_code == 200
-    print("get_task_schema_success create table resp=", resp.json())
+    create_table_resp = requests.get(url=single_table_url)
+    assert create_table_resp.status_code == 200
+    create_table = create_table_resp.json()
+    print("get_task_schema_success create table resp=", create_table)
+    assert create_table["table_name"] == table_name
+    assert create_table["schema_name"] == schema_name
+    assert table_name in create_table["schema_create_sql"]
 
     # delete table
     resp = requests.delete(url=single_table_url)
@@ -235,11 +242,9 @@ def operate_schema_and_table_success(task_name, source_name):
     }
     resp = requests.put(url=single_table_url, json=set_table_data)
     assert resp.status_code == 200
-    resp = requests.get(url=table_url)
-
-    assert resp.status_code == 200
-    print("get_task_schema_success table resp=", resp.json())
-    assert len(resp.json()) == 1
+    table_list = requests.get(url=table_url).json()
+    print("get_task_schema_success table resp=", table_list)
+    assert len(table_list) == 1
 
 
 def stop_task_failed(task_name):

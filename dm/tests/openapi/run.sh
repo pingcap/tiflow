@@ -189,7 +189,7 @@ function test_shard_task() {
 	run_sql_source1 "DELETE FROM openapi.t;"
 	run_sql_tidb_with_retry "select count(1) from openapi.t;" "count(1): 2"
 
-	# test binlog event filter, this ddl will ignored in source-2
+	# test binlog event filter, this ddl will be ignored in source-2
 	run_sql "alter table openapi.t add column aaa int;" $MYSQL_PORT2 $MYSQL_PASSWORD2
 	# ddl will be ignored, so no ddl locks and the task will work normally.
 	run_sql "INSERT INTO openapi.t(i,j) VALUES (5, 5);" $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -271,11 +271,11 @@ function test_noshard_task() {
 	# get task list
 	openapi_task_check "get_task_list" 1
 
-	# stop  task
+	# pause task first for operate schema
 	openapi_task_check "pause_task_success" "$task_name" "mysql-02"
 
 	# opreate schema
-	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-02"
+	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-02" "openapi" "t2"
 
 	# resume task
 	openapi_task_check "resume_task_success" "$task_name" "mysql-02"
