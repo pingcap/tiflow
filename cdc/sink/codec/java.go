@@ -107,16 +107,16 @@ func MysqlToJavaType(mysqlType byte) JavaSQLType {
 		return JavaSQLTypeTIMESTAMP
 
 	case mysql.TypeYear:
-		return JavaSQLTypeDATE
+		return JavaSQLTypeVARCHAR
 
 	case mysql.TypeNewDate:
 		return JavaSQLTypeDATE
 
 	case mysql.TypeEnum:
-		return JavaSQLTypeCHAR
+		return JavaSQLTypeINTEGER
 
 	case mysql.TypeSet:
-		return JavaSQLTypeCHAR
+		return JavaSQLTypeBINARY
 
 	case mysql.TypeTinyBlob:
 		return JavaSQLTypeVARBINARY
