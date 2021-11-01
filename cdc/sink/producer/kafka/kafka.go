@@ -159,6 +159,15 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 		c.TopicPreProcess = autoCreate
 	}
 
+	s = sinkURI.Query().Get("watermark")
+	if s != "" {
+		_, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		opts["watermark"] = s
+	}
+
 	return nil
 }
 

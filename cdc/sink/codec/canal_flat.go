@@ -16,6 +16,7 @@ package codec
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -31,6 +32,8 @@ type CanalFlatEventBatchEncoder struct {
 	builder       *canalEntryBuilder
 	unresolvedBuf []*canalFlatMessage
 	resolvedBuf   []*canalFlatMessage
+	// output checkpoint event is true
+	waterMark bool
 }
 
 // NewCanalFlatEventBatchEncoder creates a new CanalFlatEventBatchEncoder
@@ -39,6 +42,7 @@ func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 		builder:       NewCanalEntryBuilder(),
 		unresolvedBuf: make([]*canalFlatMessage, 0),
 		resolvedBuf:   make([]*canalFlatMessage, 0),
+		waterMark:     false,
 	}
 }
 
@@ -202,6 +206,9 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
+	if !c.waterMark {
+		return nil, nil
+	}
 	msg := c.newFlatMessage4CheckpointEvent(ts)
 	value, err := json.Marshal(msg)
 	if err != nil {
@@ -283,6 +290,12 @@ func (c *CanalFlatEventBatchEncoder) Reset() {
 
 // SetParams is no-op for now
 func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
-	// no op
+	if s, ok := params["watermark"]; ok {
+		a, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		c.waterMark = a
+	}
 	return nil
 }
