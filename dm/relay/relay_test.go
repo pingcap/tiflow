@@ -471,18 +471,18 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		c.Assert(lm.BinLogPos, Equals, uint32(1234))
 		filename := filepath.Join(lm.baseDir, lm.currentUUID, utils.MetaFilename)
 		lm2 := &LocalMeta{}
-		_, err := toml.DecodeFile(filename, lm2)
-		c.Assert(err, IsNil)
+		_, err2 := toml.DecodeFile(filename, lm2)
+		c.Assert(err2, IsNil)
 		c.Assert(lm2.BinLogName, Equals, "mysql-bin.666888")
 		c.Assert(lm2.BinLogPos, Equals, uint32(1234))
 	}
 	{
 		lm := r.meta.(*LocalMeta)
-		backupUuid := lm.currentUUID
+		backupUUID := lm.currentUUID
 		lm.currentUUID = "not exist"
 		_, err = r.handleEvents(ctx, reader2, transformer2, writer2)
 		c.Assert(os.IsNotExist(errors.Cause(err)), Equals, true)
-		lm.currentUUID = backupUuid
+		lm.currentUUID = backupUUID
 	}
 
 	// reader return valid event

@@ -565,8 +565,8 @@ func (r *Relay) handleEvents(
 			// when switch from A to B then back to A, meta's been assigned to minCheckpoint, since it's taken as a new server.
 			// and meta file is not created when relay resumed.
 			firstEvent = false
-			if err := r.saveAndFlushMeta(lastPos, lastGTID); err != nil {
-				return 0, err
+			if err2 := r.saveAndFlushMeta(lastPos, lastGTID); err2 != nil {
+				return 0, err2
 			}
 		}
 
@@ -640,10 +640,7 @@ func (r *Relay) saveAndFlushMeta(lastPos mysql.Position, lastGTID gtid.Set) erro
 	if err := r.SaveMeta(lastPos, lastGTID); err != nil {
 		return terror.Annotatef(err, "save position %s, GTID sets %v into meta", lastPos, lastGTID)
 	}
-	if err := r.FlushMeta(); err != nil {
-		return err
-	}
-	return nil
+	return r.FlushMeta()
 }
 
 // tryUpdateActiveRelayLog tries to update current active relay log file.
