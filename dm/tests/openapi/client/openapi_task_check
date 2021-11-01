@@ -4,7 +4,6 @@ import requests
 
 NO_SHARD_TASK_NAME = "test-no-shard"
 SHARD_TASK_NAME = "test-shard"
-ILLEGAL_CHAR_TASK_NAME='t-Ë!s`t'
 SOURCE1_NAME = "mysql-01"
 SOURCE2_NAME = "mysql-02"
 
