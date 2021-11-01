@@ -731,7 +731,7 @@ func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTabl
 		return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
 	}
 
-	createSQL, err := utils.GetTableCreateSql(tctx.Ctx, s.ddlDBConn.BaseConn.DBConn, targetTable.String())
+	createSQL, err := utils.GetTableCreateSQL(tctx.Ctx, s.ddlDBConn.BaseConn.DBConn, targetTable.String())
 	if err != nil {
 		return terror.ErrSchemaTrackerCannotFetchDownstreamTable.Delegate(err, targetTable, sourceTable)
 	}

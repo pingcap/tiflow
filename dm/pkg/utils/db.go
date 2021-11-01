@@ -621,8 +621,8 @@ func GetSQLModeStrBySQLMode(sqlMode tmysql.SQLMode) string {
 	return strings.Join(sqlModeStr, ",")
 }
 
-// GetTableCreateSql gets table create sql by 'show create table schema.table'
-func GetTableCreateSql(ctx context.Context, conn *sql.Conn, tableID string) (sql string, err error) {
+// GetTableCreateSQL gets table create sql by 'show create table schema.table'.
+func GetTableCreateSQL(ctx context.Context, conn *sql.Conn, tableID string) (sql string, err error) {
 	querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tableID)
 	var table, createStr string
 	row := conn.QueryRowContext(ctx, querySQL)
