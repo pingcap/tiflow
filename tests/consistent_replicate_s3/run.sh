@@ -48,7 +48,7 @@ function check_resolved_ts() {
 	changefeedid=$1
 	check_tso=$2
 	read_dir=$3
-	rts=$(cdc redo meta --storage=s3 --s3-uri="s3://logbucket/test-changefeed?endpoint=http://127.0.0.1:24927/" --dir="$read_dir" | grep -oE "resolved-ts:[0-9]+" | awk -F: '{print $2}')
+	rts=$(cdc redo meta --storage="s3://logbucket/test-changefeed?endpoint=http://127.0.0.1:24927/" --tmp-dir="$read_dir" | grep -oE "resolved-ts:[0-9]+" | awk -F: '{print $2}')
 	if [[ "$rts" -gt "$check_tso" ]]; then
 		return
 	fi
@@ -106,8 +106,8 @@ function run() {
 	export GO_FAILPOINTS=''
 	export AWS_ACCESS_KEY_ID=$MINIO_ACCESS_KEY
 	export AWS_SECRET_ACCESS_KEY=$MINIO_SECRET_KEY
-	cdc redo apply --dir="$WORK_DIR/reod/apply" --storage="s3" \
-		--s3-uri="s3://logbucket/test-changefeed?endpoint=http://127.0.0.1:24927/" \
+	cdc redo apply --tmp-dir="$WORK_DIR/reod/apply" \
+		--storage="s3://logbucket/test-changefeed?endpoint=http://127.0.0.1:24927/" \
 		--sink-uri="mysql://normal:123456@127.0.0.1:3306/"
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 }
