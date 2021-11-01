@@ -489,19 +489,19 @@ func getDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *downstream
 		if !idx.Primary && !idx.Unique {
 			continue
 		}
-		indexRedict := redirectIndexKeys(idx, originTi)
-		if indexRedict == nil {
+		indexRedirect := redirectIndexKeys(idx, originTi)
+		if indexRedirect == nil {
 			continue
 		}
 		if idx.Primary {
-			indexCache = indexRedict
+			indexCache = indexRedirect
 			hasPk = true
 		} else if idx.Unique {
 			// second check not null unique key
 			if !hasPk && isSpecifiedIndexColumn(idx, fn) {
-				indexCache = indexRedict
+				indexCache = indexRedirect
 			} else {
-				availableUKCache = append(availableUKCache, indexRedict)
+				availableUKCache = append(availableUKCache, indexRedirect)
 			}
 		}
 	}
@@ -530,26 +530,25 @@ func redirectIndexKeys(index *model.IndexInfo, originTi *model.TableInfo) *model
 
 	columns := make([]*model.IndexColumn, 0, len(index.Columns))
 	for _, key := range index.Columns {
-		if originColumn := model.FindColumnInfo(originTi.Columns, key.Name.L); originColumn != nil {
-			column := &model.IndexColumn{
-				Name:   key.Name,
-				Offset: originColumn.Offset,
-				Length: key.Length,
-			}
-			columns = append(columns, column)
+		originColumn := model.FindColumnInfo(originTi.Columns, key.Name.L)
+		if originColumn == nil {
+			return nil
 		}
-	}
-	if len(columns) == len(index.Columns) {
-		return &model.IndexInfo{
-			Table:   index.Table,
-			Unique:  index.Unique,
-			Primary: index.Primary,
-			State:   index.State,
-			Tp:      index.Tp,
-			Columns: columns,
+		column := &model.IndexColumn{
+			Name:   key.Name,
+			Offset: originColumn.Offset,
+			Length: key.Length,
 		}
+		columns = append(columns, column)
 	}
-	return nil
+	return &model.IndexInfo{
+		Table:   index.Table,
+		Unique:  index.Unique,
+		Primary: index.Primary,
+		State:   index.State,
+		Tp:      index.Tp,
+		Columns: columns,
+	}
 }
 
 // handlePkExCase is handle pk exceptional case.
