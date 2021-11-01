@@ -16,18 +16,8 @@ package loader
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"sync"
-
-	"github.com/docker/go-units"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb/br/pkg/lightning"
-	"github.com/pingcap/tidb/br/pkg/lightning/common"
-	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
-	"github.com/pingcap/tidb/parser/mysql"
-	"go.etcd.io/etcd/clientv3"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/dm/pb"
@@ -37,6 +27,18 @@ import (
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/br/pkg/lightning"
+	"github.com/pingcap/tidb/br/pkg/lightning/common"
+	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	"github.com/pingcap/tidb/parser/mysql"
+
+	"github.com/docker/go-units"
+	"go.etcd.io/etcd/clientv3"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 const (
@@ -118,7 +120,39 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		err = nil
 	})
 	l.checkPoint = checkpoint
-	l.toDB, l.toDBConns, err = createConns(tctx, l.cfg, 1)
+	toCfg, err := l.cfg.Clone()
+	if err != nil {
+		return err
+	}
+	if toCfg.To.Session == nil {
+		toCfg.To.Session = make(map[string]string)
+	}
+	toCfg.To.Session["time_zone"] = "+00:00"
+	l.toDB, l.toDBConns, err = createConns(tctx, toCfg, 1)
+	return err
+}
+
+func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) error {
+	l.logger.Info("start runLightning")
+	l.Lock()
+	taskCtx, cancel := context.WithCancel(ctx)
+	l.cancel = cancel
+	l.Unlock()
+	l.logger.Info("start RunOnce")
+	err := l.core.RunOnce(taskCtx, cfg, nil)
+	l.logger.Info("end RunOnce")
+	failpoint.Inject("LightningLoadDataSlowDown", nil)
+	failpoint.Inject("LightningLoadDataSlowDownByTask", func(val failpoint.Value) {
+		tasks := val.(string)
+		taskNames := strings.Split(tasks, ",")
+		for _, taskName := range taskNames {
+			if l.cfg.Name == taskName {
+				l.logger.Info("inject failpoint LightningLoadDataSlowDownByTask", zap.String("task", taskName))
+				<-taskCtx.Done()
+			}
+		}
+	})
+	l.logger.Info("end runLightning")
 	return err
 }
 
@@ -150,7 +184,9 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		}
 		cfg.Routes = l.cfg.RouteRules
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
-		cfg.Checkpoint.Schema = config.TiDBLightningCheckpointPrefix + dbutil.ColumnName(l.workerName)
+		cfg.Checkpoint.Schema = config.TiDBLightningCheckpointPrefix + dbutil.TableName(l.workerName, l.cfg.Name)
+		// cfg.Checkpoint.Schema = config.TiDBLightningCheckpointPrefix + dbutil.ColumnName(l.workerName)
+		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 		param := common.MySQLConnectParam{
 			Host:             cfg.TiDB.Host,
 			Port:             cfg.TiDB.Port,
@@ -161,25 +197,34 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			TLS:              cfg.TiDB.TLS,
 		}
 		cfg.Checkpoint.DSN = param.ToDSN()
+		cfg.TiDB.Vars = make(map[string]string)
+		if l.cfg.To.Session != nil {
+			for k, v := range l.cfg.To.Session {
+				cfg.TiDB.Vars[k] = v
+			}
+		}
+		cfg.TiDB.Vars["time_zone"] = "+00:00"
+
 		cfg.TiDB.StrSQLMode = l.cfg.LoaderConfig.SQLMode
 		if err = cfg.Adjust(ctx); err != nil {
 			return err
 		}
-		l.Lock()
-		taskCtx, cancel := context.WithCancel(ctx)
-		l.cancel = cancel
-		l.Unlock()
-		err = l.core.RunOnce(taskCtx, cfg, nil)
+		err = l.runLightning(ctx, cfg)
+		if err == nil {
+			err = lightning.CheckpointRemove(ctx, cfg, "all")
+		}
 		if err == nil {
 			l.finish.Store(true)
 			offsetSQL := l.checkPoint.GenSQL(lightningCheckpointFile, 1)
 			err = l.toDBConns[0].executeSQL(tctx, []string{offsetSQL})
 			_ = l.checkPoint.UpdateOffset(lightningCheckpointFile, 1)
+		} else {
+			l.logger.Error("failed to runlightning", zap.Error(err))
 		}
 	} else {
 		l.finish.Store(true)
 	}
-	if l.cfg.Mode == config.ModeFull {
+	if err == nil && l.finish.Load() && l.cfg.Mode == config.ModeFull {
 		if err = delLoadTask(l.cli, l.cfg, l.workerName); err != nil {
 			return err
 		}
@@ -212,6 +257,7 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 	}
 
 	if err := l.restore(ctx); err != nil && !utils.IsContextCanceledError(err) {
+		l.logger.Error("process error", zap.Error(err))
 		errs = append(errs, unit.NewProcessError(err))
 	}
 	isCanceled := false
@@ -220,7 +266,7 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		isCanceled = true
 	default:
 	}
-	l.logger.Info("lightning load end")
+	l.logger.Info("lightning load end", zap.Bool("IsCanceled", isCanceled))
 	pr <- pb.ProcessResult{
 		IsCanceled: isCanceled,
 		Errors:     errs,
