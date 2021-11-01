@@ -50,3 +50,4 @@ syncers:
     batch: 10
     queue-size: 100
     compact: true
+    multiple-rows: true

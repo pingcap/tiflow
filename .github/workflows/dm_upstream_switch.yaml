@@ -4,8 +4,21 @@ on:
   push:
     branches:
       - master
-  schedule:
-    - cron: "3 22 * * *" # run at minute 06:03 UTC+8
+    paths:
+      - "dm/**"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - ".github/**"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "dm/**"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - ".github/**"
 
 jobs:
   upstream-database-switch:

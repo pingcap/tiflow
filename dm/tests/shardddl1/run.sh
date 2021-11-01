@@ -606,6 +606,40 @@ function DM_COMPACT() {
 	run_case COMPACT "single-source-no-sharding" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique, c int);\"" \
 		"clean_table" ""
+}
+
+function DM_MULTIPLE_ROWS_CASE() {
+	END=100
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values($i,$i),($((i + 1)),$((i + 1))),($((i + 2)),$((i + 2))),($((i + 3)),$((i + 3))),($((i + 4)),$((i + 4))),\
+		($((i + 5)),$((i + 5))),($((i + 6)),$((i + 6))),($((i + 7)),$((i + 7))),($((i + 8)),$((i + 8))),($((i + 9)),$((i + 9)))"
+	done
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "update ${shardddl1}.${tb1} set c=1 where a>=$i and a<$((i + 10))"
+	done
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "update ${shardddl1}.${tb1} set b = 0 - b where a>=$i and a<$((i + 10))"
+	done
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "update ${shardddl1}.${tb1} set a = 0 - a where a>=$i and a<$((i + 10))"
+	done
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "delete from ${shardddl1}.${tb1} where a<=$((0 - i)) and a>$((-10 - i))"
+	done
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
+	insertMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '"original op"=insert' | wc -l)
+	updateMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '"original op"=update' | wc -l)
+	deleteMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '"original op"=delete' | wc -l)
+	if [[ "$insertMergeCnt" -le 5 || "$updateMergeCnt" -le 5 || "$deleteMergeCnt" -le 5 ]]; then
+		echo "merge dmls less than 5, insertMergeCnt: $insertMergeCnt, updateMergeCnt: $updateMergeCnt, deleteMergeCnt: $deleteMergeCnt"
+		exit 1
+	fi
+}
+
+function DM_MULTIPLE_ROWS() {
+	run_case MULTIPLE_ROWS "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique, c int);\"" \
+		"clean_table" ""
 
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER1_PORT 20
@@ -639,6 +673,7 @@ function run() {
 	init_database
 
 	DM_COMPACT
+	DM_MULTIPLE_ROWS
 	DM_CAUSALITY
 	DM_UpdateBARule
 	DM_RENAME_TABLE
