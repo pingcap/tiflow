@@ -63,12 +63,9 @@ max-log-size = 64
 # 刷新或上传 redo log 至 S3 的间隔，单位毫秒
 # interval to flush or upload redo log, default is 1000ms, unit is microseconds
 flush-interval = 1000
-# 存储 redo log 的形式，包括 local（本地文件），S3（上传至S3），blackhole（测试用）
+# 存储 redo log 的形式，包括 local（NFS 目录），S3（上传至S3），blackhole（测试用）
 # storage type for redo log
 # local: local file system
 # s3: s3 storage
 # blackhole: used for test only
-storage = "local"
-# S3 地址，示例：s3-uri="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-# S3 address, sample: s3-uri="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-s3-uri = ""
+storage = "s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"

@@ -151,39 +151,39 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		logBuffer:   make(chan cacheRows, logBufferChanSize),
 	}
 
-	changeFeedID := util.ChangefeedIDFromCtx(ctx)
-	var redoDir string
 	switch m.storageType {
 	case consistentStorageBlackhole:
 		m.writer = writer.NewBlackHoleWriter()
-	case consistentStorageLocal:
-		// When using local as backend, the uri path should be an NFS path.
-		redoDir = uri.Path
-	case consistentStorageS3:
+	case consistentStorageLocal, consistentStorageS3:
 		globalConf := config.GetGlobalServerConfig()
-		// When using S3 as backend, the local redo dir is a temporary dir.
-		redoDir = filepath.Join(globalConf.DataDir, config.DefaultRedoDir, changeFeedID)
+		changeFeedID := util.ChangefeedIDFromCtx(ctx)
+		// We use a temporary dir to storage redo logs before flushing to other backends, such as S3
+		redoDir := filepath.Join(globalConf.DataDir, config.DefaultRedoDir, changeFeedID)
+		if m.storageType == consistentStorageLocal {
+			// When using local as backend, the uri path should be an NFS path.
+			redoDir = uri.Path
+		}
+
+		writerCfg := &writer.LogWriterConfig{
+			Dir:               redoDir,
+			CaptureID:         util.CaptureAddrFromCtx(ctx),
+			ChangeFeedID:      changeFeedID,
+			CreateTime:        time.Now(),
+			MaxLogSize:        cfg.MaxLogSize,
+			FlushIntervalInMs: cfg.FlushIntervalInMs,
+			S3Storage:         m.storageType == consistentStorageS3,
+		}
+		if writerCfg.S3Storage {
+			writerCfg.S3URI = *uri
+		}
+		writer, err := writer.NewLogWriter(ctx, writerCfg)
+		if err != nil {
+			return nil, err
+		}
+		m.writer = writer
 	default:
 		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storageType)
 	}
-
-	writerCfg := &writer.LogWriterConfig{
-		Dir:               redoDir,
-		CaptureID:         util.CaptureAddrFromCtx(ctx),
-		ChangeFeedID:      changeFeedID,
-		CreateTime:        time.Now(),
-		MaxLogSize:        cfg.MaxLogSize,
-		FlushIntervalInMs: cfg.FlushIntervalInMs,
-		S3Storage:         m.storageType == consistentStorageS3,
-	}
-	if writerCfg.S3Storage {
-		writerCfg.S3URI = *uri
-	}
-	writer, err := writer.NewLogWriter(ctx, writerCfg)
-	if err != nil {
-		return nil, err
-	}
-	m.writer = writer
 
 	if opts.EnableBgRunner {
 		go m.bgUpdateResolvedTs(ctx, opts.ErrCh)
