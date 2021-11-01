@@ -29,6 +29,7 @@ import (
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/time/rate"
 )
 
 // EtcdWorker handles all interactions with Etcd
@@ -120,7 +121,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		sessionDone = make(chan struct{})
 	}
 	lastReceivedEventTime := time.Now()
-
+	// limit the frequency of EtcdWorker ticks
+	rl := rate.NewLimiter(10, 30)
 	for {
 		var response clientv3.WatchResponse
 		select {
@@ -137,7 +139,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			}
 		case response = <-watchCh:
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
-
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
 			}
@@ -183,6 +184,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			// We are safe to update the ReactorState only if there is no pending patch.
 			if err := worker.applyUpdates(); err != nil {
 				return errors.Trace(err)
+			}
+			// if !rl.Allow(), skip this Tick to avoid etcd worker tick too frequency
+			if !rl.Allow() {
+				continue
 			}
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
