@@ -575,9 +575,7 @@ func (b *avroEventBatchEncoderBuilder) newSchemaManagers(ctx context.Context) er
 func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	if !b.initialized.Load() {
 		if err := b.newSchemaManagers(ctx); err != nil {
-			return nil, errors.Annotate(
-				cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
-				"Could not create Avro schema managers")
+			return nil, cerror.WrapError(cerror.ErrPrepareAvroFailed, err)
 		}
 		b.initialized.Store(true)
 	}
