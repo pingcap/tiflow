@@ -31,12 +31,20 @@ type TableRecord struct {
 	Status    TableStatus
 }
 
+func (r *TableRecord) Clone() *TableRecord {
+	return &TableRecord{
+		TableID:   r.TableID,
+		CaptureID: r.CaptureID,
+		Status:    r.Status,
+	}
+}
+
 // TableStatus is a type representing the table's replication status.
 // The meaning of its value can be defined by the user of TableSet.
 type TableStatus int32
 
 const (
-	AddingTable = TableStatus(iota)
+	AddingTable = TableStatus(iota) + 1
 	RemovingTable
 	RunningTable
 )
@@ -56,7 +64,7 @@ func (s *TableSet) AddTableRecord(record *TableRecord) (successful bool) {
 		// duplicate tableID
 		return false
 	}
-	s.tableIDMap[record.TableID] = record
+	s.tableIDMap[record.TableID] = record.Clone()
 
 	captureIndexEntry := s.captureIndex[record.CaptureID]
 	if captureIndexEntry == nil {
@@ -64,14 +72,17 @@ func (s *TableSet) AddTableRecord(record *TableRecord) (successful bool) {
 		s.captureIndex[record.CaptureID] = captureIndexEntry
 	}
 
-	captureIndexEntry[record.TableID] = record
+	captureIndexEntry[record.TableID] = record.Clone()
 	return true
 }
 
 // GetTableRecord tries to obtain a record with the specified tableID.
 func (s *TableSet) GetTableRecord(tableID model.TableID) (*TableRecord, bool) {
-	ret, ok := s.tableIDMap[tableID]
-	return ret, ok
+	rec, ok := s.tableIDMap[tableID]
+	if ok {
+		return rec.Clone(), ok
+	}
+	return nil, false
 }
 
 // RemoveTableRecord removes the record with tableID. Returns false
@@ -124,12 +135,24 @@ func (s *TableSet) GetDistinctCaptures() []model.CaptureID {
 
 // GetAllTables returns all stored information on all tables.
 func (s *TableSet) GetAllTables() map[model.TableID]*TableRecord {
-	return s.tableIDMap
+	ret := make(map[model.TableID]*TableRecord)
+	for tableID, record := range s.tableIDMap {
+		ret[tableID] = record.Clone()
+	}
+	return ret
 }
 
 // GetAllTablesGroupedByCaptures returns all stored information grouped by associated CaptureID.
 func (s *TableSet) GetAllTablesGroupedByCaptures() map[model.CaptureID]map[model.TableID]*TableRecord {
-	return s.captureIndex
+	ret := make(map[model.CaptureID]map[model.TableID]*TableRecord)
+	for captureID, tableIDMap := range s.captureIndex {
+		tableIDMapCloned := make(map[model.TableID]*TableRecord)
+		for tableID, record := range tableIDMap {
+			tableIDMapCloned[tableID] = record.Clone()
+		}
+		ret[captureID] = tableIDMapCloned
+	}
+	return ret
 }
 
 // CountTableByStatus counts the number of tables with the given status.
