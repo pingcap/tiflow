@@ -16,14 +16,12 @@ package relay
 import (
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
 
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 var _ = Suite(&testMetaSuite{})
@@ -235,25 +233,4 @@ func (r *testMetaSuite) TestLocalMeta(c *C) {
 
 	currentDir := lm.Dir()
 	c.Assert(strings.HasSuffix(currentDir, cs.uuidWithSuffix), IsTrue)
-}
-
-func (r *testMetaSuite) TestFlushIntermediateMeta(c *C) {
-	dir := c.MkDir()
-	lm := NewLocalMeta("mysql", dir).(*LocalMeta)
-	lm.currentUUID = "sid.000001"
-	binlogDir := filepath.Join(lm.baseDir, lm.currentUUID)
-	_ = os.Mkdir(binlogDir, 0o744)
-
-	// not flushed
-	c.Assert(lm.Flush(), IsNil)
-	filename := filepath.Join(binlogDir, utils.MetaFilename)
-	_, err := os.Stat(filename)
-	c.Assert(err, NotNil)
-	c.Assert(os.IsNotExist(err), IsTrue)
-
-	// flushed
-	lm.BinLogName = "mysql-bin.000001"
-	c.Assert(lm.Flush(), IsNil)
-	_, err = os.Stat(filename)
-	c.Assert(err, IsNil)
 }
