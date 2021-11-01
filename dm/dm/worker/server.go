@@ -684,6 +684,8 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 				zap.Error(err2))
 			return err2
 		}
+	} else {
+		w.DisableRelay()
 	}
 
 	if err2 := w.EnableHandleSubtasks(); err2 != nil {
