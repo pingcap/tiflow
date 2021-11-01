@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
 	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
-	bw "github.com/pingcap/ticdc/dm/pkg/binlog/writer"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
@@ -102,7 +101,7 @@ type FileWriter struct {
 
 	// underlying binlog writer,
 	// it will be created/started until needed.
-	out *bw.FileWriter
+	out *BinlogWriter
 
 	// the parser often used to verify events's statement through parsing them.
 	parser *parser.Parser
@@ -206,7 +205,7 @@ func (w *FileWriter) offset() int64 {
 	if w.out == nil {
 		return 0
 	}
-	status := w.out.Status().(*bw.FileWriterStatus)
+	status := w.out.Status().(*BinlogWriterStatus)
 	return status.Offset
 }
 
@@ -232,15 +231,15 @@ func (w *FileWriter) handleFormatDescriptionEvent(ev *replication.BinlogEvent) (
 
 	// open/create a new binlog file
 	filename := filepath.Join(w.cfg.RelayDir, w.filename.Load())
-	outCfg := &bw.FileWriterConfig{
+	outCfg := &BinlogWriterConfig{
 		Filename: filename,
 	}
-	out := bw.NewFileWriter(w.logger, outCfg)
+	out := NewBinlogWriter(w.logger, outCfg)
 	err := out.Start()
 	if err != nil {
 		return WResult{}, terror.Annotatef(err, "start underlying binlog writer for %s", filename)
 	}
-	w.out = out.(*bw.FileWriter)
+	w.out = out
 	w.logger.Info("open underlying binlog writer", zap.Reflect("status", w.out.Status()))
 
 	// write the binlog file header if not exists
@@ -386,7 +385,7 @@ func (w *FileWriter) handlePotentialHoleOrDuplicate(ev *replication.BinlogEvent)
 func (w *FileWriter) handleFileHoleExist(ev *replication.BinlogEvent) (bool, error) {
 	// 1. detect whether a hole exists
 	evStartPos := int64(ev.Header.LogPos - ev.Header.EventSize)
-	outFs, ok := w.out.Status().(*bw.FileWriterStatus)
+	outFs, ok := w.out.Status().(*BinlogWriterStatus)
 	if !ok {
 		return false, terror.ErrRelayWriterStatusNotValid.Generate(w.out.Status())
 	}

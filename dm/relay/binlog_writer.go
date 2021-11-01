@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package writer
+package relay
 
 import (
 	"encoding/json"
@@ -27,9 +27,9 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
-// FileWriter is a binlog event writer which writes binlog events to a file.
-type FileWriter struct {
-	cfg *FileWriterConfig
+// BinlogWriter is a binlog event writer which writes binlog events to a file.
+type BinlogWriter struct {
+	cfg *BinlogWriterConfig
 
 	mu     sync.RWMutex
 	stage  common.Stage
@@ -40,15 +40,15 @@ type FileWriter struct {
 	logger log.Logger
 }
 
-// FileWriterStatus represents the status of a FileWriter.
-type FileWriterStatus struct {
+// BinlogWriterStatus represents the status of a BinlogWriter.
+type BinlogWriterStatus struct {
 	Stage    string `json:"stage"`
 	Filename string `json:"filename"`
 	Offset   int64  `json:"offset"`
 }
 
 // String implements Stringer.String.
-func (s *FileWriterStatus) String() string {
+func (s *BinlogWriterStatus) String() string {
 	data, err := json.Marshal(s)
 	if err != nil {
 		// do not use %v/%+v for `s`, it will call this `String` recursively
@@ -57,21 +57,21 @@ func (s *FileWriterStatus) String() string {
 	return string(data)
 }
 
-// FileWriterConfig is the configuration used by a FileWriter.
-type FileWriterConfig struct {
+// BinlogWriterConfig is the configuration used by a BinlogWriter.
+type BinlogWriterConfig struct {
 	Filename string
 }
 
-// NewFileWriter creates a FileWriter instance.
-func NewFileWriter(logger log.Logger, cfg *FileWriterConfig) Writer {
-	return &FileWriter{
+// NewBinlogWriter creates a BinlogWriter instance.
+func NewBinlogWriter(logger log.Logger, cfg *BinlogWriterConfig) *BinlogWriter {
+	return &BinlogWriter{
 		cfg:    cfg,
 		logger: logger,
 	}
 }
 
 // Start implements Writer.Start.
-func (w *FileWriter) Start() error {
+func (w *BinlogWriter) Start() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -99,7 +99,7 @@ func (w *FileWriter) Start() error {
 }
 
 // Close implements Writer.Close.
-func (w *FileWriter) Close() error {
+func (w *BinlogWriter) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -122,7 +122,7 @@ func (w *FileWriter) Close() error {
 }
 
 // Write implements Writer.Write.
-func (w *FileWriter) Write(rawData []byte) error {
+func (w *BinlogWriter) Write(rawData []byte) error {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -137,7 +137,7 @@ func (w *FileWriter) Write(rawData []byte) error {
 }
 
 // Flush implements Writer.Flush.
-func (w *FileWriter) Flush() error {
+func (w *BinlogWriter) Flush() error {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -149,12 +149,12 @@ func (w *FileWriter) Flush() error {
 }
 
 // Status implements Writer.Status.
-func (w *FileWriter) Status() interface{} {
+func (w *BinlogWriter) Status() interface{} {
 	w.mu.RLock()
 	stage := w.stage
 	w.mu.RUnlock()
 
-	return &FileWriterStatus{
+	return &BinlogWriterStatus{
 		Stage:    stage.String(),
 		Filename: w.cfg.Filename,
 		Offset:   w.offset.Load(),
@@ -162,7 +162,7 @@ func (w *FileWriter) Status() interface{} {
 }
 
 // flush flushes the buffered data to the disk.
-func (w *FileWriter) flush() error {
+func (w *BinlogWriter) flush() error {
 	if w.file == nil {
 		return terror.ErrBinlogWriterFileNotOpened.Generate(w.cfg.Filename)
 	}
