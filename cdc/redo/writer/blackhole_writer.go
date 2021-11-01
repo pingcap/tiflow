@@ -31,7 +31,6 @@ type blackHoleWriter struct {
 	checkpointTs uint64
 }
 
-// DeleteAllLogs ...
 func (bs *blackHoleWriter) DeleteAllLogs(ctx context.Context) error {
 	return nil
 }
