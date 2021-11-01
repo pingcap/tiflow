@@ -463,7 +463,7 @@ func (s *trackerSuite) TestAllSchemas(c *C) {
 	c.Assert(tables, DeepEquals, []string{"b", "c"})
 	// check schema not exists
 	notExistSchemaName := "testdb_not_found"
-	tables, err = tracker.ListSchemaTables(notExistSchemaName)
+	_, err = tracker.ListSchemaTables(notExistSchemaName)
 	c.Assert(terror.ErrSchemaTrackerUnSchemaNotExist.Equal(err), IsTrue)
 
 	// check that all schemas and tables are present.
