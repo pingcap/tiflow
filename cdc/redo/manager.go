@@ -140,7 +140,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		cfg = &config.ConsistentConfig{}
 		cfg.Storage = "local:///tmp/tidb_cdc_test/it/nfs/redo"
 		cfg.Level = string(consistentLevelEventual)
-		//return &ManagerImpl{enabled: false}, nil
+		// return &ManagerImpl{enabled: false}, nil
 	}
 	uri, err := storage.ParseRawURL(cfg.Storage)
 	if err != nil {
