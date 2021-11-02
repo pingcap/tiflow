@@ -50,24 +50,66 @@ type MessageServerConfig struct {
 	WorkerPoolSize int
 }
 
+// cdcPeer is used to store information on one connected client.
+type cdcPeer struct {
+	PeerID string // unique ID of the client
+	Epoch  int64  // epoch is increased when the client retries.
+
+	// necessary information on the stream.
+	sender *streamHandle
+
+	metricsAckCount prometheus.Counter
+}
+
+func newCDCPeer(senderID NodeID, epoch int64, sender *streamHandle) *cdcPeer {
+	return &cdcPeer{
+		PeerID: senderID,
+		Epoch:  epoch,
+		sender: sender,
+		metricsAckCount: serverAckCount.With(prometheus.Labels{
+			"to": senderID,
+		}),
+	}
+}
+
+func (p *cdcPeer) abortWithError(ctx context.Context, err error) {
+	if err1 := p.sender.Send(ctx, errorToRPCResponse(err)); err1 != nil {
+		log.Warn("could not send error to peer", zap.Error(err))
+		return
+	}
+	log.Debug("send error to peer", zap.Error(err))
+}
+
 // MessageServer is an implementation of the gRPC server for the peer-to-peer system
 type MessageServer struct {
 	serverID NodeID
 
-	handlers map[string]*handler
+	// Each topic has at most one registered event handle,
+	// registered with a WorkerPool.
+	handlers map[Topic]workerpool.EventHandle
 
 	peerLock sync.RWMutex
-	peers    map[string]*cdcPeer
+	peers    map[string]*cdcPeer // all currently connected clients
 
+	// messages for topics with NO registered handle.
+	// This can happen when the server is slow.
+	// The upper limit of pending messages is restricted by
+	// MaxTopicPendingCount in MessageServerConfig.
 	pendingMessages map[topicSenderPair][]pendingMessageEntry
 
+	// We store the last processed message's Sequence so that
+	// we can periodically send ACK messages.
 	acksMapLock sync.RWMutex
 	acksMap     map[NodeID]map[Topic]Seq
 
+	// taskQueue is used to store internal tasks MessageServer
+	// needs to execute serially.
 	taskQueue chan interface{}
-	pool      workerpool.WorkerPool
 
-	isRunning int32
+	// The WorkerPool instance used to execute message handlers.
+	pool workerpool.WorkerPool
+
+	isRunning int32 // atomic
 	closeCh   chan struct{}
 
 	config *MessageServerConfig // read only
@@ -79,13 +121,13 @@ type taskOnMessageBatch struct {
 }
 
 type taskOnRegisterPeer struct {
-	sender   *streamHandle
-	clientIP string
+	sender     *streamHandle
+	clientAddr string // for logging
 }
 
 type taskOnRegisterHandler struct {
 	topic   string
-	handler *handler
+	handler workerpool.EventHandle
 	done    chan struct{}
 }
 
@@ -104,7 +146,7 @@ type taskDebugDelay struct {
 func NewMessageServer(serverID NodeID, config *MessageServerConfig) *MessageServer {
 	return &MessageServer{
 		serverID:        serverID,
-		handlers:        make(map[string]*handler),
+		handlers:        make(map[string]workerpool.EventHandle),
 		peers:           make(map[string]*cdcPeer),
 		pendingMessages: make(map[topicSenderPair][]pendingMessageEntry),
 		acksMap:         make(map[NodeID]map[Topic]Seq),
@@ -167,7 +209,7 @@ func (m *MessageServer) run(ctx context.Context) error {
 				if handler, ok := m.handlers[task.topic]; ok {
 					delete(m.handlers, task.topic)
 					go func() {
-						err := handler.poolHandle.GracefulUnregister(ctx, time.Second*5)
+						err := handler.GracefulUnregister(ctx, time.Second*5)
 						if err != nil {
 							log.L().DPanic("failed to gracefully unregister handle",
 								zap.Error(err))
@@ -182,7 +224,7 @@ func (m *MessageServer) run(ctx context.Context) error {
 				log.Debug("taskOnRegisterPeer",
 					zap.String("sender", task.sender.streamMeta.SenderId),
 					zap.Int64("epoch", task.sender.streamMeta.Epoch))
-				if err := m.registerPeer(ctx, task.sender, task.clientIP); err != nil {
+				if err := m.registerPeer(ctx, task.sender, task.clientAddr); err != nil {
 					if cerror.ErrPeerMessageStaleConnection.Equal(err) || cerror.ErrPeerMessageDuplicateConnection.Equal(err) {
 						// These two errors should not affect other peers
 						if err1 := task.sender.Send(ctx, errorToRPCResponse(err)); err1 != nil {
@@ -334,18 +376,17 @@ func (m *MessageServer) AddHandler(
 
 		return nil
 	}).OnExit(func(err error) {
-		log.Debug("error caught by workerpool", zap.Error(err))
+		log.Warn("topic handler returned error", zap.Error(err))
 		_ = m.scheduleTask(ctx, taskOnDeregisterHandler{
 			topic: topic,
 		})
 	})
 
-	handler := wrapHandler(poolHandle)
 	doneCh := make(chan struct{})
 
 	if err := m.scheduleTask(ctx, taskOnRegisterHandler{
 		topic:   topic,
-		handler: handler,
+		handler: poolHandle,
 		done:    doneCh,
 	}); err != nil {
 		return nil, nil, errors.Trace(err)
@@ -388,11 +429,13 @@ func (m *MessageServer) RemoveHandler(ctx context.Context, topic string) (chan s
 	return doneCh, nil
 }
 
-func (m *MessageServer) registerHandler(ctx context.Context, topic string, handler *handler, doneCh chan struct{}) error {
+func (m *MessageServer) registerHandler(ctx context.Context, topic string, handler workerpool.EventHandle, doneCh chan struct{}) error {
 	defer close(doneCh)
 
 	if _, ok := m.handlers[topic]; ok {
-		// allow replacing the handler here would result in behaviors difficult to define
+		// allow replacing the handler here would result in behaviors difficult to define.
+		// Continuing the program when there is a risk of duplicate handlers will likely
+		// result in undefined behaviors, so we panic here.
 		log.Panic("duplicate handlers",
 			zap.String("topic", topic))
 	}
@@ -572,8 +615,8 @@ func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, send
 	// Blocking here will cause grpc-go to back propagate the pressure
 	// to the client, which is what we want.
 	if err := m.scheduleTaskBlocking(stream.Context(), taskOnRegisterPeer{
-		sender:   sender,
-		clientIP: clientIP,
+		sender:     sender,
+		clientAddr: clientIP,
 	}); err != nil {
 		return errors.Trace(err)
 	}
@@ -646,7 +689,7 @@ func (m *MessageServer) handleMessage(ctx context.Context, streamMeta *p2p.Strea
 	}
 
 	// handler is found
-	if err := handler.poolHandle.AddEvent(ctx, poolEventArgs{
+	if err := handler.AddEvent(ctx, poolEventArgs{
 		streamMeta: streamMeta,
 		entry:      entry,
 	}); err != nil {
@@ -703,6 +746,7 @@ func (m *MessageServer) verifyStreamMeta(streamMeta *p2p.StreamMeta) error {
 
 	serverVer := semver.New(version.ReleaseSemver())
 
+	// Only allow clients with the same Major and Minor.
 	if serverVer.Major != clientVer.Major || serverVer.Minor != clientVer.Minor {
 		return cerror.ErrVersionIncompatible.GenWithStackByArgs(version.ReleaseSemver())
 	}
@@ -718,16 +762,6 @@ type topicSenderPair struct {
 type pendingMessageEntry struct {
 	StreamMeta *p2p.StreamMeta
 	Entry      *p2p.MessageEntry
-}
-
-type handler struct {
-	poolHandle workerpool.EventHandle
-}
-
-func wrapHandler(poolHandle workerpool.EventHandle) *handler {
-	return &handler{
-		poolHandle: poolHandle,
-	}
 }
 
 type streamHandle struct {
@@ -777,34 +811,6 @@ func (s *streamHandle) Close() {
 	}
 	s.isClosed = true
 	close(s.sendCh)
-}
-
-type cdcPeer struct {
-	PeerID string
-	Epoch  int64
-
-	sender *streamHandle
-
-	metricsAckCount prometheus.Counter
-}
-
-func newCDCPeer(senderID NodeID, epoch int64, sender *streamHandle) *cdcPeer {
-	return &cdcPeer{
-		PeerID: senderID,
-		Epoch:  epoch,
-		sender: sender,
-		metricsAckCount: serverAckCount.With(prometheus.Labels{
-			"to": senderID,
-		}),
-	}
-}
-
-func (p *cdcPeer) abortWithError(ctx context.Context, err error) {
-	if err1 := p.sender.Send(ctx, errorToRPCResponse(err)); err1 != nil {
-		log.Warn("could not send error to peer", zap.Error(err))
-		return
-	}
-	log.Debug("send error to peer", zap.Error(err))
 }
 
 func errorToRPCResponse(err error) p2p.SendMessageResponse {
