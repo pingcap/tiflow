@@ -26,6 +26,7 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -40,6 +41,7 @@ func init() {
 
 type tableActor struct {
 	cancel    context.CancelFunc
+	wg        *errgroup.Group
 	reportErr func(error)
 
 	mb actor.Mailbox
@@ -73,10 +75,25 @@ var _ TablePipeline = (*tableActor)(nil)
 var _ actor.Actor = (*tableActor)(nil)
 
 func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
+	for i := range msgs {
+		if t.stopped {
+			// No need to handle remaining messages.
+			break
+		}
+
+		switch msgs[i].Tp {
+		case message.TypeStop:
+			t.stop(nil)
+			break
+		case message.TypeTick:
+		}
+
+		// process message for each node
+	}
 	return !t.stopped
 }
 
-func (t *tableActor) start() error {
+func (t *tableActor) start(ctx context.Context) error {
 	if t.started {
 		log.Panic("start an already started table",
 			zap.String("changefeedID", t.changefeedID),
@@ -89,13 +106,18 @@ func (t *tableActor) start() error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
+	t.pullerNode = newPullerNode(t.tableID, t.replicaInfo, t.tableName).(*pullerNode)
+	if err := t.pullerNode.Start(ctx, true, t.wg, t.info, t.vars); err != nil {
+		log.Error("puller fails to start", zap.Error(err))
+		return err
+	}
+
 	log.Info("table actor is started", zap.Int64("tableID", t.tableID))
 	return nil
 }
 
 func (t *tableActor) stop(err error) {
 	if t.stopped {
-		// It's stopped already.
 		return
 	}
 	t.stopped = true
@@ -185,7 +207,7 @@ func (t *tableActor) Cancel() {
 
 // Wait waits for table pipeline destroyed
 func (t *tableActor) Wait() {
-	//todo: wait
+	_ = t.wg.Wait()
 }
 
 // NewTableActor creates a table actor.
@@ -203,9 +225,15 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	vars := cdcCtx.GlobalVars()
 
 	mb := actor.NewMailbox(actor.ID(tableID), defaultOutputChannelSize)
+	// All sub-goroutines should be spawn in the wait group.
+	wg, wgCtx := errgroup.WithContext(cdcCtx)
+	// Cancel should be able to release all sub-goroutines in the actor.
+	ctx, cancel := context.WithCancel(wgCtx)
 	table := &tableActor{
 		reportErr: cdcCtx.Throw,
 		mb:        mb,
+		wg:        wg,
+		cancel:    cancel,
 
 		tableID:       tableID,
 		markTableID:   replicaInfo.MarkTableID,
@@ -223,7 +251,8 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	}
 
 	log.Info("spawn and start table actor", zap.Int64("tableID", tableID))
-	if err := table.start(); err != nil {
+	if err := table.start(ctx); err != nil {
+		table.stop(err)
 		return nil, err
 	}
 	err := defaultSystem.Spawn(mb, table)
