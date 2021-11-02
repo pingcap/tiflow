@@ -198,6 +198,9 @@ function test_shard_task() {
 	# get task status failed
 	openapi_task_check "get_task_status_failed" "not a task name"
 
+	#  get illegal char task_status failed
+	openapi_task_check get_illegal_char_task_status_failed
+
 	# get task status success
 	openapi_task_check "get_task_status_success" "$task_name" 2
 
