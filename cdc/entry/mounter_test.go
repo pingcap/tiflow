@@ -37,23 +37,36 @@ func TestMounterDisableOldValue(t *testing.T) {
 	testCases := []struct {
 		tableName      string
 		createTableDDL string
-		values         [][]interface{}
+		// [] for rows, []infterface{} for columns.
+		values [][]interface{}
+		// [] for table partition if there is any,
+		// []int for approximateBytes of rows.
+		putApproximateBytes [][]int
+		delApproximateBytes [][]int
 	}{{
-		tableName:      "simple",
-		createTableDDL: "create table simple(id int primary key)",
-		values:         [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		tableName:           "simple",
+		createTableDDL:      "create table simple(id int primary key)",
+		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		putApproximateBytes: [][]int{{274, 274, 274, 274, 274}},
+		delApproximateBytes: [][]int{{274, 274, 274, 274, 274}},
 	}, {
-		tableName:      "no_pk",
-		createTableDDL: "create table no_pk(id int not null unique key)",
-		values:         [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		tableName:           "no_pk",
+		createTableDDL:      "create table no_pk(id int not null unique key)",
+		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		putApproximateBytes: [][]int{{273, 273, 273, 273, 273}},
+		delApproximateBytes: [][]int{{217, 217, 217, 217, 217}},
 	}, {
-		tableName:      "many_index",
-		createTableDDL: "create table many_index(id int not null unique key, c1 int unique key, c2 int, INDEX (c2))",
-		values:         [][]interface{}{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}, {4, 4, 4}, {5, 5, 5}},
+		tableName:           "many_index",
+		createTableDDL:      "create table many_index(id int not null unique key, c1 int unique key, c2 int, INDEX (c2))",
+		values:              [][]interface{}{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}, {4, 4, 4}, {5, 5, 5}},
+		putApproximateBytes: [][]int{{422, 422, 422, 422, 422}},
+		delApproximateBytes: [][]int{{254, 254, 254, 254, 254}},
 	}, {
-		tableName:      "default_value",
-		createTableDDL: "create table default_value(id int primary key, c1 int, c2 int not null default 5, c3 varchar(20), c4 varchar(20) not null default '666')",
-		values:         [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		tableName:           "default_value",
+		createTableDDL:      "create table default_value(id int primary key, c1 int, c2 int not null default 5, c3 varchar(20), c4 varchar(20) not null default '666')",
+		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		putApproximateBytes: [][]int{{564, 564, 564, 564, 564}},
+		delApproximateBytes: [][]int{{281, 281, 281, 281, 281}},
 	}, {
 		tableName: "partition_table",
 		createTableDDL: `CREATE TABLE partition_table  (
@@ -78,6 +91,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{18, "aae", "bbf", 21, 14},
 			{15, "afa", "bbc", 11, 12},
 		},
+		putApproximateBytes: [][]int{{559}, {561}, {561}, {561, 561}},
+		delApproximateBytes: [][]int{{227}, {227}, {227}, {227, 227}},
 	}, {
 		tableName: "tp_int",
 		createTableDDL: `create table tp_int
@@ -98,6 +113,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{4, 127, 32767, 8388607, 2147483647, 9223372036854775807},
 			{5, -128, -32768, -8388608, -2147483648, -9223372036854775808},
 		},
+		putApproximateBytes: [][]int{{554, 634, 554, 554, 554}},
+		delApproximateBytes: [][]int{{274, 274, 274, 274, 274}},
 	}, {
 		tableName: "tp_text",
 		createTableDDL: `create table tp_text
@@ -116,7 +133,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 			c_binary     binary(16)    null,
 			c_varbinary  varbinary(16) null,
 			constraint pk
-				primary key (id)
+			primary key (id)
 		);`,
 		values: [][]interface{}{
 			{1},
@@ -138,6 +155,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{5, "你好", "我好", "大家好", "道路", "千万条", "安全", "第一条", "行车", "不规范", "亲人", "两行泪", "！"},
 			{6, "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "☺️", "😊", "😇", "🙂"},
 		},
+		putApproximateBytes: [][]int{{1139, 1387, 1339, 1251, 1326, 1297}},
+		delApproximateBytes: [][]int{{275, 275, 275, 275, 275, 275}},
 	}, {
 		tableName: "tp_time",
 		createTableDDL: `create table tp_time
@@ -149,12 +168,14 @@ func TestMounterDisableOldValue(t *testing.T) {
 			c_time      time      null,
 			c_year      year      null,
 			constraint pk
-				primary key (id)
+			primary key (id)
 		);`,
 		values: [][]interface{}{
 			{1},
 			{2, "2020-02-20", "2020-02-20 02:20:20", "2020-02-20 02:20:20", "02:20:20", "2020"},
 		},
+		putApproximateBytes: [][]int{{635, 675}},
+		delApproximateBytes: [][]int{{275, 275}},
 	}, {
 		tableName: "tp_real",
 		createTableDDL: `create table tp_real
@@ -164,12 +185,14 @@ func TestMounterDisableOldValue(t *testing.T) {
 			c_double  double  null,
 			c_decimal decimal null,
 			constraint pk
-				primary key (id)
+			primary key (id)
 		);`,
 		values: [][]interface{}{
 			{1},
 			{2, "2020.0202", "2020.0303", "2020.0404"},
 		},
+		putApproximateBytes: [][]int{{491, 479}},
+		delApproximateBytes: [][]int{{275, 275}},
 	}, {
 		tableName: "tp_other",
 		createTableDDL: `create table tp_other
@@ -180,12 +203,14 @@ func TestMounterDisableOldValue(t *testing.T) {
 			c_bit  bit(64)            null,
 			c_json json               null,
 			constraint pk
-				primary key (id)
+			primary key (id)
 		);`,
 		values: [][]interface{}{
 			{1},
 			{2, "a", "a,c", 888, `{"aa":"bb"}`},
 		},
+		putApproximateBytes: [][]int{{564, 552}},
+		delApproximateBytes: [][]int{{276, 276}},
 	}, {
 		tableName:      "clustered_index1",
 		createTableDDL: "CREATE TABLE clustered_index1 (id VARCHAR(255) PRIMARY KEY, data INT);",
@@ -194,6 +219,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{"你好😘", 666},
 			{"世界🤪", 888},
 		},
+		putApproximateBytes: [][]int{{383, 374, 374}},
+		delApproximateBytes: [][]int{{311, 318, 318}},
 	}, {
 		tableName:      "clustered_index2",
 		createTableDDL: "CREATE TABLE clustered_index2 (id VARCHAR(255), data INT, ddaa date, PRIMARY KEY (id, data, ddaa), UNIQUE KEY (id, data, ddaa));",
@@ -201,6 +228,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{"你好😘", 666, "2020-11-20"},
 			{"世界🤪", 888, "2020-05-12"},
 		},
+		putApproximateBytes: [][]int{{520, 520}},
+		delApproximateBytes: [][]int{{520, 520}},
 	}}
 	for _, tc := range testCases {
 		testMounterDisableOldValue(t, tc)
@@ -208,9 +237,11 @@ func TestMounterDisableOldValue(t *testing.T) {
 }
 
 func testMounterDisableOldValue(t *testing.T, tc struct {
-	tableName      string
-	createTableDDL string
-	values         [][]interface{}
+	tableName           string
+	createTableDDL      string
+	values              [][]interface{}
+	putApproximateBytes [][]int
+	delApproximateBytes [][]int
 }) {
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
@@ -257,7 +288,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	mounter.tz = time.Local
 	ctx := context.Background()
 
-	mountAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) int {
+	mountAndCheckRowInTable := func(tableID int64, rowBytes []int, f func(key []byte, value []byte) *model.RawKVEntry) int {
 		var rows int
 		walkTableSpanInStore(t, store, tableID, func(key []byte, value []byte) {
 			rawKV := f(key, value)
@@ -269,6 +300,8 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			rows++
 			require.Equal(t, row.Table.Table, tc.tableName)
 			require.Equal(t, row.Table.Schema, "test")
+			require.Equal(t, rowBytes[rows-1], row.ApproximateBytes(), row)
+			t.Log("ApproximateBytes", tc.tableName, rows-1, row.ApproximateBytes())
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
 				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.Columns)
@@ -284,19 +317,19 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 		return rows
 	}
 
-	mountAndCheckRow := func(f func(key []byte, value []byte) *model.RawKVEntry) int {
+	mountAndCheckRow := func(rowsBytes [][]int, f func(key []byte, value []byte) *model.RawKVEntry) int {
 		partitionInfo := tableInfo.GetPartitionInfo()
 		if partitionInfo == nil {
-			return mountAndCheckRowInTable(tableInfo.ID, f)
+			return mountAndCheckRowInTable(tableInfo.ID, rowsBytes[0], f)
 		}
 		var rows int
-		for _, p := range partitionInfo.Definitions {
-			rows += mountAndCheckRowInTable(p.ID, f)
+		for i, p := range partitionInfo.Definitions {
+			rows += mountAndCheckRowInTable(p.ID, rowsBytes[i], f)
 		}
 		return rows
 	}
 
-	rows := mountAndCheckRow(func(key []byte, value []byte) *model.RawKVEntry {
+	rows := mountAndCheckRow(tc.putApproximateBytes, func(key []byte, value []byte) *model.RawKVEntry {
 		return &model.RawKVEntry{
 			OpType:  model.OpTypePut,
 			Key:     key,
@@ -307,7 +340,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	})
 	require.Equal(t, rows, len(tc.values))
 
-	rows = mountAndCheckRow(func(key []byte, value []byte) *model.RawKVEntry {
+	rows = mountAndCheckRow(tc.delApproximateBytes, func(key []byte, value []byte) *model.RawKVEntry {
 		return &model.RawKVEntry{
 			OpType:  model.OpTypeDelete,
 			Key:     key,

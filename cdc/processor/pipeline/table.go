@@ -164,9 +164,9 @@ func (t *tablePipelineImpl) Wait() {
 // replicating 1024 tables in the worst case.
 const defaultOutputChannelSize = 64
 
-// There are 5 or 6 runners in table pipeline: header, puller, sorter, mounter,
+// There are 4 or 5 runners in table pipeline: header, puller, sorter,
 // sink, cyclic if cyclic replication is enabled
-const defaultRunnersSize = 5
+const defaultRunnersSize = 4
 
 // NewTablePipeline creates a table pipeline
 // TODO(leoppro): implement a mock kvclient to test the table pipeline
@@ -206,7 +206,6 @@ func NewTablePipeline(ctx cdcContext.Context,
 
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", sorterNode)
-	p.AppendNode(ctx, "mounter", newMounterNode())
 	if cyclicEnabled {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
 	}

@@ -165,7 +165,7 @@ func (l *logSink) emitRowChangedEvents(ctx context.Context, newUnit func(int64) 
 		case <-ctx.Done():
 			return ctx.Err()
 		case l.units[hash].dataChan() <- row:
-			l.units[hash].Size().Add(row.ApproximateSize)
+			l.units[hash].Size().Add(row.ApproximateDataSize)
 			l.units[hash].Events().Inc()
 		}
 	}

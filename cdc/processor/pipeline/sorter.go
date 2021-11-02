@@ -131,7 +131,25 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 					log.Panic("unexpected empty msg", zap.Reflect("msg", msg))
 				}
 				if msg.RawKV.OpType != model.OpTypeResolved {
-					size := uint64(msg.RawKV.ApproximateSize())
+					// DESIGN NOTE: We send the messages to the mounter in
+					// this separate goroutine to prevent blocking
+					// the whole pipeline.
+					msg.SetUpFinishedChan()
+					select {
+					case <-ctx.Done():
+						return nil
+					case n.mounter.Input() <- msg:
+					}
+					err := msg.WaitPrepare(ctx)
+					if err != nil {
+						if errors.Cause(err) != context.Canceled {
+							ctx.Throw(err)
+						}
+						return errors.Trace(err)
+					}
+					// We calculate memory consumption by RowChangedEvent size.
+					// It's much larger than RawKVEntry.
+					size := uint64(msg.Row.ApproximateBytes())
 					commitTs := msg.CRTs
 					// We interpolate a resolved-ts if none has been sent for some time.
 					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
@@ -148,7 +166,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 					}
 					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
 					// Otherwise the pipeline would deadlock.
-					err := n.flowController.Consume(commitTs, size, func() error {
+					err = n.flowController.Consume(commitTs, size, func() error {
 						if lastCRTs > lastSentResolvedTs {
 							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.
@@ -169,15 +187,6 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 						return nil
 					}
 					lastCRTs = commitTs
-
-					// DESIGN NOTE: We send the messages to the mounter in this separate goroutine to prevent
-					// blocking the whole pipeline.
-					msg.SetUpFinishedChan()
-					select {
-					case <-ctx.Done():
-						return nil
-					case n.mounter.Input() <- msg:
-					}
 				} else {
 					// handle OpTypeResolved
 					if msg.CRTs < lastSentResolvedTs {
