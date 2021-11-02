@@ -188,7 +188,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err := p.flushRedoLogMeta(ctx); err != nil {
 		return nil, err
 	}
-	p.handlePosition()
+	p.handlePosition(ctx)
 	p.pushResolvedTs2Table()
 	p.handleWorkload()
 	p.doGCSchemaStorage()

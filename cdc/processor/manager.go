@@ -19,6 +19,9 @@ import (
 	"io"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/tikv/client-go/v2/oracle"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -52,8 +55,7 @@ type Manager struct {
 
 	newProcessor func(cdcContext.Context) *processor
 
-	pdPhysicalTimeCache int64
-	lastUpdatedPdTime   time.Time
+	pdTimeCache *util.PDTimeCache
 }
 
 // NewManager creates a new processor manager
@@ -86,11 +88,15 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		return state, err
 	}
 
-	pdPhyTs, err := m.currentTimeFomPDCached(stdCtx)
+	// init pdTimeCache
+	if m.pdTimeCache == nil && ctx.GlobalVars().PDClient != nil {
+		m.pdTimeCache = util.NewPDTimeCache(ctx.GlobalVars().PDClient)
+	}
+	pdTime, err := m.pdTimeCache.CurrentTimeFromPDCached(stdCtx)
 	if err != nil {
 		return state, errors.Trace(err)
 	}
-	ctx.GlobalVars().PDPhyTs = pdPhyTs
+	ctx.GlobalVars().PDPhyTs = oracle.GetPhysical(pdTime)
 
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	var inactiveChangefeedCount int
@@ -197,22 +203,6 @@ func (m *Manager) handleCommand() error {
 		log.Warn("Unknown command in processor manager", zap.Any("command", cmd))
 	}
 	return nil
-}
-
-const pdTimeUpdateInterval = 1 * time.Second
-
-func (m *Manager) currentTimeFomPDCached(ctx context.Context) (int64, error) {
-	cdcCtx := ctx.(cdcContext.Context)
-	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
-		return m.pdPhysicalTimeCache, nil
-	}
-	physical, _, err := cdcCtx.GlobalVars().PDClient.GetTS(ctx)
-	if err != nil {
-		return physical, errors.Trace(err)
-	}
-	m.pdPhysicalTimeCache = physical
-	m.lastUpdatedPdTime = time.Now()
-	return m.pdPhysicalTimeCache, nil
 }
 
 func (m *Manager) writeDebugInfo(w io.Writer) {

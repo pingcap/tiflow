@@ -17,6 +17,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -31,7 +33,6 @@ import (
 const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	CDCServiceSafePointID = "ticdc"
-	pdTimeUpdateInterval  = 1 * time.Second
 )
 
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
@@ -49,26 +50,24 @@ type Manager interface {
 
 type gcManager struct {
 	pdClient pd.Client
+	gcTTL    int64
 
-	gcTTL int64
-
+	pdTimeCache       *util.PDTimeCache
 	lastUpdatedTime   time.Time
 	lastSucceededTime time.Time
 	lastSafePointTs   uint64
 	isTiCDCBlockGC    bool
-
-	pdPhysicalTimeCache time.Time
-	lastUpdatedPdTime   time.Time
 }
 
 // NewManager creates a new Manager.
-func NewManager(pdClint pd.Client) Manager {
+func NewManager(pdClient pd.Client) Manager {
 	serverConfig := config.GetGlobalServerConfig()
 	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))
 	})
 	return &gcManager{
-		pdClient:          pdClint,
+		pdClient:          pdClient,
+		pdTimeCache:       util.NewPDTimeCache(pdClient),
 		lastSucceededTime: time.Now(),
 		gcTTL:             serverConfig.GcTTL,
 	}
@@ -112,16 +111,7 @@ func (m *gcManager) TryUpdateGCSafePoint(
 }
 
 func (m *gcManager) CurrentTimeFromPDCached(ctx context.Context) (time.Time, error) {
-	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
-		return m.pdPhysicalTimeCache, nil
-	}
-	physical, _, err := m.pdClient.GetTS(ctx)
-	if err != nil {
-		return time.Now(), errors.Trace(err)
-	}
-	m.pdPhysicalTimeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
-	m.lastUpdatedPdTime = time.Now()
-	return m.pdPhysicalTimeCache, nil
+	return m.pdTimeCache.CurrentTimeFromPDCached(ctx)
 }
 
 func (m *gcManager) CheckStaleCheckpointTs(
@@ -129,7 +119,7 @@ func (m *gcManager) CheckStaleCheckpointTs(
 ) error {
 	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
-		pdTime, err := m.CurrentTimeFromPDCached(ctx)
+		pdTime, err := m.pdTimeCache.CurrentTimeFromPDCached(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
