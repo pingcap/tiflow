@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -70,37 +69,18 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	defer testleak.AfterTest(c)
 	cfg := NewConfig()
 
-	var (
-		uriTemplate = "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
-			"&max-message-bytes=%d&replication-factor=3" +
-			"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
-		maxMessageSize = 4096 // 4kb
-
-		replicaConfig = config.GetDefaultReplicaConfig()
-		opts          = make(map[string]string)
-	)
-
+	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
+		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
+	maxMessageSize := "4096" // 4kb
 	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
+
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
-	err = cfg.Initialize(sinkURI, replicaConfig, opts)
-	c.Assert(err, check.ErrorMatches, ".*encoding protocol is not set.*")
 
-	uriTemplate += "&partition-num=%d"
-	for _, n := range []int{-1, 0} {
-		uri = fmt.Sprintf(uriTemplate, maxMessageSize, n)
-		sinkURI, err = url.Parse(uri)
-		c.Assert(err, check.IsNil)
-		err = cfg.Initialize(sinkURI, replicaConfig, opts)
-		c.Assert(err, check.ErrorMatches, ".*invalid partition num.*")
-	}
+	replicaConfig := config.GetDefaultReplicaConfig()
 
-	uriTemplate += "&protocol=default"
-	partitionNum := 1
-	uri = fmt.Sprintf(uriTemplate, maxMessageSize, partitionNum)
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-
+	opts := make(map[string]string)
 	err = cfg.Initialize(sinkURI, replicaConfig, opts)
 	c.Assert(err, check.IsNil)
 
@@ -110,7 +90,7 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	c.Assert(cfg.MaxMessageBytes, check.Equals, 4096)
 
 	expectedOpts := map[string]string{
-		"max-message-bytes": strconv.Itoa(maxMessageSize),
+		"max-message-bytes": maxMessageSize,
 		"max-batch-size":    "5",
 	}
 	for k, v := range opts {
