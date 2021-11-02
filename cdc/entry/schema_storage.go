@@ -818,7 +818,7 @@ func (s *schemaStorageImpl) DoGC(ts uint64) {
 
 	// copy the part of the slice that is needed instead of re-slicing it
 	// to maximize efficiency of Go runtime GC.
-	newSnaps := make([]*schemaSnapshot, 0, len(s.snaps)-startIdx)
+	newSnaps := make([]*schemaSnapshot, len(s.snaps)-startIdx)
 	copy(newSnaps, s.snaps[startIdx:])
 	s.snaps = newSnaps
 
