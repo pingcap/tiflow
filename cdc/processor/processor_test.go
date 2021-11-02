@@ -21,17 +21,15 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	mm "github.com/pingcap/tidb/parser/model"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
@@ -129,24 +127,12 @@ func (m *mockTablePipeline) Wait() {
 }
 
 type mockSchemaStorage struct {
+	// dummy to provide default versions of unimplemented interface methods,
+	// as we only need ResolvedTs() and DoGC() in unit tests.
+	entry.SchemaStorage
+
 	c        *check.C
 	lastGcTs uint64
-}
-
-func (s *mockSchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*entry.SingleSchemaSnapshot, error) {
-	panic("implement me")
-}
-
-func (s *mockSchemaStorage) GetLastSnapshot() *entry.SingleSchemaSnapshot {
-	panic("implement me")
-}
-
-func (s *mockSchemaStorage) HandleDDLJob(job *mm.Job) error {
-	panic("implement me")
-}
-
-func (s *mockSchemaStorage) AdvanceResolvedTs(ts uint64) {
-	panic("implement me")
 }
 
 func (s *mockSchemaStorage) ResolvedTs() uint64 {
