@@ -141,9 +141,10 @@ func (s *mockSchemaStorage) ResolvedTs() uint64 {
 	return math.MaxUint64
 }
 
-func (s *mockSchemaStorage) DoGC(ts uint64) {
+func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
 	s.c.Assert(s.lastGcTs, check.LessEqual, ts)
 	atomic.StoreUint64(&s.lastGcTs, ts)
+	return ts
 }
 
 func (s *processorSuite) TestCheckTablesNum(c *check.C) {

@@ -661,8 +661,9 @@ type SchemaStorage interface {
 	AdvanceResolvedTs(ts uint64)
 	// ResolvedTs returns the resolved ts of the schema storage
 	ResolvedTs() uint64
-	// DoGC removes snaps which of ts less than this specified ts
-	DoGC(ts uint64)
+	// DoGC removes snaps that are no longer needed at the specified TS.
+	// It returns the TS from which the oldest maintained snapshot is valid.
+	DoGC(ts uint64) (lastSchemaTs uint64)
 }
 
 type schemaStorageImpl struct {
@@ -796,7 +797,7 @@ func (s *schemaStorageImpl) ResolvedTs() uint64 {
 }
 
 // DoGC removes snaps which of ts less than this specified ts
-func (s *schemaStorageImpl) DoGC(ts uint64) {
+func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 	s.snapsMu.Lock()
 	defer s.snapsMu.Unlock()
 	var startIdx int
@@ -807,7 +808,7 @@ func (s *schemaStorageImpl) DoGC(ts uint64) {
 		startIdx = i
 	}
 	if startIdx == 0 {
-		return
+		return s.snaps[0].currentTs
 	}
 	if log.GetLevel() == zapcore.DebugLevel {
 		log.Debug("Do GC in schema storage")
@@ -822,8 +823,9 @@ func (s *schemaStorageImpl) DoGC(ts uint64) {
 	copy(newSnaps, s.snaps[startIdx:])
 	s.snaps = newSnaps
 
-	atomic.StoreUint64(&s.gcTs, s.snaps[0].currentTs)
-	log.Info("finished gc in schema storage", zap.Uint64("gcTs", s.snaps[0].currentTs))
+	lastSchemaTs = s.snaps[0].currentTs
+	atomic.StoreUint64(&s.gcTs, lastSchemaTs)
+	return
 }
 
 // SkipJob skip the job should not be executed

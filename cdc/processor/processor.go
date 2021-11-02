@@ -59,6 +59,8 @@ type processor struct {
 	tables map[model.TableID]tablepipeline.TablePipeline
 
 	schemaStorage entry.SchemaStorage
+	lastSchemaTs  model.Ts
+
 	filter        *filter.Filter
 	mounter       entry.Mounter
 	sinkManager   *sink.Manager
@@ -73,12 +75,13 @@ type processor struct {
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
 
-	metricResolvedTsGauge       prometheus.Gauge
-	metricResolvedTsLagGauge    prometheus.Gauge
-	metricCheckpointTsGauge     prometheus.Gauge
-	metricCheckpointTsLagGauge  prometheus.Gauge
-	metricSyncTableNumGauge     prometheus.Gauge
-	metricProcessorErrorCounter prometheus.Counter
+	metricResolvedTsGauge        prometheus.Gauge
+	metricResolvedTsLagGauge     prometheus.Gauge
+	metricCheckpointTsGauge      prometheus.Gauge
+	metricCheckpointTsLagGauge   prometheus.Gauge
+	metricSyncTableNumGauge      prometheus.Gauge
+	metricSchemaStorageGcTsGauge prometheus.Gauge
+	metricProcessorErrorCounter  prometheus.Counter
 }
 
 // newProcessor creates a new processor
@@ -93,12 +96,13 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
 
-		metricResolvedTsGauge:       resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricResolvedTsLagGauge:    resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsGauge:     checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsLagGauge:  checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricSyncTableNumGauge:     syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricProcessorErrorCounter: processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsGauge:        resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsLagGauge:     resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsGauge:      checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsLagGauge:   checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricSyncTableNumGauge:      syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricProcessorErrorCounter:  processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
+		metricSchemaStorageGcTsGauge: processorSchemaStorageGcTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
@@ -176,7 +180,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	p.handlePosition()
 	p.pushResolvedTs2Table()
 	p.handleWorkload()
-	p.doGCSchemaStorage()
+	p.doGCSchemaStorage(ctx)
 	return p.changefeed, nil
 }
 
@@ -757,14 +761,21 @@ func (p *processor) removeTable(table tablepipeline.TablePipeline, tableID model
 }
 
 // doGCSchemaStorage trigger the schema storage GC
-func (p *processor) doGCSchemaStorage() {
+func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
 	if p.schemaStorage == nil {
 		// schemaStorage is nil only in test
 		return
 	}
 	// Please refer to `unmarshalAndMountRowChanged` in cdc/entry/mounter.go
 	// for why we need -1.
-	p.schemaStorage.DoGC(p.changefeed.Status.CheckpointTs - 1)
+	lastSchemaTs := p.schemaStorage.DoGC(p.changefeed.Status.CheckpointTs - 1)
+	if p.lastSchemaTs == lastSchemaTs {
+		return
+	}
+	log.Debug("finished gc in schema storage",
+		zap.Uint64("gcTs", lastSchemaTs),
+		cdcContext.ZapFieldChangefeed(ctx))
+	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaTs))
 }
 
 // flushRedoLogMeta flushes redo log meta, including resolved-ts and checkpoint-ts
@@ -798,6 +809,7 @@ func (p *processor) Close() error {
 	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	if p.sinkManager != nil {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
