@@ -79,7 +79,7 @@ type canalFlatMessage struct {
 	BuildTime int64 `json:"ts"`
 	// SQL that generate the change event, DDL or Query
 	Query string `json:"sql"`
-	// only works for INSERT / UPDATE / DELETE event, record each column's java representation type.
+	// only works for INSERT / UPDATE / DELETE events, records each column's java representation type.
 	SQLType map[string]int32 `json:"sqlType"`
 	// only works for INSERT / UPDATE / DELETE event, record each column's mysql representation type.
 	MySQLType map[string]string `json:"mysqlType"`
