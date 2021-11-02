@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
@@ -421,9 +422,10 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 			Timestamp: uint32(time.Now().Unix()),
 			ServerID:  11,
 		}
-		binlogPos   = gmysql.Position{Name: "mysql-bin.666888", Pos: 4}
-		rotateEv, _ = event.GenRotateEvent(eventHeader, 123, []byte(binlogPos.Name), uint64(binlogPos.Pos))
-		queryEv, _  = event.GenQueryEvent(eventHeader, 123, 0, 0, 0, nil, nil, []byte("CREATE DATABASE db_relay_test"))
+		binlogPos       = gmysql.Position{Name: "mysql-bin.666888", Pos: 4}
+		rotateEv, _     = event.GenRotateEvent(eventHeader, 123, []byte(binlogPos.Name), uint64(binlogPos.Pos))
+		fakeRotateEv, _ = event.GenRotateEvent(eventHeader, 0, []byte(binlogPos.Name), uint64(1234))
+		queryEv, _      = event.GenQueryEvent(eventHeader, 123, 0, 0, 0, nil, nil, []byte("CREATE DATABASE db_relay_test"))
 	)
 	cfg := getDBConfigForTest()
 	conn.InitMockDB(c)
@@ -453,6 +455,36 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		c.Assert(errors.Cause(handleErr), Equals, reader2.err)
 	}
 
+	// reader return fake rotate event
+	reader2.err = nil
+	reader2.result.Event = fakeRotateEv
+	// writer return error to force handleEvents return
+	writer2.err = errors.New("writer error for testing")
+	// return with the annotated writer error
+	_, err = r.handleEvents(ctx, reader2, transformer2, writer2)
+	c.Assert(errors.Cause(err), Equals, writer2.err)
+	// after handle rotate event, we save and flush the meta immediately
+	c.Assert(r.meta.Dirty(), Equals, false)
+	{
+		lm := r.meta.(*LocalMeta)
+		c.Assert(lm.BinLogName, Equals, "mysql-bin.666888")
+		c.Assert(lm.BinLogPos, Equals, uint32(1234))
+		filename := filepath.Join(lm.baseDir, lm.currentUUID, utils.MetaFilename)
+		lm2 := &LocalMeta{}
+		_, err2 := toml.DecodeFile(filename, lm2)
+		c.Assert(err2, IsNil)
+		c.Assert(lm2.BinLogName, Equals, "mysql-bin.666888")
+		c.Assert(lm2.BinLogPos, Equals, uint32(1234))
+	}
+	{
+		lm := r.meta.(*LocalMeta)
+		backupUUID := lm.currentUUID
+		lm.currentUUID = "not exist"
+		_, err = r.handleEvents(ctx, reader2, transformer2, writer2)
+		c.Assert(os.IsNotExist(errors.Cause(err)), Equals, true)
+		lm.currentUUID = backupUUID
+	}
+
 	// reader return valid event
 	reader2.err = nil
 	reader2.result.Event = rotateEv
@@ -460,7 +492,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// writer return error
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
-	_, err = r.handleEvents(ctx, reader2, transformer2, writer2)
+	_, err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
 	c.Assert(errors.Cause(err), Equals, writer2.err)
 	// after handle rotate event, we save and flush the meta immediately
 	c.Assert(r.meta.Dirty(), Equals, false)

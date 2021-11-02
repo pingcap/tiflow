@@ -117,7 +117,8 @@ func (c *compactor) flushBuffer() {
 	for _, j := range c.buffer {
 		if j != nil {
 			// set safemode for all jobs by first job in buffer.
-			j.dml.safeMode = c.safeMode
+			// or safemode for insert(delete + insert = insert with safemode)
+			j.dml.safeMode = c.safeMode || j.dml.safeMode
 			c.outCh <- j
 		}
 	}
@@ -127,8 +128,8 @@ func (c *compactor) flushBuffer() {
 
 // compactJob compact jobs.
 // INSERT + INSERT => X			‾|
-// UPDATE + INSERT => X			 |=> anything + INSERT => INSERT
-// DELETE + INSERT => INSERT	_|
+// UPDATE + INSERT => X			 |=> DELETE + INSERT => INSERT ON DUPLICATE KEY UPDATE(REPLACE)
+// DELETE + INSERT => REPLACE	_|
 // INSERT + DELETE => DELETE	‾|
 // UPDATE + DELETE => DELETE	 |=> anything + DELETE => DELETE
 // DELETE + DELETE => X			_|
@@ -156,7 +157,8 @@ func (c *compactor) compactJob(j *job) {
 	prevJob := c.buffer[prevPos]
 	c.logger.Debug("start to compact", zap.Stringer("previous dml", prevJob.dml), zap.Stringer("current dml", j.dml))
 
-	if j.tp == update {
+	switch j.tp {
+	case update:
 		if prevJob.tp == insert {
 			// INSERT + UPDATE => INSERT
 			j.tp = insert
@@ -168,6 +170,13 @@ func (c *compactor) compactJob(j *job) {
 			j.dml.oldValues = prevJob.dml.oldValues
 			j.dml.originOldValues = prevJob.dml.originOldValues
 		}
+	case insert:
+		if prevJob.tp == del {
+			// DELETE + INSERT => INSERT with safemode
+			j.dml.safeMode = true
+		}
+	case del:
+		// do nothing because anything + DELETE => DELETE
 	}
 
 	// mark previous job as compacted(nil), add new job
