@@ -14,21 +14,16 @@
 package relay
 
 import (
-	"context"
-	"os"
 	"path/filepath"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/parser"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
@@ -45,16 +40,6 @@ type WResult struct {
 	IgnoreReason string // why the writer ignore the event
 }
 
-// RecoverResult represents a result for a binlog recover operation.
-type RecoverResult struct {
-	// if truncate trailing incomplete events during recovering in relay log
-	Truncated bool
-	// the latest binlog position after recover operation has done.
-	LatestPos gmysql.Position
-	// the latest binlog GTID set after recover operation has done.
-	LatestGTIDs gtid.Set
-}
-
 // Writer writes binlog events into disk or any other memory structure.
 // The writer should support:
 //   1. write binlog events and report the operation result
@@ -67,12 +52,6 @@ type Writer interface {
 	Init(relayDir, filename string)
 	// Close closes the writer and release the resource.
 	Close() error
-
-	// Recover tries to recover the binlog file or any other memory structure associate with this writer.
-	// It is often used to recover a binlog file with some corrupt/incomplete binlog events/transactions at the end of the file.
-	// It is not safe for concurrent use by multiple goroutines.
-	// It should be called before writing to the file.
-	Recover(ctx context.Context, parser *parser.Parser) (RecoverResult, error)
 
 	// WriteEvent writes an binlog event's data into disk or any other places.
 	// It is not safe for concurrent use by multiple goroutines.
@@ -108,11 +87,6 @@ func (w *FileWriter) Init(relayDir, filename string) {
 // Close implements Writer.Close.
 func (w *FileWriter) Close() error {
 	return w.out.Close()
-}
-
-// Recover implements Writer.Recover.
-func (w *FileWriter) Recover(ctx context.Context, parser *parser.Parser) (RecoverResult, error) {
-	return w.doRecovering(ctx, parser)
 }
 
 // WriteEvent implements Writer.WriteEvent.
@@ -344,65 +318,5 @@ func (w *FileWriter) handleDuplicateEventsExist(ev *replication.BinlogEvent) (WR
 	return WResult{
 		Ignore:       duplicate,
 		IgnoreReason: reason,
-	}, nil
-}
-
-// doRecovering tries to recover the current binlog file.
-// 1. read events from the file
-// 2.
-//    a. update the position with the event's position if the transaction finished
-//    b. update the GTID set with the event's GTID if the transaction finished
-// 3. truncate any incomplete events/transactions
-// now, we think a transaction finished if we received a XIDEvent or DDL in QueryEvent
-// NOTE: handle cases when file size > 4GB.
-func (w *FileWriter) doRecovering(ctx context.Context, parser *parser.Parser) (RecoverResult, error) {
-	filename := filepath.Join(w.relayDir, w.filename.Load())
-	fs, err := os.Stat(filename)
-	if (err != nil && os.IsNotExist(err)) || (err == nil && len(w.filename.Load()) == 0) {
-		return RecoverResult{}, nil // no file need to recover
-	} else if err != nil {
-		return RecoverResult{}, terror.ErrRelayWriterGetFileStat.Delegate(err, filename)
-	}
-
-	// get latest pos/GTID set for all completed transactions from the file
-	latestPos, latestGTIDs, err := getTxnPosGTIDs(ctx, filename, parser)
-	if err != nil {
-		return RecoverResult{}, terror.Annotatef(err, "get latest pos/GTID set from %s", filename)
-	}
-
-	// mock file truncated by recover
-	failpoint.Inject("MockRecoverRelayWriter", func() {
-		w.logger.Info("mock recover relay writer")
-		failpoint.Goto("bypass")
-	})
-
-	// in most cases, we think the file is fine, so compare the size is simpler.
-	if fs.Size() == latestPos {
-		return RecoverResult{
-			Truncated:   false,
-			LatestPos:   gmysql.Position{Name: w.filename.Load(), Pos: uint32(latestPos)},
-			LatestGTIDs: latestGTIDs,
-		}, nil
-	} else if fs.Size() < latestPos {
-		return RecoverResult{}, terror.ErrRelayWriterLatestPosGTFileSize.Generate(latestPos, fs.Size())
-	}
-
-	failpoint.Label("bypass")
-
-	// truncate the file
-	f, err := os.OpenFile(filename, os.O_WRONLY, 0o644)
-	if err != nil {
-		return RecoverResult{}, terror.Annotatef(terror.ErrRelayWriterFileOperate.New(err.Error()), "open %s", filename)
-	}
-	defer f.Close()
-	err = f.Truncate(latestPos)
-	if err != nil {
-		return RecoverResult{}, terror.Annotatef(terror.ErrRelayWriterFileOperate.New(err.Error()), "truncate %s to %d", filename, latestPos)
-	}
-
-	return RecoverResult{
-		Truncated:   true,
-		LatestPos:   gmysql.Position{Name: w.filename.Load(), Pos: uint32(latestPos)},
-		LatestGTIDs: latestGTIDs,
 	}, nil
 }

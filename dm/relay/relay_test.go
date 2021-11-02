@@ -131,8 +131,8 @@ func (w *mockWriter) Close() error {
 	return nil
 }
 
-func (w *mockWriter) Recover(ctx context.Context) (RecoverResult, error) {
-	return RecoverResult{}, nil
+func (w *mockWriter) Recover(ctx context.Context) (recoverResult, error) {
+	return recoverResult{}, nil
 }
 
 func (w *mockWriter) WriteEvent(ev *replication.BinlogEvent) (WResult, error) {
