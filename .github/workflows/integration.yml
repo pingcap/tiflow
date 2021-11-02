@@ -42,7 +42,7 @@ jobs:
         run: go mod vendor
 
       - name: Pull images
-        run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
+        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-avro.yml pull --ignore-pull-failures
 
       - name: TiKV version
         run: docker run pingcap/tikv:release-4.0-nightly -V
@@ -58,11 +58,18 @@ jobs:
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=mysql
 
+<<<<<<< HEAD:.github/workflows/integration.yml
+=======
+      - name: Try to dump container logs
+        if: ${{ failure() }}
+        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-avro.yml logs -t
+
+>>>>>>> c90adaffd (deployments(ticdc): move all docker related files into deployments (#3204)):.github/workflows/ticdc_integration.yaml
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
           name: logs
-          path: ${{ github.workspace }}/docker/logs/*
+          path: ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
@@ -97,7 +104,7 @@ jobs:
         run: go mod vendor
 
       - name: Pull images
-        run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
+        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-avro.yml pull --ignore-pull-failures
 
       - name: TiKV version
         run: docker run pingcap/tikv:release-4.0-nightly -V
@@ -113,11 +120,18 @@ jobs:
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=simple-mysql-checking-old-value
 
+<<<<<<< HEAD:.github/workflows/integration.yml
+=======
+      - name: Try to dump container logs
+        if: ${{ failure() }}
+        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-avro.yml logs -t
+
+>>>>>>> c90adaffd (deployments(ticdc): move all docker related files into deployments (#3204)):.github/workflows/ticdc_integration.yaml
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
           name: logs
-          path: ${{ github.workspace }}/docker/logs/*
+          path: ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
@@ -152,7 +166,7 @@ jobs:
         run: go mod vendor
 
       - name: Pull images
-        run: docker-compose -f docker-compose-canal.yml pull --ignore-pull-failures
+        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-canal.yml pull --ignore-pull-failures
 
       - name: TiKV version
         run: docker run pingcap/tikv:release-4.0-nightly -V
@@ -168,6 +182,7 @@ jobs:
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=canalJson
 
+<<<<<<< HEAD:.github/workflows/integration.yml
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
@@ -223,12 +238,17 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=canal
+=======
+      - name: Try to dump container logs
+        if: ${{ failure() }}
+        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-canal.yml logs -t
+>>>>>>> c90adaffd (deployments(ticdc): move all docker related files into deployments (#3204)):.github/workflows/ticdc_integration.yaml
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
           name: logs
-          path: ${{ github.workspace }}/docker/logs/*
+          path: ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
