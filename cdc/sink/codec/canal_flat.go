@@ -77,7 +77,7 @@ type canalFlatMessage struct {
 	ExecutionTime int64 `json:"es"`
 	// officially the timestamp of building the MQ message, in milliseconds
 	BuildTime int64 `json:"ts"`
-	// SQL that generate the change event, DDL or Query
+	// SQL that generated the change event, DDL or Query
 	Query string `json:"sql"`
 	// only works for INSERT / UPDATE / DELETE events, records each column's java representation type.
 	SQLType map[string]int32 `json:"sqlType"`
