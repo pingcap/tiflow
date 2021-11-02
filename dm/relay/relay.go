@@ -42,10 +42,10 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
 	pkgstreamer "github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay/transformer"
 )
 
 // used to fill RelayLogInfo.
@@ -303,14 +303,12 @@ func (r *Relay) process(ctx context.Context) error {
 		return err
 	}
 
-	transformer2 := transformer.NewTransformer(parser2)
-
 	go r.doIntervalOps(ctx)
 
 	// handles binlog events with retry mechanism.
 	// it only do the retry for some binlog reader error now.
 	for {
-		eventIdx, err := r.handleEvents(ctx, reader2, transformer2)
+		eventIdx, err := r.handleEvents(ctx, reader2, parser2)
 	checkError:
 		if err == nil {
 			return nil
@@ -344,7 +342,7 @@ func (r *Relay) process(ctx context.Context) error {
 						err = err2
 						goto checkError
 					}
-					tResult := transformer2.Transform(res.Event)
+					tResult := r.preprocessEvent(res.Event, parser2)
 					// do not count skip event
 					if !tResult.Ignore {
 						i++
@@ -513,6 +511,66 @@ func (r *Relay) doRecovering(ctx context.Context, binlogDir, filename string, pa
 	}, nil
 }
 
+const (
+	ignoreReasonHeartbeat      = "heartbeat event"
+	ignoreReasonArtificialFlag = "artificial flag (0x0020) set"
+)
+
+// Result represents a transform result.
+type preprocessResult struct {
+	Ignore       bool          // whether the event should be ignored
+	IgnoreReason string        // why the transformer ignore the event
+	LogPos       uint32        // binlog event's End_log_pos or Position in RotateEvent
+	NextLogName  string        // next binlog filename, only valid for RotateEvent
+	GTIDSet      mysql.GTIDSet // GTIDSet got from QueryEvent and XIDEvent when RawModeEnabled not true
+	CanSaveGTID  bool          // whether can save GTID into meta, true for DDL query and XIDEvent
+}
+
+func (r *Relay) preprocessEvent(e *replication.BinlogEvent, parser2 *parser.Parser) preprocessResult {
+	result := preprocessResult{
+		LogPos: e.Header.LogPos,
+	}
+
+	switch ev := e.Event.(type) {
+	case *replication.PreviousGTIDsEvent:
+		result.CanSaveGTID = true
+	case *replication.MariadbGTIDListEvent:
+		result.CanSaveGTID = true
+	case *replication.RotateEvent:
+		// NOTE: we need to get the first binlog filename from fake RotateEvent when using auto position
+		result.LogPos = uint32(ev.Position)         // next event's position
+		result.NextLogName = string(ev.NextLogName) // for RotateEvent, update binlog name
+	case *replication.QueryEvent:
+		// when RawModeEnabled not true, QueryEvent will be parsed.
+		if parserpkg.CheckIsDDL(string(ev.Query), parser2) {
+			// we only update/save GTID for DDL/XID event
+			// if the query is something like `BEGIN`, we do not update/save GTID.
+			result.GTIDSet = ev.GSet
+			result.CanSaveGTID = true
+		}
+	case *replication.XIDEvent:
+		// when RawModeEnabled not true, XIDEvent will be parsed.
+		result.GTIDSet = ev.GSet
+		result.CanSaveGTID = true // need save GTID for XID
+	case *replication.GenericEvent:
+		// handle some un-parsed events
+		if e.Header.EventType == replication.HEARTBEAT_EVENT {
+			// ignore artificial heartbeat event
+			// ref: https://dev.mysql.com/doc/internals/en/heartbeat-event.html
+			result.Ignore = true
+			result.IgnoreReason = ignoreReasonHeartbeat
+		}
+	default:
+		if e.Header.Flags&replication.LOG_EVENT_ARTIFICIAL_F != 0 {
+			// ignore events with LOG_EVENT_ARTIFICIAL_F flag(0x0020) set
+			// ref: https://dev.mysql.com/doc/internals/en/binlog-event-flag.html
+			result.Ignore = true
+			result.IgnoreReason = ignoreReasonArtificialFlag
+		}
+	}
+	return result
+}
+
 // handleEvents handles binlog events, including:
 //   1. read events from upstream
 //   2. transform events
@@ -522,7 +580,7 @@ func (r *Relay) doRecovering(ctx context.Context, binlogDir, filename string, pa
 func (r *Relay) handleEvents(
 	ctx context.Context,
 	reader2 Reader,
-	transformer2 transformer.Transformer,
+	parser2 *parser.Parser,
 ) (int, error) {
 	var (
 		_, lastPos  = r.meta.Pos()
@@ -587,7 +645,7 @@ func (r *Relay) handleEvents(
 
 		// 2. transform events
 		transformTimer := time.Now()
-		tResult := transformer2.Transform(e)
+		tResult := r.preprocessEvent(e, parser2)
 		binlogTransformDurationHistogram.Observe(time.Since(transformTimer).Seconds())
 		if len(tResult.NextLogName) > 0 && tResult.NextLogName > lastPos.Name {
 			lastPos = mysql.Position{
