@@ -648,7 +648,7 @@ func (s *schemaSnapshot) Tables() map[model.TableID]*model.TableInfo {
 // SchemaStorage stores the schema information with multi-version
 type SchemaStorage interface {
 	// GetSnapshot returns the snapshot which of ts is specified
-	GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error)
+	GetSnapshot(ctx context.Context, ts uint64) (*SingleSchemaSnapshot, error)
 	// GetLastSnapshot returns the last snapshot
 	GetLastSnapshot() *schemaSnapshot
 	// HandleDDLJob creates a new snapshot in storage and handles the ddl job
@@ -806,12 +806,13 @@ func (s *schemaStorageImpl) DoGC(ts uint64) {
 			s.snaps[i].PrintStatus(log.Debug)
 		}
 	}
-	// Sets the pointers to nil so that the snaps can be
-	// GC'd by Go runtime in time.
-	for i := 0; i < startIdx; i++ {
-		s.snaps[i] = nil
-	}
-	s.snaps = s.snaps[startIdx:]
+
+	// copy the part of the slice that is needed instead of re-slicing it
+	// to maximize efficiency of Go runtime GC.
+	newSnaps := make([]*schemaSnapshot, 0, len(s.snaps)-startIdx)
+	copy(newSnaps, s.snaps[startIdx:])
+	s.snaps = newSnaps
+
 	atomic.StoreUint64(&s.gcTs, s.snaps[0].currentTs)
 	log.Info("finished gc in schema storage", zap.Uint64("gcTs", s.snaps[0].currentTs))
 }

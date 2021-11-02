@@ -101,15 +101,6 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	return p
 }
 
-func newProcessor4Test(ctx cdcContext.Context,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
-) *processor {
-	p := newProcessor(ctx)
-	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
-	p.createTablePipeline = createTablePipeline
-	return p
-}
-
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
@@ -751,6 +742,8 @@ func (p *processor) doGCSchemaStorage() {
 		// schemaStorage is nil only in test
 		return
 	}
+	// Please refer to `unmarshalAndMountRowChanged` in cdc/entry/mounter.go
+	// for why we need -1.
 	p.schemaStorage.DoGC(p.changefeed.Status.CheckpointTs - 1)
 }
 
