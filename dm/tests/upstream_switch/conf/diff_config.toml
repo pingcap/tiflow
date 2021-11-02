@@ -1,40 +1,40 @@
-use-checksum = true
+check-thread-count = 4
 
-# tables need to check.
-[[check-tables]]
-schema = "db_pessimistic"
-tables = ["tb"]
+export-fix-sql = true
 
-[[table-config]]
-schema = "db_pessimistic"
-table = "tb"
-is-sharding = true
+check-struct-only = false
 
-[[table-config.source-tables]]
-instance-id = "mysql-replica-01"
-schema = "db_pessimistic"
-table  = "~t.*"
+[task]
+    output-dir = "./output"
 
-[[table-config.source-tables]]
-instance-id = "mysql-replica-02"
-schema = "db_pessimistic"
-table  = "~t.*"
+    source-instances = ["mysql1", "mysql2"]
 
-[[source-db]]
+    target-instance = "tidb0"
+
+    target-check-tables = ["db_pessimistic.tb"]
+
+[routes.rule1]
+schema-pattern = "db_pessimistic"
+table-pattern = "t?*"
+target-schema = "db_pessimistic"
+target-table = "tb"
+
+[data-sources]
+[data-sources.mysql1]
 host = "172.28.128.2"
 port = 3306
 user = "root"
 password = "123456"
-instance-id = "mysql-replica-01"
+route-rules = ["rule1"]
 
-[[source-db]]
+[data-sources.mysql2]
 host = "172.28.128.3"
 port = 3306
 user = "root"
 password = "123456"
-instance-id = "mysql-replica-02"
+route-rules = ["rule1"]
 
-[target-db]
+[data-sources.tidb0]
 host = "172.28.128.8"
 port = 4000
 user = "root"

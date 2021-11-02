@@ -24,7 +24,7 @@ user = "root"
 password = "123456"
 instance-id = "source-1"
 
-[target-db]
+[data-sources.tidb0]
 host = "127.0.0.1"
 port = 4000
 user = "test"
