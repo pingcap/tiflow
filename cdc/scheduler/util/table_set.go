@@ -20,7 +20,11 @@ import (
 // TableSet provides a data structure to store the tables' states for the
 // scheduler.
 type TableSet struct {
-	tableIDMap   map[model.TableID]*TableRecord
+	// all tables' records
+	tableIDMap map[model.TableID]*TableRecord
+
+	// a non-unique index to facilitate looking up tables
+	// assigned to a given capture.
 	captureIndex map[model.CaptureID]map[model.TableID]*TableRecord
 }
 
