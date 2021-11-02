@@ -271,6 +271,9 @@ func (r *relayLogFileChecker) relayLogUpdatedOrNewCreated(ctx context.Context, u
 			case cmp > 0:
 				updatePathCh <- r.latestFilePath
 			default:
+				log.L().Info("newer relay uuid path is already generated",
+					zap.String("current path", r.latestRelayLogDir),
+					zap.Any("new path", switchPath))
 				switchCh <- *switchPath
 			}
 			return
