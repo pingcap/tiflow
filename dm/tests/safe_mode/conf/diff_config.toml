@@ -1,23 +1,24 @@
 # diff Configuration.
 
-log-level = "info"
-
-chunk-size = 1000
-
 check-thread-count = 4
 
-sample-percent = 100
+export-fix-sql = true
 
-use-checksum = true
+check-struct-only = false
 
-fix-sql-file = "fix.sql"
+[task]
+    output-dir = "./output"
 
-# tables need to check.
-[[check-tables]]
-schema = "safe_mode_target"
-tables = ["t_target"]
+    source-instances = ["mysql1", "mysql2"]
 
-[[table-config]]
+    target-instance = "tidb0"
+
+    target-check-tables = ["safe_mode_target.t_target"]
+
+    target-configs= ["config1"]
+
+[table-configs]
+[table-configs.config1]
 schema = "safe_mode_target"
 table = "t_target"
 ignore-columns = ["id"]
@@ -47,7 +48,7 @@ user = "root"
 password = "123456"
 instance-id = "source-2"
 
-[target-db]
+[data-sources.tidb0]
 host = "127.0.0.1"
 port = 4000
 user = "test"

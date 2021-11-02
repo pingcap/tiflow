@@ -20,7 +20,7 @@ fix-sql-file = "fix.sql"
     password = ""
     instance-id = "source-1"
 
-[target-db]
+[data-sources.tidb0]
     host = "127.0.0.1"
     port = 3306
     user = "root"
