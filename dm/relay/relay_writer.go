@@ -130,8 +130,7 @@ func (w *FileWriter) WriteEvent(ev *replication.BinlogEvent) (WResult, error) {
 // offset returns the current offset of the binlog file.
 // it is only used for testing now.
 func (w *FileWriter) offset() int64 {
-	status := w.out.Status()
-	return status.Offset
+	return w.out.Offset()
 }
 
 // handle FormatDescriptionEvent:
@@ -300,8 +299,7 @@ func (w *FileWriter) handlePotentialHoleOrDuplicate(ev *replication.BinlogEvent)
 func (w *FileWriter) handleFileHoleExist(ev *replication.BinlogEvent) (bool, error) {
 	// 1. detect whether a hole exists
 	evStartPos := int64(ev.Header.LogPos - ev.Header.EventSize)
-	outFs := w.out.Status()
-	fileOffset := outFs.Offset
+	fileOffset := w.out.Offset()
 	holeSize := evStartPos - fileOffset
 	if holeSize <= 0 {
 		// no hole exists, but duplicate events may exists, this should be handled in another place.

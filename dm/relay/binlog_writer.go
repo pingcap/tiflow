@@ -123,3 +123,7 @@ func (w *BinlogWriter) Status() *BinlogWriterStatus {
 		Offset:   w.offset.Load(),
 	}
 }
+
+func (w *BinlogWriter) Offset() int64 {
+	return w.offset.Load()
+}
