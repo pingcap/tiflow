@@ -106,6 +106,8 @@ type Process interface {
 	RegisterListener(el Listener)
 	// UnRegisterListener unregisters a relay listener
 	UnRegisterListener(el Listener)
+	// NewReader creates a new relay reader
+	NewReader(logger log.Logger, cfg *BinlogReaderConfig) *BinlogReader
 }
 
 // Relay relays mysql binlog to local file.
@@ -1156,6 +1158,10 @@ func (r *Relay) notify(e *replication.BinlogEvent) {
 	for el := range r.listeners {
 		el.OnEvent(e)
 	}
+}
+
+func (r *Relay) NewReader(logger log.Logger, cfg *BinlogReaderConfig) *BinlogReader {
+	return newBinlogReader(logger, cfg, r)
 }
 
 // RegisterListener implements Process.RegisterListener.

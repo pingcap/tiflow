@@ -50,10 +50,8 @@ type RelayHolder interface {
 	Result() *pb.ProcessResult
 	// Update updates relay config online
 	Update(ctx context.Context, cfg *config.SourceConfig) error
-	// RegisterListener registers a relay listener
-	RegisterListener(el relay.Listener)
-	// UnRegisterListener unregisters a relay listener
-	UnRegisterListener(el relay.Listener)
+	// Relay returns relay object
+	Relay() relay.Process
 }
 
 // NewRelayHolder is relay holder initializer
@@ -310,12 +308,8 @@ func (h *realRelayHolder) EarliestActiveRelayLog() *streamer.RelayLogInfo {
 	return h.relay.ActiveRelayLog()
 }
 
-func (h *realRelayHolder) RegisterListener(el relay.Listener) {
-	h.relay.RegisterListener(el)
-}
-
-func (h *realRelayHolder) UnRegisterListener(el relay.Listener) {
-	h.relay.UnRegisterListener(el)
+func (h *realRelayHolder) Relay() relay.Process {
+	return h.relay
 }
 
 /******************** dummy relay holder ********************/
@@ -436,8 +430,6 @@ func (d *dummyRelayHolder) Stage() pb.Stage {
 	return d.stage
 }
 
-func (d *dummyRelayHolder) RegisterListener(el relay.Listener) {
-}
-
-func (d *dummyRelayHolder) UnRegisterListener(el relay.Listener) {
+func (d *dummyRelayHolder) Relay() relay.Process {
+	return nil
 }

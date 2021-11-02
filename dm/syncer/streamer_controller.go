@@ -122,19 +122,20 @@ type StreamerController struct {
 
 	// whether the server id is updated
 	serverIDUpdated bool
-	notifier        relay.EventNotifier
+	relay           relay.Process
 }
 
 // NewStreamerController creates a new streamer controller.
-func NewStreamerController(notifier relay.EventNotifier,
+func NewStreamerController(
 	syncCfg replication.BinlogSyncerConfig,
 	enableGTID bool,
 	fromDB *dbconn.UpStreamConn,
-	binlogType BinlogType,
 	localBinlogDir string,
 	timezone *time.Location,
+	relay relay.Process,
 ) *StreamerController {
 	var strategy retryStrategy = alwaysRetryStrategy{}
+	binlogType := toBinlogType(relay)
 	if binlogType != LocalBinlog {
 		strategy = &maxIntervalRetryStrategy{
 			interval: minErrorRetryInterval,
@@ -156,7 +157,7 @@ func NewStreamerController(notifier relay.EventNotifier,
 		timezone:          timezone,
 		fromDB:            fromDB,
 		closed:            true,
-		notifier:          notifier,
+		relay:             relay,
 	}
 
 	return streamerController
@@ -233,7 +234,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	if c.currentBinlogType == RemoteBinlog {
 		c.streamerProducer = &remoteBinlogReader{replication.NewBinlogSyncer(c.syncCfg), tctx, c.syncCfg.Flavor, c.enableGTID}
 	} else {
-		c.streamerProducer = &localBinlogReader{relay.NewBinlogReader(c.notifier, tctx.L(), &relay.BinlogReaderConfig{RelayDir: c.localBinlogDir, Timezone: c.timezone, Flavor: c.syncCfg.Flavor}), c.enableGTID}
+		c.streamerProducer = &localBinlogReader{c.relay.NewReader(tctx.L(), &relay.BinlogReaderConfig{RelayDir: c.localBinlogDir, Timezone: c.timezone, Flavor: c.syncCfg.Flavor}), c.enableGTID}
 	}
 
 	c.streamer, err = c.streamerProducer.generateStreamer(location)
