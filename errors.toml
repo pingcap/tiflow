@@ -71,6 +71,11 @@ error = '''
 unknown type for Avro: %v
 '''
 
+["CDC:ErrBufferLogTimeout"]
+error = '''
+send row changed events to log buffer timeout
+'''
+
 ["CDC:ErrBufferReachLimit"]
 error = '''
 puller mem buffer reach size limit
@@ -169,6 +174,16 @@ cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
+'''
+
+["CDC:ErrConsistentLevel"]
+error = '''
+consistent level (%s) not support
+'''
+
+["CDC:ErrConsistentStorage"]
+error = '''
+consistent storage (%s) not support
 '''
 
 ["CDC:ErrCraftCodecInvalidData"]
@@ -354,6 +369,11 @@ invalid key: %s
 ["CDC:ErrInvalidRecordKey"]
 error = '''
 invalid record key - %q
+'''
+
+["CDC:ErrInvalidS3URI"]
+error = '''
+invalid s3 uri: %s
 '''
 
 ["CDC:ErrInvalidServerOption"]
@@ -606,6 +626,11 @@ error = '''
 etcd api call error
 '''
 
+["CDC:ErrPeerMessageIllegalMeta"]
+error = '''
+peer-to-peer message server received an RPC call with illegal metadata
+'''
+
 ["CDC:ErrPendingRegionCancel"]
 error = '''
 pending region cancelled due to stream disconnecting
@@ -671,9 +696,19 @@ error = '''
 redo log config invalid
 '''
 
+["CDC:ErrRedoDownloadFailed"]
+error = '''
+redo log down load to local failed
+'''
+
 ["CDC:ErrRedoFileOp"]
 error = '''
 redo file operation
+'''
+
+["CDC:ErrRedoMetaFileNotFound"]
+error = '''
+no redo meta file found in dir: %s
 '''
 
 ["CDC:ErrRedoMetaInitialize"]
@@ -819,6 +854,11 @@ this api supports GET method only
 ["CDC:ErrSupportPostOnly"]
 error = '''
 this api supports POST method only
+'''
+
+["CDC:ErrTCPServerClosed"]
+error = '''
+The TCP server has been closed
 '''
 
 ["CDC:ErrTableIneligible"]

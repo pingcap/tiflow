@@ -1,0 +1,22 @@
+---
+# systemd configuration generation
+
+- name: create systemd service configuration
+  become: true
+  template: src="systemd.service.j2" dest="/etc/systemd/system/{{ service_name }}.service" mode=0644
+
+- name: create startup script - common start/stop
+  become: true
+  template:
+    src: "{{ item }}_role.sh.j2"
+    dest: "{{ deploy_dir }}/scripts/{{ item }}_{{ this_role_name }}.sh"
+    mode: "0755"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+  with_items:
+    - start
+    - stop
+
+- name: reload systemd
+  become: true
+  shell: "systemctl daemon-reload"

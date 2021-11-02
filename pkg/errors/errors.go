@@ -83,8 +83,10 @@ var (
 	ErrFileSinkCreateDir         = errors.Normalize("file sink create dir", errors.RFCCodeText("CDC:ErrFileSinkCreateDir"))
 	ErrFileSinkFileOp            = errors.Normalize("file sink file operation", errors.RFCCodeText("CDC:ErrFileSinkFileOp"))
 	ErrRedoConfigInvalid         = errors.Normalize("redo log config invalid", errors.RFCCodeText("CDC:ErrRedoConfigInvalid"))
+	ErrRedoDownloadFailed        = errors.Normalize("redo log down load to local failed", errors.RFCCodeText("CDC:ErrRedoDownloadFailed"))
 	ErrRedoWriterStopped         = errors.Normalize("redo log writer stopped", errors.RFCCodeText("CDC:ErrRedoWriterStopped"))
 	ErrRedoFileOp                = errors.Normalize("redo file operation", errors.RFCCodeText("CDC:ErrRedoFileOp"))
+	ErrRedoMetaFileNotFound      = errors.Normalize("no redo meta file found in dir: %s", errors.RFCCodeText("CDC:ErrRedoMetaFileNotFound"))
 	ErrRedoMetaInitialize        = errors.Normalize("initialize meta for redo log", errors.RFCCodeText("CDC:ErrRedoMetaInitialize"))
 	ErrFileSizeExceed            = errors.Normalize("rawData size %d exceeds maximum file size %d", errors.RFCCodeText("CDC:ErrFileSizeExceed"))
 	ErrFileSinkMetaAlreadyExists = errors.Normalize("file sink meta file already exists", errors.RFCCodeText("CDC:ErrFileSinkMetaAlreadyExists"))
@@ -228,6 +230,12 @@ var (
 	ErrAsyncPoolExited                      = errors.Normalize("asyncPool has exited. Report a bug if seen externally.", errors.RFCCodeText("CDC:ErrAsyncPoolExited"))
 	ErrWorkerPoolGracefulUnregisterTimedOut = errors.Normalize("workerpool handle graceful unregister timed out", errors.RFCCodeText("CDC:ErrWorkerPoolGracefulUnregisterTimedOut"))
 
+	// redo log related errors
+	ErrConsistentLevel   = errors.Normalize("consistent level (%s) not support", errors.RFCCodeText("CDC:ErrConsistentLevel"))
+	ErrConsistentStorage = errors.Normalize("consistent storage (%s) not support", errors.RFCCodeText("CDC:ErrConsistentStorage"))
+	ErrInvalidS3URI      = errors.Normalize("invalid s3 uri: %s", errors.RFCCodeText("CDC:ErrInvalidS3URI"))
+	ErrBufferLogTimeout  = errors.Normalize("send row changed events to log buffer timeout", errors.RFCCodeText("CDC:ErrBufferLogTimeout"))
+
 	// unified sorter errors
 	ErrUnifiedSorterBackendTerminating = errors.Normalize("unified sorter backend is terminating", errors.RFCCodeText("CDC:ErrUnifiedSorterBackendTerminating"))
 	ErrIllegalUnifiedSorterParameter   = errors.Normalize("illegal parameter for unified sorter: %s", errors.RFCCodeText("CDC:ErrIllegalUnifiedSorterParameter"))
@@ -250,4 +258,10 @@ var (
 
 	// retry error
 	ErrReachMaxTry = errors.Normalize("reach maximum try: %d", errors.RFCCodeText("CDC:ErrReachMaxTry"))
+
+	// tcp server error
+	ErrTCPServerClosed = errors.Normalize("The TCP server has been closed", errors.RFCCodeText("CDC:ErrTCPServerClosed"))
+
+	// p2p error
+	ErrPeerMessageIllegalMeta = errors.Normalize("peer-to-peer message server received an RPC call with illegal metadata", errors.RFCCodeText("CDC:ErrPeerMessageIllegalMeta"))
 )

@@ -1295,7 +1295,7 @@
               "refId": "A"
             },
             {
-              "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"}) * 1000",
+              "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"})",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -2264,7 +2264,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_processor_flush_event_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_sink_flush_event_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{type}}-p95",
@@ -7250,7 +7250,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "scalar(max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"})) - avg(tikv_cdc_min_resolved_ts{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}/1000) by (instance) > 0",
+              "expr": "scalar(max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"}))/1000 - avg(tikv_cdc_min_resolved_ts{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}/1000) by (instance) > 0",
               "format": "time_series",
               "hide": false,
               "instant": false,
@@ -7260,7 +7260,7 @@
               "step": 10
             },
             {
-              "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"}) * 1000",
+              "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"})",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -9424,5 +9424,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 23
+  "version": 24
 }

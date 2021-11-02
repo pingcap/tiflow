@@ -203,7 +203,7 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err := encoder.SetParams(map[string]string{})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageSize, check.Equals, DefaultMaxMessageBytes)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
@@ -214,12 +214,12 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, math.MaxInt32)
+	c.Assert(encoder.maxMessageSize, check.Equals, math.MaxInt32)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, math.MaxUint32)
+	c.Assert(encoder.maxMessageSize, check.Equals, math.MaxUint32)
 
 	err = encoder.SetParams(map[string]string{"max-batch-size": "0"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
@@ -230,12 +230,12 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxInt32)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageSize, check.Equals, DefaultMaxMessageBytes)
 
 	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxUint32)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageSize, check.Equals, DefaultMaxMessageBytes)
 }
 
 func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
@@ -320,28 +320,6 @@ func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 		sum += count
 	}
 	c.Check(sum, check.Equals, 10000)
-}
-
-func (s *batchSuite) TestEmptyMessage(c *check.C) {
-	defer testleak.AfterTest(c)()
-	encoder := NewJSONEventBatchEncoder()
-	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
-	c.Check(err, check.IsNil)
-
-	emptyEvent := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{},
-	}
-
-	for i := 0; i < 10000; i++ {
-		r, err := encoder.AppendRowChangedEvent(emptyEvent)
-		c.Check(r, check.Equals, EncoderNoOperation)
-		c.Check(err, check.IsNil)
-	}
-
-	messages := encoder.Build()
-	c.Assert(messages, check.HasLen, 0)
 }
 
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {

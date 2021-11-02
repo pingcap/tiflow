@@ -45,6 +45,7 @@ const (
 	ownerJobTypeManualSchedule
 	ownerJobTypeAdminJob
 	ownerJobTypeDebugInfo
+	ownerJobTypeQuery
 )
 
 type ownerJob struct {
@@ -62,6 +63,9 @@ type ownerJob struct {
 	// for debug info only
 	debugInfoWriter io.Writer
 
+	// for status provider
+	query *ownerQuery
+
 	done chan struct{}
 }
 
@@ -69,6 +73,7 @@ type ownerJob struct {
 // All public functions are THREAD-SAFE, except for Tick, Tick is only used for etcd worker
 type Owner struct {
 	changefeeds map[model.ChangeFeedID]*changefeed
+	captures    map[model.CaptureID]*model.CaptureInfo
 
 	gcManager gc.Manager
 
@@ -113,6 +118,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	failpoint.Inject("sleep-in-owner-tick", nil)
 	ctx := stdCtx.(cdcContext.Context)
 	state := rawState.(*orchestrator.GlobalReactorState)
+	o.captures = state.Captures
 	o.updateMetrics(state)
 	if !o.clusterVersionConsistent(state.Captures) {
 		// sleep one second to avoid printing too much log
@@ -286,7 +292,7 @@ func (o *Owner) handleJobs() {
 	for _, job := range jobs {
 		changefeedID := job.changefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
-		if !exist {
+		if !exist && job.tp != ownerJobTypeQuery {
 			log.Warn("changefeed not found when handle a job", zap.Reflect("job", job))
 			continue
 		}
@@ -297,10 +303,104 @@ func (o *Owner) handleJobs() {
 			cfReactor.scheduler.MoveTable(job.tableID, job.targetCaptureID)
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()
+		case ownerJobTypeQuery:
+			o.handleQueries(job.query)
 		case ownerJobTypeDebugInfo:
 			// TODO: implement this function
 		}
 		close(job.done)
+	}
+}
+
+func (o *Owner) handleQueries(query *ownerQuery) {
+	switch query.tp {
+	case ownerQueryAllChangeFeedStatuses:
+		ret := map[model.ChangeFeedID]*model.ChangeFeedStatus{}
+		for cfID, cfReactor := range o.changefeeds {
+			ret[cfID] = &model.ChangeFeedStatus{}
+			if cfReactor.state == nil {
+				continue
+			}
+			if cfReactor.state.Status == nil {
+				continue
+			}
+			ret[cfID].ResolvedTs = cfReactor.state.Status.ResolvedTs
+			ret[cfID].CheckpointTs = cfReactor.state.Status.CheckpointTs
+			ret[cfID].AdminJobType = cfReactor.state.Status.AdminJobType
+		}
+		query.data = ret
+	case ownerQueryAllChangeFeedInfo:
+		ret := map[model.ChangeFeedID]*model.ChangeFeedInfo{}
+		for cfID, cfReactor := range o.changefeeds {
+			if cfReactor.state == nil {
+				continue
+			}
+			if cfReactor.state.Info == nil {
+				ret[cfID] = &model.ChangeFeedInfo{}
+				continue
+			}
+			var err error
+			ret[cfID], err = cfReactor.state.Info.Clone()
+			if err != nil {
+				query.err = errors.Trace(err)
+				return
+			}
+		}
+		query.data = ret
+	case ownerQueryAllTaskStatuses:
+		cfReactor, ok := o.changefeeds[query.changeFeedID]
+		if !ok {
+			query.err = cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.changeFeedID)
+			return
+		}
+		if cfReactor.state == nil {
+			query.err = cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.changeFeedID)
+			return
+		}
+		ret := map[model.CaptureID]*model.TaskStatus{}
+		for captureID, taskStatus := range cfReactor.state.TaskStatuses {
+			ret[captureID] = taskStatus.Clone()
+		}
+		query.data = ret
+	case ownerQueryTaskPositions:
+		cfReactor, ok := o.changefeeds[query.changeFeedID]
+		if !ok {
+			query.err = cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.changeFeedID)
+			return
+		}
+		if cfReactor.state == nil {
+			query.err = cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.changeFeedID)
+			return
+		}
+		ret := map[model.CaptureID]*model.TaskPosition{}
+		for captureID, taskPosition := range cfReactor.state.TaskPositions {
+			ret[captureID] = taskPosition.Clone()
+		}
+		query.data = ret
+	case ownerQueryProcessors:
+		var ret []*model.ProcInfoSnap
+		for cfID, cfReactor := range o.changefeeds {
+			if cfReactor.state == nil {
+				continue
+			}
+			for captureID := range cfReactor.state.TaskStatuses {
+				ret = append(ret, &model.ProcInfoSnap{
+					CfID:      cfID,
+					CaptureID: captureID,
+				})
+			}
+		}
+		query.data = ret
+	case ownerQueryCaptures:
+		var ret []*model.CaptureInfo
+		for _, captureInfo := range o.captures {
+			ret = append(ret, &model.CaptureInfo{
+				ID:            captureInfo.ID,
+				AdvertiseAddr: captureInfo.AdvertiseAddr,
+				Version:       captureInfo.Version,
+			})
+		}
+		query.data = ret
 	}
 }
 
@@ -349,4 +449,9 @@ func (o *Owner) updateGCSafepoint(
 	gcSafepointUpperBound := minCheckpointTs - 1
 	err := o.gcManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
 	return errors.Trace(err)
+}
+
+// StatusProvider returns a StatusProvider
+func (o *Owner) StatusProvider() StatusProvider {
+	return &ownerStatusProvider{owner: o}
 }

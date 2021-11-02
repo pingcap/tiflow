@@ -1,0 +1,4 @@
+---
+
+- include_tasks: tasks.yml
+  when: "grafana_exec_vars_only == false"

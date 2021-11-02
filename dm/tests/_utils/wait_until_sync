@@ -1,0 +1,52 @@
+#!/bin/bash
+# tools to query-status until Sync, will print unit and progress. This only works for single worker case
+# parameter 1: work directory
+# parameter 2: master-addr port
+
+workdir=$1
+master_addr=$2
+cmd="query-status test"
+
+PWD=$(pwd)
+binary=$PWD/bin/dmctl.test
+ts=$(date +"%s")
+dmctl_log=$workdir/dmctl.$ts.log
+pid=$$
+
+while true; do
+	sleep 5
+	echo "$cmd" | $binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.dmctl.$ts.$pid.out" DEVEL --master-addr=$master_addr >$dmctl_log 2>&1
+
+	value="\"stage\": \"Paused\""
+	# below grep will print the count of $value, exit when not 0
+	sed "s/$value/$value\n/g" $dmctl_log | grep -c "$value" && exit 1 || true
+
+	value="\"unit\": \"Dump\""
+	got=$(sed "s/$value/$value\n/g" $dmctl_log | grep -c "$value")
+	if [ "$got" -eq 1 ]; then
+		echo "in Dump unit"
+		continue
+	fi
+
+	value="\"unit\": \"Load\""
+	got=$(sed "s/$value/$value\n/g" $dmctl_log | grep -c "$value")
+	if [ "$got" -eq 1 ]; then
+		echo -n "in Load unit"
+		grep "progress" $dmctl_log
+		continue
+	fi
+
+	value="\"unit\": \"Sync\""
+	got=$(sed "s/$value/$value\n/g" $dmctl_log | grep -c "$value")
+	if [ "$got" -eq 1 ]; then
+		echo "in Sync unit"
+		exit 0
+	fi
+
+	exit 1
+done
+
+# gocovmerge doesn't support merge profiles with different modes, however atomic
+# mode and count mode have the same profile format, so we need to unify cover
+# mode before running gocovmerge. As coverage file is not generated synchronously,
+# we will patch covermode before `make coverage`

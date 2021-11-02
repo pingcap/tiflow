@@ -1,0 +1,40 @@
+---
+name: upgrade_via_tiup_optimistic
+task-mode: all
+is-sharding: true
+shard-mode: optimistic
+enable-heartbeat: true
+case-sensitive: true
+
+target-database:
+  host: tidb
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    black-white-list:  "instance"
+    route-rules: ["sharding-route-rules-table", "sharding-route-rules-schema"]
+
+  - source-id: "mariadb-replica-02"
+    black-white-list:  "instance"
+    route-rules: ["sharding-route-rules-table", "sharding-route-rules-schema"]
+
+black-white-list:
+  instance:
+    do-dbs: ["~^opt_sharding[\\d]+"]
+    do-tables:
+    -  db-name: "~^opt_sharding[\\d]+"
+       tbl-name: "~^t[\\d]+"
+
+routes:
+  sharding-route-rules-table:
+    schema-pattern: opt_sharding*
+    table-pattern: t*
+    target-schema: opt_db_target
+    target-table: t_target
+
+  sharding-route-rules-schema:
+    schema-pattern: opt_sharding*
+    target-schema: opt_db_target

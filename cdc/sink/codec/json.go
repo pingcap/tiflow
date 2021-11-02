@@ -15,6 +15,7 @@ package codec
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -343,13 +344,13 @@ type JSONEventBatchEncoder struct {
 	messageBuf   []*MQMessage
 	curBatchSize int
 	// configs
-	maxKafkaMessageSize int
-	maxBatchSize        int
+	maxMessageSize int
+	maxBatchSize   int
 }
 
-// GetMaxKafkaMessageSize is only for unit testing.
-func (d *JSONEventBatchEncoder) GetMaxKafkaMessageSize() int {
-	return d.maxKafkaMessageSize
+// GetMaxMessageSize is only for unit testing.
+func (d *JSONEventBatchEncoder) GetMaxMessageSize() int {
+	return d.maxMessageSize
 }
 
 // GetMaxBatchSize is only for unit testing.
@@ -403,12 +404,6 @@ func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, er
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	// Some transactions could generate empty row change event, such as
-	// begin; insert into t (id) values (1); delete from t where id=1; commit;
-	// Just ignore these row changed events
-	if len(e.Columns) == 0 && len(e.PreColumns) == 0 {
-		return EncoderNoOperation, nil
-	}
 	keyMsg, valueMsg := rowEventToMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -434,15 +429,15 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		// for single message that longer than max-message-size, do not send it.
 		// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 		length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
-		if length > d.maxKafkaMessageSize {
+		if length > d.maxMessageSize {
 			log.Warn("Single message too large",
-				zap.Int("max-message-size", d.maxKafkaMessageSize), zap.Int("length", length), zap.Any("table", e.Table))
+				zap.Int("max-message-size", d.maxMessageSize), zap.Int("length", length), zap.Any("table", e.Table))
 			return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
 		}
 
 		if len(d.messageBuf) == 0 ||
 			d.curBatchSize >= d.maxBatchSize ||
-			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxKafkaMessageSize {
+			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxMessageSize {
 
 			versionHead := make([]byte, 8)
 			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
@@ -460,10 +455,10 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		message.Schema = &e.Table.Schema
 		message.Table = &e.Table.Table
 
-		if message.Length() > d.maxKafkaMessageSize {
+		if message.Length() > d.maxMessageSize {
 			// `len(d.messageBuf) == 1` is implied
 			log.Debug("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
-				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxKafkaMessageSize))
+				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxMessageSize))
 		}
 		d.curBatchSize++
 	}
@@ -581,32 +576,48 @@ func (d *JSONEventBatchEncoder) Reset() {
 // SetParams reads relevant parameters for Open Protocol
 func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
+
+	d.maxMessageSize = DefaultMaxMessageBytes
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
-		d.maxKafkaMessageSize, err = strconv.Atoi(maxMessageBytes)
+		d.maxMessageSize, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
-	} else {
-		d.maxKafkaMessageSize = DefaultMaxMessageBytes
+	}
+	if d.maxMessageSize <= 0 {
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageSize))
 	}
 
-	if d.maxKafkaMessageSize <= 0 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxKafkaMessageSize))
-	}
-
+	d.maxBatchSize = DefaultMaxBatchSize
 	if maxBatchSize, ok := params["max-batch-size"]; ok {
 		d.maxBatchSize, err = strconv.Atoi(maxBatchSize)
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
-	} else {
-		d.maxBatchSize = DefaultMaxBatchSize
 	}
-
 	if d.maxBatchSize <= 0 {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", d.maxBatchSize))
 	}
+
 	return nil
+}
+
+type jsonEventBatchEncoderBuilder struct {
+	opts map[string]string
+}
+
+// Build a JSONEventBatchEncoder
+func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+	encoder := NewJSONEventBatchEncoder()
+	if err := encoder.SetParams(b.opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	return encoder, nil
+}
+
+func newJSONEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
+	return &jsonEventBatchEncoderBuilder{opts: opts}
 }
 
 // NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.

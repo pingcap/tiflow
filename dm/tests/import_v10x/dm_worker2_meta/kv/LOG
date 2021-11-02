@@ -1,0 +1,25 @@
+=============== Aug 10, 2020 (CST) ===============
+17:18:17.167100 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+17:18:17.180311 db@open opening
+17:18:17.182590 version@stat F·[] S·0B[] Sc·[]
+17:18:17.187293 db@janitor F·2 G·0
+17:18:17.187774 db@open done T·7.428047ms
+17:18:17.187991 db@close closing
+17:18:17.188092 db@close done T·98.6µs
+=============== Aug 10, 2020 (CST) ===============
+17:18:17.188522 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+17:18:17.188868 version@stat F·[] S·0B[] Sc·[]
+17:18:17.188942 db@open opening
+17:18:17.189094 journal@recovery F·1
+17:18:17.190035 journal@recovery recovering @1
+17:18:17.196605 memdb@flush created L0@2 N·1 S·169B "!DM..ion,v1":"!DM..ion,v1"
+17:18:17.198106 version@stat F·[1] S·169B[169B] Sc·[0.12]
+17:18:17.207553 db@janitor F·3 G·0
+17:18:17.207982 db@open done T·19.012521ms
+17:18:20.360681 memdb@flush N·1 S·1KiB
+17:18:20.366407 memdb@flush created L0@6 N·1 S·1KiB "!DM..\x00\x00\x01,v3":"!DM..\x00\x00\x01,v3"
+17:18:20.366598 version@stat F·[2] S·1KiB[1KiB] Sc·[0.25]
+17:18:20.372152 memdb@flush committed F·1 T·11.311072ms
+17:18:20.372223 journal@remove removed @3
+17:18:20.377544 transaction@flush created L0@7 N·3 S·1KiB "!DM..\x00\x00\x01,v4":"!DM..ter,v5"
+17:18:20.377631 version@stat F·[3] S·2KiB[2KiB] Sc·[0.38]

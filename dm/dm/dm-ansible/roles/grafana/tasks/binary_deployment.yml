@@ -1,0 +1,37 @@
+---
+
+- name: deploy grafana binary
+  unarchive: >
+    src={{ downloads_dir }}/grafana-{{ grafana_version }}.tar.gz dest={{ deploy_dir }}/opt/
+
+- name: rename grafana deploy dir
+  shell: >
+    warn=no
+    removes="{{ deploy_dir }}/opt/grafana/bin/grafana-server"
+    rm -rf {{ deploy_dir }}/opt/grafana && mv {{ deploy_dir }}/opt/grafana-{{ grafana_version }} "{{ deploy_dir }}/opt/grafana"
+
+- name: rename grafana deploy dir
+  shell: >
+    creates="{{ deploy_dir }}/opt/grafana/bin/grafana-server"
+    mv {{ deploy_dir }}/opt/grafana-{{ grafana_version }} "{{ deploy_dir }}/opt/grafana"
+
+- name: create binary deploy directories
+  file: path="{{ item }}" state=directory mode=0755
+  with_items:
+    - "{{ grafana_dashboards_dir }}"
+    - "{{ grafana_plugins_dir }}"
+
+- name: create grafana configuration file
+  template:
+    src: grafana.ini.j2
+    dest: "{{ deploy_dir }}/opt/grafana/conf/grafana.ini"
+    mode: 0644
+
+- name: create run script
+  template:
+    src: "run_{{ role_name }}.sh.j2"
+    dest: "{{ deploy_dir }}/scripts/run_{{ role_name }}.sh"
+    mode: "0755"
+    backup: yes
+
+- include_tasks: "systemd_deployment.yml"

@@ -5,7 +5,7 @@ COPY . .
 ENV CDC_ENABLE_VENDOR=1
 RUN go mod vendor
 RUN make failpoint-enable
-RUN make
+RUN make cdc
 RUN make failpoint-disable
 
 FROM alpine:3.12

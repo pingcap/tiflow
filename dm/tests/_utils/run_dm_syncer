@@ -1,0 +1,28 @@
+#!/bin/sh
+
+set -eu
+
+workdir=$1
+config=$2
+
+binary=$PWD/bin/dm-syncer.test
+
+PWD=$(pwd)
+
+mkdir -p $workdir/log
+
+format=""
+meta=""
+name=""
+
+if [ "$#" -ge 5 ]; then
+	meta="--meta=$3"
+	format=$4
+	name="--name=$5"
+fi
+
+cd $workdir
+echo "$binary --log-file="$workdir/log/dm-syncer.log" --config="$config" $meta $format >> $workdir/log/stdout.log 2>&1 &"
+$binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.syncer.out" DEVEL \
+	-L=Debug --log-file="$workdir/log/dm-syncer.log" --config="$config" $name $meta $format >>$workdir/log/stdout.log 2>&1 &
+cd $PWD

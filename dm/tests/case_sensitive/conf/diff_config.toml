@@ -1,0 +1,17 @@
+# diff Configuration.
+
+log-level = "info"
+
+chunk-size = 1000
+
+check-thread-count = 4
+
+sample-percent = 100
+
+use-checksum = true
+
+fix-sql-file = "fix.sql"
+
+dm-addr = "http://127.0.0.1:8261"
+
+dm-task = "test"

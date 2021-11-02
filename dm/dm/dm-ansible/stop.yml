@@ -1,0 +1,82 @@
+---
+
+# The Playbook of DM
+
+- name: check config locally
+  hosts: localhost
+  any_errors_fatal: true
+  tags:
+    - always
+  roles:
+    - check_config_static
+
+- hosts: prometheus_servers
+  tags:
+    - prometheus
+  tasks:
+    - name: stop prometheus by systemd
+      systemd: name={{ item }} state=stopped
+      become: true
+      with_items:
+        - prometheus-{{ prometheus_port }}.service
+
+    - name: wait for prometheus down
+      wait_for: host={{ ansible_host }} port={{ prometheus_port }} state=stopped
+
+- hosts: grafana_servers
+  tags:
+    - grafana
+  tasks:
+    - name: stop grafana by systemd
+      systemd: name=grafana-{{ grafana_port }}.service state=stopped
+      become: true
+
+    - name: wait for grafana down
+      wait_for: host={{ ansible_host }} port={{ grafana_port }} state=stopped
+
+- hosts: alertmanager_servers
+  tags:
+    - alertmanager
+  tasks:
+    - name: stop alertmanager by systemd
+      systemd: name=alertmanager-{{ alertmanager_port }}.service state=stopped
+      become: true
+
+    - name: wait for alertmanager down
+      wait_for: host={{ ansible_host }} port={{ alertmanager_port }} state=stopped
+
+- hosts: dm_worker_servers
+  tags:
+    - dm-worker
+  tasks:
+    - name: stop dm-worker by systemd
+      become: true
+      systemd: name=dm-worker-{{ dm_worker_port }}.service state=stopped enabled=no
+
+    - name: wait for dm-worker down
+      wait_for: |
+        host={{ ansible_host }} port={{ dm_worker_port }} state=stopped
+
+- hosts: dm_master_servers
+  tags:
+    - dm-master
+  tasks:
+    - name: stop dm-master by systemd
+      become: true
+      systemd: name=dm-master-{{ dm_master_port }}.service state=stopped enabled=no
+
+    - name: wait for dm-master down
+      wait_for: |
+        host={{ ansible_host }} port={{ dm_master_port }} state=stopped
+
+- hosts: dm_portal_servers
+  tags:
+    - dm-portal
+  tasks:
+    - name: stop dm-portal by systemd
+      become: true
+      systemd: name=dm-portal-{{ dm_portal_port }}.service state=stopped enabled=no
+
+    - name: wait for dm-portal down
+      wait_for: |
+        host={{ ansible_host }} port={{ dm_portal_port }} state=stopped
