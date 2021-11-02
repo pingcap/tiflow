@@ -9,11 +9,11 @@ check-struct-only = false
 [task]
     output-dir = "./output"
 
-    source-instances = ["mysql1", "mysql2"]
+    source-instances = ["mysql1"]
 
     target-instance = "tidb0"
 
-    target-check-tables = ["drop_column_with_index.t?*"]
+    target-check-tables = ["drop_column_with_index.t1"]
 
 
 [data-sources]

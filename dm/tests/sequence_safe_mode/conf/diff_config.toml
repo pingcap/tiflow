@@ -20,7 +20,7 @@ check-struct-only = false
 [routes.rule1]
 schema-pattern = "sequence_safe_mode_test"
 table-pattern = "t?*"
-target-schema = "sequence_safe_mode_test"
+target-schema = "sequence_safe_mode_target"
 target-table = "t_target"
 
 [table-configs]

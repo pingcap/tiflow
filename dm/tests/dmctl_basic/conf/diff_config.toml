@@ -25,7 +25,7 @@ ignore-columns = ["id"]
 
 [routes.rule1]
 schema-pattern = "dmctl"
-table-pattern = "t_*"
+table-pattern = "t_?*"
 target-schema = "dmctl" 
 target-table = "t_target"      
 

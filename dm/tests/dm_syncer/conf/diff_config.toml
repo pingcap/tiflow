@@ -22,14 +22,12 @@ host = "127.0.0.1"
 port = 3306
 user = "root"
 password = "123456"
-instance-id = "source-1"
 
 [data-sources.mysql2]
 host = "127.0.0.1"
 port = 3307
 user = "root"
 password = "123456"
-instance-id = "source-2"
 
 [data-sources.tidb0]
 host = "127.0.0.1"

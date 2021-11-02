@@ -13,7 +13,7 @@ check-struct-only = false
 
     target-instance = "tidb0"
 
-    target-check-tables = ["ha_test.t?*"]
+    target-check-tables = ["ha_test.ta"]
 
 [data-sources]
 [data-sources.mysql1]

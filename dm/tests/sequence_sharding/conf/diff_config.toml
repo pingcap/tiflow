@@ -18,7 +18,7 @@ check-struct-only = false
     target-configs= ["config1"]
 
 [routes.rule1]
-schema-pattern = "sharding_target2"
+schema-pattern = "sharding_seq"
 table-pattern = "t?*"
 target-schema = "sharding_target2"
 target-table = "t_target"

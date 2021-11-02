@@ -16,7 +16,7 @@ check-struct-only = false
 
 [routes.rule1]
 schema-pattern = "pes_sharding*"
-table-pattern = "t.*"
+table-pattern = "t?*"
 target-schema = "pes_db_target"
 target-table = "t_target"
 
