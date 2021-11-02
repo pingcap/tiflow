@@ -40,8 +40,8 @@ cmd/cdc/cdc
 tiflash-config-preprocessed.toml
 
 # Files generated when running docker-compose
-docker/data
-docker/logs
+deployments/ticdc/docker-compose/data
+deployments/ticdc/docker-compose/logs
 
 # Binary file when running intergration test
 integration/integration

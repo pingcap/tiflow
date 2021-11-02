@@ -42,7 +42,7 @@ jobs:
         run: go mod vendor
 
       - name: Pull images
-        run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
+        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-avro.yml pull --ignore-pull-failures
 
       - name: TiDB version
         run: |
@@ -63,13 +63,13 @@ jobs:
 
       - name: Try to dump container logs
         if: ${{ failure() }}
-        run: docker-compose -f docker-compose-avro.yml logs -t
+        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-avro.yml logs -t
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
           name: logs
-          path: ${{ github.workspace }}/docker/logs/*
+          path: ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
@@ -104,7 +104,7 @@ jobs:
         run: go mod vendor
 
       - name: Pull images
-        run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
+        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-avro.yml pull --ignore-pull-failures
 
       - name: TiDB version
         run: |
@@ -125,13 +125,13 @@ jobs:
 
       - name: Try to dump container logs
         if: ${{ failure() }}
-        run: docker-compose -f docker-compose-avro.yml logs -t
+        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-avro.yml logs -t
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
           name: logs
-          path: ${{ github.workspace }}/docker/logs/*
+          path: ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
@@ -166,7 +166,7 @@ jobs:
         run: go mod vendor
 
       - name: Pull images
-        run: docker-compose -f docker-compose-canal.yml pull --ignore-pull-failures
+        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-canal.yml pull --ignore-pull-failures
 
       - name: TiDB version
         run: |
@@ -187,13 +187,13 @@ jobs:
 
       - name: Try to dump container logs
         if: ${{ failure() }}
-        run: docker-compose -f docker-compose-canal.yml logs -t
+        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-canal.yml logs -t
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
           name: logs
-          path: ${{ github.workspace }}/docker/logs/*
+          path: ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
