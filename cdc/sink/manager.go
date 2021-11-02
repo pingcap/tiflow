@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	redo "github.com/pingcap/ticdc/cdc/redo"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -66,17 +67,18 @@ func NewManager(
 }
 
 // CreateTableSink creates a table sink
-func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) Sink {
+func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, redoManager redo.LogManager) Sink {
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
 	if _, exist := m.tableSinks[tableID]; exist {
 		log.Panic("the table sink already exists", zap.Uint64("tableID", uint64(tableID)))
 	}
 	sink := &tableSink{
-		tableID:   tableID,
-		manager:   m,
-		buffer:    make([]*model.RowChangedEvent, 0, 128),
-		emittedTs: checkpointTs,
+		tableID:     tableID,
+		manager:     m,
+		buffer:      make([]*model.RowChangedEvent, 0, 128),
+		emittedTs:   checkpointTs,
+		redoManager: redoManager,
 	}
 	m.tableSinks[tableID] = sink
 	return sink
@@ -96,9 +98,9 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 	}
 	minTs := model.Ts(math.MaxUint64)
 	for _, tableSink := range m.tableSinks {
-		emittedTs := tableSink.getEmittedTs()
-		if minTs > emittedTs {
-			minTs = emittedTs
+		resolvedTs := tableSink.getResolvedTs()
+		if minTs > resolvedTs {
+			minTs = resolvedTs
 		}
 	}
 	return minTs

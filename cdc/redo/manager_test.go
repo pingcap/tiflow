@@ -29,13 +29,25 @@ func TestConsistentConfig(t *testing.T) {
 		level string
 		valid bool
 	}{
-		{"normal", true},
+		{"none", true},
 		{"eventual", true},
-		{"NORMAL", false},
+		{"NONE", false},
 		{"", false},
 	}
 	for _, lc := range levelCases {
 		require.Equal(t, lc.valid, IsValidConsistentLevel(lc.level))
+	}
+
+	levelEnableCases := []struct {
+		level      string
+		consistent bool
+	}{
+		{"invalid-level", false},
+		{"none", false},
+		{"eventual", true},
+	}
+	for _, lc := range levelEnableCases {
+		require.Equal(t, lc.consistent, IsConsistentEnabled(lc.level))
 	}
 
 	storageCases := []struct {
@@ -81,7 +93,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 
 	cfg := &config.ConsistentConfig{
 		Level:   string(consistentLevelEventual),
-		Storage: string(consistentStorageBlackhole),
+		Storage: "blackhole://",
 	}
 	errCh := make(chan error, 1)
 	opts := &ManagerOptions{
@@ -169,7 +181,7 @@ func TestLogManagerInOwner(t *testing.T) {
 
 	cfg := &config.ConsistentConfig{
 		Level:   string(consistentLevelEventual),
-		Storage: string(consistentStorageBlackhole),
+		Storage: "blackhole://",
 	}
 	opts := &ManagerOptions{
 		EnableBgRunner: false,

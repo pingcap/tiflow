@@ -19,5 +19,4 @@ type ConsistentConfig struct {
 	MaxLogSize        int64  `toml:"max-log-size" json:"max-log-size"`
 	FlushIntervalInMs int64  `toml:"flush-interval" json:"flush-interval"`
 	Storage           string `toml:"storage" json:"storage"`
-	S3URI             string `toml:"s3-uri" json:"s3-uri"`
 }
