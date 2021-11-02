@@ -137,7 +137,10 @@ type ManagerImpl struct {
 func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *ManagerOptions) (*ManagerImpl, error) {
 	// return a disabled Manager if no consistent config or normal consistent level
 	if cfg == nil || consistentLevelType(cfg.Level) == consistentLevelNone {
-		return &ManagerImpl{enabled: false}, nil
+		cfg = &config.ConsistentConfig{}
+		cfg.Storage = "local:///tmp/tidb_cdc_test/it/nfs/redo"
+		cfg.Level = string(consistentLevelEventual)
+		//return &ManagerImpl{enabled: false}, nil
 	}
 	uri, err := storage.ParseRawURL(cfg.Storage)
 	if err != nil {
@@ -150,7 +153,6 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		rtsMap:      make(map[model.TableID]uint64),
 		logBuffer:   make(chan cacheRows, logBufferChanSize),
 	}
-
 	switch m.storageType {
 	case consistentStorageBlackhole:
 		m.writer = writer.NewBlackHoleWriter()
