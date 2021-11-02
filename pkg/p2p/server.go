@@ -553,10 +553,8 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 	metricsServerStreamCount.Add(1)
 	defer metricsServerStreamCount.Sub(1)
 
-	ctx := context.WithValue(stream.Context(), streamMetaCtxKey, packet.Meta)
-
 	streamHandle := m.newStreamHandle(packet.Meta)
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 	errg, ctx := errgroup.WithContext(ctx)
 
