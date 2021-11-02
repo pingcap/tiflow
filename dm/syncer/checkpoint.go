@@ -591,8 +591,7 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	extraSQLs []string,
 	extraArgs [][]interface{},
 ) error {
-	cp.RLock()
-	defer cp.RUnlock()
+	cp.Lock()
 
 	if len(cp.snapshots) == 0 || cp.snapshots[0].id != snapshot {
 		cp.logCtx.Logger.DPanic("snapshot not found", zap.Int("id", snapshot))
@@ -659,6 +658,8 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 		sqls = append(sqls, extraSQLs[i])
 		args = append(args, extraArgs[i])
 	}
+	// execute SQLs might be slow, so release the lock here add relock after exec finished.
+	cp.Unlock()
 
 	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
 	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
@@ -668,6 +669,8 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 		return err
 	}
 
+	cp.Lock()
+	defer cp.Unlock()
 	cp.globalPoint.flushBy(*snapshotCp.globalPoint)
 	for _, point := range points {
 		point.pos.flushBy(point.spLoc)

@@ -1090,10 +1090,10 @@ func (w *checkpointFlushWorker) Add(msg *flushCpTask) {
 
 // Run read flush tasks from input and execute one by one
 func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
-	for msg := range w.input {
+	for task := range w.input {
 		// wait all worker finish execute flush job
-		if msg.wg != nil {
-			msg.wg.Wait()
+		if task.wg != nil {
+			task.wg.Wait()
 		}
 
 		err := w.execError.Load()
@@ -1103,25 +1103,25 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 		// We should find a way to (compensating) implement a transaction containing interaction with both etcd and SQL.
 		if err != nil && (terror.ErrDBExecuteFailed.Equal(err) || terror.ErrDBUnExpect.Equal(err)) {
 			ctx.L().Warn("error detected when executing SQL job, skip flush checkpoint",
-				zap.Stringer("checkpoint", s.checkpoint),
+				zap.Stringer("global_pos", task.snapshot.pos),
 				zap.Error(err))
 			return
 		}
 
-		err = w.cp.FlushPointsExcept(ctx, msg.snapshot.id, msg.exceptTables, msg.shardMetaSQLs, msg.shardMetaArgs)
-		if msg.resChan != nil {
-			msg.resChan <- err
+		err = w.cp.FlushPointsExcept(ctx, task.snapshot.id, task.exceptTables, task.shardMetaSQLs, task.shardMetaArgs)
+		if task.resChan != nil {
+			task.resChan <- err
 		}
 		if err != nil {
-			ctx.L().Warn("flush checkpoint snapshot failed, ignore this error", zap.Any("snapshot", msg))
+			ctx.L().Warn("flush checkpoint snapshot failed, ignore this error", zap.Any("snapshot", task))
 
 			continue
 		}
-		ctx.L().Info("flushed checkpoint", zap.Int("snapshot_id", msg.snapshot.id),
-			zap.Stringer("pos", msg.snapshot.pos))
-		if err = w.afterFlushFn(msg); err != nil {
-			if msg.resChan != nil {
-				msg.resChan <- err
+		ctx.L().Info("flushed checkpoint", zap.Int("snapshot_id", task.snapshot.id),
+			zap.Stringer("pos", task.snapshot.pos))
+		if err = w.afterFlushFn(task); err != nil {
+			if task.resChan != nil {
+				task.resChan <- err
 			}
 			ctx.L().Warn("flush post process failed", zap.Error(err))
 		}
@@ -1150,7 +1150,7 @@ func (s *Syncer) flushCheckPoints() error {
 	return <-errCh
 }
 
-// flushCheckPointsAsync flushes previous saved checkpoint asyncronously after all worker finsh flush.
+// flushCheckPointsAsync flushes previous saved checkpoint asynchronously after all worker finish flush.
 // it it triggered by intervals (and job executed)
 func (s *Syncer) flushCheckPointsAsync(wg *sync.WaitGroup, version int64) {
 	s.doFlushCheckPointsAsync(wg, nil, version)
@@ -3058,7 +3058,7 @@ func (s *Syncer) recordSkipSQLsLocation(ec *eventContext) error {
 }
 
 // flushJobs add a flush job and wait for all jobs finished.
-// NOTE: currently, flush job is alwasy sync operation.
+// NOTE: currently, flush job is always sync operation.
 func (s *Syncer) flushJobs() error {
 	s.tctx.L().Info("flush all jobs", zap.Stringer("global checkpoint", s.checkpoint))
 	job := newFlushJob()
