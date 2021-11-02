@@ -94,21 +94,6 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	c.Assert(msg.EventType, check.Equals, "CREATE")
 }
 
-func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
-	defer testleak.AfterTest(c)()
-	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), waterMark: false}
-	c.Assert(encoder, check.NotNil)
-
-	msg, err := encoder.EncodeCheckpointEvent(2333)
-	c.Assert(err, check.IsNil)
-	c.Assert(msg, check.IsNil)
-
-	encoder.waterMark = true
-	msg, err = encoder.EncodeCheckpointEvent(2333)
-	c.Assert(err, check.IsNil)
-	c.Assert(msg, check.NotNil)
-}
-
 func (s *canalFlatSuite) TestBatching(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
@@ -151,6 +136,21 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 
 	c.Assert(encoder.unresolvedBuf, check.HasLen, 0)
 	c.Assert(encoder.resolvedBuf, check.HasLen, 0)
+}
+
+func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
+	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), waterMark: false}
+	c.Assert(encoder, check.NotNil)
+
+	msg, err := encoder.EncodeCheckpointEvent(2333)
+	c.Assert(err, check.IsNil)
+	c.Assert(msg, check.IsNil)
+
+	encoder.waterMark = true
+	msg, err = encoder.EncodeCheckpointEvent(2333)
+	c.Assert(err, check.IsNil)
+	c.Assert(msg, check.NotNil)
 }
 
 var testCaseUpdate = &model.RowChangedEvent{
