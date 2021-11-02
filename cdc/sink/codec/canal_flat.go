@@ -88,7 +88,7 @@ type canalFlatMessage struct {
 	Old  []map[string]interface{} `json:"old"`
 
 	// CheckpointTs is a TiCDC custom field, which is not supported by original Canal protocol
-	// this is useful for message consumer to reform the original transactions.
+	// It is useful if the message consumer needs to restore the original transactions.
 	CheckpointTs uint64 `json:"checkpointTs"`
 	// Used internally by CanalFlatEventBatchEncoder
 	tikvTs uint64
