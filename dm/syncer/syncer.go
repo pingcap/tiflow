@@ -408,6 +408,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	s.flushCpWorker = &checkpointFlushWorker{
 		input:        make(chan *flushCpTask, 16),
 		cp:           s.checkpoint,
+		execError:    &s.execError,
 		afterFlushFn: s.afterFlushCheckpoint,
 	}
 
@@ -940,12 +941,15 @@ func (s *Syncer) addJob(job *job) error {
 	case flush:
 		s.addCount(false, adminQueueName, job.tp, 1, job.targetTable)
 		s.jobWg.Add(1)
-		job.wg.Add(s.cfg.WorkerCount)
 		s.dmlJobCh <- job
 		var err error
+		// if flush is sync, should wait for all the previous job done,
+		// else don't block and let the flush async
 		if job.sync {
+			s.jobWg.Wait()
 			err = s.flushCheckPoints()
 		} else {
+			job.wg.Add(s.cfg.WorkerCount)
 			s.flushCheckPointsAsync(job.wg, job.seq)
 		}
 		return err
@@ -1075,6 +1079,7 @@ type flushCpTask struct {
 type checkpointFlushWorker struct {
 	input        chan *flushCpTask
 	cp           CheckPoint
+	execError    *atomic.Error
 	afterFlushFn func(task *flushCpTask) error
 }
 
@@ -1091,7 +1096,19 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 			msg.wg.Wait()
 		}
 
-		err := w.cp.FlushPointsExcept(ctx, msg.snapshot.id, msg.exceptTables, msg.shardMetaSQLs, msg.shardMetaArgs)
+		err := w.execError.Load()
+		// TODO: for now, if any error occurred (including user canceled), checkpoint won't be updated. But if we have put
+		// optimistic shard info, DM-master may resolved the optimistic lock and let other worker execute DDL. So after this
+		// worker resume, it can not execute the DML/DDL in old binlog because of downstream table structure mismatching.
+		// We should find a way to (compensating) implement a transaction containing interaction with both etcd and SQL.
+		if err != nil && (terror.ErrDBExecuteFailed.Equal(err) || terror.ErrDBUnExpect.Equal(err)) {
+			ctx.L().Warn("error detected when executing SQL job, skip flush checkpoint",
+				zap.Stringer("checkpoint", s.checkpoint),
+				zap.Error(err))
+			return
+		}
+
+		err = w.cp.FlushPointsExcept(ctx, msg.snapshot.id, msg.exceptTables, msg.shardMetaSQLs, msg.shardMetaArgs)
 		if msg.resChan != nil {
 			msg.resChan <- err
 		}
@@ -1140,18 +1157,6 @@ func (s *Syncer) flushCheckPointsAsync(wg *sync.WaitGroup, version int64) {
 }
 
 func (s *Syncer) doFlushCheckPointsAsync(wg *sync.WaitGroup, outCh chan error, version int64) {
-	err := s.execError.Load()
-	// TODO: for now, if any error occurred (including user canceled), checkpoint won't be updated. But if we have put
-	// optimistic shard info, DM-master may resolved the optimistic lock and let other worker execute DDL. So after this
-	// worker resume, it can not execute the DML/DDL in old binlog because of downstream table structure mismatching.
-	// We should find a way to (compensating) implement a transaction containing interaction with both etcd and SQL.
-	if err != nil && (terror.ErrDBExecuteFailed.Equal(err) || terror.ErrDBUnExpect.Equal(err)) {
-		s.tctx.L().Warn("error detected when executing SQL job, skip flush checkpoint",
-			zap.Stringer("checkpoint", s.checkpoint),
-			zap.Error(err))
-		return
-	}
-
 	var (
 		exceptTableIDs map[string]bool
 		exceptTables   []*filter.Table
@@ -1187,11 +1192,12 @@ func (s *Syncer) doFlushCheckPointsAsync(wg *sync.WaitGroup, outCh chan error, v
 }
 
 func (s *Syncer) afterFlushCheckpoint(task *flushCpTask) error {
+	s.addCount(true, adminQueueName, flush, 1, nil)
+	// add a gc job to let causality module gc outdated kvs.
 	s.dmlJobCh <- &job{
 		tp:  gc,
 		seq: task.version,
 	}
-	s.addCount(true, adminQueueName, flush, 1, nil)
 	// update current active relay log after checkpoint flushed
 	err := s.updateActiveRelayLog(task.snapshot.pos.Position)
 	if err != nil {
@@ -1601,7 +1607,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		s.checkpoint.SaveSafeModeExitPoint(&exitSafeModeLoc)
 
 		// flush all jobs before exit
-		if err2 = s.flushJobs(true); err2 != nil {
+		if err2 = s.flushJobs(); err2 != nil {
 			tctx.L().Warn("failed to flush jobs when exit task", zap.Error(err2))
 		}
 
@@ -1856,7 +1862,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 						currentLocation = startLocation
 					} else if op == pb.ErrorOp_Skip {
 						s.saveGlobalPoint(currentLocation)
-						err = s.flushJobs(true)
+						err = s.flushJobs()
 						if err != nil {
 							tctx.L().Warn("failed to flush jobs when handle-error skip", zap.Error(err))
 						} else {
@@ -1971,7 +1977,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				// flush checkpoint even if there are no real binlog events
 				if s.checkpoint.CheckGlobalPoint() {
 					tctx.L().Info("meet heartbeat event and then flush jobs")
-					err2 = s.flushJobs(true)
+					err2 = s.flushJobs()
 				}
 			}
 		}
@@ -2070,6 +2076,7 @@ func (s *Syncer) handleRotateEvent(ev *replication.RotateEvent, ec eventContext)
 	return nil
 }
 
+// getSeq is used for assigning an auto-incremental sequence number for each job
 func (s *Syncer) getSeq() int64 {
 	s.seq++
 	return s.seq
@@ -2486,7 +2493,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 
 	// flush previous DMLs and checkpoint if needing to handle the DDL.
 	// NOTE: do this flush before operations on shard groups which may lead to skip a table caused by `UnresolvedTables`.
-	if err = s.flushJobs(true); err != nil {
+	if err = s.flushJobs(); err != nil {
 		return err
 	}
 
@@ -3051,10 +3058,11 @@ func (s *Syncer) recordSkipSQLsLocation(ec *eventContext) error {
 }
 
 // flushJobs add a flush job and wait for all jobs finished.
-func (s *Syncer) flushJobs(sync bool) error {
+// NOTE: currently, flush job is alwasy sync operation.
+func (s *Syncer) flushJobs() error {
 	s.tctx.L().Info("flush all jobs", zap.Stringer("global checkpoint", s.checkpoint))
 	job := newFlushJob()
-	job.sync = sync
+	job.sync = true
 	return s.addJobFunc(job)
 }
 

@@ -817,6 +817,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	syncer.flushCpWorker = &checkpointFlushWorker{
 		input:        make(chan *flushCpTask, 16),
 		cp:           syncer.checkpoint,
+		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
 	}
 
@@ -952,6 +953,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	syncer.flushCpWorker = &checkpointFlushWorker{
 		input:        make(chan *flushCpTask, 16),
 		cp:           syncer.checkpoint,
+		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
 	}
 
@@ -1078,6 +1080,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	syncer.flushCpWorker = &checkpointFlushWorker{
 		input:        make(chan *flushCpTask, 16),
 		cp:           syncer.checkpoint,
+		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
 	}
 
