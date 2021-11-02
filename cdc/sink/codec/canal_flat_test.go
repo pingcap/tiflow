@@ -96,10 +96,14 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 
 func (s *canalFlatSuite) TestNewCanalFlatMessage4CheckpointEvent(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
+	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), waterMark: false}
 	c.Assert(encoder, check.NotNil)
 
-	msg := encoder.newFlatMessage4CheckpointEvent(23333)
+	msg := encoder.newFlatMessage4CheckpointEvent(2333)
+	c.Assert(msg, check.IsNil)
+
+	encoder.waterMark = true
+	msg = encoder.newFlatMessage4CheckpointEvent(23333)
 	c.Assert(msg, check.NotNil)
 	c.Assert(msg.EventType, check.Equals, "WATERMARK")
 }
