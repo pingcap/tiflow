@@ -626,9 +626,64 @@ error = '''
 etcd api call error
 '''
 
+["CDC:ErrPeerMessageDecodeError"]
+error = '''
+failed to decode peer-to-peer message
+'''
+
+["CDC:ErrPeerMessageDuplicateConnection"]
+error = '''
+peer-to-peer message duplicate connection: epoch %d
+'''
+
+["CDC:ErrPeerMessageEncodeError"]
+error = '''
+failed to encode peer-to-peer message
+'''
+
+["CDC:ErrPeerMessageIllegalClientVersion"]
+error = '''
+peer-to-peer message client reported illegal version: %s
+'''
+
 ["CDC:ErrPeerMessageIllegalMeta"]
 error = '''
 peer-to-peer message server received an RPC call with illegal metadata
+'''
+
+["CDC:ErrPeerMessageInternalSenderClosed"]
+error = '''
+peer-to-peer message internal sender closed. Report a bug if seen externally
+'''
+
+["CDC:ErrPeerMessageReceiverMismatch"]
+error = '''
+peer-to-peer message receiver is a mismatch: expected %s, got %s
+'''
+
+["CDC:ErrPeerMessageServerClosed"]
+error = '''
+peer-to-peer message server has closed connection: %s.
+'''
+
+["CDC:ErrPeerMessageStaleConnection"]
+error = '''
+peer-to-peer message stale connection: old-epoch %d, new-epoch %d
+'''
+
+["CDC:ErrPeerMessageTaskQueueCongested"]
+error = '''
+peer-to-peer message server has too many pending tasks
+'''
+
+["CDC:ErrPeerMessageTopicCongested"]
+error = '''
+peer-to-peer message topic has congested, aborting all connections
+'''
+
+["CDC:ErrPeerMessageUnexpected"]
+error = '''
+peer-to-peer message from %s is unexpected: %s
 '''
 
 ["CDC:ErrPendingRegionCancel"]

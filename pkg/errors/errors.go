@@ -263,5 +263,16 @@ var (
 	ErrTCPServerClosed = errors.Normalize("The TCP server has been closed", errors.RFCCodeText("CDC:ErrTCPServerClosed"))
 
 	// p2p error
-	ErrPeerMessageIllegalMeta = errors.Normalize("peer-to-peer message server received an RPC call with illegal metadata", errors.RFCCodeText("CDC:ErrPeerMessageIllegalMeta"))
+	ErrPeerMessageIllegalMeta          = errors.Normalize("peer-to-peer message server received an RPC call with illegal metadata", errors.RFCCodeText("CDC:ErrPeerMessageIllegalMeta"))
+	ErrPeerMessageTopicCongested       = errors.Normalize("peer-to-peer message topic has congested, aborting all connections", errors.RFCCodeText("CDC:ErrPeerMessageTopicCongested"))
+	ErrPeerMessageTaskQueueCongested   = errors.Normalize("peer-to-peer message server has too many pending tasks", errors.RFCCodeText("CDC:ErrPeerMessageTaskQueueCongested"))
+	ErrPeerMessageDecodeError          = errors.Normalize("failed to decode peer-to-peer message", errors.RFCCodeText("CDC:ErrPeerMessageDecodeError"))
+	ErrPeerMessageEncodeError          = errors.Normalize("failed to encode peer-to-peer message", errors.RFCCodeText("CDC:ErrPeerMessageEncodeError"))
+	ErrPeerMessageUnexpected           = errors.Normalize("peer-to-peer message from %s is unexpected: %s", errors.RFCCodeText("CDC:ErrPeerMessageUnexpected"))
+	ErrPeerMessageReceiverMismatch     = errors.Normalize("peer-to-peer message receiver is a mismatch: expected %s, got %s", errors.RFCCodeText("CDC:ErrPeerMessageReceiverMismatch"))
+	ErrPeerMessageStaleConnection      = errors.Normalize("peer-to-peer message stale connection: old-epoch %d, new-epoch %d", errors.RFCCodeText("CDC:ErrPeerMessageStaleConnection"))
+	ErrPeerMessageDuplicateConnection  = errors.Normalize("peer-to-peer message duplicate connection: epoch %d", errors.RFCCodeText("CDC:ErrPeerMessageDuplicateConnection"))
+	ErrPeerMessageInternalSenderClosed = errors.Normalize("peer-to-peer message internal sender closed. Report a bug if seen externally", errors.RFCCodeText("CDC:ErrPeerMessageInternalSenderClosed"))
+	ErrPeerMessageServerClosed         = errors.Normalize("peer-to-peer message server has closed connection: %s.", errors.RFCCodeText("CDC:ErrPeerMessageServerClosed"))
+	ErrPeerMessageIllegalClientVersion = errors.Normalize("peer-to-peer message client reported illegal version: %s", errors.RFCCodeText("CDC:ErrPeerMessageIllegalClientVersion"))
 )

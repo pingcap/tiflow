@@ -25,4 +25,10 @@ type (
 	Seq = int64
 	// MessageServerStream is an alias for the protobuf-generated interface for the message service.
 	MessageServerStream = p2p.CDCPeerToPeer_SendMessageServer
+
+	streamMetaCtxKeyType string
+)
+
+const (
+	streamMetaCtxKey = streamMetaCtxKeyType("stream-meta-ctx-key")
 )
