@@ -25,6 +25,7 @@ const (
 	TypeUnknown Type = iota
 	TypeTick
 	TypeBarrier
+	TypeStop
 	// Add a new type when adding a new message.
 )
 
@@ -48,5 +49,12 @@ func BarrierMessage(barrierTs model.Ts) Message {
 	return Message{
 		Tp:        TypeBarrier,
 		BarrierTs: barrierTs,
+	}
+}
+
+// StopMessage creates the message of Stop
+func StopMessage() Message {
+	return Message{
+		Tp: TypeStop,
 	}
 }

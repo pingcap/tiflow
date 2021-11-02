@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
+	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -727,15 +728,31 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 	}
 
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs, p.redoManager)
-	table := tablepipeline.NewTablePipeline(
-		ctx,
-		p.mounter,
-		tableID,
-		tableNameStr,
-		replicaInfo,
-		sink,
-		p.changefeed.Info.GetTargetTs(),
-	)
+	var table tablepipeline.TablePipeline
+	var err error
+	if config.GetGlobalServerConfig().Debug.EnableTableActor {
+		table, err = tablepipeline.NewTableActor(
+			ctx,
+			p.mounter,
+			tableID,
+			tableNameStr,
+			replicaInfo,
+			sink,
+			p.changefeed.Info.GetTargetTs())
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	} else {
+		table = tablepipeline.NewTablePipeline(
+			ctx,
+			p.mounter,
+			tableID,
+			tableNameStr,
+			replicaInfo,
+			sink,
+			p.changefeed.Info.GetTargetTs(),
+		)
+	}
 	p.wg.Add(1)
 	p.metricSyncTableNumGauge.Inc()
 	go func() {
