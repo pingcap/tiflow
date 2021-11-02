@@ -11,12 +11,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package p2p
 
-// ConsistentConfig represents replication consistency config for a changefeed
-type ConsistentConfig struct {
-	Level             string `toml:"level" json:"level"`
-	MaxLogSize        int64  `toml:"max-log-size" json:"max-log-size"`
-	FlushIntervalInMs int64  `toml:"flush-interval" json:"flush-interval"`
-	Storage           string `toml:"storage" json:"storage"`
-}
+import "github.com/pingcap/ticdc/proto/p2p"
+
+type (
+	// NodeID represents the identifier of a sender node.
+	// Using IP address is not enough because of possible restarts.
+	NodeID = string
+	// Topic represents the topic for a peer-to-peer message
+	Topic = string
+	// Seq represents the serial number of a message for a given topic.
+	Seq = int64
+	// MessageServerStream is an alias for the protobuf-generated interface for the message service.
+	MessageServerStream = p2p.CDCPeerToPeer_SendMessageServer
+)

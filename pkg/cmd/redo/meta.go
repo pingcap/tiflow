@@ -21,25 +21,12 @@ import (
 
 // metaOptions defines flags for the `redo meta` command.
 type metaOptions struct {
-	storage string
-	dir     string
-	s3URI   string
+	options
 }
 
 // newMetaOptions creates new MetaOptions for the `redo apply` command.
 func newMetaOptions() *metaOptions {
 	return &metaOptions{}
-}
-
-// addFlags receives a *cobra.Command reference and binds
-// flags related to template printing to it.
-func (o *metaOptions) addFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&o.storage, "storage", "", "storage of redo log")
-	cmd.Flags().StringVar(&o.dir, "dir", "", "local path of redo log")
-	cmd.Flags().StringVar(&o.s3URI, "s3-uri", "", "s3 uri of redo log")
-	// the possible error returned from MarkFlagRequired is `no such flag`
-	cmd.MarkFlagRequired("storage")  //nolint:errcheck
-	cmd.MarkFlagRequired("sink-uri") //nolint:errcheck
 }
 
 // run runs the `redo apply` command.
@@ -49,7 +36,6 @@ func (o *metaOptions) run(cmd *cobra.Command) error {
 	cfg := &applier.RedoApplierConfig{
 		Storage: o.storage,
 		Dir:     o.dir,
-		S3URI:   o.s3URI,
 	}
 	ap := applier.NewRedoApplier(cfg)
 	checkpointTs, resolvedTs, err := ap.ReadMeta(ctx)
@@ -61,16 +47,16 @@ func (o *metaOptions) run(cmd *cobra.Command) error {
 }
 
 // newCmdMeta creates the `redo meta` command.
-func newCmdMeta() *cobra.Command {
-	o := newMetaOptions()
+func newCmdMeta(opt *options) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "meta",
 		Short: "read redo log meta",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			o := newMetaOptions()
+			o.options = *opt
 			return o.run(cmd)
 		},
 	}
-	o.addFlags(command)
 
 	return command
 }

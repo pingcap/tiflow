@@ -11,12 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package p2p
 
-// ConsistentConfig represents replication consistency config for a changefeed
-type ConsistentConfig struct {
-	Level             string `toml:"level" json:"level"`
-	MaxLogSize        int64  `toml:"max-log-size" json:"max-log-size"`
-	FlushIntervalInMs int64  `toml:"flush-interval" json:"flush-interval"`
-	Storage           string `toml:"storage" json:"storage"`
+import (
+	"testing"
+
+	"github.com/pingcap/ticdc/pkg/leakutil"
+)
+
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }

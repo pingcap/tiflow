@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	dmterror "github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 const (
@@ -219,6 +220,21 @@ func (tr *Tracker) AllSchemas() []*model.DBInfo {
 		}
 	}
 	return filteredSchemas
+}
+
+// ListSchemaTables lists all tables in the schema.
+func (tr *Tracker) ListSchemaTables(schema string) ([]string, error) {
+	allSchemas := tr.AllSchemas()
+	for _, db := range allSchemas {
+		if db.Name.String() == schema {
+			tables := make([]string, len(db.Tables))
+			for i, t := range db.Tables {
+				tables[i] = t.Name.String()
+			}
+			return tables, nil
+		}
+	}
+	return nil, dmterror.ErrSchemaTrackerUnSchemaNotExist.Generate(schema)
 }
 
 // GetSingleColumnIndices returns indices of input column if input column only has single-column indices
