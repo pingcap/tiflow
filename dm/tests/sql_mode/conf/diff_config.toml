@@ -9,50 +9,24 @@ check-struct-only = false
 [task]
     output-dir = "./output"
 
-    source-instances = ["mysql1"]
+    source-instances = ["mysql1", "mysql2"]
 
     target-instance = "tidb0"
 
-    target-check-tables = ["sql_mode"
-tables = ["~.*"]
+    target-check-tables = ["sql_mode.*]
 
-[[source-db]]
+[data-sources]
+[data-sources.mysql1]
 host = "127.0.0.1"
 port = 3306
 user = "root"
 password = "123456"
-instance-id = "source-1"
 
-[[table-config]]
-schema = "sql_mode"
-table = "t_1"
-
-[[table-config.source-tables]]
-instance-id = "source-1"
-schema = "sql_mode"
-table  = "t_1"
-
-
-[[table-config.source-tables]]
-instance-id = "source-1"
-schema = "sql_mode"
-table  = "timezone"
-
-[[source-db]]
+[data-sources.mysql2]
 host = "127.0.0.1"
 port = 3307
 user = "root"
 password = "123456"
-instance-id = "source-2"
-
-[[table-config]]
-schema = "sql_mode"
-table = "t_2"
-
-[[table-config.source-tables]]
-instance-id = "source-2"
-schema = "sql_mode"
-table  = "t_2"
 
 [data-sources.tidb0]
 host = "127.0.0.1"
