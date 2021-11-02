@@ -14,12 +14,14 @@
 package codec
 
 import (
+	"context"
 	"encoding/binary"
 	"strings"
 	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -175,23 +177,27 @@ func (p *Protocol) FromString(protocol string) {
 	}
 }
 
-// NewEventBatchEncoder returns a function of creating an EventBatchEncoder by protocol.
-func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
+type EncoderBuilder interface {
+	Build(ctx context.Context) (EventBatchEncoder, error)
+}
+
+// NewEventBatchEncoderBuilder returns an EncoderBuilder
+func NewEventBatchEncoderBuilder(p Protocol, credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
 	switch p {
 	case ProtocolDefault:
-		return NewJSONEventBatchEncoder
+		return newJSONEventBatchEncoderBuilder(opts), nil
 	case ProtocolCanal:
-		return NewCanalEventBatchEncoder
+		return newCanalEventBatchEncoderBuilder(opts), nil
 	case ProtocolAvro:
-		return NewAvroEventBatchEncoder
+		return newAvroEventBatchEncoderBuilder(credential, opts)
 	case ProtocolMaxwell:
-		return NewMaxwellEventBatchEncoder
+		return newMaxwellEventBatchEncoderBuilder(opts), nil
 	case ProtocolCanalJSON:
-		return NewCanalFlatEventBatchEncoder
+		return newCanalFlatEventBatchEncoderBuilder(opts), nil
 	case ProtocolCraft:
-		return NewCraftEventBatchEncoder
+		return newCraftEventBatchEncoderBuilder(opts), nil
 	default:
-		log.Warn("unknown codec protocol value of EventBatchEncoder", zap.Int("protocol_value", int(p)))
-		return NewJSONEventBatchEncoder
+		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Int("protocol_value", int(p)))
+		return newJSONEventBatchEncoderBuilder(opts), nil
 	}
 }
