@@ -53,7 +53,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 
 	uriTemplate := "kafka://%s/kafka-test?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=4194304&partition-num=1" +
-		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=default"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr())
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)

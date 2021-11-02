@@ -120,7 +120,7 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 
 	s = sinkURI.Query().Get("protocol")
 	if s == "" {
-		return cerror.ErrKafkaInvalidConfig.GenWithStackByArgs("encoding protocol is not set")
+		return cerror.ErrKafkaInvalidConfig.GenWithStack("encoding protocol is not set")
 	}
 	replicaConfig.Sink.Protocol = s
 
