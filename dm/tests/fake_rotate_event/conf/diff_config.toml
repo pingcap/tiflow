@@ -1,5 +1,3 @@
-# [wrong?]
-
 # diff Configuration.
 
 check-thread-count = 4
@@ -15,14 +13,12 @@ check-struct-only = false
 
     target-instance = "tidb0"
 
-    target-check-tables = ["only_dml.t?*"]
-
+    target-check-tables = ["fake_rotate_event.t?"]
 
 
 [data-sources]
 [data-sources.mysql1]
 host = "127.0.0.1"
-instance-id = "source-1"
 password = "123456"
 port = 3306
 user = "root"

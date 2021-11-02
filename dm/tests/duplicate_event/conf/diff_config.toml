@@ -13,8 +13,13 @@ check-struct-only = false
 
     target-instance = "tidb0"
 
-    target-check-tables = ["dup_event1.t?*"]
+    target-check-tables = ["dup_event1.t1"]
 
+[routes.rule1]
+schema-pattern = "dup_event"
+table-pattern = "t1"
+target-schema = "dup_event1"
+target-table = "t1"
 
 [data-sources]
 [data-sources.mysql1]
@@ -22,6 +27,7 @@ host = "127.0.0.1"
 port = 3306
 user = "root"
 password = "123456"
+route-rules = ["rule1"]
 
 [data-sources.tidb0]
 host = "127.0.0.1"

@@ -1,32 +1,26 @@
 # diff Configuration.
 
-log-level = "info"
-chunk-size = 10
 check-thread-count = 4
-sample-percent = 100
-use-checksum = true
-fix-sql-file = "fix.sql"
 
-# tables need to check.
-[[check-tables]]
-    schema = "multi_capture_1"
-    tables = ["usertable"]
-[[check-tables]]
-    schema = "multi_capture_2"
-    tables = ["usertable"]
-[[check-tables]]
-    schema = "multi_capture_3"
-    tables = ["usertable"]
-[[check-tables]]
-    schema = "multi_capture_4"
-    tables = ["usertable"]
+export-fix-sql = true
 
-[[source-db]]
+check-struct-only = false
+
+[task]
+    output-dir = "./output"
+
+    source-instances = ["mysql1"]
+
+    target-instance = "tidb0"
+
+    target-check-tables = ["multi_capture_1.usertable", "multi_capture_2.usertable", "multi_capture_3.usertable", "multi_capture_4.usertable"]
+
+[data-sources]
+[data-sources.mysql1]
     host = "127.0.0.1"
     port = 4000
     user = "root"
     password = ""
-    instance-id = "source-1"
 
 [data-sources.tidb0]
     host = "127.0.0.1"

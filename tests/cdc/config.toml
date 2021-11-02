@@ -13,7 +13,7 @@ password = ""
 name = "test"
 port = 4000
 
-[data-sources.tidb0]
+[target-db]
 host = "127.0.0.1"
 user = "root"
 password = ""
