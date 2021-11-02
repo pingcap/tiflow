@@ -145,6 +145,10 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 
 // complete adapts from the command line args to the data and client required.
 func (o *createChangefeedOptions) complete(ctx context.Context, f factory.Factory, cmd *cobra.Command) error {
+	if o.commonChangefeedOptions.sinkURI == "" {
+		return errors.New("Creating changefeed without a sink-uri")
+	}
+
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
 		return err
@@ -268,10 +272,6 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 
 // validate checks that the provided attach options are specified.
 func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Command) error {
-	if o.commonChangefeedOptions.sinkURI == "" {
-		return errors.New("Creating changefeed without a sink-uri")
-	}
-
 	if err := o.validateStartTs(ctx); err != nil {
 		return err
 	}
