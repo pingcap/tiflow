@@ -149,7 +149,7 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	prodSuccess := new(sarama.ProduceResponse)
 	prodSuccess.AddTopicPartition(topic, 0, sarama.ErrNoError)
 
-	uriTemplate := "kafka://%s/kafka-test?kafka-version=0.9.0.0&auto-create-topic=false"
+	uriTemplate := "kafka://%s/kafka-test?kafka-version=0.9.0.0&auto-create-topic=false&protocol=default"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr())
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
