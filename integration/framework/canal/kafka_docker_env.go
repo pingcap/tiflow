@@ -26,8 +26,15 @@ import (
 )
 
 const (
+<<<<<<< HEAD
 	dockerComposeFilePath   = "/docker-compose-canal.yml"
 	controllerContainerName = "ticdc_controller_1"
+=======
+	dockerComposeFilePath   = "/deployments/ticdc/docker-compose/docker-compose-canal.yml"
+	controllerContainerName = "ticdc_controller"
+	// The upstream PD endpoint in docker-compose network.
+	upstreamPD = "http://upstream-pd:2379"
+>>>>>>> c90adaffd (deployments(ticdc): move all docker related files into deployments (#3204))
 )
 
 // KafkaDockerEnv represents the docker-compose service defined in docker-compose-canal.yml
