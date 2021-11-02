@@ -605,6 +605,9 @@ const (
 	codeSchemaTrackerRestoreStmtFail
 	codeSchemaTrackerCannotDropTable
 	codeSchemaTrackerInit
+	codeSchemaTrackerMarshalJSON
+	codeSchemaTrackerUnMarshalJSON
+	codeSchemaTrackerUnSchemaNotExist
 )
 
 // HA scheduler.
@@ -1224,6 +1227,9 @@ var (
 	ErrSchemaTrackerCannotSerialize    = New(codeSchemaTrackerCannotSerialize, ClassSchemaTracker, ScopeInternal, LevelHigh, "failed to serialize table info for `%s`.`%s`", "")
 	ErrSchemaTrackerCannotGetTable     = New(codeSchemaTrackerCannotGetTable, ClassSchemaTracker, ScopeInternal, LevelHigh, "cannot get table info for %v from schema tracker", "")
 	ErrSchemaTrackerCannotExecDDL      = New(codeSchemaTrackerCannotExecDDL, ClassSchemaTracker, ScopeInternal, LevelHigh, "cannot track DDL: %s", "")
+	ErrSchemaTrackerMarshalJSON        = New(codeSchemaTrackerMarshalJSON, ClassSchemaTracker, ScopeDownstream, LevelHigh, "can not marshal struct maybe `%v` is unable to serialize", "")
+	ErrSchemaTrackerUnMarshalJSON      = New(codeSchemaTrackerUnMarshalJSON, ClassSchemaTracker, ScopeDownstream, LevelHigh, "can not unmarshal json maybe `%s` is not proper JSON", "")
+	ErrSchemaTrackerUnSchemaNotExist   = New(codeSchemaTrackerUnSchemaNotExist, ClassSchemaTracker, ScopeDownstream, LevelHigh, "can not find `%s` in tracker", "")
 
 	ErrSchemaTrackerCannotFetchDownstreamTable = New(
 		codeSchemaTrackerCannotFetchDownstreamTable, ClassSchemaTracker, ScopeDownstream, LevelMedium,
