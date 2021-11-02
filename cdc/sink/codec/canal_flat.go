@@ -75,7 +75,7 @@ type canalFlatMessage struct {
 	EventType string   `json:"type"`
 	// officially the timestamp of the event-time of the message, in milliseconds since Epoch.
 	ExecutionTime int64 `json:"es"`
-	// officially the timestamp of building the MQ message, in milliseconds
+	// officially the timestamp of building the MQ message, in milliseconds since Epoch.
 	BuildTime int64 `json:"ts"`
 	// SQL that generated the change event, DDL or Query
 	Query string `json:"sql"`
@@ -161,7 +161,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		IsDDL:         false,
 		EventType:     header.GetEventType().String(),
 		ExecutionTime: header.ExecuteTime,
-		BuildTime:     time.Now().UnixNano() / 1e6,
+		BuildTime:     time.Now().UnixNano() / 1e6, // millisecond timestamp since Epoch.
 		Query:         "",
 		SQLType:       sqlType,
 		MySQLType:     mysqlType,
@@ -196,11 +196,12 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) *ca
 }
 
 // newFlatMessage4CheckpointEvent return a `WATERMARK` event typed message
+// Since `WATERMARK` is a TiCDC Custom event type, If the message consumer want to handle it properly,
+// they should make sure their consumer code can recognize this type.
 func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *canalFlatMessage {
 	return &canalFlatMessage{
 		CheckpointTs: ts,
-		// `WATERMARK` is a TiCDC custom event type, alias of `checkpoint`
-		EventType: canal.EventType_WATERMARK.String(),
+		EventType:    canal.EventType_WATERMARK.String(),
 	}
 }
 
@@ -288,7 +289,6 @@ func (c *CanalFlatEventBatchEncoder) Reset() {
 	panic("not supported")
 }
 
-// SetParams is no-op for now
 func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 	if s, ok := params["watermark"]; ok {
 		a, err := strconv.ParseBool(s)

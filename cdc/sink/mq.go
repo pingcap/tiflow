@@ -42,7 +42,11 @@ type mqEvent struct {
 	resolvedTs uint64
 }
 
-const defaultPartitionInputChSize = 12800
+const (
+	defaultPartitionInputChSize = 12800
+	// -1 means broadcast to all partition, it's the default for the default open protocol.
+	defaultDDLDispatchPartition = -1
+)
 
 type mqSink struct {
 	mqProducer     producer.Producer
@@ -230,9 +234,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	}
 
-	// -1 means broadcast to all partition, it's the default for the default open protocol.
-	var partition int32 = -1
-	// for Canal-Json / Canal-pb, send to partition 0.
+	var partition int32 = defaultDDLDispatchPartition
+	// for Canal-JSON / Canal-PB, send to partition 0.
 	if _, ok := encoder.(*codec.CanalFlatEventBatchEncoder); ok {
 		partition = 0
 	}
