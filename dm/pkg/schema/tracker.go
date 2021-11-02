@@ -39,7 +39,7 @@ import (
 
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
-	dterror "github.com/pingcap/ticdc/dm/pkg/terror"
+	dmterror "github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
@@ -251,6 +251,21 @@ func (tr *Tracker) AllSchemas() []*model.DBInfo {
 	return filteredSchemas
 }
 
+// ListSchemaTables lists all tables in the schema.
+func (tr *Tracker) ListSchemaTables(schema string) ([]string, error) {
+	allSchemas := tr.AllSchemas()
+	for _, db := range allSchemas {
+		if db.Name.String() == schema {
+			tables := make([]string, len(db.Tables))
+			for i, t := range db.Tables {
+				tables[i] = t.Name.String()
+			}
+			return tables, nil
+		}
+	}
+	return nil, dmterror.ErrSchemaTrackerUnSchemaNotExist.Generate(schema)
+}
+
 // GetSingleColumnIndices returns indices of input column if input column only has single-column indices
 // returns nil if input column has no indices, or has multi-column indices.
 func (tr *Tracker) GetSingleColumnIndices(db, tbl, col string) ([]*model.IndexInfo, error) {
@@ -440,19 +455,19 @@ func (tr *Tracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID stri
 	}
 	createStr, err := utils.GetTableCreateSQL(tctx.Ctx, tr.dsTracker.downstreamConn.BaseConn.DBConn, tableID)
 	if err != nil {
-		return nil, dterror.ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt.Delegate(err, tableID)
+		return nil, dmterror.ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt.Delegate(err, tableID)
 	}
 
 	tctx.Logger.Info("Show create table info", zap.String("tableID", tableID), zap.String("create string", createStr))
 	// parse create table stmt.
 	stmtNode, err := tr.dsTracker.stmtParser.ParseOneStmt(createStr, "", "")
 	if err != nil {
-		return nil, dterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
+		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
 
 	ti, err := ddl.MockTableInfo(mock.NewContext(), stmtNode.(*ast.CreateTableStmt), mockTableID)
 	if err != nil {
-		return nil, dterror.ErrSchemaTrackerCannotMockDownstreamTable.Delegate(err, createStr)
+		return nil, dmterror.ErrSchemaTrackerCannotMockDownstreamTable.Delegate(err, createStr)
 	}
 	return ti, nil
 }
@@ -462,11 +477,11 @@ func (tr *Tracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error 
 	setSQLMode := fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)
 	_, err := tr.dsTracker.downstreamConn.ExecuteSQL(tctx, []string{setSQLMode})
 	if err != nil {
-		return dterror.ErrSchemaTrackerCannotSetDownstreamSQLMode.Delegate(err, mysql.DefaultSQLMode)
+		return dmterror.ErrSchemaTrackerCannotSetDownstreamSQLMode.Delegate(err, mysql.DefaultSQLMode)
 	}
 	stmtParser, err := utils.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
 	if err != nil {
-		return dterror.ErrSchemaTrackerCannotInitDownstreamParser.Delegate(err, mysql.DefaultSQLMode)
+		return dmterror.ErrSchemaTrackerCannotInitDownstreamParser.Delegate(err, mysql.DefaultSQLMode)
 	}
 	tr.dsTracker.stmtParser = stmtParser
 	return nil
