@@ -73,7 +73,7 @@ type canalFlatMessage struct {
 	PKNames   []string `json:"pkNames"`
 	IsDDL     bool     `json:"isDdl"`
 	EventType string   `json:"type"`
-	// officially the timestamp of the event which generate the message executed, in milliseconds
+	// officially the timestamp of the event-time of the message, in milliseconds since Epoch.
 	ExecutionTime int64 `json:"es"`
 	// officially the timestamp of building the MQ message, in milliseconds
 	BuildTime int64 `json:"ts"`
