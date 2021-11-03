@@ -154,7 +154,6 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 		AdvertiseAddr: "127.5.5.1:7777",
 		LogFile:       "/root/cdc.log",
 		LogLevel:      "debug",
-		LogHTTP:       true,
 		Log: &config.LogConfig{
 			File: &config.LogFileConfig{
 				MaxSize:    300,
@@ -241,7 +240,6 @@ sort-dir = "/tmp/just_a_test"
 		AdvertiseAddr: "127.0.0.1:1111",
 		LogFile:       "/root/cdc1.log",
 		LogLevel:      "warn",
-		LogHTTP:       true,
 		Log: &config.LogConfig{
 			File: &config.LogFileConfig{
 				MaxSize:    200,
@@ -345,7 +343,6 @@ cert-allowed-cn = ["dd","ee"]
 		AdvertiseAddr: "127.0.0.1:1111",
 		LogFile:       "/root/cdc.log",
 		LogLevel:      "debug",
-		LogHTTP:       true,
 		Log: &config.LogConfig{
 			File: &config.LogFileConfig{
 				MaxSize:    200,

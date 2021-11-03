@@ -40,7 +40,7 @@ import (
 
 func (s *Server) startStatusHTTP() error {
 	conf := config.GetGlobalServerConfig()
-	router := newRouter(capture.NewHTTPHandler(s.capture), conf)
+	router := newRouter(capture.NewHTTPHandler(s.capture))
 
 	router.GET("/status", gin.WrapF(s.handleStatus))
 	router.GET("/debug/info", gin.WrapF(s.handleDebugInfo))

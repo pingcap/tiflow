@@ -19,16 +19,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/pingcap/ticdc/cdc/capture"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPProfPath(t *testing.T) {
 	t.Parallel()
-	conf := config.GetDefaultServerConfig()
-	router := newRouter(capture.NewHTTPHandler(nil), conf)
+	router := newRouter(capture.NewHTTPHandler(nil))
 
 	apis := []*openAPI{
 		{"/debug/pprof/", http.MethodGet},

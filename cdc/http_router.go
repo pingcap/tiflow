@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/capture"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -36,14 +35,13 @@ import (
 
 // newRouter create a router for OpenAPI
 
-func newRouter(captureHandler capture.HTTPHandler, conf *config.ServerConfig) *gin.Engine {
+func newRouter(captureHandler capture.HTTPHandler) *gin.Engine {
 	// discard gin log output
 	gin.DefaultWriter = io.Discard
 
 	router := gin.New()
-	if conf.LogHTTP {
-		router.Use(logMiddleware())
-	}
+
+	router.Use(logMiddleware())
 	// request will timeout after 10 second
 	router.Use(timeoutMiddleware(time.Second * 10))
 	router.Use(errorHandleMiddleware())
