@@ -100,17 +100,21 @@ func StrictDecodeFile(path, component string, cfg interface{}, ignoreCheckItems 
 		return errors.Trace(err)
 	}
 
+	// check if item is a ignoreCheckItem
+	hasIgnoreItem := func(item []string) bool {
+		for _, ignoreCheckItem := range ignoreCheckItems {
+			if item[0] == ignoreCheckItem {
+				return true
+			}
+		}
+		return false
+	}
+
 	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
 		var b strings.Builder
 		hasUnknownConfigSize := 0
 		for _, item := range undecoded {
-			hasIgnoreItem := false
-			for _, ignoreItem := range ignoreCheckItems {
-				if item[0] == ignoreItem {
-					hasIgnoreItem = true
-				}
-			}
-			if hasIgnoreItem {
+			if hasIgnoreItem(item) {
 				continue
 			}
 
