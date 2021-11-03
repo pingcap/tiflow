@@ -64,7 +64,7 @@ func main() {
 	lg, r, _ := globalLog.InitLogger(conf)
 	lg = lg.With(zap.String("component", "ddl tracker"))
 	globalLog.ReplaceGlobals(lg, r)
-    lightningLogger := lg.With(zap.String("component", "lightning"))
+	lightningLogger := lg.With(zap.String("component", "lightning"))
 	lightningLog.SetAppLogger(lightningLogger)
 
 	utils.PrintInfo("dm-worker", func() {

@@ -181,7 +181,6 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		cfg.Routes = l.cfg.RouteRules
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
 		cfg.Checkpoint.Schema = config.TiDBLightningCheckpointPrefix + dbutil.TableName(l.workerName, l.cfg.Name)
-		// cfg.Checkpoint.Schema = config.TiDBLightningCheckpointPrefix + dbutil.ColumnName(l.workerName)
 		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 		param := common.MySQLConnectParam{
 			Host:             cfg.TiDB.Host,
