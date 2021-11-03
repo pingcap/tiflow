@@ -3166,6 +3166,7 @@
               "exemplar": true,
               "expr": "ticdc_processor_gc_ts{changefeed=~\"$changefeed\", capture=~\"$capture\"}",
               "format": "table",
+              "instant": true,
               "interval": "",
               "legendFormat": "",
               "queryType": "randomWalk",
