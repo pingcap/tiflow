@@ -772,6 +772,7 @@ func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
 	if p.lastSchemaTs == lastSchemaTs {
 		return
 	}
+	p.lastSchemaTs = lastSchemaTs
 
 	log.Debug("finished gc in schema storage",
 		zap.Uint64("gcTs", lastSchemaTs),

@@ -725,6 +725,7 @@ func (s *processorSuite) TestSchemaGC(c *check.C) {
 
 	// GC Ts should be (checkpoint - 1).
 	c.Assert(p.schemaStorage.(*mockSchemaStorage).lastGcTs, check.Equals, uint64(49))
+	c.Assert(p.lastSchemaTs, check.Equals, uint64(49))
 }
 
 func cleanUpFinishedOpOperation(state *orchestrator.ChangefeedReactorState, captureID model.CaptureID, tester *orchestrator.ReactorStateTester) {
