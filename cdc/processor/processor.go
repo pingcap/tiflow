@@ -766,6 +766,12 @@ func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
 		// schemaStorage is nil only in test
 		return
 	}
+
+	if p.changefeed.Status == nil {
+		// This could happen if Etcd data is not complete.
+		return
+	}
+
 	// Please refer to `unmarshalAndMountRowChanged` in cdc/entry/mounter.go
 	// for why we need -1.
 	lastSchemaTs := p.schemaStorage.DoGC(p.changefeed.Status.CheckpointTs - 1)
