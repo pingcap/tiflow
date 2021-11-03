@@ -16,6 +16,8 @@ check-struct-only = false
 
     target-check-tables = ["sharding_target3.t_target"]
 
+    target-configs= ["config1"]
+
 [routes.rule1]
 schema-pattern = "sharding_seq"
 table-pattern = "t?*"

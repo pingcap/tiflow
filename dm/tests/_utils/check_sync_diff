@@ -34,7 +34,8 @@ while [ $i -lt $check_time ]; do
 	fi
 	((i++))
 	echo "check diff failed $i-th time, retry later"
-	printf "$(cat $LOG)\n"
+	cat $LOG
+	printf "\n"
 	sleep 2
 done
 
@@ -42,8 +43,10 @@ if [ $i -ge $check_time ]; then
 	echo "check diff failed at last"
 	if [[ $4 != "fail" ]]; then
 		# show \n and other blanks
-		printf "$(cat $LOG)\n"
-		printf "$(cat $OUTPUT_DIR/sync_diff.log)\n"
+		cat $LOG
+		printf "\n"
+		cat $OUTPUT_DIR/sync_diff.log
+		printf "\n"
 		exit 1
 	fi
 fi
