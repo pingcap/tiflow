@@ -125,7 +125,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	// tickRate represents the number of times EtcdWorker can tick
 	// the reactor per second
 	tickRate := time.Second / timerInterval
-	rl := rate.NewLimiter(rate.Limit(tickRate), int(tickRate)*3)
+	rl := rate.NewLimiter(rate.Limit(tickRate), 1)
 	for {
 		var response clientv3.WatchResponse
 		select {
@@ -189,8 +189,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				return errors.Trace(err)
 			}
 
-			// if !rl.Allow(), skip this Tick to avoid etcd worker tick reactor too frequency
-			// It make etcdWorker to batch etcd changed event in worker.state
+			// If !rl.Allow(), skip this Tick to avoid etcd worker tick reactor too frequency.
+			// It make etcdWorker to batch etcd changed event in worker.state.
+			// The semantics of `ReactorState` requires that any implementation
+			// can batch updates internally.
 			if !rl.Allow() {
 				continue
 			}
