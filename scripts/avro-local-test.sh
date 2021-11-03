@@ -44,12 +44,12 @@ sub_init() {
 }
 
 sub_up() {
-	sudo docker-compose -f ../docker-compose-avro.yml up --detach
+	sudo docker-compose -f ../deployments/ticdc/docker-compose/docker-compose-avro.yml up --detach
 }
 
 sub_down() {
-	sudo docker-compose -f ../docker-compose-avro.yml down
-	sudo rm -r ../docker/logs ../docker/data
+	sudo docker-compose -f ../deployments/ticdc/docker-compose/docker-compose-avro.yml down
+	sudo rm -r ../deployments/ticdc/docker-compose/logs ../deployments/ticdc/docker-compose/data
 }
 
 subcommand=$1

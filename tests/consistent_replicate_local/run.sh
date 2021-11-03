@@ -13,7 +13,7 @@ function check_resolved_ts() {
 	changefeedid=$1
 	check_tso=$2
 	redo_dir=$3
-	rts=$(cdc redo meta --storage=local --dir="$redo_dir" | grep -oE "resolved-ts:[0-9]+" | awk -F: '{print $2}')
+	rts=$(cdc redo meta --storage="local:///tmp/tidb_cdc_test/consistent_replicate_local/nfs/redo" --tmp-dir="$redo_dir" | grep -oE "resolved-ts:[0-9]+" | awk -F: '{print $2}')
 	if [[ "$rts" -gt "$check_tso" ]]; then
 		return
 	fi
@@ -66,12 +66,13 @@ function run() {
 	# to ensure row changed events have been replicated to TiCDC
 	sleep 5
 
+	local_download_path=$WORK_DIR/cdc_data/redo/$changefeed_id
 	current_tso=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-	ensure 20 check_resolved_ts $changefeed_id $current_tso $WORK_DIR/cdc_data/redo/$changefeed_id
+	ensure 20 check_resolved_ts $changefeed_id $current_tso $local_download_path
 	cleanup_process $CDC_BINARY
 
 	export GO_FAILPOINTS=''
-	cdc redo apply --dir="$WORK_DIR/cdc_data/redo/$changefeed_id" --storage="local" --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
+	cdc redo apply --tmp-dir="$local_download_path" --storage="local://$WORK_DIR/nfs/redo" --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 }
 
