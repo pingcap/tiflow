@@ -494,20 +494,6 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 		ok           bool
 	)
 
-	updateBound := func(source string, worker *Worker, bound ha.SourceBound) {
-		_ = s.updateStatusToBound(worker, bound)
-		// TODO: if we failed here, etcd has been modified!! we should try this memory check then modify persistent data
-		// and revert if failed
-	}
-
-	boundForSource := func(source string) error {
-		_, err := s.tryBoundForSource(source)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-
 	s.logger.Info("transfer source and worker", zap.String("left worker", lworker), zap.String("left source", lsource), zap.String("right worker", rworker), zap.String("right source", rsource))
 
 	inputWorkers[0], inputWorkers[1] = lworker, rworker
@@ -580,7 +566,12 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	for i := range inputWorkers {
 		another := i ^ 1 // make use of XOR to flip 0 and 1
 		if inputWorkers[i] != "" && inputSources[another] != "" {
-			updateBound(inputSources[another], workers[i], bounds[i])
+			err := s.updateStatusToBound(workers[i], bounds[i])
+			// TODO: if we failed here, etcd has been modified!! we should try this memory check then modify persistent data
+			// and revert if failed
+			if err != nil {
+				s.logger.DPanic("failed to update status to bound, but has written etcd", zap.Error(err))
+			}
 		}
 	}
 
@@ -597,7 +588,7 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	for i := range inputSources {
 		another := i ^ 1 // make use of XOR to flip 0 and 1
 		if inputSources[i] != "" && inputWorkers[another] == "" {
-			if err := boundForSource(inputSources[i]); err != nil {
+			if _, err := s.tryBoundForSource(inputSources[i]); err != nil {
 				return err
 			}
 		}
