@@ -42,7 +42,7 @@ func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 		builder:       NewCanalEntryBuilder(),
 		unresolvedBuf: make([]*canalFlatMessage, 0),
 		resolvedBuf:   make([]*canalFlatMessage, 0),
-		waterMark:     false,
+		watermark:     false,
 	}
 }
 
@@ -207,7 +207,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
-	if !c.waterMark {
+	if !c.watermark {
 		return nil, nil
 	}
 	msg := c.newFlatMessage4CheckpointEvent(ts)
@@ -295,7 +295,7 @@ func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 		if err != nil {
 			return err
 		}
-		c.waterMark = a
+		c.watermark = a
 	}
 	return nil
 }
