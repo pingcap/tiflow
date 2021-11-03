@@ -235,8 +235,6 @@ enum EventType {
 	XAROLLBACK  =		14;
 	/** MASTER HEARTBEAT **/
 	MHEARTBEAT  =       15;
-	/** TiCDC CUSTOMIZED **/
-	WATERMARK = 16;
 }
 
 /**数据库类型**/
