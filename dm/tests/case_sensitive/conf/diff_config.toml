@@ -12,4 +12,4 @@ dm-task = "test"
 
 [task]
     output-dir = "/tmp/ticdc_dm_test/output"
-    target-check-tables = ["*.*"]
+    target-check-tables = ["UPPER_DB_ROUTE.do_table_route", "Upper_DB.lower_table*", "lower_db.Upper_Table*"]
