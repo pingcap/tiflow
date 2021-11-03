@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/ticdc/dm/pkg/utils"
+
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/dm/pb"
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
@@ -772,14 +774,14 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.cfg.CheckpointFlushInterval = 30
-	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db, func() {})}
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
 	syncer.toDBConns = []*dbconn.DBConn{
 		{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})},
 		{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})},
 	}
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn.BaseConn)
-	syncer.exprFilterGroup = NewExprFilterGroup(nil)
+	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
@@ -926,7 +928,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	cancel()
 	// when syncer exit Run(), will flush job
 	syncer.Pause()
-	c.Assert(syncer.Update(s.cfg), IsNil)
+	c.Assert(syncer.Update(context.Background(), s.cfg), IsNil)
 
 	events2 := mockBinlogEvents{
 		mockBinlogEvent{typ: Write, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(3), "c"}}}},
@@ -1014,14 +1016,14 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
-	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db, func() {})}
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
 	syncer.toDBConns = []*dbconn.DBConn{
 		{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})},
 		{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})},
 	}
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn.BaseConn)
-	syncer.exprFilterGroup = NewExprFilterGroup(nil)
+	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
@@ -1210,7 +1212,7 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
 	syncer.checkpoint.(*RemoteCheckPoint).dbConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(checkPointDBConn, &retry.FiniteRetryStrategy{})}
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn.BaseConn)
-	syncer.exprFilterGroup = NewExprFilterGroup(nil)
+	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(syncer.genRouter(), IsNil)
 	c.Assert(err, IsNil)
 

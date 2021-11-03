@@ -96,7 +96,7 @@ RowLoop:
 		}
 
 		for _, expr := range filterExprs {
-			skip, err := SkipDMLByExpression(originalValue, expr, ti.Columns)
+			skip, err := SkipDMLByExpression(s.sessCtx, originalValue, expr, ti.Columns)
 			if err != nil {
 				return nil, err
 			}
