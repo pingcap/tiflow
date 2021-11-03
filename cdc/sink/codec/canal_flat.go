@@ -33,7 +33,7 @@ type CanalFlatEventBatchEncoder struct {
 	unresolvedBuf []*canalFlatMessage
 	resolvedBuf   []*canalFlatMessage
 	// When it is true, checkpoint events are generated.
-	waterMark bool
+	watermark bool
 }
 
 // NewCanalFlatEventBatchEncoder creates a new CanalFlatEventBatchEncoder
