@@ -118,6 +118,9 @@ func (c *compactor) run() {
 			}
 			// if no inner jobs and the number of outer jobs is small, flush the buffer
 		case <-time.After(waitTime):
+			failpoint.Inject("SkipFlushCompactor", func() {
+				failpoint.Continue()
+			})
 			if len(c.outCh) < c.queueSize {
 				c.flushBuffer()
 			}
