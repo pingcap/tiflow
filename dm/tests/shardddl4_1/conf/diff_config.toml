@@ -16,7 +16,7 @@ check-struct-only = false
     target-check-tables = ["shardddl.tb"]
 
 [routes.rule1]
-schema-pattern = "shardddl*"
+schema-pattern = "shardddl[1-2]"
 table-pattern = "tb*"
 target-schema = "shardddl"
 target-table = "tb"
