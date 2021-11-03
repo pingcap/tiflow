@@ -35,7 +35,7 @@ target-table = "t_target"
 schema = "db_target"
 table = "t_target"
 # currently sync_diff does not support json fields well
-ignore-columns = ["id", "info_json"]
+ignore-columns = ["id", "info_json", "info"]
 index-fields = "uid"
 # range-placeholder
 
