@@ -8,7 +8,7 @@ check-struct-only = false
 
 
 [task]
-    output-dir = "./output"
+    output-dir = "/tmp/ticdc_dm_test/output"
 
     source-instances = ["mysql1", "mysql2"]
 

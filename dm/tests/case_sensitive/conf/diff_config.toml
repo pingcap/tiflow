@@ -11,5 +11,5 @@ dm-addr = "http://127.0.0.1:8261"
 dm-task = "test"
 
 [task]
-    output-dir = "./output"
+    output-dir = "/tmp/ticdc_dm_test/output"
     target-check-tables = ["*.*"]
