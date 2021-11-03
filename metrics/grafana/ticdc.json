@@ -3164,7 +3164,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "ticdc_processor_gc_ts{changefeed=~\"$changefeed\", capture=~\"$capture\"}",
+              "expr": "ticdc_processor_schema_storage_gc_ts{changefeed=~\"$changefeed\", capture=~\"$capture\"}",
               "format": "table",
               "instant": true,
               "interval": "",

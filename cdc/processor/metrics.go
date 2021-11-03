@@ -64,7 +64,7 @@ var (
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
-			Name:      "gc_ts",
+			Name:      "schema_storage_gc_ts",
 			Help:      "the TS of the currently maintained oldest snapshot in SchemaStorage",
 		}, []string{"changefeed", "capture"})
 )
