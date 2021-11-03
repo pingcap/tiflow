@@ -36,6 +36,8 @@ type CanalFlatEventBatchEncoder struct {
 	watermark bool
 }
 
+const ticdcWaterMarkType = "CDC_WATERMARK"
+
 // NewCanalFlatEventBatchEncoder creates a new CanalFlatEventBatchEncoder
 func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 	return &CanalFlatEventBatchEncoder{
@@ -211,7 +213,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *
 	return &canalFlatMessage{
 		ID:            0,
 		IsDDL:         false,
-		EventType:     canal.EventType_WATERMARK.String(),
+		EventType:     ticdcWaterMarkType,
 		ExecutionTime: convertToCanalTs(ts),
 		BuildTime:     time.Now().UnixNano() / 1e6,
 		Props: map[string]string{
