@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -446,7 +445,7 @@ type recoverResult struct {
 	// if truncate trailing incomplete events during recovering in relay log
 	Truncated bool
 	// the latest binlog position after recover operation has done.
-	LatestPos gmysql.Position
+	LatestPos mysql.Position
 	// the latest binlog GTID set after recover operation has done.
 	LatestGTIDs gtid.Set
 }
@@ -484,7 +483,7 @@ func (r *Relay) doRecovering(ctx context.Context, binlogDir, filename string, pa
 	if fs.Size() == latestPos {
 		return recoverResult{
 			Truncated:   false,
-			LatestPos:   gmysql.Position{Name: filename, Pos: uint32(latestPos)},
+			LatestPos:   mysql.Position{Name: filename, Pos: uint32(latestPos)},
 			LatestGTIDs: latestGTIDs,
 		}, nil
 	} else if fs.Size() < latestPos {
@@ -506,7 +505,7 @@ func (r *Relay) doRecovering(ctx context.Context, binlogDir, filename string, pa
 
 	return recoverResult{
 		Truncated:   true,
-		LatestPos:   gmysql.Position{Name: filename, Pos: uint32(latestPos)},
+		LatestPos:   mysql.Position{Name: filename, Pos: uint32(latestPos)},
 		LatestGTIDs: latestGTIDs,
 	}, nil
 }

@@ -19,6 +19,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/pingcap/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -90,7 +91,7 @@ func (w *BinlogWriter) Close() error {
 
 	var err error
 	if w.file != nil {
-		err2 := w.file.Sync() // try flush manually before close.
+		err2 := w.file.Sync() // try sync manually before close.
 		if err2 != nil {
 			w.logger.Error("fail to flush buffered data", zap.String("component", "file writer"), zap.Error(err2))
 		}
@@ -108,6 +109,10 @@ func (w *BinlogWriter) Write(rawData []byte) error {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
+	if w.file == nil {
+		return terror.ErrRelayWriterNotOpened.Delegate(errors.New("file not opened"))
+	}
+
 	n, err := w.file.Write(rawData)
 	w.offset.Add(int64(n))
 
@@ -116,7 +121,7 @@ func (w *BinlogWriter) Write(rawData []byte) error {
 
 func (w *BinlogWriter) Status() *BinlogWriterStatus {
 	w.mu.RLock()
-	w.mu.RUnlock()
+	defer w.mu.RUnlock()
 
 	return &BinlogWriterStatus{
 		Filename: w.filename,

@@ -15,7 +15,6 @@ package relay
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +22,6 @@ import (
 
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
@@ -39,83 +37,63 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 	dir := c.MkDir()
 	filename := filepath.Join(dir, "test-mysql-bin.000001")
 	var (
-		cfg = &BinlogWriterConfig{
-			Filename: filename,
-		}
 		allData bytes.Buffer
+		data1   = []byte("test-data")
 	)
 
-	w := NewBinlogWriter(log.L(), cfg)
+	w := NewBinlogWriter(log.L())
 	c.Assert(w, NotNil)
 
 	// check status, stageNew
-	status := w.Status()
-	fwStatus, ok := status.(*BinlogWriterStatus)
-	c.Assert(ok, IsTrue)
-	c.Assert(fwStatus.Stage, Equals, common.StageNew.String())
+	fwStatus := w.Status()
 	c.Assert(fwStatus.Filename, Equals, filename)
 	c.Assert(fwStatus.Offset, Equals, int64(allData.Len()))
 	fwStatusStr := fwStatus.String()
-	c.Assert(strings.Contains(fwStatusStr, common.StageNew.String()), IsTrue)
+	c.Assert(strings.Contains(fwStatusStr, "filename"), IsTrue)
 
-	// not prepared
-	data1 := []byte("test-data")
+	// not opened
 	err := w.Write(data1)
-	c.Assert(err, ErrorMatches, fmt.Sprintf(".*%s.*", common.StageNew))
-	err = w.Flush()
-	c.Assert(err, ErrorMatches, fmt.Sprintf(".*%s.*", common.StageNew))
+	c.Assert(err, ErrorMatches, "not opened")
 
-	// start
-	err = w.Open()
-	c.Assert(err, IsNil)
+	// open non exist dir
+	err = w.Open(filepath.Join(dir, "not-exist", "bin.000001"))
+	c.Assert(err, ErrorMatches, "not exist")
 
-	// check status, stagePrepared
-	status = w.Status()
-	fwStatus, ok = status.(*BinlogWriterStatus)
-	c.Assert(ok, IsTrue)
-	c.Assert(fwStatus.Stage, Equals, common.StagePrepared.String())
-	c.Assert(fwStatus.Filename, Equals, filename)
-	c.Assert(fwStatus.Offset, Equals, int64(allData.Len()))
+	{
+		// normal call flow
+		err = w.Open(filename)
+		c.Assert(err, IsNil)
+		c.Assert(w.file, NotNil)
+		c.Assert(w.filename, Equals, filename)
+		c.Assert(w.offset.Load(), Equals, 0)
 
-	// re-prepare is invalid
-	err = w.Open()
-	c.Assert(err, NotNil)
+		err = w.Write(data1)
+		c.Assert(err, IsNil)
+		allData.Write(data1)
 
-	// write the data
-	err = w.Write(data1)
-	c.Assert(err, IsNil)
-	allData.Write(data1)
+		fwStatus = w.Status()
+		c.Assert(fwStatus.Filename, Equals, filename)
+		c.Assert(fwStatus.Offset, Equals, len(data1))
 
-	// write data again
-	data2 := []byte("another-data")
-	err = w.Write(data2)
-	c.Assert(err, IsNil)
-	allData.Write(data2)
+		// write data again
+		data2 := []byte("another-data")
+		err = w.Write(data2)
+		c.Assert(err, IsNil)
+		allData.Write(data2)
 
-	// test Flush interface method simply
-	err = w.Flush()
-	c.Assert(err, IsNil)
+		c.Assert(w.offset.Load(), Equals, int64(allData.Len()))
 
-	// close the reader
-	c.Assert(w.Close(), IsNil)
+		err = w.Close()
+		c.Assert(err, IsNil)
+		c.Assert(w.file, IsNil)
+		c.Assert(w.filename, Equals, "")
+		c.Assert(w.offset.Load(), Equals, 0)
 
-	// check status, stageClosed
-	status = w.Status()
-	fwStatus, ok = status.(*BinlogWriterStatus)
-	c.Assert(ok, IsTrue)
-	c.Assert(fwStatus.Stage, Equals, common.StageClosed.String())
-	c.Assert(fwStatus.Filename, Equals, filename)
-	c.Assert(fwStatus.Offset, Equals, int64(allData.Len()))
+		c.Assert(w.Close(), IsNil) // noop
 
-	// re-close is invalid
-	c.Assert(w.Close(), NotNil)
-
-	// can not Writer/Flush anymore
-	c.Assert(w.Write(data2), NotNil)
-	c.Assert(w.Flush(), NotNil)
-
-	// try to read the data back
-	dataInFile, err := os.ReadFile(filename)
-	c.Assert(err, IsNil)
-	c.Assert(dataInFile, DeepEquals, allData.Bytes())
+		// try to read the data back
+		dataInFile, err := os.ReadFile(filename)
+		c.Assert(err, IsNil)
+		c.Assert(dataInFile, DeepEquals, allData.Bytes())
+	}
 }

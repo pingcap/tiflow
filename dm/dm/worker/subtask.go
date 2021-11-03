@@ -109,7 +109,6 @@ type SubTask struct {
 	etcdClient *clientv3.Client
 
 	workerName string
-	relay      relay.Process
 }
 
 // NewSubTask is subtask initializer

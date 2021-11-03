@@ -30,8 +30,6 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
-var customID int64
-
 // TCPReader is a binlog event reader which read binlog events from a TCP stream.
 type TCPReader struct {
 	syncerCfg replication.BinlogSyncerConfig

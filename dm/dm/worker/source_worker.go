@@ -520,7 +520,7 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage pb.St
 	return nil
 }
 
-// caller should make sure w.Lock is locked before calling this method
+// caller should make sure w.Lock is locked before calling this method.
 func (w *SourceWorker) getRelayWithoutLock() relay.Process {
 	if w.relayHolder != nil {
 		return w.relayHolder.Relay()
