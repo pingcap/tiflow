@@ -64,6 +64,13 @@ jobs:
       matrix:
         arch: [aarch64]
     steps:
+      - name: Setup cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/go/pkg/mod
+          key: build_ubuntu-20.04_${{ matrix.arch }}
+
       - name: Check out code
         uses: actions/checkout@v2
 
@@ -74,5 +81,7 @@ jobs:
           distro: ubuntu20.04
           # Not required, but speeds up builds
           githubToken: ${{ github.token }}
+          dockerRunArgs: |
+            --volume "~/go/pkg/mod:~/go/pkg/mod"
           run: |
             make build
