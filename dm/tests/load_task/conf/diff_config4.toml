@@ -15,7 +15,8 @@ check-struct-only = false
 
     target-check-tables = ["load_task4.t?*"]
 
-[[source-db]]
+[data-sources]
+[data-sources.mysql1]
 host = "127.0.0.1"
 port = 3306
 user = "root"
