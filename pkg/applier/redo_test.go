@@ -236,5 +236,5 @@ func TestApplyMeetSinkError(t *testing.T) {
 	}
 	ap := NewRedoApplier(cfg)
 	err = ap.Apply(ctx)
-	require.Regexp(t, "Open database connection failed:.*connect: connection refused.*", err)
+	require.Regexp(t, "CDC:ErrMySQLConnectionError", err)
 }

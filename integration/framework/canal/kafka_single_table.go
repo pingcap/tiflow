@@ -49,7 +49,7 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 		PDUri:      "http://upstream-pd:2379",
 		SinkURI:    "kafka://kafka:9092/" + testDbName + "?kafka-version=2.6.0&protocol=" + protocol,
 		Opts:       map[string]string{"force-handle-key-pkey": "true", "support-txn": "true"},
-		ConfigFile: "/config/canal-test-config.toml",
+		ConfigFile: "/configs/canal-test-config.toml",
 	}
 }
 
