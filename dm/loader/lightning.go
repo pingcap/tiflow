@@ -19,6 +19,17 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/docker/go-units"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/br/pkg/lightning"
+	"github.com/pingcap/tidb/br/pkg/lightning/common"
+	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	"github.com/pingcap/tidb/parser/mysql"
+	"go.etcd.io/etcd/clientv3"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/dm/pb"
 	"github.com/pingcap/ticdc/dm/dm/unit"
@@ -27,18 +38,6 @@ import (
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
-
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb/br/pkg/lightning"
-	"github.com/pingcap/tidb/br/pkg/lightning/common"
-	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
-	"github.com/pingcap/tidb/parser/mysql"
-
-	"github.com/docker/go-units"
-	"go.etcd.io/etcd/clientv3"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
 )
 
 const (
@@ -124,10 +123,7 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	if toCfg.To.Session == nil {
-		toCfg.To.Session = make(map[string]string)
-	}
-	toCfg.To.Session["time_zone"] = "+00:00"
+	config.AdjustTargetDBTimeZone(&toCfg.To)
 	l.toDB, l.toDBConns, err = createConns(tctx, toCfg, 1)
 	return err
 }
