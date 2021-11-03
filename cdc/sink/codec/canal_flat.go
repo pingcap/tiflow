@@ -87,9 +87,11 @@ type canalFlatMessage struct {
 	Data []map[string]interface{} `json:"data"`
 	Old  []map[string]interface{} `json:"old"`
 
-	// CheckpointTs is a TiCDC custom field, which is not supported by original Canal protocol
-	// It is useful if the message consumer needs to restore the original transactions.
-	CheckpointTs uint64 `json:"checkpointTs"`
+	// Props is a TiCDC custom field that different from official Canal-JSON format.
+	// It would be useful to store something for special usage.
+	// At the moment, only store the `tso` of each event, which is useful if the message consumer needs to restore the original transactions.
+	Props map[string]string `json:"props"`
+
 	// Used internally by CanalFlatEventBatchEncoder
 	tikvTs uint64
 }
@@ -167,7 +169,11 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		MySQLType:     mysqlType,
 		Data:          make([]map[string]interface{}, 0),
 		Old:           make([]map[string]interface{}, 0),
-		tikvTs:        e.CommitTs,
+		Props: map[string]string{
+			"tso": strconv.FormatUint(e.CommitTs, 10),
+		},
+
+		tikvTs: e.CommitTs,
 	}
 
 	// We need to ensure that both Data and Old have exactly one element,
@@ -190,7 +196,10 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) *ca
 		ExecutionTime: header.ExecuteTime,
 		BuildTime:     time.Now().UnixNano() / 1e6,
 		Query:         e.Query,
-		tikvTs:        e.CommitTs,
+		Props: map[string]string{
+			"tso": strconv.FormatUint(e.CommitTs, 10),
+		},
+		tikvTs: e.CommitTs,
 	}
 	return ret
 }
@@ -200,8 +209,14 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) *ca
 // they should make sure their consumer code can recognize this type.
 func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *canalFlatMessage {
 	return &canalFlatMessage{
-		CheckpointTs: ts,
-		EventType:    canal.EventType_WATERMARK.String(),
+		ID:            0,
+		IsDDL:         false,
+		EventType:     canal.EventType_WATERMARK.String(),
+		ExecutionTime: convertToCanalTs(ts),
+		BuildTime:     time.Now().UnixNano() / 1e6,
+		Props: map[string]string{
+			"tso": strconv.FormatUint(ts, 10),
+		},
 	}
 }
 
