@@ -13,7 +13,7 @@ check-struct-only = false
 
     target-instance = "tidb0"
 
-    target-check-tables = ["sql_mode.*]
+    target-check-tables = ["sql_mode.*"]
 
 [data-sources]
 [data-sources.mysql1]
