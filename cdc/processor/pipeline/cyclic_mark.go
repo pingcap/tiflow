@@ -18,6 +18,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"go.uber.org/zap"
@@ -36,6 +37,7 @@ type cyclicMarkNode struct {
 	// startTs -> replicaID
 	currentReplicaIDs map[model.Ts]uint64
 	currentCommitTs   uint64
+	outputCh          chan pipeline.Message
 }
 
 func newCyclicMarkNode(markTableID model.TableID) pipeline.Node {
@@ -43,12 +45,17 @@ func newCyclicMarkNode(markTableID model.TableID) pipeline.Node {
 		markTableID:            markTableID,
 		unknownReplicaIDEvents: make(map[model.Ts][]*model.PolymorphicEvent),
 		currentReplicaIDs:      make(map[model.Ts]uint64),
+		outputCh:               make(chan pipeline.Message, 64),
 	}
 }
 
 func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
-	n.localReplicaID = ctx.ChangefeedVars().Info.Config.Cyclic.ReplicaID
-	filterReplicaID := ctx.ChangefeedVars().Info.Config.Cyclic.FilterReplicaID
+	return n.Start(ctx.ChangefeedVars())
+}
+
+func (n *cyclicMarkNode) Start(info *cdcContext.ChangefeedVars) error {
+	n.localReplicaID = info.Info.Config.Cyclic.ReplicaID
+	filterReplicaID := info.Info.Config.Cyclic.FilterReplicaID
 	n.filterReplicaID = make(map[uint64]struct{})
 	for _, rID := range filterReplicaID {
 		n.filterReplicaID[rID] = struct{}{}

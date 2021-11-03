@@ -26,6 +26,7 @@ import (
 	serverConfig "github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/pipeline"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -94,7 +95,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return !t.stopped
 }
 
-func (t *tableActor) start(ctx context.Context) error {
+func (t *tableActor) start(ctx cdcContext.Context) error {
 	if t.started {
 		log.Panic("start an already started table",
 			zap.String("changefeedID", t.changefeedID),
@@ -118,6 +119,15 @@ func (t *tableActor) start(ctx context.Context) error {
 	if err := t.sorterNode.Start(ctx, true, t.wg, t.info, t.vars); err != nil {
 		log.Error("sorter fails to start", zap.Error(err))
 		return err
+	}
+
+	if t.cyclicEnabled {
+		t.cyclicNode = newCyclicMarkNode(t.replicaInfo.MarkTableID).(*cyclicMarkNode)
+		if err := t.cyclicNode.Start(t.info); err != nil {
+			log.Error("sink fails to start", zap.Error(err))
+			return err
+		}
+		pipeline.NewNodeContext(ctx, pipeline.Message{}, nil)
 	}
 
 	log.Info("table actor is started", zap.Int64("tableID", t.tableID))
@@ -236,7 +246,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	// All sub-goroutines should be spawn in the wait group.
 	wg, wgCtx := errgroup.WithContext(cdcCtx)
 	// Cancel should be able to release all sub-goroutines in the actor.
-	ctx, cancel := context.WithCancel(wgCtx)
+	_, cancel := context.WithCancel(wgCtx)
 	table := &tableActor{
 		reportErr: cdcCtx.Throw,
 		mb:        mb,
@@ -259,7 +269,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	}
 
 	log.Info("spawn and start table actor", zap.Int64("tableID", tableID))
-	if err := table.start(ctx); err != nil {
+	if err := table.start(cdcCtx); err != nil {
 		table.stop(err)
 		return nil, err
 	}
