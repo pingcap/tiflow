@@ -73,6 +73,62 @@ function setup_mysql_tls() {
 	echo "add dm_tls_test user done $mysql_data_path"
 }
 
+function test_worker_download_certs_from_master() {
+	cleanup_data tls
+	cleanup_process
+
+	setup_mysql_tls
+	run_tidb_with_tls
+	prepare_data
+
+	cp $cur/conf/dm-master1.toml $WORK_DIR/
+	cp $cur/conf/dm-master2.toml $WORK_DIR/
+	cp $cur/conf/dm-master3.toml $WORK_DIR/
+	cp $cur/conf/dm-worker1.toml $WORK_DIR/
+	cp $cur/conf/dm-worker2.toml $WORK_DIR/
+	cp $cur/conf/dm-task.yaml $WORK_DIR/
+
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master1.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master2.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master3.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-worker1.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-worker2.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task.yaml
+
+	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $WORK_DIR/dm-master1.toml
+	run_dm_master $WORK_DIR/master2 $MASTER_PORT2 $WORK_DIR/dm-master2.toml
+	run_dm_master $WORK_DIR/master3 $MASTER_PORT3 $WORK_DIR/dm-master3.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT2 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT3 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+
+	# operate mysql config to worker
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"operate-source create $WORK_DIR/source1.yaml" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
+
+	# change ca.pem name to test wheather dm-worker will dump certs from etcd
+	mv "$cur/conf/ca.pem" "$cur/conf/ca.pem.bak"
+
+	# start task with changed ca.pem (ca.pem.bak)
+	echo "start task and check stage"
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem.bak $cur/conf/dm.pem $cur/conf/dm.key \
+		"start-task $WORK_DIR/dm-task.yaml" \
+		"\"result\": true" 2
+
+	# dm-worker will dump ca.pem from etcd and save it to ca.pem
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"query-status test" \
+		"\"result\": true" 2
+
+	echo "check data"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+}
+
 function test_worker_ha_when_enable_source_tls() {
 	cleanup_data tls
 	cleanup_process
@@ -164,7 +220,6 @@ function test_worker_ha_when_enable_source_tls() {
 
 	# resume ca.pem
 	mv "$mysql_data_path/ca.pem.bak" "$mysql_data_path/ca.pem"
-
 }
 
 function test_master_ha_when_enable_tidb_tls() {
@@ -241,6 +296,8 @@ function test_master_ha_when_enable_tidb_tls() {
 }
 
 function run() {
+	test_worker_download_certs_from_master
+	exit 1
 	test_worker_ha_when_enable_source_tls
 	test_master_ha_when_enable_tidb_tls
 }

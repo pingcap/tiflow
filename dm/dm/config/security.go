@@ -16,6 +16,8 @@ package config
 import (
 	"fmt"
 	"os"
+
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // Security config.
@@ -68,6 +70,27 @@ func (s *Security) LoadTLSContent() error {
 			return err
 		}
 		s.SSLKEYBytes = dat
+	}
+	return nil
+}
+
+// DumpTLSContent dump tls certs data to file.
+func (s *Security) DumpTLSContent() error {
+	if !utils.IsFileExists(s.SSLCA) {
+		if err := utils.WriteFileAtomic(s.SSLCA, s.SSLCABytes, 0o600); err != nil {
+			return err
+		}
+	}
+
+	if !utils.IsFileExists(s.SSLCert) {
+		if err := utils.WriteFileAtomic(s.SSLCert, s.SSLCertBytes, 0o600); err != nil {
+			return err
+		}
+	}
+	if !utils.IsFileExists(s.SSLKey) {
+		if err := utils.WriteFileAtomic(s.SSLKey, s.SSLKEYBytes, 0o600); err != nil {
+			return err
+		}
 	}
 	return nil
 }

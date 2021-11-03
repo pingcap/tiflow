@@ -70,19 +70,19 @@ func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, wor
 	switch cfg.Mode {
 	case config.ModeAll:
 		us = append(us, dumpling.NewDumpling(cfg))
-		if cfg.TiDB.Backend == "" {
-			us = append(us, loader.NewLoader(cfg, etcdClient, workerName))
-		} else {
+		if cfg.NeedUseLightning() {
 			us = append(us, loader.NewLightning(cfg, etcdClient, workerName))
+		} else {
+			us = append(us, loader.NewLoader(cfg, etcdClient, workerName))
 		}
 		us = append(us, syncer.NewSyncer(cfg, etcdClient, notifier))
 	case config.ModeFull:
 		// NOTE: maybe need another checker in the future?
 		us = append(us, dumpling.NewDumpling(cfg))
-		if cfg.TiDB.Backend == "" {
-			us = append(us, loader.NewLoader(cfg, etcdClient, workerName))
-		} else {
+		if cfg.NeedUseLightning() {
 			us = append(us, loader.NewLightning(cfg, etcdClient, workerName))
+		} else {
+			us = append(us, loader.NewLoader(cfg, etcdClient, workerName))
 		}
 	case config.ModeIncrement:
 		us = append(us, syncer.NewSyncer(cfg, etcdClient, notifier))
@@ -151,6 +151,14 @@ func NewSubTaskWithStage(cfg *config.SubTaskConfig, stage pb.Stage, etcdClient *
 
 // initUnits initializes the sub task processing units.
 func (st *SubTask) initUnits() error {
+	// NOTE: because lighting not support init tls with raw certs bytes, we write the certs data to a file.
+	println("ininiiii", st.cfg.To.Security.SSLCA, st.cfg.TiDB.Backend)
+	if st.cfg.NeedUseLightning() && st.cfg.To.Security != nil {
+		if err := st.cfg.To.Security.DumpTLSContent(); err != nil {
+			return terror.Annotatef(err, "fail to dump tls cert data for lightning, subtask %s ", st.cfg.Name)
+		}
+	}
+
 	st.units = createUnits(st.cfg, st.etcdClient, st.workerName, st.notifier)
 	if len(st.units) < 1 {
 		return terror.ErrWorkerNoAvailUnits.Generate(st.cfg.Name, st.cfg.Mode)

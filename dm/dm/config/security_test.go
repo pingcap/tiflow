@@ -21,6 +21,7 @@ import (
 	"reflect"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 const (
@@ -155,4 +156,25 @@ func (t *testTLSConfig) TestClone(c *C) {
 	c.Assert(clone, DeepEquals, s)
 	clone.CertAllowedCN[0] = "g"
 	c.Assert(clone, Not(DeepEquals), s)
+}
+
+func (t *testTLSConfig) TestLoadDumpTLSContent(c *C) {
+	s := &Security{
+		SSLCA:   caFilePath,
+		SSLCert: certFilePath,
+		SSLKey:  keyFilePath,
+	}
+	err := s.LoadTLSContent()
+	c.Assert(err, IsNil)
+	c.Assert(len(s.SSLCABytes) > 0, Equals, true)
+	c.Assert(len(s.SSLCertBytes) > 0, Equals, true)
+	c.Assert(len(s.SSLKEYBytes) > 0, Equals, true)
+
+	s.SSLCA = s.SSLCA + ".new"
+	s.SSLCert = s.SSLCert + ".new"
+	s.SSLKey = s.SSLKey + ".new"
+	c.Assert(s.DumpTLSContent(), IsNil)
+	c.Assert(utils.IsFileExists(s.SSLCA), Equals, true)
+	c.Assert(utils.IsFileExists(s.SSLCert), Equals, true)
+	c.Assert(utils.IsFileExists(s.SSLKey), Equals, true)
 }
