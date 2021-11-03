@@ -123,6 +123,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 	for {
 		var response clientv3.WatchResponse
+		batchResponse := make([]clientv3.WatchResponse, 0)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -136,6 +137,16 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				}
 			}
 		case response = <-watchCh:
+			batchResponse = append(batchResponse, response)
+		BATCH:
+			for {
+				select {
+				case response = <-watchCh:
+					batchResponse = append(batchResponse, response)
+				default:
+					break BATCH
+				}
+			}
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
 
 			if err := response.Err(); err != nil {
@@ -154,9 +165,11 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				continue
 			}
 
-			for _, event := range response.Events {
-				// handleEvent will apply the event to our internal `rawState`.
-				worker.handleEvent(ctx, event)
+			for _, response := range batchResponse {
+				for _, event := range response.Events {
+					// handleEvent will apply the event to our internal `rawState`.
+					worker.handleEvent(ctx, event)
+				}
 			}
 		}
 
@@ -270,14 +283,27 @@ func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
 	return ret
 }
 
+// etcd max transaction size is 128
+const maxBatchPatchSize = 96
+
 func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]DataPatch) ([][]DataPatch, error) {
+	getBatchPatches := func(patchGroups [][]DataPatch) ([]DataPatch, int) {
+		batchPatch := patchGroups[0]
+		patchNum := 1
+		for (len(batchPatch) + len(patchGroups[patchNum])) < maxBatchPatchSize {
+			batchPatch = append(batchPatch, patchGroups[patchNum]...)
+			patchNum++
+		}
+		return batchPatch, patchNum
+	}
+
 	for len(patchGroups) > 0 {
-		patches := patchGroups[0]
+		patches, n := getBatchPatches(patchGroups)
 		err := worker.applyPatches(ctx, patches)
 		if err != nil {
 			return patchGroups, err
 		}
-		patchGroups = patchGroups[1:]
+		patchGroups = patchGroups[n:]
 	}
 	return patchGroups, nil
 }
