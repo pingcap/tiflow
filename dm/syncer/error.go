@@ -55,7 +55,7 @@ func ignoreDDLError(err error) bool {
 }
 
 // ignoreTrackerDDLError is also same with ignoreDDLError, but in order to keep tracker's table structure same as
-// upstream's, we can ignore "already exists" errors because already exists doesn't mean same.
+// upstream's, we can't ignore "already exists" errors because already exists doesn't mean same.
 func ignoreTrackerDDLError(err error) bool {
 	switch {
 	case infoschema.ErrDatabaseExists.Equal(err), infoschema.ErrDatabaseDropExists.Equal(err),
