@@ -1129,7 +1129,7 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 
 func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
 	dbConfig := cfg.GenerateDBConfig()
-	fromDB, err := conn.DefaultDBProvider.Apply(*dbConfig)
+	fromDB, err := conn.DefaultDBProvider.Apply(dbConfig)
 	if err != nil {
 		return err
 	}
@@ -1165,7 +1165,7 @@ func adjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 		failpoint.Return(nil)
 	})
 
-	toDB, err := conn.DefaultDBProvider.Apply(cfg)
+	toDB, err := conn.DefaultDBProvider.Apply(&cfg)
 	if err != nil {
 		return err
 	}
@@ -1182,7 +1182,6 @@ func adjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 		config.AdjustTargetDBSessionCfg(dbConfig, version)
 	} else {
 		log.L().Warn("get tidb version", log.ShortError(err))
-		config.AdjustTargetDBTimeZone(dbConfig)
 	}
 	return nil
 }
@@ -1439,7 +1438,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	}
 
 	// set up db and clear meta data in downstream db
-	baseDB, err := conn.DefaultDBProvider.Apply(*toDBCfg)
+	baseDB, err := conn.DefaultDBProvider.Apply(toDBCfg)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}

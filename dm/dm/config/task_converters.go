@@ -50,6 +50,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 		cfg.EnableHeartbeat = false
 		cfg.HeartbeatUpdateInterval = c.HeartbeatUpdateInterval
 		cfg.HeartbeatReportInterval = c.HeartbeatReportInterval
+		cfg.Timezone = c.Timezone
 		cfg.Meta = inst.Meta
 
 		fromClone := dbCfg.Clone()

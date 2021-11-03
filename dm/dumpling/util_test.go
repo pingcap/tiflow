@@ -14,6 +14,7 @@
 package dumpling
 
 import (
+	"context"
 	"strings"
 
 	"github.com/docker/go-units"
@@ -27,11 +28,12 @@ import (
 
 func (d *testDumplingSuite) TestParseArgs(c *C) {
 	logger := log.L()
+	ctx := context.Background()
 
 	cfg := &config.SubTaskConfig{}
 	cfg.ExtraArgs = `--statement-size=100 --where "t>10" --threads 8 -F 50B`
 	dumpling := NewDumpling(cfg)
-	exportCfg, err := dumpling.constructArgs()
+	exportCfg, err := dumpling.constructArgs(ctx)
 	c.Assert(err, IsNil)
 	c.Assert(exportCfg.StatementSize, Equals, uint64(100))
 	c.Assert(exportCfg.Where, Equals, "t>10")
@@ -91,7 +93,9 @@ func (d *testDumplingSuite) TestParseArgs(c *C) {
 }
 
 func (d *testDumplingSuite) TestParseArgsWontOverwrite(c *C) {
-	cfg := &config.SubTaskConfig{}
+	cfg := &config.SubTaskConfig{
+		Timezone: "UTC",
+	}
 	cfg.ChunkFilesize = "1"
 	rules := &filter.Rules{
 		DoDBs: []string{"unit_test"},
@@ -101,7 +105,7 @@ func (d *testDumplingSuite) TestParseArgsWontOverwrite(c *C) {
 	cfg.ExtraArgs = "-s=4000 --consistency lock"
 
 	dumpling := NewDumpling(cfg)
-	exportCfg, err := dumpling.constructArgs()
+	exportCfg, err := dumpling.constructArgs(context.Background())
 	c.Assert(err, IsNil)
 
 	c.Assert(exportCfg.StatementSize, Equals, uint64(4000))
