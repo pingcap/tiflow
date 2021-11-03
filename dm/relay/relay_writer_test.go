@@ -15,7 +15,6 @@ package relay
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,7 +24,6 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
 	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/log"
@@ -56,7 +54,7 @@ func (t *testFileWriterSuite) TestInterfaceMethods(c *check.C) {
 
 	// not prepared
 	_, err := w.WriteEvent(ev)
-	c.Assert(err, check.ErrorMatches, fmt.Sprintf(".*%s.*", common.StageNew))
+	c.Assert(err, check.ErrorMatches, ".*not valid.*")
 
 	w.Init(relayDir, filename)
 
@@ -92,7 +90,7 @@ func (t *testFileWriterSuite) TestRelayDir(c *check.C) {
 	defer w2.Close()
 	w2.Init("invalid\x00path", "bin.000001")
 	_, err = w2.WriteEvent(ev)
-	c.Assert(err, check.ErrorMatches, ".*not valid.*")
+	c.Assert(err, check.ErrorMatches, ".*invalid argument.*")
 
 	// valid directory, but no filename specified
 	tmpRelayDir := c.MkDir()
@@ -105,14 +103,14 @@ func (t *testFileWriterSuite) TestRelayDir(c *check.C) {
 	// valid directory, but invalid filename
 	w4 := NewFileWriter(log.L())
 	defer w4.Close()
-	w3.Init(tmpRelayDir, "test-mysql-bin.666abc")
+	w4.Init(tmpRelayDir, "test-mysql-bin.666abc")
 	_, err = w4.WriteEvent(ev)
 	c.Assert(err, check.ErrorMatches, ".*not valid.*")
 
 	// valid directory, valid filename
 	w5 := NewFileWriter(log.L())
 	defer w5.Close()
-	w3.Init(tmpRelayDir, "test-mysql-bin.000001")
+	w5.Init(tmpRelayDir, "test-mysql-bin.000001")
 	result, err := w5.WriteEvent(ev)
 	c.Assert(err, check.IsNil)
 	c.Assert(result.Ignore, check.IsFalse)
@@ -234,7 +232,7 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 	defer w1.Close()
 	w1.Init(relayDir, filename)
 	_, err = w1.WriteEvent(rotateEv)
-	c.Assert(err, check.ErrorMatches, ".*no binlog file opened.*")
+	c.Assert(err, check.ErrorMatches, ".*file not opened.*")
 
 	// 2. fake RotateEvent before FormatDescriptionEvent
 	relayDir = c.MkDir() // use a new relay directory

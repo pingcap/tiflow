@@ -412,6 +412,9 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		fakeRotateEv, _ = event.GenRotateEvent(eventHeader, 0, []byte(binlogPos.Name), uint64(1234))
 		queryEv, _      = event.GenQueryEvent(eventHeader, 123, 0, 0, 0, nil, nil, []byte("CREATE DATABASE db_relay_test"))
 	)
+
+	r.writer = writer2
+
 	cfg := getDBConfigForTest()
 	conn.InitMockDB(c)
 	db, err := conn.DefaultDBProvider.Apply(cfg)
