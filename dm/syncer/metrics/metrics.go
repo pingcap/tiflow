@@ -254,7 +254,7 @@ var (
 			Name:      "replication_transaction_batch",
 			Help:      "number of sql's contained in a transaction that executed to downstream",
 			Buckets:   prometheus.LinearBuckets(1, 50, 21), // linear from 1 to 1001
-		}, []string{"worker", "task", "source_id", "queueNo"})
+		}, []string{"worker", "task", "source_id", "queueNo","type"})
 
 	FlushCheckPointsTimeInterval = metricsproxy.NewHistogramVec(
 		prometheus.HistogramOpts{
