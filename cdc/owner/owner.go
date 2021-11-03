@@ -22,8 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tikv/client-go/v2/oracle"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -33,6 +31,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -137,7 +136,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 
 	pdTime, err := o.gcManager.CurrentTimeFromPDCached(ctx)
 	if err != nil {
-		return state, errors.Trace(err)
+		log.Warn("fail to get pd time , we will use local time", zap.Error(err), zap.Time("local time", pdTime))
 	}
 	ctx.GlobalVars().PDPhyTs = oracle.GetPhysical(pdTime)
 
