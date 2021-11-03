@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/actor"
 	"github.com/pingcap/ticdc/pkg/actor/message"
 	serverConfig "github.com/pingcap/ticdc/pkg/config"
@@ -109,6 +110,13 @@ func (t *tableActor) start(ctx context.Context) error {
 	t.pullerNode = newPullerNode(t.tableID, t.replicaInfo, t.tableName).(*pullerNode)
 	if err := t.pullerNode.Start(ctx, true, t.wg, t.info, t.vars); err != nil {
 		log.Error("puller fails to start", zap.Error(err))
+		return err
+	}
+
+	flowController := common.NewTableFlowController(t.memoryQuota)
+	t.sorterNode = newSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs, flowController, t.mounter)
+	if err := t.sorterNode.Start(ctx, true, t.wg, t.info, t.vars); err != nil {
+		log.Error("sorter fails to start", zap.Error(err))
 		return err
 	}
 

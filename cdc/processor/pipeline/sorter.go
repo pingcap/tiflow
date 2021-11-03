@@ -26,6 +26,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/sorter"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
+	"github.com/pingcap/ticdc/pkg/actor"
+	"github.com/pingcap/ticdc/pkg/actor/message"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"go.uber.org/zap"
@@ -40,18 +43,20 @@ type sorterNode struct {
 	sorter sorter.EventSorter
 
 	tableID   model.TableID
-	tableName string // quoted schema and table, used in metircs only
+	tableName string // quoted schema and table, used in metrics only
 
 	// for per-table flow control
 	flowController tableFlowController
 
 	mounter entry.Mounter
 
-	wg     errgroup.Group
+	wg     *errgroup.Group
 	cancel context.CancelFunc
 
 	// The latest resolved ts that sorter has received.
 	resolvedTs model.Ts
+
+	outputCh chan pipeline.Message
 }
 
 func newSorterNode(
@@ -64,28 +69,35 @@ func newSorterNode(
 		flowController: flowController,
 		mounter:        mounter,
 		resolvedTs:     startTs,
+		outputCh:       make(chan pipeline.Message, 50),
 	}
 }
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
+	wg := errgroup.Group{}
+	return n.Start(ctx, false, &wg, ctx.ChangefeedVars(), ctx.GlobalVars())
+}
+
+func (n *sorterNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
+	n.wg = wg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
 	var sorter sorter.EventSorter
-	sortEngine := ctx.ChangefeedVars().Info.Engine
+	sortEngine := info.Info.Engine
 	switch sortEngine {
 	case model.SortInMemory:
 		sorter = memory.NewEntrySorter()
 	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
 		if sortEngine == model.SortInFile {
 			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
-				zap.String("changefeed-id", ctx.ChangefeedVars().ID), zap.String("table-name", n.tableName))
+				zap.String("changefeed-id", info.ID), zap.String("table-name", n.tableName))
 		}
-		sortDir := ctx.ChangefeedVars().Info.SortDir
+		sortDir := info.Info.SortDir
 		err := unified.UnifiedSorterCheckDir(sortDir)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		sorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+		sorter, err = unified.NewUnifiedSorter(sortDir, info.ID, n.tableName, n.tableID, vars.CaptureInfo.AdvertiseAddr)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -96,7 +108,15 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
 	n.wg.Go(func() error {
-		ctx.Throw(errors.Trace(sorter.Run(stdCtx)))
+		if !isTableActor {
+			ctx.(pipeline.NodeContext).Throw(errors.Trace(sorter.Run(stdCtx)))
+		} else {
+			err := sorter.Run(stdCtx)
+			if err != nil {
+				log.Error("sorter stopped", zap.Error(err))
+			}
+			_ = defaultRouter.SendB(stdCtx, actor.ID(n.tableID), message.StopMessage())
+		}
 		return nil
 	})
 	n.wg.Go(func() error {
@@ -112,7 +132,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(info.ID, vars.CaptureInfo.AdvertiseAddr)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
@@ -143,7 +163,11 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 						if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
-							ctx.SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
+							if isTableActor {
+								_ = defaultRouter.Send(actor.ID(n.tableID), message.BarrierMessage(lastCRTs))
+							} else {
+								ctx.(pipeline.NodeContext).SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
+							}
 						}
 					}
 					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
@@ -154,7 +178,11 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
-							ctx.SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
+							if isTableActor {
+								_ = defaultRouter.Send(actor.ID(n.tableID), message.BarrierMessage(lastCRTs))
+							} else {
+								ctx.(pipeline.NodeContext).SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
+							}
 						}
 						return nil
 					})
@@ -164,7 +192,12 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 								zap.Int64("tableID", n.tableID),
 								zap.String("tableName", n.tableName))
 						} else {
-							ctx.Throw(err)
+							if isTableActor {
+								log.Error("sorter stopped", zap.Error(err))
+								_ = defaultRouter.SendB(stdCtx, actor.ID(n.tableID), message.StopMessage())
+							} else {
+								ctx.(pipeline.NodeContext).Throw(err)
+							}
 						}
 						return nil
 					}
@@ -186,7 +219,13 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()
 				}
-				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(msg))
+
+				if isTableActor {
+					n.outputCh <- pipeline.PolymorphicEventMessage(msg)
+					_ = defaultRouter.Send(actor.ID(n.tableID), message.TickMessage())
+				} else {
+					ctx.(pipeline.NodeContext).SendToNextNode(pipeline.PolymorphicEventMessage(msg))
+				}
 			}
 		}
 	})
