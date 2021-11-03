@@ -19,7 +19,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 
 	"github.com/pingcap/errors"
@@ -30,6 +29,7 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -92,11 +92,16 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 	if m.pdTimeCache == nil && ctx.GlobalVars().PDClient != nil {
 		m.pdTimeCache = util.NewPDTimeCache(ctx.GlobalVars().PDClient)
 	}
-	pdTime, err := m.pdTimeCache.CurrentTimeFromPDCached(stdCtx)
-	if err != nil {
-		return state, errors.Trace(err)
+	// get PDPhyTs, m.pdTimeCache only nil in test
+	if m.pdTimeCache != nil {
+		pdTime, err := m.pdTimeCache.CurrentTimeFromPDCached(stdCtx)
+		if err != nil {
+			return state, errors.Trace(err)
+		}
+		ctx.GlobalVars().PDPhyTs = oracle.GetPhysical(pdTime)
+	} else {
+		ctx.GlobalVars().PDPhyTs = oracle.GetPhysical(time.Now())
 	}
-	ctx.GlobalVars().PDPhyTs = oracle.GetPhysical(pdTime)
 
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	var inactiveChangefeedCount int

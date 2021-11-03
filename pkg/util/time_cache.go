@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,18 +24,21 @@ import (
 
 const pdTimeUpdateInterval = 1 * time.Second
 
+// PDTimeCache cache time get from PD client
 type PDTimeCache struct {
 	pdClient            pd.Client
 	pdPhysicalTimeCache time.Time
 	lastUpdatedPdTime   time.Time
 }
 
+// NewPDTimeCache return a new PDTimeCache
 func NewPDTimeCache(pdClient pd.Client) *PDTimeCache {
 	return &PDTimeCache{
 		pdClient: pdClient,
 	}
 }
 
+// CurrentTimeFromPDCached return current time from pd cache
 func (m *PDTimeCache) CurrentTimeFromPDCached(ctx context.Context) (time.Time, error) {
 	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
 		return m.pdPhysicalTimeCache, nil
