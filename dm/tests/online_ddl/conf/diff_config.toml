@@ -7,7 +7,7 @@ export-fix-sql = true
 check-struct-only = false
 
 [task]
-    output-dir = "./output"
+    output-dir = "/tmp/ticdc_dm_test/output"
 
     source-instances = ["mysql1", "mysql2"]
 
@@ -35,7 +35,6 @@ schema = "online_ddl"
 table = "gho_t_target"
 ignore-columns = ["id"]
 
-[table-configs]
 [table-configs.config2]
 schema = "online_ddl"
 table = "pt_t_target"

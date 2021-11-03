@@ -14,10 +14,14 @@ binary=sync_diff_inspector
 
 PWD=$(pwd)
 LOG=$workdir/sync_diff_inspector.log
+OUTPUT_DIR=/tmp/ticdc_dm_test/output/
+
+mkdir -p /tmp/ticdc_dm_test
 
 cd $workdir
 i=0
 while [ $i -lt $check_time ]; do
+	rm -rf $OUTPUT_DIR
 	$binary --config=$conf >>$LOG 2>&1
 	ret=$?
 	if [ "$ret" == 0 ]; then
@@ -32,7 +36,8 @@ done
 if [ $i -ge $check_time ]; then
 	echo "check diff failed at last"
 	# show \n and other blanks
-	printf "$(cat $LOG)\n"
+	printf "$(cat $LOG)\n\n"
+	printf "$(cat $OUTPUT_DIR/sync_diff.log)\n"
 	exit 1
 fi
 cd $PWD

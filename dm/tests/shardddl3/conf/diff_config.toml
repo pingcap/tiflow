@@ -1,19 +1,13 @@
 # diff Configuration.
 
-log-level = "info"
-
-chunk-size = 1000
-
 check-thread-count = 4
 
-sample-percent = 100
+export-fix-sql = true
 
-use-checksum = true
-
-fix-sql-file = "fix.sql"
+check-struct-only = false
 
 [task]
-    output-dir = "./output"
+    output-dir = "/tmp/ticdc_dm_test/output"
 
     source-instances = ["mysql1", "mysql2"]
 
