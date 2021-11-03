@@ -772,10 +772,12 @@ func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
 	if p.lastSchemaTs == lastSchemaTs {
 		return
 	}
+
 	log.Debug("finished gc in schema storage",
 		zap.Uint64("gcTs", lastSchemaTs),
 		cdcContext.ZapFieldChangefeed(ctx))
-	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaTs))
+	lastSchemaPhysicalTs := oracle.ExtractPhysical(lastSchemaTs)
+	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaPhysicalTs))
 }
 
 // flushRedoLogMeta flushes redo log meta, including resolved-ts and checkpoint-ts
