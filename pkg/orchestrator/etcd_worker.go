@@ -121,8 +121,11 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		sessionDone = make(chan struct{})
 	}
 	lastReceivedEventTime := time.Now()
-	// limit the frequency of EtcdWorker ticks
-	rl := rate.NewLimiter(10, 30)
+
+	// tickRate represents the number of times EtcdWorker can tick
+	// the reactor per second
+	tickRate := time.Second / timerInterval
+	rl := rate.NewLimiter(rate.Limit(tickRate), int(tickRate)*3)
 	for {
 		var response clientv3.WatchResponse
 		select {
@@ -185,7 +188,9 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			if err := worker.applyUpdates(); err != nil {
 				return errors.Trace(err)
 			}
-			// if !rl.Allow(), skip this Tick to avoid etcd worker tick too frequency
+
+			// if !rl.Allow(), skip this Tick to avoid etcd worker tick reactor too frequency
+			// It make etcdWorker to batch etcd changed event in worker.state
 			if !rl.Allow() {
 				continue
 			}
