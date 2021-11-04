@@ -227,7 +227,7 @@ type CheckPoint interface {
 	// corresponding to Meta.Save
 	SaveGlobalPoint(point binlog.Location)
 
-	// Snapshot make a snapshot if current checkpoint and return its id
+	// Snapshot make a snapshot of current checkpoint and return its id
 	Snapshot() SnapshotID
 
 	// FlushGlobalPointsExcept flushes the global checkpoint and tables'
