@@ -49,7 +49,7 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 
 	sinkURI := "kafka://kafka:9092/" + testDbName + "?kafka-version=2.6.0&protocol=" + protocol
 	if c.EnableWatermark {
-		sinkURI += "&watermark=true"
+		sinkURI += "&enable-tidb-extension=true"
 	}
 
 	return &framework.CDCProfile{
