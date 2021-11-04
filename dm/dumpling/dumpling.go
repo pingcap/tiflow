@@ -313,6 +313,8 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 func (m *Dumpling) detectSQLMode(ctx context.Context, dumpCfg *export.Config) {
 	baseDB, err := conn.DefaultDBProvider.Apply(&m.cfg.From)
 	if err != nil {
+		log.L().Warn("set up db connect failed", zap.Any("db", m.cfg.From),
+			zap.Error(err))
 		return
 	}
 	defer baseDB.Close()
@@ -320,6 +322,7 @@ func (m *Dumpling) detectSQLMode(ctx context.Context, dumpCfg *export.Config) {
 
 	sqlMode, err := utils.GetGlobalVariable(ctx, db, "sql_mode")
 	if err != nil {
+		log.L().Warn("get global sql_mode from upstream failed", zap.Any("db", m.cfg.From), zap.Error(err))
 		return
 	}
 	m.logger.Info("found upstream SQL mode", zap.String("SQL mode", sqlMode))

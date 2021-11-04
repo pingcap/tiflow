@@ -17,18 +17,24 @@ import (
 	"context"
 	"strings"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/docker/go-units"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tfilter "github.com/pingcap/tidb-tools/pkg/table-filter"
 
 	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
 func (d *testDumplingSuite) TestParseArgs(c *C) {
 	logger := log.L()
 	ctx := context.Background()
+
+	mock := conn.InitMockDB(c)
+	mock.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
+		WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("01:00:00"))
 
 	cfg := &config.SubTaskConfig{}
 	cfg.ExtraArgs = `--statement-size=100 --where "t>10" --threads 8 -F 50B`
@@ -39,6 +45,8 @@ func (d *testDumplingSuite) TestParseArgs(c *C) {
 	c.Assert(exportCfg.Where, Equals, "t>10")
 	c.Assert(exportCfg.Threads, Equals, 8)
 	c.Assert(exportCfg.FileSize, Equals, uint64(50))
+	c.Assert(exportCfg.SessionParams, NotNil)
+	c.Assert(exportCfg.SessionParams["time_zone"], Equals, "+01:00")
 
 	extraArgs := `--threads 16 --skip-tz-utc`
 	err = parseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
