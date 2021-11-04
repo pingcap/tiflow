@@ -38,8 +38,20 @@ type managerSuite struct {
 
 var _ = check.Suite(&managerSuite{})
 
+// NewManager4Test creates a new processor manager for test
+func NewManager4Test(
+	c *check.C,
+	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
+) *Manager {
+	m := NewManager()
+	m.newProcessor = func(ctx cdcContext.Context) *processor {
+		return newProcessor4Test(ctx, c, createTablePipeline)
+	}
+	return m
+}
+
 func (s *managerSuite) resetSuit(ctx cdcContext.Context, c *check.C) {
-	s.manager = NewManager4Test(func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+	s.manager = NewManager4Test(c, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 		return &mockTablePipeline{
 			tableID:      tableID,
 			name:         fmt.Sprintf("`test`.`table%d`", tableID),

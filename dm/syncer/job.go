@@ -37,7 +37,8 @@ const (
 	skip // used by Syncer.recordSkipSQLsLocation to record global location, but not execute SQL
 	rotate
 	conflict
-	gc // used to clean up out dated causality keys
+	compact
+  gc // used to clean up out dated causality keys
 )
 
 func (t opType) String() string {
@@ -60,6 +61,8 @@ func (t opType) String() string {
 		return "rotate"
 	case conflict:
 		return "conflict"
+	case compact:
+		return "compact"
 	case gc:
 		return "gc"
 	}

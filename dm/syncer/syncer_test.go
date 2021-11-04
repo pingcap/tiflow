@@ -53,6 +53,7 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
+	pmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 )
 
@@ -778,7 +779,19 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})},
 	}
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
-	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn.BaseConn)
+	syncer.downstreamTrackConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
+	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_1`").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("t_1", "create table t_1(id int primary key, name varchar(24))"))
+	s.mockGetServerUnixTS(mock)
+	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
+
 	syncer.exprFilterGroup = NewExprFilterGroup(nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
@@ -790,7 +803,6 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	syncer.setupMockCheckpoint(c, checkPointDBConn, checkPointMock)
 
 	syncer.reset()
-	s.mockGetServerUnixTS(mock)
 	events1 := mockBinlogEvents{
 		mockBinlogEvent{typ: DBCreate, args: []interface{}{"test_1"}},
 		mockBinlogEvent{typ: TableCreate, args: []interface{}{"test_1", "create table test_1.t_1(id int primary key, name varchar(24))"}},
@@ -1032,7 +1044,16 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})},
 	}
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
-	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn.BaseConn)
+	syncer.downstreamTrackConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_1`").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("t_1", "create table t_1(id int primary key, name varchar(24))"))
+
+	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
 	syncer.exprFilterGroup = NewExprFilterGroup(nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
@@ -1227,7 +1248,7 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 	}
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
 	syncer.checkpoint.(*RemoteCheckPoint).dbConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(checkPointDBConn, &retry.FiniteRetryStrategy{})}
-	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn.BaseConn)
+	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
 	syncer.exprFilterGroup = NewExprFilterGroup(nil)
 	c.Assert(syncer.genRouter(), IsNil)
 	c.Assert(err, IsNil)
@@ -1491,7 +1512,8 @@ func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
-	syncer.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, defaultTestSessionCfg, baseConn)
+	syncer.downstreamTrackConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
+	syncer.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
 	c.Assert(err, IsNil)
 
 	upTable := &filter.Table{
@@ -1533,7 +1555,8 @@ func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
-	syncer.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, defaultTestSessionCfg, baseConn)
+	syncer.downstreamTrackConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
+	syncer.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
 	c.Assert(err, IsNil)
 
 	schemaName := "test"
@@ -1573,7 +1596,7 @@ func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
 		"tidb_skip_utf8_check":    "0",
 		schema.TiDBClusteredIndex: "ON",
 	}
-	syncer.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, sessionCfg, baseConn)
+	syncer.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, sessionCfg, syncer.downstreamTrackConn)
 	c.Assert(err, IsNil)
 	v, ok := syncer.schemaTracker.GetSystemVar(schema.TiDBClusteredIndex)
 	c.Assert(v, Equals, "ON")
