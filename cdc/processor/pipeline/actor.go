@@ -170,11 +170,21 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 
 	if t.cyclicEnabled {
 		t.cyclicNode = newCyclicMarkNode(t.replicaInfo.MarkTableID).(*cyclicMarkNode)
-		if err := t.cyclicNode.Start(t.info); err != nil {
+		if err := t.cyclicNode.Start(true, t.info); err != nil {
 			log.Error("sink fails to start", zap.Error(err))
 			return err
 		}
-		t.nodes = append(t.nodes, &node{inputChan: t.sorterNode.outputCh})
+		t.nodes = append(t.nodes, &node{
+			inputChan: t.sorterNode.outputCh,
+			trySendMessage: func(ctx context.Context, message *pipeline.Message) bool {
+				sent, err := t.cyclicNode.handleMsg(*message, t.cyclicNode)
+				if err != nil {
+					t.reportErr(err)
+				}
+				return sent
+			},
+		},
+		)
 	}
 
 	t.sinkNode = newSinkNode(t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
@@ -183,7 +193,7 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 		return err
 	}
 	if t.cyclicEnabled {
-		t.nodes = append(t.nodes, &node{inputChan: t.cyclicNode.outputCh})
+		t.nodes = append(t.nodes, &node{})
 	} else {
 		t.nodes = append(t.nodes, &node{
 			inputChan: t.sorterNode.outputCh,
