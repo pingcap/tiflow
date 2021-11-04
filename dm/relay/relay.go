@@ -48,7 +48,7 @@ import (
 )
 
 // used to fill RelayLogInfo.
-var fakeTaskName = "relay"
+var fakeRelayTaskName = "relay"
 
 const (
 	flushMetaInterval           = 30 * time.Second
@@ -1024,7 +1024,7 @@ func (r *Relay) setActiveRelayLog(filename string) {
 	uuid := r.meta.UUID()
 	_, suffix, _ := utils.ParseSuffixForUUID(uuid)
 	rli := &pkgstreamer.RelayLogInfo{
-		TaskName:   fakeTaskName,
+		TaskName:   fakeRelayTaskName,
 		UUID:       uuid,
 		UUIDSuffix: suffix,
 		Filename:   filename,

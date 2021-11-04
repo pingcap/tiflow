@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package purger
+package relay
 
 import (
 	"fmt"
@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
-var fakeTaskName = strategyFilename.String()
+var fakeStrategyTaskName = strategyFilename.String()
 
 // filenameArgs represents args needed by filenameStrategy
 // NOTE: should handle master-slave switch.
@@ -47,7 +47,7 @@ func (fa *filenameArgs) SetActiveRelayLog(active *streamer.RelayLogInfo) {
 	_, endSuffix, _ := utils.ParseSuffixForUUID(uuid)
 
 	safeRelayLog := &streamer.RelayLogInfo{
-		TaskName:   fakeTaskName,
+		TaskName:   fakeStrategyTaskName,
 		UUID:       uuid,
 		UUIDSuffix: endSuffix,
 		Filename:   fa.filename,
