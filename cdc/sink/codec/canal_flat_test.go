@@ -140,14 +140,14 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 
 func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), watermark: false}
+	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: false}
 	c.Assert(encoder, check.NotNil)
 
 	msg, err := encoder.EncodeCheckpointEvent(2333)
 	c.Assert(err, check.IsNil)
 	c.Assert(msg, check.IsNil)
 
-	encoder.watermark = true
+	encoder.enableTiDBExtension = true
 	msg, err = encoder.EncodeCheckpointEvent(2333)
 	c.Assert(err, check.IsNil)
 	c.Assert(msg, check.NotNil)

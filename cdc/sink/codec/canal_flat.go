@@ -32,19 +32,20 @@ type CanalFlatEventBatchEncoder struct {
 	builder       *canalEntryBuilder
 	unresolvedBuf []*canalFlatMessage
 	resolvedBuf   []*canalFlatMessage
-	// When it is true, checkpoint events are generated.
-	watermark bool
+	// When it is true, canal-json would generate TiDB extended information
+	// At the moment, only `tidbWaterMarkType` and `_tidb` fields.
+	enableTiDBExtension bool
 }
 
-const ticdcWaterMarkType = "CDC_WATERMARK"
+const tidbWaterMarkType = "TiDB_WATERMARK"
 
 // NewCanalFlatEventBatchEncoder creates a new CanalFlatEventBatchEncoder
 func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 	return &CanalFlatEventBatchEncoder{
-		builder:       NewCanalEntryBuilder(),
-		unresolvedBuf: make([]*canalFlatMessage, 0),
-		resolvedBuf:   make([]*canalFlatMessage, 0),
-		watermark:     false,
+		builder:             NewCanalEntryBuilder(),
+		unresolvedBuf:       make([]*canalFlatMessage, 0),
+		resolvedBuf:         make([]*canalFlatMessage, 0),
+		enableTiDBExtension: false,
 	}
 }
 
@@ -213,7 +214,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *
 	return &canalFlatMessage{
 		ID:            0,
 		IsDDL:         false,
-		EventType:     ticdcWaterMarkType,
+		EventType:     tidbWaterMarkType,
 		ExecutionTime: convertToCanalTs(ts),
 		BuildTime:     time.Now().UnixNano() / 1e6,
 		Props: map[string]string{
@@ -224,7 +225,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
-	if !c.watermark {
+	if !c.enableTiDBExtension {
 		return nil, nil
 	}
 	msg := c.newFlatMessage4CheckpointEvent(ts)
@@ -307,12 +308,12 @@ func (c *CanalFlatEventBatchEncoder) Reset() {
 }
 
 func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
-	if s, ok := params["watermark"]; ok {
+	if s, ok := params["enable-tidb-extension"]; ok {
 		a, err := strconv.ParseBool(s)
 		if err != nil {
 			return err
 		}
-		c.watermark = a
+		c.enableTiDBExtension = a
 	}
 	return nil
 }
