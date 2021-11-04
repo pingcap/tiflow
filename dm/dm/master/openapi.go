@@ -21,10 +21,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/deepmap/oapi-codegen/pkg/middleware"
-	"github.com/labstack/echo/v4"
-	echomiddleware "github.com/labstack/echo/v4/middleware"
-	"go.uber.org/zap"
+	"github.com/gin-gonic/gin"
 
 	"github.com/pingcap/ticdc/dm/checker"
 	"github.com/pingcap/ticdc/dm/dm/config"
@@ -34,7 +31,6 @@ import (
 	"github.com/pingcap/ticdc/dm/dm/pb"
 	"github.com/pingcap/ticdc/dm/openapi"
 	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
@@ -45,20 +41,19 @@ const (
 
 // redirectRequestToLeaderMW a middleware auto redirect request to leader.
 // because the leader has some data in memory, only the leader can process the request.
-func (s *Server) redirectRequestToLeaderMW() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(ctx echo.Context) error {
-			ctx2 := ctx.Request().Context()
-			isLeader, _ := s.isLeaderAndNeedForward(ctx2)
-			if isLeader {
-				return next(ctx)
-			}
+func (s *Server) redirectRequestToLeaderMW(c *gin.Context) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx2 := c.Request.Context()
+		isLeader, _ := s.isLeaderAndNeedForward(ctx2)
+		if isLeader {
+			c.Next()
+		} else {
 			// nolint:dogsled
 			_, _, leaderOpenAPIAddr, err := s.election.LeaderInfo(ctx2)
 			if err != nil {
-				return err
+				c.AbortWithError(http.StatusInternalServerError, err)
 			}
-			return ctx.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("http://%s%s", leaderOpenAPIAddr, ctx.Request().RequestURI))
+			c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("http://%s%s", leaderOpenAPIAddr, c.Request.RequestURI))
 		}
 	}
 }
@@ -69,26 +64,26 @@ func (s *Server) InitOpenAPIHandles() error {
 	if err != nil {
 		return err
 	}
-	e := echo.New()
+	engine := gin.New()
 	// inject err handler
-	e.HTTPErrorHandler = terrorHTTPErrorHandler
+	// e.HTTPErrorHandler = terrorHTTPErrorHandler
 	// middlewares
-	logger := log.L().WithFields(zap.String("component", "openapi")).Logger
+	// logger := log.L().WithFields(zap.String("component", "openapi")).Logger
 	// set logger
-	e.Use(openapi.ZapLogger(logger))
-	e.Use(echomiddleware.Recover())
-	e.Use(s.redirectRequestToLeaderMW())
+	// e.Use(openapi.ZapLogger(logger))
+	// e.Use(echomiddleware.Recover())
+	engine = engine.Use(s.redirectRequestToLeaderMW())
 	// disables swagger server name validation. it seems to work poorly
 	swagger.Servers = nil
 	// use our validation middleware to check all requests against the OpenAPI schema.
-	e.Use(middleware.OapiRequestValidator(swagger))
-	openapi.RegisterHandlers(e, s)
-	s.echo = e
+	// e.Use(middleware.OapiRequestValidator(swagger))
+	// openapi.RegisterHandlers(e, s)
+	s.openapiHandles = engine
 	return nil
 }
 
 // GetDocJSON url is:(GET /api/v1/dm.json).
-func (s *Server) GetDocJSON(ctx echo.Context) error {
+func (s *Server) GetDocJSON(ctx *gin.Context) {
 	swaggerJSON, err := openapi.GetSwaggerJSON()
 	if err != nil {
 		return err
@@ -97,7 +92,7 @@ func (s *Server) GetDocJSON(ctx echo.Context) error {
 }
 
 // GetDocHTML url is:(GET /api/v1/docs).
-func (s *Server) GetDocHTML(ctx echo.Context) error {
+func (s *Server) GetDocHTML(ctx *gin.Context) {
 	html, err := openapi.GetSwaggerHTML(openapi.NewSwaggerConfig(docJSONBasePath, ""))
 	if err != nil {
 		return err
@@ -106,7 +101,7 @@ func (s *Server) GetDocHTML(ctx echo.Context) error {
 }
 
 // DMAPIGetClusterMasterList get cluster master node list url is:(GET /api/v1/cluster/masters).
-func (s *Server) DMAPIGetClusterMasterList(ctx echo.Context) error {
+func (s *Server) DMAPIGetClusterMasterList(ctx *gin.Context) {
 	newCtx := ctx.Request().Context()
 	memberMasters, err := s.listMemberMaster(newCtx, nil)
 	if err != nil {
@@ -127,7 +122,7 @@ func (s *Server) DMAPIGetClusterMasterList(ctx echo.Context) error {
 }
 
 // DMAPIOfflineMasterNode offline master node url is: (DELETE /api/v1/cluster/masters/{master-name}).
-func (s *Server) DMAPIOfflineMasterNode(ctx echo.Context, masterName string) error {
+func (s *Server) DMAPIOfflineMasterNode(ctx *gin.Context, masterName string) {
 	newCtx := ctx.Request().Context()
 	if err := s.deleteMasterByName(newCtx, masterName); err != nil {
 		return err
@@ -136,7 +131,7 @@ func (s *Server) DMAPIOfflineMasterNode(ctx echo.Context, masterName string) err
 }
 
 // DMAPIGetClusterWorkerList get cluster worker node list url is: (GET /api/v1/cluster/workers).
-func (s *Server) DMAPIGetClusterWorkerList(ctx echo.Context) error {
+func (s *Server) DMAPIGetClusterWorkerList(ctx *gin.Context) {
 	memberWorkers := s.listMemberWorker(nil)
 	workerCnt := len(memberWorkers.Worker.Workers)
 	workers := make([]openapi.ClusterWorker, workerCnt)
@@ -153,7 +148,7 @@ func (s *Server) DMAPIGetClusterWorkerList(ctx echo.Context) error {
 }
 
 // DMAPIOfflineWorkerNode offline worker node url is: (DELETE /api/v1/cluster/workers/{worker-name}).
-func (s *Server) DMAPIOfflineWorkerNode(ctx echo.Context, workerName string) error {
+func (s *Server) DMAPIOfflineWorkerNode(ctx *gin.Context, workerName string) {
 	if err := s.scheduler.RemoveWorker(workerName); err != nil {
 		return err
 	}
@@ -161,7 +156,7 @@ func (s *Server) DMAPIOfflineWorkerNode(ctx echo.Context, workerName string) err
 }
 
 // DMAPICreateSource url is:(POST /api/v1/sources).
-func (s *Server) DMAPICreateSource(ctx echo.Context) error {
+func (s *Server) DMAPICreateSource(ctx *gin.Context) {
 	var createSourceReq openapi.Source
 	if err := ctx.Bind(&createSourceReq); err != nil {
 		return err
@@ -177,7 +172,7 @@ func (s *Server) DMAPICreateSource(ctx echo.Context) error {
 }
 
 // DMAPIGetSourceList url is:(GET /api/v1/sources).
-func (s *Server) DMAPIGetSourceList(ctx echo.Context, params openapi.DMAPIGetSourceListParams) error {
+func (s *Server) DMAPIGetSourceList(ctx *gin.Context, params openapi.DMAPIGetSourceListParams) {
 	sourceMap := s.scheduler.GetSourceCfgs()
 	sourceList := []openapi.Source{}
 	for key := range sourceMap {
@@ -199,7 +194,7 @@ func (s *Server) DMAPIGetSourceList(ctx echo.Context, params openapi.DMAPIGetSou
 }
 
 // DMAPIDeleteSource url is:(DELETE /api/v1/sources).
-func (s *Server) DMAPIDeleteSource(ctx echo.Context, sourceName string, params openapi.DMAPIDeleteSourceParams) error {
+func (s *Server) DMAPIDeleteSource(ctx *gin.Context, sourceName string, params openapi.DMAPIDeleteSourceParams) {
 	// force means delete source and stop all task of this source
 	if params.Force != nil && *params.Force {
 		// TODO(ehco) stop task concurrently
@@ -221,7 +216,7 @@ func (s *Server) DMAPIDeleteSource(ctx echo.Context, sourceName string, params o
 }
 
 // DMAPIStartRelay url is:(POST /api/v1/sources/{source-id}/relay).
-func (s *Server) DMAPIStartRelay(ctx echo.Context, sourceName string) error {
+func (s *Server) DMAPIStartRelay(ctx *gin.Context, sourceName string) {
 	var req openapi.StartRelayRequest
 	if err := ctx.Bind(&req); err != nil {
 		return err
@@ -254,7 +249,7 @@ func (s *Server) DMAPIStartRelay(ctx echo.Context, sourceName string) error {
 }
 
 // DMAPIStopRelay url is:(DELETE /api/v1/sources/{source-id}/relay).
-func (s *Server) DMAPIStopRelay(ctx echo.Context, sourceName string) error {
+func (s *Server) DMAPIStopRelay(ctx *gin.Context, sourceName string) {
 	var req openapi.StopRelayRequest
 	if err := ctx.Bind(&req); err != nil {
 		return err
@@ -263,16 +258,16 @@ func (s *Server) DMAPIStopRelay(ctx echo.Context, sourceName string) error {
 }
 
 // DMAPIPauseRelay pause relay log function for the data source url is: (POST /api/v1/sources/{source-name}/pause-relay).
-func (s *Server) DMAPIPauseRelay(ctx echo.Context, sourceName string) error {
+func (s *Server) DMAPIPauseRelay(ctx *gin.Context, sourceName string) {
 	return s.scheduler.UpdateExpectRelayStage(pb.Stage_Paused, sourceName)
 }
 
 // DMAPIResumeRelay resume relay log function for the data source url is: (POST /api/v1/sources/{source-name}/resume-relay).
-func (s *Server) DMAPIResumeRelay(ctx echo.Context, sourceName string) error {
+func (s *Server) DMAPIResumeRelay(ctx *gin.Context, sourceName string) {
 	return s.scheduler.UpdateExpectRelayStage(pb.Stage_Running, sourceName)
 }
 
-func (s *Server) getBaseDBBySourceName(sourceName string) (*conn.BaseDB, error) {
+func (s *Server) getBaseDBBySourceName(sourceName string) *conn.BaseDB {
 	sourceCfg := s.scheduler.GetSourceCfgByID(sourceName)
 	if sourceCfg == nil {
 		return nil, terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
@@ -282,7 +277,7 @@ func (s *Server) getBaseDBBySourceName(sourceName string) (*conn.BaseDB, error) 
 }
 
 // DMAPIGetSourceSchemaList get source schema list url is: (GET /api/v1/sources/{source-name}/schemas).
-func (s *Server) DMAPIGetSourceSchemaList(ctx echo.Context, sourceName string) error {
+func (s *Server) DMAPIGetSourceSchemaList(ctx *gin.Context, sourceName string) {
 	baseDB, err := s.getBaseDBBySourceName(sourceName)
 	if err != nil {
 		return err
@@ -296,7 +291,7 @@ func (s *Server) DMAPIGetSourceSchemaList(ctx echo.Context, sourceName string) e
 }
 
 // DMAPIGetSourceTableList get source table list url is: (GET /api/v1/sources/{source-name}/schemas/{schema-name}).
-func (s *Server) DMAPIGetSourceTableList(ctx echo.Context, sourceName string, schemaName string) error {
+func (s *Server) DMAPIGetSourceTableList(ctx *gin.Context, sourceName string, schemaName string) {
 	baseDB, err := s.getBaseDBBySourceName(sourceName)
 	if err != nil {
 		return err
@@ -336,7 +331,7 @@ func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName s
 }
 
 // DMAPIGetSourceStatus url is: (GET /api/v1/sources/{source-id}/status).
-func (s *Server) DMAPIGetSourceStatus(ctx echo.Context, sourceName string) error {
+func (s *Server) DMAPIGetSourceStatus(ctx *gin.Context, sourceName string) {
 	sourceCfg := s.scheduler.GetSourceCfgByID(sourceName)
 	if sourceCfg == nil {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
@@ -359,7 +354,7 @@ func (s *Server) DMAPIGetSourceStatus(ctx echo.Context, sourceName string) error
 }
 
 // DMAPITransferSource transfer source  another free worker url is: (POST /api/v1/sources/{source-name}/transfer).
-func (s *Server) DMAPITransferSource(ctx echo.Context, sourceName string) error {
+func (s *Server) DMAPITransferSource(ctx *gin.Context, sourceName string) {
 	var req openapi.WorkerNameRequest
 	if err := ctx.Bind(&req); err != nil {
 		return err
@@ -368,7 +363,7 @@ func (s *Server) DMAPITransferSource(ctx echo.Context, sourceName string) error 
 }
 
 // DMAPIStartTask url is:(POST /api/v1/tasks).
-func (s *Server) DMAPIStartTask(ctx echo.Context) error {
+func (s *Server) DMAPIStartTask(ctx *gin.Context) {
 	var req openapi.CreateTaskRequest
 	if err := ctx.Bind(&req); err != nil {
 		return err
@@ -454,7 +449,7 @@ func (s *Server) DMAPIStartTask(ctx echo.Context) error {
 }
 
 // DMAPIDeleteTask url is:(DELETE /api/v1/tasks).
-func (s *Server) DMAPIDeleteTask(ctx echo.Context, taskName string, params openapi.DMAPIDeleteTaskParams) error {
+func (s *Server) DMAPIDeleteTask(ctx *gin.Context, taskName string, params openapi.DMAPIDeleteTaskParams) {
 	var sourceList []string
 	if params.SourceNameList != nil {
 		sourceList = *params.SourceNameList
@@ -471,7 +466,7 @@ func (s *Server) DMAPIDeleteTask(ctx echo.Context, taskName string, params opena
 }
 
 // DMAPIGetTaskList url is:(GET /api/v1/tasks).
-func (s *Server) DMAPIGetTaskList(ctx echo.Context) error {
+func (s *Server) DMAPIGetTaskList(ctx *gin.Context) {
 	// get sub task config by task name task name->source name->subtask config
 	subTaskConfigMap := s.scheduler.GetSubTaskCfgs()
 	taskList := config.SubTaskConfigsToOpenAPITask(subTaskConfigMap)
@@ -480,7 +475,7 @@ func (s *Server) DMAPIGetTaskList(ctx echo.Context) error {
 }
 
 // DMAPIGetTaskStatus url is:(GET /api/v1/tasks/{task-name}/status).
-func (s *Server) DMAPIGetTaskStatus(ctx echo.Context, taskName string, params openapi.DMAPIGetTaskStatusParams) error {
+func (s *Server) DMAPIGetTaskStatus(ctx *gin.Context, taskName string, params openapi.DMAPIGetTaskStatusParams) {
 	// 1. get task source list from scheduler
 	var sourceList []string
 	if params.SourceNameList == nil {
@@ -564,7 +559,7 @@ func (s *Server) DMAPIGetTaskStatus(ctx echo.Context, taskName string, params op
 }
 
 // DMAPIPauseTask pause task url is: (POST /api/v1/tasks/{task-name}/pause).
-func (s *Server) DMAPIPauseTask(ctx echo.Context, taskName string) error {
+func (s *Server) DMAPIPauseTask(ctx *gin.Context, taskName string) {
 	var sourceName openapi.SchemaNameList
 	if err := ctx.Bind(&sourceName); err != nil {
 		return err
@@ -576,7 +571,7 @@ func (s *Server) DMAPIPauseTask(ctx echo.Context, taskName string) error {
 }
 
 // DMAPIResumeTask resume task url is: (POST /api/v1/tasks/{task-name}/resume).
-func (s *Server) DMAPIResumeTask(ctx echo.Context, taskName string) error {
+func (s *Server) DMAPIResumeTask(ctx *gin.Context, taskName string) {
 	var sourceName openapi.SchemaNameList
 	if err := ctx.Bind(&sourceName); err != nil {
 		return err
@@ -588,7 +583,7 @@ func (s *Server) DMAPIResumeTask(ctx echo.Context, taskName string) error {
 }
 
 // DMAPIGetSchemaListByTaskAndSource get task source schema list url is: (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas).
-func (s *Server) DMAPIGetSchemaListByTaskAndSource(ctx echo.Context, taskName string, sourceName string) error {
+func (s *Server) DMAPIGetSchemaListByTaskAndSource(ctx *gin.Context, taskName string, sourceName string) {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
 		return terror.ErrWorkerNoStart
@@ -617,7 +612,7 @@ func (s *Server) DMAPIGetSchemaListByTaskAndSource(ctx echo.Context, taskName st
 }
 
 // DMAPIGetTableListByTaskAndSource get task source table list url is: (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}).
-func (s *Server) DMAPIGetTableListByTaskAndSource(ctx echo.Context, taskName string, sourceName string, schemaName string) error {
+func (s *Server) DMAPIGetTableListByTaskAndSource(ctx *gin.Context, taskName string, sourceName string, schemaName string) {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
 		return terror.ErrWorkerNoStart
@@ -647,7 +642,7 @@ func (s *Server) DMAPIGetTableListByTaskAndSource(ctx echo.Context, taskName str
 }
 
 // DMAPIGetTableStructure get task source table structure url is: (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name}).
-func (s *Server) DMAPIGetTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error {
+func (s *Server) DMAPIGetTableStructure(ctx *gin.Context, taskName string, sourceName string, schemaName string, tableName string) {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
 		return terror.ErrWorkerNoStart
@@ -679,7 +674,7 @@ func (s *Server) DMAPIGetTableStructure(ctx echo.Context, taskName string, sourc
 }
 
 // DMAPIDeleteTableStructure delete task source table structure url is: (DELETE /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name}).
-func (s *Server) DMAPIDeleteTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error {
+func (s *Server) DMAPIDeleteTableStructure(ctx *gin.Context, taskName string, sourceName string, schemaName string, tableName string) {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
 		return terror.ErrWorkerNoStart
@@ -706,7 +701,7 @@ func (s *Server) DMAPIDeleteTableStructure(ctx echo.Context, taskName string, so
 }
 
 // DMAPIOperateTableStructure operate task source table structure url is: (PUT /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name}).
-func (s *Server) DMAPIOperateTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error {
+func (s *Server) DMAPIOperateTableStructure(ctx *gin.Context, taskName string, sourceName string, schemaName string, tableName string) {
 	var req openapi.OperateTaskTableStructureRequest
 	if err := ctx.Bind(&req); err != nil {
 		return err
@@ -743,7 +738,7 @@ func (s *Server) DMAPIOperateTableStructure(ctx echo.Context, taskName string, s
 	return nil
 }
 
-func terrorHTTPErrorHandler(err error, c echo.Context) {
+func terrorHTTPErrorHandler(err error, c *gin.Context) {
 	var code int
 	var msg string
 	if tErr, ok := err.(*terror.Error); ok {
@@ -757,7 +752,7 @@ func terrorHTTPErrorHandler(err error, c echo.Context) {
 	}
 }
 
-func sendHTTPErrorResp(ctx echo.Context, code int, message string) error {
+func sendHTTPErrorResp(ctx *gin.Context, code int, message string) error {
 	err := openapi.ErrorWithMessage{ErrorMsg: message, ErrorCode: code}
 	return ctx.JSON(http.StatusBadRequest, err)
 }

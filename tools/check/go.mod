@@ -5,12 +5,13 @@ go 1.16
 require (
 	github.com/AlekSi/gocov-xml v0.0.0-20190121064608-3a14fb1c4737
 	github.com/axw/gocov v1.0.0
-	github.com/deepmap/oapi-codegen v1.8.2
+	github.com/deepmap/oapi-codegen v1.9.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/mock v1.5.0
 	github.com/golangci/golangci-lint v1.42.1
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
+	github.com/labstack/echo/v4 v4.2.1 // indirect
 	github.com/mattn/goveralls v0.0.8
 	github.com/pingcap/errors v0.11.5-0.20211009033009-93128226aaa3
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
