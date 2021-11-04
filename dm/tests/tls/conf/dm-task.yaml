@@ -10,7 +10,7 @@ target-database:
   user: "root"
   password: ""
   security:
-    ssl-ca: "dir-placeholer/ca.pem"
+    ssl-ca: "dir-placeholer/task-ca.pem"
     ssl-cert: "dir-placeholer/dm.pem"
     ssl-key: "dir-placeholer/dm.key"
 

@@ -102,6 +102,8 @@ function test_worker_download_certs_from_master() {
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT2 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT3 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
 
+	# add failpoint to make loader always fail
+	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/loader/lightingAlwaysErr=return()"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
 
@@ -111,22 +113,36 @@ function test_worker_download_certs_from_master() {
 		"\"result\": true" 2 \
 		"\"source\": \"$SOURCE_ID1\"" 1
 
-	# change ca.pem name to test wheather dm-worker will dump certs from etcd
-	mv "$cur/conf/ca.pem" "$cur/conf/ca.pem.bak"
-
-	# start task with changed ca.pem (ca.pem.bak)
 	echo "start task and check stage"
-	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem.bak $cur/conf/dm.pem $cur/conf/dm.key \
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"start-task $WORK_DIR/dm-task.yaml" \
 		"\"result\": true" 2
 
-	# dm-worker will dump ca.pem from etcd and save it to ca.pem
+	# task should be paused.
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"stage\": \"Paused\"" 1
+
+	# change ca.pem name to test wheather dm-worker will dump certs from etcd
+	mv "$cur/conf/task-ca.pem" "$cur/conf/task-ca.pem.bak"
+
+	# kill dm-worker 1 and clean the failpoint
+	export GO_FAILPOINTS=''
+	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+
+	# dm-worker will dump ca.pem from dm-master and save it to task-ca.pem
+	# now we can contine use the ca.pem
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
 		"\"result\": true" 2
 
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	rm -rf "$cur/conf/task-ca.pem.bak"
 }
 
 function test_worker_ha_when_enable_source_tls() {
@@ -297,7 +313,6 @@ function test_master_ha_when_enable_tidb_tls() {
 
 function run() {
 	test_worker_download_certs_from_master
-	exit 1
 	test_worker_ha_when_enable_source_tls
 	test_master_ha_when_enable_tidb_tls
 }
@@ -305,7 +320,7 @@ function run() {
 cleanup_data tls
 cleanup_process
 
-run $*
+run
 
 # kill the tidb with tls
 pkill -hup tidb-server 2>/dev/null || true
