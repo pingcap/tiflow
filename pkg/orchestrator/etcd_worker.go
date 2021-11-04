@@ -128,7 +128,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	rl := rate.NewLimiter(rate.Limit(tickRate), 1)
 	for {
 		var response clientv3.WatchResponse
-		batchResponse := make([]clientv3.WatchResponse, 0)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -142,16 +141,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				}
 			}
 		case response = <-watchCh:
-			batchResponse = append(batchResponse, response)
-		BATCH:
-			for {
-				select {
-				case response = <-watchCh:
-					batchResponse = append(batchResponse, response)
-				default:
-					break BATCH
-				}
-			}
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
@@ -169,11 +158,9 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				continue
 			}
 
-			for _, response := range batchResponse {
-				for _, event := range response.Events {
-					// handleEvent will apply the event to our internal `rawState`.
-					worker.handleEvent(ctx, event)
-				}
+			for _, event := range response.Events {
+				// handleEvent will apply the event to our internal `rawState`.
+				worker.handleEvent(ctx, event)
 			}
 		}
 
@@ -296,18 +283,24 @@ func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
 	return ret
 }
 
-// etcd max transaction size is 128
-const maxBatchPatchSize = 96
+var maxBatchPatchSize = 96
 
 func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]DataPatch) ([][]DataPatch, error) {
 	getBatchPatches := func(patchGroups [][]DataPatch) ([]DataPatch, int) {
-		batchPatch := patchGroups[0]
-		patchNum := 1
-		for (len(batchPatch) + len(patchGroups[patchNum])) < maxBatchPatchSize {
-			batchPatch = append(batchPatch, patchGroups[patchNum]...)
-			patchNum++
+		batchPatches := patchGroups[0]
+		patchesNum := 1
+		for _, patches := range patchGroups {
+			if patchesNum == 1 {
+				continue
+			}
+			if (len(batchPatches) + len(patches)) > maxBatchPatchSize {
+				break
+			}
+			batchPatches = append(batchPatches, patches...)
+			patchesNum++
 		}
-		return batchPatch, patchNum
+
+		return batchPatches, patchesNum
 	}
 
 	for len(patchGroups) > 0 {
@@ -336,10 +329,12 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 	cmps := make([]clientv3.Cmp, 0, len(changedSet))
 	ops := make([]clientv3.Op, 0, len(changedSet))
 	hasDelete := false
+	entrys := make(map[string]int64)
 	for key := range changedSet {
 		// make sure someone else has not updated the key after the last snapshot
 		var cmp clientv3.Cmp
 		if entry, ok := worker.rawState[key]; ok {
+			entrys[key.String()] = entry.modRevision
 			cmp = clientv3.Compare(clientv3.ModRevision(key.String()), "=", entry.modRevision)
 		} else {
 			// if ok is false, it means that the key of this patch is not exist in a committed state
