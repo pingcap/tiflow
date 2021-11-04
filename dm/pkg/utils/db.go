@@ -620,3 +620,15 @@ func GetSQLModeStrBySQLMode(sqlMode tmysql.SQLMode) string {
 	}
 	return strings.Join(sqlModeStr, ",")
 }
+
+// GetTableCreateSQL gets table create sql by 'show create table schema.table'.
+func GetTableCreateSQL(ctx context.Context, conn *sql.Conn, tableID string) (sql string, err error) {
+	querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tableID)
+	var table, createStr string
+	row := conn.QueryRowContext(ctx, querySQL)
+	err = row.Scan(&table, &createStr)
+	if err != nil {
+		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+	return createStr, nil
+}
