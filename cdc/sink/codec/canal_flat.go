@@ -117,9 +117,10 @@ type tidbExtension struct {
 
 type canalFlatMessageWithTiDBExtension struct {
 	*canalFlatMessage
-	// Props is a TiCDC custom field that different from official Canal-JSON format.
+	// Extensions is a TiCDC custom field that different from official Canal-JSON format.
 	// It would be useful to store something for special usage.
-	// At the moment, only store the `tso` of each event, which is useful if the message consumer needs to restore the original transactions.
+	// At the moment, only store the `tso` of each event,
+	// which is useful if the message consumer needs to restore the original transactions.
 	Extensions *tidbExtension `json:"_tidb"`
 }
 
