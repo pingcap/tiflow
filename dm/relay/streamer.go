@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
 	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 
@@ -32,9 +31,6 @@ import (
 var heartbeatInterval = common.MasterHeartbeatPeriod
 
 // TODO: maybe one day we can make a pull request to go-mysql to support LocalStreamer.
-
-// Streamer provides the ability to get binlog event from remote server or local file.
-type Streamer reader.Streamer
 
 // LocalStreamer reads and parses binlog events from local binlog file.
 type LocalStreamer struct {

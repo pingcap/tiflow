@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/failpoint"
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
@@ -542,7 +543,7 @@ func (t *testReaderSuite) TestStartSyncByPos(c *C) {
 	r.Close()
 }
 
-func readNEvents(ctx context.Context, c *C, s Streamer, l int) []*replication.BinlogEvent {
+func readNEvents(ctx context.Context, c *C, s reader.Streamer, l int) []*replication.BinlogEvent {
 	var result []*replication.BinlogEvent
 	for {
 		ev, err2 := s.GetEvent(ctx)
@@ -1125,7 +1126,7 @@ func (t *testReaderSuite) genEvents(c *C, eventTypes []replication.EventType, la
 	return events, latestPos, latestGTID, pGset
 }
 
-func (t *testReaderSuite) purgeStreamer(c *C, s Streamer) {
+func (t *testReaderSuite) purgeStreamer(c *C, s reader.Streamer) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
@@ -1142,7 +1143,7 @@ func (t *testReaderSuite) purgeStreamer(c *C, s Streamer) {
 	}
 }
 
-func (t *testReaderSuite) verifyNoEventsInStreamer(c *C, s Streamer) {
+func (t *testReaderSuite) verifyNoEventsInStreamer(c *C, s reader.Streamer) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 

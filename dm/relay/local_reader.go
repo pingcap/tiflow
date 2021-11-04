@@ -207,7 +207,7 @@ func (r *BinlogReader) getPosByGTID(gset mysql.GTIDSet) (*mysql.Position, error)
 
 // StartSyncByPos start sync by pos
 // TODO:  thread-safe?
-func (r *BinlogReader) StartSyncByPos(pos mysql.Position) (Streamer, error) {
+func (r *BinlogReader) StartSyncByPos(pos mysql.Position) (reader.Streamer, error) {
 	if pos.Name == "" {
 		return nil, terror.ErrBinlogFileNotSpecified.Generate()
 	}
@@ -247,7 +247,7 @@ func (r *BinlogReader) StartSyncByPos(pos mysql.Position) (Streamer, error) {
 }
 
 // StartSyncByGTID start sync by gtid.
-func (r *BinlogReader) StartSyncByGTID(gset mysql.GTIDSet) (Streamer, error) {
+func (r *BinlogReader) StartSyncByGTID(gset mysql.GTIDSet) (reader.Streamer, error) {
 	r.tctx.L().Info("begin to sync binlog", zap.Stringer("GTID Set", gset))
 	r.usingGTID = true
 

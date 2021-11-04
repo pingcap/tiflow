@@ -27,6 +27,7 @@ import (
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/retry"
@@ -46,7 +47,7 @@ var minErrorRetryInterval = 1 * time.Minute
 // For other implementations who implement StreamerProducer and Streamer can easily take place of Syncer.streamProducer
 // For test is easy to mock.
 type StreamerProducer interface {
-	generateStreamer(location binlog.Location) (relay.Streamer, error)
+	generateStreamer(location binlog.Location) (reader.Streamer, error)
 }
 
 // Read local relay log.
@@ -55,7 +56,7 @@ type localBinlogReader struct {
 	EnableGTID bool
 }
 
-func (l *localBinlogReader) generateStreamer(location binlog.Location) (relay.Streamer, error) {
+func (l *localBinlogReader) generateStreamer(location binlog.Location) (reader.Streamer, error) {
 	if l.EnableGTID {
 		return l.reader.StartSyncByGTID(location.GetGTID().Origin().Clone())
 	}
@@ -70,7 +71,7 @@ type remoteBinlogReader struct {
 	EnableGTID bool
 }
 
-func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (relay.Streamer, error) {
+func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (reader.Streamer, error) {
 	defer func() {
 		lastSlaveConnectionID := r.reader.LastConnectionID()
 		r.tctx.L().Info("last slave connection", zap.Uint32("connection ID", lastSlaveConnectionID))
@@ -106,7 +107,7 @@ type StreamerController struct {
 	localBinlogDir string
 	timezone       *time.Location
 
-	streamer         relay.Streamer
+	streamer         reader.Streamer
 	streamerProducer StreamerProducer
 
 	// meetError means meeting error when get binlog event
