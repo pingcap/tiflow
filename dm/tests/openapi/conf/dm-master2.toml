@@ -5,5 +5,5 @@ master-addr = ":8361"
 name = "master2"
 peer-urls = "127.0.0.1:8292"
 
-[experimental-features]
+[experimental]
 openapi = true

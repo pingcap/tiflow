@@ -141,7 +141,17 @@ func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
-	c.Assert(NewServer(cfg1).echo, check.IsNil)
+
+	s1 := NewServer(cfg1)
+	ctx, cancel := context.WithCancel(context.Background())
+	c.Assert(s1.Start(ctx), check.IsNil)
+	// wait the first one become the leader
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s1.election.IsLeader() && s1.scheduler.Started()
+	}), check.IsTrue)
+	c.Assert(s1.echo, check.IsNil)
+	defer s1.Close()
+	cancel()
 }
 
 func (t *openAPISuite) TestSourceAPI(c *check.C) {

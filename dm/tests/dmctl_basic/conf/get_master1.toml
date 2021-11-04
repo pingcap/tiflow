@@ -25,5 +25,5 @@ ssl-ca = ""
 ssl-cert = ""
 ssl-key = ""
 
-[experimental-features]
+[experimental]
   openapi = false

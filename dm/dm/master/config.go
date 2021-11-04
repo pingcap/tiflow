@@ -139,7 +139,7 @@ type Config struct {
 	printVersion      bool
 	printSampleConfig bool
 
-	ExperimentalFeatures ExperimentalFeatures `toml:"experimental-features"`
+	ExperimentalFeatures ExperimentalFeatures `toml:"experimental"`
 }
 
 func (c *Config) String() string {
