@@ -15,7 +15,6 @@ package codec
 
 import (
 	"encoding/json"
-	"strconv"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -88,7 +87,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	c.Assert(ok, check.IsTrue)
 
 	c.Assert(withExtension.Extensions, check.NotNil)
-	c.Assert(withExtension.Extensions.Tso, check.Equals, strconv.FormatUint(testCaseUpdate.CommitTs, 10))
+	c.Assert(withExtension.Extensions.Tso, check.Equals, testCaseUpdate.CommitTs)
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
@@ -118,8 +117,8 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	withExtension, ok := message.(*canalFlatMessageWithTiDBExtension)
 	c.Assert(ok, check.IsTrue)
 
-	c.Assert(withExtension.Extensions, check.IsNil)
-	c.Assert(withExtension.Extensions.Tso, check.Equals, strconv.FormatUint(testCaseDdl.CommitTs, 10))
+	c.Assert(withExtension.Extensions, check.NotNil)
+	c.Assert(withExtension.Extensions.Tso, check.Equals, testCaseDdl.CommitTs, 10)
 }
 
 func (s *canalFlatSuite) TestBatching(c *check.C) {
