@@ -26,7 +26,6 @@ const (
 	TypeUnknown Type = iota
 	TypeTick
 	TypeStop
-	TypeTest
 	TypeBarrier
 	TypeSorter
 	// Add a new type when adding a new message.

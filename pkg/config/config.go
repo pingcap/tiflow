@@ -198,7 +198,7 @@ var defaultServerConfig = &ServerConfig{
 		SortDir:                DefaultSortDir,
 
 		// Default leveldb sorter config
-		EnableLevelDB:          true,
+		EnableLevelDB:          false,
 		LevelDBCount:           16,
 		LevelDBConcurrency:     256,
 		MaxOpenFiles:           10000,
