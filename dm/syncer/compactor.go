@@ -28,7 +28,6 @@ import (
 type compactor struct {
 	inCh       chan *job
 	outCh      chan *job
-	queueSize  int
 	bufferSize int
 	logger     log.Logger
 	safeMode   bool
@@ -50,7 +49,6 @@ func compactorWrap(inCh chan *job, syncer *Syncer) chan *job {
 	compactor := &compactor{
 		inCh:         inCh,
 		outCh:        make(chan *job, bufferSize),
-		queueSize:    syncer.cfg.QueueSize,
 		bufferSize:   bufferSize,
 		logger:       syncer.tctx.Logger.WithFields(zap.String("component", "compactor")),
 		keyMap:       make(map[string]map[string]int),
@@ -112,16 +110,16 @@ func (c *compactor) run() {
 			failpoint.Inject("SkipFlushCompactor", func() {
 				failpoint.Continue()
 			})
-			// if the number of outer jobs is small or buffer is full, flush the buffer
-			if len(c.outCh) < c.queueSize || len(c.buffer) >= c.bufferSize {
+			// if the number of outer jobs is zero or buffer is full, flush the buffer
+			if len(c.outCh) == 0 || len(c.buffer) >= c.bufferSize {
 				c.flushBuffer()
 			}
-			// if no inner jobs and the number of outer jobs is small, flush the buffer
+			// if no inner jobs and the number of outer jobs is zero, flush the buffer
 		case <-time.After(waitTime):
 			failpoint.Inject("SkipFlushCompactor", func() {
 				failpoint.Continue()
 			})
-			if len(c.outCh) < c.queueSize {
+			if len(c.outCh) == 0 {
 				c.flushBuffer()
 			}
 		}
