@@ -22,8 +22,10 @@ type RowInfos struct{
 type ColumnVo struct{
 
 	IsPkFlag bool
+	IsBinary bool
 	ColumnType byte
 	CFlag  byte
+	ColumnLen int32
 	ColumnValue string
 	ColumnName string
 
