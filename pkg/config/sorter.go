@@ -49,7 +49,7 @@ type SorterConfig struct {
 	MaxOpenFiles int `toml:"max-open-files" json:"max-open-files"`
 	// BlockSize the block size of leveldb sorter.
 	//
-	// The default value is 64KB.
+	// The default value is 65536, 64KB.
 	BlockSize int `toml:"block-size" json:"block-size"`
 	// BlockCacheSize is the capacity of leveldb block cache.
 	//
@@ -57,7 +57,7 @@ type SorterConfig struct {
 	BlockCacheSize int `toml:"block-cache-size" json:"block-cache-size"`
 	// WriterBufferSize is the size of memory table of leveldb.
 	//
-	// The default value is 8MiB.
+	// The default value is 8388608, 8MiB.
 	WriterBufferSize int `toml:"writer-buffer-size" json:"writer-buffer-size"`
 	// Compression is the compression algorithm that is used by leveldb.
 	// Valid values are "none" or "snappy".
@@ -66,7 +66,7 @@ type SorterConfig struct {
 	Compression string `toml:"compression" json:"compression"`
 	// TargetFileSizeBase limits size of leveldb sst file that compaction generates.
 	//
-	// The default value is 8MiB.
+	// The default value is 8388608, 8MiB.
 	TargetFileSizeBase int `toml:"target-file-size-base" json:"target-file-size-base"`
 	// CompactionL0Trigger defines number of leveldb sst file at level-0 that will
 	// trigger compaction.
@@ -85,7 +85,7 @@ type SorterConfig struct {
 	WriteL0PauseTrigger int `toml:"write-l0-pause-trigger" json:"write-l0-pause-trigger"`
 	// CleanupSpeedLimit limits clean up speed, based on key value entry count.
 	//
-	// The default value is 10,000.
+	// The default value is 10000.
 	CleanupSpeedLimit int `toml:"cleanup-speed-limit" json:"cleanup-speed-limit"`
 }
 

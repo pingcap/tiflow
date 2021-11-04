@@ -123,3 +123,18 @@ func TestServerConfigValidateAndAdjust(t *testing.T) {
 	require.Nil(t, conf.ValidateAndAdjust())
 	require.EqualValues(t, GetDefaultServerConfig().PerTableMemoryQuota, conf.PerTableMemoryQuota)
 }
+
+func TestSorterConfigValidateAndAdjust(t *testing.T) {
+	t.Parallel()
+	conf := GetDefaultServerConfig().Clone().Sorter
+
+	require.Nil(t, conf.ValidateAndAdjust())
+	conf.Compression = "none"
+	require.Nil(t, conf.ValidateAndAdjust())
+	conf.Compression = "snappy"
+	require.Nil(t, conf.ValidateAndAdjust())
+	conf.Compression = "invalid"
+	require.Error(t, conf.ValidateAndAdjust())
+	conf.CleanupSpeedLimit = 0
+	require.Error(t, conf.ValidateAndAdjust())
+}

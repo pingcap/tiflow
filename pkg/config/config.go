@@ -198,8 +198,10 @@ var defaultServerConfig = &ServerConfig{
 		SortDir:                DefaultSortDir,
 
 		// Default leveldb sorter config
-		EnableLevelDB:          false,
-		LevelDBCount:           16,
+		EnableLevelDB: false,
+		LevelDBCount:  16,
+		// Following configs are optimized for write throughput.
+		// Users should not change them.
 		LevelDBConcurrency:     256,
 		MaxOpenFiles:           10000,
 		BlockSize:              65536,
