@@ -124,7 +124,7 @@ function test_worker_download_certs_from_master() {
 		"\"result\": true" 2 \
 		"\"stage\": \"Paused\"" 1
 
-	# change ca.pem name to test wheather dm-worker will dump certs from etcd
+	# change task-ca.pem name to test wheather dm-worker will dump certs from dm-master
 	mv "$cur/conf/task-ca.pem" "$cur/conf/task-ca.pem.bak"
 
 	# kill dm-worker 1 and clean the failpoint
@@ -134,9 +134,9 @@ function test_worker_download_certs_from_master() {
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
 
-	# dm-worker will dump ca.pem from dm-master and save it to task-ca.pem
-	# now we can contine use the ca.pem
-	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+	# dm-worker will dump task-ca.pem from dm-master and save it to task-ca.pem
+	# let;s try use this file to connect dm-master
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/task-ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
 		"\"result\": true" 2
 

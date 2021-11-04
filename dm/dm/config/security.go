@@ -81,7 +81,6 @@ func (s *Security) DumpTLSContent() error {
 			return err
 		}
 	}
-
 	if !utils.IsFileExists(s.SSLCert) {
 		if err := utils.WriteFileAtomic(s.SSLCert, s.SSLCertBytes, 0o600); err != nil {
 			return err

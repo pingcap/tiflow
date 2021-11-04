@@ -152,7 +152,6 @@ func NewSubTaskWithStage(cfg *config.SubTaskConfig, stage pb.Stage, etcdClient *
 // initUnits initializes the sub task processing units.
 func (st *SubTask) initUnits() error {
 	// NOTE: because lighting not support init tls with raw certs bytes, we write the certs data to a file.
-	println("ininiiii", st.cfg.To.Security.SSLCA, st.cfg.TiDB.Backend)
 	if st.cfg.NeedUseLightning() && st.cfg.To.Security != nil {
 		if err := st.cfg.To.Security.DumpTLSContent(); err != nil {
 			return terror.Annotatef(err, "fail to dump tls cert data for lightning, subtask %s ", st.cfg.Name)
