@@ -231,7 +231,7 @@ func (w *regionWorker) checkShouldExit() error {
 	return nil
 }
 
-func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, state *regionFeedState) error {
+func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState) error {
 	if state.lastResolvedTs > state.sri.ts {
 		state.sri.ts = state.lastResolvedTs
 	}
@@ -384,26 +384,25 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 		case *cdcpb.Event_Entries_:
 			err = w.handleEventEntry(ctx, x, event.state)
 			if err != nil {
-				err = w.handleSingleRegionError(ctx, err, event.state)
+				err = w.handleSingleRegionError(err, event.state)
 			}
 		case *cdcpb.Event_Admin_:
 			log.Info("receive admin event", zap.Stringer("event", event.changeEvent))
 		case *cdcpb.Event_Error:
 			err = w.handleSingleRegionError(
-				ctx,
 				cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error}),
 				event.state,
 			)
 		case *cdcpb.Event_ResolvedTs:
 			if err = w.handleResolvedTs(ctx, x.ResolvedTs, event.state); err != nil {
-				err = w.handleSingleRegionError(ctx, err, event.state)
+				err = w.handleSingleRegionError(err, event.state)
 			}
 		}
 	}
 
 	if event.resolvedTs != nil {
 		if err = w.handleResolvedTs(ctx, event.resolvedTs.Ts, event.state); err != nil {
-			err = w.handleSingleRegionError(ctx, err, event.state)
+			err = w.handleSingleRegionError(err, event.state)
 		}
 	}
 	event.state.lock.Unlock()
