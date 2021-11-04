@@ -482,8 +482,8 @@ func createBytesFromRowInfo(rowInfos []*vo.RowInfos) []byte{
 	fmt.Printf(" rowCount = %d\n", len(rowInfos))
 
 	sendBatchRowsArr.Write(buffer.Bytes())
-	//fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
-	fmt.Printf(" allColumnArrByRow[%d]Arr %s \n",len(buffer.Bytes()),publicUtils.BytestoHex(buffer.Bytes()))
+	fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
+	//fmt.Printf(" allColumnArrByRow[%d]Arr %s \n",len(buffer.Bytes()),publicUtils.BytestoHex(buffer.Bytes()))
 
 
 
@@ -654,7 +654,7 @@ func ddlColumnInfoVoToByte(columnInfo *vo.ColVo) []byte{
 func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 
 	colPos:=0;
-    thisColLen := 3+len(columnInfo.ColumnName)+1+len(columnInfo.ColumnValue)+1;
+    thisColLen := 4+len(columnInfo.ColumnName)+1+len(columnInfo.ColumnValue)+1+4;
 
     columnInfoArr := make([]byte,thisColLen)
 
@@ -662,6 +662,7 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
     //lengthArr := publicUtils.IntegerToBytes(thisColLen);
     columnNameArr := make([]byte,1+len(columnInfo.ColumnName))
     publicUtils.BlockByteArrCopy([]byte(columnInfo.ColumnName),0,columnNameArr,0,len(columnInfo.ColumnName))
+
     columnValueArr := make([]byte,1+len(columnInfo.ColumnValue))
     publicUtils.BlockByteArrCopy([]byte(columnInfo.ColumnValue),0,columnValueArr,0,len(columnInfo.ColumnValue))
 
@@ -673,17 +674,31 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
     }else{
     	columnInfoArr[colPos]=0x30
     }
-    
-    colPos = colPos+1;
+	colPos = colPos+1
+    if(columnInfo.IsBinary==true){
+		columnInfoArr[colPos]=0x31
+	}else{
+		columnInfoArr[colPos]=0x31
+	}
+
+    colPos = colPos+1
     columnInfoArr[colPos]=columnInfo.ColumnType
-    colPos = colPos+1;
+    colPos = colPos+1
 	columnInfoArr[colPos]=columnInfo.CFlag
-	colPos = colPos+1;
+	colPos = colPos+1
     publicUtils.BlockByteArrCopy([]byte(columnNameArr),0,columnInfoArr,colPos,len(columnNameArr))
 	//fmt.Printf(" columnInfoArr[]Arr %s \n",publicUtils.BytestoHex(columnInfoArr))
 
-	colPos = colPos+len(columnNameArr);
+	colPos = colPos+len(columnNameArr)
 
+	publicUtils.BlockByteArrCopy(publicUtils.Int32ToBytes(columnInfo.ColumnLen),0,columnInfoArr,colPos,4)
+	colPos = colPos+4
+
+	//fmt.Printf("column info:::::",columnInfo.ColumnName," length:",columnInfo.ColumnLen," value:",columnInfo.ColumnValue," isBinary",columnInfo.IsBinary)
+	//publicUtils.BlockByteArrCopy(publicUtils.Int32ToBytes(columnInfo.ColumnLen),0,columnInfoArr,colPos, int(columnInfo.ColumnLen))
+	//fmt.Printf(string(columnInfo.ColumnLen)," columnValueArr[] %s \n",publicUtils.Int32ToBytes(columnInfo.ColumnLen))
+
+	//colPos = colPos+4
 	//fmt.Printf(" columnValueArr[] %s \n",publicUtils.BytestoHex(columnValueArr))
 
 	publicUtils.BlockByteArrCopy([]byte(columnValueArr),0,columnInfoArr,colPos,len(columnValueArr))
