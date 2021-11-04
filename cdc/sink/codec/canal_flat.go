@@ -30,8 +30,8 @@ import (
 // CanalFlatEventBatchEncoder encodes Canal flat messages in JSON format
 type CanalFlatEventBatchEncoder struct {
 	builder       *canalEntryBuilder
-	unresolvedBuf []*canalFlatMessage
-	resolvedBuf   []*canalFlatMessage
+	unresolvedBuf []canalFlatMessageInterface
+	resolvedBuf   []canalFlatMessageInterface
 	// When it is true, canal-json would generate TiDB extended information
 	// At the moment, only `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
@@ -43,8 +43,8 @@ const tidbWaterMarkType = "TiDB_WATERMARK"
 func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 	return &CanalFlatEventBatchEncoder{
 		builder:             NewCanalEntryBuilder(),
-		unresolvedBuf:       make([]*canalFlatMessage, 0),
-		resolvedBuf:         make([]*canalFlatMessage, 0),
+		unresolvedBuf:       make([]canalFlatMessageInterface, 0),
+		resolvedBuf:         make([]canalFlatMessageInterface, 0),
 		enableTiDBExtension: false,
 	}
 }
@@ -65,6 +65,14 @@ func (b *canalFlatEventBatchEncoderBuilder) Build(ctx context.Context) (EventBat
 
 func newCanalFlatEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &canalFlatEventBatchEncoderBuilder{opts: opts}
+}
+
+type canalFlatMessageInterface interface {
+	newForDML(e *model.RowChangedEvent, builder *canalEntryBuilder) error
+	newForDDL(e *model.DDLEvent, builder *canalEntryBuilder)
+	getTikvTs() uint64
+	getSchema() *string
+	getTable() *string
 }
 
 // adapted from https://github.com/alibaba/canal/blob/master/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java
@@ -90,21 +98,16 @@ type canalFlatMessage struct {
 	Data []map[string]interface{} `json:"data"`
 	Old  []map[string]interface{} `json:"old"`
 
-	// Props is a TiCDC custom field that different from official Canal-JSON format.
-	// It would be useful to store something for special usage.
-	// At the moment, only store the `tso` of each event, which is useful if the message consumer needs to restore the original transactions.
-	Props map[string]string `json:"props"`
-
 	// Used internally by CanalFlatEventBatchEncoder
 	tikvTs uint64
 }
 
-func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEvent) (*canalFlatMessage, error) {
+func (c *canalFlatMessage) newForDML(e *model.RowChangedEvent, builder *canalEntryBuilder) error {
 	eventType := convertRowEventType(e)
-	header := c.builder.buildHeader(e.CommitTs, e.Table.Schema, e.Table.Table, eventType, 1)
-	rowData, err := c.builder.buildRowData(e)
+	header := builder.buildHeader(e.CommitTs, e.Table.Schema, e.Table.Table, eventType, 1)
+	rowData, err := builder.buildRowData(e)
 	if err != nil {
-		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
+		return cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
 	}
 
 	pkCols := e.PrimaryKeyColumns()
@@ -158,77 +161,121 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		data = oldData
 	}
 
-	ret := &canalFlatMessage{
-		ID:            0, // ignored by both Canal Adapter and Flink
-		Schema:        header.SchemaName,
-		Table:         header.TableName,
-		PKNames:       pkNames,
-		IsDDL:         false,
-		EventType:     header.GetEventType().String(),
-		ExecutionTime: header.ExecuteTime,
-		BuildTime:     time.Now().UnixNano() / 1e6, // millisecond timestamp since Epoch.
-		Query:         "",
-		SQLType:       sqlType,
-		MySQLType:     mysqlType,
-		Data:          make([]map[string]interface{}, 0),
-		Old:           make([]map[string]interface{}, 0),
-		Props: map[string]string{
-			"tso": strconv.FormatUint(e.CommitTs, 10),
-		},
-
-		tikvTs: e.CommitTs,
-	}
+	c.ID = 0 // ignored by both Canal Adapter and Flink
+	c.Schema = header.SchemaName
+	c.Table = header.TableName
+	c.PKNames = pkNames
+	c.IsDDL = false
+	c.EventType = header.GetEventType().String()
+	c.ExecutionTime = header.ExecuteTime
+	c.BuildTime = time.Now().UnixNano() / 1e6 // millisecond timestamp since Epoch.
+	c.Query = ""
+	c.SQLType = sqlType
+	c.MySQLType = mysqlType
+	c.Data = make([]map[string]interface{}, 0)
+	c.Old = make([]map[string]interface{}, 0)
+	c.tikvTs = e.CommitTs
 
 	// We need to ensure that both Data and Old have exactly one element,
 	// even if the element could be nil. Changing this could break Alibaba's adapter
-	ret.Data = append(ret.Data, data)
-	ret.Old = append(ret.Old, oldData)
+	c.Data = append(c.Data, data)
+	c.Old = append(c.Old, oldData)
 
-	return ret, nil
+	return nil
 }
 
-func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) *canalFlatMessage {
-	header := c.builder.buildHeader(e.CommitTs, e.TableInfo.Schema, e.TableInfo.Table, convertDdlEventType(e), 1)
+func (c *canalFlatMessage) newForDDL(e *model.DDLEvent, builder *canalEntryBuilder) {
+	header := builder.buildHeader(e.CommitTs, e.TableInfo.Schema, e.TableInfo.Table, convertDdlEventType(e), 1)
 
-	ret := &canalFlatMessage{
-		ID:            0, // ignored by both Canal Adapter and Flink
-		Schema:        header.SchemaName,
-		Table:         header.TableName,
-		IsDDL:         true,
-		EventType:     header.GetEventType().String(),
-		ExecutionTime: header.ExecuteTime,
-		BuildTime:     time.Now().UnixNano() / 1e6,
-		Query:         e.Query,
-		Props: map[string]string{
-			"tso": strconv.FormatUint(e.CommitTs, 10),
-		},
-		tikvTs: e.CommitTs,
+	c.ID = 0 // ignored by both Canal Adapter and Flink
+	c.Schema = header.SchemaName
+	c.Table = header.TableName
+	c.IsDDL = true
+	c.EventType = header.GetEventType().String()
+	c.ExecutionTime = header.ExecuteTime
+	c.BuildTime = time.Now().UnixNano() / 1e6
+	c.Query = e.Query
+	c.tikvTs = e.CommitTs
+}
+
+func (c *canalFlatMessage) getTikvTs() uint64 {
+	return c.tikvTs
+}
+
+func (c *canalFlatMessage) getSchema() *string {
+	return &c.Schema
+}
+
+func (c *canalFlatMessage) getTable() *string {
+	return &c.Table
+}
+
+type canalFlatMessageWithTiDBExtension struct {
+	*canalFlatMessage
+	// Props is a TiCDC custom field that different from official Canal-JSON format.
+	// It would be useful to store something for special usage.
+	// At the moment, only store the `tso` of each event, which is useful if the message consumer needs to restore the original transactions.
+	Props map[string]string `json:"props"`
+}
+
+func (c *canalFlatMessageWithTiDBExtension) newForDML(e *model.RowChangedEvent, builder *canalEntryBuilder) error {
+	flatMessage := &canalFlatMessage{}
+	if err := flatMessage.newForDML(e, builder); err != nil {
+		return err
 	}
-	return ret
+
+	c.canalFlatMessage = flatMessage
+	c.Props = map[string]string{
+		"tso": strconv.FormatUint(e.CommitTs, 10),
+	}
+	return nil
+}
+
+func (c *canalFlatMessageWithTiDBExtension) newForDDL(e *model.DDLEvent, builder *canalEntryBuilder) {
+	flatMessage := &canalFlatMessage{}
+	flatMessage.newForDDL(e, builder)
+
+	c.canalFlatMessage = flatMessage
+	c.Props = map[string]string{
+		"tso": strconv.FormatUint(e.CommitTs, 10),
+	}
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getTikvTs() uint64 {
+	return c.tikvTs
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getSchema() *string {
+	return &c.Schema
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getTable() *string {
+	return &c.Table
+}
+
+func (c *canalFlatMessageWithTiDBExtension) newForCheckpointEvent(ts uint64) {
+	c.ID = 0
+	c.IsDDL = false
+	c.EventType = tidbWaterMarkType
+	c.ExecutionTime = convertToCanalTs(ts)
+	c.BuildTime = time.Now().UnixNano() / 1e6
+	c.Props = map[string]string{
+		"tso": strconv.FormatUint(ts, 10),
+	}
 }
 
 // newFlatMessage4CheckpointEvent return a `WATERMARK` event typed message
 // Since `WATERMARK` is a TiCDC Custom event type, If the message consumer want to handle it properly,
 // they should make sure their consumer code can recognize this type.
-func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *canalFlatMessage {
-	return &canalFlatMessage{
-		ID:            0,
-		IsDDL:         false,
-		EventType:     tidbWaterMarkType,
-		ExecutionTime: convertToCanalTs(ts),
-		BuildTime:     time.Now().UnixNano() / 1e6,
-		Props: map[string]string{
-			"tso": strconv.FormatUint(ts, 10),
-		},
-	}
-}
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	if !c.enableTiDBExtension {
 		return nil, nil
 	}
-	msg := c.newFlatMessage4CheckpointEvent(ts)
+
+	msg := &canalFlatMessageWithTiDBExtension{}
+	msg.newForCheckpointEvent(ts)
 	value, err := json.Marshal(msg)
 	if err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
@@ -236,13 +283,35 @@ func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessag
 	return newResolvedMQMessage(ProtocolCanalJSON, nil, value, ts), nil
 }
 
+func (c *CanalFlatEventBatchEncoder) getFlatMessageInterface() canalFlatMessageInterface {
+	if c.enableTiDBExtension {
+		return &canalFlatMessageWithTiDBExtension{}
+	}
+	return &canalFlatMessage{}
+}
+
+func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEvent) (canalFlatMessageInterface, error) {
+	result := c.getFlatMessageInterface()
+	if err := result.newForDML(e, c.builder); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) canalFlatMessageInterface {
+	result := c.getFlatMessageInterface()
+	result.newForDDL(e, c.builder)
+
+	return result
+}
+
 // AppendRowChangedEvent implements the interface EventBatchEncoder
 func (c *CanalFlatEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	msg, err := c.newFlatMessageForDML(e)
+	message, err := c.newFlatMessageForDML(e)
 	if err != nil {
 		return EncoderNoOperation, errors.Trace(err)
 	}
-	c.unresolvedBuf = append(c.unresolvedBuf, msg)
+	c.unresolvedBuf = append(c.unresolvedBuf, message)
 	return EncoderNoOperation, nil
 }
 
@@ -250,7 +319,7 @@ func (c *CanalFlatEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEv
 func (c *CanalFlatEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
 	nextIdx := 0
 	for _, msg := range c.unresolvedBuf {
-		if msg.tikvTs <= ts {
+		if msg.getTikvTs() <= ts {
 			c.resolvedBuf = append(c.resolvedBuf, msg)
 		} else {
 			break
@@ -266,8 +335,8 @@ func (c *CanalFlatEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResu
 
 // EncodeDDLEvent encodes DDL events
 func (c *CanalFlatEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
-	msg := c.newFlatMessageForDDL(e)
-	value, err := json.Marshal(msg)
+	message := c.newFlatMessageForDDL(e)
+	value, err := json.Marshal(message)
 	if err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
 	}
@@ -286,7 +355,7 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 			log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
 			return nil
 		}
-		ret[i] = NewMQMessage(ProtocolCanalJSON, nil, value, msg.tikvTs, model.MqMessageTypeRow, &msg.Schema, &msg.Table)
+		ret[i] = NewMQMessage(ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MqMessageTypeRow, msg.getSchema(), msg.getTable())
 	}
 	c.resolvedBuf = c.resolvedBuf[0:0]
 	return ret
