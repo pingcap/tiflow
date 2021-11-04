@@ -63,6 +63,9 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 		logger:     log.L(),
 		keyMap:     make(map[string]map[string]int),
 		buffer:     make([]*job, 0, 10000),
+		addCountFunc: func(b bool, s string, ot opType, i int64, t *filter.Table) {
+			return
+		},
 	}
 
 	location := binlog.NewLocation("")
