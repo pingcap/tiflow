@@ -605,16 +605,10 @@ const (
 	codeSchemaTrackerRestoreStmtFail
 	codeSchemaTrackerCannotDropTable
 	codeSchemaTrackerInit
-<<<<<<< HEAD
-=======
-	codeSchemaTrackerMarshalJSON
-	codeSchemaTrackerUnMarshalJSON
-	codeSchemaTrackerUnSchemaNotExist
 	codeSchemaTrackerCannotSetDownstreamSQLMode
 	codeSchemaTrackerCannotInitDownstreamParser
 	codeSchemaTrackerCannotMockDownstreamTable
 	codeSchemaTrackerCannotFetchDownstreamCreateTableStmt
->>>>>>> f8e8abfb7 (dm/syncer: use downstream PK/UK to generate DML (#3168))
 )
 
 // HA scheduler.

@@ -36,13 +36,9 @@ import (
 
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/pkg/conn"
-<<<<<<< HEAD
-=======
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	dlog "github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
->>>>>>> f8e8abfb7 (dm/syncer: use downstream PK/UK to generate DML (#3168))
 )
 
 func Test(t *testing.T) {

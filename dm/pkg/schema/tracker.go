@@ -39,12 +39,9 @@ import (
 
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
-<<<<<<< HEAD
-=======
 	dmterror "github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
->>>>>>> f8e8abfb7 (dm/syncer: use downstream PK/UK to generate DML (#3168))
 )
 
 const (
