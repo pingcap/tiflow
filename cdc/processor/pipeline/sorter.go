@@ -69,7 +69,7 @@ func newSorterNode(
 		flowController: flowController,
 		mounter:        mounter,
 		resolvedTs:     startTs,
-		outputCh:       make(chan pipeline.Message, 50),
+		outputCh:       make(chan pipeline.Message, defaultOutputChannelSize),
 	}
 }
 

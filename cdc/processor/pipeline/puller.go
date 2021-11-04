@@ -48,7 +48,7 @@ func newPullerNode(
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
 		tableName:   tableName,
-		outputCh:    make(chan pipeline.Message, 64),
+		outputCh:    make(chan pipeline.Message, defaultOutputChannelSize),
 	}
 }
 

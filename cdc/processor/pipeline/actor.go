@@ -89,9 +89,10 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 			break
 		case message.TypeTick:
 		}
-
 		// process message for each node
 	}
+	// Report error to processor if there is any.
+	t.checkError()
 	return !t.stopped
 }
 

@@ -45,7 +45,7 @@ func newCyclicMarkNode(markTableID model.TableID) pipeline.Node {
 		markTableID:            markTableID,
 		unknownReplicaIDEvents: make(map[model.Ts][]*model.PolymorphicEvent),
 		currentReplicaIDs:      make(map[model.Ts]uint64),
-		outputCh:               make(chan pipeline.Message, 64),
+		outputCh:               make(chan pipeline.Message, defaultOutputChannelSize),
 	}
 }
 
