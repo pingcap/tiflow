@@ -21,9 +21,15 @@ import (
 
 // Producer is an interface of mq producer
 type Producer interface {
-	SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error
+	// AsyncSendMessage sends a message asynchronously.
+	AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error
+	// SyncBroadcastMessage broadcasts a message synchronously.
 	SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error
+	// Flush all the messages buffered in the client and wait until all messages have been successfully
+	// persisted.
 	Flush(ctx context.Context) error
+	// GetPartitionNum gets partition number of topic.
 	GetPartitionNum() int32
+	// Close closes the producer and client(s).
 	Close() error
 }
