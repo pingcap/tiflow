@@ -215,7 +215,7 @@ type canalFlatMessageWithTiDBExtension struct {
 	// Props is a TiCDC custom field that different from official Canal-JSON format.
 	// It would be useful to store something for special usage.
 	// At the moment, only store the `tso` of each event, which is useful if the message consumer needs to restore the original transactions.
-	Props map[string]string `json:"props"`
+	Extensions map[string]string `json:"_tidb"`
 }
 
 func (c *canalFlatMessageWithTiDBExtension) newForDML(e *model.RowChangedEvent, builder *canalEntryBuilder) error {
@@ -225,7 +225,7 @@ func (c *canalFlatMessageWithTiDBExtension) newForDML(e *model.RowChangedEvent, 
 	}
 
 	c.canalFlatMessage = flatMessage
-	c.Props = map[string]string{
+	c.Extensions = map[string]string{
 		"tso": strconv.FormatUint(e.CommitTs, 10),
 	}
 	return nil
@@ -236,7 +236,7 @@ func (c *canalFlatMessageWithTiDBExtension) newForDDL(e *model.DDLEvent, builder
 	flatMessage.newForDDL(e, builder)
 
 	c.canalFlatMessage = flatMessage
-	c.Props = map[string]string{
+	c.Extensions = map[string]string{
 		"tso": strconv.FormatUint(e.CommitTs, 10),
 	}
 }
@@ -259,7 +259,7 @@ func (c *canalFlatMessageWithTiDBExtension) newForCheckpointEvent(ts uint64) {
 	c.EventType = tidbWaterMarkType
 	c.ExecutionTime = convertToCanalTs(ts)
 	c.BuildTime = time.Now().UnixNano() / 1e6
-	c.Props = map[string]string{
+	c.Extensions = map[string]string{
 		"tso": strconv.FormatUint(ts, 10),
 	}
 }
