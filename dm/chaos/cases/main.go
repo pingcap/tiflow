@@ -106,7 +106,7 @@ func main() {
 	}
 
 	// set upstream and downstream instances state.
-	err = setInstancesState(ctx, cfg.Target, &cfg.Source1, &cfg.Source2, &cfg.Source3)
+	err = setInstancesState(ctx, &cfg.Target, &cfg.Source1, &cfg.Source2, &cfg.Source3)
 	if err != nil {
 		log.L().Error("fail to set instances state", zap.Error(err))
 		code = 2
