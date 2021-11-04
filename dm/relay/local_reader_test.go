@@ -46,14 +46,13 @@ import (
 
 var parseFileTimeout = 10 * time.Second
 
-var _ = Suite(&testReaderSuite{})
-
 type testReaderSuite struct {
 	lastPos  uint32
 	lastGTID gtid.Set
 }
 
 func TestReader(t *testing.T) {
+	var _ = Suite(&testReaderSuite{})
 	TestingT(t)
 }
 

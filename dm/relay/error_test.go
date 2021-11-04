@@ -15,12 +15,16 @@ package relay
 
 import (
 	"context"
+	"testing"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 )
 
-var _ = check.Suite(&testErrorSuite{})
+func TestErrorSuite(t *testing.T) {
+	var _ = check.Suite(&testErrorSuite{})
+	check.TestingT(t)
+}
 
 type testErrorSuite struct{}
 

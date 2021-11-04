@@ -17,6 +17,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"testing"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
@@ -24,7 +25,10 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 )
 
-var _ = Suite(&testMetaSuite{})
+func TestMetaSuite(t *testing.T) {
+	var _ = Suite(&testMetaSuite{})
+	TestingT(t)
+}
 
 type testMetaSuite struct{}
 

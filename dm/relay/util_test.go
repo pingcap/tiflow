@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
@@ -27,7 +28,10 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
-var _ = Suite(&testUtilSuite{})
+func TestUtilSuite(t *testing.T) {
+	var _ = Suite(&testUtilSuite{})
+	TestingT(t)
+}
 
 type testUtilSuite struct{}
 
