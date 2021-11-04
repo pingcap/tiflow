@@ -17,6 +17,7 @@ import (
 	"flag"
 	"os"
 	"strings"
+	"testing"
 
 	"github.com/kami-zh/go-capturer"
 	"github.com/pingcap/check"
@@ -26,8 +27,12 @@ import (
 
 var (
 	defaultConfigFile = "./dm-worker.toml"
-	_                 = check.Suite(&testConfigSuite{})
 )
+
+func TestConfigSuite(t *testing.T) {
+	_ = check.Suite(&testConfigSuite{})
+	check.TestingT(t)
+}
 
 type testConfigSuite struct{}
 

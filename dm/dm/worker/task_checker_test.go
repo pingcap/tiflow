@@ -14,6 +14,7 @@
 package worker
 
 import (
+	"testing"
 	"time"
 
 	"github.com/pingcap/check"
@@ -28,9 +29,12 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
-var _ = check.Suite(&testTaskCheckerSuite{})
-
 type testTaskCheckerSuite struct{}
+
+func TestTaskCheckerSuite(t *testing.T) {
+	var _ = check.Suite(&testTaskCheckerSuite{})
+	check.TestingT(t)
+}
 
 var (
 	unsupporteModifyColumnError = unit.NewProcessError(terror.ErrDBExecuteFailed.Delegate(&tmysql.SQLError{Code: 1105, Message: "unsupported modify column length 20 is less than origin 40", State: tmysql.DefaultMySQLState}))
