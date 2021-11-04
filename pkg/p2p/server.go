@@ -74,10 +74,11 @@ func newCDCPeer(senderID NodeID, epoch int64, sender *streamHandle) *cdcPeer {
 
 func (p *cdcPeer) abortWithError(ctx context.Context, err error) {
 	if err1 := p.sender.Send(ctx, errorToRPCResponse(err)); err1 != nil {
-		log.Warn("could not send error to peer", zap.Error(err))
+		log.Warn("could not send error to peer", zap.Error(err),
+			zap.NamedError("send-err", err1))
 		return
 	}
-	log.Debug("send error to peer", zap.Error(err))
+	log.Debug("sent error to peer", zap.Error(err))
 }
 
 // MessageServer is an implementation of the gRPC server for the peer-to-peer system
@@ -798,6 +799,7 @@ func (s *streamHandle) Send(ctx context.Context, response p2p.SendMessageRespons
 }
 
 func (s *streamHandle) Close() {
+	// Must close `s.closeCh` while not holding `s.mu`.
 	close(s.closeCh)
 
 	s.mu.Lock()
