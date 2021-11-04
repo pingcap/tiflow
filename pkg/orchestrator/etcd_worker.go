@@ -29,6 +29,7 @@ import (
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/time/rate"
 )
 
 // EtcdWorker handles all interactions with Etcd
@@ -121,6 +122,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	}
 	lastReceivedEventTime := time.Now()
 
+	// tickRate represents the number of times EtcdWorker can tick
+	// the reactor per second
+	tickRate := time.Second / timerInterval
+	rl := rate.NewLimiter(rate.Limit(tickRate), 1)
 	for {
 		var response clientv3.WatchResponse
 		batchResponse := make([]clientv3.WatchResponse, 0)
@@ -148,7 +153,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				}
 			}
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
-
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
 			}
@@ -197,6 +201,15 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			if err := worker.applyUpdates(); err != nil {
 				return errors.Trace(err)
 			}
+
+			// If !rl.Allow(), skip this Tick to avoid etcd worker tick reactor too frequency.
+			// It make etcdWorker to batch etcd changed event in worker.state.
+			// The semantics of `ReactorState` requires that any implementation
+			// can batch updates internally.
+			if !rl.Allow() {
+				continue
+			}
+			// it is safe that a batch of updates has been applied to worker.state before worker.reactor.Tick
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
 				if !cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
