@@ -26,7 +26,7 @@ var mustExecSQLs = []string{
 }
 
 // setInstancesState sets the state (like global sql_mode) for upstream and downstream DB instances.
-func setInstancesState(ctx context.Context, targetCfg config2.DBConfig, sourcesCfg ...*config2.DBConfig) error {
+func setInstancesState(ctx context.Context, targetCfg *config2.DBConfig, sourcesCfg ...*config2.DBConfig) error {
 	targetDB, err := conn.DefaultDBProvider.Apply(targetCfg)
 	if err != nil {
 		return err

@@ -63,7 +63,7 @@ func (m *Dumpling) Init(ctx context.Context) error {
 	if m.dumpConfig, err = m.constructArgs(ctx); err != nil {
 		return err
 	}
-	m.detectSQLMode(ctx)
+	m.detectSQLMode(ctx, m.dumpConfig)
 	m.dumpConfig.SessionParams["time_zone"] = "+00:00"
 	m.logger.Info("create dumpling", zap.Stringer("config", m.dumpConfig))
 	return nil
