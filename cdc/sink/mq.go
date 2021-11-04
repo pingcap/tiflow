@@ -99,7 +99,7 @@ func newMqSink(
 		return nil, errors.Trace(err)
 	}
 
-	k := &mqSink{
+	s := &mqSink{
 		mqProducer:     mqProducer,
 		dispatcher:     d,
 		encoderBuilder: encoderBuilder,
@@ -116,7 +116,7 @@ func newMqSink(
 	}
 
 	go func() {
-		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
 				return
@@ -126,7 +126,7 @@ func newMqSink(
 			}
 		}
 	}()
-	return k, nil
+	return s, nil
 }
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -350,12 +350,12 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 	switch op {
 	case codec.EncoderNeedAsyncWrite:
 		if partition >= 0 {
-			return k.mqProducer.SendMessage(ctx, message, partition)
+			return k.mqProducer.AsyncSendMessage(ctx, message, partition)
 		}
 		return cerror.ErrAsyncBroadcastNotSupport.GenWithStackByArgs()
 	case codec.EncoderNeedSyncWrite:
 		if partition >= 0 {
-			err := k.mqProducer.SendMessage(ctx, message, partition)
+			err := k.mqProducer.AsyncSendMessage(ctx, message, partition)
 			if err != nil {
 				return err
 			}
