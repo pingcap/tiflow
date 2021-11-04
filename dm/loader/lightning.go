@@ -202,7 +202,7 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		pr <- pb.ProcessResult{
 			Errors: []*pb.ProcessError{unit.NewProcessError(errors.New("failpoint lightingAlwaysErr"))},
 		}
-		return
+		failpoint.Return()
 	})
 	binlog, gtid, err := getMydumpMetadata(l.cli, l.cfg, l.workerName)
 	if err != nil {

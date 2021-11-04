@@ -170,9 +170,9 @@ func (t *testTLSConfig) TestLoadDumpTLSContent(c *C) {
 	c.Assert(len(s.SSLCertBytes) > 0, Equals, true)
 	c.Assert(len(s.SSLKEYBytes) > 0, Equals, true)
 
-	s.SSLCA = s.SSLCA + ".new"
-	s.SSLCert = s.SSLCert + ".new"
-	s.SSLKey = s.SSLKey + ".new"
+	s.SSLCA += ".new"
+	s.SSLCert += ".new"
+	s.SSLKey += ".new"
 	c.Assert(s.DumpTLSContent(), IsNil)
 	c.Assert(utils.IsFileExists(s.SSLCA), Equals, true)
 	c.Assert(utils.IsFileExists(s.SSLCert), Equals, true)
