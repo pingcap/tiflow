@@ -14,6 +14,7 @@
 package pipeline
 
 import (
+	"container/list"
 	"context"
 
 	"github.com/pingcap/log"
@@ -104,25 +105,46 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 
 type node struct {
 	eventStash     *pipeline.Message
-	inputChan      chan pipeline.Message
+	messageFetcher MessageFetcher
 	trySendMessage func(ctx context.Context, message *pipeline.Message) bool
 }
 
-func (n *node) tryGetMessageFrom() *pipeline.Message {
+type MessageFetcher interface {
+	TryGetMessage() *pipeline.Message
+}
+
+type ChannelMessageFetcher struct {
+	OutputChan chan pipeline.Message
+}
+
+func (c *ChannelMessageFetcher) TryGetMessage() *pipeline.Message {
 	var msg pipeline.Message
 	select {
-	case msg = <-n.inputChan:
+	case msg = <-c.OutputChan:
 		return &msg
 	default:
 		return nil
 	}
 }
 
+type ListMessageFetcher struct {
+	MessageList list.List
+}
+
+func (q *ListMessageFetcher) TryGetMessage() *pipeline.Message {
+	el := q.MessageList.Front()
+	if el == nil {
+		return nil
+	}
+	msg := q.MessageList.Remove(el).(pipeline.Message)
+	return &msg
+}
+
 func (n *node) tryRun(ctx context.Context) {
 	for {
 		// batch?
 		if n.eventStash == nil {
-			n.eventStash = n.tryGetMessageFrom()
+			n.eventStash = n.messageFetcher.TryGetMessage()
 		}
 		if n.eventStash == nil {
 			return
@@ -162,7 +184,7 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 	}
 	t.nodes = append(t.nodes,
 		&node{
-			inputChan: t.pullerNode.outputCh,
+			messageFetcher: &ChannelMessageFetcher{OutputChan: t.pullerNode.outputCh},
 			trySendMessage: func(ctx context.Context, message *pipeline.Message) bool {
 				return t.sorterNode.sorter.TryAddEntry(ctx, message.PolymorphicEvent)
 			},
@@ -175,7 +197,7 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 			return err
 		}
 		t.nodes = append(t.nodes, &node{
-			inputChan: t.sorterNode.outputCh,
+			messageFetcher: &ChannelMessageFetcher{OutputChan: t.sorterNode.outputCh},
 			trySendMessage: func(ctx context.Context, message *pipeline.Message) bool {
 				sent, err := t.cyclicNode.handleMsg(*message, t.cyclicNode)
 				if err != nil {
@@ -193,10 +215,19 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 		return err
 	}
 	if t.cyclicEnabled {
-		t.nodes = append(t.nodes, &node{})
+		t.nodes = append(t.nodes, &node{
+			messageFetcher: &ListMessageFetcher{MessageList: t.cyclicNode.queue},
+			trySendMessage: func(ctx context.Context, message *pipeline.Message) bool {
+				if !message.PolymorphicEvent.IsPrepared() {
+					return false
+				}
+				//todo: return t.sinkNode.HandleMessages(ctx, message)
+				return false
+			},
+		})
 	} else {
 		t.nodes = append(t.nodes, &node{
-			inputChan: t.sorterNode.outputCh,
+			messageFetcher: &ChannelMessageFetcher{OutputChan: t.sorterNode.outputCh},
 			trySendMessage: func(ctx context.Context, message *pipeline.Message) bool {
 				if !message.PolymorphicEvent.IsPrepared() {
 					return false
