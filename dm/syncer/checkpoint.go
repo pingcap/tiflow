@@ -70,7 +70,7 @@ type binlogPoint struct {
 	sync.RWMutex
 
 	location        tablePoint
-	flushedLocation tablePoint // location which flushed permanently
+	flushedLocation tablePoint // location which flushed persistently
 	enableGTID      bool
 }
 
