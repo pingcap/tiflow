@@ -97,7 +97,6 @@ type canalFlatMessage struct {
 	// A Datum should be a string or nil
 	Data []map[string]interface{} `json:"data"`
 	Old  []map[string]interface{} `json:"old"`
-
 	// Used internally by CanalFlatEventBatchEncoder
 	tikvTs uint64
 }

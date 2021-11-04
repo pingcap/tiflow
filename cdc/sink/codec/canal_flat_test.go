@@ -179,7 +179,6 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 	msg, err = encoder.EncodeCheckpointEvent(2333)
 	c.Assert(err, check.IsNil)
 	c.Assert(msg, check.NotNil)
-
 }
 
 var testCaseUpdate = &model.RowChangedEvent{
