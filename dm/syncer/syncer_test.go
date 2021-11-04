@@ -25,8 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/dm/pb"
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
@@ -40,6 +38,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/retry"
 	"github.com/pingcap/ticdc/dm/pkg/schema"
 	streamer2 "github.com/pingcap/ticdc/dm/pkg/streamer"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
