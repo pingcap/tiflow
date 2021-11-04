@@ -321,6 +321,7 @@ type dummyRelayHolder struct {
 	relayBinlog string
 
 	cfg *config.SourceConfig
+	relay2 relay.Process
 }
 
 // NewDummyRelayHolder creates a new RelayHolder.
@@ -328,6 +329,7 @@ func NewDummyRelayHolder(cfg *config.SourceConfig) RelayHolder {
 	return &dummyRelayHolder{
 		cfg:   cfg,
 		stage: pb.Stage_New,
+		relay2: &relay.Relay{},
 	}
 }
 
@@ -431,5 +433,5 @@ func (d *dummyRelayHolder) Stage() pb.Stage {
 }
 
 func (d *dummyRelayHolder) Relay() relay.Process {
-	return nil
+	return d.relay2
 }
