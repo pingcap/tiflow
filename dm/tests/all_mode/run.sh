@@ -387,7 +387,7 @@ function run() {
 	check_log_contain_with_retry '\\"tidb_txn_mode\\":\\"optimistic\\"' $WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry '\\"tidb_txn_mode\\":\\"optimistic\\"' $WORK_DIR/worker2/log/dm-worker.log
 
-  run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-task $ILLEGAL_CHAR_NAME" \
 		"\"result\": true" 3
 	echo 'create table all_mode.no_diff(id int NOT NULL PRIMARY KEY);' >${WORK_DIR}/schema.sql
@@ -445,7 +445,7 @@ function run() {
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-  # check compatibility after incremental sync
+	# check compatibility after incremental sync
 	run_sql_tidb "set time_zone = '+04:00';SELECT count(*) from all_mode.no_diff where dt = ts;"
 	check_contains "count(*): 4"
 

@@ -939,6 +939,10 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	cancel()
 	// when syncer exit Run(), will flush job
 	syncer.Pause()
+
+	mockDBProvider := conn.InitMockDB(c)
+	mockDBProvider.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
+		WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("01:00:00"))
 	c.Assert(syncer.Update(context.Background(), s.cfg), IsNil)
 
 	events2 := mockBinlogEvents{

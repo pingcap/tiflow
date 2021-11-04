@@ -3158,7 +3158,10 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	s.cfg.ColumnMappingRules = cfg.ColumnMappingRules
 
 	// update timezone
-	return s.setTimezone(ctx)
+	if s.timezone == nil {
+		return s.setTimezone(ctx)
+	}
+	return nil
 }
 
 // assume that reset master before switching to new master, and only the new master would write
