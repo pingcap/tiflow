@@ -119,9 +119,7 @@ func (c *compactor) run() {
 			failpoint.Inject("SkipFlushCompactor", func() {
 				failpoint.Continue()
 			})
-			if len(c.outCh) == 0 {
-				c.flushBuffer()
-			}
+			c.flushBuffer()
 		}
 	}
 }
