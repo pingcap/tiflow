@@ -37,7 +37,8 @@ import (
 // DBConn represents a live DB connection
 // it's not thread-safe.
 type DBConn struct {
-	cfg      *config.SubTaskConfig
+	name     string
+	sourceID string
 	baseConn *conn.BaseConn
 
 	// generate new BaseConn and close old one
@@ -89,7 +90,7 @@ func (conn *DBConn) querySQL(ctx *tcontext.Context, query string, args ...interf
 				cost := time.Since(startTime)
 				// duration seconds
 				ds := cost.Seconds()
-				queryHistogram.WithLabelValues(conn.cfg.Name, conn.cfg.SourceID).Observe(ds)
+				queryHistogram.WithLabelValues(conn.name, conn.sourceID).Observe(ds)
 				if ds > 1 {
 					ctx.L().Warn("query statement too slow",
 						zap.Duration("cost time", cost),
@@ -123,7 +124,7 @@ func (conn *DBConn) executeSQL(ctx *tcontext.Context, queries []string, args ...
 		FirstRetryDuration: 2 * time.Second,
 		BackoffStrategy:    retry.LinearIncrease,
 		IsRetryableFn: func(retryTime int, err error) bool {
-			tidbExecutionErrorCounter.WithLabelValues(conn.cfg.Name, conn.cfg.SourceID).Inc()
+			tidbExecutionErrorCounter.WithLabelValues(conn.name, conn.sourceID).Inc()
 			if retry.IsConnectionError(err) {
 				err = conn.resetConn(ctx)
 				if err != nil {
@@ -151,7 +152,7 @@ func (conn *DBConn) executeSQL(ctx *tcontext.Context, queries []string, args ...
 		params,
 		func(ctx *tcontext.Context) (interface{}, error) {
 			startTime := time.Now()
-			_, err := conn.baseConn.ExecuteSQL(ctx, stmtHistogram, conn.cfg.Name, queries, args...)
+			_, err := conn.baseConn.ExecuteSQL(ctx, stmtHistogram, conn.name, queries, args...)
 			failpoint.Inject("LoadExecCreateTableFailed", func(val failpoint.Value) {
 				errCode, err1 := strconv.ParseUint(val.(string), 10, 16)
 				if err1 != nil {
@@ -196,8 +197,10 @@ func (conn *DBConn) resetConn(tctx *tcontext.Context) error {
 	return nil
 }
 
-func createConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, workerCount int) (*conn.BaseDB, []*DBConn, error) {
-	baseDB, err := conn.DefaultDBProvider.Apply(cfg.To)
+func createConns(tctx *tcontext.Context, cfg config.DBConfig,
+	name, sourceID string,
+	workerCount int) (*conn.BaseDB, []*DBConn, error) {
+	baseDB, err := conn.DefaultDBProvider.Apply(cfg)
 	if err != nil {
 		return nil, nil, terror.WithScope(err, terror.ScopeDownstream)
 	}
@@ -218,7 +221,7 @@ func createConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, workerCount 
 			}
 			return baseDB.GetBaseConn(tctx.Context())
 		}
-		conns = append(conns, &DBConn{baseConn: baseConn, cfg: cfg, resetBaseConnFn: resetBaseConnFn})
+		conns = append(conns, &DBConn{baseConn: baseConn, name: name, sourceID: sourceID, resetBaseConnFn: resetBaseConnFn})
 	}
 	return baseDB, conns, nil
 }

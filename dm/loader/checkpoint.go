@@ -31,6 +31,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	lightningCheckpointListName = "lightning_checkpoint_list"
+)
+
 // CheckPoint represents checkpoint status.
 type CheckPoint interface {
 	// Load loads all checkpoints recorded before.
@@ -100,7 +104,7 @@ type RemoteCheckPoint struct {
 }
 
 func newRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id string) (CheckPoint, error) {
-	db, dbConns, err := createConns(tctx, cfg, 1)
+	db, dbConns, err := createConns(tctx, cfg.To, cfg.Name, cfg.SourceID, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -463,4 +467,98 @@ func (cp *RemoteCheckPoint) String() string {
 		return err.Error()
 	}
 	return string(bytes)
+}
+
+type LightningCheckpointList struct {
+	db        *conn.BaseDB
+	connMutex sync.Mutex
+	conn      *DBConn
+	schema    string
+	tableName string
+	logger    log.Logger
+}
+
+func NewLightningCheckpointList(tctx *tcontext.Context, cfg config.DBConfig, metaSchema string) (*LightningCheckpointList, error) {
+	db, dbConns, err := createConns(tctx, cfg, "checkpoint", "checkpoint", 1)
+	if err != nil {
+		return nil, err
+	}
+	cp := &LightningCheckpointList{
+		db:        db,
+		conn:      dbConns[0],
+		schema:    dbutil.ColumnName(metaSchema),
+		tableName: dbutil.TableName(metaSchema, lightningCheckpointListName),
+		logger:    tctx.L().WithFields(zap.String("component", "lightning checkpoint database list")),
+	}
+	err = cp.prepare(tctx)
+	if err != nil {
+		return nil, err
+	}
+	return cp, nil
+}
+
+func (cp *LightningCheckpointList) prepare(tctx *tcontext.Context) error {
+	createTable := `CREATE TABLE IF NOT EXISTS %s (
+		worker_name varchar(255) NOT NULL,
+		task_name varchar(255) NOT NULL,
+		PRIMARY KEY (task_name, worker_name)
+	);
+`
+	sql2 := fmt.Sprintf(createTable, cp.tableName)
+	cp.connMutex.Lock()
+	err := cp.conn.executeSQL(tctx, []string{sql2})
+	cp.connMutex.Unlock()
+	return terror.WithScope(err, terror.ScopeDownstream)
+}
+
+func (cp *LightningCheckpointList) RegisterCheckPoint(tctx *tcontext.Context, workerName, taskName string) error {
+	sql := fmt.Sprintf("INSERT INGORE INTO %s (`id`, `worker_name`, `task_name`) VALUES(?,?)", cp.tableName)
+	cp.logger.Info("initial checkpoint record",
+		zap.String("sql", sql),
+		zap.String("worker-name", workerName),
+		zap.String("task-name", taskName))
+	args := []interface{}{workerName, taskName}
+	cp.connMutex.Lock()
+	err := cp.conn.executeSQL(tctx, []string{sql}, args)
+	cp.connMutex.Unlock()
+	if err != nil {
+		return terror.WithScope(terror.Annotate(err, "initialize checkpoint"), terror.ScopeDownstream)
+	}
+	return nil
+}
+
+func (cp *LightningCheckpointList) RemoveTaskCheckPoint(tctx *tcontext.Context, taskName string) error {
+	query := fmt.Sprintf("SELECT `worker_name` from %s where `task_name`=?", cp.tableName)
+	cp.connMutex.Lock()
+	rows, err := cp.conn.querySQL(tctx, query, taskName)
+	cp.connMutex.Unlock()
+	if err != nil {
+		return terror.WithScope(err, terror.ScopeDownstream)
+	}
+	defer rows.Close()
+	var workerName string
+	for rows.Next() {
+		err := rows.Scan(&workerName)
+		if err != nil {
+			return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
+		}
+		cpdb := config.TiDBLightningCheckpointPrefix + dbutil.TableName(workerName, taskName)
+		sql := fmt.Sprintf("DROP DATABASE IF NOT EXISTS %s", cpdb)
+		err = cp.conn.executeSQL(tctx, []string{sql})
+		if err != nil {
+			return terror.WithScope(err, terror.ScopeDownstream)
+		}
+	}
+	query = fmt.Sprintf("DELETE from %s where `task_name`=?", cp.tableName)
+	cp.connMutex.Lock()
+	err = cp.conn.executeSQL(tctx, []string{query}, []interface{}{taskName})
+	cp.connMutex.Unlock()
+	return terror.WithScope(err, terror.ScopeDownstream)
+}
+
+// Close implements CheckPoint.Close.
+func (cp *LightningCheckpointList) Close() {
+	if err := cp.db.Close(); err != nil {
+		cp.logger.Error("close checkpoint list db", log.ShortError(err))
+	}
 }

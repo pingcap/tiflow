@@ -53,6 +53,7 @@ type LightningLoader struct {
 	cfg             *config.SubTaskConfig
 	cli             *clientv3.Client
 	checkPoint      CheckPoint
+	checkPointList  *LightningCheckpointList
 	workerName      string
 	logger          log.Logger
 	core            *lightning.Lightning
@@ -114,29 +115,34 @@ func (l *LightningLoader) Type() pb.UnitType {
 func (l *LightningLoader) Init(ctx context.Context) (err error) {
 	tctx := tcontext.NewContext(ctx, l.logger)
 	checkpoint, err := newRemoteCheckPoint(tctx, l.cfg, l.checkpointID())
+	if err == nil {
+		l.checkPoint = checkpoint
+		checkpointList, err1 := NewLightningCheckpointList(tctx, l.cfg.To, l.cfg.MetaSchema)
+		err = err1
+		l.checkPointList = checkpointList
+	}
 	failpoint.Inject("ignoreLoadCheckpointErr", func(_ failpoint.Value) {
 		l.logger.Info("", zap.String("failpoint", "ignoreLoadCheckpointErr"))
 		err = nil
 	})
-	l.checkPoint = checkpoint
+	if err != nil {
+		return err
+	}
 	toCfg, err := l.cfg.Clone()
 	if err != nil {
 		return err
 	}
 	config.AdjustTargetDBTimeZone(&toCfg.To)
-	l.toDB, l.toDBConns, err = createConns(tctx, toCfg, 1)
+	l.toDB, l.toDBConns, err = createConns(tctx, toCfg.To, toCfg.Name, toCfg.SourceID, 1)
 	return err
 }
 
 func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) error {
-	l.logger.Info("start runLightning")
 	l.Lock()
 	taskCtx, cancel := context.WithCancel(ctx)
 	l.cancel = cancel
 	l.Unlock()
-	l.logger.Info("start RunOnce")
 	err := l.core.RunOnce(taskCtx, cfg, nil)
-	l.logger.Info("end RunOnce")
 	failpoint.Inject("LightningLoadDataSlowDown", nil)
 	failpoint.Inject("LightningLoadDataSlowDownByTask", func(val failpoint.Value) {
 		tasks := val.(string)
@@ -174,6 +180,12 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		return err
 	}
 	if !l.checkPoint.IsTableFinished(lightningCheckpointDB, lightningCheckpointTable) {
+		if l.checkPointList != nil {
+			tctx := tcontext.NewContext(ctx, l.logger)
+			if err = l.checkPointList.RegisterCheckPoint(tctx, l.workerName, l.cfg.Name); err != nil {
+				return err
+			}
+		}
 		cfg := lcfg.NewConfig()
 		if err = cfg.LoadFromGlobal(l.lightningConfig); err != nil {
 			return err
@@ -281,6 +293,8 @@ func (l *LightningLoader) IsFreshTask(ctx context.Context) (bool, error) {
 // Close does graceful shutdown.
 func (l *LightningLoader) Close() {
 	l.Pause()
+	l.checkPoint.Close()
+	l.checkPointList.Close()
 	l.closed.Store(true)
 }
 
