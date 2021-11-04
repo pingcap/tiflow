@@ -1,10 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
+# -*- coding: utf-8 -*-
 import sys
 import requests
 
 NO_SHARD_TASK_NAME = "test-no-shard"
 SHARD_TASK_NAME = "test-shard"
-ILLEGAL_CHAR_TASK_NAME='t-Ë!s`t'
+ILLEGAL_CHAR_TASK_NAME = "t-Ë!s`t"
 SOURCE1_NAME = "mysql-01"
 SOURCE2_NAME = "mysql-02"
 
@@ -159,6 +160,17 @@ def get_task_status_failed(task_name):
     assert resp.status_code == 400
 
 
+def get_illegal_char_task_status_failed():
+    # task name contains illegal char but api server can handle it.
+    # return 400 is because of the task is not started.
+    url = API_ENDPOINT + "/" + ILLEGAL_CHAR_TASK_NAME + "/status"
+    resp = requests.get(url=url)
+    print("get_illegal_char_task_status_failed resp=", resp.json())
+    assert resp.status_code == 400
+    # need decode in python2
+    assert ILLEGAL_CHAR_TASK_NAME.decode("utf-8") in resp.json()["error_msg"]
+
+
 def get_task_status_success(task_name, total):
     url = API_ENDPOINT + "/" + task_name + "/status"
     resp = requests.get(url=url)
@@ -270,6 +282,7 @@ if __name__ == "__main__":
         "stop_task_success": stop_task_success,
         "get_task_list": get_task_list,
         "get_task_status_failed": get_task_status_failed,
+        "get_illegal_char_task_status_failed": get_illegal_char_task_status_failed,
         "get_task_status_success": get_task_status_success,
         "operate_schema_and_table_success": operate_schema_and_table_success,
     }
