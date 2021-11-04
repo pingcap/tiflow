@@ -253,11 +253,14 @@ func (c *canalFlatMessageWithTiDBExtension) getTable() *string {
 }
 
 func (c *canalFlatMessageWithTiDBExtension) newForCheckpointEvent(ts uint64) {
-	c.ID = 0
-	c.IsDDL = false
-	c.EventType = tidbWaterMarkType
-	c.ExecutionTime = convertToCanalTs(ts)
-	c.BuildTime = time.Now().UnixNano() / 1e6
+	flatMessage := &canalFlatMessage{
+		ID:            0,
+		IsDDL:         false,
+		EventType:     tidbWaterMarkType,
+		ExecutionTime: convertToCanalTs(ts),
+		BuildTime:     time.Now().UnixNano() / 1e6,
+	}
+	c.canalFlatMessage = flatMessage
 	c.Extensions = map[string]string{
 		"tso": strconv.FormatUint(ts, 10),
 	}
