@@ -273,7 +273,7 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	}
 
 	revokeToken := !state.initialized
-	err2 := w.session.onRegionFail(ctx, regionErrorInfo{
+	err2 := w.session.onRegionFail(w.parentCtx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
 	}, revokeToken)
