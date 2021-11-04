@@ -362,7 +362,7 @@ func (w *Worker) dispatchSQL(ctx context.Context, file string, offset int64, tab
 				continue
 			}
 
-			if w.loader.columnMapping != nil {
+			if w.loader.columnMapping != nil || len(table.extendCol) > 0 {
 				// column mapping and route table
 				query, err = reassemble(data, table, w.loader.columnMapping)
 				if err != nil {
@@ -407,6 +407,8 @@ type tableInfo struct {
 	targetTable    string
 	columnNameList []string
 	insertHeadStmt string
+	extendCol      []string
+	extendVal      []string
 }
 
 // Loader can load your mydumper data into TiDB database.
@@ -1422,7 +1424,7 @@ tblSchemaLoop:
 		for table := range l.db2Tables[db] {
 			schemaFile := l.cfg.Dir + "/" + db + "." + table + "-schema.sql" // cache friendly
 			if _, ok := l.tableInfos[tableName(db, table)]; !ok {
-				l.tableInfos[tableName(db, table)], err = parseTable(tctx, l.tableRouter, db, table, schemaFile, l.cfg.LoaderConfig.SQLMode)
+				l.tableInfos[tableName(db, table)], err = parseTable(tctx, l.tableRouter, db, table, schemaFile, l.cfg.LoaderConfig.SQLMode, l.cfg.SourceID)
 				if err != nil {
 					err = terror.Annotatef(err, "parse table %s/%s", db, table)
 					break tblSchemaLoop
