@@ -59,9 +59,9 @@ type processor struct {
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
 
-	filter        *filter.Filter
-	mounter       entry.Mounter
-	sinkManager   *sink.Manager
+	filter      *filter.Filter
+	mounter     entry.Mounter
+	sinkManager *sink.Manager
 
 	initialized bool
 	errCh       chan error
@@ -104,18 +104,6 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	return p
 }
 
-<<<<<<< HEAD
-func newProcessor4Test(ctx cdcContext.Context,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
-) *processor {
-	p := newProcessor(ctx)
-	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
-	p.createTablePipeline = createTablePipeline
-	return p
-}
-
-=======
->>>>>>> fd39bb2e9 (schema_storage: fix schema GC threshold & improve memory management (#3172))
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
