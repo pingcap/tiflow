@@ -45,8 +45,6 @@ import (
 )
 
 const (
-	schemaStorageGCLag = time.Minute * 20
-
 	backoffBaseDelayInMs = 5
 	maxTries             = 3
 )
@@ -59,6 +57,8 @@ type processor struct {
 	tables map[model.TableID]tablepipeline.TablePipeline
 
 	schemaStorage entry.SchemaStorage
+	lastSchemaTs  model.Ts
+
 	filter        *filter.Filter
 	mounter       entry.Mounter
 	sinkManager   *sink.Manager
@@ -71,12 +71,13 @@ type processor struct {
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
 
-	metricResolvedTsGauge       prometheus.Gauge
-	metricResolvedTsLagGauge    prometheus.Gauge
-	metricCheckpointTsGauge     prometheus.Gauge
-	metricCheckpointTsLagGauge  prometheus.Gauge
-	metricSyncTableNumGauge     prometheus.Gauge
-	metricProcessorErrorCounter prometheus.Counter
+	metricResolvedTsGauge        prometheus.Gauge
+	metricResolvedTsLagGauge     prometheus.Gauge
+	metricCheckpointTsGauge      prometheus.Gauge
+	metricCheckpointTsLagGauge   prometheus.Gauge
+	metricSyncTableNumGauge      prometheus.Gauge
+	metricSchemaStorageGcTsGauge prometheus.Gauge
+	metricProcessorErrorCounter  prometheus.Counter
 }
 
 // newProcessor creates a new processor
@@ -90,18 +91,20 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		captureInfo:  ctx.GlobalVars().CaptureInfo,
 		cancel:       func() {},
 
-		metricResolvedTsGauge:       resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricResolvedTsLagGauge:    resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsGauge:     checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsLagGauge:  checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricSyncTableNumGauge:     syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricProcessorErrorCounter: processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsGauge:        resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsLagGauge:     resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsGauge:      checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsLagGauge:   checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricSyncTableNumGauge:      syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricProcessorErrorCounter:  processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
+		metricSchemaStorageGcTsGauge: processorSchemaStorageGcTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
 	return p
 }
 
+<<<<<<< HEAD
 func newProcessor4Test(ctx cdcContext.Context,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *processor {
@@ -111,6 +114,8 @@ func newProcessor4Test(ctx cdcContext.Context,
 	return p
 }
 
+=======
+>>>>>>> fd39bb2e9 (schema_storage: fix schema GC threshold & improve memory management (#3172))
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
@@ -179,7 +184,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	p.handlePosition()
 	p.pushResolvedTs2Table()
 	p.handleWorkload()
-	p.doGCSchemaStorage()
+	p.doGCSchemaStorage(ctx)
 	return p.changefeed, nil
 }
 
@@ -750,16 +755,30 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 }
 
 // doGCSchemaStorage trigger the schema storage GC
-func (p *processor) doGCSchemaStorage() {
+func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
 	if p.schemaStorage == nil {
 		// schemaStorage is nil only in test
 		return
 	}
-	// Delay GC to accommodate pullers starting from a startTs that's too small
-	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
-	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs).Add(-schemaStorageGCLag)
-	gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
-	p.schemaStorage.DoGC(gcTs)
+
+	if p.changefeed.Status == nil {
+		// This could happen if Etcd data is not complete.
+		return
+	}
+
+	// Please refer to `unmarshalAndMountRowChanged` in cdc/entry/mounter.go
+	// for why we need -1.
+	lastSchemaTs := p.schemaStorage.DoGC(p.changefeed.Status.CheckpointTs - 1)
+	if p.lastSchemaTs == lastSchemaTs {
+		return
+	}
+	p.lastSchemaTs = lastSchemaTs
+
+	log.Debug("finished gc in schema storage",
+		zap.Uint64("gcTs", lastSchemaTs),
+		cdcContext.ZapFieldChangefeed(ctx))
+	lastSchemaPhysicalTs := oracle.ExtractPhysical(lastSchemaTs)
+	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaPhysicalTs))
 }
 
 func (p *processor) Close() error {
@@ -779,6 +798,7 @@ func (p *processor) Close() error {
 	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	if p.sinkManager != nil {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
