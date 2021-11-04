@@ -40,39 +40,45 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 		data1   = []byte("test-data")
 	)
 
-	w := NewBinlogWriter(log.L())
-	c.Assert(w, NotNil)
+	{
+		w := NewBinlogWriter(log.L())
+		c.Assert(w, NotNil)
+		c.Assert(w.Open(filename), IsNil)
+		fwStatus := w.Status()
+		c.Assert(fwStatus.Filename, Equals, filename)
+		c.Assert(fwStatus.Offset, Equals, int64(allData.Len()))
+		fwStatusStr := fwStatus.String()
+		c.Assert(strings.Contains(fwStatusStr, "filename"), IsTrue)
+		c.Assert(w.Close(), IsNil)
+	}
 
-	// check status, stageNew
-	fwStatus := w.Status()
-	c.Assert(fwStatus.Filename, Equals, filename)
-	c.Assert(fwStatus.Offset, Equals, int64(allData.Len()))
-	fwStatusStr := fwStatus.String()
-	c.Assert(strings.Contains(fwStatusStr, "filename"), IsTrue)
+	{
+		// not opened
+		w := NewBinlogWriter(log.L())
+		err := w.Write(data1)
+		c.Assert(err, ErrorMatches, "*not opened")
 
-	// not opened
-	err := w.Write(data1)
-	c.Assert(err, ErrorMatches, "not opened")
-
-	// open non exist dir
-	err = w.Open(filepath.Join(dir, "not-exist", "bin.000001"))
-	c.Assert(err, ErrorMatches, "not exist")
+		// open non exist dir
+		err = w.Open(filepath.Join(dir, "not-exist", "bin.000001"))
+		c.Assert(err, ErrorMatches, "*no such file or directory")
+	}
 
 	{
 		// normal call flow
-		err = w.Open(filename)
+		w := NewBinlogWriter(log.L())
+		err := w.Open(filename)
 		c.Assert(err, IsNil)
 		c.Assert(w.file, NotNil)
 		c.Assert(w.filename, Equals, filename)
-		c.Assert(w.offset.Load(), Equals, 0)
+		c.Assert(w.offset.Load(), Equals, int64(0))
 
 		err = w.Write(data1)
 		c.Assert(err, IsNil)
 		allData.Write(data1)
 
-		fwStatus = w.Status()
+		fwStatus := w.Status()
 		c.Assert(fwStatus.Filename, Equals, filename)
-		c.Assert(fwStatus.Offset, Equals, len(data1))
+		c.Assert(fwStatus.Offset, Equals, int64(len(data1)))
 
 		// write data again
 		data2 := []byte("another-data")
@@ -86,7 +92,7 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 		c.Assert(err, IsNil)
 		c.Assert(w.file, IsNil)
 		c.Assert(w.filename, Equals, "")
-		c.Assert(w.offset.Load(), Equals, 0)
+		c.Assert(w.offset.Load(), Equals, int64(0))
 
 		c.Assert(w.Close(), IsNil) // noop
 
