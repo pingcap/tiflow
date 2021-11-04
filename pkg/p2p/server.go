@@ -356,11 +356,10 @@ func (m *MessageServer) AddHandler(
 			return nil
 		}
 
+		m.acksMapLock.Unlock()
 		if lastAck != 0 && entry.Sequence > lastAck+1 {
 			log.Panic("seq is skipped. Bug?", zap.Int64("last-ack", lastAck))
 		}
-
-		m.acksMapLock.Unlock()
 
 		if err := unmarshalMessage(entry.Content, e); err != nil {
 			return cerror.WrapError(cerror.ErrPeerMessageDecodeError, err)
