@@ -130,6 +130,12 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 		pipeline.NewNodeContext(ctx, pipeline.Message{}, nil)
 	}
 
+	t.sinkNode = newSinkNode(t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
+	if err := t.sinkNode.Start(ctx, t.info, t.vars); err != nil {
+		log.Error("sink fails to start", zap.Error(err))
+		return err
+	}
+	t.started = true
 	log.Info("table actor is started", zap.Int64("tableID", t.tableID))
 	return nil
 }

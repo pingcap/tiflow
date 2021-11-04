@@ -14,6 +14,7 @@
 package pipeline
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
@@ -22,6 +23,9 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/actor/message"
+	"github.com/pingcap/ticdc/pkg/config"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"go.uber.org/zap"
@@ -64,6 +68,7 @@ func (s *TableStatus) Store(new TableStatus) {
 }
 
 type sinkNode struct {
+	config *config.ReplicaConfig
 	sink   sink.Sink
 	status TableStatus
 
@@ -100,10 +105,15 @@ func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	return nil
 }
 
+func (n *sinkNode) Start(ctx context.Context, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
+	n.config = info.Info.Config
+	return nil
+}
+
 // stop is called when sink receives a stop command or checkpointTs reaches targetTs.
 // In this method, the builtin table sink will be closed by calling `Close`, and
 // no more events can be sent to this sink node afterwards.
-func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
+func (n *sinkNode) stop(ctx context.Context) (err error) {
 	// table stopped status must be set after underlying sink is closed
 	defer n.status.Store(TableStatusStopped)
 	err = n.sink.Close(ctx)
@@ -114,7 +124,7 @@ func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
 	return
 }
 
-func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err error) {
+func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err error) {
 	defer func() {
 		if err != nil {
 			n.status.Store(TableStatusStopped)
@@ -149,7 +159,7 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 	return nil
 }
 
-func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
+func (n *sinkNode) emitEvent(ctx context.Context, event *model.PolymorphicEvent) error {
 	if event == nil || event.Row == nil {
 		log.Warn("skip emit empty rows", zap.Any("event", event))
 		return nil
@@ -164,12 +174,12 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 		return nil
 	}
 
-	config := ctx.ChangefeedVars().Info.Config
+	replicaConfig := n.config
 
 	// This indicates that it is an update event,
 	// and after enable old value internally by default(but disable in the configuration).
 	// We need to handle the update event to be compatible with the old format.
-	if !config.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
+	if !replicaConfig.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
 		if shouldSplitUpdateEvent(event) {
 			deleteEvent, insertEvent, err := splitUpdateEvent(event)
 			if err != nil {
@@ -281,7 +291,7 @@ func (n *sinkNode) clearBuffers() {
 	}
 }
 
-func (n *sinkNode) emitRow2Sink(ctx pipeline.NodeContext) error {
+func (n *sinkNode) emitRow2Sink(ctx context.Context) error {
 	for _, ev := range n.eventBuffer {
 		n.rowBuffer = append(n.rowBuffer, ev.Row)
 	}
@@ -344,4 +354,21 @@ func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 	n.status.Store(TableStatusStopped)
 	n.flowController.Abort()
 	return n.sink.Close(ctx)
+}
+
+func (n *sinkNode) HandleMessages(ctx context.Context, msg message.Message) error {
+	switch msg.Tp {
+	case message.TypeStop:
+		return n.stop(ctx)
+	case message.TypeBarrier:
+		n.barrierTs = msg.BarrierTs
+		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+			return errors.Trace(err)
+		}
+	case message.TypeTick:
+		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
 }
