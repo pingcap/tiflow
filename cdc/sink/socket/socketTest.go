@@ -549,7 +549,7 @@ func createBytes_FromDdlInfoVo(ddlInfos *vo.DDLInfos) []byte{
 	sendBatchDDLArr.Write(lengthArr)
 	sendBatchDDLArr.Write(verifyArr)
 	sendBatchDDLArr.Write(buffer.Bytes())
-	fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchDDLArr.Bytes()))
+	//fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchDDLArr.Bytes()))
 
 
 	return sendBatchDDLArr.Bytes()
@@ -673,6 +673,7 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
     }else{
     	columnInfoArr[colPos]=0x30
     }
+    
     colPos = colPos+1;
     columnInfoArr[colPos]=columnInfo.ColumnType
     colPos = colPos+1;
@@ -970,7 +971,7 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 	//fmt.Print("\n",publicUtils.BytestoHex(tt1))
 	result := buf[4:re]
 	commitTs := publicUtils.BytesToLong(result)
-	//fmt.Print("\nCommitTs:::::::::",commitTs)
+	fmt.Print("\nCommitTs:::::::::",commitTs)
 
 	return uint64(commitTs), err
 
@@ -1058,7 +1059,8 @@ func createBytesFromResolvedTs(resolvedTs uint64)  []byte{
 	verifyArr[0] = 0x06
 	verifyArr[1] = 0xce
 	verifyArr[2] = 0x01
-	verifyArr[3] = 0x15
+	verifyArr[3] = 0x23
+	//verifyArr[3] = 0x15
 
 	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
 	sendBatchRowsArr :=new(bytes.Buffer)
