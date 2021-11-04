@@ -550,7 +550,9 @@ func (t *testServer) testSubTaskRecover(c *C, s *Server, dir string) {
 
 func (t *testServer) testStopWorkerWhenLostConnect(c *C, s *Server, etcd *embed.Etcd) {
 	etcd.Close()
-	time.Sleep(retryConnectSleepTime + time.Duration(defaultKeepAliveTTL+3)*time.Second)
+	c.Assert(utils.WaitSomething(60, time.Second, func() bool {
+		return s.getWorker(true) == nil
+	}), IsTrue)
 	c.Assert(s.getWorker(true), IsNil)
 }
 
