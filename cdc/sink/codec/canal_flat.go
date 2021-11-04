@@ -203,7 +203,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		IsDDL:         false,
 		EventType:     header.GetEventType().String(),
 		ExecutionTime: header.ExecuteTime,
-		BuildTime:     0, // ignored by both Canal Adapter and Flink
+		BuildTime:     time.Now().UnixNano() / 1e6, // ignored by both Canal Adapter and Flink
 		Query:         "",
 		SQLType:       sqlType,
 		MySQLType:     mysqlType,
@@ -236,7 +236,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) can
 		IsDDL:         true,
 		EventType:     header.GetEventType().String(),
 		ExecutionTime: header.ExecuteTime,
-		BuildTime:     0, // ignored by both Canal Adapter and Flink
+		BuildTime:     time.Now().UnixNano() / 1e6, // timestamp
 		Query:         e.Query,
 		tikvTs:        e.CommitTs,
 	}
