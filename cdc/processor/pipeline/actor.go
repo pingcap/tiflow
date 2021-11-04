@@ -71,6 +71,8 @@ type tableActor struct {
 	sorterNode *sorterNode
 	cyclicNode *cyclicMarkNode
 	sinkNode   *sinkNode
+
+	nodes []*node
 }
 
 var _ TablePipeline = (*tableActor)(nil)
@@ -90,10 +92,47 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 		case message.TypeTick:
 		}
 		// process message for each node
+		// get message from puller
+		for _, n := range t.nodes {
+			n.tryRun(ctx)
+		}
 	}
 	// Report error to processor if there is any.
 	t.checkError()
 	return !t.stopped
+}
+
+type node struct {
+	eventStash     *pipeline.Message
+	inputChan      chan pipeline.Message
+	trySendMessage func(ctx context.Context, message *pipeline.Message) bool
+}
+
+func (n *node) tryGetMessageFrom() *pipeline.Message {
+	var msg pipeline.Message
+	select {
+	case msg = <-n.inputChan:
+		return &msg
+	default:
+		return nil
+	}
+}
+
+func (n *node) tryRun(ctx context.Context) {
+	for {
+		// batch?
+		if n.eventStash == nil {
+			n.eventStash = n.tryGetMessageFrom()
+		}
+		if n.eventStash == nil {
+			return
+		}
+		if n.trySendMessage(ctx, n.eventStash) {
+			n.eventStash = nil
+		} else {
+			return
+		}
+	}
 }
 
 func (t *tableActor) start(ctx cdcContext.Context) error {
@@ -121,6 +160,13 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 		log.Error("sorter fails to start", zap.Error(err))
 		return err
 	}
+	t.nodes = append(t.nodes,
+		&node{
+			inputChan: t.pullerNode.outputCh,
+			trySendMessage: func(ctx context.Context, message *pipeline.Message) bool {
+				return t.sorterNode.sorter.TryAddEntry(ctx, message.PolymorphicEvent)
+			},
+		})
 
 	if t.cyclicEnabled {
 		t.cyclicNode = newCyclicMarkNode(t.replicaInfo.MarkTableID).(*cyclicMarkNode)
@@ -128,13 +174,27 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 			log.Error("sink fails to start", zap.Error(err))
 			return err
 		}
-		pipeline.NewNodeContext(ctx, pipeline.Message{}, nil)
+		t.nodes = append(t.nodes, &node{inputChan: t.sorterNode.outputCh})
 	}
 
 	t.sinkNode = newSinkNode(t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
 	if err := t.sinkNode.Start(ctx, t.info, t.vars); err != nil {
 		log.Error("sink fails to start", zap.Error(err))
 		return err
+	}
+	if t.cyclicEnabled {
+		t.nodes = append(t.nodes, &node{inputChan: t.cyclicNode.outputCh})
+	} else {
+		t.nodes = append(t.nodes, &node{
+			inputChan: t.sorterNode.outputCh,
+			trySendMessage: func(ctx context.Context, message *pipeline.Message) bool {
+				if !message.PolymorphicEvent.IsPrepared() {
+					return false
+				}
+				//todo: return t.sinkNode.HandleMessages(ctx, message)
+				return false
+			},
+		})
 	}
 	t.started = true
 	log.Info("table actor is started", zap.Int64("tableID", t.tableID))

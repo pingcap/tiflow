@@ -158,6 +158,11 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 	return errg.Wait()
 }
 
+func (es *EntrySorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) bool {
+	es.AddEntry(ctx, entry)
+	return true
+}
+
 // AddEntry adds an RawKVEntry to the EntryGroup
 func (es *EntrySorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 	if atomic.LoadInt32(&es.closed) != 0 {

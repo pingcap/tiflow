@@ -23,9 +23,10 @@ type PolymorphicEvent struct {
 	// Commit or resolved TS
 	CRTs uint64
 
-	RawKV    *RawKVEntry
-	Row      *RowChangedEvent
-	finished chan struct{}
+	RawKV      *RawKVEntry
+	Row        *RowChangedEvent
+	isPrepared bool
+	finished   chan struct{}
 }
 
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
@@ -44,10 +45,11 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 // NewResolvedPolymorphicEvent creates a new PolymorphicEvent with the resolved ts
 func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
-		CRTs:     resolvedTs,
-		RawKV:    &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
-		Row:      nil,
-		finished: nil,
+		CRTs:       resolvedTs,
+		RawKV:      &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
+		Row:        nil,
+		finished:   nil,
+		isPrepared: true,
 	}
 }
 
@@ -60,6 +62,7 @@ func (e *PolymorphicEvent) RegionID() uint64 {
 func (e *PolymorphicEvent) SetUpFinishedChan() {
 	if e.finished == nil {
 		e.finished = make(chan struct{})
+		e.isPrepared = true
 	}
 }
 
@@ -69,6 +72,7 @@ func (e *PolymorphicEvent) PrepareFinished() {
 	if e.finished != nil {
 		close(e.finished)
 	}
+	e.isPrepared = true
 }
 
 // WaitPrepare waits for prepare process finished
@@ -81,4 +85,9 @@ func (e *PolymorphicEvent) WaitPrepare(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// IsPrepared return if prepare process is finished
+func (e *PolymorphicEvent) IsPrepared() bool {
+	return e.isPrepared
 }

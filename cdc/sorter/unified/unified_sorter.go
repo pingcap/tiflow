@@ -274,6 +274,17 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	return printError(errg.Wait())
 }
 
+// TryAddEntry implements the EventSorter interface
+func (s *UnifiedSorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) bool {
+	select {
+	case <-ctx.Done():
+	case <-s.closeCh:
+	case s.inputCh <- entry:
+	default:
+	}
+	return false
+}
+
 // AddEntry implements the EventSorter interface
 func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 	select {
