@@ -21,7 +21,6 @@ check-struct-only = false
     port = 4000
     user = "root"
     password = ""
-    instance-id = "source-1"
 
 [data-sources.tidb0]
     host = "127.0.0.1"
