@@ -35,7 +35,7 @@ const (
 	DefaultSortDir = "/tmp/sorter"
 
 	// DefaultRedoDir is the sub directory path of data-dir.
-	DefaultRedoDir = "/redo"
+	DefaultRedoDir = "/tmp/redo"
 )
 
 func init() {
@@ -63,11 +63,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 		PollingTime: -1,
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "normal",
+		Level:             "none",
 		MaxLogSize:        64,
 		FlushIntervalInMs: 1000,
-		Storage:           "local",
-		S3URI:             "",
+		Storage:           "",
 	},
 }
 

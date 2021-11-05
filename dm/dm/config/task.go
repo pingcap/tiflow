@@ -237,8 +237,10 @@ type SyncerConfig struct {
 	Batch       int    `yaml:"batch" toml:"batch" json:"batch"`
 	QueueSize   int    `yaml:"queue-size" toml:"queue-size" json:"queue-size"`
 	// checkpoint flush interval in seconds.
-	CheckpointFlushInterval int  `yaml:"checkpoint-flush-interval" toml:"checkpoint-flush-interval" json:"checkpoint-flush-interval"`
-	Compact                 bool `yaml:"compact" toml:"compact" json:"compact"`
+	CheckpointFlushInterval int `yaml:"checkpoint-flush-interval" toml:"checkpoint-flush-interval" json:"checkpoint-flush-interval"`
+	// TODO: add this two new config items for openapi.
+	Compact      bool `yaml:"compact" toml:"compact" json:"compact"`
+	MultipleRows bool `yaml:"multiple-rows" toml:"multiple-rows" json:"multiple-rows"`
 
 	// deprecated
 	MaxRetry int `yaml:"max-retry" toml:"max-retry" json:"max-retry"`
@@ -874,7 +876,8 @@ type SyncerConfigForDowngrade struct {
 	SafeMode                bool   `yaml:"safe-mode"`
 	EnableANSIQuotes        bool   `yaml:"enable-ansi-quotes"`
 
-	Compact bool `yaml:"compact,omitempty"`
+	Compact      bool `yaml:"compact,omitempty"`
+	MultipleRows bool `yaml:"multipleRows,omitempty"`
 }
 
 // NewSyncerConfigsForDowngrade converts SyncerConfig to SyncerConfigForDowngrade.
@@ -894,6 +897,7 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 			SafeMode:                syncerConfig.SafeMode,
 			EnableANSIQuotes:        syncerConfig.EnableANSIQuotes,
 			Compact:                 syncerConfig.Compact,
+			MultipleRows:            syncerConfig.MultipleRows,
 		}
 		syncerConfigsForDowngrade[configName] = newSyncerConfig
 	}

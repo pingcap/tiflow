@@ -61,11 +61,10 @@ const (
     "polling-time": -1
   },
   "consistent": {
-    "level": "normal",
+    "level": "none",
     "max-log-size": 64,
     "flush-interval": 1000,
-    "storage": "local",
-    "s3-uri": ""
+    "storage": ""
   }
 }`
 
@@ -154,11 +153,10 @@ const (
     "polling-time": -1
   },
   "consistent": {
-    "level": "normal",
+    "level": "none",
     "max-log-size": 64,
     "flush-interval": 1000,
-    "storage": "local",
-    "s3-uri": ""
+    "storage": ""
   }
 }`
 
@@ -192,11 +190,10 @@ const (
     "polling-time": -1
   },
   "consistent": {
-    "level": "normal",
+    "level": "none",
     "max-log-size": 64,
     "flush-interval": 1000,
-    "storage": "local",
-    "s3-uri": ""
+    "storage": ""
   }
 }`
 )
