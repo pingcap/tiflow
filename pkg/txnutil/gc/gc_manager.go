@@ -17,7 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/util"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -44,7 +44,6 @@ type Manager interface {
 	// Manager may skip update when it thinks it is too frequent.
 	// Set `forceUpdate` to force Manager update.
 	TryUpdateGCSafePoint(ctx context.Context, checkpointTs model.Ts, forceUpdate bool) error
-	CurrentTimeFromPDCached(ctx context.Context) (time.Time, error)
 	CheckStaleCheckpointTs(ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts) error
 }
 
@@ -52,7 +51,6 @@ type gcManager struct {
 	pdClient pd.Client
 	gcTTL    int64
 
-	pdTimeCache       *util.PDTimeCache
 	lastUpdatedTime   time.Time
 	lastSucceededTime time.Time
 	lastSafePointTs   uint64
@@ -67,7 +65,6 @@ func NewManager(pdClient pd.Client) Manager {
 	})
 	return &gcManager{
 		pdClient:          pdClient,
-		pdTimeCache:       util.NewPDTimeCache(pdClient),
 		lastSucceededTime: time.Now(),
 		gcTTL:             serverConfig.GcTTL,
 	}
@@ -110,16 +107,13 @@ func (m *gcManager) TryUpdateGCSafePoint(
 	return nil
 }
 
-func (m *gcManager) CurrentTimeFromPDCached(ctx context.Context) (time.Time, error) {
-	return m.pdTimeCache.CurrentTimeFromPDCached(ctx)
-}
-
 func (m *gcManager) CheckStaleCheckpointTs(
 	ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
 ) error {
 	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
-		pdTime, err := m.pdTimeCache.CurrentTimeFromPDCached(ctx)
+		cctx := ctx.(cdcContext.Context)
+		pdTime, err := cctx.GlobalVars().PDTimeCache.CurrentTimeFromPDCached()
 		if err != nil {
 			return errors.Trace(err)
 		}

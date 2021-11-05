@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -55,10 +57,11 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	pdClient   pd.Client
-	kvStorage  tidbkv.Storage
-	etcdClient *etcd.CDCEtcdClient
-	grpcPool   kv.GrpcPool
+	pdClient    pd.Client
+	kvStorage   tidbkv.Storage
+	etcdClient  *etcd.CDCEtcdClient
+	grpcPool    kv.GrpcPool
+	pdTimeCache *util.PDTimeCache
 
 	cancel context.CancelFunc
 
@@ -100,6 +103,12 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
+
+	if c.pdTimeCache != nil {
+		c.pdTimeCache.Stop()
+	}
+	c.pdTimeCache = util.NewPDTimeCache(c.pdClient)
+
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
 	}
@@ -153,6 +162,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		CaptureInfo: c.info,
 		EtcdClient:  c.etcdClient,
 		GrpcPool:    c.grpcPool,
+		PDTimeCache: c.pdTimeCache,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -166,7 +176,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		cancel()
 	}()
 	wg := new(sync.WaitGroup)
-	wg.Add(3)
+	wg.Add(4)
 	var ownerErr, processorErr error
 	go func() {
 		defer wg.Done()
@@ -187,6 +197,10 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// so we should also stop the processor and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, orchestrator.NewGlobalState(), processorFlushInterval)
 		log.Info("the processor routine has exited", zap.Error(processorErr))
+	}()
+	go func() {
+		defer wg.Done()
+		c.pdTimeCache.Run(ctx)
 	}()
 	go func() {
 		defer wg.Done()

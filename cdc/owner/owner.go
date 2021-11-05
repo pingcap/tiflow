@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/version"
-	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -133,12 +132,6 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	if err = o.updateGCSafepoint(stdCtx, state); err != nil {
 		return state, errors.Trace(err)
 	}
-
-	pdTime, err := o.gcManager.CurrentTimeFromPDCached(ctx)
-	if err != nil {
-		log.Warn("fail to get pd time , we will use local time", zap.Error(err), zap.Time("local time", pdTime))
-	}
-	ctx.GlobalVars().PDPhyTs = oracle.GetPhysical(pdTime)
 
 	o.handleJobs()
 	for changefeedID, changefeedState := range state.Changefeeds {
