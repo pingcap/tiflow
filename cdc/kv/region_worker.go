@@ -269,6 +269,8 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 	}
 
 	revokeToken := !state.initialized
+	// since the context used in region worker will be cancelled after region
+	// worker exits, we must use the parent context to prevent regionErrorInfo loss.
 	err2 := w.session.onRegionFail(w.parentCtx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
