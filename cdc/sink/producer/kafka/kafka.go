@@ -183,14 +183,6 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 	return nil
 }
 
-func (c *Config) Validate() error {
-	if c.PartitionNum < 0 {
-		return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
-	}
-
-	return nil
-}
-
 // AdjustPartitionNum gets partition number from existing topic
 func (c *Config) AdjustPartitionNum(topic string, admin *kafkaPkg.Admin) error {
 	count, err := admin.GetPartitionCount(topic)
