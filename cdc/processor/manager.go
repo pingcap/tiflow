@@ -27,7 +27,6 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -52,8 +51,6 @@ type Manager struct {
 	commandQueue chan *command
 
 	newProcessor func(cdcContext.Context) *processor
-
-	pdTimeCache *util.PDTimeCache
 }
 
 // NewManager creates a new processor manager

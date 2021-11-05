@@ -36,22 +36,24 @@ func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 func TestTimeFromPD(t *testing.T) {
 	mockPDClient := &MockPDClient{}
 	pdTimeCache := NewPDTimeCache(mockPDClient)
-	ctx := context.Background()
-	t1, err := pdTimeCache.CurrentTimeFromPDCached(ctx)
+	go pdTimeCache.Run(context.Background())
+	defer pdTimeCache.Stop()
+	time.Sleep(1 * time.Second)
+
+	t1, err := pdTimeCache.CurrentTimeFromPDCached()
 	require.Nil(t, err)
 	require.Equal(t, pdTimeCache.pdPhysicalTimeCache, t1)
 
 	time.Sleep(10 * time.Millisecond)
 	// should return cached time
-	t2, err := pdTimeCache.CurrentTimeFromPDCached(ctx)
+	t2, err := pdTimeCache.CurrentTimeFromPDCached()
 	require.Nil(t, err)
 	require.Equal(t, pdTimeCache.pdPhysicalTimeCache, t2)
 	require.Equal(t, t1, t2)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(400 * time.Millisecond)
 	// assume that the gc safe point updated one hour ago
-	pdTimeCache.lastUpdatedPdTime = time.Now().Add(-time.Hour)
-	t3, err := pdTimeCache.CurrentTimeFromPDCached(ctx)
+	t3, err := pdTimeCache.CurrentTimeFromPDCached()
 	require.Nil(t, err)
 	require.Equal(t, pdTimeCache.pdPhysicalTimeCache, t3)
 	// should return new time

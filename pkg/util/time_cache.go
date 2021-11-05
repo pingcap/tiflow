@@ -20,10 +20,9 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/retry"
-	"go.uber.org/zap"
-
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 )
 
 const pdTimeUpdateInterval = 200 * time.Millisecond
@@ -32,7 +31,6 @@ const pdTimeUpdateInterval = 200 * time.Millisecond
 type PDTimeCache struct {
 	pdClient            pd.Client
 	pdPhysicalTimeCache time.Time
-	lastUpdatedPdTime   time.Time
 	mu                  sync.RWMutex
 	stop                chan struct{}
 	err                 error
@@ -42,9 +40,11 @@ type PDTimeCache struct {
 func NewPDTimeCache(pdClient pd.Client) *PDTimeCache {
 	return &PDTimeCache{
 		pdClient: pdClient,
+		stop:     make(chan struct{}),
 	}
 }
 
+// Run will get time from pd periodically to cache in pdPhysicalTimeCache
 func (m *PDTimeCache) Run(ctx context.Context) {
 	ticker := time.NewTicker(pdTimeUpdateInterval)
 	for {
@@ -64,7 +64,6 @@ func (m *PDTimeCache) Run(ctx context.Context) {
 				}
 				m.mu.Lock()
 				m.pdPhysicalTimeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
-				m.lastUpdatedPdTime = time.Now()
 				m.err = nil
 				m.mu.Unlock()
 				return nil

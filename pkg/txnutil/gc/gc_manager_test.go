@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
@@ -87,40 +89,32 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	}
 }
 
-func (s *gcManagerSuite) TestTimeFromPD(c *check.C) {
-	defer testleak.AfterTest(c)()
-	mockPDClient := &MockPDClient{}
-	gcManager := NewManager(mockPDClient).(*gcManager)
-	ctx := context.Background()
-	t1, err := gcManager.CurrentTimeFromPDCached(ctx)
-	c.Assert(err, check.IsNil)
-	t2, err := gcManager.CurrentTimeFromPDCached(ctx)
-	c.Assert(err, check.IsNil)
-	// should equal
-	c.Assert(t1, check.Equals, t2)
-	time.Sleep(1 * time.Second)
-	t3, err := gcManager.CurrentTimeFromPDCached(ctx)
-	c.Assert(err, check.IsNil)
-	// should not equal
-	c.Assert(t1, check.Less, t3)
-}
-
 func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDClient := &MockPDClient{}
 	gcManager := NewManager(mockPDClient).(*gcManager)
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
-	err := gcManager.CheckStaleCheckpointTs(ctx, "cfID", 10)
+
+	pdTimeCache := util.NewPDTimeCache(mockPDClient)
+	go pdTimeCache.Run(ctx)
+	defer pdTimeCache.Stop()
+	time.Sleep(1 * time.Second)
+
+	cCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
+		PDTimeCache: pdTimeCache,
+	})
+
+	err := gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 
-	err = gcManager.CheckStaleCheckpointTs(ctx, "cfID", oracle.GoTimeToTS(time.Now()))
+	err = gcManager.CheckStaleCheckpointTs(cCtx, "cfID", oracle.GoTimeToTS(time.Now()))
 	c.Assert(err, check.IsNil)
 
 	gcManager.isTiCDCBlockGC = false
 	gcManager.lastSafePointTs = 20
-	err = gcManager.CheckStaleCheckpointTs(ctx, "cfID", 10)
+	err = gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)
 	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 }
