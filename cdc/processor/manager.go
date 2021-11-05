@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
@@ -60,17 +59,6 @@ func NewManager() *Manager {
 		commandQueue: make(chan *command, 4),
 		newProcessor: newProcessor,
 	}
-}
-
-// NewManager4Test creates a new processor manager for test
-func NewManager4Test(
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
-) *Manager {
-	m := NewManager()
-	m.newProcessor = func(ctx cdcContext.Context) *processor {
-		return newProcessor4Test(ctx, createTablePipeline)
-	}
-	return m
 }
 
 // Tick implements the `orchestrator.State` interface
