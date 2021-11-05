@@ -33,6 +33,7 @@ import (
 )
 
 const (
+	// APIOpVarAdminJob is the key of admin job in HTTP API
 	APIOpVarAdminJob = "admin-job"
 	// APIOpVarChangefeedID is the key of changefeed ID in HTTP API
 	APIOpVarChangefeedID = "cf-id"
@@ -59,6 +60,7 @@ type ChangefeedResp struct {
 
 // MarshalJSON use to marshal ChangefeedResp
 func (c ChangefeedResp) MarshalJSON() ([]byte, error) {
+	panic("")
 	// alias the original type to prevent recursive call of MarshalJSON
 	type Alias ChangefeedResp
 	if c.FeedState == string(model.StateNormal) {
