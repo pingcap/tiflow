@@ -261,7 +261,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *
 			IsDDL:         false,
 			EventType:     tidbWaterMarkType,
 			ExecutionTime: convertToCanalTs(ts),
-			BuildTime:     time.Now().UnixNano() / 1e6, // converts to milliseconds
+			BuildTime:     time.Now().UnixNano() / int64(time.Millisecond), // converts to milliseconds
 		},
 		Extensions: &tidbExtension{WatermarkTs: ts},
 	}
