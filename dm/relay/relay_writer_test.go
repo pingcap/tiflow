@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package writer
+package relay
 
 import (
 	"bytes"
@@ -35,7 +35,7 @@ import (
 
 var _ = check.Suite(&testFileWriterSuite{})
 
-func TestSuite(t *testing.T) {
+func TestFileWriterSuite(t *testing.T) {
 	check.TestingT(t)
 }
 

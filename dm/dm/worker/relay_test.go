@@ -29,7 +29,6 @@ import (
 	pkgstreamer "github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 	"github.com/pingcap/ticdc/dm/relay"
-	"github.com/pingcap/ticdc/dm/relay/purger"
 )
 
 type testRelay struct{}
@@ -139,11 +138,11 @@ func (d *DummyRelay) PurgeRelayDir() error {
 func (t *testRelay) TestRelay(c *C) {
 	originNewRelay := relay.NewRelay
 	relay.NewRelay = NewDummyRelay
-	originNewPurger := purger.NewPurger
-	purger.NewPurger = purger.NewDummyPurger
+	originNewPurger := relay.NewPurger
+	relay.NewPurger = relay.NewDummyPurger
 	defer func() {
 		relay.NewRelay = originNewRelay
-		purger.NewPurger = originNewPurger
+		relay.NewPurger = originNewPurger
 	}()
 
 	cfg := loadSourceConfigWithoutPassword(c)

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package streamer
+package relay
 
 import (
 	"context"
@@ -42,14 +42,6 @@ import (
 // ErrorMaybeDuplicateEvent indicates that there may be duplicate event in next binlog file
 // this is mainly happened when upstream master changed when relay log not finish reading a transaction.
 var ErrorMaybeDuplicateEvent = errors.New("truncate binlog file found, event may be duplicated")
-
-// Meta represents binlog meta information in relay.meta.
-type Meta struct {
-	BinLogName string `toml:"binlog-name" json:"binlog-name"`
-	BinLogPos  uint32 `toml:"binlog-pos" json:"binlog-pos"`
-	BinlogGTID string `toml:"binlog-gtid" json:"binlog-gtid"`
-	UUID       string `toml:"-" json:"-"`
-}
 
 // polling interval for watcher.
 var watcherInterval = 100 * time.Millisecond
@@ -215,7 +207,7 @@ func (r *BinlogReader) getPosByGTID(gset mysql.GTIDSet) (*mysql.Position, error)
 
 // StartSyncByPos start sync by pos
 // TODO:  thread-safe?
-func (r *BinlogReader) StartSyncByPos(pos mysql.Position) (Streamer, error) {
+func (r *BinlogReader) StartSyncByPos(pos mysql.Position) (reader.Streamer, error) {
 	if pos.Name == "" {
 		return nil, terror.ErrBinlogFileNotSpecified.Generate()
 	}
@@ -255,7 +247,7 @@ func (r *BinlogReader) StartSyncByPos(pos mysql.Position) (Streamer, error) {
 }
 
 // StartSyncByGTID start sync by gtid.
-func (r *BinlogReader) StartSyncByGTID(gset mysql.GTIDSet) (Streamer, error) {
+func (r *BinlogReader) StartSyncByGTID(gset mysql.GTIDSet) (reader.Streamer, error) {
 	r.tctx.L().Info("begin to sync binlog", zap.Stringer("GTID Set", gset))
 	r.usingGTID = true
 
