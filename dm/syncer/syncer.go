@@ -2063,7 +2063,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	param := &genDMLParam{
 		targetTableID:   utils.GenTableID(targetTable),
 		data:            prunedRows,
-		originalData:    rows,
+		originalData:    extRows,
 		columns:         prunedColumns,
 		sourceTableInfo: tableInfo,
 		sourceTable:     sourceTable,
