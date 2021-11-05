@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package streamer
+package relay
 
 import (
 	"context"
@@ -31,9 +31,9 @@ var _ = Suite(&testStreamerSuite{})
 type testStreamerSuite struct{}
 
 func (t *testStreamerSuite) TestStreamer(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/streamer/SetHeartbeatInterval", "return(10000)"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/relay/SetHeartbeatInterval", "return(10000)"), IsNil)
 	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/streamer/SetHeartbeatInterval"), IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/relay/SetHeartbeatInterval"), IsNil)
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -105,9 +105,9 @@ func (t *testStreamerSuite) TestStreamer(c *C) {
 }
 
 func (t *testStreamerSuite) TestHeartbeat(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/streamer/SetHeartbeatInterval", "return(1)"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/relay/SetHeartbeatInterval", "return(1)"), IsNil)
 	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/streamer/SetHeartbeatInterval"), IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/relay/SetHeartbeatInterval"), IsNil)
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
