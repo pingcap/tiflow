@@ -678,7 +678,7 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
     if(columnInfo.IsBinary==true){
 		columnInfoArr[colPos]=0x31
 	}else{
-		columnInfoArr[colPos]=0x31
+		columnInfoArr[colPos]=0x30
 	}
 
     colPos = colPos+1
