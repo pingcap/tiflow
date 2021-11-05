@@ -127,7 +127,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	tickRate := time.Second / timerInterval
 	rl := rate.NewLimiter(rate.Limit(tickRate), 1)
 	for {
-		var response clientv3.WatchResponse
+		var responses []clientv3.WatchResponse
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -140,27 +140,52 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 					log.Warn("failed to request progress for etcd watcher", zap.Error(err))
 				}
 			}
-		case response = <-watchCh:
+		case response := <-watchCh:
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
 			}
 			lastReceivedEventTime = time.Now()
-
 			// Check whether the response is stale.
 			if worker.revision >= response.Header.GetRevision() {
 				continue
 			}
 			worker.revision = response.Header.GetRevision()
-
 			// ProgressNotify implies no new events.
 			if response.IsProgressNotify() {
 				continue
 			}
+			responses = append(responses, response)
 
-			for _, event := range response.Events {
-				// handleEvent will apply the event to our internal `rawState`.
-				worker.handleEvent(ctx, event)
+			// try to receive more response from watchCh
+		BATCH:
+			for {
+				select {
+				case response = <-watchCh:
+					if err := response.Err(); err != nil {
+						return errors.Trace(err)
+					}
+					lastReceivedEventTime = time.Now()
+					if worker.revision >= response.Header.GetRevision() {
+						continue
+					}
+					worker.revision = response.Header.GetRevision()
+					if response.IsProgressNotify() {
+						continue
+					}
+					responses = append(responses, response)
+					log.Info("responses length", zap.Int("len", len(responses)))
+				default:
+					break BATCH
+				}
+			}
+
+			// handle all responses in batch
+			for _, resp := range responses {
+				for _, event := range resp.Events {
+					// handleEvent will apply the event to our internal `rawState`.
+					worker.handleEvent(ctx, event)
+				}
 			}
 		}
 
@@ -285,24 +310,27 @@ func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
 
 var maxBatchPatchSize = 96
 
-func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]DataPatch) ([][]DataPatch, error) {
-	getBatchPatches := func(patchGroups [][]DataPatch) ([]DataPatch, int) {
-		batchPatches := patchGroups[0]
-		patchesNum := 1
-		for _, patches := range patchGroups {
-			if patchesNum == 1 {
-				continue
-			}
-			if (len(batchPatches) + len(patches)) > maxBatchPatchSize {
-				break
-			}
+func getBatchPatches(patchGroups [][]DataPatch) ([]DataPatch, int) {
+	batchPatches := make([]DataPatch, 0)
+	patchesNum := 0
+	for i, patches := range patchGroups {
+		// make sure there at least one patches are put into batchPatches
+		if i == 0 {
 			batchPatches = append(batchPatches, patches...)
 			patchesNum++
+			continue
 		}
 
-		return batchPatches, patchesNum
+		if (len(batchPatches) + len(patches)) > maxBatchPatchSize {
+			break
+		}
+		batchPatches = append(batchPatches, patches...)
+		patchesNum++
 	}
+	return batchPatches, patchesNum
+}
 
+func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]DataPatch) ([][]DataPatch, error) {
 	for len(patchGroups) > 0 {
 		patches, n := getBatchPatches(patchGroups)
 		err := worker.applyPatches(ctx, patches)

@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strconv"
 	"sync"
@@ -759,4 +760,25 @@ func (s *etcdWorkerSuite) TestModifyAfterDelete(c *check.C) {
 
 	_ = cli1.Unwrap().Close()
 	_ = cli2.Unwrap().Close()
+}
+
+func (s *etcdWorkerSuite) TestGetPatchGroup(c *check.C) {
+	patchGroupSize := 1000
+	patchGroup := make([][]DataPatch, patchGroupSize)
+	for i := 0; i < patchGroupSize; i++ {
+		patches := []DataPatch{&SingleDataPatch{
+			Key: util.NewEtcdKey(fmt.Sprintf("/key%d", i)),
+			Func: func(old []byte) (newValue []byte, changed bool, err error) {
+				return nil, true, nil
+			},
+		}}
+		patchGroup[i] = patches
+	}
+	for len(patchGroup) > 0 {
+		batchPatches, n := getBatchPatches(patchGroup)
+		c.Assert(len(batchPatches), check.LessEqual, maxBatchPatchSize)
+		patchGroup = patchGroup[n:]
+	}
+
+	c.Assert(len(patchGroup), check.Equals, 0)
 }
