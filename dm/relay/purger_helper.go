@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package purger
+package relay
 
 import (
 	"os"
@@ -107,7 +107,7 @@ func collectRelayFilesBeforeFileAndTime(logger log.Logger, relayBaseDir string, 
 		)
 		if i+1 == len(uuids) {
 			// same sub dir, only collect relay files newer than safeRelay.filename
-			shortFiles, err = streamer.CollectBinlogFilesCmp(dir, safeFilename, streamer.FileCmpLess)
+			shortFiles, err = CollectBinlogFilesCmp(dir, safeFilename, FileCmpLess)
 			if err != nil {
 				return nil, terror.Annotatef(err, "dir %s", dir)
 			}
@@ -117,7 +117,7 @@ func collectRelayFilesBeforeFileAndTime(logger log.Logger, relayBaseDir string, 
 				continue
 			}
 			// earlier sub dir, collect all relay files
-			shortFiles, err = streamer.CollectAllBinlogFiles(dir)
+			shortFiles, err = CollectAllBinlogFiles(dir)
 			if err != nil {
 				return nil, terror.Annotatef(err, "dir %s", dir)
 			}

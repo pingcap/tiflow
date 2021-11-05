@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package reader
+package relay
 
 import (
 	"context"
@@ -25,22 +25,22 @@ import (
 	br "github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 )
 
-var _ = check.Suite(&testReaderSuite{})
+var _ = check.Suite(&testRemoteReaderSuite{})
 
-func TestSuite(t *testing.T) {
+func TestRemoteReaderSuite(t *testing.T) {
 	check.TestingT(t)
 }
 
-type testReaderSuite struct{}
+type testRemoteReaderSuite struct{}
 
-func (t *testReaderSuite) TestInterface(c *check.C) {
+func (t *testRemoteReaderSuite) TestInterface(c *check.C) {
 	cases := []*replication.BinlogEvent{
 		{RawData: []byte{1}},
 		{RawData: []byte{2}},
 		{RawData: []byte{3}},
 	}
 
-	cfg := &Config{
+	cfg := &RConfig{
 		SyncConfig: replication.BinlogSyncerConfig{
 			ServerID: 101,
 		},
@@ -48,18 +48,18 @@ func (t *testReaderSuite) TestInterface(c *check.C) {
 	}
 
 	// test with position
-	r := NewReader(cfg)
+	r := NewUpstreamReader(cfg)
 	t.testInterfaceWithReader(c, r, cases)
 
 	// test with GTID
 	cfg.EnableGTID = true
-	r = NewReader(cfg)
+	r = NewUpstreamReader(cfg)
 	t.testInterfaceWithReader(c, r, cases)
 }
 
-func (t *testReaderSuite) testInterfaceWithReader(c *check.C, r Reader, cases []*replication.BinlogEvent) {
+func (t *testRemoteReaderSuite) testInterfaceWithReader(c *check.C, r Reader, cases []*replication.BinlogEvent) {
 	// replace underlying reader with a mock reader for testing
-	concreteR := r.(*reader)
+	concreteR := r.(*upstreamReader)
 	c.Assert(concreteR, check.NotNil)
 	mockR := br.NewMockReader()
 	concreteR.in = mockR
@@ -102,17 +102,17 @@ func (t *testReaderSuite) testInterfaceWithReader(c *check.C, r Reader, cases []
 	c.Assert(result.Event, check.IsNil)
 }
 
-func (t *testReaderSuite) TestGetEventWithError(c *check.C) {
-	cfg := &Config{
+func (t *testRemoteReaderSuite) TestGetEventWithError(c *check.C) {
+	cfg := &RConfig{
 		SyncConfig: replication.BinlogSyncerConfig{
 			ServerID: 101,
 		},
 		MasterID: "test-master",
 	}
 
-	r := NewReader(cfg)
+	r := NewUpstreamReader(cfg)
 	// replace underlying reader with a mock reader for testing
-	concreteR := r.(*reader)
+	concreteR := r.(*upstreamReader)
 	c.Assert(concreteR, check.NotNil)
 	mockR := br.NewMockReader()
 	concreteR.in = mockR
