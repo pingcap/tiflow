@@ -33,7 +33,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [self-hosted,x64, macos-latest]
     steps:
 
     - name: Check out code into the Go module directory
