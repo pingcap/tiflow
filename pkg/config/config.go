@@ -35,7 +35,7 @@ const (
 	DefaultSortDir = "/tmp/sorter"
 
 	// DefaultRedoDir is the sub directory path of data-dir.
-	DefaultRedoDir = "/redo"
+	DefaultRedoDir = "/tmp/redo"
 )
 
 func init() {
@@ -63,11 +63,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 		PollingTime: -1,
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "normal",
+		Level:             "none",
 		MaxLogSize:        64,
 		FlushIntervalInMs: 1000,
-		Storage:           "local",
-		S3URI:             "",
+		Storage:           "",
 	},
 }
 
@@ -198,19 +197,23 @@ var defaultServerConfig = &ServerConfig{
 		SortDir:                DefaultSortDir,
 
 		// Default leveldb sorter config
-		EnableLevelDB:          true,
-		LevelDBCount:           16,
-		LevelDBConcurrency:     256,
-		MaxOpenFiles:           10000,
-		BlockSize:              65536,
-		BlockCacheSize:         0,
-		WriterBufferSize:       8388608,
-		Compression:            "snappy",
-		TargetFileSizeBase:     8388608,
-		CompactionL0Trigger:    160,
-		WriteL0SlowdownTrigger: math.MaxInt32,
-		WriteL0PauseTrigger:    math.MaxInt32,
-		CleanupSpeedLimit:      10000,
+		EnableLevelDB: false,
+		LevelDB: LevelDBConfig{
+			LevelDBCount: 16,
+			// Following configs are optimized for write throughput.
+			// Users should not change them.
+			LevelDBConcurrency:     256,
+			MaxOpenFiles:           10000,
+			BlockSize:              65536,
+			BlockCacheSize:         0,
+			WriterBufferSize:       8388608,
+			Compression:            "snappy",
+			TargetFileSizeBase:     8388608,
+			CompactionL0Trigger:    160,
+			WriteL0SlowdownTrigger: math.MaxInt32,
+			WriteL0PauseTrigger:    math.MaxInt32,
+			CleanupSpeedLimit:      10000,
+		},
 	},
 	Security:            &SecurityConfig{},
 	PerTableMemoryQuota: 10 * 1024 * 1024, // 10MB

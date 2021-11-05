@@ -32,9 +32,14 @@ type SorterConfig struct {
 
 	// EnableLevelDB enables leveldb sorter.
 	//
-	// The default value is true.
-	// FIXME: turn off until GA.
-	EnableLevelDB bool `toml:"enable-leveldb-sorter" json:"enable-leveldb-sorter"`
+	// The default value is false.
+	// TODO: turn on after GA.
+	EnableLevelDB bool          `toml:"enable-leveldb-sorter" json:"enable-leveldb-sorter"`
+	LevelDB       LevelDBConfig `toml:"leveldb" json:"leveldb"`
+}
+
+// LevelDBConfig represents leveldb sorter config.
+type LevelDBConfig struct {
 	// LevelDBCount is the number of leveldb count.
 	//
 	// The default value is 16.
@@ -49,7 +54,7 @@ type SorterConfig struct {
 	MaxOpenFiles int `toml:"max-open-files" json:"max-open-files"`
 	// BlockSize the block size of leveldb sorter.
 	//
-	// The default value is 64KB.
+	// The default value is 65536, 64KB.
 	BlockSize int `toml:"block-size" json:"block-size"`
 	// BlockCacheSize is the capacity of leveldb block cache.
 	//
@@ -57,7 +62,7 @@ type SorterConfig struct {
 	BlockCacheSize int `toml:"block-cache-size" json:"block-cache-size"`
 	// WriterBufferSize is the size of memory table of leveldb.
 	//
-	// The default value is 8MiB.
+	// The default value is 8388608, 8MiB.
 	WriterBufferSize int `toml:"writer-buffer-size" json:"writer-buffer-size"`
 	// Compression is the compression algorithm that is used by leveldb.
 	// Valid values are "none" or "snappy".
@@ -66,7 +71,7 @@ type SorterConfig struct {
 	Compression string `toml:"compression" json:"compression"`
 	// TargetFileSizeBase limits size of leveldb sst file that compaction generates.
 	//
-	// The default value is 8MiB.
+	// The default value is 8388608, 8MiB.
 	TargetFileSizeBase int `toml:"target-file-size-base" json:"target-file-size-base"`
 	// CompactionL0Trigger defines number of leveldb sst file at level-0 that will
 	// trigger compaction.
@@ -85,35 +90,35 @@ type SorterConfig struct {
 	WriteL0PauseTrigger int `toml:"write-l0-pause-trigger" json:"write-l0-pause-trigger"`
 	// CleanupSpeedLimit limits clean up speed, based on key value entry count.
 	//
-	// The default value is 10,000.
+	// The default value is 10000.
 	CleanupSpeedLimit int `toml:"cleanup-speed-limit" json:"cleanup-speed-limit"`
 }
 
 // ValidateAndAdjust validates and adjusts the sorter configuration
 func (c *SorterConfig) ValidateAndAdjust() error {
 	if c.ChunkSizeLimit < 1*1024*1024 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
+		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
 	}
 	if c.NumConcurrentWorker < 1 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-concurrent-worker should be at least 1")
+		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("num-concurrent-worker should be at least 1")
 	}
 	if c.NumWorkerPoolGoroutine > 4096 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at most 4096")
+		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at most 4096")
 	}
 	if c.NumConcurrentWorker > c.NumWorkerPoolGoroutine {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-concurrent-worker larger than num-workerpool-goroutine is useless")
+		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("num-concurrent-worker larger than num-workerpool-goroutine is useless")
 	}
 	if c.NumWorkerPoolGoroutine < 1 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at least 1, larger than 8 is recommended")
+		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at least 1, larger than 8 is recommended")
 	}
 	if c.MaxMemoryPressure < 0 || c.MaxMemoryPressure > 100 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage")
+		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage")
 	}
-	if c.Compression != "none" && c.Compression != "snappy" {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("sorter.compression must be \"none\" or \"snappy\"")
+	if c.LevelDB.Compression != "none" && c.LevelDB.Compression != "snappy" {
+		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.leveldb.compression must be \"none\" or \"snappy\"")
 	}
-	if c.CleanupSpeedLimit <= 1 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("sorter.cleanup-speed-limit must be larger than 1")
+	if c.LevelDB.CleanupSpeedLimit <= 1 {
+		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.leveldb.cleanup-speed-limit must be larger than 1")
 	}
 
 	return nil

@@ -38,19 +38,20 @@ import (
 
 // OpenDB opens a leveldb.
 func OpenDB(ctx context.Context, id int, cfg *config.SorterConfig) (*leveldb.DB, error) {
+	lcfg := cfg.LevelDB
 	var option opt.Options
-	option.OpenFilesCacheCapacity = cfg.MaxOpenFiles / cfg.LevelDBCount
-	option.BlockCacheCapacity = cfg.BlockCacheSize / cfg.LevelDBCount
-	option.BlockSize = cfg.BlockSize
-	option.WriteBuffer = cfg.WriterBufferSize
+	option.OpenFilesCacheCapacity = lcfg.MaxOpenFiles / lcfg.LevelDBCount
+	option.BlockCacheCapacity = lcfg.BlockCacheSize / lcfg.LevelDBCount
+	option.BlockSize = lcfg.BlockSize
+	option.WriteBuffer = lcfg.WriterBufferSize
 	option.Compression = opt.NoCompression
-	if cfg.Compression == "snappy" {
+	if lcfg.Compression == "snappy" {
 		option.Compression = opt.SnappyCompression
 	}
-	option.CompactionTableSize = cfg.TargetFileSizeBase
-	option.CompactionL0Trigger = cfg.CompactionL0Trigger
-	option.WriteL0SlowdownTrigger = cfg.WriteL0SlowdownTrigger
-	option.WriteL0PauseTrigger = cfg.WriteL0PauseTrigger
+	option.CompactionTableSize = lcfg.TargetFileSizeBase
+	option.CompactionL0Trigger = lcfg.CompactionL0Trigger
+	option.WriteL0SlowdownTrigger = lcfg.WriteL0SlowdownTrigger
+	option.WriteL0PauseTrigger = lcfg.WriteL0PauseTrigger
 	option.ErrorIfExist = true
 	option.NoSync = true
 
@@ -95,12 +96,12 @@ func NewLevelDBActor(
 ) (*LevelActor, actor.Mailbox, error) {
 	idTag := fmt.Sprint(id)
 	// Write batch size should be larger than block size to save CPU.
-	wbSize := cfg.BlockSize * 16
+	wbSize := cfg.LevelDB.BlockSize * 16
 	wb := leveldb.MakeBatch(wbSize)
 	// IterCount limits the total number of opened iterators to release leveldb
 	// resources (memtables and SST files) in time.
-	iterSema := semaphore.NewWeighted(int64(cfg.LevelDBConcurrency))
-	mb := actor.NewMailbox(actor.ID(id), cfg.LevelDBConcurrency)
+	iterSema := semaphore.NewWeighted(int64(cfg.LevelDB.LevelDBConcurrency))
+	mb := actor.NewMailbox(actor.ID(id), cfg.LevelDB.LevelDBConcurrency)
 	wg.Add(1)
 	return &LevelActor{
 		id:       actor.ID(id),
@@ -156,7 +157,7 @@ func (ldb *LevelActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 		var task message.Task
 		msg := tasks[i]
 		switch msg.Tp {
-		case actormsg.TypeSorter:
+		case actormsg.TypeSorterTask:
 			task = msg.SorterTask
 		case actormsg.TypeStop:
 			ldb.close(nil)

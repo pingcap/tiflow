@@ -27,16 +27,17 @@ type Task struct {
 	UID     uint32
 	TableID uint64
 
-	// encodeKey(tableID, event) -> serde.marshal(event)
+	// encoded key -> serde.marshal(event)
 	// If a value is empty, it deletes the key/value entry in leveldb.
 	Events map[Key][]byte
 	// Must be buffered channel to avoid blocking.
-	IterCh   chan LimitedIterator `json:"-"` // Make Task JSON printable.
-	Irange   *lutil.Range
+	IterCh chan LimitedIterator `json:"-"` // Make Task JSON printable.
+	Irange *lutil.Range
+	// Set NeedIter whenever caller wants to read something from an iterator.
 	NeedIter bool
 }
 
-// Key is the key that is wrote to leveldb.
+// Key is the key that is written to leveldb.
 type Key string
 
 // String returns a pretty printed string.
@@ -48,7 +49,7 @@ func (k Key) String() string {
 }
 
 // LimitedIterator is a wrapper of leveldb iterator that has a sema to limit
-// the total number of opend iterator.
+// the total number of open iterators.
 type LimitedIterator struct {
 	Iterator.Iterator
 	Sema *semaphore.Weighted

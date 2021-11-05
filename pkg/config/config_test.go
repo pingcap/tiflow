@@ -14,10 +14,19 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func mustIdentJSON(t *testing.T, j string) string {
+	var buf bytes.Buffer
+	err := json.Indent(&buf, []byte(j), "", "  ")
+	require.Nil(t, err)
+	return buf.String()
+}
 
 func TestReplicaConfigMarshal(t *testing.T) {
 	t.Parallel()
@@ -28,9 +37,9 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Mounter.WorkerNum = 3
 	b, err := conf.Marshal()
 	require.Nil(t, err)
-	require.Equal(t, `{"case-sensitive":false,"enable-old-value":true,"force-replicate":true,"check-gc-safe-point":true,"filter":{"rules":["1.1"],"ignore-txn-start-ts":null},"mounter":{"worker-num":3},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1},"consistent":{"level":"normal","max-log-size":64,"flush-interval":1000,"storage":"local","s3-uri":""}}`, b)
+	require.Equal(t, testCfgTestReplicaConfigMarshal1, mustIdentJSON(t, b))
 	conf2 := new(ReplicaConfig)
-	err = conf2.Unmarshal([]byte(`{"case-sensitive":false,"enable-old-value":true,"force-replicate":true,"check-gc-safe-point":true,"filter":{"rules":["1.1"],"ignore-txn-start-ts":null},"mounter":{"worker-num":3},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1},"consistent":{"level":"normal","max-log-size":64,"flush-interval":1000,"storage":"local","s3-uri":""}}`))
+	err = conf2.Unmarshal([]byte(testCfgTestReplicaConfigMarshal2))
 	require.Nil(t, err)
 	require.Equal(t, conf, conf2)
 }
@@ -51,7 +60,7 @@ func TestReplicaConfigClone(t *testing.T) {
 func TestReplicaConfigOutDated(t *testing.T) {
 	t.Parallel()
 	conf2 := new(ReplicaConfig)
-	err := conf2.Unmarshal([]byte(`{"case-sensitive":false,"enable-old-value":true,"force-replicate":true,"check-gc-safe-point":true,"filter":{"rules":["1.1"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":3},"sink":{"dispatch-rules":[{"db-name":"a","tbl-name":"b","rule":"r1"},{"db-name":"a","tbl-name":"c","rule":"r2"},{"db-name":"a","tbl-name":"d","rule":"r2"}],"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1},"consistent":{"level":"normal","max-log-size":64,"flush-interval":1000,"storage":"local","s3-uri":""}}`))
+	err := conf2.Unmarshal([]byte(testCfgTestReplicaConfigOutDated))
 	require.Nil(t, err)
 
 	conf := GetDefaultReplicaConfig()
@@ -69,7 +78,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 
 func TestServerConfigMarshal(t *testing.T) {
 	t.Parallel()
-	rawConfig := `{"addr":"192.155.22.33:8887","advertise-addr":"","log-file":"","log-level":"info","log":{"file":{"max-size":300,"max-days":0,"max-backups":0}},"data-dir":"","gc-ttl":86400,"tz":"System","capture-session-ttl":10,"owner-flush-interval":200000000,"processor-flush-interval":100000000,"sorter":{"num-concurrent-worker":4,"chunk-size-limit":999,"max-memory-percentage":30,"max-memory-consumption":17179869184,"num-workerpool-goroutine":16,"sort-dir":"/tmp/sorter","enable-leveldb-sorter":true,"leveldb-count":16,"leveldb-concurrency":256,"max-open-files":10000,"block-size":65536,"block-cache-size":0,"writer-buffer-size":8388608,"compression":"snappy","target-file-size-base":8388608,"compaction-l0-trigger":160,"write-l0-slowdown-trigger":2147483647,"write-l0-pause-trigger":2147483647,"cleanup-speed-limit":10000},"security":{"ca-path":"","cert-path":"","key-path":"","cert-allowed-cn":null},"per-table-memory-quota":10485760,"kv-client":{"worker-concurrent":8,"worker-pool-size":0,"region-scan-limit":40}}`
+	rawConfig := testCfgTestServerConfigMarshal
 
 	conf := GetDefaultServerConfig()
 	conf.Addr = "192.155.22.33:8887"
@@ -77,7 +86,7 @@ func TestServerConfigMarshal(t *testing.T) {
 	b, err := conf.Marshal()
 	require.Nil(t, err)
 
-	require.Equal(t, rawConfig, b)
+	require.Equal(t, rawConfig, mustIdentJSON(t, b))
 	conf2 := new(ServerConfig)
 	err = conf2.Unmarshal([]byte(rawConfig))
 	require.Nil(t, err)
@@ -122,4 +131,19 @@ func TestServerConfigValidateAndAdjust(t *testing.T) {
 	conf.PerTableMemoryQuota = 0
 	require.Nil(t, conf.ValidateAndAdjust())
 	require.EqualValues(t, GetDefaultServerConfig().PerTableMemoryQuota, conf.PerTableMemoryQuota)
+}
+
+func TestSorterConfigValidateAndAdjust(t *testing.T) {
+	t.Parallel()
+	conf := GetDefaultServerConfig().Clone().Sorter
+
+	require.Nil(t, conf.ValidateAndAdjust())
+	conf.LevelDB.Compression = "none"
+	require.Nil(t, conf.ValidateAndAdjust())
+	conf.LevelDB.Compression = "snappy"
+	require.Nil(t, conf.ValidateAndAdjust())
+	conf.LevelDB.Compression = "invalid"
+	require.Error(t, conf.ValidateAndAdjust())
+	conf.LevelDB.CleanupSpeedLimit = 0
+	require.Error(t, conf.ValidateAndAdjust())
 }

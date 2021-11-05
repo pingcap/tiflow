@@ -516,14 +516,14 @@ type DMAPIDeleteTaskParams struct {
 	SourceNameList *[]string `json:"source_name_list,omitempty"`
 }
 
-// DMAPPauseTaskJSONBody defines parameters for DMAPPauseTask.
-type DMAPPauseTaskJSONBody SourceNameList
+// DMAPIPauseTaskJSONBody defines parameters for DMAPIPauseTask.
+type DMAPIPauseTaskJSONBody SourceNameList
 
 // DMAPIResumeTaskJSONBody defines parameters for DMAPIResumeTask.
 type DMAPIResumeTaskJSONBody SourceNameList
 
-// DMAPIOperateTaskSourceTableStructureJSONBody defines parameters for DMAPIOperateTaskSourceTableStructure.
-type DMAPIOperateTaskSourceTableStructureJSONBody OperateTaskTableStructureRequest
+// DMAPIOperateTableStructureJSONBody defines parameters for DMAPIOperateTableStructure.
+type DMAPIOperateTableStructureJSONBody OperateTaskTableStructureRequest
 
 // DMAPIGetTaskStatusParams defines parameters for DMAPIGetTaskStatus.
 type DMAPIGetTaskStatusParams struct {
@@ -546,14 +546,14 @@ type DMAPITransferSourceJSONRequestBody DMAPITransferSourceJSONBody
 // DMAPIStartTaskJSONRequestBody defines body for DMAPIStartTask for application/json ContentType.
 type DMAPIStartTaskJSONRequestBody DMAPIStartTaskJSONBody
 
-// DMAPPauseTaskJSONRequestBody defines body for DMAPPauseTask for application/json ContentType.
-type DMAPPauseTaskJSONRequestBody DMAPPauseTaskJSONBody
+// DMAPIPauseTaskJSONRequestBody defines body for DMAPIPauseTask for application/json ContentType.
+type DMAPIPauseTaskJSONRequestBody DMAPIPauseTaskJSONBody
 
 // DMAPIResumeTaskJSONRequestBody defines body for DMAPIResumeTask for application/json ContentType.
 type DMAPIResumeTaskJSONRequestBody DMAPIResumeTaskJSONBody
 
-// DMAPIOperateTaskSourceTableStructureJSONRequestBody defines body for DMAPIOperateTaskSourceTableStructure for application/json ContentType.
-type DMAPIOperateTaskSourceTableStructureJSONRequestBody DMAPIOperateTaskSourceTableStructureJSONBody
+// DMAPIOperateTableStructureJSONRequestBody defines body for DMAPIOperateTableStructure for application/json ContentType.
+type DMAPIOperateTableStructureJSONRequestBody DMAPIOperateTableStructureJSONBody
 
 // Getter for additional properties for Task_BinlogFilterRule. Returns the specified
 // element and whether it was found

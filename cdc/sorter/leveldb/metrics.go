@@ -33,10 +33,18 @@ var (
 		Help:      "Bucketed histogram of sorter write duration",
 		Buckets:   prometheus.ExponentialBuckets(0.004, 2.0, 20),
 	}, []string{"capture", "id"})
+
+	sorterCleanupKVCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "ticdc",
+		Subsystem: "sorter",
+		Name:      "leveldb_cleanup_kv_total",
+		Help:      "The total number of cleaned up kv entries",
+	}, []string{"capture", "id"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(sorterWriteDurationHistogram)
 	registry.MustRegister(sorterWriteBytesHistogram)
+	registry.MustRegister(sorterCleanupKVCounter)
 }
