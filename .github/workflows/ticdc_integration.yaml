@@ -205,4 +205,3 @@ jobs:
         if: ${{ always() }}
         run: |
           $GITHUB_WORKSPACE/scripts/canal/canal-local-test.sh down
-
