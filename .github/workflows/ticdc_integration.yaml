@@ -191,64 +191,7 @@ jobs:
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=canalJson
 
-      - name: Try to dump container logs
-        if: ${{ failure() }}
-        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-canal.yml logs -t
-
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: logs
-          path: ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
-
-      - name: Clean Up
-        if: ${{ always() }}
-        run: |
-          $GITHUB_WORKSPACE/scripts/canal/canal-local-test.sh down
-
-
-  canalJson-extension-canal-adapter-integration:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          docker volume prune -f
-          docker image prune -f
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
-
-      - uses: actions/setup-go@v2
-        with:
-          go-version: "1.16.4"
-
-      - name: Cache Vendor
-        id: cache-vendor
-        uses: actions/cache@v2
-        with:
-          path: vendor
-          key: ${{ runner.os }}-cdc-integration-vendor-${{ hashFiles('go.sum') }}
-
-      - name: Update Vendor
-        run: go mod vendor
-
-      - name: Pull images
-        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-canal.yml pull --ignore-pull-failures
-
-      - name: TiDB version
-        run: |
-          docker run pingcap/tidb:nightly -V
-          docker run pingcap/tikv:nightly -V
-          docker run pingcap/pd:nightly -V
-
-      - name: Build Integration Framework
-        run: |
-          cd $GITHUB_WORKSPACE/integration
-          go build
-
-      - name: Run Integration Framework
+      - name: Run Integration Framework with CanalJson-extension-with-Canal-Adapter
         timeout-minutes: 45
         run: |
           cd $GITHUB_WORKSPACE/integration
