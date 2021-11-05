@@ -44,7 +44,7 @@ body:
              ```
              How did you deploy DM: tiup or manually?
              ```console
-             (leave DM-Ansible or manually here)
+             (leave TiUP or manually here)
              ```
              Other interesting information (system version, hardware config, etc):
              ```console
