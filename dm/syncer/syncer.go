@@ -1342,7 +1342,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if s.cfg.Mode == config.ModeAll && fresh {
 		delLoadTask = true
 		flushCheckpoint = true
-		// TODO: loadTableStructureFromDump in future
+		err = s.loadTableStructureFromDump(ctx)
+		if err != nil {
+            tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
+			cleanDumpFile = false
+        }
 	} else {
 		cleanDumpFile = false
 	}
@@ -2783,7 +2787,6 @@ func (s *Syncer) genRouter() error {
 	return nil
 }
 
-//nolint:unused
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
 
