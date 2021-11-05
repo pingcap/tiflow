@@ -72,14 +72,14 @@ type Tracker struct {
 type downstreamTracker struct {
 	downstreamConn *dbconn.DBConn                  // downstream connection
 	stmtParser     *parser.Parser                  // statement parser
-	tableInfos     map[string]*downstreamTableInfo // downstream table infos
+	tableInfos     map[string]*DownstreamTableInfo // downstream table infos
 }
 
-// downstreamTableInfo contains tableinfo and index cache.
-type downstreamTableInfo struct {
-	tableInfo        *model.TableInfo   // tableInfo which comes from parse create statement syntaxtree
-	indexCache       *model.IndexInfo   // index cache include pk/uk(not null)
-	availableUKCache []*model.IndexInfo // index cache include uks(data not null)
+// DownstreamTableInfo contains tableinfo and index cache.
+type DownstreamTableInfo struct {
+	TableInfo        *model.TableInfo   // tableInfo which comes from parse create statement syntaxtree
+	IndexCache       *model.IndexInfo   // index cache include pk/uk(not null)
+	AvailableUKCache []*model.IndexInfo // index cache include uks(data not null)
 }
 
 // NewTracker creates a new tracker. `sessionCfg` will be set as tracker's session variables if specified, or retrieve
@@ -181,7 +181,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	// init downstreamTracker
 	dsTracker := &downstreamTracker{
 		downstreamConn: downstreamConn,
-		tableInfos:     make(map[string]*downstreamTableInfo),
+		tableInfos:     make(map[string]*DownstreamTableInfo),
 	}
 
 	return &Tracker{
@@ -377,20 +377,20 @@ func (tr *Tracker) GetSystemVar(name string) (string, bool) {
 
 // GetDownStreamIndexInfo gets downstream PK/UK(not null) Index.
 // note. this function will init downstreamTrack's table info.
-func (tr *Tracker) GetDownStreamIndexInfo(tctx *tcontext.Context, tableID string, originTi *model.TableInfo) (*model.IndexInfo, error) {
+func (tr *Tracker) GetDownStreamIndexAndTableInfo(tctx *tcontext.Context, tableID string, originTi *model.TableInfo) (*model.IndexInfo, *DownstreamTableInfo, error) {
 	dti, ok := tr.dsTracker.tableInfos[tableID]
 	if !ok {
 		tctx.Logger.Info("Downstream schema tracker init. ", zap.String("tableID", tableID))
 		ti, err := tr.getTableInfoByCreateStmt(tctx, tableID)
 		if err != nil {
 			tctx.Logger.Error("Init dowstream schema info error. ", zap.String("tableID", tableID), zap.Error(err))
-			return nil, err
+			return nil, nil, err
 		}
 
-		dti = getDownStreamTi(ti, originTi)
+		dti = GetDownStreamTi(ti, originTi)
 		tr.dsTracker.tableInfos[tableID] = dti
 	}
-	return dti.indexCache, nil
+	return dti.IndexCache, dti, nil
 }
 
 // GetAvailableDownStreamUKIndexInfo gets available downstream UK whose data is not null.
@@ -398,7 +398,7 @@ func (tr *Tracker) GetDownStreamIndexInfo(tctx *tcontext.Context, tableID string
 func (tr *Tracker) GetAvailableDownStreamUKIndexInfo(tableID string, data []interface{}) *model.IndexInfo {
 	dti, ok := tr.dsTracker.tableInfos[tableID]
 
-	if !ok || len(dti.availableUKCache) == 0 {
+	if !ok || len(dti.AvailableUKCache) == 0 {
 		return nil
 	}
 	// func for check data is not null
@@ -406,13 +406,13 @@ func (tr *Tracker) GetAvailableDownStreamUKIndexInfo(tableID string, data []inte
 		return data[i] != nil
 	}
 
-	for i, uk := range dti.availableUKCache {
+	for _, uk := range dti.AvailableUKCache {
 		// check uk's column data is not null
 		if isSpecifiedIndexColumn(uk, fn) {
-			if i != 0 {
-				// exchange available uk to the first of the array to reduce judgements for next row
-				dti.availableUKCache[0], dti.availableUKCache[i] = dti.availableUKCache[i], dti.availableUKCache[0]
-			}
+			// if i != 0 {
+			// 	// exchange available uk to the first of the array to reduce judgements for next row
+			// 	dti.availableUKCache[0], dti.availableUKCache[i] = dti.availableUKCache[i], dti.availableUKCache[0]
+			// }
 			return uk
 		}
 	}
@@ -488,7 +488,7 @@ func (tr *Tracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error 
 }
 
 // getDownStreamTi constructs downstreamTable index cache by tableinfo.
-func getDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *downstreamTableInfo {
+func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *DownstreamTableInfo {
 	var (
 		indexCache       *model.IndexInfo
 		availableUKCache = make([]*model.IndexInfo, 0, len(ti.Indices))
@@ -509,6 +509,9 @@ func getDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *downstream
 			continue
 		}
 		if idx.Primary {
+			if indexCache != nil {
+				availableUKCache = append(availableUKCache, indexCache)
+			}
 			indexCache = indexRedirect
 			hasPk = true
 		} else if idx.Unique {
@@ -526,14 +529,17 @@ func getDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *downstream
 	if !hasPk {
 		exPk := redirectIndexKeys(handlePkExCase(ti), originTi)
 		if exPk != nil {
+			if indexCache != nil {
+				availableUKCache = append(availableUKCache, indexCache)
+			}
 			indexCache = exPk
 		}
 	}
 
-	return &downstreamTableInfo{
-		tableInfo:        ti,
-		indexCache:       indexCache,
-		availableUKCache: availableUKCache,
+	return &DownstreamTableInfo{
+		TableInfo:        ti,
+		IndexCache:       indexCache,
+		AvailableUKCache: availableUKCache,
 	}
 }
 
