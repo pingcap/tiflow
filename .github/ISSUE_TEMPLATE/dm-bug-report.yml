@@ -78,7 +78,6 @@ body:
           - `dm-worker.toml` for every DM-worker instance if possible
           - `dm-master.toml` for DM-master if possible
           - task config, like `task.yaml` if possible
-          - `inventory.ini` if deployed by DM-Ansible
   - type: markdown
     attributes:
       value: |
