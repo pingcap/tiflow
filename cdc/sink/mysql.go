@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/errorutil"
-	"github.com/pingcap/ticdc/pkg/filter"
 	tifilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/quotes"
@@ -90,7 +89,7 @@ type mysqlSink struct {
 	db     *sql.DB
 	params *sinkParams
 
-	filter *filter.Filter
+	filter *tifilter.Filter
 	cyclic *cyclic.Cyclic
 
 	txnCache      *common.UnresolvedTxnCache
@@ -111,6 +110,16 @@ type mysqlSink struct {
 
 	forceReplicate bool
 	cancel         func()
+}
+
+func needSwitchDB(ddl *model.DDLEvent) bool {
+	if len(ddl.TableInfo.Schema) > 0 {
+		if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -225,7 +234,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
-	shouldSwitchDB := len(ddl.TableInfo.Schema) > 0 && ddl.Type != timodel.ActionCreateSchema
+	shouldSwitchDB := needSwitchDB(ddl)
 
 	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
 		select {
