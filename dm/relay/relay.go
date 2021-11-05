@@ -831,7 +831,7 @@ func (r *Relay) setUpReader(ctx context.Context) (Reader, error) {
 		EnableGTID: r.cfg.EnableGTID,
 	}
 
-	reader2 := NewReader(cfg)
+	reader2 := NewUpstreamReader(cfg)
 	err = reader2.Start()
 	if err != nil {
 		// do not log the whole config to protect the password in `SyncConfig`.

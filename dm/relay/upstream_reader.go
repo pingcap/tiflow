@@ -61,7 +61,7 @@ type RConfig struct {
 }
 
 // reader implements Reader interface.
-type remoteReader struct {
+type upstreamReader struct {
 	cfg *RConfig
 
 	mu    sync.RWMutex
@@ -73,9 +73,9 @@ type remoteReader struct {
 	logger log.Logger
 }
 
-// NewReader creates a Reader instance.
-func NewReader(cfg *RConfig) Reader {
-	return &remoteReader{
+// NewUpstreamReader creates a Reader instance.
+func NewUpstreamReader(cfg *RConfig) Reader {
+	return &upstreamReader{
 		cfg:    cfg,
 		in:     br.NewTCPReader(cfg.SyncConfig),
 		out:    make(chan *replication.BinlogEvent),
@@ -84,7 +84,7 @@ func NewReader(cfg *RConfig) Reader {
 }
 
 // Start implements Reader.Start.
-func (r *remoteReader) Start() error {
+func (r *upstreamReader) Start() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -109,7 +109,7 @@ func (r *remoteReader) Start() error {
 }
 
 // Close implements Reader.Close.
-func (r *remoteReader) Close() error {
+func (r *upstreamReader) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -124,7 +124,7 @@ func (r *remoteReader) Close() error {
 
 // GetEvent implements Reader.GetEvent.
 // NOTE: can only close the reader after this returned.
-func (r *remoteReader) GetEvent(ctx context.Context) (RResult, error) {
+func (r *upstreamReader) GetEvent(ctx context.Context) (RResult, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -148,13 +148,13 @@ func (r *remoteReader) GetEvent(ctx context.Context) (RResult, error) {
 	}
 }
 
-func (r *remoteReader) setUpReaderByGTID() error {
+func (r *upstreamReader) setUpReaderByGTID() error {
 	gs := r.cfg.GTIDs
 	r.logger.Info("start sync", zap.String("master", r.cfg.MasterID), zap.Stringer("from GTID set", gs))
 	return r.in.StartSyncByGTID(gs)
 }
 
-func (r *remoteReader) setUpReaderByPos() error {
+func (r *upstreamReader) setUpReaderByPos() error {
 	pos := r.cfg.Pos
 	r.logger.Info("start sync", zap.String("master", r.cfg.MasterID), zap.Stringer("from position", pos))
 	return r.in.StartSyncByPos(pos)

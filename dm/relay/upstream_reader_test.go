@@ -48,18 +48,18 @@ func (t *testRemoteReaderSuite) TestInterface(c *check.C) {
 	}
 
 	// test with position
-	r := NewReader(cfg)
+	r := NewUpstreamReader(cfg)
 	t.testInterfaceWithReader(c, r, cases)
 
 	// test with GTID
 	cfg.EnableGTID = true
-	r = NewReader(cfg)
+	r = NewUpstreamReader(cfg)
 	t.testInterfaceWithReader(c, r, cases)
 }
 
 func (t *testRemoteReaderSuite) testInterfaceWithReader(c *check.C, r Reader, cases []*replication.BinlogEvent) {
 	// replace underlying reader with a mock reader for testing
-	concreteR := r.(*remoteReader)
+	concreteR := r.(*upstreamReader)
 	c.Assert(concreteR, check.NotNil)
 	mockR := br.NewMockReader()
 	concreteR.in = mockR
@@ -110,9 +110,9 @@ func (t *testRemoteReaderSuite) TestGetEventWithError(c *check.C) {
 		MasterID: "test-master",
 	}
 
-	r := NewReader(cfg)
+	r := NewUpstreamReader(cfg)
 	// replace underlying reader with a mock reader for testing
-	concreteR := r.(*remoteReader)
+	concreteR := r.(*upstreamReader)
 	c.Assert(concreteR, check.NotNil)
 	mockR := br.NewMockReader()
 	concreteR.in = mockR
