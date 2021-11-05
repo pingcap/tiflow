@@ -20,8 +20,8 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
-// HTTPBadRequestError is some errors that will cause a BadRequestError in http handler
-var HTTPBadRequestError = []*errors.Error{
+// httpBadRequestError is some errors that will cause a BadRequestError in http handler
+var httpBadRequestError = []*errors.Error{
 	cerror.ErrAPIInvalidParam, cerror.ErrSinkURIInvalid, cerror.ErrStartTsBeforeGC,
 	cerror.ErrChangeFeedNotExists, cerror.ErrTargetTsBeforeStartTs, cerror.ErrTableIneligible,
 	cerror.ErrFilterRuleInvalid, cerror.ErrChangefeedUpdateRefused, cerror.ErrMySQLConnectionError,
@@ -33,7 +33,7 @@ func IsHTTPBadRequestError(err error) bool {
 	if err == nil {
 		return false
 	}
-	for _, e := range HTTPBadRequestError {
+	for _, e := range httpBadRequestError {
 		if e.Equal(err) {
 			return true
 		}
