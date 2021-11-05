@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package streamer
+package relay
 
 import (
 	"bytes"
@@ -358,10 +358,10 @@ func (t *testFileSuite) TestrelayLogUpdatedOrNewCreated(c *C) {
 	}
 
 	rotateRelayFile := func(filename string) {
-		meta := Meta{BinLogName: filename, BinLogPos: binlogPos, BinlogGTID: binlogGTID}
+		meta := LocalMeta{BinLogName: filename, BinLogPos: binlogPos, BinlogGTID: binlogGTID}
 		metaFile, err2 := os.Create(path.Join(subDir, utils.MetaFilename))
 		c.Assert(err2, IsNil)
-		err = toml.NewEncoder(metaFile).Encode(meta)
+		err = toml.NewEncoder(metaFile).Encode(&meta)
 		c.Assert(err, IsNil)
 		_ = metaFile.Close()
 	}

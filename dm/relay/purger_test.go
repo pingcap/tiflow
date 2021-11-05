@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package purger
+package relay
 
 import (
 	"bytes"
@@ -42,14 +42,14 @@ var _ = Suite(&testPurgerSuite{
 		{"mysql-bin.000001", "mysql-bin.000002", "mysql-bin.000003"},
 	},
 	activeRelayLog: &streamer.RelayLogInfo{
-		TaskName:   fakeTaskName,
+		TaskName:   fakeStrategyTaskName,
 		UUID:       "e9540a0d-f16d-11e8-8cb7-0242ac130008.000002",
 		UUIDSuffix: 2,
 		Filename:   "mysql-bin.000003", // last in second sub dir
 	},
 })
 
-func TestSuite(t *testing.T) {
+func TestPurgerSuite(t *testing.T) {
 	TestingT(t)
 }
 
@@ -82,7 +82,7 @@ func (t *testPurgerSuite) TestPurgeManuallyInactive(c *C) {
 		Interval: 0, // disable automatically
 	}
 
-	purger := NewPurger(cfg, baseDir, []RelayOperator{t}, nil)
+	purger := NewPurger(cfg, baseDir, []Operator{t}, nil)
 
 	req := &pb.PurgeRelayRequest{
 		Inactive: true,
@@ -121,7 +121,7 @@ func (t *testPurgerSuite) TestPurgeManuallyTime(c *C) {
 		Interval: 0, // disable automatically
 	}
 
-	purger := NewPurger(cfg, baseDir, []RelayOperator{t}, nil)
+	purger := NewPurger(cfg, baseDir, []Operator{t}, nil)
 
 	req := &pb.PurgeRelayRequest{
 		Time: safeTime.Unix(),
@@ -160,7 +160,7 @@ func (t *testPurgerSuite) TestPurgeManuallyFilename(c *C) {
 		Interval: 0, // disable automatically
 	}
 
-	purger := NewPurger(cfg, baseDir, []RelayOperator{t}, nil)
+	purger := NewPurger(cfg, baseDir, []Operator{t}, nil)
 
 	req := &pb.PurgeRelayRequest{
 		Filename: t.relayFiles[0][2],
@@ -214,7 +214,7 @@ func (t *testPurgerSuite) TestPurgeAutomaticallyTime(c *C) {
 		}
 	}
 
-	purger := NewPurger(cfg, baseDir, []RelayOperator{t}, nil)
+	purger := NewPurger(cfg, baseDir, []Operator{t}, nil)
 	purger.Start()
 	time.Sleep(2 * time.Second) // sleep enough time to purge all inactive relay log files
 	purger.Close()
@@ -254,7 +254,7 @@ func (t *testPurgerSuite) TestPurgeAutomaticallySpace(c *C) {
 		RemainSpace: int64(storageSize.Available)/1024/1024/1024 + 1024, // always trigger purge
 	}
 
-	purger := NewPurger(cfg, baseDir, []RelayOperator{t}, nil)
+	purger := NewPurger(cfg, baseDir, []Operator{t}, nil)
 	purger.Start()
 	time.Sleep(2 * time.Second) // sleep enough time to purge all inactive relay log files
 	purger.Close()
@@ -336,7 +336,7 @@ func (t *testPurgerSuite) TestPurgerInterceptor(c *C) {
 	cfg := config.PurgeConfig{}
 	interceptor := newFakeInterceptor()
 
-	purger := NewPurger(cfg, "", []RelayOperator{t}, []PurgeInterceptor{interceptor})
+	purger := NewPurger(cfg, "", []Operator{t}, []PurgeInterceptor{interceptor})
 
 	req := &pb.PurgeRelayRequest{
 		Inactive: true,

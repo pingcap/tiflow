@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package writer
+package relay
 
 import (
 	"bytes"
@@ -400,72 +400,6 @@ func (t *testFileUtilSuite) testGetTxnPosGTIDs(c *check.C, filename, flavor, pre
 	c.Assert(err, check.IsNil)
 	c.Assert(pos, check.DeepEquals, expectedPos)
 	c.Assert(gSet, check.DeepEquals, expectedGTIDs)
-}
-
-// genBinlogEventsWithGTIDs generates some binlog events used by testFileUtilSuite and testFileWriterSuite.
-// now, its generated events including 3 DDL and 10 DML.
-// nolint:unparam
-func genBinlogEventsWithGTIDs(c *check.C, flavor string, previousGTIDSet, latestGTID1, latestGTID2 gtid.Set) (*event.Generator, []*replication.BinlogEvent, []byte) {
-	var (
-		serverID  uint32 = 11
-		latestPos uint32
-		latestXID uint64 = 10
-
-		allEvents = make([]*replication.BinlogEvent, 0, 50)
-		allData   bytes.Buffer
-	)
-
-	// use a binlog event generator to generate some binlog events.
-	g, err := event.NewGenerator(flavor, serverID, latestPos, latestGTID1, previousGTIDSet, latestXID)
-	c.Assert(err, check.IsNil)
-
-	// file header with FormatDescriptionEvent and PreviousGTIDsEvent
-	events, data, err := g.GenFileHeader()
-	c.Assert(err, check.IsNil)
-	allEvents = append(allEvents, events...)
-	allData.Write(data)
-
-	// CREATE DATABASE/TABLE, 3 DDL
-	queries := []string{
-		"CREATE DATABASE `db`",
-		"CREATE TABLE `db`.`tbl1` (c1 INT)",
-		"CREATE TABLE `db`.`tbl2` (c1 INT)",
-	}
-	for _, query := range queries {
-		events, data, err = g.GenDDLEvents("db", query)
-		c.Assert(err, check.IsNil)
-		allEvents = append(allEvents, events...)
-		allData.Write(data)
-	}
-
-	// DMLs, 10 DML
-	g.LatestGTID = latestGTID2 // use another latest GTID with different SID/DomainID
-	var (
-		tableID    uint64 = 8
-		columnType        = []byte{gmysql.MYSQL_TYPE_LONG}
-		eventType         = replication.WRITE_ROWS_EVENTv2
-		schema            = "db"
-		table             = "tbl1"
-	)
-	for i := 0; i < 10; i++ {
-		insertRows := make([][]interface{}, 0, 1)
-		insertRows = append(insertRows, []interface{}{int32(i)})
-		dmlData := []*event.DMLData{
-			{
-				TableID:    tableID,
-				Schema:     schema,
-				Table:      table,
-				ColumnType: columnType,
-				Rows:       insertRows,
-			},
-		}
-		events, data, err = g.GenDMLEvents(eventType, dmlData)
-		c.Assert(err, check.IsNil)
-		allEvents = append(allEvents, events...)
-		allData.Write(data)
-	}
-
-	return g, allEvents, allData.Bytes()
 }
 
 func (t *testFileUtilSuite) TestGetTxnPosGTIDsNoGTID(c *check.C) {
