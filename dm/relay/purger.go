@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package purger
+package relay
 
 import (
 	"context"
@@ -30,8 +30,8 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
-// RelayOperator represents an operator for relay log files, like writer, reader.
-type RelayOperator interface {
+// Operator represents an operator for relay log files, like writer, reader.
+type Operator interface {
 	// EarliestActiveRelayLog returns the earliest active relay log info in this operator
 	EarliestActiveRelayLog() *streamer.RelayLogInfo
 }
@@ -63,8 +63,8 @@ type Purger interface {
 // NewPurger creates a new purger.
 var NewPurger = NewRelayPurger
 
-// RelayPurger purges relay log according to some strategies.
-type RelayPurger struct {
+// relayPurger purges relay log according to some strategies.
+type relayPurger struct {
 	lock            sync.RWMutex
 	wg              sync.WaitGroup
 	cancel          context.CancelFunc
@@ -74,7 +74,7 @@ type RelayPurger struct {
 	cfg          config.PurgeConfig
 	baseRelayDir string
 	indexPath    string // server-uuid.index file path
-	operators    []RelayOperator
+	operators    []Operator
 	interceptors []PurgeInterceptor
 	strategies   map[strategyType]PurgeStrategy
 
@@ -82,8 +82,8 @@ type RelayPurger struct {
 }
 
 // NewRelayPurger creates a new purger.
-func NewRelayPurger(cfg config.PurgeConfig, baseRelayDir string, operators []RelayOperator, interceptors []PurgeInterceptor) Purger {
-	p := &RelayPurger{
+func NewRelayPurger(cfg config.PurgeConfig, baseRelayDir string, operators []Operator, interceptors []PurgeInterceptor) Purger {
+	p := &relayPurger{
 		cfg:          cfg,
 		baseRelayDir: baseRelayDir,
 		indexPath:    filepath.Join(baseRelayDir, utils.UUIDIndexFilename),
@@ -103,7 +103,7 @@ func NewRelayPurger(cfg config.PurgeConfig, baseRelayDir string, operators []Rel
 }
 
 // Start starts strategies by config.
-func (p *RelayPurger) Start() {
+func (p *relayPurger) Start() {
 	if !p.running.CAS(stageNew, stageRunning) {
 		return
 	}
@@ -124,7 +124,7 @@ func (p *RelayPurger) Start() {
 
 // run starts running the process
 // NOTE: ensure run is called at most once of a Purger.
-func (p *RelayPurger) run() {
+func (p *relayPurger) run() {
 	ticker := time.NewTicker(time.Duration(p.cfg.Interval) * time.Second)
 	defer ticker.Stop()
 
@@ -143,7 +143,7 @@ func (p *RelayPurger) run() {
 }
 
 // Close stops the started strategies.
-func (p *RelayPurger) Close() {
+func (p *relayPurger) Close() {
 	if !p.running.CAS(stageRunning, stageClosed) {
 		return
 	}
@@ -159,12 +159,12 @@ func (p *RelayPurger) Close() {
 }
 
 // Purging returns whether the purger is purging.
-func (p *RelayPurger) Purging() bool {
+func (p *relayPurger) Purging() bool {
 	return p.purgingStrategy.Load() != uint32(strategyNone)
 }
 
 // Do does the purge process one time.
-func (p *RelayPurger) Do(ctx context.Context, req *pb.PurgeRelayRequest) error {
+func (p *relayPurger) Do(ctx context.Context, req *pb.PurgeRelayRequest) error {
 	uuids, err := utils.ParseUUIDIndex(p.indexPath)
 	if err != nil {
 		return terror.Annotatef(err, "parse UUID index file %s", p.indexPath)
@@ -201,7 +201,7 @@ func (p *RelayPurger) Do(ctx context.Context, req *pb.PurgeRelayRequest) error {
 }
 
 // tryPurge tries to do purge by check condition first.
-func (p *RelayPurger) tryPurge() {
+func (p *relayPurger) tryPurge() {
 	strategy, args, err := p.check()
 	if err != nil {
 		p.logger.Error("check whether need to purge relay log files in background", zap.Error(err))
@@ -217,7 +217,7 @@ func (p *RelayPurger) tryPurge() {
 }
 
 // doPurge does the purging operation.
-func (p *RelayPurger) doPurge(ps PurgeStrategy, args StrategyArgs) error {
+func (p *relayPurger) doPurge(ps PurgeStrategy, args StrategyArgs) error {
 	if !p.purgingStrategy.CAS(uint32(strategyNone), uint32(ps.Type())) {
 		return terror.ErrRelayOtherStrategyIsPurging.Generate(ps.Type())
 	}
@@ -241,7 +241,7 @@ func (p *RelayPurger) doPurge(ps PurgeStrategy, args StrategyArgs) error {
 	return ps.Do(args)
 }
 
-func (p *RelayPurger) check() (PurgeStrategy, StrategyArgs, error) {
+func (p *relayPurger) check() (PurgeStrategy, StrategyArgs, error) {
 	p.logger.Info("checking whether needing to purge relay log files")
 
 	uuids, err := utils.ParseUUIDIndex(p.indexPath)
@@ -292,7 +292,7 @@ func (p *RelayPurger) check() (PurgeStrategy, StrategyArgs, error) {
 }
 
 // earliestActiveRelayLog returns the current earliest active relay log info.
-func (p *RelayPurger) earliestActiveRelayLog() *streamer.RelayLogInfo {
+func (p *relayPurger) earliestActiveRelayLog() *streamer.RelayLogInfo {
 	var earliest *streamer.RelayLogInfo
 	for _, op := range p.operators {
 		info := op.EarliestActiveRelayLog()
@@ -309,7 +309,7 @@ func (p *RelayPurger) earliestActiveRelayLog() *streamer.RelayLogInfo {
 type dummyPurger struct{}
 
 // NewDummyPurger returns a dummy purger.
-func NewDummyPurger(cfg config.PurgeConfig, baseRelayDir string, operators []RelayOperator, interceptors []PurgeInterceptor) Purger {
+func NewDummyPurger(cfg config.PurgeConfig, baseRelayDir string, operators []Operator, interceptors []PurgeInterceptor) Purger {
 	return &dummyPurger{}
 }
 

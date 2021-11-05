@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package writer
+package relay
 
 import (
 	"bytes"
@@ -27,30 +27,30 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
-func TestSuite(t *testing.T) {
+func TestBinlogWriterSuite(t *testing.T) {
 	TestingT(t)
 }
 
-var _ = Suite(&testFileWriterSuite{})
+var _ = Suite(&testBinlogWriterSuite{})
 
-type testFileWriterSuite struct{}
+type testBinlogWriterSuite struct{}
 
-func (t *testFileWriterSuite) TestWrite(c *C) {
+func (t *testBinlogWriterSuite) TestWrite(c *C) {
 	dir := c.MkDir()
 	filename := filepath.Join(dir, "test-mysql-bin.000001")
 	var (
-		cfg = &FileWriterConfig{
+		cfg = &BinlogWriterConfig{
 			Filename: filename,
 		}
 		allData bytes.Buffer
 	)
 
-	w := NewFileWriter(log.L(), cfg)
+	w := NewBinlogWriter(log.L(), cfg)
 	c.Assert(w, NotNil)
 
 	// check status, stageNew
 	status := w.Status()
-	fwStatus, ok := status.(*FileWriterStatus)
+	fwStatus, ok := status.(*BinlogWriterStatus)
 	c.Assert(ok, IsTrue)
 	c.Assert(fwStatus.Stage, Equals, common.StageNew.String())
 	c.Assert(fwStatus.Filename, Equals, filename)
@@ -71,7 +71,7 @@ func (t *testFileWriterSuite) TestWrite(c *C) {
 
 	// check status, stagePrepared
 	status = w.Status()
-	fwStatus, ok = status.(*FileWriterStatus)
+	fwStatus, ok = status.(*BinlogWriterStatus)
 	c.Assert(ok, IsTrue)
 	c.Assert(fwStatus.Stage, Equals, common.StagePrepared.String())
 	c.Assert(fwStatus.Filename, Equals, filename)
@@ -101,7 +101,7 @@ func (t *testFileWriterSuite) TestWrite(c *C) {
 
 	// check status, stageClosed
 	status = w.Status()
-	fwStatus, ok = status.(*FileWriterStatus)
+	fwStatus, ok = status.(*BinlogWriterStatus)
 	c.Assert(ok, IsTrue)
 	c.Assert(fwStatus.Stage, Equals, common.StageClosed.String())
 	c.Assert(fwStatus.Filename, Equals, filename)

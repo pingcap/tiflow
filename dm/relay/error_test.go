@@ -11,18 +11,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package reader
+package relay
 
 import (
 	"context"
 
+	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 )
 
-// isRetryableError checks whether the error is retryable.
-func isRetryableError(err error) bool {
-	if err = errors.Cause(err); err == context.DeadlineExceeded {
-		return true
+var _ = check.Suite(&testErrorSuite{})
+
+type testErrorSuite struct{}
+
+func (t *testErrorSuite) TestRetryable(c *check.C) {
+	err := errors.New("custom error")
+	c.Assert(isRetryableError(err), check.IsFalse)
+
+	cases := []error{
+		context.DeadlineExceeded,
+		errors.Annotate(context.DeadlineExceeded, "annotated"),
 	}
-	return false
+	for _, cs := range cases {
+		c.Assert(isRetryableError(cs), check.IsTrue)
+	}
 }

@@ -28,13 +28,12 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/relay"
-	"github.com/pingcap/ticdc/dm/relay/purger"
 )
 
 // RelayHolder for relay unit.
 type RelayHolder interface {
 	// Init initializes the holder
-	Init(ctx context.Context, interceptors []purger.PurgeInterceptor) (purger.Purger, error)
+	Init(ctx context.Context, interceptors []relay.PurgeInterceptor) (relay.Purger, error)
 	// Start starts run the relay
 	Start()
 	// Close closes the holder
@@ -94,11 +93,11 @@ func NewRealRelayHolder(sourceCfg *config.SourceConfig) RelayHolder {
 }
 
 // Init initializes the holder.
-func (h *realRelayHolder) Init(ctx context.Context, interceptors []purger.PurgeInterceptor) (purger.Purger, error) {
+func (h *realRelayHolder) Init(ctx context.Context, interceptors []relay.PurgeInterceptor) (relay.Purger, error) {
 	h.closed.Store(false)
 
 	// initial relay purger
-	operators := []purger.RelayOperator{
+	operators := []relay.Operator{
 		h,
 		streamer.GetReaderHub(),
 	}
@@ -107,7 +106,7 @@ func (h *realRelayHolder) Init(ctx context.Context, interceptors []purger.PurgeI
 		return nil, terror.Annotate(err, "initial relay unit")
 	}
 
-	return purger.NewPurger(h.cfg.Purge, h.cfg.RelayDir, operators, interceptors), nil
+	return relay.NewPurger(h.cfg.Purge, h.cfg.RelayDir, operators, interceptors), nil
 }
 
 // Start starts run the relay.
@@ -306,7 +305,7 @@ func (h *realRelayHolder) Update(ctx context.Context, sourceCfg *config.SourceCo
 	return nil
 }
 
-// EarliestActiveRelayLog implements RelayOperator.EarliestActiveRelayLog.
+// EarliestActiveRelayLog implements Operator.EarliestActiveRelayLog.
 func (h *realRelayHolder) EarliestActiveRelayLog() *streamer.RelayLogInfo {
 	return h.relay.ActiveRelayLog()
 }
@@ -355,13 +354,13 @@ func NewDummyRelayHolderWithInitError(cfg *config.SourceConfig) RelayHolder {
 }
 
 // Init implements interface of RelayHolder.
-func (d *dummyRelayHolder) Init(ctx context.Context, interceptors []purger.PurgeInterceptor) (purger.Purger, error) {
+func (d *dummyRelayHolder) Init(ctx context.Context, interceptors []relay.PurgeInterceptor) (relay.Purger, error) {
 	// initial relay purger
-	operators := []purger.RelayOperator{
+	operators := []relay.Operator{
 		d,
 	}
 
-	return purger.NewDummyPurger(d.cfg.Purge, d.cfg.RelayDir, operators, interceptors), d.initError
+	return relay.NewDummyPurger(d.cfg.Purge, d.cfg.RelayDir, operators, interceptors), d.initError
 }
 
 // Start implements interface of RelayHolder.
