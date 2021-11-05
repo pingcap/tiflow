@@ -44,14 +44,11 @@ import (
 	pkgstreamer "github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay/reader"
-	"github.com/pingcap/ticdc/dm/relay/retry"
 	"github.com/pingcap/ticdc/dm/relay/transformer"
-	"github.com/pingcap/ticdc/dm/relay/writer"
 )
 
 // used to fill RelayLogInfo.
-var fakeTaskName = "relay"
+var fakeRelayTaskName = "relay"
 
 const (
 	flushMetaInterval           = 30 * time.Second
@@ -295,7 +292,7 @@ func (r *Relay) process(ctx context.Context) error {
 		}
 	}()
 
-	readerRetry, err := retry.NewReaderRetry(r.cfg.ReaderRetry)
+	readerRetry, err := NewReaderRetry(r.cfg.ReaderRetry)
 	if err != nil {
 		return err
 	}
@@ -395,11 +392,11 @@ func (r *Relay) tryRecoverLatestFile(ctx context.Context, parser2 *parser.Parser
 	}
 
 	// setup a special writer to do the recovering
-	cfg := &writer.FileConfig{
+	cfg := &FileConfig{
 		RelayDir: r.meta.Dir(),
 		Filename: latestPos.Name,
 	}
-	writer2 := writer.NewFileWriter(r.logger, cfg, parser2)
+	writer2 := NewFileWriter(r.logger, cfg, parser2)
 	err := writer2.Start()
 	if err != nil {
 		return terror.Annotatef(err, "start recover writer for UUID %s with config %+v", uuid, cfg)
@@ -462,9 +459,9 @@ func (r *Relay) tryRecoverLatestFile(ctx context.Context, parser2 *parser.Parser
 // the first return value is the index of last read rows event if the transaction is not finished.
 func (r *Relay) handleEvents(
 	ctx context.Context,
-	reader2 reader.Reader,
+	reader2 Reader,
 	transformer2 transformer.Transformer,
-	writer2 writer.Writer,
+	writer2 Writer,
 ) (int, error) {
 	var (
 		_, lastPos  = r.meta.Pos()
@@ -811,7 +808,7 @@ func (r *Relay) doIntervalOps(ctx context.Context) {
 }
 
 // setUpReader setups the underlying reader used to read binlog events from the upstream master server.
-func (r *Relay) setUpReader(ctx context.Context) (reader.Reader, error) {
+func (r *Relay) setUpReader(ctx context.Context) (Reader, error) {
 	ctx2, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel()
 
@@ -826,7 +823,7 @@ func (r *Relay) setUpReader(ctx context.Context) (reader.Reader, error) {
 
 	uuid, pos := r.meta.Pos()
 	_, gs := r.meta.GTID()
-	cfg := &reader.Config{
+	cfg := &RConfig{
 		SyncConfig: r.syncerCfg,
 		Pos:        pos,
 		GTIDs:      gs,
@@ -834,7 +831,7 @@ func (r *Relay) setUpReader(ctx context.Context) (reader.Reader, error) {
 		EnableGTID: r.cfg.EnableGTID,
 	}
 
-	reader2 := reader.NewReader(cfg)
+	reader2 := NewUpstreamReader(cfg)
 	err = reader2.Start()
 	if err != nil {
 		// do not log the whole config to protect the password in `SyncConfig`.
@@ -847,13 +844,13 @@ func (r *Relay) setUpReader(ctx context.Context) (reader.Reader, error) {
 }
 
 // setUpWriter setups the underlying writer used to writer binlog events into file or other places.
-func (r *Relay) setUpWriter(parser2 *parser.Parser) (writer.Writer, error) {
+func (r *Relay) setUpWriter(parser2 *parser.Parser) (Writer, error) {
 	uuid, pos := r.meta.Pos()
-	cfg := &writer.FileConfig{
+	cfg := &FileConfig{
 		RelayDir: r.meta.Dir(),
 		Filename: pos.Name,
 	}
-	writer2 := writer.NewFileWriter(r.logger, cfg, parser2)
+	writer2 := NewFileWriter(r.logger, cfg, parser2)
 	if err := writer2.Start(); err != nil {
 		return nil, terror.Annotatef(err, "start writer for UUID %s with config %+v", uuid, cfg)
 	}
@@ -1027,7 +1024,7 @@ func (r *Relay) setActiveRelayLog(filename string) {
 	uuid := r.meta.UUID()
 	_, suffix, _ := utils.ParseSuffixForUUID(uuid)
 	rli := &pkgstreamer.RelayLogInfo{
-		TaskName:   fakeTaskName,
+		TaskName:   fakeRelayTaskName,
 		UUID:       uuid,
 		UUIDSuffix: suffix,
 		Filename:   filename,
