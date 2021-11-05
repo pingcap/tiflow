@@ -76,7 +76,7 @@ jobs:
       run: make build
 
   arm_build:
-    runs-on: [self-hosted,ARM64]
+    runs-on: [ARM64]
     name: Make Build
     strategy:
       fail-fast: false

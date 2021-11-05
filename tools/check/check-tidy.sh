@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# go mod tidy do not support symlink
-cd -P .
-
-cp go.sum /tmp/go.sum.before
 GO111MODULE=on go mod tidy
-diff -q go.sum /tmp/go.sum.before
+
+if [ "$(git --no-pager diff go.mod go.sum | wc -c)" -ne 0 ]; then
+	echo "Please run \`go mod tidy\` to clean up"
+	git --no-pager diff go.mod go.sum
+	exit 1
+fi
