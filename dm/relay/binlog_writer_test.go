@@ -30,6 +30,9 @@ type testBinlogWriterSuite struct{}
 
 func (t *testBinlogWriterSuite) TestWrite(c *C) {
 	dir := c.MkDir()
+	uuid := "3ccc475b-2343-11e7-be21-6c0b84d59f30.000001"
+	c.Assert(os.Mkdir(filepath.Join(dir, uuid), 0o755), IsNil)
+
 	filename := filepath.Join(dir, "test-mysql-bin.000001")
 	var (
 		allData bytes.Buffer
@@ -37,9 +40,9 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 	)
 
 	{
-		w := NewBinlogWriter(log.L())
+		w := NewBinlogWriter(log.L(), dir)
 		c.Assert(w, NotNil)
-		c.Assert(w.Open(filename), IsNil)
+		c.Assert(w.Open(uuid, filename), IsNil)
 		fwStatus := w.Status()
 		c.Assert(fwStatus.Filename, Equals, filename)
 		c.Assert(fwStatus.Offset, Equals, int64(allData.Len()))
@@ -50,19 +53,19 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 
 	{
 		// not opened
-		w := NewBinlogWriter(log.L())
+		w := NewBinlogWriter(log.L(), dir)
 		err := w.Write(data1)
 		c.Assert(err, ErrorMatches, "*not opened")
 
 		// open non exist dir
-		err = w.Open(filepath.Join(dir, "not-exist", "bin.000001"))
+		err = w.Open("not-exist-uuid", "bin.000001")
 		c.Assert(err, ErrorMatches, "*no such file or directory")
 	}
 
 	{
 		// normal call flow
-		w := NewBinlogWriter(log.L())
-		err := w.Open(filename)
+		w := NewBinlogWriter(log.L(), dir)
+		err := w.Open(uuid, filename)
 		c.Assert(err, IsNil)
 		c.Assert(w.file, NotNil)
 		c.Assert(w.filename, Equals, filename)

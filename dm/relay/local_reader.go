@@ -610,7 +610,7 @@ func (r *BinlogReader) parseFile(
 	if !state.formatDescEventRead {
 		if err = r.parseFormatDescEvent(state); err != nil {
 			if state.possibleLast && isIgnorableParseError(err) {
-				return r.waitBinlogChanged(ctx, state, offset)
+				return r.waitBinlogChanged(ctx, state)
 			}
 			return false, false, terror.ErrParserParseRelayLog.Delegate(err, state.fullPath)
 		}
@@ -648,14 +648,15 @@ func (r *BinlogReader) parseFile(
 		return false, false, nil
 	}
 
-	return r.waitBinlogChanged(ctx, state, offset)
+	return r.waitBinlogChanged(ctx, state)
 }
 
-func (r *BinlogReader) waitBinlogChanged(ctx context.Context, state *binlogFileParseState, beginOffset int64) (
-	needSwitch, needReParse bool, err error) {
-	// binlog file may have rotated if we read nothing last time(either it's the first read or after notified)
-	lastReadCnt := state.latestPos - beginOffset
-	if lastReadCnt == 0 {
+func (r *BinlogReader) waitBinlogChanged(ctx context.Context, state *binlogFileParseState) (needSwitch, needReParse bool, err error) {
+	active, relayOffset := r.relay.IsActive(r.currentUUID, state.relayLogFile)
+	if active && relayOffset > state.latestPos {
+		return false, true, nil
+	}
+	if !active {
 		meta := &LocalMeta{}
 		_, err := toml.DecodeFile(filepath.Join(state.relayLogDir, utils.MetaFilename), meta)
 		if err != nil {
@@ -711,22 +712,22 @@ func (r *BinlogReader) waitBinlogChanged(ctx context.Context, state *binlogFileP
 		}
 	}
 
-	timer := time.NewTimer(watcherInterval)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false, false, nil
-	case <-r.Notified():
-		// the notified event may not be the current relay file
-		// in that case we may read 0 bytes and check again
-		return false, true, nil
-	case <-timer.C:
-		// for a task start after source shutdown or there's no new write, it'll not be notified,
-		// and if it's reading from dir 000001 and there's need to switch dir to 000002,
-		// after the task read files in dir 000001, the read size > 0, so it goes to the select directly,
-		// since there is no notify, it blocks, that'll leave dir 000002 un-synced.
-		// so we stop waiting after watcherInterval to give it a chance to check again
-		return false, true, nil
+	for {
+		select {
+		case <-ctx.Done():
+			return false, false, nil
+		case <-r.Notified():
+			active, relayOffset = r.relay.IsActive(r.currentUUID, state.relayLogFile)
+			if active {
+				if relayOffset > state.latestPos {
+					return false, true, nil
+				}
+				// already read to relayOffset, try again
+				continue
+			}
+			// file may have changed, try parse and check again
+			return false, true, nil
+		}
 	}
 }
 
