@@ -52,6 +52,7 @@ function run() {
 	run_sql "CREATE table consistent_replicate_local.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists "consistent_replicate_local.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "consistent_replicate_local.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	mysql --host ${DOWN_TIDB_HOST} --port ${DOWN_TIDB_PORT} -uroot -e "show tables from consistent_replicate_local;"
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	# Inject the failpoint to prevent sink execution, but the global resolved can be moved forward.
