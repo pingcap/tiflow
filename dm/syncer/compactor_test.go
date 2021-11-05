@@ -59,10 +59,11 @@ func randString(n int) string {
 
 func (s *testSyncerSuite) TestCompactJob(c *C) {
 	compactor := &compactor{
-		bufferSize: 10000,
-		logger:     log.L(),
-		keyMap:     make(map[string]map[string]int),
-		buffer:     make([]*job, 0, 10000),
+		bufferSize:   10000,
+		logger:       log.L(),
+		keyMap:       make(map[string]map[string]int),
+		buffer:       make([]*job, 0, 10000),
+		addCountFunc: func(b bool, s string, ot opType, i int64, t *filter.Table) {},
 	}
 
 	location := binlog.NewLocation("")
