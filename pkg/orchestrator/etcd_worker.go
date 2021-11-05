@@ -128,6 +128,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	rl := rate.NewLimiter(rate.Limit(tickRate), 1)
 	for {
 		var response clientv3.WatchResponse
+		var responses []clientv3.WatchResponse
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -146,21 +147,46 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				return errors.Trace(err)
 			}
 			lastReceivedEventTime = time.Now()
-
 			// Check whether the response is stale.
 			if worker.revision >= response.Header.GetRevision() {
 				continue
 			}
 			worker.revision = response.Header.GetRevision()
-
 			// ProgressNotify implies no new events.
 			if response.IsProgressNotify() {
 				continue
 			}
+			responses = append(responses, response)
 
-			for _, event := range response.Events {
-				// handleEvent will apply the event to our internal `rawState`.
-				worker.handleEvent(ctx, event)
+			// try to receive more response from watchCh
+		BATCH:
+			for {
+				select {
+				case response = <-watchCh:
+					if err := response.Err(); err != nil {
+						return errors.Trace(err)
+					}
+					lastReceivedEventTime = time.Now()
+					if worker.revision >= response.Header.GetRevision() {
+						continue
+					}
+					worker.revision = response.Header.GetRevision()
+					if response.IsProgressNotify() {
+						continue
+					}
+					responses = append(responses, response)
+					log.Info("responses length", zap.Int("len", len(responses)))
+				default:
+					break BATCH
+				}
+			}
+
+			// handle all responses in batch
+			for _, resp := range responses {
+				for _, event := range resp.Events {
+					// handleEvent will apply the event to our internal `rawState`.
+					worker.handleEvent(ctx, event)
+				}
 			}
 		}
 
