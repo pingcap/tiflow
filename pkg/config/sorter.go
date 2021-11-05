@@ -34,7 +34,12 @@ type SorterConfig struct {
 	//
 	// The default value is true.
 	// TODO: turn on after GA.
-	EnableLevelDB bool `toml:"enable-leveldb-sorter" json:"enable-leveldb-sorter"`
+	EnableLevelDB bool          `toml:"enable-leveldb-sorter" json:"enable-leveldb-sorter"`
+	LevelDB       LevelDBConfig `toml:"leveldb" json:"leveldb"`
+}
+
+// LevelDBConfig represents leveldb sorter config.
+type LevelDBConfig struct {
 	// LevelDBCount is the number of leveldb count.
 	//
 	// The default value is 16.
@@ -109,10 +114,10 @@ func (c *SorterConfig) ValidateAndAdjust() error {
 	if c.MaxMemoryPressure < 0 || c.MaxMemoryPressure > 100 {
 		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage")
 	}
-	if c.Compression != "none" && c.Compression != "snappy" {
+	if c.LevelDB.Compression != "none" && c.LevelDB.Compression != "snappy" {
 		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.compression must be \"none\" or \"snappy\"")
 	}
-	if c.CleanupSpeedLimit <= 1 {
+	if c.LevelDB.CleanupSpeedLimit <= 1 {
 		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.cleanup-speed-limit must be larger than 1")
 	}
 

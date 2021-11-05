@@ -27,7 +27,7 @@ const (
 	TypeTick
 	TypeStop
 	TypeBarrier
-	TypeSorter
+	TypeSorterTask
 	// Add a new type when adding a new message.
 )
 
@@ -69,7 +69,7 @@ func BarrierMessage(barrierTs model.Ts) Message {
 // SorterMessage creates the message of sorter
 func SorterMessage(task sorter.Task) Message {
 	return Message{
-		Tp:         TypeSorter,
+		Tp:         TypeSorterTask,
 		SorterTask: task,
 	}
 }

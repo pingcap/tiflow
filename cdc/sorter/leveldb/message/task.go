@@ -31,8 +31,9 @@ type Task struct {
 	// If a value is empty, it deletes the key/value entry in leveldb.
 	Events map[Key][]byte
 	// Must be buffered channel to avoid blocking.
-	IterCh   chan LimitedIterator `json:"-"` // Make Task JSON printable.
-	Irange   *lutil.Range
+	IterCh chan LimitedIterator `json:"-"` // Make Task JSON printable.
+	Irange *lutil.Range
+	// Set NeedIter whenever caller wants to read something from an iterator.
 	NeedIter bool
 }
 

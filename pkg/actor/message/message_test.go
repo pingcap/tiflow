@@ -46,6 +46,6 @@ func TestBarrierMessage(t *testing.T) {
 func TestSorterMessage(t *testing.T) {
 	task := sorter.Task{UID: 1, TableID: 2}
 	msg := SorterMessage(task)
-	require.Equal(t, TypeSorter, msg.Tp)
+	require.Equal(t, TypeSorterTask, msg.Tp)
 	require.Equal(t, task, msg.SorterTask)
 }

@@ -199,20 +199,22 @@ var defaultServerConfig = &ServerConfig{
 
 		// Default leveldb sorter config
 		EnableLevelDB: false,
-		LevelDBCount:  16,
-		// Following configs are optimized for write throughput.
-		// Users should not change them.
-		LevelDBConcurrency:     256,
-		MaxOpenFiles:           10000,
-		BlockSize:              65536,
-		BlockCacheSize:         0,
-		WriterBufferSize:       8388608,
-		Compression:            "snappy",
-		TargetFileSizeBase:     8388608,
-		CompactionL0Trigger:    160,
-		WriteL0SlowdownTrigger: math.MaxInt32,
-		WriteL0PauseTrigger:    math.MaxInt32,
-		CleanupSpeedLimit:      10000,
+		LevelDB: LevelDBConfig{
+			LevelDBCount: 16,
+			// Following configs are optimized for write throughput.
+			// Users should not change them.
+			LevelDBConcurrency:     256,
+			MaxOpenFiles:           10000,
+			BlockSize:              65536,
+			BlockCacheSize:         0,
+			WriterBufferSize:       8388608,
+			Compression:            "snappy",
+			TargetFileSizeBase:     8388608,
+			CompactionL0Trigger:    160,
+			WriteL0SlowdownTrigger: math.MaxInt32,
+			WriteL0PauseTrigger:    math.MaxInt32,
+			CleanupSpeedLimit:      10000,
+		},
 	},
 	Security:            &SecurityConfig{},
 	PerTableMemoryQuota: 10 * 1024 * 1024, // 10MB
