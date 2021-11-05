@@ -6,7 +6,6 @@ cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
-exit 0
 function run() {
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
