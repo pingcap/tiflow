@@ -21,9 +21,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/errno"
-	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
@@ -32,27 +30,8 @@ import (
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
+	"github.com/pingcap/ticdc/pkg/errorutil"
 )
-
-func ignoreDDLError(err error) bool {
-	err = errors.Cause(err)
-	mysqlErr, ok := err.(*mysql.MySQLError)
-	if !ok {
-		return false
-	}
-
-	errCode := errors.ErrCode(mysqlErr.Number)
-	switch errCode {
-	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
-		infoschema.ErrTableExists.Code(), infoschema.ErrTableDropExists.Code(),
-		infoschema.ErrColumnExists.Code(),
-		infoschema.ErrIndexExists.Code(),
-		infoschema.ErrKeyNameDuplicate.Code(), tddl.ErrCantDropFieldOrKey.Code():
-		return true
-	default:
-		return false
-	}
-}
 
 func isDropColumnWithIndexError(err error) bool {
 	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
@@ -207,7 +186,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 		}
 
 		tctx.L().Info("drop index success, now try to drop column", zap.Strings("index", idx2Drop))
-		if _, err2 = conn.ExecuteSQLWithIgnore(tctx, ignoreDDLError, ddls[index:]); err2 != nil {
+		if _, err2 = conn.ExecuteSQLWithIgnore(tctx, errorutil.IsIgnorableMySQLDDLError, ddls[index:]); err2 != nil {
 			return err2
 		}
 
