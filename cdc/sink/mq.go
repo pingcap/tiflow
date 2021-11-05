@@ -44,7 +44,7 @@ type mqEvent struct {
 
 const (
 	defaultPartitionInputChSize = 12800
-	// -1 means broadcast to all partition, it's the default for the default open protocol.
+	// -1 means broadcast to all partitions, it's the default for the default open protocol.
 	defaultDDLDispatchPartition = -1
 )
 
