@@ -120,7 +120,7 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	return nil
 }
 
-// FlushRowChangedEvents will flushes all received events, we don't allow mysql
+// FlushRowChangedEvents will flush all received events, we don't allow mysql
 // sink to receive events before resolving
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	if atomic.LoadUint64(&s.maxResolvedTs) < resolvedTs {
