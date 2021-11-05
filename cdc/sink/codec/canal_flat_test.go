@@ -87,7 +87,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	c.Assert(ok, check.IsTrue)
 
 	c.Assert(withExtension.Extensions, check.NotNil)
-	c.Assert(withExtension.Extensions.Tso, check.Equals, testCaseUpdate.CommitTs)
+	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseUpdate.CommitTs)
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
@@ -118,7 +118,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	c.Assert(ok, check.IsTrue)
 
 	c.Assert(withExtension.Extensions, check.NotNil)
-	c.Assert(withExtension.Extensions.Tso, check.Equals, testCaseDdl.CommitTs)
+	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseDdl.CommitTs)
 }
 
 func (s *canalFlatSuite) TestBatching(c *check.C) {

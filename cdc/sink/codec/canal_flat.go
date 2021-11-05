@@ -114,7 +114,8 @@ func (c *canalFlatMessage) getTable() *string {
 }
 
 type tidbExtension struct {
-	Tso uint64 `json:"tso"`
+	CommitTs    uint64 `json:"commit-ts"`
+	WatermarkTs uint64 `json:"watermark-ts"`
 }
 
 type canalFlatMessageWithTiDBExtension struct {
@@ -225,7 +226,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 
 	return &canalFlatMessageWithTiDBExtension{
 		canalFlatMessage: flatMessage,
-		Extensions:       &tidbExtension{Tso: e.CommitTs},
+		Extensions:       &tidbExtension{CommitTs: e.CommitTs},
 	}, nil
 }
 
@@ -249,7 +250,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) can
 
 	return &canalFlatMessageWithTiDBExtension{
 		canalFlatMessage: flatMessage,
-		Extensions:       &tidbExtension{Tso: e.CommitTs},
+		Extensions:       &tidbExtension{CommitTs: e.CommitTs},
 	}
 }
 
@@ -262,7 +263,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *
 			ExecutionTime: convertToCanalTs(ts),
 			BuildTime:     time.Now().UnixNano() / 1e6, // converts to milliseconds
 		},
-		Extensions: &tidbExtension{Tso: ts},
+		Extensions: &tidbExtension{WatermarkTs: ts},
 	}
 }
 
