@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/capture"
 	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
@@ -137,9 +136,9 @@ func logMiddleware() gin.HandlerFunc {
 		cost := time.Since(start)
 
 		err := c.Errors.Last()
-		var inErr error
+		var stdErr error
 		if err != nil {
-			inErr = err.Err
+			stdErr = err.Err
 		}
 
 		log.Info(path,
@@ -149,7 +148,7 @@ func logMiddleware() gin.HandlerFunc {
 			zap.String("query", query),
 			zap.String("ip", c.ClientIP()),
 			zap.String("user-agent", c.Request.UserAgent()),
-			zap.Error(inErr),
+			zap.Error(stdErr),
 			zap.Duration("cost", cost),
 		)
 	}
@@ -164,7 +163,7 @@ func errorHandleMiddleware() gin.HandlerFunc {
 		if lastError != nil {
 			err := lastError.Err
 			// put the error into response
-			if cerror.IsHTTPBadRequestError(err) {
+			if capture.IsHTTPBadRequestError(err) {
 				c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
 			} else {
 				c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))

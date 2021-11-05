@@ -512,7 +512,7 @@ var GetDBConnImpl = getDBConn
 func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsnStr)
 	if err != nil {
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("Open database connection failed")
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 	}
 	err = db.PingContext(ctx)
 	if err != nil {
@@ -520,7 +520,7 @@ func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		if closeErr := db.Close(); closeErr != nil {
 			log.Warn("close db failed", zap.Error(err))
 		}
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("Open database connection failed")
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 	}
 	return db, nil
 }

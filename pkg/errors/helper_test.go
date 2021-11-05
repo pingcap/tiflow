@@ -65,17 +65,6 @@ func TestIsRetryableError(t *testing.T) {
 	}
 }
 
-func TestIsHTTPBadRequestError(t *testing.T) {
-	err := ErrAPIInvalidParam.GenWithStack("aa")
-	require.Equal(t, true, IsHTTPBadRequestError(err))
-	err = ErrAPIInvalidParam.Wrap(errors.New("aa"))
-	require.Equal(t, true, IsHTTPBadRequestError(err))
-	err = ErrPDEtcdAPIError.GenWithStack("aa")
-	require.Equal(t, false, IsHTTPBadRequestError(err))
-	err = nil
-	require.Equal(t, false, IsHTTPBadRequestError(err))
-}
-
 func TestChangefeedFastFailError(t *testing.T) {
 	t.Parallel()
 	err := ErrGCTTLExceeded.FastGenByArgs()

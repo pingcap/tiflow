@@ -15,7 +15,6 @@ package errors
 
 import (
 	"context"
-	"strings"
 
 	"github.com/pingcap/errors"
 )
@@ -93,34 +92,4 @@ func IsRetryableError(err error) bool {
 		return false
 	}
 	return true
-}
-
-// HTTPBadRequestError is some errors that will cause a BadRequestError in http handler
-var HTTPBadRequestError = []*errors.Error{
-	ErrAPIInvalidParam, ErrSinkURIInvalid, ErrStartTsBeforeGC,
-	ErrChangeFeedNotExists, ErrTargetTsBeforeStartTs, ErrTableIneligible,
-	ErrFilterRuleInvalid, ErrChangefeedUpdateRefused, ErrMySQLConnectionError,
-	ErrMySQLInvalidConfig,
-}
-
-// IsHTTPBadRequestError check if a error is a http bad request error
-func IsHTTPBadRequestError(err error) bool {
-	if err == nil {
-		return false
-	}
-	for _, e := range HTTPBadRequestError {
-		if e.Equal(err) {
-			return true
-		}
-
-		rfcCode, ok := RFCCode(err)
-		if ok && e.RFCCode() == rfcCode {
-			return true
-		}
-
-		if strings.Contains(err.Error(), string(e.RFCCode())) {
-			return true
-		}
-	}
-	return false
 }
