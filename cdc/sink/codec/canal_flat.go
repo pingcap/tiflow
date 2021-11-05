@@ -32,8 +32,8 @@ type CanalFlatEventBatchEncoder struct {
 	builder       *canalEntryBuilder
 	unresolvedBuf []canalFlatMessageInterface
 	resolvedBuf   []canalFlatMessageInterface
-	// When it is true, canal-json would generate TiDB extended information
-	// At the moment, only `tidbWaterMarkType` and `_tidb` fields.
+	// When it is true, canal-json would generate TiDB extension information
+	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
 }
 
@@ -67,6 +67,8 @@ func newCanalFlatEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder
 	return &canalFlatEventBatchEncoderBuilder{opts: opts}
 }
 
+// The TiCDC Canal-JSON implementation extend the official format with a TiDB extension field.
+// canalFlatMessageInterface is used to support this without affect the original format.
 type canalFlatMessageInterface interface {
 	getTikvTs() uint64
 	getSchema() *string
@@ -258,7 +260,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessage4CheckpointEvent(ts uint64) *
 			IsDDL:         false,
 			EventType:     tidbWaterMarkType,
 			ExecutionTime: convertToCanalTs(ts),
-			BuildTime:     time.Now().UnixNano() / 1e6,
+			BuildTime:     time.Now().UnixNano() / 1e6, // converts to milliseconds
 		},
 		Extensions: &tidbExtension{Tso: ts},
 	}
@@ -353,7 +355,7 @@ func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 	if s, ok := params["enable-tidb-extension"]; ok {
 		a, err := strconv.ParseBool(s)
 		if err != nil {
-			return err
+			return cerrors.WrapError(cerrors.ErrSinkInvalidConfig, err)
 		}
 		c.enableTiDBExtension = a
 	}
