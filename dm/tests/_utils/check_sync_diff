@@ -23,7 +23,7 @@ cd $workdir
 i=0
 while [ $i -lt $check_time ]; do
 	rm -rf $OUTPUT_DIR
-	$binary --log-level=debug --config=$conf >$LOG 2>&1
+	$binary --config=$conf >>$LOG 2>&1
 	ret=$?
 	if [ "$ret" == 0 ]; then
 		echo "check diff successfully"
@@ -34,8 +34,6 @@ while [ $i -lt $check_time ]; do
 	fi
 	((i++))
 	echo "check diff failed $i-th time, retry later"
-	cat $LOG
-	printf "\n"
 	sleep 2
 done
 
