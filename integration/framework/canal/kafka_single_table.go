@@ -27,9 +27,9 @@ const (
 
 // SingleTableTask provides a basic implementation for an Avro test case
 type SingleTableTask struct {
-	TableName       string
-	UseJSON         bool
-	EnableWatermark bool
+	TableName           string
+	UseJSON             bool
+	EnableTiDBExtension bool
 }
 
 // Name implements Task
@@ -48,7 +48,7 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 	}
 
 	sinkURI := "kafka://kafka:9092/" + testDbName + "?kafka-version=2.6.0&protocol=" + protocol
-	if c.EnableWatermark {
+	if c.EnableTiDBExtension {
 		sinkURI += "&enable-tidb-extension=true"
 	}
 

@@ -83,7 +83,7 @@ func testCanalJSON() {
 func testCanalJSONWatermark() {
 	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
 	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
-	task := &canal.SingleTableTask{TableName: "test", UseJSON: true, EnableWatermark: true}
+	task := &canal.SingleTableTask{TableName: "test", UseJSON: true, EnableTiDBExtension: true}
 	testCases := []framework.Task{
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
@@ -149,7 +149,7 @@ func main() {
 		testCanal()
 	} else if *testProtocol == "canalJson" {
 		testCanalJSON()
-	} else if *testProtocol == "canalJson-watermark" {
+	} else if *testProtocol == "canalJson-extension" {
 		testCanalJSONWatermark()
 	} else if *testProtocol == "mysql" {
 		testMySQL()
