@@ -93,12 +93,12 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 		case message.TypeStop:
 			t.stop(nil)
 			break
+		case message.TypeTick:
 		case message.TypeBarrier:
 			err := t.sinkNode.HandleMessages(ctx, msgs[i])
 			if err != nil {
 				t.stop(err)
 			}
-		case message.TypeTick:
 		}
 		// process message for each node
 		// get message from puller
@@ -114,7 +114,48 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 type node struct {
 	eventStash     *pipeline.Message
 	messageFetcher MessageFetcher
-	trySendMessage func(ctx context.Context, message *pipeline.Message) bool
+	messageSender  MessageSender
+}
+
+type MessageSender interface {
+	TrySendMessage(ctx context.Context, message *pipeline.Message) bool
+}
+
+type sorterMessageSender struct {
+	sorter *sorterNode
+}
+
+func (s *sorterMessageSender) TrySendMessage(ctx context.Context, message *pipeline.Message) bool {
+	return s.sorter.sorter.TryAddEntry(ctx, message.PolymorphicEvent)
+}
+
+type cyclicMessageSender struct {
+	tableActor *tableActor
+	cyclic     *cyclicMarkNode
+}
+
+func (s *cyclicMessageSender) TrySendMessage(ctx context.Context, message *pipeline.Message) bool {
+	sent, err := s.cyclic.handleMsg(*message, s.cyclic)
+	if err != nil {
+		s.tableActor.reportErr(err)
+	}
+	return sent
+}
+
+type sinkMessageSender struct {
+	tableActor *tableActor
+	sink       *sinkNode
+}
+
+func (s *sinkMessageSender) TrySendMessage(ctx context.Context, message *pipeline.Message) bool {
+	if message.PolymorphicEvent.RawKV.OpType != model.OpTypeResolved && !message.PolymorphicEvent.IsPrepared() {
+		return false
+	}
+	err := s.sink.HandleMessage(ctx, *message)
+	if err != nil {
+		s.tableActor.reportErr(err)
+	}
+	return true
 }
 
 type MessageFetcher interface {
@@ -157,7 +198,7 @@ func (n *node) tryRun(ctx context.Context) {
 		if n.eventStash == nil {
 			return
 		}
-		if n.trySendMessage(ctx, n.eventStash) {
+		if n.messageSender.TrySendMessage(ctx, n.eventStash) {
 			n.eventStash = nil
 		} else {
 			return
@@ -193,9 +234,7 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 	t.nodes = append(t.nodes,
 		&node{
 			messageFetcher: &ChannelMessageFetcher{OutputChan: t.pullerNode.outputCh},
-			trySendMessage: func(ctx context.Context, message *pipeline.Message) bool {
-				return t.sorterNode.sorter.TryAddEntry(ctx, message.PolymorphicEvent)
-			},
+			messageSender:  &sorterMessageSender{sorter: t.sorterNode},
 		})
 
 	if t.cyclicEnabled {
@@ -206,13 +245,7 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 		}
 		t.nodes = append(t.nodes, &node{
 			messageFetcher: &ChannelMessageFetcher{OutputChan: t.sorterNode.outputCh},
-			trySendMessage: func(ctx context.Context, message *pipeline.Message) bool {
-				sent, err := t.cyclicNode.handleMsg(*message, t.cyclicNode)
-				if err != nil {
-					t.reportErr(err)
-				}
-				return sent
-			},
+			messageSender:  &cyclicMessageSender{tableActor: t, cyclic: t.cyclicNode},
 		},
 		)
 	}
@@ -225,25 +258,12 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 	if t.cyclicEnabled {
 		t.nodes = append(t.nodes, &node{
 			messageFetcher: &ListMessageFetcher{MessageList: t.cyclicNode.queue},
-			trySendMessage: func(ctx context.Context, message *pipeline.Message) bool {
-				if !message.PolymorphicEvent.IsPrepared() {
-					return false
-				}
-				//todo: return t.sinkNode.HandleMessages(ctx, message)
-				return false
-			},
+			messageSender:  &sinkMessageSender{tableActor: t, sink: t.sinkNode},
 		})
 	} else {
 		t.nodes = append(t.nodes, &node{
 			messageFetcher: &ChannelMessageFetcher{OutputChan: t.sorterNode.outputCh},
-			trySendMessage: func(ctx context.Context, message *pipeline.Message) bool {
-				if message.PolymorphicEvent.RawKV.OpType != model.OpTypeResolved && !message.PolymorphicEvent.IsPrepared() {
-					return false
-				}
-				//todo: non blocking
-				t.sinkNode.HandleMessage(ctx, *message)
-				return true
-			},
+			messageSender:  &sinkMessageSender{tableActor: t, sink: t.sinkNode},
 		})
 	}
 	t.started = true
