@@ -60,7 +60,6 @@ type ChangefeedResp struct {
 
 // MarshalJSON use to marshal ChangefeedResp
 func (c ChangefeedResp) MarshalJSON() ([]byte, error) {
-	panic("")
 	// alias the original type to prevent recursive call of MarshalJSON
 	type Alias ChangefeedResp
 	if c.FeedState == string(model.StateNormal) {
