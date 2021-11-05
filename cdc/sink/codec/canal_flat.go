@@ -37,7 +37,7 @@ type CanalFlatEventBatchEncoder struct {
 	enableTiDBExtension bool
 }
 
-const tidbWaterMarkType = "TiDB_WATERMARK"
+const tidbWaterMarkType = "TIDB_WATERMARK"
 
 // NewCanalFlatEventBatchEncoder creates a new CanalFlatEventBatchEncoder
 func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
