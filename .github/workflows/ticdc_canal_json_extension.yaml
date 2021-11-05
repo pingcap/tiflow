@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  CanalJson-with-watermark-integration:
+  canal-adapter-integration:
     runs-on: ubuntu-latest
 
     steps:
@@ -65,7 +65,7 @@ jobs:
         timeout-minutes: 45
         run: |
           cd $GITHUB_WORKSPACE/integration
-          ./integration -protocol=canalJson-watermark
+          ./integration -protocol=canalJson-extension
 
       - name: Try to dump container logs
         if: ${{ failure() }}
