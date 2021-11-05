@@ -417,11 +417,6 @@ function DM_142_CASE {
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add partition (partition p1 values less than (200));"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(130),(131),(132),(133),(134),(135);"
 
-	sleep 10
-	mysql --host 127.0.0.1 --port 3306 -u root -p123456 -e "select * from ${shardddl1}.${tb1};"
-	mysql --host 127.0.0.1 --port 3307 -u root -p123456 -e "select * from ${shardddl1}.${tb1};"
-	mysql --host 127.0.0.1 --port 3307 -u root -p123456 -e "select * from ${shardddl1}.${tb2};"
-	mysql --host 127.0.0.1 --port 4000 -u test -p123456 -e "select * from ${shardddl}.${tb};"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 }
 
@@ -433,11 +428,12 @@ function DM_142 {
          run_sql_source2 \"create table ${shardddl1}.${tb2} (id int primary key) partition by range(id)(partition p0 values less than (100));\"" \
 		"clean_table" "pessimistic"
 
-	run_case 142 "double-source-optimistic" \
-		"run_sql_source1 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id)(partition p0 values less than (100));\"; \
-         run_sql_source2 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id)(partition p0 values less than (100));\"; \
-         run_sql_source2 \"create table ${shardddl1}.${tb2} (id int primary key) partition by range(id)(partition p0 values less than (100));\"" \
-		"clean_table" "optimistic"
+	# Note: not support optimistic partition yet
+	#run_case 142 "double-source-optimistic" \
+	#	"run_sql_source1 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id)(partition p0 values less than (100));\"; \
+	#     run_sql_source2 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id)(partition p0 values less than (100));\"; \
+	#     run_sql_source2 \"create table ${shardddl1}.${tb2} (id int primary key) partition by range(id)(partition p0 values less than (100));\"" \
+	#	"clean_table" "optimistic"
 }
 
 function DM_143_CASE {
