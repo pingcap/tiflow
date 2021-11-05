@@ -52,7 +52,7 @@ type testReaderSuite struct {
 }
 
 func TestReader(t *testing.T) {
-	var _ = Suite(&testReaderSuite{})
+	_ = Suite(&testReaderSuite{})
 	TestingT(t)
 }
 

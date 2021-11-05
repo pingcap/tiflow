@@ -26,7 +26,7 @@ import (
 )
 
 func TestMetaSuite(t *testing.T) {
-	var _ = Suite(&testMetaSuite{})
+	_ = Suite(&testMetaSuite{})
 	TestingT(t)
 }
 

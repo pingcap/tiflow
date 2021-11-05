@@ -33,7 +33,7 @@ import (
 )
 
 func TestFileUtilSuite(t *testing.T) {
-	var _ = check.Suite(&testFileUtilSuite{})
+	_ = check.Suite(&testFileUtilSuite{})
 	check.TestingT(t)
 }
 

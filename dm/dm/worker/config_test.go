@@ -25,9 +25,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
-var (
-	defaultConfigFile = "./dm-worker.toml"
-)
+var defaultConfigFile = "./dm-worker.toml"
 
 func TestConfigSuite(t *testing.T) {
 	_ = check.Suite(&testConfigSuite{})

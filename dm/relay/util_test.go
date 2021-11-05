@@ -29,7 +29,7 @@ import (
 )
 
 func TestUtilSuite(t *testing.T) {
-	var _ = Suite(&testUtilSuite{})
+	_ = Suite(&testUtilSuite{})
 	TestingT(t)
 }
 

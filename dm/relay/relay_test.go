@@ -40,7 +40,7 @@ import (
 )
 
 func TestRelaySuite(t *testing.T) {
-	var _ = Suite(&testRelaySuite{})
+	_ = Suite(&testRelaySuite{})
 	TestingT(t)
 }
 

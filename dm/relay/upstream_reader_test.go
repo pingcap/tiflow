@@ -26,7 +26,7 @@ import (
 )
 
 func TestRemoteReaderSuite(t *testing.T) {
-	var _ = check.Suite(&testRemoteReaderSuite{})
+	_ = check.Suite(&testRemoteReaderSuite{})
 	check.TestingT(t)
 }
 

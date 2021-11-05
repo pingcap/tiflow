@@ -32,7 +32,7 @@ import (
 type testTaskCheckerSuite struct{}
 
 func TestTaskCheckerSuite(t *testing.T) {
-	var _ = check.Suite(&testTaskCheckerSuite{})
+	_ = check.Suite(&testTaskCheckerSuite{})
 	check.TestingT(t)
 }
 

@@ -36,7 +36,7 @@ import (
 type testRelay struct{}
 
 func TestRelay(t *testing.T) {
-	var _ = Suite(&testRelay{})
+	_ = Suite(&testRelay{})
 	TestingT(t)
 }
 

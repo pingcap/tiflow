@@ -24,7 +24,7 @@ import (
 )
 
 func TestReaderRetrySuite(t *testing.T) {
-	var _ = Suite(&testReaderRetrySuite{})
+	_ = Suite(&testReaderRetrySuite{})
 	TestingT(t)
 }
 

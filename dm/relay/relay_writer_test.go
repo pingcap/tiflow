@@ -32,7 +32,7 @@ import (
 )
 
 func TestFileWriterSuite(t *testing.T) {
-	var _ = check.Suite(&testFileWriterSuite{})
+	_ = check.Suite(&testFileWriterSuite{})
 	check.TestingT(t)
 }
 

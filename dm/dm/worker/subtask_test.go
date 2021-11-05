@@ -43,7 +43,7 @@ const (
 type testSubTask struct{}
 
 func TestSubTask(t *testing.T) {
-	var _ = Suite(&testSubTask{})
+	_ = Suite(&testSubTask{})
 	TestingT(t)
 }
 

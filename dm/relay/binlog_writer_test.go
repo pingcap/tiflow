@@ -26,7 +26,7 @@ import (
 )
 
 func TestBinlogWriterSuite(t *testing.T) {
-	var _ = Suite(&testBinlogWriterSuite{})
+	_ = Suite(&testBinlogWriterSuite{})
 	TestingT(t)
 }
 

@@ -117,7 +117,7 @@ func (t *testServer) testWorker(c *C) {
 type testServer2 struct{}
 
 func TestServer2(t *testing.T) {
-	var _ = Suite(&testServer2{})
+	_ = Suite(&testServer2{})
 	TestingT(t)
 }
 

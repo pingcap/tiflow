@@ -22,7 +22,7 @@ import (
 )
 
 func TestErrorSuite(t *testing.T) {
-	var _ = check.Suite(&testErrorSuite{})
+	_ = check.Suite(&testErrorSuite{})
 	check.TestingT(t)
 }
 

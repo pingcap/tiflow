@@ -53,7 +53,7 @@ const (
 var etcdErrCompacted = v3rpc.ErrCompacted
 
 func TestServer(t *testing.T) {
-	var _ = Suite(&testServer{})
+	_ = Suite(&testServer{})
 	TestingT(t)
 }
 

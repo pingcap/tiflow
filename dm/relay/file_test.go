@@ -32,7 +32,7 @@ import (
 )
 
 func TestFileSuite(t *testing.T) {
-	var _ = Suite(&testFileSuite{})
+	_ = Suite(&testFileSuite{})
 	TestingT(t)
 }
 

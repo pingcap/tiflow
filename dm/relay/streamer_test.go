@@ -28,7 +28,7 @@ import (
 )
 
 func TestStreamerSuite(t *testing.T) {
-	var _ = Suite(&testStreamerSuite{})
+	_ = Suite(&testStreamerSuite{})
 	TestingT(t)
 }
 
