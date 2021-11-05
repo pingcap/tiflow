@@ -40,14 +40,14 @@ type SorterConfig struct {
 
 // LevelDBConfig represents leveldb sorter config.
 type LevelDBConfig struct {
-	// LevelDBCount is the number of leveldb count.
+	// Count is the number of leveldb count.
 	//
 	// The default value is 16.
-	LevelDBCount int `toml:"leveldb-count" json:"leveldb-count"`
-	// LevelDBConcurrency is the maximum write and read concurrency.
+	Count int `toml:"count" json:"count"`
+	// Concurrency is the maximum write and read concurrency.
 	//
 	// The default value is 256.
-	LevelDBConcurrency int `toml:"leveldb-concurrency" json:"leveldb-concurrency"`
+	Concurrency int `toml:"concurrency" json:"concurrency"`
 	// MaxOpenFiles is the maximum number of open FD by leveldb sorter.
 	//
 	// The default value is 10000.

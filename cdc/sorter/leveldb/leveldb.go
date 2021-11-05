@@ -40,8 +40,8 @@ import (
 func OpenDB(ctx context.Context, id int, cfg *config.SorterConfig) (*leveldb.DB, error) {
 	lcfg := cfg.LevelDB
 	var option opt.Options
-	option.OpenFilesCacheCapacity = lcfg.MaxOpenFiles / lcfg.LevelDBCount
-	option.BlockCacheCapacity = lcfg.BlockCacheSize / lcfg.LevelDBCount
+	option.OpenFilesCacheCapacity = lcfg.MaxOpenFiles / lcfg.Count
+	option.BlockCacheCapacity = lcfg.BlockCacheSize / lcfg.Count
 	option.BlockSize = lcfg.BlockSize
 	option.WriteBuffer = lcfg.WriterBufferSize
 	option.Compression = opt.NoCompression
@@ -100,8 +100,8 @@ func NewLevelDBActor(
 	wb := leveldb.MakeBatch(wbSize)
 	// IterCount limits the total number of opened iterators to release leveldb
 	// resources (memtables and SST files) in time.
-	iterSema := semaphore.NewWeighted(int64(cfg.LevelDB.LevelDBConcurrency))
-	mb := actor.NewMailbox(actor.ID(id), cfg.LevelDB.LevelDBConcurrency)
+	iterSema := semaphore.NewWeighted(int64(cfg.LevelDB.Concurrency))
+	mb := actor.NewMailbox(actor.ID(id), cfg.LevelDB.Concurrency)
 	wg.Add(1)
 	return &LevelActor{
 		id:       actor.ID(id),

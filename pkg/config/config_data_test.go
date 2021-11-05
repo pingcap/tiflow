@@ -95,8 +95,8 @@ const (
     "sort-dir": "/tmp/sorter",
     "enable-leveldb-sorter": false,
     "leveldb": {
-      "leveldb-count": 16,
-      "leveldb-concurrency": 256,
+      "count": 16,
+      "concurrency": 256,
       "max-open-files": 10000,
       "block-size": 65536,
       "block-cache-size": 0,

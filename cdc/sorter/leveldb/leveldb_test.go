@@ -42,7 +42,7 @@ func TestMaybeWrite(t *testing.T) {
 
 	cfg := config.GetDefaultServerConfig().Clone().Sorter
 	cfg.SortDir = t.TempDir()
-	cfg.LevelDBCount = 1
+	cfg.LevelDB.Count = 1
 
 	db, err := OpenDB(ctx, 1, cfg)
 	require.Nil(t, err)
@@ -106,7 +106,7 @@ func TestPutReadDelete(t *testing.T) {
 	ctx := context.Background()
 	cfg := config.GetDefaultServerConfig().Clone().Sorter
 	cfg.SortDir = t.TempDir()
-	cfg.LevelDBCount = 1
+	cfg.LevelDB.Count = 1
 
 	db, err := OpenDB(ctx, 1, cfg)
 	require.Nil(t, err)
@@ -209,7 +209,7 @@ func TestModelChecking(t *testing.T) {
 	ctx := context.Background()
 	cfg := config.GetDefaultServerConfig().Clone().Sorter
 	cfg.SortDir = t.TempDir()
-	cfg.LevelDBCount = 1
+	cfg.LevelDB.Count = 1
 
 	db, err := OpenDB(ctx, 1, cfg)
 	require.Nil(t, err)
@@ -293,7 +293,7 @@ func TestContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := config.GetDefaultServerConfig().Clone().Sorter
 	cfg.SortDir = t.TempDir()
-	cfg.LevelDBCount = 1
+	cfg.LevelDB.Count = 1
 
 	db, err := OpenDB(ctx, 1, cfg)
 	require.Nil(t, err)
