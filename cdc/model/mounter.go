@@ -35,10 +35,11 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 		return NewResolvedPolymorphicEvent(rawKV.RegionID, rawKV.CRTs)
 	}
 	return &PolymorphicEvent{
-		StartTs:  rawKV.StartTs,
-		CRTs:     rawKV.CRTs,
-		RawKV:    rawKV,
-		finished: nil,
+		StartTs:    rawKV.StartTs,
+		CRTs:       rawKV.CRTs,
+		RawKV:      rawKV,
+		finished:   nil,
+		isPrepared: false,
 	}
 }
 
@@ -62,7 +63,7 @@ func (e *PolymorphicEvent) RegionID() uint64 {
 func (e *PolymorphicEvent) SetUpFinishedChan() {
 	if e.finished == nil {
 		e.finished = make(chan struct{})
-		e.isPrepared = true
+		e.isPrepared = false
 	}
 }
 

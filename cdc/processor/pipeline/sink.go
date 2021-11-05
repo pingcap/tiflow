@@ -101,8 +101,7 @@ func (n *sinkNode) CheckpointTs() model.Ts { return atomic.LoadUint64(&n.checkpo
 func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
 
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
-	// do nothing
-	return nil
+	return n.Start(ctx, ctx.ChangefeedVars(), ctx.GlobalVars())
 }
 
 func (n *sinkNode) Start(ctx context.Context, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
@@ -115,7 +114,7 @@ func (n *sinkNode) Start(ctx context.Context, info *cdcContext.ChangefeedVars, v
 // no more events can be sent to this sink node afterwards.
 func (n *sinkNode) stop(ctx context.Context) (err error) {
 	// table stopped status must be set after underlying sink is closed
-	defer n.status.Store(TableStatusStopped)
+	n.status.Store(TableStatusStopped)
 	err = n.sink.Close(ctx)
 	if err != nil {
 		return
@@ -196,7 +195,7 @@ func (n *sinkNode) emitEvent(ctx context.Context, event *model.PolymorphicEvent)
 		n.eventBuffer = append(n.eventBuffer, event)
 	}
 
-	if len(n.eventBuffer) >= defaultSyncResolvedBatch {
+	if len(n.eventBuffer) >= 1 {
 		if err := n.emitRow2Sink(ctx); err != nil {
 			return errors.Trace(err)
 		}
@@ -314,6 +313,13 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 		return cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	}
 	msg := ctx.Message()
+	return n.HandleMessage(ctx, msg)
+}
+
+func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) error {
+	if n.status == TableStatusStopped {
+		return cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+	}
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent

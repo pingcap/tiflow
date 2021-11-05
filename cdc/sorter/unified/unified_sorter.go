@@ -280,6 +280,7 @@ func (s *UnifiedSorter) TryAddEntry(ctx context.Context, entry *model.Polymorphi
 	case <-ctx.Done():
 	case <-s.closeCh:
 	case s.inputCh <- entry:
+		return true
 	default:
 	}
 	return false

@@ -16,6 +16,7 @@ package pipeline
 import (
 	"container/list"
 	"context"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
@@ -74,6 +75,8 @@ type tableActor struct {
 	sinkNode   *sinkNode
 
 	nodes []*node
+
+	lastBarrierTsUpdateTime time.Time
 }
 
 var _ TablePipeline = (*tableActor)(nil)
@@ -90,6 +93,11 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 		case message.TypeStop:
 			t.stop(nil)
 			break
+		case message.TypeBarrier:
+			err := t.sinkNode.HandleMessages(ctx, msgs[i])
+			if err != nil {
+				t.stop(err)
+			}
 		case message.TypeTick:
 		}
 		// process message for each node
@@ -229,11 +237,12 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 		t.nodes = append(t.nodes, &node{
 			messageFetcher: &ChannelMessageFetcher{OutputChan: t.sorterNode.outputCh},
 			trySendMessage: func(ctx context.Context, message *pipeline.Message) bool {
-				if !message.PolymorphicEvent.IsPrepared() {
+				if message.PolymorphicEvent.RawKV.OpType != model.OpTypeResolved && !message.PolymorphicEvent.IsPrepared() {
 					return false
 				}
-				//todo: return t.sinkNode.HandleMessages(ctx, message)
-				return false
+				//todo: non blocking
+				t.sinkNode.HandleMessage(ctx, *message)
+				return true
 			},
 		})
 	}
@@ -274,12 +283,13 @@ func (t *tableActor) CheckpointTs() model.Ts {
 
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
-	if t.sinkNode.barrierTs != ts {
+	if t.sinkNode.barrierTs != ts || t.lastBarrierTsUpdateTime.Add(time.Minute).Before(time.Now()) {
 		msg := message.BarrierMessage(ts)
 		err := defaultRouter.Send(actor.ID(t.tableID), msg)
 		if err != nil {
 			log.Warn("send fails", zap.Reflect("msg", msg), zap.Error(err))
 		}
+		t.lastBarrierTsUpdateTime = time.Now()
 	}
 }
 
