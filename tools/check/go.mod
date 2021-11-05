@@ -11,7 +11,6 @@ require (
 	github.com/golangci/golangci-lint v1.42.1
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
-	github.com/jstemmer/go-junit-report v0.9.1
 	github.com/mattn/goveralls v0.0.8
 	github.com/pingcap/errors v0.11.5-0.20211009033009-93128226aaa3
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
@@ -21,6 +20,7 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	golang.org/x/mod v0.5.1 // indirect
 	golang.org/x/tools v0.1.6 // indirect
+	gotest.tools/gotestsum v1.7.0 // indirect
 	mvdan.cc/gofumpt v0.1.1
 	mvdan.cc/sh/v3 v3.3.1
 )

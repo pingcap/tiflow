@@ -608,6 +608,10 @@ const (
 	codeSchemaTrackerMarshalJSON
 	codeSchemaTrackerUnMarshalJSON
 	codeSchemaTrackerUnSchemaNotExist
+	codeSchemaTrackerCannotSetDownstreamSQLMode
+	codeSchemaTrackerCannotInitDownstreamParser
+	codeSchemaTrackerCannotMockDownstreamTable
+	codeSchemaTrackerCannotFetchDownstreamCreateTableStmt
 )
 
 // HA scheduler.
@@ -1243,7 +1247,15 @@ var (
 		"fail to restore the statement", "")
 	ErrSchemaTrackerCannotDropTable = New(codeSchemaTrackerCannotDropTable, ClassSchemaTracker, ScopeInternal, LevelHigh,
 		"failed to drop table for %v in schema tracker", "")
-	ErrSchemaTrackerInit = New(codeSchemaTrackerInit, ClassSchemaTracker, ScopeInternal, LevelHigh, "failed to create schema tracker", "")
+	ErrSchemaTrackerInit                       = New(codeSchemaTrackerInit, ClassSchemaTracker, ScopeInternal, LevelHigh, "failed to create schema tracker", "")
+	ErrSchemaTrackerCannotSetDownstreamSQLMode = New(codeSchemaTrackerCannotSetDownstreamSQLMode, ClassSchemaTracker, ScopeInternal, LevelHigh,
+		"failed to set default downstream sql_mode %v in schema tracker", "")
+	ErrSchemaTrackerCannotInitDownstreamParser = New(codeSchemaTrackerCannotInitDownstreamParser, ClassSchemaTracker, ScopeInternal, LevelHigh,
+		"failed to init downstream parser by sql_mode %v in schema tracker", "")
+	ErrSchemaTrackerCannotMockDownstreamTable = New(codeSchemaTrackerCannotMockDownstreamTable, ClassSchemaTracker, ScopeInternal, LevelHigh,
+		"failed to mock downstream table by create table statement %v in schema tracker", "")
+	ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt = New(codeSchemaTrackerCannotFetchDownstreamCreateTableStmt, ClassSchemaTracker, ScopeInternal, LevelHigh,
+		"failed to fetch downstream table %v by show create table statement in schema tracker", "")
 
 	// HA scheduler.
 	ErrSchedulerNotStarted                = New(codeSchedulerNotStarted, ClassScheduler, ScopeInternal, LevelHigh, "the scheduler has not started", "")

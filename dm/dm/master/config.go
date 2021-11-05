@@ -90,6 +90,10 @@ func NewConfig() *Config {
 	return cfg
 }
 
+type ExperimentalFeatures struct {
+	OpenAPI bool `toml:"openapi"`
+}
+
 // Config is the configuration for dm-master.
 type Config struct {
 	flagSet *flag.FlagSet
@@ -134,6 +138,8 @@ type Config struct {
 
 	printVersion      bool
 	printSampleConfig bool
+
+	ExperimentalFeatures ExperimentalFeatures `toml:"experimental"`
 }
 
 func (c *Config) String() string {

@@ -1789,7 +1789,7 @@
           "hide": false,
           "interval": "$interval",
           "intervalFactor": 2,
-          "legendFormat": "{{task}} - max",
+          "legendFormat": "{{task}} - ideal",
           "refId": "B"
         }
       ],
@@ -4139,10 +4139,10 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.90, sum(rate(dm_syncer_replication_transaction_batch_bucket{instance=~\"$instance\",task=~\"$task\"}[$interval])) by (le,instance,task,queueNo))",
+          "expr": "histogram_quantile(0.90, sum(rate(dm_syncer_replication_transaction_batch_bucket{instance=~\"$instance\",task=~\"$task\"}[$interval])) by (le,instance,task,queueNo,type))",
           "hide": false,
           "interval": "",
-          "legendFormat": "{{task}} - {{queueNo}}",
+          "legendFormat": "{{task}} - {{queueNo}} - {{type}}",
           "refId": "B"
         }
       ],
