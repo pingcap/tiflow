@@ -30,8 +30,6 @@ while [ $i -lt $check_time ]; do
 	fi
 	((i++))
 	echo "check diff failed $i-th time, retry later"
-	cat $LOG
-	printf "\n"
 	sleep 2
 done
 
