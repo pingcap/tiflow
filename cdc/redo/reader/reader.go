@@ -231,7 +231,8 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 	for l.rowHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.rowHeap).(*logWithIdx)
 		if item.data.RedoRow != nil && item.data.RedoRow.Row != nil &&
-			item.data.RedoRow.Row.CommitTs > l.cfg.startTs {
+			item.data.RedoRow.Row.CommitTs > l.cfg.startTs &&
+			item.data.RedoRow.Row.CommitTs <= l.cfg.endTs {
 			ret = append(ret, item.data.RedoRow)
 			i++
 		}
@@ -292,7 +293,8 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 	for l.ddlHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.ddlHeap).(*logWithIdx)
 		if item.data.RedoDDL != nil && item.data.RedoDDL.DDL != nil &&
-			item.data.RedoDDL.DDL.CommitTs > l.cfg.startTs {
+			item.data.RedoDDL.DDL.CommitTs > l.cfg.startTs &&
+			item.data.RedoDDL.DDL.CommitTs <= l.cfg.endTs {
 			ret = append(ret, item.data.RedoDDL)
 			i++
 		}
