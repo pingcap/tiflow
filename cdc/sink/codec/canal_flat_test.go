@@ -32,9 +32,11 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)
-	msg, err := encoder.newFlatMessageForDML(testCaseUpdate)
+	message, err := encoder.newFlatMessageForDML(testCaseUpdate)
 	c.Assert(err, check.IsNil)
 
+	msg, ok := message.(*canalFlatMessage)
+	c.Assert(ok, check.IsTrue)
 	c.Assert(msg.EventType, check.Equals, "UPDATE")
 	c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(testCaseUpdate.CommitTs))
 	c.Assert(msg.tikvTs, check.Equals, testCaseUpdate.CommitTs)
@@ -75,6 +77,17 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 			"blob":    string(encodedBytes),
 		},
 	})
+
+	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
+	c.Assert(encoder, check.NotNil)
+	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
+	c.Assert(err, check.IsNil)
+
+	withExtension, ok := message.(*canalFlatMessageWithTiDBExtension)
+	c.Assert(ok, check.IsTrue)
+
+	c.Assert(withExtension.Extensions, check.NotNil)
+	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseUpdate.CommitTs)
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
@@ -82,9 +95,11 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)
 
-	msg := encoder.newFlatMessageForDDL(testCaseDdl)
-	c.Assert(msg, check.NotNil)
+	message := encoder.newFlatMessageForDDL(testCaseDdl)
+	c.Assert(message, check.NotNil)
 
+	msg, ok := message.(*canalFlatMessage)
+	c.Assert(ok, check.IsTrue)
 	c.Assert(msg.tikvTs, check.Equals, testCaseDdl.CommitTs)
 	c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(testCaseDdl.CommitTs))
 	c.Assert(msg.IsDDL, check.IsTrue)
@@ -92,6 +107,18 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	c.Assert(msg.Table, check.Equals, "person")
 	c.Assert(msg.Query, check.Equals, testCaseDdl.Query)
 	c.Assert(msg.EventType, check.Equals, "CREATE")
+
+	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
+	c.Assert(encoder, check.NotNil)
+
+	message = encoder.newFlatMessageForDDL(testCaseDdl)
+	c.Assert(message, check.NotNil)
+
+	withExtension, ok := message.(*canalFlatMessageWithTiDBExtension)
+	c.Assert(ok, check.IsTrue)
+
+	c.Assert(withExtension.Extensions, check.NotNil)
+	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseDdl.CommitTs)
 }
 
 func (s *canalFlatSuite) TestBatching(c *check.C) {
@@ -136,6 +163,21 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 
 	c.Assert(encoder.unresolvedBuf, check.HasLen, 0)
 	c.Assert(encoder.resolvedBuf, check.HasLen, 0)
+}
+
+func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
+	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: false}
+	c.Assert(encoder, check.NotNil)
+
+	msg, err := encoder.EncodeCheckpointEvent(2333)
+	c.Assert(err, check.IsNil)
+	c.Assert(msg, check.IsNil)
+
+	encoder.enableTiDBExtension = true
+	msg, err = encoder.EncodeCheckpointEvent(2333)
+	c.Assert(err, check.IsNil)
+	c.Assert(msg, check.NotNil)
 }
 
 var testCaseUpdate = &model.RowChangedEvent{
