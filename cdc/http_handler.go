@@ -33,7 +33,6 @@ import (
 )
 
 const (
-	// APIOpVarAdminJob is the key of admin job in HTTP API
 	APIOpVarAdminJob = "admin-job"
 	// APIOpVarChangefeedID is the key of changefeed ID in HTTP API
 	APIOpVarChangefeedID = "cf-id"
