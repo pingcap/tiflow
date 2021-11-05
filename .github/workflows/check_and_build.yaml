@@ -57,12 +57,12 @@ jobs:
       run: make build
 
   arm_build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted,ARM64]
     name: Make Build
     strategy:
       fail-fast: false
       matrix:
-        arch: [aarch64]
+        arch: [ARM64]
     steps:
       - name: Check out code
         uses: actions/checkout@v2
