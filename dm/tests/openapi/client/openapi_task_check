@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 import sys
 import requests
 
@@ -156,6 +157,20 @@ def get_task_status_failed(task_name):
     resp = requests.get(url=url)
     print("get_task_status_failed resp=", resp.json())
     assert resp.status_code == 400
+
+
+def get_illegal_char_task_status_failed():
+    # task name contains illegal char but api server can handle it.
+    # return 400 is because of the task is not started.
+    url = API_ENDPOINT + "/" + ILLEGAL_CHAR_TASK_NAME + "/status"
+    resp = requests.get(url=url)
+    print("get_illegal_char_task_status_failed resp=", resp.json())
+    assert resp.status_code == 400
+    if sys.version_info.major == 2:
+        # need decode in python2
+        assert ILLEGAL_CHAR_TASK_NAME.decode("utf-8") in resp.json()["error_msg"]
+    else:
+        assert ILLEGAL_CHAR_TASK_NAME in resp.json()["error_msg"]
 
 
 def get_task_status_success(task_name, total):
