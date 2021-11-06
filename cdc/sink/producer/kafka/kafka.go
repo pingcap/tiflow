@@ -35,8 +35,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
-
-	kafkaPkg "github.com/pingcap/ticdc/pkg/kafka"
 )
 
 const defaultPartitionNum = 3
@@ -412,7 +410,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 }
 
 func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
-	admin, err := kafkaPkg.NewAdmin(config.BrokerEndpoints, saramaConfig)
+	admin, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return err
 	}
@@ -422,9 +420,15 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 		}
 	}()
 
-	realPartitionCount, err := admin.GetPartitionCount(config.TopicName)
+	topics, err := admin.ListTopics()
 	if err != nil {
 		return err
+	}
+
+	var realPartitionCount int32 = 0
+	info, ok := topics[config.TopicName]
+	if ok {
+		realPartitionCount = info.NumPartitions
 	}
 
 	// if user specify cdc to create the topic, we must make sure that topic number and replication-factor is given
@@ -441,10 +445,14 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 			log.Warn("partition-num is not set, use the default partition count",
 				zap.String("topic", config.TopicName), zap.Int32("partitions", config.PartitionNum))
 		}
-		return admin.CreateTopic(config.TopicName, &sarama.TopicDetail{
+		err := admin.CreateTopic(config.TopicName, &sarama.TopicDetail{
 			NumPartitions:     config.PartitionNum,
 			ReplicationFactor: config.ReplicationFactor,
-		})
+		}, false)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return err
+		}
+		return nil
 	}
 
 	// topic should have already created by the user, `realPartitionCount` won't be 0.
