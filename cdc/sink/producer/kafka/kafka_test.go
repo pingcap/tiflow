@@ -98,6 +98,12 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	for k, v := range opts {
 		c.Assert(v, check.Equals, expectedOpts[k])
 	}
+
+	uri = "kafka://127.0.0.1:9092/?kafka-version=2.6.0"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	err = cfg.Initialize(sinkURI, replicaConfig, opts)
+	c.Assert(err, check.ErrorMatches, ".*topic name not found.*")
 }
 
 func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
