@@ -16,7 +16,6 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"regexp"
 	"strconv"
 	"sync"
@@ -305,12 +304,12 @@ func (s *intReactorState) GetPatches() [][]DataPatch {
 	return [][]DataPatch{}
 }
 
-type linearizabilityReactor struct {
+type linearityReactor struct {
 	state     *intReactorState
 	tickCount int
 }
 
-func (r *linearizabilityReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
+func (r *linearityReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
 	r.state = state.(*intReactorState)
 	if r.state.isUpdated {
 		if r.state.val < r.tickCount {
@@ -325,7 +324,8 @@ func (r *linearizabilityReactor) Tick(ctx context.Context, state ReactorState) (
 	return r.state, nil
 }
 
-func (s *etcdWorkerSuite) TestLinearizability(c *check.C) {
+// TestLinearity test ReactorState change are linear.
+func (s *etcdWorkerSuite) TestLinearity(c *check.C) {
 	defer testleak.AfterTest(c)()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
@@ -341,7 +341,7 @@ func (s *etcdWorkerSuite) TestLinearizability(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}
 
-	reactor, err := NewEtcdWorker(cli0, testEtcdKeyPrefix+"/lin", &linearizabilityReactor{
+	reactor, err := NewEtcdWorker(cli0, testEtcdKeyPrefix+"/lin", &linearityReactor{
 		state:     nil,
 		tickCount: 999,
 	}, &intReactorState{
@@ -760,25 +760,4 @@ func (s *etcdWorkerSuite) TestModifyAfterDelete(c *check.C) {
 
 	_ = cli1.Unwrap().Close()
 	_ = cli2.Unwrap().Close()
-}
-
-func (s *etcdWorkerSuite) TestGetPatchGroup(c *check.C) {
-	patchGroupSize := 1000
-	patchGroup := make([][]DataPatch, patchGroupSize)
-	for i := 0; i < patchGroupSize; i++ {
-		patches := []DataPatch{&SingleDataPatch{
-			Key: util.NewEtcdKey(fmt.Sprintf("/key%d", i)),
-			Func: func(old []byte) (newValue []byte, changed bool, err error) {
-				return nil, true, nil
-			},
-		}}
-		patchGroup[i] = patches
-	}
-	for len(patchGroup) > 0 {
-		batchPatches, n := getBatchPatches(patchGroup)
-		c.Assert(len(batchPatches), check.LessEqual, maxBatchPatchSize)
-		patchGroup = patchGroup[n:]
-	}
-
-	c.Assert(len(patchGroup), check.Equals, 0)
 }

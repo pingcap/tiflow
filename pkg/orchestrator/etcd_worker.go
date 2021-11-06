@@ -156,29 +156,13 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				continue
 			}
 			responses = append(responses, response)
-
-			// try to receive more response from watchCh
-		BATCH:
-			for {
-				select {
-				case response = <-watchCh:
-					if err := response.Err(); err != nil {
-						return errors.Trace(err)
-					}
-					lastReceivedEventTime = time.Now()
-					if worker.revision >= response.Header.GetRevision() {
-						continue
-					}
-					worker.revision = response.Header.GetRevision()
-					if response.IsProgressNotify() {
-						continue
-					}
-					responses = append(responses, response)
-					log.Info("responses length", zap.Int("len", len(responses)))
-				default:
-					break BATCH
-				}
+			batchResponses, revision, err := getBatchResponse(watchCh, worker.revision)
+			worker.revision = revision
+			if err != nil {
+				return err
 			}
+			responses = append(responses, batchResponses...)
+			// try to receive more response from watchCh
 
 			// handle all responses in batch
 			for _, resp := range responses {
@@ -306,28 +290,6 @@ func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
 		ret[util.NewEtcdKey(k.String())] = vCloned
 	}
 	return ret
-}
-
-var maxBatchPatchSize = 96
-
-func getBatchPatches(patchGroups [][]DataPatch) ([]DataPatch, int) {
-	batchPatches := make([]DataPatch, 0)
-	patchesNum := 0
-	for i, patches := range patchGroups {
-		// make sure there at least one patches are put into batchPatches
-		if i == 0 {
-			batchPatches = append(batchPatches, patches...)
-			patchesNum++
-			continue
-		}
-
-		if (len(batchPatches) + len(patches)) > maxBatchPatchSize {
-			break
-		}
-		batchPatches = append(batchPatches, patches...)
-		patchesNum++
-	}
-	return batchPatches, patchesNum
 }
 
 func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]DataPatch) ([][]DataPatch, error) {
