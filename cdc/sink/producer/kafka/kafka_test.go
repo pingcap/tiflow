@@ -274,7 +274,7 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	c.Assert(errors.Cause(err), check.Equals, sarama.ErrOutOfBrokers)
 
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
-	config.PartitionNum = int32(4)
+	config.PartitionNum = int32(3)
 
 	err = topicPreProcess(config, cfg)
 	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
