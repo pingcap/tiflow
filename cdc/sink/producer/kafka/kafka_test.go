@@ -130,7 +130,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	prodSuccess.AddTopicPartition(topic, 0, sarama.ErrNoError)
 	prodSuccess.AddTopicPartition(topic, 1, sarama.ErrNoError)
 	// 200 async messages and 2 sync message, Kafka flush could be in batch,
-	// we can set flush.maxmessages to 1 to control message count exactly.
+	// we can set flush.max.messages to 1 to control message count exactly.
 	for i := 0; i < 202; i++ {
 		leader.Returns(prodSuccess)
 	}
