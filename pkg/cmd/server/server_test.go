@@ -15,6 +15,7 @@ package server
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -174,6 +175,21 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 			MaxMemoryConsumption:   60000,
 			NumWorkerPoolGoroutine: 90,
 			SortDir:                config.DefaultSortDir,
+			EnableLevelDB:          false,
+			LevelDB: config.LevelDBConfig{
+				LevelDBCount:           16,
+				LevelDBConcurrency:     256,
+				MaxOpenFiles:           10000,
+				BlockSize:              65536,
+				BlockCacheSize:         0,
+				WriterBufferSize:       8388608,
+				Compression:            "snappy",
+				TargetFileSizeBase:     8388608,
+				CompactionL0Trigger:    160,
+				WriteL0SlowdownTrigger: math.MaxInt32,
+				WriteL0PauseTrigger:    math.MaxInt32,
+				CleanupSpeedLimit:      10000,
+			},
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -221,6 +237,20 @@ max-memory-percentage = 3
 num-concurrent-worker = 4
 num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
+enable-leveldb-sorter = false
+[sorter.leveldb]
+leveldb-count = 5
+leveldb-concurrency = 6
+max-open-files = 7
+block-size = 32768 # 32 KB
+block-cache-size = 8
+writer-buffer-size = 9
+compression = "none"
+target-file-size-base = 10
+compaction-l0-trigger = 11
+write-l0-slowdown-trigger = 12
+write-l0-pause-trigger = 13
+cleanup-speed-limit = 14
 `, dataDir)
 	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
@@ -260,6 +290,21 @@ sort-dir = "/tmp/just_a_test"
 			MaxMemoryConsumption:   2000000,
 			NumWorkerPoolGoroutine: 5,
 			SortDir:                config.DefaultSortDir,
+			EnableLevelDB:          false,
+			LevelDB: config.LevelDBConfig{
+				LevelDBCount:           5,
+				LevelDBConcurrency:     6,
+				MaxOpenFiles:           7,
+				BlockSize:              32768,
+				BlockCacheSize:         8,
+				WriterBufferSize:       9,
+				Compression:            "none",
+				TargetFileSizeBase:     10,
+				CompactionL0Trigger:    11,
+				WriteL0SlowdownTrigger: 12,
+				WriteL0PauseTrigger:    13,
+				CleanupSpeedLimit:      14,
+			},
 		},
 		Security:            &config.SecurityConfig{},
 		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
@@ -363,6 +408,21 @@ cert-allowed-cn = ["dd","ee"]
 			MaxMemoryConsumption:   60000000,
 			NumWorkerPoolGoroutine: 5,
 			SortDir:                config.DefaultSortDir,
+			EnableLevelDB:          false,
+			LevelDB: config.LevelDBConfig{
+				LevelDBCount:           16,
+				LevelDBConcurrency:     256,
+				MaxOpenFiles:           10000,
+				BlockSize:              65536,
+				BlockCacheSize:         0,
+				WriterBufferSize:       8388608,
+				Compression:            "snappy",
+				TargetFileSizeBase:     8388608,
+				CompactionL0Trigger:    160,
+				WriteL0SlowdownTrigger: math.MaxInt32,
+				WriteL0PauseTrigger:    math.MaxInt32,
+				CleanupSpeedLimit:      10000,
+			},
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
