@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/pdtime"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -57,11 +57,11 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	pdClient    pd.Client
-	kvStorage   tidbkv.Storage
-	etcdClient  *etcd.CDCEtcdClient
-	grpcPool    kv.GrpcPool
-	pdTimeCache *util.PDTimeCache
+	pdClient     pd.Client
+	kvStorage    tidbkv.Storage
+	etcdClient   *etcd.CDCEtcdClient
+	grpcPool     kv.GrpcPool
+	TimeAcquirer *pdtime.TimeAcquirer
 
 	cancel context.CancelFunc
 
@@ -104,10 +104,10 @@ func (c *Capture) reset(ctx context.Context) error {
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
 
-	if c.pdTimeCache != nil {
-		c.pdTimeCache.Stop()
+	if c.TimeAcquirer != nil {
+		c.TimeAcquirer.Stop()
 	}
-	c.pdTimeCache = util.NewPDTimeCache(c.pdClient)
+	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
 
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
@@ -157,12 +157,12 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		PDClient:    c.pdClient,
-		KVStorage:   c.kvStorage,
-		CaptureInfo: c.info,
-		EtcdClient:  c.etcdClient,
-		GrpcPool:    c.grpcPool,
-		PDTimeCache: c.pdTimeCache,
+		PDClient:     c.pdClient,
+		KVStorage:    c.kvStorage,
+		CaptureInfo:  c.info,
+		EtcdClient:   c.etcdClient,
+		GrpcPool:     c.grpcPool,
+		TimeAcquirer: c.TimeAcquirer,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -200,7 +200,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 	}()
 	go func() {
 		defer wg.Done()
-		c.pdTimeCache.Run(ctx)
+		c.TimeAcquirer.Run(ctx)
 	}()
 	go func() {
 		defer wg.Done()

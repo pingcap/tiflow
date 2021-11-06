@@ -113,9 +113,15 @@ func (m *gcManager) CheckStaleCheckpointTs(
 	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
 		cctx := ctx.(cdcContext.Context)
-		pdTime, err := cctx.GlobalVars().PDTimeCache.CurrentTimeFromPDCached()
-		if err != nil {
-			return errors.Trace(err)
+		pdTime := time.Now()
+		var err error
+		// only nil in test
+		if cctx.GlobalVars().TimeAcquirer != nil {
+			pdTime, err = cctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+			// TODO: should we return err here, or just log it?
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		if pdTime.Sub(oracle.GetTimeFromTS(gcSafepointUpperBound)) > time.Duration(m.gcTTL)*time.Second {
 			return cerror.ErrGCTTLExceeded.GenWithStackByArgs(checkpointTs, changefeedID)

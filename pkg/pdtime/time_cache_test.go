@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package pdtime
 
 import (
 	"context"
@@ -35,27 +35,18 @@ func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 
 func TestTimeFromPD(t *testing.T) {
 	mockPDClient := &MockPDClient{}
-	pdTimeCache := NewPDTimeCache(mockPDClient)
-	go pdTimeCache.Run(context.Background())
-	defer pdTimeCache.Stop()
+	TimeAcquirer := NewTimeAcquirer(mockPDClient)
+	go TimeAcquirer.Run(context.Background())
+	defer TimeAcquirer.Stop()
 	time.Sleep(1 * time.Second)
 
-	t1, err := pdTimeCache.CurrentTimeFromPDCached()
+	t1, err := TimeAcquirer.CurrentTimeFromCached()
 	require.Nil(t, err)
-	require.Equal(t, pdTimeCache.pdPhysicalTimeCache, t1)
-
-	time.Sleep(10 * time.Millisecond)
-	// should return cached time
-	t2, err := pdTimeCache.CurrentTimeFromPDCached()
-	require.Nil(t, err)
-	require.Equal(t, pdTimeCache.pdPhysicalTimeCache, t2)
-	require.Equal(t, t1, t2)
 
 	time.Sleep(400 * time.Millisecond)
 	// assume that the gc safe point updated one hour ago
-	t3, err := pdTimeCache.CurrentTimeFromPDCached()
+	t2, err := TimeAcquirer.CurrentTimeFromCached()
 	require.Nil(t, err)
-	require.Equal(t, pdTimeCache.pdPhysicalTimeCache, t3)
 	// should return new time
-	require.NotEqual(t, t3, t2)
+	require.NotEqual(t, t1, t2)
 }

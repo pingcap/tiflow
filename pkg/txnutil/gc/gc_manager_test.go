@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/pdtime"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -96,13 +96,13 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 
-	pdTimeCache := util.NewPDTimeCache(mockPDClient)
-	go pdTimeCache.Run(ctx)
-	defer pdTimeCache.Stop()
+	TimeAcquirer := pdtime.NewTimeAcquirer(mockPDClient)
+	go TimeAcquirer.Run(ctx)
+	defer TimeAcquirer.Stop()
 	time.Sleep(1 * time.Second)
 
 	cCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
-		PDTimeCache: pdTimeCache,
+		TimeAcquirer: TimeAcquirer,
 	})
 
 	err := gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)

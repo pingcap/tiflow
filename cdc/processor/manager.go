@@ -83,21 +83,6 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		return state, err
 	}
 
-	//// init pdTimeCache
-	//if m.pdTimeCache == nil && ctx.GlobalVars().PDClient != nil {
-	//	m.pdTimeCache = util.NewPDTimeCache(ctx.GlobalVars().PDClient)
-	//}
-	//// get PDPhyTs, m.pdTimeCache only nil in test
-	//if m.pdTimeCache != nil {
-	//	pdTime, err := m.pdTimeCache.CurrentTimeFromPDCached(stdCtx)
-	//	if err != nil {
-	//		log.Warn("fail to get pd time , we will use local time", zap.Error(err), zap.Time("local time", pdTime))
-	//	}
-	//	ctx.GlobalVars().PDPhyTs = oracle.GetPhysical(pdTime)
-	//} else {
-	//	ctx.GlobalVars().PDPhyTs = oracle.GetPhysical(time.Now())
-	//}
-
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {

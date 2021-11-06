@@ -190,7 +190,15 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	}
 	// it is no need to check the err here, because we will use
 	// local time when an error return, which is acceptable
-	pdTime, _ := ctx.GlobalVars().PDTimeCache.CurrentTimeFromPDCached()
+
+	pdTime := time.Now()
+	// only nil in test
+	if ctx.GlobalVars().TimeAcquirer != nil {
+		pdTime, err = ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		if err != nil {
+			log.Warn("get time from pd failed, will use local time as pd time")
+		}
+	}
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
 	p.handleWorkload()
