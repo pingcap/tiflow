@@ -459,7 +459,11 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 		return nil
 	}
 
-	// topic should have already created by the user, `realPartitionCount` won't be 0.
+	// if `auto-create-topic` is disabled by user, we would assume topic should have already created
+	if !ok {
+		return cerror.ErrKafkaInvalidConfig.GenWithStack("auto-create-topic is false, and topic not found")
+	}
+
 	if config.PartitionNum == 0 {
 		config.PartitionNum = realPartitionCount
 		return nil
