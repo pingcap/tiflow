@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	// UpstreamPD is upstream PD URL.
-	UpstreamPD = "http://upstream-pd:2379/"
+	// UpstreamPD is upstream PD URI.
+	UpstreamPD = "http://upstream-pd:2379"
 	// UpstreamDSN is upstream database dsn
 	UpstreamDSN = "root@tcp(127.0.0.1:4000)/"
 	// DownstreamDSN is downstream database dsn
