@@ -26,10 +26,16 @@ import (
 )
 
 const (
+	// UpstreamPD is upstream PD URL.
+	UpstreamPD = "http://upstream-pd:2379/"
 	// UpstreamDSN is upstream database dsn
 	UpstreamDSN = "root@tcp(127.0.0.1:4000)/"
 	// DownstreamDSN is downstream database dsn
 	DownstreamDSN = "root@tcp(127.0.0.1:5000)/"
+	// DockerComposeFilePathPrefix is prefix of docker compose file path.
+	DockerComposeFilePathPrefix = "/deployments/ticdc/docker-compose/"
+	// ControllerContainerName is the ticdc controller container name.
+	ControllerContainerName = "ticdc_controller"
 )
 
 // DockerEnv represents the docker-compose service

@@ -53,7 +53,7 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 	}
 
 	return &framework.CDCProfile{
-		PDUri:      "http://upstream-pd:2379",
+		PDUri:      framework.UpstreamPD,
 		SinkURI:    sinkURI,
 		Opts:       map[string]string{"force-handle-key-pkey": "true", "support-txn": "true"},
 		ConfigFile: "/configs/canal-test-config.toml",
