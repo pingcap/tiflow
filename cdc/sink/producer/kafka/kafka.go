@@ -449,7 +449,7 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 			NumPartitions:     config.PartitionNum,
 			ReplicationFactor: config.ReplicationFactor,
 		}, false)
-		// TODO idenfity the cause of "Topic with this name already exists"
+		// TODO identify the cause of "Topic with this name already exists"
 		if err != nil && !strings.Contains(err.Error(), "already exists") {
 			return err
 		}
