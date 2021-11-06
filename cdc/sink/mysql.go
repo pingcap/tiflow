@@ -1039,7 +1039,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		var args []interface{}
 		quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
 
-		// Translate to UPDATE if old value is enabled, not in safe mode and is update event
+		// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
+		// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 			flushCacheDMLs()
 			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
@@ -1051,9 +1052,12 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			continue
 		}
 
-		// Case for delete event or update event
-		// If old value is enabled and not in safe mode,
-		// update will be translated to DELETE + INSERT(or REPLACE) SQL.
+		// Case for update event or delete event.
+		// For update event:
+		// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
+		// So we will prepare a DELETE SQL here.
+		// For delete event:
+		// It will be translated directly into a DELETE SQL.
 		if len(row.PreColumns) != 0 {
 			flushCacheDMLs()
 			query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
@@ -1064,7 +1068,12 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			}
 		}
 
-		// Case for insert event or update event
+		// Case for update event or insert event.
+		// For update event:
+		// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
+		// So we will prepare a REPLACE SQL here.
+		// For insert event:
+		// It will be translated directly into a INSERT(old value is enabled and not in safe mode)/REPLACE(old value is disabled or in safe mod) SQL.
 		if len(row.Columns) != 0 {
 			if s.params.batchReplaceEnabled {
 				query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
