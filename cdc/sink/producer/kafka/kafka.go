@@ -587,7 +587,9 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	}
 	config.Version = version
 	// See: https://kafka.apache.org/documentation/#replication
-	// When one of the brokers in a Kafka cluster is down, the partition leaders in this broker is broken, Kafka will election a new partition leader and replication logs, this process will last from a few seconds to a few minutes. Kafka cluster will not provide a writing service in this process.
+	// When one of the brokers in a Kafka cluster is down, the partition leaders in this broker is broken,
+	// Kafka will election a new partition leader and replication logs, this process will last from a few seconds to a few minutes.
+	// Kafka cluster will not provide a writing service in this process.
 	// Time out in one minute(120 * 500ms).
 	config.Metadata.Retry.Max = 120
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
