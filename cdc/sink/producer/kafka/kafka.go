@@ -410,6 +410,9 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 }
 
 func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
+	failpoint.Inject("workaround4NewClusterAdmin", func() {
+		failpoint.Return(nil)
+	})
 	admin, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return err

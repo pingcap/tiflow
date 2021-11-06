@@ -25,6 +25,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -155,6 +156,9 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	defer func() {
 		newSaramaConfigImpl = newSaramaConfigImplBak
 	}()
+
+	err := failpoint.Enable("workaround4NewClusterAdmin", "")
+	c.Assert(err, check.IsNil)
 
 	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
 	c.Assert(err, check.IsNil)
@@ -414,6 +418,9 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 		newSaramaConfigImpl = newSaramaConfigImplBak
 	}()
 
+	err := failpoint.Enable("workaround4NewClusterAdmin", "")
+	c.Assert(err, check.IsNil)
+
 	errCh := make(chan error, 1)
 	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
 	defer func() {
@@ -466,6 +473,9 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	leader.Returns(metadataResponse)
 	leader.Returns(metadataResponse)
+
+	err := failpoint.Enable("workaround4NewClusterAdmin", "")
+	c.Assert(err, check.IsNil)
 
 	config := NewConfig()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0
