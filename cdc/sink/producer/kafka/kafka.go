@@ -39,7 +39,7 @@ import (
 	kafkaPkg "github.com/pingcap/ticdc/pkg/kafka"
 )
 
-const defaultPartitionCount = 3
+const defaultPartitionNum = 3
 
 // Config stores user specified Kafka producer configuration
 type Config struct {
@@ -47,7 +47,7 @@ type Config struct {
 
 	TopicName string
 
-	PartitionCount int32
+	PartitionNum int32
 	// User should make sure that `replication-factor` not greater than the number of kafka brokers.
 	ReplicationFactor int16
 
@@ -93,9 +93,9 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 		if err != nil {
 			return err
 		}
-		c.PartitionCount = int32(a)
-		if c.PartitionCount <= 0 {
-			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionCount)
+		c.PartitionNum = int32(a)
+		if c.PartitionNum <= 0 {
+			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
 		}
 	}
 
@@ -429,40 +429,41 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 
 	// if user specify cdc to create the topic, we must make sure that topic number and replication-factor is given
 	if config.AutoCreate {
-		// this indicates that the specified topic name already exist, it may cause by user gives wrong topic name
-		// we would return error, to prevent that message sends to wrong topic.
+		// this indicates that the specified topic name already exist
 		if realPartitionCount != 0 {
-			return cerror.ErrKafkaInvalidConfig.GenWithStack("topic already exist, ticdc should not create the topic")
+			config.PartitionNum = realPartitionCount
+			log.Warn("topic already exist", zap.String("topic", config.TopicName))
+			return nil
 		}
 		// this could happen if user does not specify the `partition-num` in the sink uri.
-		if config.PartitionCount == 0 {
-			config.PartitionCount = defaultPartitionCount
-			log.Warn("partition number is not set, use the default partition count",
-				zap.String("topic", config.TopicName), zap.Int32("partitions", config.PartitionCount))
+		if config.PartitionNum == 0 {
+			config.PartitionNum = defaultPartitionNum
+			log.Warn("partition-num is not set, use the default partition count",
+				zap.String("topic", config.TopicName), zap.Int32("partitions", config.PartitionNum))
 		}
 		return admin.CreateTopic(config.TopicName, &sarama.TopicDetail{
-			NumPartitions:     config.PartitionCount,
+			NumPartitions:     config.PartitionNum,
 			ReplicationFactor: config.ReplicationFactor,
 		})
 	}
 
 	// topic should have already created by the user, `realPartitionCount` won't be 0.
-	if config.PartitionCount == 0 {
-		config.PartitionCount = realPartitionCount
+	if config.PartitionNum == 0 {
+		config.PartitionNum = realPartitionCount
 		return nil
 	}
 
-	if config.PartitionCount < realPartitionCount {
+	if config.PartitionNum < realPartitionCount {
 		log.Warn("partition count assigned in sink-uri is less than that of topic, some partitions would not have messages to be dispatched",
-			zap.Int32("sink-uri partitions", config.PartitionCount), zap.Int32("topic partitions", realPartitionCount))
+			zap.Int32("sink-uri partitions", config.PartitionNum), zap.Int32("topic partitions", realPartitionCount))
 		return nil
 	}
 
 	// for topic already exist, we just make sure that the user specified partition count is not greater than the real
 	// partition count, since we would dispatch messages to different partitions, this could prevent potential message loss.
-	if config.PartitionCount > realPartitionCount {
+	if config.PartitionNum > realPartitionCount {
 		return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
-			"partition number(%d) assigned in sink-uri is more than that of topic(%d)", config.PartitionCount, realPartitionCount)
+			"partition number(%d) assigned in sink-uri is more than that of topic(%d)", config.PartitionNum, realPartitionCount)
 	}
 
 	return nil
@@ -500,11 +501,11 @@ func NewKafkaSaramaProducer(ctx context.Context, config *Config, errCh chan erro
 		asyncClient:  asyncClient,
 		syncClient:   syncClient,
 		topic:        config.TopicName,
-		partitionNum: config.PartitionCount,
+		partitionNum: config.PartitionNum,
 		partitionOffset: make([]struct {
 			flushed uint64
 			sent    uint64
-		}, config.PartitionCount),
+		}, config.PartitionNum),
 		flushedNotifier: notifier,
 		flushedReceiver: flushedReceiver,
 		closeCh:         make(chan struct{}),
