@@ -86,7 +86,7 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	err = cfg.Initialize(sinkURI, replicaConfig, opts)
 	c.Assert(err, check.IsNil)
 
-	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
+	c.Assert(cfg.PartitionCount, check.Equals, int32(1))
 	c.Assert(cfg.ReplicationFactor, check.Equals, int16(3))
 	c.Assert(cfg.Version, check.Equals, "2.6.0")
 	c.Assert(cfg.MaxMessageBytes, check.Equals, 4096)
@@ -129,8 +129,8 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	// We use a smaller version in the following producer tests.
 	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac030c15cf08e9e57925/async_producer_test.go#L1445-L1447
 	config.Version = "0.9.0.0"
-	config.PartitionNum = int32(2)
-	config.TopicPreProcess = false
+	config.PartitionCount = int32(2)
+	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
@@ -245,7 +245,7 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	})
 
 	config := NewConfig()
-	config.PartitionNum = int32(0)
+	config.PartitionCount = int32(0)
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
@@ -256,10 +256,10 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 
 	err = config.AdjustPartitionNum(topic, admin)
 	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(2))
+	c.Assert(config.PartitionCount, check.Equals, int32(2))
 
 	err = admin.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     config.PartitionNum,
+		NumPartitions:     config.PartitionCount,
 		ReplicationFactor: config.ReplicationFactor,
 	})
 	c.Assert(err, check.IsNil)
@@ -271,19 +271,19 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	defer admin.Close()
 
 	err = admin.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     config.PartitionNum,
+		NumPartitions:     config.PartitionCount,
 		ReplicationFactor: config.ReplicationFactor,
 	})
 	c.Assert(errors.Cause(err), check.Equals, sarama.ErrOutOfBrokers)
 
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
-	config.PartitionNum = int32(4)
+	config.PartitionCount = int32(4)
 	admin, err = kafka.NewAdmin(config.BrokerEndpoints, cfg)
 	c.Assert(err, check.IsNil)
 	defer admin.Close()
 
 	err = admin.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     config.PartitionNum,
+		NumPartitions:     config.PartitionCount,
 		ReplicationFactor: config.ReplicationFactor,
 	})
 	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
@@ -306,7 +306,7 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 	defer broker.Close()
 
 	config := NewConfig()
-	config.PartitionNum = int32(0)
+	config.PartitionCount = int32(0)
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
@@ -317,10 +317,10 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 
 	err = config.AdjustPartitionNum(topic, admin)
 	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(4))
+	c.Assert(config.PartitionCount, check.Equals, int32(4))
 
 	err = admin.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     config.PartitionNum,
+		NumPartitions:     config.PartitionCount,
 		ReplicationFactor: config.ReplicationFactor,
 	})
 	c.Assert(err, check.IsNil)
@@ -413,8 +413,8 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	// We use a smaller version in the following producer tests.
 	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac030c15cf08e9e57925/async_producer_test.go#L1445-L1447
 	config.Version = "0.9.0.0"
-	config.PartitionNum = int32(2)
-	config.TopicPreProcess = false
+	config.PartitionCount = int32(2)
+	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
@@ -488,8 +488,8 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	// We use a smaller version in the following producer tests.
 	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac030c15cf08e9e57925/async_producer_test.go#L1445-L1447
 	config.Version = "0.9.0.0"
-	config.PartitionNum = int32(2)
-	config.TopicPreProcess = false
+	config.PartitionCount = int32(2)
+	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
 	errCh := make(chan error, 1)

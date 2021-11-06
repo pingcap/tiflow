@@ -39,6 +39,7 @@ func (admin *Admin) Close() error {
 	return admin.ClusterAdmin.Close()
 }
 
+// GetPartitionCount return the partition number of the topic, return 0 if not found the topic.
 func (admin *Admin) GetPartitionCount(topic string) (int32, error) {
 	topics, err := admin.ListTopics()
 	if err != nil {

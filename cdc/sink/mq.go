@@ -16,7 +16,6 @@ package sink
 import (
 	"context"
 	"net/url"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -390,11 +389,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
-		return r == '/'
-	})
-
-	producer, err := kafka.NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, config, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
