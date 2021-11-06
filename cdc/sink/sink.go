@@ -44,7 +44,7 @@ type Sink interface {
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 
 	// FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
-	// TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
+	// TiCDC guarantees that all the Events whose commitTs is less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
 	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error)
 
 	// EmitCheckpointTs sends CheckpointTs to Sink
