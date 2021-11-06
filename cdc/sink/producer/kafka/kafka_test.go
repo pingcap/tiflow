@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/kafka"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -254,12 +253,9 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	config := NewConfig()
 	config.PartitionCount = int32(0)
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
+	config.TopicName = topic
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
-
-	admin, err := kafka.NewAdmin(config.BrokerEndpoints, cfg)
-	c.Assert(err, check.IsNil)
-	defer admin.Close()
 
 	err = topicPreProcess(config, cfg)
 	c.Assert(err, check.IsNil)
@@ -267,18 +263,12 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 
 	config.BrokerEndpoints = []string{""}
 	cfg.Metadata.Retry.Max = 1
-	admin, err = kafka.NewAdmin(config.BrokerEndpoints, cfg)
-	c.Assert(err, check.IsNil)
-	defer admin.Close()
 
 	err = topicPreProcess(config, cfg)
 	c.Assert(errors.Cause(err), check.Equals, sarama.ErrOutOfBrokers)
 
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
 	config.PartitionCount = int32(4)
-	admin, err = kafka.NewAdmin(config.BrokerEndpoints, cfg)
-	c.Assert(err, check.IsNil)
-	defer admin.Close()
 
 	err = topicPreProcess(config, cfg)
 	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
@@ -306,10 +296,6 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
-
-	admin, err := kafka.NewAdmin(config.BrokerEndpoints, cfg)
-	c.Assert(err, check.IsNil)
-	defer admin.Close()
 
 	err = topicPreProcess(config, cfg)
 	c.Assert(err, check.IsNil)
