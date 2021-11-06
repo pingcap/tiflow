@@ -132,6 +132,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	config.PartitionCount = int32(2)
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
+	config.TopicName = topic
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
 	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
@@ -144,7 +145,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 		newSaramaConfigImpl = newSaramaConfigImplBak
 	}()
 
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
 	for i := 0; i < 100; i++ {
@@ -254,15 +255,9 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer admin.Close()
 
-	err = config.AdjustPartitionNum(topic, admin)
+	err = topicPreProcess(config, cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(config.PartitionCount, check.Equals, int32(2))
-
-	err = admin.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     config.PartitionCount,
-		ReplicationFactor: config.ReplicationFactor,
-	})
-	c.Assert(err, check.IsNil)
 
 	config.BrokerEndpoints = []string{""}
 	cfg.Metadata.Retry.Max = 1
@@ -270,10 +265,7 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer admin.Close()
 
-	err = admin.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     config.PartitionCount,
-		ReplicationFactor: config.ReplicationFactor,
-	})
+	err = topicPreProcess(config, cfg)
 	c.Assert(errors.Cause(err), check.Equals, sarama.ErrOutOfBrokers)
 
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
@@ -282,10 +274,7 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer admin.Close()
 
-	err = admin.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     config.PartitionCount,
-		ReplicationFactor: config.ReplicationFactor,
-	})
+	err = topicPreProcess(config, cfg)
 	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
 }
 
@@ -307,6 +296,7 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 
 	config := NewConfig()
 	config.PartitionCount = int32(0)
+	config.TopicName = topic
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
@@ -315,15 +305,9 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer admin.Close()
 
-	err = config.AdjustPartitionNum(topic, admin)
+	err = topicPreProcess(config, cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(config.PartitionCount, check.Equals, int32(4))
-
-	err = admin.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     config.PartitionCount,
-		ReplicationFactor: config.ReplicationFactor,
-	})
-	c.Assert(err, check.IsNil)
 }
 
 func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
@@ -389,7 +373,8 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config := NewConfig()
 	config.Version = "invalid"
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
-	_, err := NewKafkaSaramaProducer(ctx, "topic", config, errCh)
+	config.TopicName = "topic"
+	_, err := NewKafkaSaramaProducer(ctx, config, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 }
 
@@ -416,6 +401,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	config.PartitionCount = int32(2)
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
+	config.TopicName = topic
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
 	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
@@ -431,7 +417,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	}()
 
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
@@ -491,9 +477,10 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	config.PartitionCount = int32(2)
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
+	config.TopicName = topic
 
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)

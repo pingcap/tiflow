@@ -428,7 +428,6 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 	}
 
 	// if user specify cdc to create the topic, we must make sure that topic number and replication-factor is given
-	// and return error,
 	if config.AutoCreate {
 		// this indicates that the specified topic name already exist, it may cause by user gives wrong topic name
 		// we would return error, to prevent that message sends to wrong topic.
@@ -441,15 +440,13 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 			log.Warn("partition number is not set, use the default partition count",
 				zap.String("topic", config.TopicName), zap.Int32("partitions", config.PartitionCount))
 		}
-		if err := admin.CreateTopic(config.TopicName, &sarama.TopicDetail{
+		return admin.CreateTopic(config.TopicName, &sarama.TopicDetail{
 			NumPartitions:     config.PartitionCount,
 			ReplicationFactor: config.ReplicationFactor,
-		}); err != nil {
-			return err
-		}
-		return nil
+		})
 	}
 
+	// topic should have already created by the user, `realPartitionCount` won't be 0.
 	if config.PartitionCount == 0 {
 		config.PartitionCount = realPartitionCount
 		return nil
