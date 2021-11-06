@@ -264,12 +264,27 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	config.PartitionNum = int32(0)
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
 	config.TopicName = topic
+	config.AutoCreate = false
+
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
 
 	err = topicPreProcess(config, cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(config.PartitionNum, check.Equals, int32(2))
+
+	config.PartitionNum = int32(1)
+	cfg, err = newSaramaConfigImpl(ctx, config)
+	c.Assert(err, check.IsNil)
+	err = topicPreProcess(config, cfg)
+	c.Assert(err, check.IsNil)
+	c.Assert(config.PartitionNum, check.Equals, int32(1))
+
+	config.PartitionNum = int32(3)
+	cfg, err = newSaramaConfigImpl(ctx, config)
+	c.Assert(err, check.IsNil)
+	err = topicPreProcess(config, cfg)
+	c.Assert(errors.Cause(err), check.ErrorMatches, ".*assigned in sink-uri is more than that of topic.*")
 
 	config.BrokerEndpoints = []string{""}
 	cfg.Metadata.Retry.Max = 1
@@ -309,7 +324,24 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 
 	err = topicPreProcess(config, cfg)
 	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(4))
+	c.Assert(config.PartitionNum, check.Equals, int32(3))
+
+	config.TopicName = "createTopicWithValidPartitionNum"
+	config.PartitionNum = 1
+	cfg, err = newSaramaConfigImpl(ctx, config)
+	c.Assert(err, check.IsNil)
+
+	err = topicPreProcess(config, cfg)
+	c.Assert(err, check.IsNil)
+
+	config.TopicName = "createTopicWithoutPartitionNum"
+	config.PartitionNum = 0
+	cfg, err = newSaramaConfigImpl(ctx, config)
+	c.Assert(err, check.IsNil)
+
+	err = topicPreProcess(config, cfg)
+	c.Assert(err, check.IsNil)
+	c.Assert(config.PartitionNum, check.Equals, int32(3))
 }
 
 func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
