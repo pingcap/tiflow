@@ -59,10 +59,7 @@ jobs:
     steps:
 
     - name: Check out code into the Go module directory
-      # Due to git version issues, we are unable to use v2 checkout.
-      # See: https://github.com/actions/checkout/issues/126
-      # TODO: Fix it after we build our self runner image to update git.
-      uses: actions/checkout@v1
+      uses: actions/checkout@v2
 
     - name: Setup Go environment
       uses: actions/setup-go@v2
