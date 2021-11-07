@@ -57,7 +57,7 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 	})
 }
 
-func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
+func (s MySQLSinkSuite) TestGenerateDSNByParams(c *check.C) {
 	defer testleak.AfterTest(c)()
 
 	testDefaultParams := func() {
@@ -124,7 +124,7 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 	testTimeoutParams()
 }
 
-func (s MySQLSinkSuite) TestParseSinkURI(c *check.C) {
+func (s MySQLSinkSuite) TestParseSinkURIToParams(c *check.C) {
 	defer testleak.AfterTest(c)()
 	expected := defaultParams.Clone()
 	expected.workerCount = 64
