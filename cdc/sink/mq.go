@@ -42,7 +42,11 @@ type mqEvent struct {
 	resolvedTs uint64
 }
 
-const defaultPartitionInputChSize = 12800
+const (
+	defaultPartitionInputChSize = 12800
+	// -1 means broadcast to all partitions, it's the default for the default open protocol.
+	defaultDDLDispatchPartition = -1
+)
 
 type mqSink struct {
 	mqProducer     producer.Producer
@@ -230,9 +234,18 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	}
 
+	var partition int32 = defaultDDLDispatchPartition
+	// for Canal-JSON / Canal-PB, send to partition 0.
+	if _, ok := encoder.(*codec.CanalFlatEventBatchEncoder); ok {
+		partition = 0
+	}
+	if _, ok := encoder.(*codec.CanalEventBatchEncoder); ok {
+		partition = 0
+	}
+
 	k.statistics.AddDDLCount()
-	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
-	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
+	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs), zap.Int32("partition", partition))
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
 	return errors.Trace(err)
 }
 
@@ -372,11 +385,6 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	scheme := strings.ToLower(sinkURI.Scheme)
-	if scheme != "kafka" && scheme != "kafka+ssl" {
-		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("can't create MQ sink with unsupported scheme: %s", scheme)
-	}
-
 	config := kafka.NewConfig()
 	if err := config.Initialize(sinkURI, replicaConfig, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
