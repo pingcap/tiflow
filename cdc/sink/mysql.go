@@ -133,7 +133,7 @@ func newMySQLSink(
 	}
 	defer testDB.Close()
 
-	dsnStr, err = configureSinkURI(ctx, dsn, params, testDB)
+	dsnStr, err = generateDSNByParams(ctx, dsn, params, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

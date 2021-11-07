@@ -112,7 +112,7 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection when configuring sink")
 	}
 	defer testDB.Close()
-	dsnStr, err = configureSinkURI(ctx, dsn, params, testDB)
+	dsnStr, err = generateDSNByParams(ctx, dsn, params, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

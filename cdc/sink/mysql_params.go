@@ -208,7 +208,7 @@ func parseSinkURIToParams(ctx context.Context, sinkURI *url.URL, opts map[string
 	return params, nil
 }
 
-func configureSinkURI(
+func generateDSNByParams(
 	ctx context.Context,
 	dsnCfg *dmysql.Config,
 	params *sinkParams,

@@ -68,7 +68,7 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
 		c.Assert(err, check.IsNil)
 		params := defaultParams.Clone()
-		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
+		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
 		c.Assert(err, check.IsNil)
 		expectedParams := []string{
 			"tidb_txn_mode=optimistic",
@@ -91,7 +91,7 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 		c.Assert(err, check.IsNil)
 		params := defaultParams.Clone()
 		params.timezone = `"UTC"`
-		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
+		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
 		c.Assert(err, check.IsNil)
 		c.Assert(strings.Contains(dsnStr, "time_zone=%22UTC%22"), check.IsTrue)
 	}
@@ -107,7 +107,7 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 		c.Assert(err, check.IsNil)
 		params, err := parseSinkURIToParams(context.TODO(), uri, map[string]string{})
 		c.Assert(err, check.IsNil)
-		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
+		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
 		c.Assert(err, check.IsNil)
 		expectedParams := []string{
 			"readTimeout=4m",
