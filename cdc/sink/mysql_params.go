@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"go.uber.org/zap"
 	"net/url"
 	"strconv"
 	"strings"
@@ -29,6 +28,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 )
 
 const (

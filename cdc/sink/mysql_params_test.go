@@ -16,10 +16,10 @@ package sink
 import (
 	"context"
 	"database/sql"
-	"github.com/DATA-DOG/go-sqlmock"
 	"net/url"
 	"strings"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"

@@ -15,16 +15,16 @@ package sink
 
 import (
 	"context"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/pingcap/ticdc/pkg/notify"
-	"golang.org/x/sync/errgroup"
 	"sync"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"golang.org/x/sync/errgroup"
 )
 
 func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
