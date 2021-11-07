@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -223,7 +224,6 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 	defer func() {
 		_ = cli.Unwrap().Close()
 	}()
-
 	_, err := cli.Put(ctx, testEtcdKeyPrefix+"/sum", "0")
 	c.Check(err, check.IsNil)
 
@@ -272,7 +272,8 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 	}
 
 	err = errg.Wait()
-	if err != nil && (errors.Cause(err) == context.DeadlineExceeded || errors.Cause(err) == context.Canceled) {
+	if err != nil && (errors.Cause(err) == context.DeadlineExceeded || errors.Cause(err) == context.Canceled ||
+		strings.Contains(err.Error(), "etcdserver: request timeout")) {
 		return
 	}
 	c.Check(err, check.IsNil)

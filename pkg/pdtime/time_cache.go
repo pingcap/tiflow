@@ -91,6 +91,6 @@ func (c *TimeAcquirer) CurrentTimeFromCached() (time.Time, error) {
 	return cacheTime, errors.Trace(err)
 }
 
-func (m *TimeAcquirer) Stop() {
-	m.stop <- struct{}{}
+func (c *TimeAcquirer) Stop() {
+	c.stop <- struct{}{}
 }
