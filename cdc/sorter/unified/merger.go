@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sorter"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -39,11 +40,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
-	metricSorterEventCount := sorterEventCount.MustCurryWith(map[string]string{
+	metricSorterEventCount := sorter.SorterEventCount.MustCurryWith(map[string]string{
 		"capture":    captureAddr,
 		"changefeed": changefeedID,
 	})
-	metricSorterResolvedTsGauge := sorterResolvedTsGauge.WithLabelValues(captureAddr, changefeedID)
+	metricSorterResolvedTsGauge := sorter.SorterResolvedTsGauge.WithLabelValues(captureAddr, changefeedID)
 	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(captureAddr, changefeedID)
 	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(captureAddr, changefeedID)
 
