@@ -99,7 +99,7 @@ const (
       "concurrency": 256,
       "max-open-files": 10000,
       "block-size": 65536,
-      "block-cache-size": 0,
+      "block-cache-size": 4294967296,
       "writer-buffer-size": 8388608,
       "compression": "snappy",
       "target-file-size-base": 8388608,

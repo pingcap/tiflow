@@ -205,7 +205,7 @@ var defaultServerConfig = &ServerConfig{
 			Concurrency:            256,
 			MaxOpenFiles:           10000,
 			BlockSize:              65536,
-			BlockCacheSize:         0,
+			BlockCacheSize:         4294967296,
 			WriterBufferSize:       8388608,
 			Compression:            "snappy",
 			TargetFileSizeBase:     8388608,

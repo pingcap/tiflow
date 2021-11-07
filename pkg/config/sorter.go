@@ -58,11 +58,11 @@ type LevelDBConfig struct {
 	BlockSize int `toml:"block-size" json:"block-size"`
 	// BlockCacheSize is the capacity of leveldb block cache.
 	//
-	// The default value is 0.
+	// The default value is 4294967296, 4GB.
 	BlockCacheSize int `toml:"block-cache-size" json:"block-cache-size"`
 	// WriterBufferSize is the size of memory table of leveldb.
 	//
-	// The default value is 8388608, 8MiB.
+	// The default value is 8388608, 8MB.
 	WriterBufferSize int `toml:"writer-buffer-size" json:"writer-buffer-size"`
 	// Compression is the compression algorithm that is used by leveldb.
 	// Valid values are "none" or "snappy".
@@ -71,7 +71,7 @@ type LevelDBConfig struct {
 	Compression string `toml:"compression" json:"compression"`
 	// TargetFileSizeBase limits size of leveldb sst file that compaction generates.
 	//
-	// The default value is 8388608, 8MiB.
+	// The default value is 8388608, 8MB.
 	TargetFileSizeBase int `toml:"target-file-size-base" json:"target-file-size-base"`
 	// CompactionL0Trigger defines number of leveldb sst file at level-0 that will
 	// trigger compaction.
