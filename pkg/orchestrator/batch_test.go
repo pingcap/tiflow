@@ -90,7 +90,10 @@ func TestGetBatchResponse(t *testing.T) {
 		for i := 0; i < 5; i++ {
 			for j := 0; j < patchSize; j++ {
 				time.Sleep(10 * time.Millisecond)
-				cli.Put(ctx, prefix+fmt.Sprintf("/key%d", j), "abc")
+				_, err := cli.Put(ctx, prefix+fmt.Sprintf("/key%d", j), "abc")
+				if err == nil || err.Error() == "etcdserver: request timed out" {
+					continue
+				}
 			}
 		}
 	}()
