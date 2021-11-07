@@ -76,6 +76,7 @@ func TestGetBatchResponse(t *testing.T) {
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
 
 	tickCounter := 0
 	ticker := time.NewTicker(10 * time.Millisecond)
