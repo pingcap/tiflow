@@ -1,25 +1,28 @@
 # diff Configuration.
 
-log-level = "info"
-chunk-size = 10
 check-thread-count = 4
-sample-percent = 100
-use-checksum = true
-fix-sql-file = "fix.sql"
 
-# tables need to check.
-[[check-tables]]
-    schema = "changefeed_error"
-    tables = ["usertable"]
+export-fix-sql = true
 
-[[source-db]]
+check-struct-only = false
+
+[task]
+    output-dir = "/tmp/ticdc_dm_test/output"
+
+    source-instances = ["mysql1"]
+
+    target-instance = "tidb0"
+
+    target-check-tables = ["changefeed_error.usertable"]
+
+[data-sources]
+[data-sources.mysql1]
     host = "127.0.0.1"
     port = 4000
     user = "root"
     password = ""
-    instance-id = "source-1"
 
-[target-db]
+[data-sources.tidb0]
     host = "127.0.0.1"
     port = 3306
     user = "root"
