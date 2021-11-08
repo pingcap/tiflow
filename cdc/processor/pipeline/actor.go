@@ -359,12 +359,24 @@ type AsyncDataProcessor interface {
 	TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error)
 }
 
+type AsyncDataProcessorFunc func(ctx context.Context, msg pipeline.Message) (bool, error)
+
+func (fn AsyncDataProcessorFunc) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
+	return fn(ctx, msg)
+}
+
 type NodeStarter interface {
 	Start(ctx context.Context, isTableActor bool, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error
 }
 
 type AsyncDataHolder interface {
 	TryGetProcessedMessage() *pipeline.Message
+}
+
+type AsyncDataHolderFunc func() *pipeline.Message
+
+func (fn AsyncDataHolderFunc) TryGetProcessedMessage() *pipeline.Message {
+	return fn()
 }
 
 type TableActorDataNode interface {

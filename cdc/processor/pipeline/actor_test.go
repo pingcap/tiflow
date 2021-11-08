@@ -43,13 +43,21 @@ func TestNewTableActor(t *testing.T) {
 		})
 
 	nodeCreator := &FakeTableNodeCreator{}
-	actor, err := NewTableActor(cctx, nil, 1, "t1",
+	tbl, err := NewTableActor(cctx, nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     1,
-			MarkTableID: 0,
+			MarkTableID: 2,
 		},
 		nil, 100, nodeCreator)
 	require.Nil(t, err)
+	actor := tbl.(*tableActor)
+	id, markId := actor.ID()
+	require.Equal(t, TableStatusInitializing, actor.Status())
+	require.Equal(t, "t1", actor.Name())
+	require.Equal(t, int64(1), id)
+	require.Equal(t, int64(2), markId)
+	require.Equal(t, uint64(1), actor.ResolvedTs())
+	require.Equal(t, uint64(1), actor.CheckpointTs())
 
 	defaultRouter.Send(1, message.BarrierMessage(2))
 	nodeCreator.actorPullerNode.TryHandleDataMessage(ctx, pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -65,10 +73,34 @@ func TestNewTableActor(t *testing.T) {
 	defaultRouter.Send(1, message.TickMessage())
 	time.Sleep(time.Second)
 
-	defaultRouter.Send(1, message.StopMessage())
+	actor.AsyncStop(1)
 	time.Sleep(time.Second)
-	require.True(t, actor.(*tableActor).stopped)
+	require.True(t, actor.stopped)
 	defaultSystem.Stop()
+}
+
+func TestPollStartAndStoppedActor(t *testing.T) {
+	defaultSystem.Stop()
+
+	actor := &tableActor{stopped: false}
+	var called = false
+	var dataHolderFunc AsyncDataHolderFunc = func() *pipeline.Message {
+		called = true
+		return nil
+	}
+	actor.nodes = []*Node{{
+		tableActor:    actor,
+		eventStash:    nil,
+		parentNode:    dataHolderFunc,
+		dataProcessor: nil,
+	},
+	}
+	require.True(t, actor.Poll(context.TODO(), []message.Message{message.TickMessage()}))
+	require.True(t, called)
+	actor.stopped = true
+	called = false
+	require.False(t, actor.Poll(context.TODO(), []message.Message{message.TickMessage()}))
+	require.False(t, called)
 }
 
 type FakeTableNodeCreator struct {
