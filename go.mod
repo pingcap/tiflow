@@ -8,6 +8,7 @@ require (
 	github.com/Shopify/sarama v1.27.2
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/apache/pulsar-client-go v0.6.0
+	github.com/aws/aws-sdk-go v1.35.3
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chaos-mesh/go-sqlsmith v0.0.0-20211025024535-03ae33408684

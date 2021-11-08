@@ -163,12 +163,12 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 	}
 
 	w.state.Store(started)
-	go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
+	go w.runFlushToDisk(cfg.FlushIntervalInMs)
 
 	return w, nil
 }
 
-func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
+func (w *Writer) runFlushToDisk(flushIntervalInMs int64) {
 	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
 	defer ticker.Stop()
 
@@ -177,15 +177,10 @@ func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
 			return
 		}
 
-		select {
-		case <-ctx.Done():
-			log.Info("runFlushToDisk got canceled", zap.Error(ctx.Err()))
-			return
-		case <-ticker.C:
-			err := w.Flush()
-			if err != nil {
-				log.Error("redo log flush error", zap.Error(err))
-			}
+		<-ticker.C
+		err := w.Flush()
+		if err != nil {
+			log.Error("redo log flush error", zap.Error(err))
 		}
 	}
 }
