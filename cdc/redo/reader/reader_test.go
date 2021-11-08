@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,22 +39,22 @@ func TestNewLogReader(t *testing.T) {
 	_, err = NewLogReader(context.Background(), &LogReaderConfig{})
 	require.Nil(t, err)
 
-	dir, err := ioutil.TempDir("", "redo-NewLogReader")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	//dir, err := ioutil.TempDir("", "redo-NewLogReader")
+	//require.Nil(t, err)
+	//defer os.RemoveAll(dir)
 
-	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
-	require.Nil(t, err)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, err = NewLogReader(ctx, &LogReaderConfig{
-		S3Storage: true,
-		Dir:       dir,
-		S3URI:     *s3URI,
-	})
-	require.Regexp(t, ".*ErrRedoDownloadFailed*.", err)
-	_, err = os.Stat(dir)
-	require.True(t, os.IsNotExist(err))
+	//s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
+	//require.Nil(t, err)
+	//ctx, cancel := context.WithCancel(context.Background())
+	//cancel()
+	//_, err = NewLogReader(ctx, &LogReaderConfig{
+	//	S3Storage: true,
+	//	Dir:       dir,
+	//	S3URI:     *s3URI,
+	//})
+	//require.Regexp(t, ".*ErrRedoDownloadFailed*.", err)
+	//_, err = os.Stat(dir)
+	//require.True(t, os.IsNotExist(err))
 }
 
 func TestLogReaderResetReader(t *testing.T) {
