@@ -1,5 +1,6 @@
 # diff Configuration.
 
+<<<<<<< HEAD:tests/ddl_async/conf/diff_config.toml
 log-level = "info"
 chunk-size = 10
 check-thread-count = 4
@@ -12,15 +13,36 @@ fix-sql-file = "fix.sql"
 [[check-tables]]
 schema = "ddl_async"
 tables = ["many_cols1","many_cols2","many_cols3","many_cols4","many_cols5","finish_mark"]
+=======
+check-thread-count = 4
 
-[[source-db]]
+export-fix-sql = true
+
+check-struct-only = false
+
+[task]
+    output-dir = "/tmp/ticdc_dm_test/output"
+
+    source-instances = ["mysql1"]
+
+    target-instance = "tidb0"
+
+    target-check-tables = ["http_apis.?*"]
+>>>>>>> 640da278d (tests, dm/tests: fix sync_diff configs for CI (#3247)):dm/tests/http_apis/conf/diff_config.toml
+
+[data-sources]
+[data-sources.mysql1]
 host = "127.0.0.1"
 port = 4000
 user = "root"
+<<<<<<< HEAD:tests/ddl_async/conf/diff_config.toml
 password = ""
 instance-id = "source-1"
+=======
+password = "123456"
+>>>>>>> 640da278d (tests, dm/tests: fix sync_diff configs for CI (#3247)):dm/tests/http_apis/conf/diff_config.toml
 
-[target-db]
+[data-sources.tidb0]
 host = "127.0.0.1"
 port = 3306
 user = "root"
