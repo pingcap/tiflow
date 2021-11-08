@@ -14,7 +14,6 @@
 package model
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/pingcap/errors"
@@ -77,17 +76,12 @@ func (m *SyncMessage) Marshal() ([]byte, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return json.Marshal(raw)
+	return raw, nil
 }
 
 // Unmarshal deserializes the message.
 func (m *SyncMessage) Unmarshal(data []byte) error {
-	var raw []byte
-	err := json.Unmarshal(data, &raw)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return msgpack.Unmarshal(raw, m)
+	return msgpack.Unmarshal(data, m)
 }
 
 // CheckpointTopic returns a topic for sending the latest checkpoint from
