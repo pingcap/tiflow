@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/failpoint"
@@ -36,6 +37,7 @@ var heartbeatInterval = common.MasterHeartbeatPeriod
 type LocalStreamer struct {
 	ch  chan *replication.BinlogEvent
 	ech chan error
+	heatBeatTimer *time.Timer
 	err error
 }
 
@@ -57,8 +59,18 @@ func (s *LocalStreamer) GetEvent(ctx context.Context) (*replication.BinlogEvent,
 		heartbeatInterval = time.Duration(i) * time.Second
 	})
 
+	fired := false
+	s.heatBeatTimer.Reset(heartbeatInterval)
+	defer func() {
+		if !fired {
+			if !s.heatBeatTimer.Stop() {
+                <-s.heatBeatTimer.C
+            }
+		}
+	}()
 	select {
-	case <-time.After(heartbeatInterval):
+	case <-s.heatBeatTimer.C:
+		fired = true
 		// MySQL will send heartbeat event 30s by default
 		heartbeatHeader := &replication.EventHeader{}
 		return event.GenHeartbeatEvent(heartbeatHeader), nil
@@ -97,6 +109,7 @@ func newLocalStreamer() *LocalStreamer {
 
 	s.ch = make(chan *replication.BinlogEvent, 10240)
 	s.ech = make(chan error, 4)
+	s.heatBeatTimer = utils.NewStoppedTimer()
 
 	return s
 }
