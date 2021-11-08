@@ -17,6 +17,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -97,9 +98,12 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 			}
 		}
 		// process message for each node
-		// get message from puller
 		for _, n := range t.nodes {
-			n.TryRun(ctx)
+			if err := n.TryRun(ctx); err != nil {
+				log.Error("failed to process message ", zap.Error(err))
+				t.stop(err)
+				break
+			}
 		}
 	}
 	// Report error to processor if there is any.
@@ -114,31 +118,30 @@ type Node struct {
 	dataProcessor AsyncDataProcessor
 }
 
-func (n *Node) TryRun(ctx context.Context) {
+func (n *Node) TryRun(ctx context.Context) error {
 	for {
 		// batch?
 		if n.eventStash == nil {
 			n.eventStash = n.parentNode.TryGetProcessedMessage()
 		}
 		if n.eventStash == nil {
-			return
+			return nil
 		}
-		sent, err := n.dataProcessor.TryHandleDataMessage(ctx, *n.eventStash)
+		ok, err := n.dataProcessor.TryHandleDataMessage(ctx, *n.eventStash)
 		// process message failed, stop table actor
 		if err != nil {
-			n.tableActor.stop(err)
-			return
+			return errors.Trace(err)
 		}
 
-		if sent {
+		if ok {
 			n.eventStash = nil
 		} else {
-			return
+			return nil
 		}
 	}
 }
 
-func (t *tableActor) start(ctx cdcContext.Context, tablePipelineNodeCreator TablePipelineNodeCreator) error {
+func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePipelineNodeCreator) error {
 	if t.started {
 		log.Panic("start an already started table",
 			zap.String("changefeedID", t.changefeedID),
@@ -314,10 +317,10 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	vars := cdcCtx.GlobalVars()
 
 	mb := actor.NewMailbox(actor.ID(tableID), defaultOutputChannelSize)
-	// All sub-goroutines should be spawn in the wait group.
-	wg, wgCtx := errgroup.WithContext(cdcCtx)
 	// Cancel should be able to release all sub-goroutines in the actor.
-	_, cancel := context.WithCancel(wgCtx)
+	cancelCtx, cancel := context.WithCancel(cdcCtx)
+	// All sub-goroutines should be spawn in the wait group.
+	wg, _ := errgroup.WithContext(cancelCtx)
 	table := &tableActor{
 		reportErr: cdcCtx.Throw,
 		mb:        mb,
@@ -340,7 +343,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	}
 
 	log.Info("spawn and start table actor", zap.Int64("tableID", tableID))
-	if err := table.start(cdcCtx, nodeCreator); err != nil {
+	if err := table.start(cancelCtx, nodeCreator); err != nil {
 		table.stop(err)
 		return nil, err
 	}

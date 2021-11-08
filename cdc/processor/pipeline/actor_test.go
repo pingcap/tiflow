@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/actor/message"
@@ -29,28 +28,43 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func TestMarshalUnmarshal(t *testing.T) {
+func TestNewTableActor(t *testing.T) {
 	ctx := context.TODO()
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Cyclic = &config.CyclicConfig{
-		Enable: true,
-	}
+	replicaConfig.Cyclic = &config.CyclicConfig{Enable: true}
 	cctx := cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{CaptureInfo: &model.CaptureInfo{ID: "1", AdvertiseAddr: "1", Version: "v5.3.0"}}),
 		&cdcContext.ChangefeedVars{
 			ID: "1",
 			Info: &model.ChangeFeedInfo{
 				Config: replicaConfig,
+				Engine: model.SortInMemory,
 			},
 		})
 
-	actor, err := NewTableActor(cctx, nil, 1, "t1", &model.TableReplicaInfo{
-		StartTs:     1,
-		MarkTableID: 0,
-	}, nil, 100, &FakeTableNodeCreator{})
+	nodeCreator := &FakeTableNodeCreator{}
+	actor, err := NewTableActor(cctx, nil, 1, "t1",
+		&model.TableReplicaInfo{
+			StartTs:     1,
+			MarkTableID: 0,
+		},
+		nil, 100, nodeCreator)
 	require.Nil(t, err)
 
 	defaultRouter.Send(1, message.BarrierMessage(2))
+	nodeCreator.actorPullerNode.TryHandleDataMessage(ctx, pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
+		StartTs: 2,
+		CRTs:    2,
+		RawKV: &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			StartTs: 2,
+			CRTs:    2,
+		},
+		Row: nil,
+	}))
+	defaultRouter.Send(1, message.TickMessage())
+	time.Sleep(time.Second)
+
 	defaultRouter.Send(1, message.StopMessage())
 	time.Sleep(time.Second)
 	require.True(t, actor.(*tableActor).stopped)
@@ -58,18 +72,17 @@ func TestMarshalUnmarshal(t *testing.T) {
 }
 
 type FakeTableNodeCreator struct {
+	nodeCreatorImpl
+	actorPullerNode TableActorDataNode
 }
 
 func (n *FakeTableNodeCreator) NewPullerNode(tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) TableActorDataNode {
-	return &FakeTableActorDataNode{}
-}
-
-func (n *FakeTableNodeCreator) NewSorterNode(tableName string, tableID model.TableID, startTs model.Ts, flowController tableFlowController, mounter entry.Mounter) TableActorDataNode {
-	return &FakeTableActorDataNode{}
+	n.actorPullerNode = &FakeTableActorDataNode{outputCh: make(chan pipeline.Message, 1)}
+	return n.actorPullerNode
 }
 
 func (n *FakeTableNodeCreator) NewCyclicNode(markTableID model.TableID) TableActorDataNode {
-	return &FakeTableActorDataNode{}
+	return newCyclicMarkNode(markTableID).(*cyclicMarkNode)
 }
 
 func (n *FakeTableNodeCreator) NewSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) TableActorSinkNode {
