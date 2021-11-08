@@ -2,14 +2,7 @@
 
 check-thread-count = 4
 
-<<<<<<< HEAD:tests/ddl_async/conf/diff_config.toml
-# tables need to check.
-[[check-tables]]
-    schema = "ddl_async"
-    tables = ["many_cols1","many_cols2","many_cols3","many_cols4","many_cols5","finish_mark"]
-=======
 export-fix-sql = true
->>>>>>> 640da278d (tests, dm/tests: fix sync_diff configs for CI (#3247)):tests/consistent_replicate_local/conf/diff_config.toml
 
 check-struct-only = false
 
