@@ -31,9 +31,9 @@ func DispatchTableTopic(changefeedID ChangeFeedID) p2p.Topic {
 
 // DispatchTableMessage is the message body for dispatching a table.
 type DispatchTableMessage struct {
-	OwnerRev   int64   `json:"owner-rev"`
-	ID         TableID `json:"id"`
-	IsDelete   bool    `json:"is-delete"`
+	OwnerRev int64   `json:"owner-rev"`
+	ID       TableID `json:"id"`
+	IsDelete bool    `json:"is-delete"`
 }
 
 // DispatchTableResponseTopic returns a message topic for the result of
@@ -55,6 +55,8 @@ func AnnounceTopic(changefeedID ChangeFeedID) p2p.Topic {
 // AnnounceMessage is the message body for announcing an ownership change.
 type AnnounceMessage struct {
 	OwnerRev int64 `json:"owner-rev"`
+	// Sends the owner's version for compatibility check
+	OwnerVersion string `json:"owner-version"`
 }
 
 // SyncTopic returns a message body for syncing the current states of a processor.
@@ -65,9 +67,11 @@ func SyncTopic(changefeedID ChangeFeedID) p2p.Topic {
 // SyncMessage is the message body for syncing the current states of a processor.
 // MsgPack serialization has been implemented to minimize the size of the message.
 type SyncMessage struct {
-	Running  []TableID
-	Adding   []TableID
-	Removing []TableID
+	// Sends the processor's version for compatibility check
+	ProcessorVersion string `json:"processor-version"`
+	Running          []TableID
+	Adding           []TableID
+	Removing         []TableID
 }
 
 // Marshal serializes the message into MsgPack format.
