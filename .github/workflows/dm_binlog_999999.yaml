@@ -1,16 +1,8 @@
 name: DM Binlog 999999
 
 on:
-  #schedule:
-  #  - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
-  push:
-    branches:
-      - master
-      - 'release-[0-9].[0-9]*'
-  pull_request:
-    branches:
-      - master
-      - 'release-[0-9].[0-9]*'
+  schedule:
+    - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
 
 jobs:
   test-binlog-999999:
