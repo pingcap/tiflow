@@ -126,7 +126,8 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	data, err = log.MarshalMsg(nil)
 	require.Nil(t, err)
 	_, err = w.Write(data)
-	w.Close()
+	require.Nil(t, err)
+	err = w.Close()
 	require.Nil(t, err)
 	path := filepath.Join(cfg.Dir, fileName)
 	f, err := os.Open(path)
@@ -248,4 +249,5 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 			require.Regexp(t, tt.wantErr, err.Error(), tt.name)
 		}
 	}
+	time.Sleep(1001 * time.Millisecond)
 }

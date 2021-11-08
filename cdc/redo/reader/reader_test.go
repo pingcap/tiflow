@@ -81,7 +81,8 @@ func TestLogReaderResetReader(t *testing.T) {
 	require.Nil(t, err)
 	_, err = w.Write(data)
 	require.Nil(t, err)
-	w.Close()
+	err = w.Close()
+	require.Nil(t, err)
 
 	path := filepath.Join(dir, fileName)
 	f, err := os.Open(path)
@@ -99,7 +100,8 @@ func TestLogReaderResetReader(t *testing.T) {
 	require.Nil(t, err)
 	_, err = w.Write(data)
 	require.Nil(t, err)
-	w.Close()
+	err = w.Close()
+	require.Nil(t, err)
 	path = filepath.Join(dir, fileName)
 	f1, err := os.Open(path)
 	require.Nil(t, err)
@@ -211,6 +213,7 @@ func TestLogReaderResetReader(t *testing.T) {
 
 		}
 	}
+	time.Sleep(1001 * time.Millisecond)
 }
 
 func TestLogReaderReadMeta(t *testing.T) {
