@@ -175,8 +175,8 @@ func (ldb *LevelActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 				ldb.wb.Delete([]byte(k))
 			}
 
-			forceWrite := false
-			if err := ldb.maybeWrite(forceWrite); err != nil {
+			// Do not force write, batching for efficiency.
+			if err := ldb.maybeWrite(false); err != nil {
 				log.Panic("leveldb error", zap.Error(err))
 			}
 		}

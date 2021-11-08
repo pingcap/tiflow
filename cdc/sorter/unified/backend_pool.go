@@ -95,9 +95,9 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 		defer ticker.Stop()
 
 		id := "0" // A placeholder for ID label in metrics.
-		metricSorterInMemoryDataSizeGauge := sorter.SorterInMemoryDataSizeGauge.WithLabelValues(captureAddr, id)
-		metricSorterOnDiskDataSizeGauge := sorter.SorterOnDiskDataSizeGauge.WithLabelValues(captureAddr, id)
-		metricSorterOpenFileCountGauge := sorter.SorterOpenFileCountGauge.WithLabelValues(captureAddr, id)
+		metricSorterInMemoryDataSizeGauge := sorter.InMemoryDataSizeGauge.WithLabelValues(captureAddr, id)
+		metricSorterOnDiskDataSizeGauge := sorter.OnDiskDataSizeGauge.WithLabelValues(captureAddr, id)
+		metricSorterOpenFileCountGauge := sorter.OpenFileCountGauge.WithLabelValues(captureAddr, id)
 
 		for {
 			select {
