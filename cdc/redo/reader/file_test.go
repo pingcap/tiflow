@@ -71,8 +71,10 @@ func TestReaderRead(t *testing.T) {
 	require.Nil(t, err)
 	w.AdvanceTs(11)
 	_, err = w.Write(data)
-	w.Close()
 	require.Nil(t, err)
+	err = w.Close()
+	require.Nil(t, err)
+	require.True(t, !w.IsRunning())
 	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", cfg.CaptureID, cfg.ChangeFeedID, cfg.CreateTime.Unix(), cfg.FileType, 11, common.LogEXT)
 	path := filepath.Join(cfg.Dir, fileName)
 	info, err := os.Stat(path)
@@ -92,6 +94,7 @@ func TestReaderRead(t *testing.T) {
 	err = r[0].Read(log)
 	require.Nil(t, err)
 	require.EqualValues(t, 1123, log.RedoRow.Row.CommitTs)
+	time.Sleep(1001 * time.Millisecond)
 }
 
 func TestReaderOpenSelectedFiles(t *testing.T) {
