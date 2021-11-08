@@ -29,7 +29,7 @@ import (
 	"go.uber.org/zap"
 
 	// use for OpenAPI online docs
-	_ "github.com/pingcap/ticdc/docs/api"
+	_ "github.com/pingcap/ticdc/api"
 )
 
 // newRouter create a router for OpenAPI
