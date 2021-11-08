@@ -145,8 +145,6 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 	config.TopicName = topic
 
-	enableTopicPreProcess = false
-
 	newSaramaConfigImplBak := newSaramaConfigImpl
 	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
 		cfg, err := newSaramaConfigImplBak(ctx, config)
@@ -435,8 +433,6 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 	config.TopicName = topic
 
-	enableTopicPreProcess = false
-
 	newSaramaConfigImplBak := newSaramaConfigImpl
 	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
 		cfg, err := newSaramaConfigImplBak(ctx, config)
@@ -513,7 +509,6 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 	config.TopicName = topic
 
-	enableTopicPreProcess = false
 	errCh := make(chan error, 1)
 	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
 	defer func() {
