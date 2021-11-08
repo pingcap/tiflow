@@ -1,13 +1,6 @@
 # diff Configuration.
 
 check-thread-count = 4
-<<<<<<< HEAD
-sample-percent = 100
-use-rowid = false
-use-checksum = true
-fix-sql-file = "fix.sql"
-=======
->>>>>>> 640da278d (tests, dm/tests: fix sync_diff configs for CI (#3247))
 
 export-fix-sql = true
 
