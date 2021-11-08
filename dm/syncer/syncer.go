@@ -63,6 +63,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/relay"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 	operator "github.com/pingcap/ticdc/dm/syncer/err-operator"
 	"github.com/pingcap/ticdc/dm/syncer/metrics"
@@ -75,6 +76,8 @@ var (
 	maxRetryCount = 100
 
 	retryTimeout = 3 * time.Second
+
+	waitTime = 10 * time.Millisecond
 
 	// MaxDDLConnectionTimeoutMinute also used by SubTask.ExecuteDDL.
 	MaxDDLConnectionTimeoutMinute = 5
@@ -221,11 +224,11 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
-	notifier streamer.EventNotifier
+	notifier relay.EventNotifier
 }
 
 // NewSyncer creates a new Syncer.
-func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier streamer.EventNotifier) *Syncer {
+func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier relay.EventNotifier) *Syncer {
 	logger := log.With(zap.String("task", cfg.Name), zap.String("unit", "binlog replication"))
 	syncer := &Syncer{
 		pessimist: shardddl.NewPessimist(&logger, etcdClient, cfg.Name, cfg.SourceID),
@@ -786,7 +789,7 @@ func (s *Syncer) addCount(isFinished bool, queueBucket string, tp opType, n int6
 		m = metrics.FinishedJobsTotal
 	}
 	switch tp {
-	case insert, update, del, ddl, flush, conflict:
+	case insert, update, del, ddl, flush, conflict, compact:
 		m.WithLabelValues(tp.String(), s.cfg.Name, queueBucket, s.cfg.SourceID, s.cfg.WorkerName, targetTable.Schema, targetTable.Name).Add(float64(n))
 	case skip, xid:
 		// ignore skip/xid jobs
@@ -1227,7 +1230,7 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.
 	}
 }
 
-func (s *Syncer) successFunc(queueID int, jobs []*job) {
+func (s *Syncer) successFunc(queueID int, statementsCnt int, jobs []*job) {
 	queueBucket := queueBucketName(queueID)
 	if len(jobs) > 0 {
 		// NOTE: we can use the first job of job queue to calculate lag because when this job committed,
@@ -1248,7 +1251,8 @@ func (s *Syncer) successFunc(queueID int, jobs []*job) {
 		s.addCount(true, queueBucket, sqlJob.tp, 1, sqlJob.targetTable)
 	}
 	s.updateReplicationJobTS(nil, dmlWorkerJobIdx(queueID))
-	metrics.ReplicationTransactionBatch.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID, queueBucket).Observe(float64(len(jobs)))
+	metrics.ReplicationTransactionBatch.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID, queueBucket, "statements").Observe(float64(statementsCnt))
+	metrics.ReplicationTransactionBatch.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID, queueBucket, "rows").Observe(float64(len(jobs)))
 }
 
 func (s *Syncer) fatalFunc(job *job, err error) {
@@ -1624,7 +1628,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				return err1
 			}
 			continue
-		case err == streamer.ErrorMaybeDuplicateEvent:
+		case err == relay.ErrorMaybeDuplicateEvent:
 			tctx.L().Warn("read binlog met a truncated file, need to open safe-mode until the next transaction")
 			err = maybeSkipNRowsEvent(eventIndex)
 			if err == nil {
