@@ -319,12 +319,10 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 	cmps := make([]clientv3.Cmp, 0, len(changedSet))
 	ops := make([]clientv3.Op, 0, len(changedSet))
 	hasDelete := false
-	entrys := make(map[string]int64)
 	for key := range changedSet {
 		// make sure someone else has not updated the key after the last snapshot
 		var cmp clientv3.Cmp
 		if entry, ok := worker.rawState[key]; ok {
-			entrys[key.String()] = entry.modRevision
 			cmp = clientv3.Compare(clientv3.ModRevision(key.String()), "=", entry.modRevision)
 		} else {
 			// if ok is false, it means that the key of this patch is not exist in a committed state
