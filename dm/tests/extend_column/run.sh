@@ -81,7 +81,7 @@ function run() {
 	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=2 and c_table='2';" "count(1): 1"
 	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=3 and c_table='2';" "count(1): 0"
 	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=4 and c_table='2';" "count(1): 0"
-	
+
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb};" "count(1): 4"
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=1 and c_table='1' and c_schema='extend_column1' and c_source='replica01';" "count(1): 1"
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=2 and c_table='1' and c_schema='extend_column1' and c_source='replica01';" "count(1): 1"
