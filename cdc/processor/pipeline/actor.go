@@ -74,7 +74,7 @@ type tableActor struct {
 	cyclicNode *cyclicMarkNode
 	sinkNode   *sinkNode
 
-	nodes []*node
+	nodes []*Node
 
 	lastBarrierTsUpdateTime time.Time
 }
@@ -103,7 +103,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 		// process message for each node
 		// get message from puller
 		for _, n := range t.nodes {
-			n.tryRun(ctx)
+			n.TryRun(ctx)
 		}
 	}
 	// Report error to processor if there is any.
@@ -111,7 +111,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return !t.stopped
 }
 
-type node struct {
+type Node struct {
 	eventStash     *pipeline.Message
 	messageFetcher MessageFetcher
 	messageSender  MessageSender
@@ -189,7 +189,7 @@ func (q *ListMessageFetcher) TryGetMessage() *pipeline.Message {
 	return &msg
 }
 
-func (n *node) tryRun(ctx context.Context) {
+func (n *Node) TryRun(ctx context.Context) {
 	for {
 		// batch?
 		if n.eventStash == nil {
@@ -232,7 +232,7 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 		return err
 	}
 	t.nodes = append(t.nodes,
-		&node{
+		&Node{
 			messageFetcher: &ChannelMessageFetcher{OutputChan: t.pullerNode.outputCh},
 			messageSender:  &sorterMessageSender{sorter: t.sorterNode},
 		})
@@ -243,7 +243,7 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 			log.Error("sink fails to start", zap.Error(err))
 			return err
 		}
-		t.nodes = append(t.nodes, &node{
+		t.nodes = append(t.nodes, &Node{
 			messageFetcher: &ChannelMessageFetcher{OutputChan: t.sorterNode.outputCh},
 			messageSender:  &cyclicMessageSender{tableActor: t, cyclic: t.cyclicNode},
 		},
@@ -256,12 +256,12 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 		return err
 	}
 	if t.cyclicEnabled {
-		t.nodes = append(t.nodes, &node{
+		t.nodes = append(t.nodes, &Node{
 			messageFetcher: &ListMessageFetcher{MessageList: t.cyclicNode.queue},
 			messageSender:  &sinkMessageSender{tableActor: t, sink: t.sinkNode},
 		})
 	} else {
-		t.nodes = append(t.nodes, &node{
+		t.nodes = append(t.nodes, &Node{
 			messageFetcher: &ChannelMessageFetcher{OutputChan: t.sorterNode.outputCh},
 			messageSender:  &sinkMessageSender{tableActor: t, sink: t.sinkNode},
 		})
