@@ -1,26 +1,35 @@
 # diff Configuration.
 
-log-level = "info"
-chunk-size = 10
 check-thread-count = 4
-sample-percent = 100
-use-rowid = false
-use-checksum = true
-fix-sql-file = "fix.sql"
 
+<<<<<<< HEAD:tests/ddl_async/conf/diff_config.toml
 # tables need to check.
 [[check-tables]]
     schema = "ddl_async"
     tables = ["many_cols1","many_cols2","many_cols3","many_cols4","many_cols5","finish_mark"]
+=======
+export-fix-sql = true
+>>>>>>> 640da278d (tests, dm/tests: fix sync_diff configs for CI (#3247)):tests/consistent_replicate_local/conf/diff_config.toml
 
-[[source-db]]
+check-struct-only = false
+
+[task]
+    output-dir = "/tmp/ticdc_dm_test/output"
+
+    source-instances = ["mysql1"]
+
+    target-instance = "tidb0"
+
+    target-check-tables = ["consistent_replicate_local.usertable*"]
+
+[data-sources]
+[data-sources.mysql1]
     host = "127.0.0.1"
     port = 4000
     user = "root"
     password = ""
-    instance-id = "source-1"
 
-[target-db]
+[data-sources.tidb0]
     host = "127.0.0.1"
     port = 3306
     user = "root"
