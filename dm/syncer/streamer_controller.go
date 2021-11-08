@@ -27,12 +27,13 @@ import (
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/retry"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/relay"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
 
@@ -46,16 +47,16 @@ var minErrorRetryInterval = 1 * time.Minute
 // For other implementations who implement StreamerProducer and Streamer can easily take place of Syncer.streamProducer
 // For test is easy to mock.
 type StreamerProducer interface {
-	generateStreamer(location binlog.Location) (streamer.Streamer, error)
+	generateStreamer(location binlog.Location) (reader.Streamer, error)
 }
 
 // Read local relay log.
 type localBinlogReader struct {
-	reader     *streamer.BinlogReader
+	reader     *relay.BinlogReader
 	EnableGTID bool
 }
 
-func (l *localBinlogReader) generateStreamer(location binlog.Location) (streamer.Streamer, error) {
+func (l *localBinlogReader) generateStreamer(location binlog.Location) (reader.Streamer, error) {
 	if l.EnableGTID {
 		return l.reader.StartSyncByGTID(location.GetGTID().Origin().Clone())
 	}
@@ -70,7 +71,7 @@ type remoteBinlogReader struct {
 	EnableGTID bool
 }
 
-func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (streamer.Streamer, error) {
+func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (reader.Streamer, error) {
 	defer func() {
 		lastSlaveConnectionID := r.reader.LastConnectionID()
 		r.tctx.L().Info("last slave connection", zap.Uint32("connection ID", lastSlaveConnectionID))
@@ -106,7 +107,7 @@ type StreamerController struct {
 	localBinlogDir string
 	timezone       *time.Location
 
-	streamer         streamer.Streamer
+	streamer         reader.Streamer
 	streamerProducer StreamerProducer
 
 	// meetError means meeting error when get binlog event
@@ -121,11 +122,11 @@ type StreamerController struct {
 
 	// whether the server id is updated
 	serverIDUpdated bool
-	notifier        streamer.EventNotifier
+	notifier        relay.EventNotifier
 }
 
 // NewStreamerController creates a new streamer controller.
-func NewStreamerController(notifier streamer.EventNotifier,
+func NewStreamerController(notifier relay.EventNotifier,
 	syncCfg replication.BinlogSyncerConfig,
 	enableGTID bool,
 	fromDB *dbconn.UpStreamConn,
@@ -234,7 +235,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	if c.currentBinlogType == RemoteBinlog {
 		c.streamerProducer = &remoteBinlogReader{replication.NewBinlogSyncer(c.syncCfg), tctx, c.syncCfg.Flavor, c.enableGTID}
 	} else {
-		c.streamerProducer = &localBinlogReader{streamer.NewBinlogReader(c.notifier, tctx.L(), &streamer.BinlogReaderConfig{RelayDir: c.localBinlogDir, Timezone: c.timezone, Flavor: c.syncCfg.Flavor}), c.enableGTID}
+		c.streamerProducer = &localBinlogReader{relay.NewBinlogReader(c.notifier, tctx.L(), &relay.BinlogReaderConfig{RelayDir: c.localBinlogDir, Timezone: c.timezone, Flavor: c.syncCfg.Flavor}), c.enableGTID}
 	}
 
 	c.streamer, err = c.streamerProducer.generateStreamer(location)
