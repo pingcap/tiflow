@@ -46,7 +46,7 @@ func TestNewLogReader(t *testing.T) {
 
 	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
 	require.Nil(t, err)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
+	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err = NewLogReader(ctx, &LogReaderConfig{
 		S3Storage: true,
