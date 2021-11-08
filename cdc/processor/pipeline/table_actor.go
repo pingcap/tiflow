@@ -15,7 +15,6 @@ package pipeline
 
 import (
 	"context"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -69,11 +68,10 @@ type tableActor struct {
 	info *cdcContext.ChangefeedVars
 	vars *cdcContext.GlobalVars
 
-	sinkNode TableActorSinkNode
+	actorMessageHandler ActorMessageHandler
+	sinkNode            TableActorSinkNode
 
 	nodes []*Node
-
-	lastBarrierTsUpdateTime time.Time
 }
 
 var _ TablePipeline = (*tableActor)(nil)
@@ -89,10 +87,10 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 		switch msgs[i].Tp {
 		case message.TypeStop:
 			t.stop(nil)
-			break
+			return false
 		case message.TypeTick:
 		case message.TypeBarrier:
-			err := t.sinkNode.HandleActorMessage(ctx, msgs[i])
+			err := t.actorMessageHandler.HandleActorMessage(ctx, msgs[i])
 			if err != nil {
 				t.stop(err)
 			}
@@ -193,6 +191,7 @@ func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePi
 		log.Error("sink fails to start", zap.Error(err))
 		return err
 	}
+	t.actorMessageHandler = actorSinkNode
 	t.sinkNode = actorSinkNode
 	node := &Node{dataProcessor: actorSinkNode, tableActor: t}
 	if t.cyclicEnabled {
@@ -238,13 +237,12 @@ func (t *tableActor) CheckpointTs() model.Ts {
 
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
-	if t.sinkNode.BarrierTs() != ts || t.lastBarrierTsUpdateTime.Add(time.Minute).Before(time.Now()) {
+	if t.sinkNode.BarrierTs() != ts {
 		msg := message.BarrierMessage(ts)
 		err := defaultRouter.Send(actor.ID(t.tableID), msg)
 		if err != nil {
 			log.Warn("send fails", zap.Reflect("msg", msg), zap.Error(err))
 		}
-		t.lastBarrierTsUpdateTime = time.Now()
 	}
 }
 
@@ -290,7 +288,7 @@ func (t *tableActor) Name() string {
 // created by this table pipeline
 func (t *tableActor) Cancel() {
 	// TODO(neil): pass context.
-	if err := t.mb.SendB(context.TODO(), message.StopMessage()); err != nil {
+	if err := defaultRouter.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
 		log.Warn("fails to send Stop message",
 			zap.Uint64("tableID", uint64(t.tableID)))
 	}
@@ -391,6 +389,10 @@ type TableActorSinkNode interface {
 	ResolvedTs() model.Ts
 	CheckpointTs() model.Ts
 	BarrierTs() model.Ts
+	HandleActorMessage(ctx context.Context, msg message.Message) error
+}
+
+type ActorMessageHandler interface {
 	HandleActorMessage(ctx context.Context, msg message.Message) error
 }
 

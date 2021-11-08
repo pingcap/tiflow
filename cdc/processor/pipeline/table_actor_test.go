@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
@@ -44,11 +43,7 @@ func TestNewTableActor(t *testing.T) {
 
 	nodeCreator := &FakeTableNodeCreator{}
 	tbl, err := NewTableActor(cctx, nil, 1, "t1",
-		&model.TableReplicaInfo{
-			StartTs:     1,
-			MarkTableID: 2,
-		},
-		nil, 100, nodeCreator)
+		&model.TableReplicaInfo{StartTs: 1, MarkTableID: 2}, nil, 100, nodeCreator)
 	require.Nil(t, err)
 	actor := tbl.(*tableActor)
 	id, markId := actor.ID()
@@ -58,8 +53,9 @@ func TestNewTableActor(t *testing.T) {
 	require.Equal(t, int64(2), markId)
 	require.Equal(t, uint64(1), actor.ResolvedTs())
 	require.Equal(t, uint64(1), actor.CheckpointTs())
+	require.Equal(t, uint64(1), actor.Workload().Workload)
+	actor.UpdateBarrierTs(2)
 
-	defaultRouter.Send(1, message.BarrierMessage(2))
 	nodeCreator.actorPullerNode.TryHandleDataMessage(ctx, pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
 		StartTs: 2,
 		CRTs:    2,
@@ -73,9 +69,48 @@ func TestNewTableActor(t *testing.T) {
 	defaultRouter.Send(1, message.TickMessage())
 	time.Sleep(time.Second)
 
+	replicaConfig.Cyclic = &config.CyclicConfig{Enable: false}
+	cctx = cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{CaptureInfo: &model.CaptureInfo{ID: "1", AdvertiseAddr: "1", Version: "v5.3.0"}}),
+		&cdcContext.ChangefeedVars{ID: "2", Info: &model.ChangeFeedInfo{
+			Config: replicaConfig,
+			Engine: model.SortInMemory,
+		},
+		})
+	tbl2, err := NewTableActor(cctx, nil, 2, "t2",
+		&model.TableReplicaInfo{StartTs: 3, MarkTableID: 4}, nil, 100, nodeCreator)
+	require.Nil(t, err)
+	actor2 := tbl2.(*tableActor)
+	id, markId = actor2.ID()
+	require.Equal(t, TableStatusInitializing, actor2.Status())
+	require.Equal(t, "t2", actor2.Name())
+	require.Equal(t, int64(2), id)
+	require.Equal(t, int64(4), markId)
+	require.Equal(t, uint64(3), actor2.ResolvedTs())
+	require.Equal(t, uint64(3), actor2.CheckpointTs())
+	require.Equal(t, uint64(1), actor2.Workload().Workload)
+
+	actor1WaitReturned := false
+	go func() {
+		actor.Wait()
+		actor1WaitReturned = true
+	}()
+	actor2WaitReturned := false
+	go func() {
+		actor2.Wait()
+		actor2WaitReturned = true
+	}()
 	actor.AsyncStop(1)
 	time.Sleep(time.Second)
 	require.True(t, actor.stopped)
+	require.True(t, actor1WaitReturned)
+	require.False(t, actor2.stopped)
+	require.False(t, actor2WaitReturned)
+
+	actor2.Cancel()
+	time.Sleep(time.Second)
+	require.True(t, actor2.stopped)
+	require.True(t, actor2WaitReturned)
+
 	defaultSystem.Stop()
 }
 
@@ -111,14 +146,6 @@ type FakeTableNodeCreator struct {
 func (n *FakeTableNodeCreator) NewPullerNode(tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) TableActorDataNode {
 	n.actorPullerNode = &FakeTableActorDataNode{outputCh: make(chan pipeline.Message, 1)}
 	return n.actorPullerNode
-}
-
-func (n *FakeTableNodeCreator) NewCyclicNode(markTableID model.TableID) TableActorDataNode {
-	return newCyclicMarkNode(markTableID).(*cyclicMarkNode)
-}
-
-func (n *FakeTableNodeCreator) NewSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) TableActorSinkNode {
-	return newSinkNode(sink, startTs, targetTs, flowController)
 }
 
 type FakeTableActorDataNode struct {
