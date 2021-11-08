@@ -68,7 +68,8 @@ function escape_schema() {
 	cp $cur/data/db2.prepare.sql $WORK_DIR/db2.prepare.sql
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	cp $cur/conf/diff_config.toml $WORK_DIR/diff_config.toml
-	sed -i "s/full_mode/full\/mode/g" $WORK_DIR/db1.prepare.sql $WORK_DIR/db2.prepare.sql $WORK_DIR/dm-task.yaml $WORK_DIR/diff_config.toml
+	sed -i "s/full_mode/full\\\\\\\\\/mode/g" $WORK_DIR/diff_config.toml
+	sed -i "s/full_mode/full\/mode/g" $WORK_DIR/db1.prepare.sql $WORK_DIR/db2.prepare.sql $WORK_DIR/dm-task.yaml
 
 	run_sql_file $WORK_DIR/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
