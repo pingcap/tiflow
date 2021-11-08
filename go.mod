@@ -107,3 +107,5 @@ replace (
 	// we need keep the replacement until go.etcd.io supports the higher version of grpc.
 	google.golang.org/grpc v1.40.0 => google.golang.org/grpc v1.29.1
 )
+
+replace github.com/go-mysql-org/go-mysql v1.1.3-0.20210705101833-83965e516929 => github.com/D3Hunter/go-mysql v1.1.3-0.20211021095645-e837483e393f
