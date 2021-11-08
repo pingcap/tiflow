@@ -410,9 +410,6 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 }
 
 func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
-	failpoint.Inject("workaround4NewClusterAdmin", func() {
-		failpoint.Return(nil)
-	})
 	admin, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return err
@@ -488,6 +485,7 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 var (
 	newSaramaConfigImpl = newSaramaConfig
 	// when use kafka broker version less than "1.0.0", we would have to disable topicPreProcess
+	// this could happen in some unit testcase.
 	enableTopicPreProcess = true
 )
 
