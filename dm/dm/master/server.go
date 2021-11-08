@@ -25,8 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/dm/loader"
-
 	"github.com/labstack/echo/v4"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -1425,18 +1423,6 @@ func withHost(addr string) string {
 func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string, toDBCfg *config.DBConfig) error {
 	toDBCfg.Adjust()
 
-	if toDBCfg != nil {
-		tctx := tcontext.NewContext(ctx, log.L())
-		list, err := loader.NewLightningCheckpointList(tctx, *toDBCfg, metaSchema)
-		if err != nil {
-			return err
-		}
-		err = list.RemoveTaskCheckPoint(tctx, taskName)
-		if err != nil {
-			return err
-		}
-		list.Close()
-	}
 	// clear shard meta data for pessimistic/optimist
 	err := s.pessimist.RemoveMetaData(taskName)
 	if err != nil {

@@ -117,9 +117,12 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 	checkpoint, err := newRemoteCheckPoint(tctx, l.cfg, l.checkpointID())
 	if err == nil {
 		l.checkPoint = checkpoint
-		checkpointList, err1 := NewLightningCheckpointList(tctx, l.cfg.To, l.cfg.MetaSchema)
+		checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.MetaSchema)
+		err1 := checkpointList.Prepare(ctx)
+		if err1 == nil {
+			l.checkPointList = checkpointList
+		}
 		err = err1
-		l.checkPointList = checkpointList
 	}
 	failpoint.Inject("ignoreLoadCheckpointErr", func(_ failpoint.Value) {
 		l.logger.Info("", zap.String("failpoint", "ignoreLoadCheckpointErr"))
@@ -180,7 +183,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 	}
 	if !l.checkPoint.IsTableFinished(lightningCheckpointDB, lightningCheckpointTable) {
 		if l.checkPointList != nil {
-			if err = l.checkPointList.RegisterCheckPoint(tctx, l.workerName, l.cfg.Name); err != nil {
+			if err = l.checkPointList.RegisterCheckPoint(ctx, l.workerName, l.cfg.Name); err != nil {
 				return err
 			}
 		}

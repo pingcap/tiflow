@@ -14,6 +14,7 @@
 package loader
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -32,7 +33,7 @@ import (
 )
 
 const (
-	lightningCheckpointListName = "lightning_checkpoint_list"
+	LightningCheckpointListName = "lightning_checkpoint_list"
 )
 
 // CheckPoint represents checkpoint status.
@@ -472,32 +473,31 @@ func (cp *RemoteCheckPoint) String() string {
 type LightningCheckpointList struct {
 	db        *conn.BaseDB
 	connMutex sync.Mutex
-	conn      *DBConn
 	schema    string
 	tableName string
 	logger    log.Logger
 }
 
-func NewLightningCheckpointList(tctx *tcontext.Context, cfg config.DBConfig, metaSchema string) (*LightningCheckpointList, error) {
-	db, dbConns, err := createConns(tctx, cfg, "checkpoint", "checkpoint", 1)
-	if err != nil {
-		return nil, err
-	}
-	cp := &LightningCheckpointList{
+func NewLightningCheckpointList(db *conn.BaseDB, metaSchema string) *LightningCheckpointList {
+	return &LightningCheckpointList{
 		db:        db,
-		conn:      dbConns[0],
 		schema:    dbutil.ColumnName(metaSchema),
-		tableName: dbutil.TableName(metaSchema, lightningCheckpointListName),
-		logger:    tctx.L().WithFields(zap.String("component", "lightning checkpoint database list")),
+		tableName: dbutil.TableName(metaSchema, LightningCheckpointListName),
+		logger:    log.L().WithFields(zap.String("component", "lightning checkpoint database list")),
 	}
-	err = cp.prepare(tctx)
-	if err != nil {
-		return nil, err
-	}
-	return cp, nil
 }
 
-func (cp *LightningCheckpointList) prepare(tctx *tcontext.Context) error {
+func (cp *LightningCheckpointList) Prepare(ctx context.Context) error {
+	connection, err := cp.db.GetBaseConn(ctx)
+	if err != nil {
+		return terror.WithScope(terror.Annotate(err, "initialize connection when prepare"), terror.ScopeDownstream)
+	}
+	createSchema := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", cp.schema)
+	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
+	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{createSchema})
+	if err != nil {
+		return err
+	}
 	createTable := `CREATE TABLE IF NOT EXISTS %s (
 		worker_name varchar(255) NOT NULL,
 		task_name varchar(255) NOT NULL,
@@ -505,21 +505,24 @@ func (cp *LightningCheckpointList) prepare(tctx *tcontext.Context) error {
 	);
 `
 	sql2 := fmt.Sprintf(createTable, cp.tableName)
-	cp.connMutex.Lock()
-	err := cp.conn.executeSQL(tctx, []string{sql2})
-	cp.connMutex.Unlock()
+	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{sql2})
 	return terror.WithScope(err, terror.ScopeDownstream)
 }
 
-func (cp *LightningCheckpointList) RegisterCheckPoint(tctx *tcontext.Context, workerName, taskName string) error {
+func (cp *LightningCheckpointList) RegisterCheckPoint(ctx context.Context, workerName, taskName string) error {
+	connection, err := cp.db.GetBaseConn(ctx)
+	if err != nil {
+		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
+	}
+
 	sql := fmt.Sprintf("INSERT INGORE INTO %s (`id`, `worker_name`, `task_name`) VALUES(?,?)", cp.tableName)
 	cp.logger.Info("initial checkpoint record",
 		zap.String("sql", sql),
 		zap.String("worker-name", workerName),
 		zap.String("task-name", taskName))
 	args := []interface{}{workerName, taskName}
-	cp.connMutex.Lock()
-	err := cp.conn.executeSQL(tctx, []string{sql}, args)
+	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
+	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{sql}, args)
 	cp.connMutex.Unlock()
 	if err != nil {
 		return terror.WithScope(terror.Annotate(err, "initialize checkpoint"), terror.ScopeDownstream)
@@ -527,11 +530,15 @@ func (cp *LightningCheckpointList) RegisterCheckPoint(tctx *tcontext.Context, wo
 	return nil
 }
 
-func (cp *LightningCheckpointList) RemoveTaskCheckPoint(tctx *tcontext.Context, taskName string) error {
+func (cp *LightningCheckpointList) RemoveTaskCheckPoint(ctx context.Context, taskName string) error {
+	connection, err := cp.db.GetBaseConn(ctx)
+	if err != nil {
+		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
+	}
+
+	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
 	query := fmt.Sprintf("SELECT `worker_name` from %s where `task_name`=?", cp.tableName)
-	cp.connMutex.Lock()
-	rows, err := cp.conn.querySQL(tctx, query, taskName)
-	cp.connMutex.Unlock()
+	rows, err := connection.QuerySQL(tctx, query, taskName)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
@@ -544,15 +551,13 @@ func (cp *LightningCheckpointList) RemoveTaskCheckPoint(tctx *tcontext.Context, 
 		}
 		cpdb := config.TiDBLightningCheckpointPrefix + dbutil.TableName(workerName, taskName)
 		sql := fmt.Sprintf("DROP DATABASE IF NOT EXISTS %s", cpdb)
-		err = cp.conn.executeSQL(tctx, []string{sql})
+		_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{sql})
 		if err != nil {
 			return terror.WithScope(err, terror.ScopeDownstream)
 		}
 	}
 	query = fmt.Sprintf("DELETE from %s where `task_name`=?", cp.tableName)
-	cp.connMutex.Lock()
-	err = cp.conn.executeSQL(tctx, []string{query}, []interface{}{taskName})
-	cp.connMutex.Unlock()
+	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{query}, []interface{}{taskName})
 	return terror.WithScope(err, terror.ScopeDownstream)
 }
 
