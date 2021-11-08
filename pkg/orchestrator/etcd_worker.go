@@ -21,9 +21,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc/mvccpb"
@@ -58,6 +60,14 @@ type EtcdWorker struct {
 	// a `compare-and-swap` semantics, which is essential for implementing
 	// snapshot isolation for Reactor ticks.
 	deleteCounter int64
+	metrics       *etcdWorkerMetrics
+}
+
+type etcdWorkerMetrics struct {
+	// kv events related metrics
+	metricEtcdTxnSize            prometheus.Observer
+	metricEtcdTxnDuration        prometheus.Observer
+	metricEtcdWorkerTickDuration prometheus.Observer
 }
 
 type etcdUpdate struct {
@@ -90,12 +100,25 @@ const (
 	deletionCounterKey          = "/meta/ticdc-delete-etcd-key-count"
 )
 
+func (worker *EtcdWorker) initMetrics(ctx context.Context) {
+	cdcCtx := ctx.(cdcContext.Context)
+	captureAddr := cdcCtx.GlobalVars().CaptureInfo.AdvertiseAddr
+
+	metrics := &etcdWorkerMetrics{}
+	metrics.metricEtcdTxnSize = etcdTxnSize.WithLabelValues(captureAddr)
+	metrics.metricEtcdTxnDuration = etcdTxnExecDuration.WithLabelValues(captureAddr)
+	metrics.metricEtcdWorkerTickDuration = etcdWorkerTickDuration.WithLabelValues(captureAddr)
+	worker.metrics = metrics
+}
+
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 // If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
 // And the specified etcd session is nil-safety.
 func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration) error {
 	defer worker.cleanUp()
+
+	worker.initMetrics(ctx)
 
 	err := worker.syncRawState(ctx)
 	if err != nil {
@@ -205,8 +228,11 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			if !rl.Allow() {
 				continue
 			}
+			startTime := time.Now()
 			// it is safe that a batch of updates has been applied to worker.state before worker.reactor.Tick
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
+			costTime := time.Since(startTime).Seconds()
+			worker.metrics.metricEtcdWorkerTickDuration.Observe(costTime)
 			if err != nil {
 				if !cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
 					return errors.Trace(err)
@@ -319,7 +345,12 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 	cmps := make([]clientv3.Cmp, 0, len(changedSet))
 	ops := make([]clientv3.Op, 0, len(changedSet))
 	hasDelete := false
+	// use for metrics
+	keySize := 0
+	valueSize := 0
+
 	for key := range changedSet {
+		keySize += len(key.String()) * 2
 		// make sure someone else has not updated the key after the last snapshot
 		var cmp clientv3.Cmp
 		if entry, ok := worker.rawState[key]; ok {
@@ -332,6 +363,8 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 		cmps = append(cmps, cmp)
 
 		value := state[key]
+		valueSize += len(value)
+
 		var op clientv3.Op
 		if value != nil {
 			op = clientv3.OpPut(key.String(), string(value))
@@ -353,7 +386,11 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 		panic("unreachable")
 	}
 
+	worker.metrics.metricEtcdTxnSize.Observe(float64(keySize + valueSize))
+	startTime := time.Now()
 	resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
+	costTime := time.Since(startTime).Seconds()
+	worker.metrics.metricEtcdTxnDuration.Observe(costTime)
 	if err != nil {
 		return errors.Trace(err)
 	}
