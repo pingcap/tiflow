@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/relay/retry"
 )
 
 // Config is the configuration for Relay.
@@ -38,7 +37,7 @@ type Config struct {
 	UUIDSuffix int    `toml:"-" json:"-"`
 
 	// for binlog reader retry
-	ReaderRetry retry.ReaderRetryConfig `toml:"reader-retry" json:"reader-retry"`
+	ReaderRetry ReaderRetryConfig `toml:"reader-retry" json:"reader-retry"`
 }
 
 func (c *Config) String() string {
@@ -63,7 +62,7 @@ func FromSourceCfg(sourceCfg *config.SourceConfig) *Config {
 		BinLogName:  clone.RelayBinLogName,
 		BinlogGTID:  clone.RelayBinlogGTID,
 		UUIDSuffix:  clone.UUIDSuffix,
-		ReaderRetry: retry.ReaderRetryConfig{ // we use config from TaskChecker now
+		ReaderRetry: ReaderRetryConfig{ // we use config from TaskChecker now
 			BackoffRollback: clone.Checker.BackoffRollback.Duration,
 			BackoffMax:      clone.Checker.BackoffMax.Duration,
 			BackoffMin:      clone.Checker.BackoffMin.Duration,
