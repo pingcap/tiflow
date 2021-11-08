@@ -39,7 +39,8 @@ type pullerNode struct {
 	cancel      context.CancelFunc
 	wg          *errgroup.Group
 
-	outputCh chan pipeline.Message
+	outputCh     chan pipeline.Message
+	isTableActor bool
 }
 
 func newPullerNode(
@@ -67,7 +68,7 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	return n.Start(ctx, false, new(errgroup.Group), ctx.ChangefeedVars(), ctx.GlobalVars())
 }
 
-func (n *pullerNode) Start(ctx context.Context, isActor bool, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
+func (n *pullerNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
 	n.wg = wg
 	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(info.ID, vars.CaptureInfo.AdvertiseAddr, n.tableName)
 	ctxC, cancel := context.WithCancel(ctx)
@@ -81,7 +82,7 @@ func (n *pullerNode) Start(ctx context.Context, isActor bool, wg *errgroup.Group
 		if err != nil {
 			log.Error("puller stopped", zap.Error(err))
 		}
-		if isActor {
+		if isTableActor {
 			_ = defaultRouter.SendB(ctxC, actor.ID(n.tableID), message.StopMessage())
 		}
 		return nil
@@ -100,7 +101,7 @@ func (n *pullerNode) Start(ctx context.Context, isActor bool, wg *errgroup.Group
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
 				msg := pipeline.PolymorphicEventMessage(pEvent)
-				if isActor {
+				if isTableActor {
 					n.outputCh <- msg
 					_ = defaultRouter.Send(actor.ID(n.tableID), message.TickMessage())
 				} else {
@@ -120,8 +121,32 @@ func (n *pullerNode) Receive(ctx pipeline.NodeContext) error {
 	return nil
 }
 
+func (n *pullerNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
+	if n.isTableActor {
+		select {
+		case n.outputCh <- msg:
+			return true, nil
+		default:
+			return false, nil
+		}
+	} else {
+		ctx.(pipeline.NodeContext).SendToNextNode(msg)
+		return true, nil
+	}
+}
+
 func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
 	tableResolvedTsGauge.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
 	n.cancel()
 	return n.wg.Wait()
+}
+
+func (n *pullerNode) TryGetProcessedMessage() *pipeline.Message {
+	var msg pipeline.Message
+	select {
+	case msg = <-n.outputCh:
+		return &msg
+	default:
+		return nil
+	}
 }

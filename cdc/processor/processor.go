@@ -738,7 +738,8 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			tableNameStr,
 			replicaInfo,
 			sink,
-			p.changefeed.Info.GetTargetTs())
+			p.changefeed.Info.GetTargetTs(),
+			tablepipeline.NewTablePipelineNodeCreator())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

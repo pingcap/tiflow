@@ -29,6 +29,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -99,13 +100,14 @@ func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowContro
 
 func (n *sinkNode) ResolvedTs() model.Ts   { return atomic.LoadUint64(&n.resolvedTs) }
 func (n *sinkNode) CheckpointTs() model.Ts { return atomic.LoadUint64(&n.checkpointTs) }
+func (n *sinkNode) BarrierTs() model.Ts    { return atomic.LoadUint64(&n.barrierTs) }
 func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
 
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
-	return n.Start(ctx, false, ctx.ChangefeedVars(), ctx.GlobalVars())
+	return n.Start(ctx, false, nil, ctx.ChangefeedVars(), ctx.GlobalVars())
 }
 
-func (n *sinkNode) Start(ctx context.Context, isTableActor bool, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
+func (n *sinkNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
 	n.config = info.Info.Config
 	n.isTableActor = isTableActor
 	return nil
@@ -382,5 +384,9 @@ func (n *sinkNode) HandleActorMessage(ctx context.Context, msg message.Message) 
 			return errors.Trace(err)
 		}
 	}
+	return nil
+}
+
+func (n *sinkNode) TryGetProcessedMessage() *pipeline.Message {
 	return nil
 }

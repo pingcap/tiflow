@@ -14,7 +14,6 @@
 package pipeline
 
 import (
-	"container/list"
 	"context"
 	"time"
 
@@ -69,10 +68,7 @@ type tableActor struct {
 	info *cdcContext.ChangefeedVars
 	vars *cdcContext.GlobalVars
 
-	pullerNode *pullerNode
-	sorterNode *sorterNode
-	cyclicNode *cyclicMarkNode
-	sinkNode   *sinkNode
+	sinkNode TableActorSinkNode
 
 	nodes []*Node
 
@@ -112,57 +108,22 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 }
 
 type Node struct {
-	tableActor     *tableActor
-	eventStash     *pipeline.Message
-	messageFetcher MessageFetcher
-	messageSender  TableActorDataNode
-}
-
-type MessageSender interface {
-	TrySendMessage(ctx context.Context, message *pipeline.Message) bool
-}
-
-type MessageFetcher interface {
-	TryGetMessage() *pipeline.Message
-}
-
-type ChannelMessageFetcher struct {
-	OutputChan chan pipeline.Message
-}
-
-func (c *ChannelMessageFetcher) TryGetMessage() *pipeline.Message {
-	var msg pipeline.Message
-	select {
-	case msg = <-c.OutputChan:
-		return &msg
-	default:
-		return nil
-	}
-}
-
-type ListMessageFetcher struct {
-	MessageList list.List
-}
-
-func (q *ListMessageFetcher) TryGetMessage() *pipeline.Message {
-	el := q.MessageList.Front()
-	if el == nil {
-		return nil
-	}
-	msg := q.MessageList.Remove(el).(pipeline.Message)
-	return &msg
+	tableActor    *tableActor
+	eventStash    *pipeline.Message
+	parentNode    AsyncDataHolder
+	dataProcessor AsyncDataProcessor
 }
 
 func (n *Node) TryRun(ctx context.Context) {
 	for {
 		// batch?
 		if n.eventStash == nil {
-			n.eventStash = n.messageFetcher.TryGetMessage()
+			n.eventStash = n.parentNode.TryGetProcessedMessage()
 		}
 		if n.eventStash == nil {
 			return
 		}
-		sent, err := n.messageSender.TryHandleDataMessage(ctx, *n.eventStash)
+		sent, err := n.dataProcessor.TryHandleDataMessage(ctx, *n.eventStash)
 		// process message failed, stop table actor
 		if err != nil {
 			n.tableActor.stop(err)
@@ -177,7 +138,7 @@ func (n *Node) TryRun(ctx context.Context) {
 	}
 }
 
-func (t *tableActor) start(ctx cdcContext.Context) error {
+func (t *tableActor) start(ctx cdcContext.Context, tablePipelineNodeCreator TablePipelineNodeCreator) error {
 	if t.started {
 		log.Panic("start an already started table",
 			zap.String("changefeedID", t.changefeedID),
@@ -190,49 +151,51 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	t.pullerNode = newPullerNode(t.tableID, t.replicaInfo, t.tableName).(*pullerNode)
-	if err := t.pullerNode.Start(ctx, true, t.wg, t.info, t.vars); err != nil {
+	actorPullerNode := tablePipelineNodeCreator.NewPullerNode(t.tableID, t.replicaInfo, t.tableName)
+	if err := actorPullerNode.Start(ctx, true, t.wg, t.info, t.vars); err != nil {
 		log.Error("puller fails to start", zap.Error(err))
 		return err
 	}
 
 	flowController := common.NewTableFlowController(t.memoryQuota)
-	t.sorterNode = newSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs, flowController, t.mounter)
-	if err := t.sorterNode.Start(ctx, true, t.wg, t.info, t.vars); err != nil {
+	actorDataNode := tablePipelineNodeCreator.NewSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs, flowController, t.mounter)
+	if err := actorDataNode.Start(ctx, true, t.wg, t.info, t.vars); err != nil {
 		log.Error("sorter fails to start", zap.Error(err))
 		return err
 	}
 	t.nodes = append(t.nodes,
 		&Node{
-			messageFetcher: &ChannelMessageFetcher{OutputChan: t.pullerNode.outputCh},
-			messageSender:  t.sorterNode,
-			tableActor:     t,
+			parentNode:    actorPullerNode,
+			dataProcessor: actorDataNode,
+			tableActor:    t,
 		})
 
+	var cyclicNode TableActorDataNode
 	if t.cyclicEnabled {
-		t.cyclicNode = newCyclicMarkNode(t.replicaInfo.MarkTableID).(*cyclicMarkNode)
-		if err := t.cyclicNode.Start(true, t.info); err != nil {
+		cyclicNode = tablePipelineNodeCreator.NewCyclicNode(t.replicaInfo.MarkTableID)
+		if err := cyclicNode.Start(ctx, true, t.wg, t.info, t.vars); err != nil {
 			log.Error("sink fails to start", zap.Error(err))
 			return err
 		}
 		t.nodes = append(t.nodes, &Node{
-			messageFetcher: &ChannelMessageFetcher{OutputChan: t.sorterNode.outputCh},
-			messageSender:  t.cyclicNode,
-			tableActor:     t,
+			parentNode:    actorDataNode,
+			dataProcessor: cyclicNode,
+			tableActor:    t,
 		},
 		)
 	}
 
-	t.sinkNode = newSinkNode(t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
-	if err := t.sinkNode.Start(ctx, true, t.info, t.vars); err != nil {
+	actorSinkNode := tablePipelineNodeCreator.NewSinkNode(t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
+	if err := actorSinkNode.Start(ctx, true, t.wg, t.info, t.vars); err != nil {
 		log.Error("sink fails to start", zap.Error(err))
 		return err
 	}
-	node := &Node{messageSender: t.sinkNode, tableActor: t}
+	t.sinkNode = actorSinkNode
+	node := &Node{dataProcessor: actorSinkNode, tableActor: t}
 	if t.cyclicEnabled {
-		node.messageFetcher = &ListMessageFetcher{MessageList: t.cyclicNode.queue}
+		node.parentNode = cyclicNode
 	} else {
-		node.messageFetcher = &ChannelMessageFetcher{OutputChan: t.sorterNode.outputCh}
+		node.parentNode = actorDataNode
 	}
 	t.nodes = append(t.nodes, node)
 	t.started = true
@@ -272,7 +235,7 @@ func (t *tableActor) CheckpointTs() model.Ts {
 
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
-	if t.sinkNode.barrierTs != ts || t.lastBarrierTsUpdateTime.Add(time.Minute).Before(time.Now()) {
+	if t.sinkNode.BarrierTs() != ts || t.lastBarrierTsUpdateTime.Add(time.Minute).Before(time.Now()) {
 		msg := message.BarrierMessage(ts)
 		err := defaultRouter.Send(actor.ID(t.tableID), msg)
 		if err != nil {
@@ -343,6 +306,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 	targetTs model.Ts,
+	nodeCreator TablePipelineNodeCreator,
 ) (TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
@@ -376,7 +340,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	}
 
 	log.Info("spawn and start table actor", zap.Int64("tableID", tableID))
-	if err := table.start(cdcCtx); err != nil {
+	if err := table.start(cdcCtx, nodeCreator); err != nil {
 		table.stop(err)
 		return nil, err
 	}
@@ -388,6 +352,59 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	return table, nil
 }
 
-type TableActorDataNode interface {
+type AsyncDataProcessor interface {
 	TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error)
+}
+
+type NodeStarter interface {
+	Start(ctx context.Context, isTableActor bool, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error
+}
+
+type AsyncDataHolder interface {
+	TryGetProcessedMessage() *pipeline.Message
+}
+
+type TableActorDataNode interface {
+	AsyncDataProcessor
+	NodeStarter
+	AsyncDataHolder
+}
+
+type TableActorSinkNode interface {
+	TableActorDataNode
+	Status() TableStatus
+	ResolvedTs() model.Ts
+	CheckpointTs() model.Ts
+	BarrierTs() model.Ts
+	HandleActorMessage(ctx context.Context, msg message.Message) error
+}
+
+type TablePipelineNodeCreator interface {
+	NewPullerNode(tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) TableActorDataNode
+	NewSorterNode(tableName string, tableID model.TableID, startTs model.Ts, flowController tableFlowController, mounter entry.Mounter) TableActorDataNode
+	NewCyclicNode(markTableID model.TableID) TableActorDataNode
+	NewSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) TableActorSinkNode
+}
+
+type nodeCreatorImpl struct {
+}
+
+func (n *nodeCreatorImpl) NewPullerNode(tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) TableActorDataNode {
+	return newPullerNode(tableID, replicaInfo, tableName).(*pullerNode)
+}
+
+func (n *nodeCreatorImpl) NewSorterNode(tableName string, tableID model.TableID, startTs model.Ts, flowController tableFlowController, mounter entry.Mounter) TableActorDataNode {
+	return newSorterNode(tableName, tableID, startTs, flowController, mounter)
+}
+
+func (n *nodeCreatorImpl) NewCyclicNode(markTableID model.TableID) TableActorDataNode {
+	return newCyclicMarkNode(markTableID).(*cyclicMarkNode)
+}
+
+func (n *nodeCreatorImpl) NewSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) TableActorSinkNode {
+	return newSinkNode(sink, startTs, targetTs, flowController)
+}
+
+func NewTablePipelineNodeCreator() TablePipelineNodeCreator {
+	return &nodeCreatorImpl{}
 }

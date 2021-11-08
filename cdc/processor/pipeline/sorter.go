@@ -237,8 +237,8 @@ func (n *sorterNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.
 
 // Receive receives the message from the previous node
 func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
-	n.TryHandleDataMessage(ctx, ctx.Message())
-	return nil
+	_, err := n.TryHandleDataMessage(ctx, ctx.Message())
+	return err
 }
 
 func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
@@ -286,4 +286,14 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 
 func (n *sorterNode) ResolvedTs() model.Ts {
 	return atomic.LoadUint64(&n.resolvedTs)
+}
+
+func (n *sorterNode) TryGetProcessedMessage() *pipeline.Message {
+	var msg pipeline.Message
+	select {
+	case msg = <-n.outputCh:
+		return &msg
+	default:
+		return nil
+	}
 }

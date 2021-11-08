@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // cyclicMarkNode match the mark row events and normal row events.
@@ -53,11 +54,11 @@ func newCyclicMarkNode(markTableID model.TableID) pipeline.Node {
 }
 
 func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
-	return n.Start(false, ctx.ChangefeedVars())
+	return n.Start(ctx, false, nil, ctx.ChangefeedVars(), nil)
 }
 
-func (n *cyclicMarkNode) Start(isActor bool, info *cdcContext.ChangefeedVars) error {
-	n.isActor = isActor
+func (n *cyclicMarkNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
+	n.isActor = isTableActor
 	n.localReplicaID = info.Info.Config.Cyclic.ReplicaID
 	filterReplicaID := info.Info.Config.Cyclic.FilterReplicaID
 	n.filterReplicaID = make(map[uint64]struct{})
@@ -200,4 +201,13 @@ func (n *cyclicMarkNode) SendToNextNode(ctx context.Context, msg pipeline.Messag
 	} else {
 		ctx.(pipeline.NodeContext).SendToNextNode(msg)
 	}
+}
+
+func (n *cyclicMarkNode) TryGetProcessedMessage() *pipeline.Message {
+	el := n.queue.Front()
+	if el == nil {
+		return nil
+	}
+	msg := n.queue.Remove(el).(pipeline.Message)
+	return &msg
 }
