@@ -21,6 +21,8 @@ import (
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/cdc/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter/leveldb"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/actor"
@@ -45,6 +47,8 @@ func init() {
 	initServerMetrics(registry)
 	actor.InitMetrics(registry)
 	// Sorter metrics
+	sorter.InitMetrics(registry)
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
+	leveldb.InitMetrics(registry)
 }

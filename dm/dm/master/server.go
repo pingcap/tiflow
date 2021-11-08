@@ -184,15 +184,17 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	// And curl or safari browser does trigger this problem.
 	// But I haven't figured it out.
 	// (maybe more requests are sent from chrome or its extensions).
-	initOpenAPIErr := s.InitOpenAPIHandles()
-	if initOpenAPIErr != nil {
-		return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
-	}
+
 	userHandles := map[string]http.Handler{
-		"/apis/":   apiHandler,
-		"/status":  getStatusHandle(),
-		"/debug/":  getDebugHandler(),
-		"/api/v1/": s.openapiHandles,
+		"/apis/":  apiHandler,
+		"/status": getStatusHandle(),
+		"/debug/": getDebugHandler(),
+	}
+	if s.cfg.ExperimentalFeatures.OpenAPI {
+		if initOpenAPIErr := s.InitOpenAPIHandles(); initOpenAPIErr != nil {
+			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
+		}
+		userHandles["/api/v1/"] = s.openapiHandles
 	}
 
 	// gRPC API server
