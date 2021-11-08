@@ -39,9 +39,9 @@ func TestNewLogReader(t *testing.T) {
 	_, err = NewLogReader(context.Background(), &LogReaderConfig{})
 	require.Nil(t, err)
 
-	//dir, err := ioutil.TempDir("", "redo-NewLogReader")
-	//require.Nil(t, err)
-	//defer os.RemoveAll(dir)
+	// dir, err := ioutil.TempDir("", "redo-NewLogReader")
+	// require.Nil(t, err)
+	// defer os.RemoveAll(dir)
 
 	//s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
 	//require.Nil(t, err)
