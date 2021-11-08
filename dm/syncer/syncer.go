@@ -2188,7 +2188,6 @@ func genrateExtendColumn(data [][]interface{}, r *router.Table, table *filter.Ta
 	return rows
 }
 
-
 func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
 	if originSQL == "BEGIN" {
 		// GTID event: GTID_NEXT = xxx:11
