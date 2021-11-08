@@ -44,7 +44,7 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 		sinkURI = "simple-mysql://downstream-tidb:4000/" + testDbName + "?check-old-value=true"
 	}
 	return &framework.CDCProfile{
-		PDUri:      "http://upstream-pd:2379",
+		PDUri:      framework.UpstreamPD,
 		SinkURI:    sinkURI,
 		Opts:       map[string]string{},
 		ConfigFile: "/configs/enable-oldvalue-config.toml",
