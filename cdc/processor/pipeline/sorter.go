@@ -56,7 +56,8 @@ type sorterNode struct {
 	// The latest resolved ts that sorter has received.
 	resolvedTs model.Ts
 
-	outputCh chan pipeline.Message
+	outputCh     chan pipeline.Message
+	isTableActor bool
 }
 
 func newSorterNode(
@@ -80,6 +81,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 
 func (n *sorterNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
 	n.wg = wg
+	n.isTableActor = isTableActor
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
 	var sorter sorter.EventSorter
@@ -235,7 +237,11 @@ func (n *sorterNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.
 
 // Receive receives the message from the previous node
 func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
-	msg := ctx.Message()
+	n.TryHandleDataMessage(ctx, ctx.Message())
+	return nil
+}
+
+func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		rawKV := msg.PolymorphicEvent.RawKV
@@ -251,11 +257,25 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 			}
 			atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 		}
-		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
+		if n.isTableActor {
+			return n.sorter.TryAddEntry(ctx, msg.PolymorphicEvent), nil
+		} else {
+			n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
+			return true, nil
+		}
 	default:
-		ctx.SendToNextNode(msg)
+		if n.isTableActor {
+			select {
+			case n.outputCh <- msg:
+				return true, nil
+			default:
+				return false, nil
+			}
+		} else {
+			ctx.(pipeline.NodeContext).SendToNextNode(msg)
+			return true, nil
+		}
 	}
-	return nil
 }
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {

@@ -81,6 +81,7 @@ type sinkNode struct {
 	rowBuffer   []*model.RowChangedEvent
 
 	flowController tableFlowController
+	isTableActor   bool
 }
 
 func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
@@ -101,11 +102,12 @@ func (n *sinkNode) CheckpointTs() model.Ts { return atomic.LoadUint64(&n.checkpo
 func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
 
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
-	return n.Start(ctx, ctx.ChangefeedVars(), ctx.GlobalVars())
+	return n.Start(ctx, false, ctx.ChangefeedVars(), ctx.GlobalVars())
 }
 
-func (n *sinkNode) Start(ctx context.Context, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
+func (n *sinkNode) Start(ctx context.Context, isTableActor bool, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
 	n.config = info.Info.Config
+	n.isTableActor = isTableActor
 	return nil
 }
 
@@ -313,12 +315,16 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 		return cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	}
 	msg := ctx.Message()
-	return n.HandleMessage(ctx, msg)
+	_, err := n.TryHandleDataMessage(ctx, msg)
+	return err
 }
 
-func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) error {
+func (n *sinkNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
 	if n.status == TableStatusStopped {
-		return cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+		return false, cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+	}
+	if n.isTableActor && msg.Tp == pipeline.MessageTypePolymorphicEvent && msg.PolymorphicEvent.RawKV.OpType != model.OpTypeResolved && !msg.PolymorphicEvent.IsPrepared() {
+		return false, nil
 	}
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
@@ -331,29 +337,29 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) erro
 				failpoint.Return(errors.New("processor sync resolved injected error"))
 			})
 			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
-				return errors.Trace(err)
+				return false, errors.Trace(err)
 			}
 			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
-			return nil
+			return true, nil
 		}
 		if err := n.emitEvent(ctx, event); err != nil {
-			return errors.Trace(err)
+			return false, errors.Trace(err)
 		}
 	case pipeline.MessageTypeTick:
 		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
-			return errors.Trace(err)
+			return false, errors.Trace(err)
 		}
 	case pipeline.MessageTypeCommand:
 		if msg.Command.Tp == pipeline.CommandTypeStop {
-			return n.stop(ctx)
+			return true, n.stop(ctx)
 		}
 	case pipeline.MessageTypeBarrier:
 		n.barrierTs = msg.BarrierTs
 		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
-			return errors.Trace(err)
+			return false, errors.Trace(err)
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
@@ -362,7 +368,7 @@ func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 	return n.sink.Close(ctx)
 }
 
-func (n *sinkNode) HandleMessages(ctx context.Context, msg message.Message) error {
+func (n *sinkNode) HandleActorMessage(ctx context.Context, msg message.Message) error {
 	switch msg.Tp {
 	case message.TypeStop:
 		return n.stop(ctx)

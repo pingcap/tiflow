@@ -95,7 +95,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 			break
 		case message.TypeTick:
 		case message.TypeBarrier:
-			err := t.sinkNode.HandleMessages(ctx, msgs[i])
+			err := t.sinkNode.HandleActorMessage(ctx, msgs[i])
 			if err != nil {
 				t.stop(err)
 			}
@@ -112,50 +112,14 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 }
 
 type Node struct {
+	tableActor     *tableActor
 	eventStash     *pipeline.Message
 	messageFetcher MessageFetcher
-	messageSender  MessageSender
+	messageSender  TableActorDataNode
 }
 
 type MessageSender interface {
 	TrySendMessage(ctx context.Context, message *pipeline.Message) bool
-}
-
-type sorterMessageSender struct {
-	sorter *sorterNode
-}
-
-func (s *sorterMessageSender) TrySendMessage(ctx context.Context, message *pipeline.Message) bool {
-	return s.sorter.sorter.TryAddEntry(ctx, message.PolymorphicEvent)
-}
-
-type cyclicMessageSender struct {
-	tableActor *tableActor
-	cyclic     *cyclicMarkNode
-}
-
-func (s *cyclicMessageSender) TrySendMessage(ctx context.Context, message *pipeline.Message) bool {
-	sent, err := s.cyclic.handleMsg(*message, s.cyclic)
-	if err != nil {
-		s.tableActor.reportErr(err)
-	}
-	return sent
-}
-
-type sinkMessageSender struct {
-	tableActor *tableActor
-	sink       *sinkNode
-}
-
-func (s *sinkMessageSender) TrySendMessage(ctx context.Context, message *pipeline.Message) bool {
-	if message.PolymorphicEvent.RawKV.OpType != model.OpTypeResolved && !message.PolymorphicEvent.IsPrepared() {
-		return false
-	}
-	err := s.sink.HandleMessage(ctx, *message)
-	if err != nil {
-		s.tableActor.reportErr(err)
-	}
-	return true
 }
 
 type MessageFetcher interface {
@@ -198,7 +162,14 @@ func (n *Node) TryRun(ctx context.Context) {
 		if n.eventStash == nil {
 			return
 		}
-		if n.messageSender.TrySendMessage(ctx, n.eventStash) {
+		sent, err := n.messageSender.TryHandleDataMessage(ctx, *n.eventStash)
+		// process message failed, stop table actor
+		if err != nil {
+			n.tableActor.stop(err)
+			return
+		}
+
+		if sent {
 			n.eventStash = nil
 		} else {
 			return
@@ -234,7 +205,8 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 	t.nodes = append(t.nodes,
 		&Node{
 			messageFetcher: &ChannelMessageFetcher{OutputChan: t.pullerNode.outputCh},
-			messageSender:  &sorterMessageSender{sorter: t.sorterNode},
+			messageSender:  t.sorterNode,
+			tableActor:     t,
 		})
 
 	if t.cyclicEnabled {
@@ -245,27 +217,24 @@ func (t *tableActor) start(ctx cdcContext.Context) error {
 		}
 		t.nodes = append(t.nodes, &Node{
 			messageFetcher: &ChannelMessageFetcher{OutputChan: t.sorterNode.outputCh},
-			messageSender:  &cyclicMessageSender{tableActor: t, cyclic: t.cyclicNode},
+			messageSender:  t.cyclicNode,
+			tableActor:     t,
 		},
 		)
 	}
 
 	t.sinkNode = newSinkNode(t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
-	if err := t.sinkNode.Start(ctx, t.info, t.vars); err != nil {
+	if err := t.sinkNode.Start(ctx, true, t.info, t.vars); err != nil {
 		log.Error("sink fails to start", zap.Error(err))
 		return err
 	}
+	node := &Node{messageSender: t.sinkNode, tableActor: t}
 	if t.cyclicEnabled {
-		t.nodes = append(t.nodes, &Node{
-			messageFetcher: &ListMessageFetcher{MessageList: t.cyclicNode.queue},
-			messageSender:  &sinkMessageSender{tableActor: t, sink: t.sinkNode},
-		})
+		node.messageFetcher = &ListMessageFetcher{MessageList: t.cyclicNode.queue}
 	} else {
-		t.nodes = append(t.nodes, &Node{
-			messageFetcher: &ChannelMessageFetcher{OutputChan: t.sorterNode.outputCh},
-			messageSender:  &sinkMessageSender{tableActor: t, sink: t.sinkNode},
-		})
+		node.messageFetcher = &ChannelMessageFetcher{OutputChan: t.sorterNode.outputCh}
 	}
+	t.nodes = append(t.nodes, node)
 	t.started = true
 	log.Info("table actor is started", zap.Int64("tableID", t.tableID))
 	return nil
@@ -417,4 +386,8 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	}
 	log.Info("spawn and start table actor done", zap.Int64("tableID", tableID))
 	return table, nil
+}
+
+type TableActorDataNode interface {
+	TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error)
 }

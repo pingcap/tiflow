@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"container/list"
+	"context"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -80,20 +81,20 @@ func (n *cyclicMarkNode) Start(isActor bool, info *cdcContext.ChangefeedVars) er
 // and adds the mark row event or normal row event into the cache.
 func (n *cyclicMarkNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
-	_, err := n.handleMsg(msg, ctx)
+	_, err := n.TryHandleDataMessage(ctx, msg)
 	return err
 }
 
-func (n *cyclicMarkNode) handleMsg(msg pipeline.Message, sender Sender) (bool, error) {
+func (n *cyclicMarkNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
 	if n.isActor && n.queue.Len() >= defaultSyncResolvedBatch {
 		return false, nil
 	}
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
-		n.flush(sender, event.CRTs)
+		n.flush(ctx, event.CRTs)
 		if event.RawKV.OpType == model.OpTypeResolved {
-			sender.SendToNextNode(msg)
+			n.SendToNextNode(ctx, msg)
 			return true, nil
 		}
 		tableID, err := entry.DecodeTableID(event.RawKV.Key)
@@ -101,24 +102,24 @@ func (n *cyclicMarkNode) handleMsg(msg pipeline.Message, sender Sender) (bool, e
 			return false, errors.Trace(err)
 		}
 		if tableID == n.markTableID {
-			n.appendMarkRowEvent(sender, event)
+			n.appendMarkRowEvent(ctx, event)
 		} else {
-			n.appendNormalRowEvent(sender, event)
+			n.appendNormalRowEvent(ctx, event)
 		}
 		return true, nil
 	}
-	sender.SendToNextNode(msg)
+	n.SendToNextNode(ctx, msg)
 	return true, nil
 }
 
 // appendNormalRowEvent adds the normal row into the cache.
-func (n *cyclicMarkNode) appendNormalRowEvent(sender Sender, event *model.PolymorphicEvent) {
+func (n *cyclicMarkNode) appendNormalRowEvent(ctx context.Context, event *model.PolymorphicEvent) {
 	if event.CRTs != n.currentCommitTs {
 		log.Panic("the CommitTs of the received event is not equal to the currentCommitTs, please report a bug", zap.Reflect("event", event), zap.Uint64("currentCommitTs", n.currentCommitTs))
 	}
 	if replicaID, exist := n.currentReplicaIDs[event.StartTs]; exist {
 		// we already know the replicaID of this startTs, it means that the mark row of this startTs is already in cached.
-		n.sendNormalRowEventToNextNode(sender, replicaID, event)
+		n.sendNormalRowEventToNextNode(ctx, replicaID, event)
 		return
 	}
 	// for all normal row events which we don't know the replicaID for now. we cache them in unknownReplicaIDEvents.
@@ -126,7 +127,7 @@ func (n *cyclicMarkNode) appendNormalRowEvent(sender Sender, event *model.Polymo
 }
 
 // appendMarkRowEvent adds the mark row event into the cache.
-func (n *cyclicMarkNode) appendMarkRowEvent(sender Sender, event *model.PolymorphicEvent) {
+func (n *cyclicMarkNode) appendMarkRowEvent(ctx context.Context, event *model.PolymorphicEvent) {
 	if event.CRTs != n.currentCommitTs {
 		log.Panic("the CommitTs of the received event is not equal to the currentCommitTs, please report a bug", zap.Reflect("event", event), zap.Uint64("currentCommitTs", n.currentCommitTs))
 	}
@@ -140,18 +141,18 @@ func (n *cyclicMarkNode) appendMarkRowEvent(sender Sender, event *model.Polymorp
 	if events, exist := n.unknownReplicaIDEvents[markRow.StartTs]; exist {
 		// the replicaID of these events we did not know before, but now we know through received mark row now.
 		delete(n.unknownReplicaIDEvents, markRow.StartTs)
-		n.sendNormalRowEventToNextNode(sender, replicaID, events...)
+		n.sendNormalRowEventToNextNode(ctx, replicaID, events...)
 	}
 }
 
-func (n *cyclicMarkNode) flush(sender Sender, commitTs uint64) {
+func (n *cyclicMarkNode) flush(ctx context.Context, commitTs uint64) {
 	if n.currentCommitTs == commitTs {
 		return
 	}
 	// all mark events and normal events in current transaction is received now.
 	// there are still unmatched normal events in the cache, their replicaID should be local replicaID.
 	for _, events := range n.unknownReplicaIDEvents {
-		n.sendNormalRowEventToNextNode(sender, n.localReplicaID, events...)
+		n.sendNormalRowEventToNextNode(ctx, n.localReplicaID, events...)
 	}
 	if len(n.unknownReplicaIDEvents) != 0 {
 		n.unknownReplicaIDEvents = make(map[model.Ts][]*model.PolymorphicEvent)
@@ -164,13 +165,13 @@ func (n *cyclicMarkNode) flush(sender Sender, commitTs uint64) {
 
 // sendNormalRowEventToNextNode filter the specified normal row events
 // by the FilterReplicaID config item, and send events to the next node.
-func (n *cyclicMarkNode) sendNormalRowEventToNextNode(sender Sender, replicaID uint64, events ...*model.PolymorphicEvent) {
+func (n *cyclicMarkNode) sendNormalRowEventToNextNode(ctx context.Context, replicaID uint64, events ...*model.PolymorphicEvent) {
 	if _, shouldFilter := n.filterReplicaID[replicaID]; shouldFilter {
 		return
 	}
 	for _, event := range events {
 		event.Row.ReplicaID = replicaID
-		sender.SendToNextNode(pipeline.PolymorphicEventMessage(event))
+		n.SendToNextNode(ctx, pipeline.PolymorphicEventMessage(event))
 	}
 }
 
@@ -193,11 +194,10 @@ func extractReplicaID(markRow *model.RowChangedEvent) uint64 {
 	return 0
 }
 
-func (n *cyclicMarkNode) SendToNextNode(msg pipeline.Message) {
-	n.queue.PushBack(msg)
-}
-
-type Sender interface {
-	// SendToNextNode sends the message to the next node
-	SendToNextNode(msg pipeline.Message)
+func (n *cyclicMarkNode) SendToNextNode(ctx context.Context, msg pipeline.Message) {
+	if n.isActor {
+		n.queue.PushBack(msg)
+	} else {
+		ctx.(pipeline.NodeContext).SendToNextNode(msg)
+	}
 }
