@@ -379,7 +379,7 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 		}},
 	}
 	downTi11 := &schema.DownstreamTableInfo{
-		IndexCache: ti11Index,
+		AbsoluteUKIndexInfo: ti11Index,
 	}
 	ti12, err := createTableInfo(p, se, 0, schema12)
 	c.Assert(err, IsNil)
@@ -396,7 +396,7 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 		}},
 	}
 	downTi12 := &schema.DownstreamTableInfo{
-		IndexCache: ti12Index,
+		AbsoluteUKIndexInfo: ti12Index,
 	}
 	ti21, err := createTableInfo(p, se, 0, schema21)
 	c.Assert(err, IsNil)
@@ -413,7 +413,7 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 		}},
 	}
 	downTi21 := &schema.DownstreamTableInfo{
-		IndexCache: ti21Index,
+		AbsoluteUKIndexInfo: ti21Index,
 	}
 	ti22, err := createTableInfo(p, se, 0, schema22)
 	c.Assert(err, IsNil)
@@ -430,7 +430,7 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 		}},
 	}
 	downTi22 := &schema.DownstreamTableInfo{
-		IndexCache: ti22Index,
+		AbsoluteUKIndexInfo: ti22Index,
 	}
 
 	dmls := []*DML{
