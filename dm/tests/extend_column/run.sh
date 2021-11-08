@@ -31,7 +31,6 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	# start DM task in all mode
-	# schemaTracker create table from dump data
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 
 	# check load data
@@ -54,6 +53,42 @@ function run() {
 	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=3 and c_table='2';" "count(1): 1"
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=3 and c_table='1' and c_schema='extend_column1' and c_source='replica01';" "count(1): 1"
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=3 and c_table='2' and c_schema='extend_column2' and c_source='replica02';" "count(1): 1"
+
+	# check update data
+	run_sql_file $cur/data/db1.update.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/db2.update.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=3 and c_table='1';" "count(1): 1"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=4 and c_table='1';" "count(1): 0"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=3 and c_table='2';" "count(1): 0"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=4 and c_table='2';" "count(1): 1"
+
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=3 and c_table='1' and c_schema='extend_column1' and c_source='replica01';" "count(1): 1"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=4 and c_table='1' and c_schema='extend_column1' and c_source='replica01';" "count(1): 0"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=3 and c_table='2' and c_schema='extend_column2' and c_source='replica02';" "count(1): 0"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=4 and c_table='2' and c_schema='extend_column2' and c_source='replica02';" "count(1): 1"
+
+	# check delete data
+	run_sql_file $cur/data/db1.delete.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/db2.delete.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb};" "count(1): 5"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=1 and c_table='1';" "count(1): 1"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=2 and c_table='1';" "count(1): 1"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=3 and c_table='1';" "count(1): 1"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=4 and c_table='1';" "count(1): 0"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=1 and c_table='2';" "count(1): 1"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=2 and c_table='2';" "count(1): 1"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=3 and c_table='2';" "count(1): 0"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${yb} where c1=4 and c_table='2';" "count(1): 0"
+	
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb};" "count(1): 4"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=1 and c_table='1' and c_schema='extend_column1' and c_source='replica01';" "count(1): 1"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=2 and c_table='1' and c_schema='extend_column1' and c_source='replica01';" "count(1): 1"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=3 and c_table='1' and c_schema='extend_column1' and c_source='replica01';" "count(1): 1"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=4 and c_table='1' and c_schema='extend_column1' and c_source='replica01';" "count(1): 0"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=1 and c_table='2' and c_schema='extend_column2' and c_source='replica02';" "count(1): 1"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1>1 and c_table='2' and c_schema='extend_column2' and c_source='replica02';" "count(1): 0"
 
 }
 
