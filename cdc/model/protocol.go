@@ -35,7 +35,6 @@ type DispatchTableMessage struct {
 	OwnerRev   int64   `json:"owner-rev"`
 	ID         TableID `json:"id"`
 	IsDelete   bool    `json:"is-delete"`
-	BoundaryTs Ts      `json:"boundary-ts"` // Deprecated
 }
 
 // DispatchTableResponseTopic returns a message topic for the result of
