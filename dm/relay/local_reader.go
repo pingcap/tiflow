@@ -496,7 +496,6 @@ func (r *BinlogReader) parseFile(
 		return false, false, err
 	}
 
-	uuidSuffix := utils.SuffixIntToStr(suffixInt) // current UUID's suffix, which will be added to binlog name
 	offset := state.latestPos
 
 	onEventFunc := func(e *replication.BinlogEvent) error {
@@ -514,6 +513,7 @@ func (r *BinlogReader) parseFile(
 		case *replication.RotateEvent:
 			// add master UUID suffix to pos.Name
 			parsed, _ := binlog.ParseFilename(string(ev.NextLogName))
+			uuidSuffix := utils.SuffixIntToStr(suffixInt) // current UUID's suffix, which will be added to binlog name
 			nameWithSuffix := binlog.ConstructFilenameWithUUIDSuffix(parsed, uuidSuffix)
 			ev.NextLogName = []byte(nameWithSuffix)
 
