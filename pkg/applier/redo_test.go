@@ -231,10 +231,10 @@ func TestApplyMeetSinkError(t *testing.T) {
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	cfg := &RedoApplierConfig{
-		Storage: "blackhole",
+		Storage: "blackhole://",
 		SinkURI: fmt.Sprintf("mysql://127.0.0.1:%d/?read-timeout=1s&timeout=1s", port),
 	}
 	ap := NewRedoApplier(cfg)
 	err = ap.Apply(ctx)
-	require.Regexp(t, "fail to open MySQL connection:.*connect: connection refused.*", err)
+	require.Regexp(t, "CDC:ErrMySQLConnectionError", err)
 }

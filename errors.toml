@@ -331,9 +331,9 @@ error = '''
 get tikv grpc context failed
 '''
 
-["CDC:ErrIllegalUnifiedSorterParameter"]
+["CDC:ErrIllegalSorterParameter"]
 error = '''
-illegal parameter for unified sorter: %s
+illegal parameter for sorter: %s
 '''
 
 ["CDC:ErrIndexKeyTableNotFound"]
@@ -624,6 +624,11 @@ pd batch load regions failed
 ["CDC:ErrPDEtcdAPIError"]
 error = '''
 etcd api call error
+'''
+
+["CDC:ErrPeerMessageIllegalMeta"]
+error = '''
+peer-to-peer message server received an RPC call with illegal metadata
 '''
 
 ["CDC:ErrPendingRegionCancel"]

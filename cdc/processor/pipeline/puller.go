@@ -74,7 +74,7 @@ func (n *pullerNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	// NOTICE: always pull the old value internally
-	// See also: TODO(hi-rustin): add issue link here.
+	// See also: https://github.com/pingcap/ticdc/issues/2301.
 	plr := puller.NewPuller(ctxC, vars.PDClient, vars.GrpcPool, vars.KVStorage,
 		n.replicaInfo.StartTs, n.tableSpan(info.Info.Config), true)
 	n.wg.Go(func() error {

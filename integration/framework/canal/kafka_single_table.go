@@ -27,8 +27,9 @@ const (
 
 // SingleTableTask provides a basic implementation for an Avro test case
 type SingleTableTask struct {
-	TableName string
-	UseJSON   bool
+	TableName           string
+	UseJSON             bool
+	EnableTiDBExtension bool
 }
 
 // Name implements Task
@@ -45,11 +46,17 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 	} else {
 		protocol = "canal"
 	}
+
+	sinkURI := "kafka://kafka:9092/" + testDbName + "?kafka-version=2.6.0&protocol=" + protocol
+	if c.EnableTiDBExtension {
+		sinkURI += "&enable-tidb-extension=true"
+	}
+
 	return &framework.CDCProfile{
-		PDUri:      "http://upstream-pd:2379",
-		SinkURI:    "kafka://kafka:9092/" + testDbName + "?kafka-version=2.6.0&protocol=" + protocol,
+		PDUri:      framework.UpstreamPD,
+		SinkURI:    sinkURI,
 		Opts:       map[string]string{"force-handle-key-pkey": "true", "support-txn": "true"},
-		ConfigFile: "/config/canal-test-config.toml",
+		ConfigFile: "/configs/canal-test-config.toml",
 	}
 }
 

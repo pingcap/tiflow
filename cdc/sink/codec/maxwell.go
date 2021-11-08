@@ -15,6 +15,7 @@ package codec
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 
@@ -25,6 +26,24 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/tikv/pd/pkg/tsoutil"
 )
+
+type maxwellEventBatchEncoderBuilder struct {
+	opts map[string]string
+}
+
+// Build a `MaxwellEventBatchEncoder`
+func (b *maxwellEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+	encoder := NewMaxwellEventBatchEncoder()
+	if err := encoder.SetParams(b.opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	return encoder, nil
+}
+
+func newMaxwellEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
+	return &maxwellEventBatchEncoderBuilder{opts: opts}
+}
 
 // MaxwellEventBatchEncoder is a maxwell format encoder implementation
 type MaxwellEventBatchEncoder struct {
