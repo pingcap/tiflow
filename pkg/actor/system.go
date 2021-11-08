@@ -385,10 +385,10 @@ func (s *System) Start(ctx context.Context) {
 		id := i
 		s.wg.Go(func() error {
 			defer pprof.SetGoroutineLabels(ctx)
-			ctx = pprof.WithLabels(ctx, pprof.Labels("actor", s.name))
-			pprof.SetGoroutineLabels(ctx)
+			pctx := pprof.WithLabels(ctx, pprof.Labels("actor", s.name))
+			pprof.SetGoroutineLabels(pctx)
 
-			s.poll(ctx, id)
+			s.poll(pctx, id)
 			return nil
 		})
 	}
