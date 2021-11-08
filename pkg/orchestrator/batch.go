@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	maxBatchPatchSize    = 96
+	maxBatchPatchSize    = 64
 	maxBatchResponseSize = 64
 )
 
@@ -52,6 +52,7 @@ BATCH:
 		select {
 		case response := <-watchCh:
 			if err := response.Err(); err != nil {
+				// we should always return revision
 				return nil, revision, errors.Trace(err)
 			}
 			if revision >= response.Header.GetRevision() {
