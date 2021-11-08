@@ -618,7 +618,6 @@ func (s *Server) DMAPIPauseTask(c *gin.Context, taskName string) {
 	}
 	if err := s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName, sourceName...); err != nil {
 		c.Error(err)
-
 	}
 }
 
