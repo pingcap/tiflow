@@ -1,28 +1,6 @@
 # diff Configuration.
 
 check-thread-count = 4
-<<<<<<< HEAD
-sample-percent = 100
-use-rowid = false
-use-checksum = true
-fix-sql-file = "fix.sql"
-
-# tables need to check.
-[[check-tables]]
-    schema = "multi_capture_1"
-    tables = ["usertable"]
-[[check-tables]]
-    schema = "multi_capture_2"
-    tables = ["usertable"]
-[[check-tables]]
-    schema = "multi_capture_3"
-    tables = ["usertable"]
-[[check-tables]]
-    schema = "multi_capture_4"
-    tables = ["usertable"]
-
-[[source-db]]
-=======
 
 export-fix-sql = true
 
@@ -39,7 +17,6 @@ check-struct-only = false
 
 [data-sources]
 [data-sources.mysql1]
->>>>>>> 640da278d (tests, dm/tests: fix sync_diff configs for CI (#3247))
     host = "127.0.0.1"
     port = 4000
     user = "root"

@@ -1,20 +1,8 @@
 # diff Configuration.
 
 check-thread-count = 4
-<<<<<<< HEAD:tests/new_ci_collation/conf/diff_config.toml
-sample-percent = 100
-use-rowid = false
-use-checksum = true
-fix-sql-file = "fix.sql"
-
-# tables need to check.
-[[check-tables]]
-    schema = "new_ci_collation_test"
-    tables = ["~.*"]
-=======
 
 export-fix-sql = true
->>>>>>> 640da278d (tests, dm/tests: fix sync_diff configs for CI (#3247)):tests/ddl_attributes/conf/diff_config.toml
 
 check-struct-only = false
 
