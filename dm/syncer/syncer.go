@@ -2173,7 +2173,7 @@ func (qec *queryEventContext) String() string {
 
 // genrateExtendColumn generate extended columns by extractor.
 func genrateExtendColumn(data [][]interface{}, r *router.Table, table *filter.Table, sourceID string) [][]interface{} {
-	extendCol, extendVal := r.FetchExtendColumn(table.Schema, table.Name, source)
+	extendCol, extendVal := r.FetchExtendColumn(table.Schema, table.Name, sourceID)
 	if len(extendCol) == 0 {
 		return data
 	}
