@@ -538,7 +538,7 @@ func (cp *LightningCheckpointList) RemoveTaskCheckPoint(tctx *tcontext.Context, 
 	defer rows.Close()
 	var workerName string
 	for rows.Next() {
-		err := rows.Scan(&workerName)
+		err = rows.Scan(&workerName)
 		if err != nil {
 			return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
 		}

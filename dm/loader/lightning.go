@@ -132,7 +132,6 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	config.AdjustTargetDBTimeZone(&toCfg.To)
 	l.toDB, l.toDBConns, err = createConns(tctx, toCfg.To, toCfg.Name, toCfg.SourceID, 1)
 	return err
 }
@@ -181,7 +180,6 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 	}
 	if !l.checkPoint.IsTableFinished(lightningCheckpointDB, lightningCheckpointTable) {
 		if l.checkPointList != nil {
-			tctx := tcontext.NewContext(ctx, l.logger)
 			if err = l.checkPointList.RegisterCheckPoint(tctx, l.workerName, l.cfg.Name); err != nil {
 				return err
 			}
@@ -210,7 +208,6 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 				cfg.TiDB.Vars[k] = v
 			}
 		}
-		cfg.TiDB.Vars["time_zone"] = "+00:00"
 
 		cfg.TiDB.StrSQLMode = l.cfg.LoaderConfig.SQLMode
 		if err = cfg.Adjust(ctx); err != nil {
