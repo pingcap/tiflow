@@ -485,7 +485,11 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 	return nil
 }
 
-var newSaramaConfigImpl = newSaramaConfig
+var (
+	newSaramaConfigImpl = newSaramaConfig
+	// when use kafka broker version less than "1.0.0", we would have to disable topicPreProcess
+	enableTopicPreProcess = true
+)
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
@@ -495,8 +499,10 @@ func NewKafkaSaramaProducer(ctx context.Context, config *Config, errCh chan erro
 		return nil, err
 	}
 
-	if err := topicPreProcess(config, cfg); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	if enableTopicPreProcess {
+		if err := topicPreProcess(config, cfg); err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
 	}
 
 	asyncClient, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)

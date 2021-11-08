@@ -25,7 +25,6 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -146,7 +145,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 	config.TopicName = topic
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4NewClusterAdmin", ""), check.IsNil)
+	enableTopicPreProcess = false
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
 	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
@@ -157,7 +156,6 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	}
 	defer func() {
 		newSaramaConfigImpl = newSaramaConfigImplBak
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4NewClusterAdmin")
 	}()
 
 	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
@@ -437,6 +435,8 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 	config.TopicName = topic
 
+	enableTopicPreProcess = false
+
 	newSaramaConfigImplBak := newSaramaConfigImpl
 	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
 		cfg, err := newSaramaConfigImplBak(ctx, config)
@@ -450,12 +450,9 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 		newSaramaConfigImpl = newSaramaConfigImplBak
 	}()
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4NewClusterAdmin", ""), check.IsNil)
-
 	errCh := make(chan error, 1)
 	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4NewClusterAdmin")
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
 	}()
@@ -506,7 +503,6 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	leader.Returns(metadataResponse)
 	leader.Returns(metadataResponse)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4NewClusterAdmin", ""), check.IsNil)
 	config := NewConfig()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0
 	// We use a smaller version in the following producer tests.
@@ -517,10 +513,10 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 	config.TopicName = topic
 
+	enableTopicPreProcess = false
 	errCh := make(chan error, 1)
 	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4NewClusterAdmin")
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
 	}()
