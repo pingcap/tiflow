@@ -149,7 +149,7 @@ func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return s1.election.IsLeader() && s1.scheduler.Started()
 	}), check.IsTrue)
-	c.Assert(s1.echo, check.IsNil)
+	c.Assert(s1.openapiHandles, check.IsNil)
 	defer s1.Close()
 	cancel()
 }

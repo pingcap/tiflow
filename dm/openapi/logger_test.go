@@ -18,7 +18,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/check"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -33,13 +33,14 @@ func TestZapLogger(t *testing.T) {
 }
 
 func (t *zapLoggerSuite) TestZapLogger(c *check.C) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/something", nil)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	h := func(ctx echo.Context) error {
-		return ctx.String(http.StatusOK, "")
+	e := gin.New()
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request, _ := httptest.NewRequest(http.MethodGet, "/something", nil)
+	h := func(c *gin.Context) {
+		c.String(http.StatusOK, "")
 	}
+	e.GET("/something", h)
+	e.Use()
 	obs, logs := observer.New(zap.DebugLevel)
 	logger := zap.New(obs)
 	err := ZapLogger(logger)(h)(ctx)

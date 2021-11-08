@@ -39,7 +39,6 @@ require (
 	github.com/jarcoal/httpmock v1.0.5
 	github.com/jmoiron/sqlx v1.3.3
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
-	github.com/labstack/echo/v4 v4.6.1
 	github.com/lib/pq v1.3.0 // indirect
 	github.com/linkedin/goavro/v2 v2.9.8
 	github.com/mackerelio/go-osstat v0.1.0
