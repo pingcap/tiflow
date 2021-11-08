@@ -153,7 +153,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 		cfg.Producer.Flush.MaxMessages = 1
 		return cfg, err
 	}
-	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test")
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(nil)"), check.IsNil)
 	defer func() {
 		newSaramaConfigImpl = newSaramaConfigImplBak
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test")
