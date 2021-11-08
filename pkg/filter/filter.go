@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 )
 
-// Filter is a event filter implementation.
+// Filter is an event filter implementation.
 type Filter struct {
 	filter           filterV2.Filter
 	ignoreTxnStartTs []uint64
