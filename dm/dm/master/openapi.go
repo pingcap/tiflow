@@ -23,6 +23,7 @@ import (
 
 	ginmiddleware "github.com/deepmap/oapi-codegen/pkg/gin-middleware"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/dm/checker"
 	"github.com/pingcap/ticdc/dm/dm/config"
@@ -32,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/dm/dm/pb"
 	"github.com/pingcap/ticdc/dm/openapi"
 	"github.com/pingcap/ticdc/dm/pkg/conn"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
@@ -65,20 +67,20 @@ func (s *Server) InitOpenAPIHandles() error {
 	if err != nil {
 		return err
 	}
-	engine := gin.New()
-	// middlewares
-	// logger := log.L().WithFields(zap.String("component", "openapi")).Logger
-	// set logger
-	// e.Use(openapi.ZapLogger(logger))
-	// e.Use(echomiddleware.Recover())
-	engine.Use(s.redirectRequestToLeaderMW())
-	engine.Use(terrorHTTPErrorHandler())
 	// disables swagger server name validation. it seems to work poorly
 	swagger.Servers = nil
-	// use our validation middleware to check all requests against the OpenAPI schema.
-	engine.Use(ginmiddleware.OapiRequestValidator(swagger))
-	// openapi.RegisterHandlers(e, s)
-	s.openapiHandles = engine
+
+	r := gin.New()
+	// middlewares
+	r.Use(gin.Recovery())
+	r.Use(openapi.ZapLogger(log.L().WithFields(zap.String("component", "openapi")).Logger))
+	r.Use(s.redirectRequestToLeaderMW())
+	r.Use(terrorHTTPErrorHandler())
+	// use validation middleware to check all requests against the OpenAPI schema.
+	r.Use(ginmiddleware.OapiRequestValidator(swagger))
+	// register handlers
+	openapi.RegisterHandlers(r, s)
+	s.openapiHandles = r
 	return nil
 }
 
