@@ -347,11 +347,6 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.Version = "invalid"
 	_, err := NewKafkaSaramaProducer(ctx, "127.0.0.1:1111", "topic", config, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
-
-	config.Version = "0.8.2.0"
-	config.PartitionNum = int32(-1)
-	_, err = NewKafkaSaramaProducer(ctx, "127.0.0.1:1111", "topic", config, errCh)
-	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
 }
 
 func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
