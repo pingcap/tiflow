@@ -436,8 +436,21 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 
 	// if user specify cdc to create the topic, we must make sure that topic number and replication-factor is given
 	if config.AutoCreate {
-		// this indicates that the specified topic name already exist
-		if realPartitionCount != 0 {
+		// if the specified topic name already exist, we should make sure that topic's `max.message.bytes` is not
+		// less than given `max-message-size`
+		if ok {
+			if a, ok := info.ConfigEntries["max.message.bytes"]; ok {
+				topicMaxMessageBytes, err := strconv.Atoi(*a)
+				if err != nil {
+					return err
+				}
+				if topicMaxMessageBytes < config.MaxMessageBytes {
+					return cerror.ErrKafkaInvalidConfig.GenWithStack(
+						"topic already exist, and max.message.size(%d) less than max-message-size(%d)",
+						topicMaxMessageBytes, config.MaxMessageBytes)
+				}
+			}
+
 			config.PartitionNum = realPartitionCount
 			log.Warn("topic already exist", zap.String("topic", config.TopicName))
 			return nil
