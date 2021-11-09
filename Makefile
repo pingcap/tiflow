@@ -344,49 +344,49 @@ else
 endif
 
 tools/bin/failpoint-ctl: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/failpoint-ctl github.com/pingcap/failpoint/failpoint-ctl
+	cd tools/check && $(GO) build -mod=mod -o ../bin/failpoint-ctl github.com/pingcap/failpoint/failpoint-ctl
 
 tools/bin/gocovmerge: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gocovmerge github.com/zhouqiang-cl/gocovmerge
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gocovmerge github.com/zhouqiang-cl/gocovmerge
 
 tools/bin/goveralls: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/goveralls github.com/mattn/goveralls
+	cd tools/check && $(GO) build -mod=mod -o ../bin/goveralls github.com/mattn/goveralls
 
 tools/bin/golangci-lint: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
+	cd tools/check && $(GO) build  -mod=mod -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 
 tools/bin/mockgen: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/mockgen github.com/golang/mock/mockgen
+	cd tools/check && $(GO) build -mod=mod -o ../bin/mockgen github.com/golang/mock/mockgen
 
 tools/bin/protoc-gen-gogofaster: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/protoc-gen-gogofaster github.com/gogo/protobuf/protoc-gen-gogofaster
+	cd tools/check && $(GO) build -mod=mod -o ../bin/protoc-gen-gogofaster github.com/gogo/protobuf/protoc-gen-gogofaster
 
 tools/bin/protoc-gen-grpc-gateway: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/protoc-gen-grpc-gateway github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
+	cd tools/check && $(GO) build -mod=mod -o ../bin/protoc-gen-grpc-gateway github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 
 tools/bin/statik: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/statik github.com/rakyll/statik
+	cd tools/check && $(GO) build -mod=mod -o ../bin/statik github.com/rakyll/statik
 
 tools/bin/gofumports: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gofumports mvdan.cc/gofumpt/gofumports
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gofumports mvdan.cc/gofumpt/gofumports
 
 tools/bin/shfmt: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/shfmt mvdan.cc/sh/v3/cmd/shfmt
+	cd tools/check && $(GO) build -mod=mod -o ../bin/shfmt mvdan.cc/sh/v3/cmd/shfmt
 
 tools/bin/oapi-codegen: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/oapi-codegen github.com/deepmap/oapi-codegen/cmd/oapi-codegen
+	cd tools/check && $(GO) build -mod=mod -o ../bin/oapi-codegen github.com/deepmap/oapi-codegen/cmd/oapi-codegen
 
 tools/bin/gocov: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gocov  github.com/axw/gocov/gocov
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gocov  github.com/axw/gocov/gocov
 
 tools/bin/gocov-xml: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gocov-xml github.com/AlekSi/gocov-xml
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gocov-xml github.com/AlekSi/gocov-xml
 
 tools/bin/gotestsum: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gotestsum gotest.tools/gotestsum
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gotestsum gotest.tools/gotestsum
 
 tools/bin/errdoc-gen: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
+	cd tools/check && $(GO) build -mod=mod -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
 
 check_failpoint_ctl: tools/bin/failpoint-ctl
 

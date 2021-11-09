@@ -44,9 +44,17 @@ func ZapLogger(log *zap.Logger) gin.HandlerFunc {
 
 		switch {
 		case statusCode >= 500:
-			log.With(zap.Error(c.Errors.Last().Err)).Error("Server error", fields...)
+			if err := c.Errors.Last(); err != nil {
+				log.With(zap.Error(err)).Error("Server error", fields...)
+			} else {
+				log.Error("Server error", fields...)
+			}
 		case statusCode >= 400:
-			log.With(zap.Error(c.Errors.Last().Err)).Warn("Client error", fields...)
+			if err := c.Errors.Last(); err != nil {
+				log.With(zap.Error(c.Errors.Last().Err)).Warn("Client error", fields...)
+			} else {
+				log.Warn("Client error", fields...)
+			}
 		case statusCode >= 300:
 			log.Info("Redirection", fields...)
 		default:

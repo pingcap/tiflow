@@ -54,9 +54,11 @@ func (s *Server) redirectRequestToLeaderMW() gin.HandlerFunc {
 			// nolint:dogsled
 			_, _, leaderOpenAPIAddr, err := s.election.LeaderInfo(ctx2)
 			if err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
+				_ = c.AbortWithError(http.StatusBadRequest, err)
+				return
 			}
 			c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("http://%s%s", leaderOpenAPIAddr, c.Request.RequestURI))
+			c.AbortWithStatus(http.StatusTemporaryRedirect)
 		}
 	}
 }
@@ -81,6 +83,7 @@ func (s *Server) InitOpenAPIHandles() error {
 	// register handlers
 	openapi.RegisterHandlers(r, s)
 	s.openapiHandles = r
+	gin.SetMode(gin.ReleaseMode)
 	return nil
 }
 
@@ -88,7 +91,7 @@ func (s *Server) InitOpenAPIHandles() error {
 func (s *Server) GetDocJSON(c *gin.Context) {
 	swaggerJSON, err := openapi.GetSwaggerJSON()
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.IndentedJSON(200, swaggerJSON)
@@ -98,7 +101,7 @@ func (s *Server) GetDocJSON(c *gin.Context) {
 func (s *Server) GetDocHTML(c *gin.Context) {
 	html, err := openapi.GetSwaggerHTML(openapi.NewSwaggerConfig(docJSONBasePath, ""))
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.String(http.StatusOK, "text/html; charset=utf-8", html)
@@ -109,7 +112,7 @@ func (s *Server) DMAPIGetClusterMasterList(c *gin.Context) {
 	newCtx := c.Request.Context()
 	memberMasters, err := s.listMemberMaster(newCtx, nil)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	masterCnt := len(memberMasters.Master.Masters)
@@ -130,7 +133,7 @@ func (s *Server) DMAPIGetClusterMasterList(c *gin.Context) {
 func (s *Server) DMAPIOfflineMasterNode(c *gin.Context, masterName string) {
 	newCtx := c.Request.Context()
 	if err := s.deleteMasterByName(newCtx, masterName); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -156,7 +159,7 @@ func (s *Server) DMAPIGetClusterWorkerList(c *gin.Context) {
 // DMAPIOfflineWorkerNode offline worker node url is: (DELETE /api/v1/cluster/workers/{worker-name}).
 func (s *Server) DMAPIOfflineWorkerNode(c *gin.Context, workerName string) {
 	if err := s.scheduler.RemoveWorker(workerName); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -166,16 +169,16 @@ func (s *Server) DMAPIOfflineWorkerNode(c *gin.Context, workerName string) {
 func (s *Server) DMAPICreateSource(c *gin.Context) {
 	var createSourceReq openapi.Source
 	if err := c.Bind(&createSourceReq); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	cfg := modelToSourceCfg(createSourceReq)
 	if err := checkAndAdjustSourceConfigFunc(c.Request.Context(), cfg); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	if err := s.scheduler.AddSourceCfg(cfg); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.IndentedJSON(http.StatusCreated, createSourceReq)
@@ -194,7 +197,7 @@ func (s *Server) DMAPIGetSourceList(c *gin.Context, params openapi.DMAPIGetSourc
 		for idx := range sourceList {
 			sourceStatusList, err := s.getSourceStatusListFromWorker(nexCtx, sourceList[idx].SourceName)
 			if err != nil {
-				c.Error(err)
+				_ = c.Error(err)
 				return
 			}
 			sourceList[idx].StatusList = &sourceStatusList
@@ -216,13 +219,13 @@ func (s *Server) DMAPIDeleteSource(c *gin.Context, sourceName string, params ope
 				Name:    taskName,
 				Sources: []string{sourceName},
 			}); err != nil {
-				c.Error(terror.ErrOpenAPICommonError.Delegate(err, "failed to stop source related task %s", taskName))
+				_ = c.Error(terror.ErrOpenAPICommonError.Delegate(err, "failed to stop source related task %s", taskName))
 				return
 			}
 		}
 	}
 	if err := s.scheduler.RemoveSourceCfg(sourceName); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -232,12 +235,12 @@ func (s *Server) DMAPIDeleteSource(c *gin.Context, sourceName string, params ope
 func (s *Server) DMAPIStartRelay(c *gin.Context, sourceName string) {
 	var req openapi.StartRelayRequest
 	if err := c.Bind(&req); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	sourceCfg := s.scheduler.GetSourceCfgByID(sourceName)
 	if sourceCfg == nil {
-		c.Error(terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName))
+		_ = c.Error(terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName))
 		return
 	}
 	needUpdate := false
@@ -257,12 +260,12 @@ func (s *Server) DMAPIStartRelay(c *gin.Context, sourceName string) {
 	if needUpdate {
 		// update current source relay config before start relay
 		if err := s.scheduler.UpdateSourceCfg(sourceCfg); err != nil {
-			c.Error(err)
+			_ = c.Error(err)
 			return
 		}
 	}
 	if err := s.scheduler.StartRelay(sourceName, req.WorkerNameList); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 	}
 }
 
@@ -270,25 +273,25 @@ func (s *Server) DMAPIStartRelay(c *gin.Context, sourceName string) {
 func (s *Server) DMAPIStopRelay(c *gin.Context, sourceName string) {
 	var req openapi.StopRelayRequest
 	if err := c.Bind(&req); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	if err := s.scheduler.StopRelay(sourceName, req.WorkerNameList); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 	}
 }
 
 // DMAPIPauseRelay pause relay log function for the data source url is: (POST /api/v1/sources/{source-name}/pause-relay).
 func (s *Server) DMAPIPauseRelay(c *gin.Context, sourceName string) {
 	if err := s.scheduler.UpdateExpectRelayStage(pb.Stage_Paused, sourceName); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 	}
 }
 
 // DMAPIResumeRelay resume relay log function for the data source url is: (POST /api/v1/sources/{source-name}/resume-relay).
 func (s *Server) DMAPIResumeRelay(c *gin.Context, sourceName string) {
 	if err := s.scheduler.UpdateExpectRelayStage(pb.Stage_Running, sourceName); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 	}
 }
 
@@ -305,13 +308,13 @@ func (s *Server) getBaseDBBySourceName(sourceName string) (*conn.BaseDB, error) 
 func (s *Server) DMAPIGetSourceSchemaList(c *gin.Context, sourceName string) {
 	baseDB, err := s.getBaseDBBySourceName(sourceName)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	defer baseDB.Close()
 	schemaList, err := utils.GetSchemaList(c.Request.Context(), baseDB.DB)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.IndentedJSON(http.StatusOK, schemaList)
@@ -321,13 +324,13 @@ func (s *Server) DMAPIGetSourceSchemaList(c *gin.Context, sourceName string) {
 func (s *Server) DMAPIGetSourceTableList(c *gin.Context, sourceName string, schemaName string) {
 	baseDB, err := s.getBaseDBBySourceName(sourceName)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	defer baseDB.Close()
 	tableList, err := utils.GetTableList(c.Request.Context(), baseDB.DB, schemaName)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.IndentedJSON(http.StatusOK, tableList)
@@ -363,7 +366,7 @@ func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName s
 func (s *Server) DMAPIGetSourceStatus(c *gin.Context, sourceName string) {
 	sourceCfg := s.scheduler.GetSourceCfgByID(sourceName)
 	if sourceCfg == nil {
-		c.Error(terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName))
+		_ = c.Error(terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName))
 		return
 	}
 	var resp openapi.GetSourceStatusResponse
@@ -377,7 +380,7 @@ func (s *Server) DMAPIGetSourceStatus(c *gin.Context, sourceName string) {
 	}
 	sourceStatusList, err := s.getSourceStatusListFromWorker(c.Request.Context(), sourceName)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	resp.Data = append(resp.Data, sourceStatusList...)
@@ -389,11 +392,11 @@ func (s *Server) DMAPIGetSourceStatus(c *gin.Context, sourceName string) {
 func (s *Server) DMAPITransferSource(c *gin.Context, sourceName string) {
 	var req openapi.WorkerNameRequest
 	if err := c.Bind(&req); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	if err := s.scheduler.TransferSource(sourceName, req.WorkerName); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 	}
 }
 
@@ -401,19 +404,19 @@ func (s *Server) DMAPITransferSource(c *gin.Context, sourceName string) {
 func (s *Server) DMAPIStartTask(c *gin.Context) {
 	var req openapi.CreateTaskRequest
 	if err := c.Bind(&req); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	task := &req.Task
 	if err := task.Adjust(); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	// prepare target db config
 	newCtx := c.Request.Context()
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
 	if adjustDBErr := adjustTargetDB(newCtx, toDBCfg); adjustDBErr != nil {
-		c.Error(terror.WithClass(adjustDBErr, terror.ClassDMMaster))
+		_ = c.Error(terror.WithClass(adjustDBErr, terror.ClassDMMaster))
 		return
 	}
 	// prepare source db config source name -> source config
@@ -422,14 +425,14 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 		if sourceCfg := s.scheduler.GetSourceCfgByID(cfg.SourceName); sourceCfg != nil {
 			sourceCfgMap[cfg.SourceName] = sourceCfg
 		} else {
-			c.Error(terror.ErrOpenAPITaskSourceNotFound.Generatef("source name %s", cfg.SourceName))
+			_ = c.Error(terror.ErrOpenAPITaskSourceNotFound.Generatef("source name %s", cfg.SourceName))
 			return
 		}
 	}
 	// generate sub task configs
 	subTaskConfigList, err := config.OpenAPITaskToSubTaskConfigs(task, toDBCfg, sourceCfgMap)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	// check subtask config
@@ -439,7 +442,7 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 	}
 	if err = checker.CheckSyncConfigFunc(newCtx, subTaskConfigPList,
 		common.DefaultErrorCnt, common.DefaultWarnCnt); err != nil {
-		c.Error(terror.WithClass(err, terror.ClassDMMaster))
+		_ = c.Error(terror.WithClass(err, terror.ClassDMMaster))
 		return
 	}
 	// specify only start task on partial sources
@@ -454,7 +457,7 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 		for _, sourceName := range *req.SourceNameList {
 			subTaskCfg, ok := subTaskCfgM[sourceName]
 			if !ok {
-				c.Error(terror.ErrOpenAPITaskSourceNotFound.Generatef("source name %s", sourceName))
+				_ = c.Error(terror.ErrOpenAPITaskSourceNotFound.Generatef("source name %s", sourceName))
 				return
 			}
 			needStartSubTaskList = append(needStartSubTaskList, *subTaskCfg)
@@ -471,20 +474,20 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 		// use same latch for remove-meta and start-task
 		release, err = s.scheduler.AcquireSubtaskLatch(task.Name)
 		if err != nil {
-			c.Error(terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", task.Name))
+			_ = c.Error(terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", task.Name))
 			return
 		}
 		defer release()
 		latched = true
 		err = s.removeMetaData(newCtx, task.Name, *task.MetaSchema, toDBCfg)
 		if err != nil {
-			c.Error(terror.Annotate(err, "while removing metadata"))
+			_ = c.Error(terror.Annotate(err, "while removing metadata"))
 			return
 		}
 	}
 	err = s.scheduler.AddSubTasks(latched, needStartSubTaskList...)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	if release != nil {
@@ -502,11 +505,11 @@ func (s *Server) DMAPIDeleteTask(c *gin.Context, taskName string, params openapi
 		sourceList = s.getTaskResources(taskName)
 	}
 	if len(sourceList) == 0 {
-		c.Error(terror.ErrSchedulerTaskNotExist.Generate(taskName))
+		_ = c.Error(terror.ErrSchedulerTaskNotExist.Generate(taskName))
 		return
 	}
 	if err := s.scheduler.RemoveSubTasks(taskName, sourceList...); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -531,7 +534,7 @@ func (s *Server) DMAPIGetTaskStatus(c *gin.Context, taskName string, params open
 		sourceList = *params.SourceNameList
 	}
 	if len(sourceList) == 0 {
-		c.Error(terror.ErrSchedulerTaskNotExist.Generate(taskName))
+		_ = c.Error(terror.ErrSchedulerTaskNotExist.Generate(taskName))
 		return
 	}
 	// 2. get status from workers
@@ -540,7 +543,7 @@ func (s *Server) DMAPIGetTaskStatus(c *gin.Context, taskName string, params open
 	for i, workerStatus := range workerStatusList {
 		if workerStatus == nil || workerStatus.SourceStatus == nil {
 			// this should not happen unless the rpc in the worker server has been modified
-			c.Error(terror.ErrOpenAPICommonError.New("worker's query-status response is nil"))
+			_ = c.Error(terror.ErrOpenAPICommonError.New("worker's query-status response is nil"))
 			return
 		}
 		sourceStatus := workerStatus.SourceStatus
@@ -553,7 +556,7 @@ func (s *Server) DMAPIGetTaskStatus(c *gin.Context, taskName string, params open
 		}
 		if subTaskStatus == nil {
 			// this may not happen
-			c.Error(terror.ErrOpenAPICommonError.Generatef("can not find subtask status task name: %s.", taskName))
+			_ = c.Error(terror.ErrOpenAPICommonError.Generatef("can not find subtask status task name: %s.", taskName))
 			return
 		}
 		openapiSubTaskStatus := openapi.SubTaskStatus{
@@ -612,14 +615,14 @@ func (s *Server) DMAPIGetTaskStatus(c *gin.Context, taskName string, params open
 func (s *Server) DMAPIPauseTask(c *gin.Context, taskName string) {
 	var sourceName openapi.SchemaNameList
 	if err := c.Bind(&sourceName); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	if len(sourceName) == 0 {
 		sourceName = s.getTaskResources(taskName)
 	}
 	if err := s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName, sourceName...); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 	}
 }
 
@@ -627,14 +630,14 @@ func (s *Server) DMAPIPauseTask(c *gin.Context, taskName string) {
 func (s *Server) DMAPIResumeTask(c *gin.Context, taskName string) {
 	var sourceName openapi.SchemaNameList
 	if err := c.Bind(&sourceName); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	if len(sourceName) == 0 {
 		sourceName = s.getTaskResources(taskName)
 	}
 	if err := s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Running, taskName, sourceName...); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 	}
 }
 
@@ -642,7 +645,7 @@ func (s *Server) DMAPIResumeTask(c *gin.Context, taskName string) {
 func (s *Server) DMAPIGetSchemaListByTaskAndSource(c *gin.Context, taskName string, sourceName string) {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
-		c.Error(terror.ErrWorkerNoStart)
+		_ = c.Error(terror.ErrWorkerNoStart)
 		return
 	}
 	workerReq := workerrpc.Request{
@@ -656,16 +659,16 @@ func (s *Server) DMAPIGetSchemaListByTaskAndSource(c *gin.Context, taskName stri
 	newCtx := c.Request.Context()
 	resp, err := worker.SendRequest(newCtx, &workerReq, s.cfg.RPCTimeout)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	if !resp.OperateSchema.Result {
-		c.Error(terror.ErrOpenAPICommonError.New(resp.OperateSchema.Msg))
+		_ = c.Error(terror.ErrOpenAPICommonError.New(resp.OperateSchema.Msg))
 		return
 	}
 	schemaList := openapi.SchemaNameList{}
 	if err := json.Unmarshal([]byte(resp.OperateSchema.Msg), &schemaList); err != nil {
-		c.Error(terror.ErrSchemaTrackerUnMarshalJSON.Delegate(err, resp.OperateSchema.Msg))
+		_ = c.Error(terror.ErrSchemaTrackerUnMarshalJSON.Delegate(err, resp.OperateSchema.Msg))
 		return
 	}
 	c.IndentedJSON(http.StatusOK, schemaList)
@@ -675,7 +678,7 @@ func (s *Server) DMAPIGetSchemaListByTaskAndSource(c *gin.Context, taskName stri
 func (s *Server) DMAPIGetTableListByTaskAndSource(c *gin.Context, taskName string, sourceName string, schemaName string) {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
-		c.Error(terror.ErrWorkerNoStart)
+		_ = c.Error(terror.ErrWorkerNoStart)
 		return
 	}
 	workerReq := workerrpc.Request{
@@ -690,16 +693,16 @@ func (s *Server) DMAPIGetTableListByTaskAndSource(c *gin.Context, taskName strin
 	newCtx := c.Request.Context()
 	resp, err := worker.SendRequest(newCtx, &workerReq, s.cfg.RPCTimeout)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	if !resp.OperateSchema.Result {
-		c.Error(terror.ErrOpenAPICommonError.New(resp.OperateSchema.Msg))
+		_ = c.Error(terror.ErrOpenAPICommonError.New(resp.OperateSchema.Msg))
 		return
 	}
 	tableList := openapi.TableNameList{}
 	if err := json.Unmarshal([]byte(resp.OperateSchema.Msg), &tableList); err != nil {
-		c.Error(terror.ErrSchemaTrackerUnMarshalJSON.Delegate(err, resp.OperateSchema.Msg))
+		_ = c.Error(terror.ErrSchemaTrackerUnMarshalJSON.Delegate(err, resp.OperateSchema.Msg))
 		return
 	}
 	c.IndentedJSON(http.StatusOK, tableList)
@@ -709,7 +712,7 @@ func (s *Server) DMAPIGetTableListByTaskAndSource(c *gin.Context, taskName strin
 func (s *Server) DMAPIGetTableStructure(c *gin.Context, taskName string, sourceName string, schemaName string, tableName string) {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
-		c.Error(terror.ErrWorkerNoStart)
+		_ = c.Error(terror.ErrWorkerNoStart)
 		return
 	}
 	workerReq := workerrpc.Request{
@@ -725,11 +728,11 @@ func (s *Server) DMAPIGetTableStructure(c *gin.Context, taskName string, sourceN
 	newCtx := c.Request.Context()
 	resp, err := worker.SendRequest(newCtx, &workerReq, s.cfg.RPCTimeout)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	if !resp.OperateSchema.Result {
-		c.Error(terror.ErrOpenAPICommonError.New(resp.OperateSchema.Msg))
+		_ = c.Error(terror.ErrOpenAPICommonError.New(resp.OperateSchema.Msg))
 		return
 	}
 	taskTableStruct := openapi.GetTaskTableStructureResponse{
@@ -744,7 +747,7 @@ func (s *Server) DMAPIGetTableStructure(c *gin.Context, taskName string, sourceN
 func (s *Server) DMAPIDeleteTableStructure(c *gin.Context, taskName string, sourceName string, schemaName string, tableName string) {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
-		c.Error(terror.ErrWorkerNoStart)
+		_ = c.Error(terror.ErrWorkerNoStart)
 		return
 	}
 	workerReq := workerrpc.Request{
@@ -760,11 +763,11 @@ func (s *Server) DMAPIDeleteTableStructure(c *gin.Context, taskName string, sour
 	newCtx := c.Request.Context()
 	resp, err := worker.SendRequest(newCtx, &workerReq, s.cfg.RPCTimeout)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	if !resp.OperateSchema.Result {
-		c.Error(terror.ErrOpenAPICommonError.New(resp.OperateSchema.Msg))
+		_ = c.Error(terror.ErrOpenAPICommonError.New(resp.OperateSchema.Msg))
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -774,12 +777,12 @@ func (s *Server) DMAPIDeleteTableStructure(c *gin.Context, taskName string, sour
 func (s *Server) DMAPIOperateTableStructure(c *gin.Context, taskName string, sourceName string, schemaName string, tableName string) {
 	var req openapi.OperateTaskTableStructureRequest
 	if err := c.Bind(&req); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
-		c.Error(terror.ErrWorkerNoStart)
+		_ = c.Error(terror.ErrWorkerNoStart)
 		return
 	}
 	opReq := &pb.OperateWorkerSchemaRequest{
@@ -802,11 +805,11 @@ func (s *Server) DMAPIOperateTableStructure(c *gin.Context, taskName string, sou
 	newCtx := c.Request.Context()
 	resp, err := worker.SendRequest(newCtx, &workerReq, s.cfg.RPCTimeout)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	if !resp.OperateSchema.Result {
-		c.Error(terror.ErrOpenAPICommonError.New(resp.OperateSchema.Msg))
+		_ = c.Error(terror.ErrOpenAPICommonError.New(resp.OperateSchema.Msg))
 		return
 	}
 }
