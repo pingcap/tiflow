@@ -490,8 +490,10 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 	}
 
 	if config.PartitionNum < realPartitionCount {
-		log.Warn("number of partition specified in sink-uri is less than that of the actual topic. Some partitions will not have messages dispatched to",
-			zap.Int32("sink-uri partitions", config.PartitionNum), zap.Int32("topic partitions", realPartitionCount))
+		log.Warn("number of partition specified in sink-uri is less than that of the actual topic. "+
+			"Some partitions will not have messages dispatched to",
+			zap.Int32("sink-uri partitions", config.PartitionNum),
+			zap.Int32("topic partitions", realPartitionCount))
 		return nil
 	}
 
@@ -500,7 +502,8 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 	// messages would be dispatched to different partitions, this could prevent potential correctness problems.
 	if config.PartitionNum > realPartitionCount {
 		return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
-			"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)", config.PartitionNum, realPartitionCount)
+			"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)",
+			config.PartitionNum, realPartitionCount)
 	}
 
 	return nil
