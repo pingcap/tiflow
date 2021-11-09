@@ -281,7 +281,7 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	cfg, err = newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
 	err = topicPreProcess(topic, config, cfg)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*assigned in sink-uri is more than that of topic.*")
+	c.Assert(errors.Cause(err), check.ErrorMatches, ".*assigned in sink-uri is more than that of.*")
 
 	config.BrokerEndpoints = []string{""}
 	cfg.Metadata.Retry.Max = 1
