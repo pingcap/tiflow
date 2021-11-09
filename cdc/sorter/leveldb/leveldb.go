@@ -55,6 +55,7 @@ func OpenDB(ctx context.Context, id int, cfg *config.SorterConfig) (*leveldb.DB,
 	option.ErrorIfExist = true
 	option.NoSync = true
 
+	// TODO make sure sorter dir is under data dir.
 	dbDir := filepath.Join(cfg.SortDir, fmt.Sprintf("%04d", id))
 	err := retry.Do(ctx, func() error {
 		err1 := os.RemoveAll(dbDir)
@@ -96,7 +97,8 @@ func NewLevelDBActor(
 ) (*LevelActor, actor.Mailbox, error) {
 	idTag := fmt.Sprint(id)
 	// Write batch size should be larger than block size to save CPU.
-	wbSize := cfg.LevelDB.BlockSize * 16
+	const batchSizeFactor = 16
+	wbSize := cfg.LevelDB.BlockSize * batchSizeFactor
 	wb := leveldb.MakeBatch(wbSize)
 	// IterCount limits the total number of opened iterators to release leveldb
 	// resources (memtables and SST files) in time.
@@ -151,8 +153,8 @@ func (ldb *LevelActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 		return false
 	default:
 	}
-	var iterChs []chan message.LimitedIterator
-	var iterRanges []*util.Range
+	iterChs := make([]chan message.LimitedIterator, 0, len(tasks))
+	iterRanges := make([]*util.Range, 0, len(tasks))
 	for i := range tasks {
 		var task message.Task
 		msg := tasks[i]
@@ -181,9 +183,11 @@ func (ldb *LevelActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 			}
 		}
 		if needIter {
+			// Append to slice for later batch acquiring iterators.
 			iterChs = append(iterChs, iterCh)
 			iterRanges = append(iterRanges, task.Irange)
 		} else {
+			// Or close channel to notify caller that that its task is done.
 			close(iterCh)
 		}
 	}
@@ -193,6 +197,7 @@ func (ldb *LevelActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 	if err := ldb.maybeWrite(forceWrite); err != nil {
 		log.Panic("leveldb error", zap.Error(err))
 	}
+	// Batch acquire iterators.
 	for i := range iterChs {
 		iterCh := iterChs[i]
 		err := ldb.iterSema.Acquire(ctx, 1)
