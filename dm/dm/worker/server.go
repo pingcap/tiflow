@@ -89,6 +89,7 @@ func NewServer(cfg *Config) *Server {
 }
 
 // Start starts to serving.
+// this function should only exit when can't dail DM-master, for other errors it should not exit
 func (s *Server) Start() error {
 	log.L().Info("starting dm-worker server")
 	RegistryMetrics()
