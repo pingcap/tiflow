@@ -43,8 +43,6 @@ const defaultPartitionNum = 3
 type Config struct {
 	BrokerEndpoints []string
 
-	TopicName string
-
 	PartitionNum int32
 	// User should make sure that `replication-factor` not greater than the number of kafka brokers.
 	ReplicationFactor int16
@@ -76,13 +74,6 @@ func NewConfig() *Config {
 // Initialize the kafka configuration
 func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
 	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
-	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
-		return r == '/'
-	})
-	if topic == "" {
-		return cerror.ErrKafkaInvalidConfig.GenWithStack("topic name not found")
-	}
-	c.TopicName = topic
 
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
@@ -409,7 +400,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
-func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
+func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) error {
 	// FIXME: find a way to remove this failpoint for workload the unit test
 	failpoint.Inject("workaround4Test", func() {
 		failpoint.Return(nil)
@@ -430,7 +421,7 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 	}
 
 	var realPartitionCount int32 = 0
-	info, ok := topics[config.TopicName]
+	info, ok := topics[topic]
 	if ok {
 		realPartitionCount = info.NumPartitions
 	}
@@ -455,17 +446,17 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 			}
 
 			config.PartitionNum = realPartitionCount
-			log.Warn("topic already exist", zap.String("topic", config.TopicName))
+			log.Warn("topic already exist", zap.String("topic", topic))
 			return nil
 		}
 		// this could happen if user does not specify the `partition-num` in the sink uri.
 		if config.PartitionNum == 0 {
 			config.PartitionNum = defaultPartitionNum
 			log.Warn("partition-num is not set, use the default partition count",
-				zap.String("topic", config.TopicName), zap.Int32("partitions", config.PartitionNum))
+				zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
 		}
 		maxMessageBytes := strconv.Itoa(config.MaxMessageBytes)
-		err := admin.CreateTopic(config.TopicName, &sarama.TopicDetail{
+		err := admin.CreateTopic(topic, &sarama.TopicDetail{
 			NumPartitions:     config.PartitionNum,
 			ReplicationFactor: config.ReplicationFactor,
 			ConfigEntries: map[string]*string{
@@ -512,14 +503,14 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 var newSaramaConfigImpl = newSaramaConfig
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := topicPreProcess(config, cfg); err != nil {
+	if err := topicPreProcess(topic, config, cfg); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -540,7 +531,7 @@ func NewKafkaSaramaProducer(ctx context.Context, config *Config, errCh chan erro
 	k := &kafkaSaramaProducer{
 		asyncClient:  asyncClient,
 		syncClient:   syncClient,
-		topic:        config.TopicName,
+		topic:        topic,
 		partitionNum: config.PartitionNum,
 		partitionOffset: make([]struct {
 			flushed uint64

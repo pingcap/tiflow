@@ -144,7 +144,6 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	config.PartitionNum = int32(2)
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
-	config.TopicName = topic
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
 	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
@@ -159,7 +158,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test")
 	}()
 
-	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
 	for i := 0; i < 100; i++ {
@@ -262,39 +261,38 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	config := NewConfig()
 	config.PartitionNum = int32(0)
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
-	config.TopicName = topic
 	config.AutoCreate = false
 
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
 
-	err = topicPreProcess(config, cfg)
+	err = topicPreProcess(topic, config, cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(config.PartitionNum, check.Equals, int32(2))
 
 	config.PartitionNum = int32(1)
 	cfg, err = newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
-	err = topicPreProcess(config, cfg)
+	err = topicPreProcess(topic, config, cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(config.PartitionNum, check.Equals, int32(1))
 
 	config.PartitionNum = int32(3)
 	cfg, err = newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
-	err = topicPreProcess(config, cfg)
+	err = topicPreProcess(topic, config, cfg)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*assigned in sink-uri is more than that of topic.*")
 
 	config.BrokerEndpoints = []string{""}
 	cfg.Metadata.Retry.Max = 1
 
-	err = topicPreProcess(config, cfg)
+	err = topicPreProcess(topic, config, cfg)
 	c.Assert(errors.Cause(err), check.Equals, sarama.ErrOutOfBrokers)
 
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
 	config.PartitionNum = int32(3)
 
-	err = topicPreProcess(config, cfg)
+	err = topicPreProcess(topic, config, cfg)
 	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
 }
 
@@ -316,29 +314,28 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 
 	config := NewConfig()
 	config.PartitionNum = int32(0)
-	config.TopicName = topic
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
 
-	err = topicPreProcess(config, cfg)
+	err = topicPreProcess(topic, config, cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(config.PartitionNum, check.Equals, int32(3))
 
-	config.TopicName = "createTopicWithValidPartitionNum"
+	topic = "createTopicWithValidPartitionNum"
 	config.PartitionNum = 1
 	cfg, err = newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
 
-	err = topicPreProcess(config, cfg)
+	err = topicPreProcess(topic, config, cfg)
 	c.Assert(err, check.IsNil)
 
-	config.TopicName = "createTopicWithoutPartitionNum"
+	topic = "createTopicWithoutPartitionNum"
 	config.PartitionNum = 0
 	cfg, err = newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
 
-	err = topicPreProcess(config, cfg)
+	err = topicPreProcess(topic, config, cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(config.PartitionNum, check.Equals, int32(3))
 }
@@ -406,9 +403,9 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config := NewConfig()
 	config.Version = "invalid"
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
-	config.TopicName = "topic"
+	topic := "topic"
 	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(true)"), check.IsNil)
-	_, err := NewKafkaSaramaProducer(ctx, config, errCh)
+	_, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test")
 }
@@ -436,7 +433,6 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	config.PartitionNum = int32(2)
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
-	config.TopicName = topic
 
 	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(true)"), check.IsNil)
 
@@ -454,7 +450,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	}()
 
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test")
 		err := producer.Close()
@@ -515,12 +511,11 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	config.PartitionNum = int32(2)
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
-	config.TopicName = topic
 
 	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(true)"), check.IsNil)
 
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
