@@ -68,7 +68,7 @@ func SyncTopic(changefeedID ChangeFeedID) p2p.Topic {
 // MsgPack serialization has been implemented to minimize the size of the message.
 type SyncMessage struct {
 	// Sends the processor's version for compatibility check
-	ProcessorVersion string `json:"processor-version"`
+	ProcessorVersion string
 	Running          []TableID
 	Adding           []TableID
 	Removing         []TableID
