@@ -36,6 +36,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const (
+	waitUnregisterHandleTimeout = time.Second * 5
+)
+
 // MessageServerConfig stores configurations for the MessageServer
 type MessageServerConfig struct {
 	// The maximum number of entries to be cached for topics with no handler registered
@@ -201,8 +205,13 @@ func (m *MessageServer) run(ctx context.Context) error {
 					}
 				}
 			case taskOnRegisterHandler:
-				// TODO think about error handling here
+				// FIXME better error handling here.
+				// Notes: registering a handler is not expected to fail unless a context is cancelled.
+				// The current error handling here will cause the server to exit, which is not ideal,
+				// but will not cause service to be interrupted because the `ctx` involved here will not
+				// be cancelled unless the server is exiting.
 				if err := m.registerHandler(ctx, task.topic, task.handler, task.done); err != nil {
+					log.Warn("registering handler failed", zap.Error(err))
 					return errors.Trace(err)
 				}
 				log.Debug("handler registered", zap.String("topic", task.topic))
@@ -210,8 +219,17 @@ func (m *MessageServer) run(ctx context.Context) error {
 				if handler, ok := m.handlers[task.topic]; ok {
 					delete(m.handlers, task.topic)
 					go func() {
-						err := handler.GracefulUnregister(ctx, time.Second*5)
+						err := handler.GracefulUnregister(ctx, waitUnregisterHandleTimeout)
 						if err != nil {
+							// This can only happen if `ctx` is cancelled or the workerpool
+							// fails to unregister the handle in time, which can be caused
+							// by inappropriate blocking inside the handler.
+							// We use `DPanic` here so that any unexpected blocking can be
+							// caught in tests, but in the same time we can provide better
+							// resilience in production (`DPanic` does not panic in production).
+							//
+							// Note: Even if `GracefulUnregister` does fail, the handle is still
+							// unregistered, only forcefully.
 							log.L().DPanic("failed to gracefully unregister handle",
 								zap.Error(err))
 						}
@@ -291,8 +309,11 @@ func (m *MessageServer) tick(ctx context.Context) {
 }
 
 func (m *MessageServer) deregisterPeer(ctx context.Context, peer *cdcPeer, err error) {
-	log.Info("Deregistering peer", zap.String("sender", peer.PeerID),
-		zap.Int64("epoch", peer.Epoch))
+	log.Info("Deregistering peer",
+		zap.String("sender", peer.PeerID),
+		zap.Int64("epoch", peer.Epoch),
+		zap.Error(err))
+
 	m.peerLock.Lock()
 	delete(m.peers, peer.PeerID)
 	m.peerLock.Unlock()
@@ -359,7 +380,14 @@ func (m *MessageServer) AddHandler(
 
 		m.acksMapLock.Unlock()
 		if lastAck != 0 && entry.Sequence > lastAck+1 {
-			log.Panic("seq is skipped. Bug?", zap.Int64("last-ack", lastAck))
+			// We detected a message loss at seq = (lastAck+1).
+			// This can only happen if the receiver's handler had failed to
+			// unregister before the receiver restarted. This is expected to be
+			// rare and indicates problems with the receiver's handler.
+			// It is expected to happen only with extreme system latency or buggy code.
+			//
+			// Reports an error so that the receiver can gracefully exit.
+			return cerror.ErrPeerMessageDataLost.GenWithStackByArgs(entry.Topic, lastAck+1)
 		}
 
 		if err := unmarshalMessage(entry.Content, e); err != nil {

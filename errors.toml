@@ -626,6 +626,11 @@ error = '''
 etcd api call error
 '''
 
+["CDC:ErrPeerMessageDataLost"]
+error = '''
+peer-to-peer message data lost, topic: %s, seq: %s
+'''
+
 ["CDC:ErrPeerMessageDecodeError"]
 error = '''
 failed to decode peer-to-peer message
