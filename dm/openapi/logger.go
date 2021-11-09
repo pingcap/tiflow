@@ -17,46 +17,40 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 // ZapLogger is a middleware and zap to provide an "access log" like logging for each request.
-func ZapLogger(log *zap.Logger) gin.MiddlewareFunc {
+func ZapLogger(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-
 		c.Next()
-		if err != nil {
-			c.Error(err)
-		}
+		req := c.Request
 
-		req := c.Request()
-		res := c.Response()
-
+		statusCode := c.Writer.Status()
 		fields := []zapcore.Field{
-			zap.Int64("size", res.Size),
+			zap.Int("size", c.Writer.Size()),
 			zap.String("host", req.Host),
-			zap.Int("status", res.Status),
+			zap.Int("status", statusCode),
 			zap.String("method", req.Method),
 			zap.String("protocol", req.Proto),
-			zap.String("remote_ip", c.RealIP()),
+			zap.String("remote_ip", c.Request.RemoteAddr),
 			zap.String("user_agent", req.UserAgent()),
 			zap.String("duration", time.Since(start).String()),
 			zap.String("request", fmt.Sprintf("%s %s", req.Method, req.RequestURI)),
 		}
-		print(fields)
-		// n := res.Status
-		// switch {
-		// case n >= 500:
-		// 	log.With(zap.Error(err)).Error("Server error", fields...)
-		// case n >= 400:
-		// 	log.With(zap.Error(err)).Warn("Client error", fields...)
-		// case n >= 300:
-		// 	log.Info("Redirection", fields...)
-		// default:
-		// 	log.Info("Success", fields...)
-		// }
-		// return nil
+
+		switch {
+		case statusCode >= 500:
+			log.With(zap.Error(c.Errors.Last().Err)).Error("Server error", fields...)
+		case statusCode >= 400:
+			log.With(zap.Error(c.Errors.Last().Err)).Warn("Client error", fields...)
+		case statusCode >= 300:
+			log.Info("Redirection", fields...)
+		default:
+			log.Info("Success", fields...)
+		}
 	}
 }
