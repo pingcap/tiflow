@@ -2764,6 +2764,14 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 
 	if shouldExecDDLOnSchemaTracker {
 		if err := s.schemaTracker.Exec(ec.tctx.Ctx, usedSchema, trackInfo.originDDL); err != nil {
+			if ignoreTrackerDDLError(err) {
+				ec.tctx.L().Warn("will ignore a DDL error when tracking",
+					zap.String("schema", usedSchema),
+					zap.String("statement", trackInfo.originDDL),
+					log.WrapStringerField("location", ec.currentLocation),
+					log.ShortError(err))
+				return nil
+			}
 			ec.tctx.L().Error("cannot track DDL",
 				zap.String("schema", usedSchema),
 				zap.String("statement", trackInfo.originDDL),
