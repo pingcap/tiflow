@@ -19,16 +19,16 @@ var (
 	etcdTxnSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "etcdWorker",
+			Subsystem: "etcd_worker",
 			Name:      "etcd_txn_size_bytes",
-			Help:      "Bucketed histogram of of etcd txn size.",
+			Help:      "Bucketed histogram of a etcd txn size.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
 		}, []string{"capture"})
 
 	etcdTxnExecDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "etcdWorker",
+			Subsystem: "etcd_worker",
 			Name:      "etcd_txn_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a etcd txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
@@ -37,7 +37,7 @@ var (
 	etcdWorkerTickDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "etcdWorker",
+			Subsystem: "etcd_worker",
 			Name:      "tick_reactor_duration",
 			Help:      "Bucketed histogram of etcdWorker tick reactor time (s).",
 			Buckets:   prometheus.ExponentialBuckets(0.01 /* 10 ms */, 2, 18),

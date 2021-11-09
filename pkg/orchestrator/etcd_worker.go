@@ -217,6 +217,9 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			// it is safe that a batch of updates has been applied to worker.state before worker.reactor.Tick
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			costTime := time.Since(startTime).Seconds()
+			if costTime > time.Second.Seconds()*1 {
+				log.Warn("etcdWorker ticks reactor cost time more than 1 second")
+			}
 			worker.metrics.metricEtcdWorkerTickDuration.Observe(costTime)
 			if err != nil {
 				if !cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
@@ -361,6 +364,9 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	startTime := time.Now()
 	resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
 	costTime := time.Since(startTime).Seconds()
+	if costTime > time.Second.Seconds()*1 {
+		log.Warn("etcdWorker commit etcd txn cost time more than 1 second")
+	}
 	worker.metrics.metricEtcdTxnDuration.Observe(costTime)
 	if err != nil {
 		return errors.Trace(err)

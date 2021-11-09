@@ -978,7 +978,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_etcdWorker_tick_reactor_duration_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, capture)",
+              "expr": "sum(rate(ticdc_etcd_worker_tick_reactor_duration_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, capture)",
               "format": "heatmap",
               "interval": "1",
               "intervalFactor": 2,
@@ -1060,7 +1060,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcdWorker_tick_reactor_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcd_worker_tick_reactor_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "interval": "",
               "legendFormat": "{{capture}}-95",
               "queryType": "randomWalk",
@@ -1068,7 +1068,7 @@
             },
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcdWorker_tick_reactor_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcd_worker_tick_reactor_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "hide": false,
               "interval": "",
               "legendFormat": "{{capture}}-99",
@@ -1157,7 +1157,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_etcdWorker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "sum(rate(ticdc_etcd_worker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "interval": "",
@@ -1244,7 +1244,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcdWorker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcd_worker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "format": "time_series",
               "interval": "",
               "legendFormat": "{{capture}}-p95",
@@ -1253,7 +1253,7 @@
             },
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcdWorker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcd_worker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "hide": false,
               "interval": "",
               "legendFormat": "{{lcapture}-p99}",
@@ -1341,7 +1341,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_etcdWorker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, capture)",
+              "expr": "sum(rate(ticdc_etcd_worker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, capture)",
               "format": "heatmap",
               "instant": false,
               "interval": "",
@@ -1424,7 +1424,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcdWorker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcd_worker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "interval": "",
               "legendFormat": "{{capture}}-p95",
               "queryType": "randomWalk",
@@ -1432,7 +1432,7 @@
             },
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcdWorker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcd_worker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "hide": false,
               "interval": "",
               "legendFormat": "{{capture}}-p99",
@@ -1443,7 +1443,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "EtcdWorker txn size pecentile",
+          "title": "EtcdWorker txn size percentile",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -1534,7 +1534,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_etcdWorker_tick_reactor_duration_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, capture)",
+              "expr": "sum(rate(ticdc_etcd_worker_tick_reactor_duration_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, capture)",
               "format": "heatmap",
               "interval": "1",
               "intervalFactor": 2,
@@ -1616,7 +1616,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcdWorker_tick_reactor_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcd_worker_tick_reactor_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "interval": "",
               "legendFormat": "{{capture}}-95",
               "queryType": "randomWalk",
@@ -1624,7 +1624,7 @@
             },
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcdWorker_tick_reactor_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcd_worker_tick_reactor_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "hide": false,
               "interval": "",
               "legendFormat": "{{capture}}-99",
@@ -1713,7 +1713,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_etcdWorker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "sum(rate(ticdc_etcd_worker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "interval": "",
@@ -1800,7 +1800,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcdWorker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcd_worker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "format": "time_series",
               "interval": "",
               "legendFormat": "{{capture}}-p95",
@@ -1809,7 +1809,7 @@
             },
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcdWorker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcd_worker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "hide": false,
               "interval": "",
               "legendFormat": "{{capture}-p99}",
@@ -1897,7 +1897,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_etcdWorker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, capture)",
+              "expr": "sum(rate(ticdc_etcd_worker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, capture)",
               "format": "heatmap",
               "instant": false,
               "interval": "",
@@ -1980,7 +1980,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcdWorker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcd_worker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "interval": "",
               "legendFormat": "{{capture}}-p95",
               "queryType": "randomWalk",
@@ -1988,7 +1988,7 @@
             },
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcdWorker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcd_worker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "hide": false,
               "interval": "",
               "legendFormat": "{{capture}}-p99",
@@ -1999,7 +1999,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "EtcdWorker txn size pecentile",
+          "title": "EtcdWorker txn size percentile",
           "tooltip": {
             "shared": true,
             "sort": 0,

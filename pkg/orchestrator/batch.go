@@ -31,18 +31,19 @@ func getBatchChangedState(state map[util.EtcdKey][]byte, patchGroups [][]DataPat
 	// store changedState of multiple changefeed
 	batchChangedState := make(map[util.EtcdKey][]byte)
 	for i, patches := range patchGroups {
-		changeState, changedSize, err := getChangedState(state, patches)
+		changedState, changedSize, err := getChangedState(state, patches)
 		if err != nil {
 			return nil, 0, 0, err
 		}
-		// if one changefeed
+		// if a changefeed's changedState size is large than etcdTxnMaxSize
+		// we should return an error instantly
 		if i == 0 && changedSize >= etcdTxnMaxSize {
 			return nil, 0, 0, cerrors.ErrEtcdTxnSizeExceed.GenWithStackByArgs()
 		}
 		if totalSize+changedSize >= etcdTxnMaxSize {
 			break
 		}
-		for k, v := range changeState {
+		for k, v := range changedState {
 			batchChangedState[k] = v
 		}
 		num++
@@ -54,7 +55,7 @@ func getBatchChangedState(state map[util.EtcdKey][]byte, patchGroups [][]DataPat
 func getChangedState(state map[util.EtcdKey][]byte, patches []DataPatch) (map[util.EtcdKey][]byte, int, error) {
 	changedSet := make(map[util.EtcdKey]struct{})
 	changeState := make(map[util.EtcdKey][]byte)
-	kvSize := 0
+	changedSize := 0
 	for _, patch := range patches {
 		err := patch.Patch(state, changedSet)
 		if err != nil {
@@ -66,8 +67,8 @@ func getChangedState(state map[util.EtcdKey][]byte, patches []DataPatch) (map[ut
 	}
 	for k := range changedSet {
 		v := state[k]
-		kvSize += len(k.String())*2 + len(v)
+		changedSize += len(k.String())*2 + len(v)
 		changeState[k] = v
 	}
-	return changeState, kvSize, nil
+	return changeState, changedSize, nil
 }
