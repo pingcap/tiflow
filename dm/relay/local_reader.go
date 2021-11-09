@@ -499,7 +499,9 @@ func (r *BinlogReader) parseFile(
 	offset := state.latestPos
 
 	onEventFunc := func(e *replication.BinlogEvent) error {
-		r.tctx.L().Debug("read event", zap.Reflect("header", e.Header))
+		if ce := r.tctx.L().Check(zap.DebugLevel, ""); ce != nil {
+			r.tctx.L().Debug("read event", zap.Reflect("header", e.Header))
+		}
 		r.latestServerID = e.Header.ServerID // record server_id
 
 		switch ev := e.Event.(type) {

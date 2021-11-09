@@ -688,7 +688,9 @@ func (r *Relay) handleEvents(
 
 		// 3. save events into file
 		writeTimer := time.Now()
-		r.logger.Debug("writing binlog event", zap.Reflect("header", e.Header))
+		if ce := r.logger.Check(zap.DebugLevel, ""); ce != nil {
+			r.logger.Debug("writing binlog event", zap.Reflect("header", e.Header))
+		}
 		wResult, err := r.writer.WriteEvent(e)
 		if err != nil {
 			relayLogWriteErrorCounter.Inc()
