@@ -440,7 +440,6 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 		// less than given `max-message-size`
 		if ok {
 			if a, ok := info.ConfigEntries["max.message.bytes"]; ok {
-				log.Warn("show topic info", zap.Any("topic info", info))
 				topicMaxMessageBytes, err := strconv.Atoi(*a)
 				if err != nil {
 					return err
