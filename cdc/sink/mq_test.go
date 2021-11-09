@@ -63,9 +63,9 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(true)"), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
@@ -168,9 +168,9 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(true)"), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)

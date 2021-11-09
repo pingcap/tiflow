@@ -402,12 +402,12 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 
 func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) error {
 	// FIXME: find a way to remove this failpoint for workload the unit test
-	failpoint.Inject("workaround4Test", func() {
+	failpoint.Inject("SkipTopicAutoCreate", func() {
 		failpoint.Return(nil)
 	})
 	admin, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
 	if err != nil {
-		return err
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	defer func() {
 		if err := admin.Close(); err != nil {
@@ -465,7 +465,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		}, false)
 		// TODO identify the cause of "Topic with this name already exists"
 		if err != nil && !strings.Contains(err.Error(), "already exists") {
-			return err
+			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
 		return nil
 	}
