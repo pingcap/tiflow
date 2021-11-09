@@ -15,60 +15,59 @@ package orchestrator
 
 import (
 	"github.com/pingcap/errors"
-	"go.etcd.io/etcd/clientv3"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 )
 
 const (
-	maxBatchPatchSize    = 64
-	maxBatchResponseSize = 64
+	// 1.25 MiB
+	// Ref: https://etcd.io/docs/v3.3/dev-guide/limit/
+	etcdTxnMaxSize = 1024 * (1024 + 256)
 )
 
-// getBatchPatches batch patches
-func getBatchPatches(patchGroups [][]DataPatch) ([]DataPatch, int) {
-	batchPatches := make([]DataPatch, 0)
-	patchesNum := 0
+func getBatchChangedState(state map[util.EtcdKey][]byte, patchGroups [][]DataPatch) (map[util.EtcdKey][]byte, int, int, error) {
+	num := 0
+	totalSize := 0
+	// store changedState of multiple changefeed
+	batchChangedState := make(map[util.EtcdKey][]byte)
 	for i, patches := range patchGroups {
-		// make sure there at least one patches are put into batchPatches
-		if i == 0 {
-			batchPatches = append(batchPatches, patches...)
-			patchesNum++
-			continue
+		changeState, changedSize, err := getChangedState(state, patches)
+		if err != nil {
+			return nil, 0, 0, err
 		}
-
-		if (len(batchPatches) + len(patches)) > maxBatchPatchSize {
+		// if one changefeed
+		if i == 0 && changedSize >= etcdTxnMaxSize {
+			return nil, 0, 0, cerrors.ErrEtcdTxnSizeExceed.GenWithStackByArgs()
+		}
+		if totalSize+changedSize >= etcdTxnMaxSize {
 			break
 		}
-		batchPatches = append(batchPatches, patches...)
-		patchesNum++
+		for k, v := range changeState {
+			batchChangedState[k] = v
+		}
+		num++
+		totalSize += changedSize
 	}
-	return batchPatches, patchesNum
+	return batchChangedState, num, totalSize, nil
 }
 
-// getBatchResponse try to get more WatchResponse from watchCh
-func getBatchResponse(watchCh clientv3.WatchChan, revision int64) ([]clientv3.WatchResponse, int64, error) {
-	responses := make([]clientv3.WatchResponse, 0)
-BATCH:
-	for {
-		select {
-		case response := <-watchCh:
-			if err := response.Err(); err != nil {
-				// we should always return revision
-				return nil, revision, errors.Trace(err)
-			}
-			if revision >= response.Header.GetRevision() {
+func getChangedState(state map[util.EtcdKey][]byte, patches []DataPatch) (map[util.EtcdKey][]byte, int, error) {
+	changedSet := make(map[util.EtcdKey]struct{})
+	changeState := make(map[util.EtcdKey][]byte)
+	kvSize := 0
+	for _, patch := range patches {
+		err := patch.Patch(state, changedSet)
+		if err != nil {
+			if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
 				continue
 			}
-			revision = response.Header.GetRevision()
-			if response.IsProgressNotify() {
-				continue
-			}
-			responses = append(responses, response)
-			if len(responses) == maxBatchResponseSize {
-				break BATCH
-			}
-		default:
-			break BATCH
+			return nil, 0, errors.Trace(err)
 		}
 	}
-	return responses, revision, nil
+	for k := range changedSet {
+		v := state[k]
+		kvSize += len(k.String())*2 + len(v)
+		changeState[k] = v
+	}
+	return changeState, kvSize, nil
 }

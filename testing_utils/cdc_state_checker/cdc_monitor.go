@@ -89,7 +89,7 @@ func newCDCMonitor(ctx context.Context, pd string, credential *security.Credenti
 
 func (m *cdcMonitor) run(ctx context.Context) error {
 	log.Debug("start running cdcMonitor")
-	err := m.etcdWorker.Run(ctx, nil, 200*time.Millisecond)
+	err := m.etcdWorker.Run(ctx, nil, 200*time.Millisecond, "127.0.0.1")
 	log.Error("etcdWorker exited: test-case-failed", zap.Error(err))
 	log.Info("CDC state", zap.Reflect("state", m.reactor.state))
 	return err
