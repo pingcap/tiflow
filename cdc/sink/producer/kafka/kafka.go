@@ -42,8 +42,8 @@ const defaultPartitionNum = 3
 // Config stores user specified Kafka producer configuration
 type Config struct {
 	BrokerEndpoints []string
+	PartitionNum    int32
 
-	PartitionNum int32
 	// User should make sure that `replication-factor` not greater than the number of kafka brokers.
 	ReplicationFactor int16
 
@@ -74,7 +74,6 @@ func NewConfig() *Config {
 // Initialize the kafka configuration
 func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
 	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
-
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
 	if s != "" {
