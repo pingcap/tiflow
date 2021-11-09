@@ -410,6 +410,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 }
 
 func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
+	// FIXME: find a way to remove this failpoint for workload the unit test
 	failpoint.Inject("workaround4Test", func() {
 		failpoint.Return(nil)
 	})
@@ -443,11 +444,12 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 			if a, ok := info.ConfigEntries["max.message.bytes"]; ok {
 				topicMaxMessageBytes, err := strconv.Atoi(*a)
 				if err != nil {
-					return err
+					return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 				}
 				if topicMaxMessageBytes < config.MaxMessageBytes {
 					return cerror.ErrKafkaInvalidConfig.GenWithStack(
-						"topic already exist, and max.message.size(%d) less than max-message-size(%d)",
+						"topic already exist, and max.message.size(%d) less than max-message-size(%d)."+
+							"Please make sure max-message-size not greater than topic max.message.size",
 						topicMaxMessageBytes, config.MaxMessageBytes)
 				}
 			}
@@ -493,8 +495,9 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 		return nil
 	}
 
-	// For a topic already existing, we just make sure that the user-specified partition count is not greater than the real
-	// partition count, since we would dispatch messages to different partitions, this could prevent potential message loss.
+	// For a topic already existing, we just make sure that the user-specified
+	// partition count is not greater than the real partition count, since
+	// messages would be dispatched to different partitions, this could prevent potential correctness problems.
 	if config.PartitionNum > realPartitionCount {
 		return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
 			"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)", config.PartitionNum, realPartitionCount)
