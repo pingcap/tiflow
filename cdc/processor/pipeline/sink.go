@@ -119,7 +119,7 @@ func (n *sinkNode) Start(ctx context.Context, tableActorRouter *actor.Router, wg
 // no more events can be sent to this sink node afterwards.
 func (n *sinkNode) stop(ctx context.Context) (err error) {
 	// table stopped status must be set after underlying sink is closed
-	n.status.Store(TableStatusStopped)
+	defer n.status.Store(TableStatusStopped)
 	err = n.sink.Close(ctx)
 	if err != nil {
 		return
@@ -200,7 +200,7 @@ func (n *sinkNode) emitEvent(ctx context.Context, event *model.PolymorphicEvent)
 		n.eventBuffer = append(n.eventBuffer, event)
 	}
 
-	if len(n.eventBuffer) >= 1 {
+	if len(n.eventBuffer) >= defaultSyncResolvedBatch {
 		if err := n.emitRow2Sink(ctx); err != nil {
 			return errors.Trace(err)
 		}
