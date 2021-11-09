@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/actor"
 	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -68,10 +70,10 @@ func OpenDB(ctx context.Context, id int, cfg *config.SorterConfig) (*leveldb.DB,
 		retry.WithBackoffBaseDelay(500), // 0.5s
 		retry.WithMaxTries(4))           // 2s in total.
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
 	}
 	db, err := leveldb.OpenFile(dbDir, &option)
-	return db, errors.Trace(err)
+	return db, cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
 }
 
 // LevelActor is a leveldb actor, it reads, writes and deletes key value pair
@@ -95,7 +97,7 @@ func NewLevelDBActor(
 	ctx context.Context, id int, db *leveldb.DB, cfg *config.SorterConfig,
 	wg *sync.WaitGroup, captureAddr string,
 ) (*LevelActor, actor.Mailbox, error) {
-	idTag := fmt.Sprint(id)
+	idTag := strconv.Itoa(id)
 	// Write batch size should be larger than block size to save CPU.
 	const batchSizeFactor = 16
 	wbSize := cfg.LevelDB.BlockSize * batchSizeFactor
@@ -129,7 +131,7 @@ func (ldb *LevelActor) maybeWrite(force bool) error {
 		startTime := time.Now()
 		err := ldb.db.Write(ldb.wb, nil)
 		if err != nil {
-			return errors.Trace(err)
+			return cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
 		}
 		ldb.metricWriteDuration.Observe(time.Since(startTime).Seconds())
 		ldb.metricWriteBytes.Observe(float64(bytes))
@@ -202,10 +204,11 @@ func (ldb *LevelActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 		iterCh := iterChs[i]
 		err := ldb.iterSema.Acquire(ctx, 1)
 		if err != nil {
-			if errors.Cause(err) == context.Canceled {
+			if errors.Cause(err) == context.Canceled ||
+				errors.Cause(err) == context.DeadlineExceeded {
 				return false
 			}
-			log.Panic("leveldb error, acquire iter", zap.Error(err))
+			log.Panic("leveldb unreachable error, acquire iter", zap.Error(err))
 		}
 		iter := ldb.db.NewIterator(iterRanges[i], nil)
 		iterCh <- message.LimitedIterator{
