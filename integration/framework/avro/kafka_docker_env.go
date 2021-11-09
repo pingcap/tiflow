@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	kafkaURI              = "http://127.0.0.1:18083"
+	kafkaURI              = "http://127.0.0.1:18083/"
 	dockerComposeFilePath = framework.DockerComposeFilePathPrefix + "docker-compose-avro.yml"
 )
 
@@ -113,7 +113,7 @@ func (d *KafkaDockerEnv) Reset() {
 }
 
 func (d *KafkaDockerEnv) resetSchemaRegistry() error {
-	subjectsURL := kafkaURI + "/subjects/"
+	subjectsURL := "http://127.0.0.1:8081/subjects/"
 	resp, err := http.Get(subjectsURL)
 	if err != nil {
 		return err
