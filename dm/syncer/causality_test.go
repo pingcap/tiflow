@@ -114,7 +114,7 @@ func (s *testSyncerSuite) TestCasuality(c *C) {
 	results := []opType{insert, insert, update, del, conflict, insert}
 	table := &filter.Table{Schema: "test", Name: "t1"}
 	location := binlog.NewLocation("")
-	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
+	ec := &eventContext{startLocation: &location, endLocation: &location, lastLocation: &location}
 
 	for _, tc := range testCases {
 		job := newDMLJob(tc.op, table, table, newDML(tc.op, false, "", table, tc.oldVals, tc.vals, tc.oldVals, tc.vals, ti.Columns, ti, tiIndex), ec)

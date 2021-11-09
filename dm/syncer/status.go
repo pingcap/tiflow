@@ -107,9 +107,7 @@ func (s *Syncer) printStatus(sourceStatus *binlog.SourceStatus) {
 		tps = (total - last) / seconds
 		totalTps = total / totalSeconds
 
-		s.currentLocationMu.RLock()
-		currentLocation := s.currentLocationMu.currentLocation
-		s.currentLocationMu.RUnlock()
+		currentLocation := s.locations.getCurEndLocation()
 
 		remainingSize := sourceStatus.Binlogs.After(currentLocation.Position)
 		bytesPerSec := (totalBinlogSize - lastBinlogSize) / seconds

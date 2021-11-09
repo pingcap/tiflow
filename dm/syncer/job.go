@@ -71,15 +71,15 @@ type job struct {
 	// ddl in ShardOptimistic and ShardPessimistic will only affect one table at one time but for normal node
 	// we don't have this limit. So we should update multi tables in normal mode.
 	// sql example: drop table `s1`.`t1`, `s2`.`t2`.
-	sourceTbls      map[string][]*filter.Table
-	targetTable     *filter.Table
-	dml             *DML
-	retry           bool
-	location        binlog.Location // location of last received (ROTATE / QUERY / XID) event, for global/table checkpoint
-	startLocation   binlog.Location // start location of the sql in binlog, for handle_error
-	currentLocation binlog.Location // end location of the sql in binlog, for user to skip sql manually by changing checkpoint
-	ddls            []string
-	originSQL       string // show origin sql when error, only DDL now
+	sourceTbls       map[string][]*filter.Table
+	targetTable      *filter.Table
+	dml              *DML
+	retry            bool
+	txnEndLocation   binlog.Location // location of last received (ROTATE / QUERY / XID) event, for global/table checkpoint
+	curStartLocation binlog.Location // start location of the sql in binlog, for handle_error
+	curEndLocation   binlog.Location // end location of the sql in binlog, for user to skip sql manually by changing checkpoint
+	ddls             []string
+	originSQL        string // show origin sql when error, only DDL now
 
 	eventHeader *replication.EventHeader
 	jobAddTime  time.Time // job commit time
@@ -97,7 +97,7 @@ func (j *job) String() string {
 	if j.dml != nil {
 		dmlStr = j.dml.String()
 	}
-	return fmt.Sprintf("tp: %s, dml: %s, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, dmlStr, j.ddls, j.location, j.startLocation, j.currentLocation)
+	return fmt.Sprintf("tp: %s, dml: %s, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, dmlStr, j.ddls, j.txnEndLocation, j.curStartLocation, j.curEndLocation)
 }
 
 func newDMLJob(tp opType, sourceTable, targetTable *filter.Table, dml *DML, ec *eventContext) *job {
@@ -108,11 +108,11 @@ func newDMLJob(tp opType, sourceTable, targetTable *filter.Table, dml *DML, ec *
 		dml:         dml,
 		retry:       true,
 
-		location:        *ec.lastLocation,
-		startLocation:   *ec.startLocation,
-		currentLocation: *ec.currentLocation,
-		eventHeader:     ec.header,
-		jobAddTime:      time.Now(),
+		txnEndLocation:   *ec.lastLocation,
+		curStartLocation: *ec.startLocation,
+		curEndLocation:   *ec.endLocation,
+		eventHeader:      ec.header,
+		jobAddTime:       time.Now(),
 	}
 }
 
@@ -126,11 +126,11 @@ func newDDLJob(qec *queryEventContext) *job {
 		ddls:        qec.needHandleDDLs,
 		originSQL:   qec.originSQL,
 
-		location:        *qec.lastLocation,
-		startLocation:   *qec.startLocation,
-		currentLocation: *qec.currentLocation,
-		eventHeader:     qec.header,
-		jobAddTime:      time.Now(),
+		txnEndLocation:   *qec.lastLocation,
+		curStartLocation: *qec.startLocation,
+		curEndLocation:   *qec.endLocation,
+		eventHeader:      qec.header,
+		jobAddTime:       time.Now(),
 	}
 
 	ddlInfo := qec.shardingDDLInfo
@@ -154,20 +154,20 @@ func newDDLJob(qec *queryEventContext) *job {
 
 func newSkipJob(ec *eventContext) *job {
 	return &job{
-		tp:          skip,
-		location:    *ec.lastLocation,
-		eventHeader: ec.header,
-		jobAddTime:  time.Now(),
+		tp:             skip,
+		txnEndLocation: *ec.lastLocation,
+		eventHeader:    ec.header,
+		jobAddTime:     time.Now(),
 	}
 }
 
-func newXIDJob(location, startLocation, currentLocation binlog.Location) *job {
+func newXIDJob(txnEndLocation, curStartLocation, curEndLocation binlog.Location) *job {
 	return &job{
-		tp:              xid,
-		location:        location,
-		startLocation:   startLocation,
-		currentLocation: currentLocation,
-		jobAddTime:      time.Now(),
+		tp:               xid,
+		txnEndLocation:   txnEndLocation,
+		curStartLocation: curStartLocation,
+		curEndLocation:   curEndLocation,
+		jobAddTime:       time.Now(),
 	}
 }
 

@@ -1440,17 +1440,17 @@ func (s *Syncer) addJobToMemory(job *job) error {
 
 	switch job.tp {
 	case xid:
-		s.saveGlobalPoint(job.location)
+		s.saveGlobalPoint(job.txnEndLocation)
 		s.checkpoint.(*RemoteCheckPoint).globalPoint.flush()
 	case ddl:
-		s.saveGlobalPoint(job.location)
+		s.saveGlobalPoint(job.txnEndLocation)
 		s.checkpoint.(*RemoteCheckPoint).globalPoint.flush()
 		for sourceSchema, tbs := range job.sourceTbls {
 			if len(sourceSchema) == 0 {
 				continue
 			}
 			for _, sourceTable := range tbs {
-				s.saveTablePoint(sourceTable, job.location)
+				s.saveTablePoint(sourceTable, job.txnEndLocation)
 				s.checkpoint.(*RemoteCheckPoint).points[sourceSchema][sourceTable.Name].flush()
 			}
 		}
@@ -1461,7 +1461,7 @@ func (s *Syncer) addJobToMemory(job *job) error {
 				continue
 			}
 			for _, sourceTable := range tbs {
-				s.saveTablePoint(sourceTable, job.currentLocation)
+				s.saveTablePoint(sourceTable, job.curEndLocation)
 				s.checkpoint.(*RemoteCheckPoint).points[sourceSchema][sourceTable.Name].flush()
 			}
 		}
