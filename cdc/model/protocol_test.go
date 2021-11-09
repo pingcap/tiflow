@@ -49,13 +49,13 @@ func TestSerializeSyncMessage(t *testing.T) {
 }
 
 func makeVeryLargeSyncMessage() *SyncMessage {
-	largeSliceFn := func () (ret []TableID) {
+	largeSliceFn := func() (ret []TableID) {
 		for i := 0; i < 80000; i++ {
 			ret = append(ret, TableID(i))
-        }
+		}
 		return
 	}
-    return &SyncMessage{
+	return &SyncMessage{
 		Running:  largeSliceFn(),
 		Adding:   largeSliceFn(),
 		Removing: largeSliceFn(),
@@ -65,16 +65,16 @@ func makeVeryLargeSyncMessage() *SyncMessage {
 func TestMarshalDispatchTableMessage(t *testing.T) {
 	msg := &DispatchTableMessage{
 		OwnerRev: 1,
-        ID: TableID(1),
-        IsDelete: true,
-    }
-    bytes, err := json.Marshal(msg)
-    require.NoError(t, err)
-    require.Equal(t, `{"owner-rev":1,"id":1,"is-delete":true}`, string(bytes))
+		ID:       TableID(1),
+		IsDelete: true,
+	}
+	bytes, err := json.Marshal(msg)
+	require.NoError(t, err)
+	require.Equal(t, `{"owner-rev":1,"id":1,"is-delete":true}`, string(bytes))
 }
 
 func TestMarshalDispatchTableResponseMessage(t *testing.T) {
-	msg := &DispatchTableResponseMessage {
+	msg := &DispatchTableResponseMessage{
 		ID: TableID(1),
 	}
 	bytes, err := json.Marshal(msg)
@@ -84,9 +84,9 @@ func TestMarshalDispatchTableResponseMessage(t *testing.T) {
 
 func TestMarshalAnnounceMessage(t *testing.T) {
 	msg := &AnnounceMessage{
-        OwnerRev: 1,
+		OwnerRev:     1,
 		OwnerVersion: "v5.3.0",
-    }
+	}
 	bytes, err := json.Marshal(msg)
 	require.NoError(t, err)
 	require.Equal(t, `{"owner-rev":1,"owner-version":"v5.3.0"}`, string(bytes))
