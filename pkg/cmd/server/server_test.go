@@ -202,6 +202,9 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 			WorkerPoolSize:   0,
 			RegionScanLimit:  40,
 		},
+		Debug: &config.DebugConfig{
+			EnableTableActor: true,
+		},
 	})
 }
 
@@ -312,6 +315,9 @@ cleanup-speed-limit = 14
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
 			RegionScanLimit:  40,
+		},
+		Debug: &config.DebugConfig{
+			EnableTableActor: true,
 		},
 	})
 }
@@ -434,6 +440,9 @@ cert-allowed-cn = ["dd","ee"]
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
 			RegionScanLimit:  40,
+		},
+		Debug: &config.DebugConfig{
+			EnableTableActor: true,
 		},
 	})
 }

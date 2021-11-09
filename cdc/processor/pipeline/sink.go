@@ -337,7 +337,7 @@ func (n *sinkNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Messag
 				n.status.Store(TableStatusRunning)
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
-				failpoint.Return(errors.New("processor sync resolved injected error"))
+				failpoint.Return(false, errors.New("processor sync resolved injected error"))
 			})
 			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
 				return false, errors.Trace(err)
