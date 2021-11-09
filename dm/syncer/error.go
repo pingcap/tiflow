@@ -21,7 +21,9 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
@@ -32,6 +34,19 @@ import (
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 	"github.com/pingcap/ticdc/pkg/errorutil"
 )
+
+// ignoreTrackerDDLError is also same with ignoreDDLError, but in order to keep tracker's table structure same as
+// upstream's, we can't ignore "already exists" errors because already exists doesn't mean same.
+func ignoreTrackerDDLError(err error) bool {
+	switch {
+	case infoschema.ErrDatabaseExists.Equal(err), infoschema.ErrDatabaseDropExists.Equal(err),
+		infoschema.ErrTableDropExists.Equal(err),
+		tddl.ErrCantDropFieldOrKey.Equal(err):
+		return true
+	default:
+		return false
+	}
+}
 
 func isDropColumnWithIndexError(err error) bool {
 	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
