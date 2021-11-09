@@ -133,19 +133,12 @@ func (r *upstreamReader) GetEvent(ctx context.Context) (RResult, error) {
 		return result, terror.ErrRelayReaderNeedStart.Generate(r.stage, common.StagePrepared)
 	}
 
-	for {
-		ctx2, cancel2 := context.WithTimeout(ctx, common.SlaveReadTimeout)
-		ev, err := r.in.GetEvent(ctx2)
-		cancel2()
+	ev, err := r.in.GetEvent(ctx)
 
-		if err == nil {
-			result.Event = ev
-		} else if isRetryableError(err) {
-			r.logger.Info("get retryable error when reading binlog event", log.ShortError(err))
-			continue
-		}
-		return result, err
+	if err == nil {
+		result.Event = ev
 	}
+	return result, err
 }
 
 func (r *upstreamReader) setUpReaderByGTID() error {
