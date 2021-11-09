@@ -59,7 +59,6 @@ func TestConsistentConfig(t *testing.T) {
 		{"s3", true},
 		{"blackhole", true},
 		{"Local", false},
-		{"nfs", false},
 		{"", false},
 	}
 	for _, sc := range storageCases {
