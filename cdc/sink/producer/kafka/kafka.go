@@ -421,7 +421,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 	}
 
 	info, created := topics[topic]
-	// once we have found the topic, no matter `auto-create-topic`, make sure all user input parameters are valid.
+	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
 	if created {
 		// make sure that topic's `max.message.bytes` is not less than given `max-message-size`
 		// else the producer will send message that too large to make topic reject, then changefeed would error.
@@ -433,7 +433,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 			if topicMaxMessageBytes < config.MaxMessageBytes {
 				return cerror.ErrKafkaInvalidConfig.GenWithStack(
 					"topic already exist, and max.message.size(%d) less than max-message-size(%d)."+
-						"Please make sure max-message-size not greater than topic max.message.size",
+						"Please make sure `max-message-size` not greater than topic `max.message.size`",
 					topicMaxMessageBytes, config.MaxMessageBytes)
 			}
 		}
