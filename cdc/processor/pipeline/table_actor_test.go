@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/actor"
 	"github.com/pingcap/ticdc/pkg/actor/message"
@@ -31,13 +32,18 @@ import (
 )
 
 func TestNewTableActor(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.TODO())
 	tableActorSystem, tableActorRouter := actor.NewSystemBuilder("table").Build()
-	tableActorSystem.Start(context.Background())
-	defer tableActorSystem.Stop()
+	tableActorSystem.Start(ctx)
+	defer func() {
+		cancel()
+		_ = tableActorSystem.Stop()
+	}()
 
-	ctx := context.TODO()
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Cyclic = &config.CyclicConfig{Enable: true}
+	backholeSink, err := sink.New(ctx, "1", "blackhole://", nil, replicaConfig, nil, make(chan error, 2))
+	require.Nil(t, err)
 	cctx := cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TableActorSystem: tableActorSystem,
 		TableActorRouter: tableActorRouter,
@@ -52,19 +58,19 @@ func TestNewTableActor(t *testing.T) {
 
 	nodeCreator := &FakeTableNodeCreator{}
 	tbl, err := NewTableActor(cctx, nil, 1, "t1",
-		&model.TableReplicaInfo{StartTs: 1, MarkTableID: 2}, nil, 100, nodeCreator)
+		&model.TableReplicaInfo{StartTs: 1, MarkTableID: 2}, backholeSink, 100, nodeCreator)
 	require.Nil(t, err)
-	actor := tbl.(*tableActor)
-	require.Equal(t, 3, len(actor.nodes))
-	id, markId := actor.ID()
-	require.Equal(t, TableStatusInitializing, actor.Status())
-	require.Equal(t, "t1", actor.Name())
+	table1 := tbl.(*tableActor)
+	require.Equal(t, 3, len(table1.nodes))
+	id, markId := table1.ID()
+	require.Equal(t, TableStatusInitializing, table1.Status())
+	require.Equal(t, "t1", table1.Name())
 	require.Equal(t, int64(1), id)
 	require.Equal(t, int64(2), markId)
-	require.Equal(t, uint64(1), actor.ResolvedTs())
-	require.Equal(t, uint64(1), actor.CheckpointTs())
-	require.Equal(t, uint64(1), actor.Workload().Workload)
-	actor.UpdateBarrierTs(2)
+	require.Equal(t, uint64(1), table1.ResolvedTs())
+	require.Equal(t, uint64(1), table1.CheckpointTs())
+	require.Equal(t, uint64(1), table1.Workload().Workload)
+	table1.UpdateBarrierTs(2)
 
 	ok, err := nodeCreator.actorPullerNode.TryHandleDataMessage(ctx, pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
 		StartTs: 2,
@@ -82,6 +88,8 @@ func TestNewTableActor(t *testing.T) {
 	time.Sleep(time.Millisecond * 500)
 
 	replicaConfig.Cyclic = &config.CyclicConfig{Enable: false}
+	backholeSink, err = sink.New(ctx, "1", "blackhole://", nil, replicaConfig, nil, make(chan error, 2))
+	require.Nil(t, err)
 	cctx = cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TableActorSystem: tableActorSystem,
 		TableActorRouter: tableActorRouter,
@@ -92,7 +100,7 @@ func TestNewTableActor(t *testing.T) {
 		},
 		})
 	tbl2, err := NewTableActor(cctx, nil, 2, "t2",
-		&model.TableReplicaInfo{StartTs: 3, MarkTableID: 4}, nil, 100, nodeCreator)
+		&model.TableReplicaInfo{StartTs: 3, MarkTableID: 4}, backholeSink, 100, nodeCreator)
 	require.Nil(t, err)
 	actor2 := tbl2.(*tableActor)
 	require.Equal(t, 2, len(actor2.nodes))
@@ -105,31 +113,21 @@ func TestNewTableActor(t *testing.T) {
 	require.Equal(t, uint64(3), actor2.CheckpointTs())
 	require.Equal(t, uint64(1), actor2.Workload().Workload)
 
-	actor1WaitReturned := false
-	go func() {
-		actor.Wait()
-		actor1WaitReturned = true
-	}()
-	actor2WaitReturned := false
-	go func() {
-		actor2.Wait()
-		actor2WaitReturned = true
-	}()
-	actor.AsyncStop(1)
+	go func() { table1.Wait() }()
+	go func() { actor2.Wait() }()
+	table1.AsyncStop(1)
 	time.Sleep(time.Millisecond * 500)
-	require.True(t, actor.stopped)
-	require.True(t, actor1WaitReturned)
-	require.False(t, actor2.stopped)
-	require.False(t, actor2WaitReturned)
+	require.Equal(t, TableStatusStopped, table1.Status())
+	require.NotEqual(t, TableStatusStopped, actor2.Status())
 
 	actor2.Cancel()
 	time.Sleep(time.Millisecond * 500)
-	require.True(t, actor2.stopped)
-	require.True(t, actor2WaitReturned)
+	require.Equal(t, TableStatusStopped, actor2.Status())
 }
 
 func TestPollStartAndStoppedActor(t *testing.T) {
-	tbl := &tableActor{stopped: false}
+	var f ActorMessageHandlerFunc = func(ctx context.Context, msg message.Message) error { return nil }
+	tbl := &tableActor{stopped: false, actorMessageHandler: f}
 	var called = false
 	var dataHolderFunc AsyncDataHolderFunc = func() *pipeline.Message {
 		called = true
@@ -205,13 +203,18 @@ func TestTryRun(t *testing.T) {
 }
 
 func TestStartFailed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.TODO())
 	tableActorSystem, tableActorRouter := actor.NewSystemBuilder("table").Build()
-	tableActorSystem.Start(context.Background())
-	defer tableActorSystem.Stop()
+	tableActorSystem.Start(ctx)
+	defer func() {
+		cancel()
+		_ = tableActorSystem.Stop()
+	}()
 
-	ctx := context.TODO()
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Cyclic = &config.CyclicConfig{Enable: true}
+	backholeSink, err := sink.New(ctx, "1", "blackhole://", nil, replicaConfig, nil, make(chan error, 2))
+	require.Nil(t, err)
 	cctx := cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TableActorSystem: tableActorSystem,
 		TableActorRouter: tableActorRouter,
@@ -226,7 +229,7 @@ func TestStartFailed(t *testing.T) {
 
 	nodeCreator := &FakeTableNodeCreator{failStart: true}
 	tbl, err := NewTableActor(cctx, nil, 1, "t1",
-		&model.TableReplicaInfo{StartTs: 1, MarkTableID: 2}, nil, 100, nodeCreator)
+		&model.TableReplicaInfo{StartTs: 1, MarkTableID: 2}, backholeSink, 100, nodeCreator)
 	require.NotNil(t, err)
 	require.Nil(t, tbl)
 }
@@ -250,7 +253,7 @@ func TestNewTablePipelineNodeCreator(t *testing.T) {
 	require.True(t, ok)
 }
 
-func (n *FakeTableNodeCreator) NewPullerNode(_ model.TableID, _ *model.TableReplicaInfo, tableName string) TableActorDataNode {
+func (n *FakeTableNodeCreator) NewPullerNode(_ model.TableID, _ *model.TableReplicaInfo, _ string) TableActorDataNode {
 	n.actorPullerNode = &FakeTableActorDataNode{
 		outputCh:  make(chan pipeline.Message, 1),
 		failStart: n.failStart,
@@ -263,7 +266,7 @@ type FakeTableActorDataNode struct {
 	failStart bool
 }
 
-func (n *FakeTableActorDataNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
+func (n *FakeTableActorDataNode) TryHandleDataMessage(_ context.Context, msg pipeline.Message) (bool, error) {
 	select {
 	case n.outputCh <- msg:
 		return true, nil
@@ -272,7 +275,7 @@ func (n *FakeTableActorDataNode) TryHandleDataMessage(ctx context.Context, msg p
 	}
 }
 
-func (n *FakeTableActorDataNode) Start(ctx context.Context, _ *actor.Router, _ *errgroup.Group, _ *cdcContext.ChangefeedVars, _ *cdcContext.GlobalVars) error {
+func (n *FakeTableActorDataNode) Start(_ context.Context, _ *actor.Router, _ *errgroup.Group, _ *cdcContext.ChangefeedVars, _ *cdcContext.GlobalVars) error {
 	if n.failStart {
 		return errors.New("failed to start")
 	}

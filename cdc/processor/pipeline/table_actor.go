@@ -76,15 +76,15 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 		}
 
 		switch msgs[i].Tp {
-		case message.TypeStop:
-			t.stop(nil)
-			return false
-		case message.TypeTick:
-		case message.TypeBarrier:
+		case message.TypeStop, message.TypeTick, message.TypeBarrier:
 			err := t.actorMessageHandler.HandleActorMessage(ctx, msgs[i])
 			if err != nil {
 				t.stop(err)
 			}
+		}
+		if msgs[i].Tp == message.TypeStop {
+			t.stop(nil)
+			return false
 		}
 		// process message for each node
 		for _, n := range t.nodes {
@@ -386,6 +386,12 @@ type TableActorSinkNode interface {
 
 type ActorMessageHandler interface {
 	HandleActorMessage(ctx context.Context, msg message.Message) error
+}
+
+type ActorMessageHandlerFunc func(ctx context.Context, msg message.Message) error
+
+func (fn ActorMessageHandlerFunc) HandleActorMessage(ctx context.Context, msg message.Message) error {
+	return fn(ctx, msg)
 }
 
 type TablePipelineNodeCreator interface {
