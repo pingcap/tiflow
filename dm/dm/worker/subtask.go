@@ -34,9 +34,9 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/shardddl/pessimism"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/relay"
 	"github.com/pingcap/ticdc/dm/syncer"
 )
 
@@ -60,7 +60,7 @@ func (r relayNotifier) Notified() chan interface{} {
 var createUnits = createRealUnits
 
 // createRealUnits creates process units base on task mode.
-func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, workerName string, notifier streamer.EventNotifier) []unit.Unit {
+func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, workerName string, notifier relay.EventNotifier) []unit.Unit {
 	failpoint.Inject("mockCreateUnitsDumpOnly", func(_ failpoint.Value) {
 		log.L().Info("create mock worker units with dump unit only", zap.String("failpoint", "mockCreateUnitsDumpOnly"))
 		failpoint.Return([]unit.Unit{dumpling.NewDumpling(cfg)})
@@ -120,7 +120,7 @@ type SubTask struct {
 
 	workerName string
 
-	notifier streamer.EventNotifier
+	notifier relay.EventNotifier
 }
 
 // NewSubTask is subtask initializer

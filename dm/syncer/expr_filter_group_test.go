@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/schema"
+	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
 
 func (s *testFilterSuite) TestSkipDMLByExpression(c *C) {
@@ -91,8 +92,9 @@ create table t (
 	)
 	c.Assert(log.InitLogger(&log.Config{Level: "debug"}), IsNil)
 
+	dbConn := &dbconn.DBConn{Cfg: &config.SubTaskConfig{}, BaseConn: s.baseConn}
 	for _, ca := range cases {
-		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, s.baseConn)
+		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
 		c.Assert(err, IsNil)
 		c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
 		c.Assert(schemaTracker.Exec(ctx, dbName, ca.tableStr), IsNil)
@@ -348,9 +350,10 @@ create table t (
 	)
 	c.Assert(log.InitLogger(&log.Config{Level: "debug"}), IsNil)
 
+	dbConn := &dbconn.DBConn{Cfg: &config.SubTaskConfig{}, BaseConn: s.baseConn}
 	for _, ca := range cases {
 		c.Log(ca.tableStr)
-		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, s.baseConn)
+		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
 		c.Assert(err, IsNil)
 		c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
 		c.Assert(schemaTracker.Exec(ctx, dbName, ca.tableStr), IsNil)
@@ -398,7 +401,9 @@ create table t (
 );`
 		exprStr = "d > 1"
 	)
-	schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, s.baseConn)
+
+	dbConn := &dbconn.DBConn{Cfg: &config.SubTaskConfig{}, BaseConn: s.baseConn}
+	schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
 	c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
 	c.Assert(schemaTracker.Exec(ctx, dbName, tableStr), IsNil)

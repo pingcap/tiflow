@@ -1,52 +1,35 @@
 # diff Configuration.
 
-log-level = "info"
-
-chunk-size = 10
-
 check-thread-count = 4
 
-sample-percent = 100
+export-fix-sql = true
 
-use-checksum = true
+check-struct-only = false
 
-fix-sql-file = "fix.sql"
+[task]
+    output-dir = "/tmp/ticdc_dm_test/output"
 
-# tables need to check.
-[[check-tables]]
-schema = "openapi"
-tables = ["~^.*"]
+    source-instances = ["mysql1", "mysql2"]
 
-[[table-config]]
-is-sharding = true
-schema = "openapi"
-table = "t"
+    target-instance = "tidb0"
 
-[[table-config.source-tables]]
-instance-id = "source-1"
-schema = "openapi"
-table = "t"
+    target-check-tables = ["openapi.t"]
 
-[[table-config.source-tables]]
-instance-id = "source-2"
-schema = "openapi"
-table = "t"
 
-[[source-db]]
+[data-sources]
+[data-sources.mysql1]
 host = "127.0.0.1"
-instance-id = "source-1"
 password = "123456"
 port = 3306
 user = "root"
 
-[[source-db]]
+[data-sources.mysql2]
 host = "127.0.0.1"
-instance-id = "source-2"
 password = "123456"
 port = 3307
 user = "root"
 
-[target-db]
+[data-sources.tidb0]
 host = "127.0.0.1"
 password = ""
 port = 4000

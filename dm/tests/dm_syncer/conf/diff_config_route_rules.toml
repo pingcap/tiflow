@@ -1,52 +1,36 @@
 # diff Configuration.
 
-log-level = "info"
-
-chunk-size = 1000
-
 check-thread-count = 4
 
-sample-percent = 100
+export-fix-sql = true
 
-use-checksum = true
+check-struct-only = false
 
-fix-sql-file = "fix.sql"
 
-# tables need to check.
-[[check-tables]]
-schema = "dm_syncer"
-tables = ["dm_syncer_route_rule"]
+[task]
+    output-dir = "/tmp/ticdc_dm_test/output"
 
-[[table-config]]
-    schema = "dm_syncer"
+    source-instances = ["mysql1"]
 
-    table = "dm_syncer_route_rule"
+    target-instance = "tidb0"
 
-    is-sharding = true
+    target-check-tables = ["dm_syncer.dm_syncer_route_rule"]
 
-    [[table-config.source-tables]]
-    instance-id = "source-2"
-    schema = "dm_syncer"
-    table  = "dm_syncer_route_rules_1"
+[routes.rule1]
+schema-pattern = "dm_syncer"
+table-pattern = "dm_syncer_route_rules_*"
+target-schema = "dm_syncer"
+target-table = "dm_syncer_route_rule"
 
-    [[table-config.source-tables]]
-    instance-id = "source-2"
-    schema = "dm_syncer"
-    table  = "dm_syncer_route_rules_2"
-
-    [[table-config.source-tables]]
-    instance-id = "source-2"
-    schema = "dm_syncer"
-    table  = "dm_syncer_route_rules_3"
-
-[[source-db]]
+[data-sources]
+[data-sources.mysql1]
 host = "127.0.0.1"
 port = 3307
 user = "root"
 password = "123456"
-instance-id = "source-2"
+route-rules = ["rule1"]
 
-[target-db]
+[data-sources.tidb0]
 host = "127.0.0.1"
 port = 4000
 user = "test"
