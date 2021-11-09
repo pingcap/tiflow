@@ -114,8 +114,8 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 	defer initLock.Unlock()
 
 	if v, ok := logWriters[cfg.ChangeFeedID]; ok {
-		// if cfg changed need create a new LogWriter
-		if cfg.String() == v.cfg.String() {
+		// if cfg changed or already closed need create a new LogWriter
+		if cfg.String() == v.cfg.String() && !v.isStopped() {
 			return v, nil
 		}
 	}
@@ -177,7 +177,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 		}
 	}
 	logWriters[cfg.ChangeFeedID] = logWriter
-	go logWriter.runGC()
+	go logWriter.runGC(ctx)
 	return logWriter, nil
 }
 
@@ -216,7 +216,7 @@ func (l *LogWriter) initMeta(ctx context.Context) error {
 	return nil
 }
 
-func (l *LogWriter) runGC() {
+func (l *LogWriter) runGC(ctx context.Context) {
 	ticker := time.NewTicker(time.Duration(defaultGCIntervalInMs) * time.Millisecond)
 	defer ticker.Stop()
 
@@ -225,12 +225,18 @@ func (l *LogWriter) runGC() {
 			return
 		}
 
-		<-ticker.C
-		err := l.gc()
-		if err != nil {
-			log.Error("redo log GC error", zap.Error(err))
+		select {
+		case <-ctx.Done():
+			err := l.Close()
+			if err != nil {
+				log.Error("runGC close fail", zap.String("changefeedID", l.cfg.ChangeFeedID), zap.Error(err))
+			}
+		case <-ticker.C:
+			err := l.gc()
+			if err != nil {
+				log.Error("redo log GC fail", zap.String("changefeedID", l.cfg.ChangeFeedID), zap.Error(err))
+			}
 		}
-
 	}
 }
 

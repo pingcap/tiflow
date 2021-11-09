@@ -57,7 +57,7 @@ func TestWriterWrite(t *testing.T) {
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		},
 		uint64buf: make([]byte, 8),
-		state:     *atomic.NewBool(started),
+		state:     *atomic.NewBool(true),
 	}
 
 	w.eventCommitTS.Store(1)
@@ -138,7 +138,7 @@ func TestWriterGC(t *testing.T) {
 		uint64buf: make([]byte, 8),
 		storage:   mockStorage,
 	}
-	w.state.Store(started)
+	w.state.Store(true)
 	w.eventCommitTS.Store(1)
 	_, err = w.Write([]byte("t1111"))
 	require.Nil(t, err)
@@ -218,7 +218,7 @@ func TestNewWriter(t *testing.T) {
 		uint64buf: make([]byte, 8),
 		storage:   mockStorage,
 	}
-	w.state.Store(started)
+	w.state.Store(true)
 	_, err = w.Write([]byte("test"))
 	require.Nil(t, err)
 	//
@@ -227,6 +227,6 @@ func TestNewWriter(t *testing.T) {
 
 	err = w.Close()
 	require.Nil(t, err)
-	require.Equal(t, w.state.Load(), stopped)
+	require.Equal(t, w.state.Load(), false)
 	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
 }

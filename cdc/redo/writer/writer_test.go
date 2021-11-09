@@ -618,16 +618,10 @@ func TestNewLogWriter(t *testing.T) {
 	ll, err := NewLogWriter(ctx, cfg)
 	require.Nil(t, err)
 	time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
-	err = ll.Close()
-	require.Nil(t, err)
-	require.True(t, ll.isStopped())
 	require.Equal(t, map[int64]uint64{}, ll.meta.ResolvedTsList)
 
 	ll2, err := NewLogWriter(ctx, cfg)
 	require.Nil(t, err)
-	err = ll2.Close()
-	require.Nil(t, err)
-	require.True(t, ll2.isStopped())
 	require.Same(t, ll, ll2)
 
 	cfg1 := &LogWriterConfig{
@@ -640,16 +634,10 @@ func TestNewLogWriter(t *testing.T) {
 	}
 	ll1, err := NewLogWriter(ctx, cfg1)
 	require.Nil(t, err)
-	err = ll1.Close()
-	require.Nil(t, err)
-	require.True(t, ll1.isStopped())
 	require.NotSame(t, ll, ll1)
 
 	ll2, err = NewLogWriter(ctx, cfg)
 	require.Nil(t, err)
-	err = ll2.Close()
-	require.Nil(t, err)
-	require.True(t, ll2.isStopped())
 	require.NotSame(t, ll, ll2)
 
 	dir, err := ioutil.TempDir("", "redo-NewLogWriter")
@@ -734,7 +722,7 @@ func TestWriterRedoGC(t *testing.T) {
 			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
 			cfg:       cfg,
 		}
-		go writer.runGC()
+		go writer.runGC(context.Background())
 		time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
 
 		writer.Close()
