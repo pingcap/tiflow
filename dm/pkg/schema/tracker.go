@@ -511,6 +511,7 @@ func getDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *downstream
 		if idx.Primary {
 			indexCache = indexRedirect
 			hasPk = true
+<<<<<<< HEAD
 		} else if idx.Unique {
 			// second check not null unique key
 			if !hasPk && isSpecifiedIndexColumn(idx, fn) {
@@ -518,6 +519,12 @@ func getDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *downstream
 			} else {
 				availableUKCache = append(availableUKCache, indexRedirect)
 			}
+=======
+		} else if absoluteUKIndexInfo == nil && isSpecifiedIndexColumn(idx, fn) {
+			// second check not null unique key
+			absoluteUKIndexInfo = indexRedirect
+			absoluteUKPosition = i
+>>>>>>> 8814deda7 (dm/worker: don't exit when failed to read checkpoint in relay (#3345))
 		}
 	}
 
