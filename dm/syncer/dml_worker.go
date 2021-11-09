@@ -38,7 +38,7 @@ type DMLWorker struct {
 	multipleRows bool
 	toDBConns    []*dbconn.DBConn
 	tctx         *tcontext.Context
-	wg           sync.WaitGroup // counts conflict/flush jobs in all DML job channels.
+	wg           *sync.WaitGroup // counts conflict/flush jobs in all DML job channels.
 	logger       log.Logger
 
 	// for metrics
@@ -54,12 +54,11 @@ type DMLWorker struct {
 	addCountFunc func(bool, string, opType, int64, *filter.Table)
 
 	// channel
-	inCh    chan *job
-	flushCh chan *job
+	inCh chan *job
 }
 
 // dmlWorkerWrap creates and runs a dmlWorker instance and returns flush job channel.
-func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
+func dmlWorkerWrap(inCh chan *job, syncer *Syncer) {
 	chanSize := syncer.cfg.QueueSize / 2
 	if syncer.cfg.Compact {
 		chanSize /= 2
@@ -69,30 +68,23 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		workerCount:  syncer.cfg.WorkerCount,
 		chanSize:     chanSize,
 		multipleRows: syncer.cfg.MultipleRows,
+		toDBConns:    syncer.toDBConns,
+		tctx:         syncer.tctx,
+		wg:           syncer.jobWg,
+		logger:       syncer.tctx.Logger.WithFields(zap.String("component", "dml_worker")),
 		task:         syncer.cfg.Name,
 		source:       syncer.cfg.SourceID,
 		worker:       syncer.cfg.WorkerName,
-		logger:       syncer.tctx.Logger.WithFields(zap.String("component", "dml_worker")),
 		successFunc:  syncer.successFunc,
 		fatalFunc:    syncer.fatalFunc,
 		lagFunc:      syncer.updateReplicationJobTS,
 		addCountFunc: syncer.addCount,
-		tctx:         syncer.tctx,
-		toDBConns:    syncer.toDBConns,
 		inCh:         inCh,
-		flushCh:      make(chan *job),
 	}
 
 	go func() {
 		dmlWorker.run()
-		dmlWorker.close()
 	}()
-	return dmlWorker.flushCh
-}
-
-// close closes outer channel.
-func (w *DMLWorker) close() {
-	close(w.flushCh)
 }
 
 // run distribute jobs by queueBucket.
@@ -120,19 +112,19 @@ func (w *DMLWorker) run() {
 		if j.tp == flush || j.tp == conflict {
 			if j.tp == conflict {
 				w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+				w.wg.Add(w.workerCount)
 			}
-			w.wg.Add(w.workerCount)
+
 			// flush for every DML queue
 			for i, jobCh := range jobChs {
 				startTime := time.Now()
 				jobCh <- j
 				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
 			}
-			w.wg.Wait()
+
 			if j.tp == conflict {
+				w.wg.Wait()
 				w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
-			} else {
-				w.flushCh <- j
 			}
 		} else {
 			queueBucket := int(utils.GenHashKey(j.dml.key)) % w.workerCount

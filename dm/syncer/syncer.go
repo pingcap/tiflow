@@ -134,8 +134,8 @@ type Syncer struct {
 	streamerController *StreamerController
 	enableRelay        bool
 
-	wg    sync.WaitGroup // counts goroutines
-	jobWg sync.WaitGroup // counts ddl/flush job in-flight in s.dmlJobCh and s.ddlJobCh
+	wg    sync.WaitGroup  // counts goroutines
+	jobWg *sync.WaitGroup // counts ddl/flush job in-flight in s.dmlJobCh and s.ddlJobCh
 
 	schemaTracker *schema.Tracker
 
@@ -267,6 +267,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier 
 	}
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.notifier = notifier
+	syncer.jobWg = new(sync.WaitGroup)
 	return syncer
 }
 
@@ -928,19 +929,19 @@ func (s *Syncer) addJob(job *job) error {
 		s.updateReplicationJobTS(job, skipJobIdx)
 	case flush:
 		s.addCount(false, adminQueueName, job.tp, 1, job.targetTable)
-		s.jobWg.Add(1)
+		s.jobWg.Add(s.cfg.WorkerCount)
 		s.dmlJobCh <- job
 		s.jobWg.Wait()
 		s.addCount(true, adminQueueName, job.tp, 1, job.targetTable)
 		return s.flushCheckPoints()
 	case ddl:
+		s.jobWg.Wait()
 		s.addCount(false, adminQueueName, job.tp, 1, job.targetTable)
 		s.updateReplicationJobTS(job, ddlJobIdx)
 		s.jobWg.Add(1)
 		startTime := time.Now()
 		s.ddlJobCh <- job
 		metrics.AddJobDurationHistogram.WithLabelValues("ddl", s.cfg.Name, adminQueueName, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
-		s.jobWg.Wait()
 	case insert, update, del:
 		s.dmlJobCh <- job
 		s.isTransactionEnd = false
@@ -960,7 +961,7 @@ func (s *Syncer) addJob(job *job) error {
 		}
 	})
 	if needFlush {
-		s.jobWg.Add(1)
+		s.jobWg.Add(s.cfg.WorkerCount)
 		s.dmlJobCh <- newFlushJob()
 		s.jobWg.Wait()
 	}
@@ -1272,11 +1273,7 @@ func (s *Syncer) syncDML() {
 		dmlJobCh = compactorWrap(dmlJobCh, s)
 	}
 	causalityCh := causalityWrap(dmlJobCh, s)
-	flushCh := dmlWorkerWrap(causalityCh, s)
-
-	for range flushCh {
-		s.jobWg.Done()
-	}
+	dmlWorkerWrap(causalityCh, s)
 }
 
 // Run starts running for sync, we should guarantee it can rerun when paused.
