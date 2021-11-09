@@ -153,7 +153,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 		cfg.Producer.Flush.MaxMessages = 1
 		return cfg, err
 	}
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(nil)"), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(true)"), check.IsNil)
 	defer func() {
 		newSaramaConfigImpl = newSaramaConfigImplBak
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test")
@@ -407,7 +407,7 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.Version = "invalid"
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
 	config.TopicName = "topic"
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(nil)"), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(true)"), check.IsNil)
 	_, err := NewKafkaSaramaProducer(ctx, config, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test")
@@ -438,7 +438,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 	config.TopicName = topic
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(nil)"), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(true)"), check.IsNil)
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
 	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
@@ -517,7 +517,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 	config.TopicName = topic
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(nil)"), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/workaround4Test", "return(true)"), check.IsNil)
 
 	errCh := make(chan error, 1)
 	producer, err := NewKafkaSaramaProducer(ctx, config, errCh)
