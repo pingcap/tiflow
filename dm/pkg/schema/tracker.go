@@ -510,12 +510,10 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 			absoluteUKIndexInfo = indexRedirect
 			absoluteUKPosition = i
 			hasPk = true
-		} else {
+		} else if absoluteUKIndexInfo == nil && isSpecifiedIndexColumn(idx, fn) {
 			// second check not null unique key
-			if absoluteUKIndexInfo == nil && isSpecifiedIndexColumn(idx, fn) {
-				absoluteUKIndexInfo = indexRedirect
-				absoluteUKPosition = i
-			}
+			absoluteUKIndexInfo = indexRedirect
+			absoluteUKPosition = i
 		}
 	}
 
