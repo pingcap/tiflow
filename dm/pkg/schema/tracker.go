@@ -487,7 +487,7 @@ func (tr *Tracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error 
 func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *DownstreamTableInfo {
 	var (
 		absoluteUKIndexInfo  *model.IndexInfo
-		availableUKIndexList = make([]*model.IndexInfo, 0, len(ti.Indices))
+		availableUKIndexList = []*model.IndexInfo{}
 		hasPk                = false
 		absoluteUKPosition   = -1
 	)
