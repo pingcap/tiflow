@@ -151,7 +151,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 
 	type arg struct {
 		dir, fixedName string
-		startTs, endTs uint64
+		startTs        uint64
 	}
 
 	tests := []struct {
@@ -166,7 +166,6 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 				dir:       dir + "test",
 				fixedName: common.DefaultDDLLogFileType,
 				startTs:   0,
-				endTs:     12,
 			},
 			wantErr: ".*CDC:ErrRedoFileOp*.",
 		},
@@ -176,7 +175,6 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 				dir:       dir,
 				fixedName: common.DefaultDDLLogFileType,
 				startTs:   0,
-				endTs:     12,
 			},
 			wantRet: []io.ReadCloser{f, f1},
 		},
@@ -195,7 +193,6 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 				dir:       dir,
 				fixedName: common.DefaultDDLLogFileType + "test",
 				startTs:   0,
-				endTs:     9,
 			},
 		},
 		{
@@ -204,7 +201,6 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 				dir:       dir1,
 				fixedName: common.DefaultDDLLogFileType,
 				startTs:   0,
-				endTs:     12,
 			},
 		},
 	}
