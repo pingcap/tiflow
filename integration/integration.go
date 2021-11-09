@@ -80,6 +80,22 @@ func testCanalJSON() {
 	runTests(testCases, env)
 }
 
+func testCanalJSONWatermark() {
+	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
+	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
+	task := &canal.SingleTableTask{TableName: "test", UseJSON: true, EnableTiDBExtension: true}
+	testCases := []framework.Task{
+		tests.NewSimpleCase(task),
+		tests.NewDeleteCase(task),
+		tests.NewManyTypesCase(task),
+		// tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
+		tests.NewCompositePKeyCase(task),
+		tests.NewAlterCase(task),
+	}
+
+	runTests(testCases, env)
+}
+
 func testMySQL() {
 	env := mysql.NewDockerEnv(*dockerComposeFile)
 	task := &mysql.SingleTableTask{TableName: "test"}
@@ -133,6 +149,8 @@ func main() {
 		testCanal()
 	} else if *testProtocol == "canalJson" {
 		testCanalJSON()
+	} else if *testProtocol == "canalJson-extension" {
+		testCanalJSONWatermark()
 	} else if *testProtocol == "mysql" {
 		testMySQL()
 	} else if *testProtocol == "simple-mysql-checking-old-value" {

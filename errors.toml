@@ -331,9 +331,9 @@ error = '''
 get tikv grpc context failed
 '''
 
-["CDC:ErrIllegalUnifiedSorterParameter"]
+["CDC:ErrIllegalSorterParameter"]
 error = '''
-illegal parameter for unified sorter: %s
+illegal parameter for sorter: %s
 '''
 
 ["CDC:ErrIndexKeyTableNotFound"]
