@@ -461,9 +461,13 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 			log.Warn("partition-num is not set, use the default partition count",
 				zap.String("topic", config.TopicName), zap.Int32("partitions", config.PartitionNum))
 		}
+		maxMessageBytes := strconv.Itoa(config.MaxMessageBytes)
 		err := admin.CreateTopic(config.TopicName, &sarama.TopicDetail{
 			NumPartitions:     config.PartitionNum,
 			ReplicationFactor: config.ReplicationFactor,
+			ConfigEntries: map[string]*string{
+				"max.message.bytes": &maxMessageBytes,
+			},
 		}, false)
 		// TODO identify the cause of "Topic with this name already exists"
 		if err != nil && !strings.Contains(err.Error(), "already exists") {
