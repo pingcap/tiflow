@@ -434,10 +434,11 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 		realPartitionCount = info.NumPartitions
 	}
 
-	// if user specify cdc to create the topic, we must make sure that `partition-num` and `replication-factor` is given
+	// if user specify cdc to create the topic, we must make sure
+	// that `partition-num` and `replication-factor` is given
 	if config.AutoCreate {
-		// if the specified topic name already exist, we should make sure that topic's `max.message.bytes` is not
-		// less than given `max-message-size`
+		// if the specified topic name already exist, we should make sure that
+		// topic's `max.message.bytes` is not less than given `max-message-size`
 		if ok {
 			if a, ok := info.ConfigEntries["max.message.bytes"]; ok {
 				topicMaxMessageBytes, err := strconv.Atoi(*a)
