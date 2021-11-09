@@ -73,7 +73,10 @@ func OpenDB(ctx context.Context, id int, cfg *config.SorterConfig) (*leveldb.DB,
 		return nil, cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
 	}
 	db, err := leveldb.OpenFile(dbDir, &option)
-	return db, cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
+	if err != nil {
+		return nil, cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
+	}
+	return db, nil
 }
 
 // LevelActor is a leveldb actor, it reads, writes and deletes key value pair
@@ -83,6 +86,7 @@ type LevelActor struct {
 	db       *leveldb.DB
 	wb       *leveldb.Batch
 	wbSize   int
+	wbCap    int
 	iterSema *semaphore.Weighted
 	closedWg *sync.WaitGroup
 
@@ -99,9 +103,12 @@ func NewLevelDBActor(
 ) (*LevelActor, actor.Mailbox, error) {
 	idTag := strconv.Itoa(id)
 	// Write batch size should be larger than block size to save CPU.
-	const batchSizeFactor = 16
-	wbSize := cfg.LevelDB.BlockSize * batchSizeFactor
-	wb := leveldb.MakeBatch(wbSize)
+	const writeBatchSizeFactor = 16
+	wbSize := cfg.LevelDB.BlockSize * writeBatchSizeFactor
+	// Double batch capacity to avoid memory reallocation.
+	const writeBatchCapFactor = 2
+	wbCap := wbSize * writeBatchCapFactor
+	wb := leveldb.MakeBatch(wbCap)
 	// IterCount limits the total number of opened iterators to release leveldb
 	// resources (memtables and SST files) in time.
 	iterSema := semaphore.NewWeighted(int64(cfg.LevelDB.Concurrency))
@@ -113,6 +120,7 @@ func NewLevelDBActor(
 		wb:       wb,
 		iterSema: iterSema,
 		wbSize:   wbSize,
+		wbCap:    wbCap,
 		closedWg: wg,
 
 		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(captureAddr, idTag),
@@ -137,10 +145,10 @@ func (ldb *LevelActor) maybeWrite(force bool) error {
 		ldb.metricWriteBytes.Observe(float64(bytes))
 
 		// Reset write batch or reclaim memory if it grows too large.
-		if cap(ldb.wb.Dump()) <= 2*ldb.wbSize {
+		if cap(ldb.wb.Dump()) <= ldb.wbCap {
 			ldb.wb.Reset()
 		} else {
-			ldb.wb = leveldb.MakeBatch(ldb.wbSize)
+			ldb.wb = leveldb.MakeBatch(ldb.wbCap)
 		}
 	}
 	return nil
