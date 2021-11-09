@@ -39,8 +39,8 @@ type pullerNode struct {
 	cancel      context.CancelFunc
 	wg          *errgroup.Group
 
-	outputCh     chan pipeline.Message
-	isTableActor bool
+	outputCh         chan pipeline.Message
+	tableActorRouter *actor.Router
 }
 
 func newPullerNode(
@@ -65,10 +65,10 @@ func (n *pullerNode) tableSpan(config *config.ReplicaConfig) []regionspan.Span {
 }
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
-	return n.Start(ctx, false, new(errgroup.Group), ctx.ChangefeedVars(), ctx.GlobalVars())
+	return n.Start(ctx, nil, new(errgroup.Group), ctx.ChangefeedVars(), ctx.GlobalVars())
 }
 
-func (n *pullerNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
+func (n *pullerNode) Start(ctx context.Context, tableActorRouter *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
 	n.wg = wg
 	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(info.ID, vars.CaptureInfo.AdvertiseAddr, n.tableName)
 	ctxC, cancel := context.WithCancel(ctx)
@@ -82,8 +82,8 @@ func (n *pullerNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.
 		if err != nil {
 			log.Error("puller stopped", zap.Error(err))
 		}
-		if isTableActor {
-			_ = defaultRouter.SendB(ctxC, actor.ID(n.tableID), message.StopMessage())
+		if tableActorRouter != nil {
+			_ = tableActorRouter.SendB(ctxC, actor.ID(n.tableID), message.StopMessage())
 		}
 		return nil
 	})
@@ -101,9 +101,9 @@ func (n *pullerNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
 				msg := pipeline.PolymorphicEventMessage(pEvent)
-				if isTableActor {
+				if tableActorRouter != nil {
 					n.outputCh <- msg
-					_ = defaultRouter.Send(actor.ID(n.tableID), message.TickMessage())
+					_ = tableActorRouter.Send(actor.ID(n.tableID), message.TickMessage())
 				} else {
 					ctx.(pipeline.NodeContext).SendToNextNode(msg)
 				}
@@ -122,7 +122,7 @@ func (n *pullerNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *pullerNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
-	if n.isTableActor {
+	if n.tableActorRouter != nil {
 		select {
 		case n.outputCh <- msg:
 			return true, nil

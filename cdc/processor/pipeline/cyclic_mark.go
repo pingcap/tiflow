@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/actor"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/pipeline"
@@ -42,7 +43,7 @@ type cyclicMarkNode struct {
 	currentReplicaIDs map[model.Ts]uint64
 	currentCommitTs   uint64
 	queue             list.List
-	isActor           bool
+	tableActorRouter  *actor.Router
 }
 
 func newCyclicMarkNode(markTableID model.TableID) pipeline.Node {
@@ -54,11 +55,11 @@ func newCyclicMarkNode(markTableID model.TableID) pipeline.Node {
 }
 
 func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
-	return n.Start(ctx, false, nil, ctx.ChangefeedVars(), nil)
+	return n.Start(ctx, nil, nil, ctx.ChangefeedVars(), nil)
 }
 
-func (n *cyclicMarkNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
-	n.isActor = isTableActor
+func (n *cyclicMarkNode) Start(ctx context.Context, tableActorRouter *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
+	n.tableActorRouter = tableActorRouter
 	n.localReplicaID = info.Info.Config.Cyclic.ReplicaID
 	filterReplicaID := info.Info.Config.Cyclic.FilterReplicaID
 	n.filterReplicaID = make(map[uint64]struct{})
@@ -87,7 +88,7 @@ func (n *cyclicMarkNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *cyclicMarkNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
-	if n.isActor && n.queue.Len() >= defaultSyncResolvedBatch {
+	if n.tableActorRouter != nil && n.queue.Len() >= defaultSyncResolvedBatch {
 		return false, nil
 	}
 	switch msg.Tp {
@@ -196,7 +197,7 @@ func extractReplicaID(markRow *model.RowChangedEvent) uint64 {
 }
 
 func (n *cyclicMarkNode) SendToNextNode(ctx context.Context, msg pipeline.Message) {
-	if n.isActor {
+	if n.tableActorRouter != nil {
 		n.queue.PushBack(msg)
 	} else {
 		ctx.(pipeline.NodeContext).SendToNextNode(msg)

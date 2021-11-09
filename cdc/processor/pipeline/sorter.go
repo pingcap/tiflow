@@ -56,8 +56,8 @@ type sorterNode struct {
 	// The latest resolved ts that sorter has received.
 	resolvedTs model.Ts
 
-	outputCh     chan pipeline.Message
-	isTableActor bool
+	outputCh         chan pipeline.Message
+	tableActorRouter *actor.Router
 }
 
 func newSorterNode(
@@ -76,12 +76,12 @@ func newSorterNode(
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	wg := errgroup.Group{}
-	return n.Start(ctx, false, &wg, ctx.ChangefeedVars(), ctx.GlobalVars())
+	return n.Start(ctx, nil, &wg, ctx.ChangefeedVars(), ctx.GlobalVars())
 }
 
-func (n *sorterNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
+func (n *sorterNode) Start(ctx context.Context, tableActorRouter *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
 	n.wg = wg
-	n.isTableActor = isTableActor
+	n.tableActorRouter = tableActorRouter
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
 	var sorter sorter.EventSorter
@@ -110,14 +110,14 @@ func (n *sorterNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
 	n.wg.Go(func() error {
-		if !isTableActor {
+		if tableActorRouter == nil {
 			ctx.(pipeline.NodeContext).Throw(errors.Trace(sorter.Run(stdCtx)))
 		} else {
 			err := sorter.Run(stdCtx)
 			if err != nil {
 				log.Error("sorter stopped", zap.Error(err))
 			}
-			_ = defaultRouter.SendB(stdCtx, actor.ID(n.tableID), message.StopMessage())
+			_ = n.tableActorRouter.SendB(stdCtx, actor.ID(n.tableID), message.StopMessage())
 		}
 		return nil
 	})
@@ -165,8 +165,8 @@ func (n *sorterNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.
 						if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
-							if isTableActor {
-								_ = defaultRouter.Send(actor.ID(n.tableID), message.BarrierMessage(lastCRTs))
+							if tableActorRouter != nil {
+								_ = tableActorRouter.Send(actor.ID(n.tableID), message.BarrierMessage(lastCRTs))
 							} else {
 								ctx.(pipeline.NodeContext).SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
 							}
@@ -180,8 +180,8 @@ func (n *sorterNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
-							if isTableActor {
-								_ = defaultRouter.Send(actor.ID(n.tableID), message.BarrierMessage(lastCRTs))
+							if tableActorRouter != nil {
+								_ = tableActorRouter.Send(actor.ID(n.tableID), message.BarrierMessage(lastCRTs))
 							} else {
 								ctx.(pipeline.NodeContext).SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
 							}
@@ -194,9 +194,9 @@ func (n *sorterNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.
 								zap.Int64("tableID", n.tableID),
 								zap.String("tableName", n.tableName))
 						} else {
-							if isTableActor {
+							if tableActorRouter != nil {
 								log.Error("sorter stopped", zap.Error(err))
-								_ = defaultRouter.SendB(stdCtx, actor.ID(n.tableID), message.StopMessage())
+								_ = tableActorRouter.SendB(stdCtx, actor.ID(n.tableID), message.StopMessage())
 							} else {
 								ctx.(pipeline.NodeContext).Throw(err)
 							}
@@ -222,9 +222,9 @@ func (n *sorterNode) Start(ctx context.Context, isTableActor bool, wg *errgroup.
 					lastSendResolvedTsTime = time.Now()
 				}
 
-				if isTableActor {
+				if tableActorRouter != nil {
 					n.outputCh <- pipeline.PolymorphicEventMessage(msg)
-					_ = defaultRouter.Send(actor.ID(n.tableID), message.TickMessage())
+					_ = tableActorRouter.Send(actor.ID(n.tableID), message.TickMessage())
 				} else {
 					ctx.(pipeline.NodeContext).SendToNextNode(pipeline.PolymorphicEventMessage(msg))
 				}
@@ -257,14 +257,14 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 			}
 			atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 		}
-		if n.isTableActor {
+		if n.tableActorRouter != nil {
 			return n.sorter.TryAddEntry(ctx, msg.PolymorphicEvent), nil
 		} else {
 			n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
 			return true, nil
 		}
 	default:
-		if n.isTableActor {
+		if n.tableActorRouter != nil {
 			select {
 			case n.outputCh <- msg:
 				return true, nil

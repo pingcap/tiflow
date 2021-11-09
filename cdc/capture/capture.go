@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/cdc/processor"
+	"github.com/pingcap/ticdc/pkg/actor"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -59,6 +60,9 @@ type Capture struct {
 	kvStorage  tidbkv.Storage
 	etcdClient *etcd.CDCEtcdClient
 	grpcPool   kv.GrpcPool
+
+	tableActorSystem *actor.System
+	tableActorRouter *actor.Router
 
 	cancel context.CancelFunc
 
@@ -104,6 +108,10 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.grpcPool.Close()
 	}
 	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
+	if conf.Debug.EnableTableActor {
+		c.tableActorSystem, c.tableActorRouter = actor.NewSystemBuilder("table").Build()
+		c.tableActorSystem.Start(ctx)
+	}
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
@@ -148,11 +156,13 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		PDClient:    c.pdClient,
-		KVStorage:   c.kvStorage,
-		CaptureInfo: c.info,
-		EtcdClient:  c.etcdClient,
-		GrpcPool:    c.grpcPool,
+		PDClient:         c.pdClient,
+		KVStorage:        c.kvStorage,
+		CaptureInfo:      c.info,
+		EtcdClient:       c.etcdClient,
+		GrpcPool:         c.grpcPool,
+		TableActorSystem: c.tableActorSystem,
+		TableActorRouter: c.tableActorRouter,
 	})
 	err := c.register(ctx)
 	if err != nil {
