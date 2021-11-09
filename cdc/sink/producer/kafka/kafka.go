@@ -420,83 +420,72 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		return err
 	}
 
-	var realPartitionCount int32 = 0
-	info, ok := topics[topic]
-	if ok {
-		realPartitionCount = info.NumPartitions
-	}
-
-	// if user specify cdc to create the topic, we must make sure
-	// that `partition-num` and `replication-factor` is given
-	if config.AutoCreate {
-		// if the specified topic name already exist, we should make sure that
-		// topic's `max.message.bytes` is not less than given `max-message-size`
-		if ok {
-			if a, ok := info.ConfigEntries["max.message.bytes"]; ok {
-				topicMaxMessageBytes, err := strconv.Atoi(*a)
-				if err != nil {
-					return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-				}
-				if topicMaxMessageBytes < config.MaxMessageBytes {
-					return cerror.ErrKafkaInvalidConfig.GenWithStack(
-						"topic already exist, and max.message.size(%d) less than max-message-size(%d)."+
-							"Please make sure max-message-size not greater than topic max.message.size",
-						topicMaxMessageBytes, config.MaxMessageBytes)
-				}
+	info, created := topics[topic]
+	// once we have found the topic, no matter `auto-create-topic`, make sure all user input parameters are valid.
+	if created {
+		// make sure that topic's `max.message.bytes` is not less than given `max-message-size`
+		// else the producer will send message that too large to make topic reject, then changefeed would error.
+		if a, found := info.ConfigEntries["max.message.bytes"]; found {
+			topicMaxMessageBytes, err := strconv.Atoi(*a)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 			}
+			if topicMaxMessageBytes < config.MaxMessageBytes {
+				return cerror.ErrKafkaInvalidConfig.GenWithStack(
+					"topic already exist, and max.message.size(%d) less than max-message-size(%d)."+
+						"Please make sure max-message-size not greater than topic max.message.size",
+					topicMaxMessageBytes, config.MaxMessageBytes)
+			}
+		}
 
-			config.PartitionNum = realPartitionCount
-			log.Warn("topic already exist", zap.String("topic", topic))
+		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
+		if config.AutoCreate {
+			log.Warn("topic already exist, TiCDC will not create the topic",
+				zap.String("topic", topic), zap.Any("detail", info))
+		}
+
+		realPartitionCount := info.NumPartitions
+		if config.PartitionNum < realPartitionCount {
+			log.Warn("number of partition specified in sink-uri is less than that of the actual topic. "+
+				"Some partitions will not have messages dispatched to",
+				zap.Int32("sink-uri partitions", config.PartitionNum),
+				zap.Int32("topic partitions", realPartitionCount))
 			return nil
 		}
-		// this could happen if user does not specify the `partition-num` in the sink uri.
-		if config.PartitionNum == 0 {
-			config.PartitionNum = defaultPartitionNum
-			log.Warn("partition-num is not set, use the default partition count",
-				zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
+
+		// Make sure that the user-specified partition count is not greater than the real partition count,
+		// since messages would be dispatched to different partitions, this could prevent potential correctness problems.
+		if config.PartitionNum > realPartitionCount {
+			return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
+				"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)",
+				config.PartitionNum, realPartitionCount)
 		}
-		maxMessageBytes := strconv.Itoa(config.MaxMessageBytes)
-		err := admin.CreateTopic(topic, &sarama.TopicDetail{
-			NumPartitions:     config.PartitionNum,
-			ReplicationFactor: config.ReplicationFactor,
-			ConfigEntries: map[string]*string{
-				"max.message.bytes": &maxMessageBytes,
-			},
-		}, false)
-		// TODO identify the cause of "Topic with this name already exists"
-		if err != nil && !strings.Contains(err.Error(), "already exists") {
-			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-		}
+
 		return nil
 	}
 
-	// if `auto-create-topic` is disabled by user, we would assume topic should have already created
-	if !ok {
-		return cerror.ErrKafkaInvalidConfig.GenWithStack("auto-create-topic is false, and topic not found")
+	if !config.AutoCreate {
+		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
 	}
 
+	// topic not created yet, and user does not specify the `partition-num` in the sink uri.
 	if config.PartitionNum == 0 {
-		config.PartitionNum = realPartitionCount
-		return nil
+		log.Warn("partition-num is not set, use the default partition count",
+			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
+		config.PartitionNum = defaultPartitionNum
 	}
-
-	if config.PartitionNum < realPartitionCount {
-		log.Warn("number of partition specified in sink-uri is less than that of the actual topic. "+
-			"Some partitions will not have messages dispatched to",
-			zap.Int32("sink-uri partitions", config.PartitionNum),
-			zap.Int32("topic partitions", realPartitionCount))
-		return nil
+	maxMessageBytes := strconv.Itoa(config.MaxMessageBytes)
+	err = admin.CreateTopic(topic, &sarama.TopicDetail{
+		NumPartitions:     config.PartitionNum,
+		ReplicationFactor: config.ReplicationFactor,
+		ConfigEntries: map[string]*string{
+			"max.message.bytes": &maxMessageBytes,
+		},
+	}, false)
+	// TODO identify the cause of "Topic with this name already exists"
+	if err != nil && !strings.Contains(err.Error(), "already exists") {
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-
-	// For a topic already existing, we just make sure that the user-specified
-	// partition count is not greater than the real partition count, since
-	// messages would be dispatched to different partitions, this could prevent potential correctness problems.
-	if config.PartitionNum > realPartitionCount {
-		return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
-			"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)",
-			config.PartitionNum, realPartitionCount)
-	}
-
 	return nil
 }
 
