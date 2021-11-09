@@ -497,7 +497,7 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 	// partition count, since we would dispatch messages to different partitions, this could prevent potential message loss.
 	if config.PartitionNum > realPartitionCount {
 		return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
-			"partition number(%d) assigned in sink-uri is more than that of topic(%d)", config.PartitionNum, realPartitionCount)
+			"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)", config.PartitionNum, realPartitionCount)
 	}
 
 	return nil
