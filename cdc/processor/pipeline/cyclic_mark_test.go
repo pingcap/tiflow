@@ -21,6 +21,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/actor"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
@@ -181,6 +182,76 @@ func (s *markSuite) TestCyclicMarkNode(c *check.C) {
 		wg.Wait()
 		// check the commitTs is increasing
 		var lastCommitTs model.Ts
+		for _, row := range output {
+			c.Assert(row.CommitTs, check.GreaterEqual, lastCommitTs)
+			// Ensure that the ReplicaID of the row is set correctly.
+			c.Assert(row.ReplicaID, check.Not(check.Equals), 0)
+			lastCommitTs = row.CommitTs
+		}
+		sort.Slice(output, func(i, j int) bool {
+			if output[i].CommitTs == output[j].CommitTs {
+				return output[i].StartTs < output[j].StartTs
+			}
+			return output[i].CommitTs < output[j].CommitTs
+		})
+		c.Assert(output, check.DeepEquals, tc.expected,
+			check.Commentf("%s", cmp.Diff(output, tc.expected)))
+	}
+
+	//table actor
+	for _, tc := range testCases {
+		ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+			Info: &model.ChangeFeedInfo{
+				Config: &config.ReplicaConfig{
+					Cyclic: &config.CyclicConfig{
+						Enable:          true,
+						ReplicaID:       tc.replicaID,
+						FilterReplicaID: tc.filterID,
+					},
+				},
+			},
+		})
+		n := newCyclicMarkNode(markTableID).(*cyclicMarkNode)
+		err := n.StartActorNode(ctx, &actor.Router{}, nil, ctx.ChangefeedVars(), nil)
+		c.Assert(err, check.IsNil)
+		output := []*model.RowChangedEvent{}
+		putToOutput := func(row *pipeline.Message) {
+			if row == nil || row.PolymorphicEvent.RawKV.OpType == model.OpTypeResolved {
+				return
+			}
+			output = append(output, row.PolymorphicEvent.Row)
+		}
+
+		var lastCommitTs model.Ts
+		for _, row := range tc.input {
+			event := model.NewPolymorphicEvent(&model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				Key:     tablecodec.GenTableRecordPrefix(row.Table.TableID),
+				StartTs: row.StartTs,
+				CRTs:    row.CommitTs,
+			})
+			event.Row = row
+			ok, err := n.TryHandleDataMessage(context.TODO(), pipeline.PolymorphicEventMessage(event))
+			c.Assert(err, check.IsNil)
+			c.Assert(ok, check.IsTrue)
+			putToOutput(n.TryGetProcessedMessage())
+			lastCommitTs = row.CommitTs
+		}
+		ok, err := n.TryHandleDataMessage(context.TODO(), pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCommitTs+1)))
+		c.Assert(ok, check.IsTrue)
+		putToOutput(n.TryGetProcessedMessage())
+		c.Assert(err, check.IsNil)
+		for {
+			msg := n.TryGetProcessedMessage()
+			if msg == nil {
+				break
+			}
+			putToOutput(msg)
+		}
+
+		// check the commitTs is increasing
+		lastCommitTs = 0
 		for _, row := range output {
 			c.Assert(row.CommitTs, check.GreaterEqual, lastCommitTs)
 			// Ensure that the ReplicaID of the row is set correctly.

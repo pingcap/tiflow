@@ -84,6 +84,7 @@ type sinkNode struct {
 
 	flowController   tableFlowController
 	tableActorRouter *actor.Router
+	isTableActorMode bool
 }
 
 func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
@@ -105,12 +106,15 @@ func (n *sinkNode) BarrierTs() model.Ts    { return atomic.LoadUint64(&n.barrier
 func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
 
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
-	return n.Start(ctx, nil, nil, ctx.ChangefeedVars(), ctx.GlobalVars())
+	return n.StartActorNode(ctx, nil, nil, ctx.ChangefeedVars(), ctx.GlobalVars())
 }
 
-func (n *sinkNode) Start(ctx context.Context, tableActorRouter *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
+func (n *sinkNode) StartActorNode(ctx context.Context, tableActorRouter *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
 	n.config = info.Info.Config
 	n.tableActorRouter = tableActorRouter
+	if n.tableActorRouter != nil {
+		n.isTableActorMode = true
+	}
 	return nil
 }
 
@@ -326,7 +330,7 @@ func (n *sinkNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Messag
 	if n.status == TableStatusStopped {
 		return false, cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	}
-	if n.tableActorRouter != nil && msg.Tp == pipeline.MessageTypePolymorphicEvent && msg.PolymorphicEvent.RawKV.OpType != model.OpTypeResolved && !msg.PolymorphicEvent.IsPrepared() {
+	if n.isTableActorMode && msg.Tp == pipeline.MessageTypePolymorphicEvent && msg.PolymorphicEvent.RawKV.OpType != model.OpTypeResolved && !msg.PolymorphicEvent.IsPrepared() {
 		return false, nil
 	}
 	switch msg.Tp {

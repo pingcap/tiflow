@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
@@ -558,4 +559,61 @@ func (s *outputSuite) TestSplitUpdateEventWhenDisableOldValue(c *check.C) {
 	insertEventIndex := 1
 	c.Assert(node.eventBuffer[insertEventIndex].Row.Columns, check.HasLen, 2)
 	c.Assert(node.eventBuffer[insertEventIndex].Row.PreColumns, check.HasLen, 0)
+}
+
+func (s *outputSuite) TestHandleActorMessage(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID: "changefeed-id-test-many-ts",
+		Info: &model.ChangeFeedInfo{
+			StartTs: oracle.GoTimeToTS(time.Now()),
+			Config:  config.GetDefaultReplicaConfig(),
+		},
+	})
+	sink := &mockSink{}
+	node := newSinkNode(sink, 2, 10, &mockFlowController{})
+	c.Check(node.HandleActorMessage(ctx, message.TickMessage()), check.IsNil)
+	c.Check(node.barrierTs, check.Equals, model.Ts(2))
+	c.Check(node.HandleActorMessage(ctx, message.BarrierMessage(3)), check.IsNil)
+	c.Check(node.barrierTs, check.Equals, model.Ts(3))
+	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(node.HandleActorMessage(ctx, message.StopMessage())), check.IsTrue)
+	c.Check(node.status, check.Equals, TableStatusStopped)
+}
+
+func (s *outputSuite) TestTryHandleDataMessage(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID: "changefeed-id-test-many-ts",
+		Info: &model.ChangeFeedInfo{
+			StartTs: oracle.GoTimeToTS(time.Now()),
+			Config:  config.GetDefaultReplicaConfig(),
+		},
+	})
+	sink := &mockSink{}
+	node := newSinkNode(sink, 2, 10, &mockFlowController{})
+	ok, err := node.TryHandleDataMessage(ctx, pipeline.TickMessage())
+	c.Assert(ok, check.IsTrue)
+	c.Assert(err, check.IsNil)
+	node.isTableActorMode = true
+	ok, err = node.TryHandleDataMessage(ctx, pipeline.TickMessage())
+	c.Assert(ok, check.IsTrue)
+	c.Assert(err, check.IsNil)
+	event := model.NewResolvedPolymorphicEvent(1, 2)
+	event.SetUpFinishedChan()
+	resolvedMessage := pipeline.PolymorphicEventMessage(event)
+	ok, err = node.TryHandleDataMessage(ctx, resolvedMessage)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(err, check.IsNil)
+	event = model.NewPolymorphicEvent(&model.RawKVEntry{OpType: model.OpTypePut})
+	event.SetUpFinishedChan()
+	dataMsg := pipeline.PolymorphicEventMessage(event)
+	ok, err = node.TryHandleDataMessage(ctx, dataMsg)
+	c.Assert(ok, check.IsFalse)
+	c.Assert(err, check.IsNil)
+	event.PrepareFinished()
+	ok, err = node.TryHandleDataMessage(ctx, dataMsg)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(err, check.IsNil)
 }

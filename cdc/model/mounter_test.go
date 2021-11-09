@@ -61,6 +61,7 @@ func TestPolymorphicEventPrepare(t *testing.T) {
 		defer wg.Done()
 		err := polyEvent.WaitPrepare(ctx)
 		require.Nil(t, err)
+		require.True(t, polyEvent.IsPrepared())
 	}()
 	polyEvent.PrepareFinished()
 	wg.Wait()
@@ -71,4 +72,5 @@ func TestPolymorphicEventPrepare(t *testing.T) {
 	cancel()
 	err := polyEvent.WaitPrepare(cctx)
 	require.Equal(t, context.Canceled, err)
+	require.False(t, polyEvent.IsPrepared())
 }

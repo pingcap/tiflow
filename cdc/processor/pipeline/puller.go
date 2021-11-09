@@ -41,6 +41,7 @@ type pullerNode struct {
 
 	outputCh         chan pipeline.Message
 	tableActorRouter *actor.Router
+	isTableActorMode bool
 }
 
 func newPullerNode(
@@ -65,11 +66,14 @@ func (n *pullerNode) tableSpan(config *config.ReplicaConfig) []regionspan.Span {
 }
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
-	return n.Start(ctx, nil, new(errgroup.Group), ctx.ChangefeedVars(), ctx.GlobalVars())
+	return n.StartActorNode(ctx, nil, new(errgroup.Group), ctx.ChangefeedVars(), ctx.GlobalVars())
 }
 
-func (n *pullerNode) Start(ctx context.Context, tableActorRouter *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
+func (n *pullerNode) StartActorNode(ctx context.Context, tableActorRouter *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
 	n.wg = wg
+	if n.tableActorRouter != nil {
+		n.isTableActorMode = true
+	}
 	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(info.ID, vars.CaptureInfo.AdvertiseAddr, n.tableName)
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
@@ -82,8 +86,10 @@ func (n *pullerNode) Start(ctx context.Context, tableActorRouter *actor.Router, 
 		if err != nil {
 			log.Error("puller stopped", zap.Error(err))
 		}
-		if tableActorRouter != nil {
+		if n.isTableActorMode {
 			_ = tableActorRouter.SendB(ctxC, actor.ID(n.tableID), message.StopMessage())
+		} else {
+			ctx.(pipeline.NodeContext).Throw(err)
 		}
 		return nil
 	})
@@ -101,7 +107,7 @@ func (n *pullerNode) Start(ctx context.Context, tableActorRouter *actor.Router, 
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
 				msg := pipeline.PolymorphicEventMessage(pEvent)
-				if tableActorRouter != nil {
+				if n.isTableActorMode {
 					n.outputCh <- msg
 					_ = tableActorRouter.Send(actor.ID(n.tableID), message.TickMessage())
 				} else {
@@ -117,22 +123,12 @@ func (n *pullerNode) Start(ctx context.Context, tableActorRouter *actor.Router, 
 // Receive receives the message from the previous node
 func (n *pullerNode) Receive(ctx pipeline.NodeContext) error {
 	// just forward any messages to the next node
-	ctx.SendToNextNode(ctx.Message())
-	return nil
+	_, err := n.TryHandleDataMessage(ctx, ctx.Message())
+	return err
 }
 
 func (n *pullerNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
-	if n.tableActorRouter != nil {
-		select {
-		case n.outputCh <- msg:
-			return true, nil
-		default:
-			return false, nil
-		}
-	} else {
-		ctx.(pipeline.NodeContext).SendToNextNode(msg)
-		return true, nil
-	}
+	return trySendMessageToNextNode(ctx, n.isTableActorMode, n.outputCh, msg), nil
 }
 
 func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
@@ -142,11 +138,5 @@ func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
 }
 
 func (n *pullerNode) TryGetProcessedMessage() *pipeline.Message {
-	var msg pipeline.Message
-	select {
-	case msg = <-n.outputCh:
-		return &msg
-	default:
-		return nil
-	}
+	return tryGetProcessedMessageFromChan(n.outputCh)
 }

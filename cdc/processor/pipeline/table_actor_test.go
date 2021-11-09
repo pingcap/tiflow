@@ -42,7 +42,7 @@ func TestNewTableActor(t *testing.T) {
 
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Cyclic = &config.CyclicConfig{Enable: true}
-	backholeSink, err := sink.New(ctx, "1", "blackhole://", nil, replicaConfig, nil, make(chan error, 2))
+	blackHoleSink, err := sink.New(ctx, "1", "blackhole://", nil, replicaConfig, nil, make(chan error, 2))
 	require.Nil(t, err)
 	cctx := cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TableActorSystem: tableActorSystem,
@@ -58,9 +58,12 @@ func TestNewTableActor(t *testing.T) {
 
 	nodeCreator := &FakeTableNodeCreator{}
 	tbl, err := NewTableActor(cctx, nil, 1, "t1",
-		&model.TableReplicaInfo{StartTs: 1, MarkTableID: 2}, backholeSink, 100, nodeCreator)
+		&model.TableReplicaInfo{StartTs: 1, MarkTableID: 2}, blackHoleSink, 100, nodeCreator)
 	require.Nil(t, err)
 	table1 := tbl.(*tableActor)
+	require.Panics(t, func() {
+		_ = table1.start(ctx, nodeCreator)
+	})
 	require.Equal(t, 3, len(table1.nodes))
 	id, markId := table1.ID()
 	require.Equal(t, TableStatusInitializing, table1.Status())
@@ -88,7 +91,7 @@ func TestNewTableActor(t *testing.T) {
 	time.Sleep(time.Millisecond * 500)
 
 	replicaConfig.Cyclic = &config.CyclicConfig{Enable: false}
-	backholeSink, err = sink.New(ctx, "1", "blackhole://", nil, replicaConfig, nil, make(chan error, 2))
+	blackHoleSink, err = sink.New(ctx, "1", "blackhole://", nil, replicaConfig, nil, make(chan error, 2))
 	require.Nil(t, err)
 	cctx = cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TableActorSystem: tableActorSystem,
@@ -100,7 +103,7 @@ func TestNewTableActor(t *testing.T) {
 		},
 		})
 	tbl2, err := NewTableActor(cctx, nil, 2, "t2",
-		&model.TableReplicaInfo{StartTs: 3, MarkTableID: 4}, backholeSink, 100, nodeCreator)
+		&model.TableReplicaInfo{StartTs: 3, MarkTableID: 4}, blackHoleSink, 100, nodeCreator)
 	require.Nil(t, err)
 	actor2 := tbl2.(*tableActor)
 	require.Equal(t, 2, len(actor2.nodes))
@@ -234,6 +237,72 @@ func TestStartFailed(t *testing.T) {
 	require.Nil(t, tbl)
 }
 
+func TestPollFailed(t *testing.T) {
+	var f ActorMessageHandlerFunc = func(ctx context.Context, msg message.Message) error { return nil }
+	tbl := &tableActor{stopped: false, actorMessageHandler: f, cancel: func() {}, reportErr: func(err error) {}}
+
+	count := 0
+	var pN AsyncDataHolderFunc = func() *pipeline.Message {
+		if count > 0 {
+			return nil
+		}
+		count++
+		return &pipeline.Message{}
+	}
+	var dp AsyncDataProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+		return false, errors.New("error")
+	}
+	n := &Node{}
+	n.parentNode = pN
+	n.dataProcessor = dp
+	tbl.nodes = []*Node{
+		{
+			parentNode:    pN,
+			dataProcessor: dp,
+		},
+	}
+	ok := tbl.Poll(context.TODO(), []message.Message{message.TickMessage()})
+	require.False(t, ok)
+	require.True(t, tbl.stopped)
+	require.Nil(t, tbl.err)
+}
+
+func TestAsyncStopFailed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	tableActorSystem, tableActorRouter := actor.NewSystemBuilder("table").Build()
+	tableActorSystem.Start(ctx)
+	defer func() {
+		cancel()
+		_ = tableActorSystem.Stop()
+	}()
+
+	var f ActorMessageHandlerFunc = func(ctx context.Context, msg message.Message) error { return nil }
+	tbl := &tableActor{stopped: false, tableID: 1, tableActorRouter: tableActorRouter, actorMessageHandler: f, cancel: func() {}, reportErr: func(err error) {}}
+	require.Panics(t, func() { tbl.AsyncStop(1) })
+
+	mb := actor.NewMailbox(actor.ID(1), 0)
+	require.Nil(t, tableActorSystem.Spawn(mb, tbl))
+	tbl.mb = mb
+	require.Nil(t, tableActorSystem.Stop())
+	require.False(t, tbl.AsyncStop(1))
+}
+
+func TestTryGetProcessedMessageFromChan(t *testing.T) {
+	ch := make(chan pipeline.Message, 1)
+	require.Nil(t, tryGetProcessedMessageFromChan(ch))
+	ch <- pipeline.TickMessage()
+	require.NotNil(t, tryGetProcessedMessageFromChan(ch))
+	close(ch)
+	require.Nil(t, tryGetProcessedMessageFromChan(ch))
+}
+
+func TestTrySendMessageToNextNode(t *testing.T) {
+	ch := make(chan pipeline.Message, 1)
+	require.True(t, trySendMessageToNextNode(context.TODO(), true, ch, pipeline.TickMessage()))
+	require.False(t, trySendMessageToNextNode(context.TODO(), true, ch, pipeline.TickMessage()))
+	require.True(t, trySendMessageToNextNode(pipeline.NewNodeContext(cdcContext.NewContext(context.TODO(), nil), pipeline.Message{}, make(chan pipeline.Message, 2)), false, ch, pipeline.TickMessage()))
+}
+
 type FakeTableNodeCreator struct {
 	nodeCreatorImpl
 	actorPullerNode TableActorDataNode
@@ -275,7 +344,7 @@ func (n *FakeTableActorDataNode) TryHandleDataMessage(_ context.Context, msg pip
 	}
 }
 
-func (n *FakeTableActorDataNode) Start(_ context.Context, _ *actor.Router, _ *errgroup.Group, _ *cdcContext.ChangefeedVars, _ *cdcContext.GlobalVars) error {
+func (n *FakeTableActorDataNode) StartActorNode(_ context.Context, _ *actor.Router, _ *errgroup.Group, _ *cdcContext.ChangefeedVars, _ *cdcContext.GlobalVars) error {
 	if n.failStart {
 		return errors.New("failed to start")
 	}
