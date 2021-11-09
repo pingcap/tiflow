@@ -493,7 +493,7 @@ func topicPreProcess(config *Config, saramaConfig *sarama.Config) error {
 		return nil
 	}
 
-	// for topic already exist, we just make sure that the user specified partition count is not greater than the real
+	// For a topic already existing, we just make sure that the user-specified partition count is not greater than the real
 	// partition count, since we would dispatch messages to different partitions, this could prevent potential message loss.
 	if config.PartitionNum > realPartitionCount {
 		return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
