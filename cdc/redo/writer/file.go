@@ -49,13 +49,6 @@ const (
 	defaultS3Timeout         = 3 * time.Second
 )
 
-const (
-	// stopped defines the state value of a Writer which has been stopped
-	stopped bool = false
-	// started defines the state value of a Writer which is currently started
-	started bool = true
-)
-
 var (
 	// for easy testing, not set to const
 	megabyte          int64 = 1024 * 1024
@@ -162,13 +155,13 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		storage:   s3storage,
 	}
 
-	w.state.Store(started)
-	go w.runFlushToDisk(cfg.FlushIntervalInMs)
+	w.state.Store(true)
+	go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
 
 	return w, nil
 }
 
-func (w *Writer) runFlushToDisk(flushIntervalInMs int64) {
+func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
 	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
 	defer ticker.Stop()
 
@@ -177,10 +170,17 @@ func (w *Writer) runFlushToDisk(flushIntervalInMs int64) {
 			return
 		}
 
-		<-ticker.C
-		err := w.Flush()
-		if err != nil {
-			log.Error("redo log flush error", zap.Error(err))
+		select {
+		case <-ctx.Done():
+			err := w.Close()
+			if err != nil {
+				log.Error("runFlushToDisk close fail", zap.String("changefeedID", w.cfg.ChangeFeedID), zap.Error(err))
+			}
+		case <-ticker.C:
+			err := w.Flush()
+			if err != nil {
+				log.Error("redo log flush fail", zap.String("changefeedID", w.cfg.ChangeFeedID), zap.Error(err))
+			}
 		}
 	}
 }
@@ -261,7 +261,7 @@ func (w *Writer) Close() error {
 		return err
 	}
 
-	w.state.Store(stopped)
+	w.state.Store(false)
 	return nil
 }
 
@@ -518,14 +518,10 @@ func (w *Writer) flush() error {
 }
 
 func (w *Writer) writeToS3(ctx context.Context, name string) error {
-	log.Debug("writeToS3", zap.String("name", name))
-
 	fileData, err := os.ReadFile(name)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-
-	log.Debug("storage.WriteFile", zap.String("name", filepath.Base(name)), zap.Int("data size", len(fileData)))
 
 	// Key in s3: aws.String(rs.options.Prefix + name), prefix should be changefeed name
 	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.WriteFile(ctx, filepath.Base(name), fileData))

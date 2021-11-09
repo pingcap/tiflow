@@ -18,15 +18,19 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	"github.com/pingcap/ticdc/cdc/redo/writer"
+	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/multierr"
@@ -39,22 +43,34 @@ func TestNewLogReader(t *testing.T) {
 	_, err = NewLogReader(context.Background(), &LogReaderConfig{})
 	require.Nil(t, err)
 
-	// dir, err := ioutil.TempDir("", "redo-NewLogReader")
-	// require.Nil(t, err)
-	// defer os.RemoveAll(dir)
+	dir, err := ioutil.TempDir("", "redo-NewLogReader")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
 
-	//s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
-	//require.Nil(t, err)
-	//ctx, cancel := context.WithCancel(context.Background())
-	//cancel()
-	//_, err = NewLogReader(ctx, &LogReaderConfig{
-	//	S3Storage: true,
-	//	Dir:       dir,
-	//	S3URI:     *s3URI,
-	//})
-	//require.Regexp(t, ".*ErrRedoDownloadFailed*.", err)
-	//_, err = os.Stat(dir)
-	//require.True(t, os.IsNotExist(err))
+	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
+	require.Nil(t, err)
+
+	origin := common.InitS3storage
+	defer func() {
+		common.InitS3storage = origin
+	}()
+	controller := gomock.NewController(t)
+	mockStorage := mockstorage.NewMockExternalStorage(controller)
+	// no file to download
+	mockStorage.EXPECT().WalkDir(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	common.InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
+		return mockStorage, nil
+	}
+
+	// after init should rm the dir
+	_, err = NewLogReader(context.Background(), &LogReaderConfig{
+		S3Storage: true,
+		Dir:       dir,
+		S3URI:     *s3URI,
+	})
+	require.Nil(t, err)
+	_, err = os.Stat(dir)
+	require.True(t, os.IsNotExist(err))
 }
 
 func TestLogReaderResetReader(t *testing.T) {
