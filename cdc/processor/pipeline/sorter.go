@@ -170,7 +170,8 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
 							if n.isTableActorMode {
-								_ = tableActorRouter.Send(actor.ID(n.tableID), message.BarrierMessage(lastCRTs))
+								n.outputCh <- pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs))
+								_ = tableActorRouter.Send(actor.ID(n.tableID), message.TickMessage())
 							} else {
 								ctx.(pipeline.NodeContext).SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
 							}
@@ -185,7 +186,8 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
 							if n.isTableActorMode {
-								_ = tableActorRouter.Send(actor.ID(n.tableID), message.BarrierMessage(lastCRTs))
+								n.outputCh <- pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs))
+								_ = tableActorRouter.Send(actor.ID(n.tableID), message.TickMessage())
 							} else {
 								ctx.(pipeline.NodeContext).SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
 							}

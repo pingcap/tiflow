@@ -101,7 +101,6 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 }
 
 type Node struct {
-	tableActor    *tableActor
 	eventStash    *pipeline.Message
 	parentNode    AsyncDataHolder
 	dataProcessor AsyncDataProcessor
@@ -150,17 +149,15 @@ func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePi
 	}
 
 	flowController := common.NewTableFlowController(t.memoryQuota)
-	actorDataNode := tablePipelineNodeCreator.NewSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs, flowController, t.mounter)
-	if err := actorDataNode.StartActorNode(ctx, t.tableActorRouter, t.wg, t.info, t.vars); err != nil {
+	sorterActorNode := tablePipelineNodeCreator.NewSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs, flowController, t.mounter)
+	if err := sorterActorNode.StartActorNode(ctx, t.tableActorRouter, t.wg, t.info, t.vars); err != nil {
 		log.Error("sorter fails to start", zap.Error(err))
 		return err
 	}
-	t.nodes = append(t.nodes,
-		&Node{
-			parentNode:    actorPullerNode,
-			dataProcessor: actorDataNode,
-			tableActor:    t,
-		})
+	t.nodes = append(t.nodes, &Node{
+		parentNode:    actorPullerNode,
+		dataProcessor: sorterActorNode,
+	})
 
 	var cyclicNode TableActorDataNode
 	if t.cyclicEnabled {
@@ -170,11 +167,9 @@ func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePi
 			return err
 		}
 		t.nodes = append(t.nodes, &Node{
-			parentNode:    actorDataNode,
+			parentNode:    sorterActorNode,
 			dataProcessor: cyclicNode,
-			tableActor:    t,
-		},
-		)
+		})
 	}
 
 	actorSinkNode := tablePipelineNodeCreator.NewSinkNode(t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
@@ -184,11 +179,11 @@ func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePi
 	}
 	t.actorMessageHandler = actorSinkNode
 	t.sinkNode = actorSinkNode
-	node := &Node{dataProcessor: actorSinkNode, tableActor: t}
+	node := &Node{dataProcessor: actorSinkNode}
 	if t.cyclicEnabled {
 		node.parentNode = cyclicNode
 	} else {
-		node.parentNode = actorDataNode
+		node.parentNode = sorterActorNode
 	}
 	t.nodes = append(t.nodes, node)
 	t.started = true
