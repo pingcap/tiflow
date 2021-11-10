@@ -674,7 +674,6 @@ type hasWokers interface {
 
 func extractSources(s *Server, req hasWokers) ([]string, error) {
 	var sources []string
-
 	switch {
 	case len(req.GetSources()) > 0:
 		sources = req.GetSources()
@@ -711,8 +710,8 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 	if shouldRet {
 		return resp2, err2
 	}
-
 	sources, err := extractSources(s, req)
+	sort.Strings(sources)
 	if err != nil {
 		// nolint:nilerr
 		return &pb.QueryStatusListResponse{
@@ -720,29 +719,34 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 			Msg:    err.Error(),
 		}, nil
 	}
-
 	queryRelayWorker := false
 	if len(req.GetSources()) > 0 {
 		// if user specified sources, query relay workers instead of task workers
 		queryRelayWorker = true
 	}
-
 	resps := s.getStatusFromWorkers(ctx, sources, req.Name, queryRelayWorker)
+	// sourceName -> worker QueryStatusResponse
 	workerRespMap := make(map[string][]*pb.QueryStatusResponse, len(sources))
+	inSlice := func(s []string, e string) bool {
+		for _, v := range s {
+			if v == e {
+				return true
+			}
+		}
+		return false
+	}
 	for _, workerResp := range resps {
 		workerRespMap[workerResp.SourceStatus.Source] = append(workerRespMap[workerResp.SourceStatus.Source], workerResp)
+		// append some offline worker responses
+		if !inSlice(sources, workerResp.SourceStatus.Source) {
+			sources = append(sources, workerResp.SourceStatus.Source)
+		}
 	}
-
-	sort.Strings(sources)
 	workerResps := make([]*pb.QueryStatusResponse, 0, len(sources))
-	for _, worker := range sources {
-		workerResps = append(workerResps, workerRespMap[worker]...)
+	for _, sourceName := range sources {
+		workerResps = append(workerResps, workerRespMap[sourceName]...)
 	}
-	resp := &pb.QueryStatusListResponse{
-		Result:  true,
-		Sources: workerResps,
-	}
-	return resp, nil
+	return &pb.QueryStatusListResponse{Result: true, Sources: workerResps}, nil
 }
 
 // adjust unsynced field in sync status by looking at DDL locks.
@@ -977,7 +981,6 @@ func (s *Server) getStatusFromWorkers(ctx context.Context, sources []string, tas
 		Type:        workerrpc.CmdQueryStatus,
 		QueryStatus: &pb.QueryStatusRequest{Name: taskName},
 	}
-
 	var (
 		workerResps  = make([]*pb.QueryStatusResponse, 0, len(sources))
 		workerRespMu sync.Mutex
@@ -1070,6 +1073,32 @@ func (s *Server) getStatusFromWorkers(ctx context.Context, sources []string, tas
 	}
 	wg.Wait()
 	s.fillUnsyncedStatus(workerResps)
+	findTaskInResp := func(taskName string) bool {
+		for _, resp := range workerResps {
+			for _, status := range resp.SubTaskStatus {
+				if status.Name == taskName {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	// when taskName is empty, we need list all task even the worker that handle this task is not running.
+	if taskName == "" {
+		for taskName, sourceM := range s.scheduler.GetSubTaskCfgs() {
+			if !findTaskInResp(taskName) {
+				msg := fmt.Sprintf("can't find task: %s from dm-worker, please user dmctl list-member to check if worker is offline.", taskName)
+				log.L().Warn(msg)
+				for source := range sourceM {
+					setWorkerResp(&pb.QueryStatusResponse{
+						Result: false, Msg: msg,
+						SourceStatus:  &pb.SourceStatus{Source: source, Worker: "unknown-offline-worker"},
+						SubTaskStatus: []*pb.SubTaskStatus{{Name: taskName}},
+					})
+				}
+			}
+		}
+	}
 	return workerResps
 }
 
