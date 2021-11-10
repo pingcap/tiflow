@@ -441,28 +441,8 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 				zap.String("topic", topic), zap.Any("detail", info))
 		}
 
-		realPartitionCount := info.NumPartitions
-		// user does not specify the `partition-num` in the sink-uri
-		if config.PartitionNum == 0 {
-			config.PartitionNum = realPartitionCount
-			return nil
-		}
-
-		if config.PartitionNum < realPartitionCount {
-			log.Warn("number of partition specified in sink-uri is less than that of the actual topic. "+
-				"Some partitions will not have messages dispatched to",
-				zap.Int32("sink-uri partitions", config.PartitionNum),
-				zap.Int32("topic partitions", realPartitionCount))
-			return nil
-		}
-
-		// Make sure that the user-specified `partition-num` is not greater than
-		// the real partition count, since messages would be dispatched to different
-		// partitions, this could prevent potential correctness problems.
-		if config.PartitionNum > realPartitionCount {
-			return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
-				"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)",
-				config.PartitionNum, realPartitionCount)
+		if err := config.adjustPartitionNum(info.NumPartitions); err != nil {
+			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
 
 		return nil
@@ -678,6 +658,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 }
 
 func getBrokerMessageMaxBytes(admin sarama.ClusterAdmin) (int, error) {
+	target := "message.max.bytes"
 	_, controllerID, err := admin.DescribeCluster()
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -686,13 +667,13 @@ func getBrokerMessageMaxBytes(admin sarama.ClusterAdmin) (int, error) {
 	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
 		Type:        sarama.BrokerResource,
 		Name:        strconv.Itoa(int(controllerID)),
-		ConfigNames: []string{"message.max.bytes"},
+		ConfigNames: []string{target},
 	})
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
 
-	if len(configEntries) == 0 {
+	if len(configEntries) == 0 || configEntries[0].Name != target {
 		return 0, cerror.ErrKafkaNewSaramaProducer.GenWithStack(
 			"since cannot find the `message.max.bytes` from the broker's configuration, " +
 				"ticdc decline to create the topic and changefeed to prevent potential error")
@@ -716,4 +697,31 @@ func getTopicMaxMessageBytes(admin sarama.ClusterAdmin, info sarama.TopicDetail)
 	}
 
 	return getBrokerMessageMaxBytes(admin)
+}
+
+// adjust the partition-num by the topic's partition count
+func (c *Config) adjustPartitionNum(realPartitionCount int32) error {
+	// user does not specify the `partition-num` in the sink-uri
+	if c.PartitionNum == 0 {
+		c.PartitionNum = realPartitionCount
+		return nil
+	}
+
+	if c.PartitionNum < realPartitionCount {
+		log.Warn("number of partition specified in sink-uri is less than that of the actual topic. "+
+			"Some partitions will not have messages dispatched to",
+			zap.Int32("sink-uri partitions", c.PartitionNum),
+			zap.Int32("topic partitions", realPartitionCount))
+		return nil
+	}
+
+	// Make sure that the user-specified `partition-num` is not greater than
+	// the real partition count, since messages would be dispatched to different
+	// partitions, this could prevent potential correctness problems.
+	if c.PartitionNum > realPartitionCount {
+		return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
+			"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)",
+			c.PartitionNum, realPartitionCount)
+	}
+	return nil
 }
