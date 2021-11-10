@@ -71,8 +71,9 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 
 func (n *pullerNode) StartActorNode(ctx context.Context, tableActorRouter *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
 	n.wg = wg
-	if n.tableActorRouter != nil {
+	if tableActorRouter != nil {
 		n.isTableActorMode = true
+		n.tableActorRouter = tableActorRouter
 	}
 	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(info.ID, vars.CaptureInfo.AdvertiseAddr, n.tableName)
 	ctxC, cancel := context.WithCancel(ctx)

@@ -82,9 +82,9 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 
 func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
 	n.wg = wg
-	n.tableActorRouter = tableActorRouter
-	if n.tableActorRouter != nil {
+	if tableActorRouter != nil {
 		n.isTableActorMode = true
+		n.tableActorRouter = tableActorRouter
 	}
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel

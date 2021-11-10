@@ -61,8 +61,9 @@ func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
 
 func (n *cyclicMarkNode) StartActorNode(_ context.Context, tableActorRouter *actor.Router, _ *errgroup.Group, info *cdcContext.ChangefeedVars, _ *cdcContext.GlobalVars) error {
 	n.tableActorRouter = tableActorRouter
-	if n.tableActorRouter != nil {
+	if tableActorRouter != nil {
 		n.isTableActorMode = true
+		n.tableActorRouter = tableActorRouter
 	}
 	n.localReplicaID = info.Info.Config.Cyclic.ReplicaID
 	filterReplicaID := info.Info.Config.Cyclic.FilterReplicaID
