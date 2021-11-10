@@ -417,9 +417,11 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 
 var emptyBytes = make([]byte, 0)
 
-const sizeOfEmptyBytes = int(unsafe.Sizeof(emptyBytes))
-const sizeOfEmptyString = int(unsafe.Sizeof(""))
-const sizeOfEmptyDatum = int(unsafe.Sizeof(types.Datum{}))
+const (
+	sizeOfEmptyBytes  = int(unsafe.Sizeof(emptyBytes))
+	sizeOfEmptyString = int(unsafe.Sizeof(""))
+	sizeOfEmptyDatum  = int(unsafe.Sizeof(types.Datum{}))
+)
 
 func sizeOfDatumValue(d types.Datum) int {
 	array := [...]types.Datum{d}
@@ -503,7 +505,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int) {
 		d := types.NewDatum(col.FieldType.Elems[0])
 		return d.GetValue(), sizeOfDatumValue(d)
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-		return emptyBytes, int(sizeOfEmptyBytes)
+		return emptyBytes, sizeOfEmptyBytes
 	}
 
 	d := table.GetZeroValue(col)
