@@ -25,6 +25,11 @@ const (
 	etcdTxnMaxSize = 1024 * (1024 + 256)
 )
 
+// getBatchChangedState has 4 return values:
+// 1.batchChangedSate
+// 2.number of patch apply to batchChangedState
+// 3.size of batchChangedState in byte
+// 4.error
 func getBatchChangedState(state map[util.EtcdKey][]byte, patchGroups [][]DataPatch) (map[util.EtcdKey][]byte, int, int, error) {
 	num := 0
 	totalSize := 0
