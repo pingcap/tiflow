@@ -234,6 +234,22 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	}
 }
 
+func (s *kafkaSuite) TestAdjustPartitionNum(c *check.C) {
+	config := NewConfig()
+	err := config.adjustPartitionNum(2)
+	c.Assert(err, check.IsNil)
+	c.Assert(config.PartitionNum, check.Equals, int32(2))
+
+	config.PartitionNum = 1
+	err = config.adjustPartitionNum(2)
+	c.Assert(err, check.IsNil)
+	c.Assert(config.PartitionNum, check.Equals, int32(1))
+
+	config.PartitionNum = 3
+	err = config.adjustPartitionNum(2)
+	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
+}
+
 func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	defer testleak.AfterTest(c)
 	topic := "unit_test_2"
@@ -251,7 +267,6 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 		"MetadataRequest":        metaResponse,
 		"DescribeConfigsRequest": sarama.NewMockDescribeConfigsResponse(c),
 	})
-
 	config := NewConfig()
 	config.PartitionNum = int32(0)
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
@@ -260,78 +275,11 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
 
-	err = topicPreProcess(topic, config, cfg)
-	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(2))
-
-	config.PartitionNum = int32(1)
-	cfg, err = newSaramaConfigImpl(ctx, config)
-	c.Assert(err, check.IsNil)
-	err = topicPreProcess(topic, config, cfg)
-	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(1))
-
-	config.PartitionNum = int32(3)
-	cfg, err = newSaramaConfigImpl(ctx, config)
-	c.Assert(err, check.IsNil)
-	err = topicPreProcess(topic, config, cfg)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*specified in sink-uri is more than that of actual topic.*")
-
 	config.BrokerEndpoints = []string{""}
 	cfg.Metadata.Retry.Max = 1
 
 	err = topicPreProcess(topic, config, cfg)
 	c.Assert(errors.Cause(err), check.Equals, sarama.ErrOutOfBrokers)
-
-	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
-	config.PartitionNum = int32(3)
-
-	err = topicPreProcess(topic, config, cfg)
-	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
-}
-
-func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
-	defer testleak.AfterTest(c)()
-	topic := "unit_test_3"
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	broker := sarama.NewMockBroker(c, 1)
-	broker.SetHandlerByMap(map[string]sarama.MockResponse{
-		"MetadataRequest": sarama.NewMockMetadataResponse(c).
-			SetBroker(broker.Addr(), broker.BrokerID()).
-			SetController(broker.BrokerID()),
-		"DescribeConfigsRequest": sarama.NewMockDescribeConfigsResponse(c),
-		"CreateTopicsRequest":    sarama.NewMockCreateTopicsResponse(c),
-	})
-	defer broker.Close()
-
-	config := NewConfig()
-	config.PartitionNum = int32(0)
-	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
-	cfg, err := newSaramaConfigImpl(ctx, config)
-	c.Assert(err, check.IsNil)
-
-	err = topicPreProcess(topic, config, cfg)
-	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(3))
-
-	topic = "createTopicWithValidPartitionNum"
-	config.PartitionNum = 1
-	cfg, err = newSaramaConfigImpl(ctx, config)
-	c.Assert(err, check.IsNil)
-
-	err = topicPreProcess(topic, config, cfg)
-	c.Assert(err, check.IsNil)
-
-	topic = "createTopicWithoutPartitionNum"
-	config.PartitionNum = 0
-	cfg, err = newSaramaConfigImpl(ctx, config)
-	c.Assert(err, check.IsNil)
-
-	err = topicPreProcess(topic, config, cfg)
-	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(3))
 }
 
 func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
