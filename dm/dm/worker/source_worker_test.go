@@ -32,8 +32,8 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	"github.com/pingcap/ticdc/dm/pkg/ha"
 	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/relay"
 )
 
 var emptyWorkerStatusInfoJSONLength = 25
@@ -243,7 +243,7 @@ var _ = Suite(&testWorkerFunctionalities{})
 func (t *testWorkerFunctionalities) SetUpSuite(c *C) {
 	NewRelayHolder = NewDummyRelayHolder
 	NewSubTask = NewRealSubTask
-	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, notifier streamer.EventNotifier) []unit.Unit {
+	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, notifier relay.EventNotifier) []unit.Unit {
 		atomic.AddInt32(&t.createUnitCount, 1)
 		mockDumper := NewMockUnit(pb.UnitType_Dump)
 		mockLoader := NewMockUnit(pb.UnitType_Load)
@@ -418,7 +418,7 @@ func (t *testWorkerEtcdCompact) SetUpSuite(c *C) {
 		cfg.UseRelay = false
 		return NewRealSubTask(cfg, etcdClient, worker)
 	}
-	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, notifier streamer.EventNotifier) []unit.Unit {
+	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, notifier relay.EventNotifier) []unit.Unit {
 		mockDumper := NewMockUnit(pb.UnitType_Dump)
 		mockLoader := NewMockUnit(pb.UnitType_Load)
 		mockSync := NewMockUnit(pb.UnitType_Sync)

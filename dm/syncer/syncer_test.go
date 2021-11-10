@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/dm/dm/pb"
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/cputil"
@@ -37,7 +38,6 @@ import (
 	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
 	"github.com/pingcap/ticdc/dm/pkg/retry"
 	"github.com/pingcap/ticdc/dm/pkg/schema"
-	streamer2 "github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 
@@ -47,6 +47,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/ticdc/pkg/errorutil"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -113,7 +114,7 @@ type MockStreamProducer struct {
 	events []*replication.BinlogEvent
 }
 
-func (mp *MockStreamProducer) generateStreamer(location binlog.Location) (streamer2.Streamer, error) {
+func (mp *MockStreamProducer) generateStreamer(location binlog.Location) (reader.Streamer, error) {
 	if location.Position.Pos == 4 {
 		return &MockStreamer{mp.events, 0}, nil
 	}
@@ -788,6 +789,9 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_1`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_1`").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("t_1", "create table t_1(id int primary key, name varchar(24), KEY `index1` (`name`))"))
 	s.mockGetServerUnixTS(mock)
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
@@ -1638,7 +1642,7 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 	mock.ExpectCommit()
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestExecuteSQLSWithIgnore")))
-	n, err := conn.ExecuteSQLWithIgnore(tctx, ignoreDDLError, sqls)
+	n, err := conn.ExecuteSQLWithIgnore(tctx, errorutil.IsIgnorableMySQLDDLError, sqls)
 	c.Assert(err, IsNil)
 	c.Assert(n, Equals, 2)
 

@@ -52,7 +52,7 @@ func (t *dummyTask) Prepare(taskContext *framework.TaskContext) error {
 
 func (t *dummyTask) GetCDCProfile() *framework.CDCProfile {
 	return &framework.CDCProfile{
-		PDUri:   "http://upstream-pd:2379",
+		PDUri:   framework.UpstreamPD,
 		SinkURI: "kafka://kafka:9092/testdb_test?protocol=avro",
 		Opts:    map[string]string{"registry": "http://schema-registry:8081"},
 	}
