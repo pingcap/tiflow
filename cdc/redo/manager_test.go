@@ -55,10 +55,10 @@ func TestConsistentConfig(t *testing.T) {
 		valid   bool
 	}{
 		{"local", true},
+		{"nfs", true},
 		{"s3", true},
 		{"blackhole", true},
 		{"Local", false},
-		{"nfs", false},
 		{"", false},
 	}
 	for _, sc := range storageCases {
@@ -70,6 +70,7 @@ func TestConsistentConfig(t *testing.T) {
 		s3Enabled bool
 	}{
 		{"local", false},
+		{"nfs", false},
 		{"s3", true},
 		{"blackhole", false},
 	}
