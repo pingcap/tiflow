@@ -7,7 +7,7 @@ meta-schema: dm_meta
 enable-heartbeat: false
 heartbeat-update-interval: 1
 heartbeat-report-interval: 1
-timezone: ""
+timezone: Asia/Shanghai
 case-sensitive: false
 target-database:
   host: 127.0.0.1
