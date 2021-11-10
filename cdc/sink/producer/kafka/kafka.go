@@ -481,14 +481,20 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		config.PartitionNum = defaultPartitionNum
 	}
 
-	brokerConfigEntry, err := admin.DescribeConfig(sarama.ConfigResource{
-		Type:        sarama.BrokerResource,
-		Name:        "message.max.bytes",
-		ConfigNames: nil,
+	_, controllerID, err := admin.DescribeCluster()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
+		Type: sarama.BrokerResource,
+		Name: string(controllerID),
 	})
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	log.Info("broker config", zap.Any("entries", configEntries))
 
 	maxMessageBytes := strconv.Itoa(config.MaxMessageBytes)
 	err = admin.CreateTopic(topic, &sarama.TopicDetail{
