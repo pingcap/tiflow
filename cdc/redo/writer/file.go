@@ -49,13 +49,6 @@ const (
 	defaultS3Timeout         = 3 * time.Second
 )
 
-const (
-	// stopped defines the state value of a Writer which has been stopped
-	stopped bool = false
-	// started defines the state value of a Writer which is currently started
-	started bool = true
-)
-
 var (
 	// for easy testing, not set to const
 	megabyte          int64 = 1024 * 1024
@@ -119,7 +112,7 @@ type Writer struct {
 	commitTS atomic.Uint64
 	// the ts send with the event
 	eventCommitTS atomic.Uint64
-	state         atomic.Bool
+	running       atomic.Bool
 	gcRunning     atomic.Bool
 	size          int64
 	file          *os.File
@@ -162,7 +155,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		storage:   s3storage,
 	}
 
-	w.state.Store(started)
+	w.running.Store(true)
 	go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
 
 	return w, nil
@@ -179,12 +172,14 @@ func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
 
 		select {
 		case <-ctx.Done():
-			log.Info("runFlushToDisk got canceled", zap.Error(ctx.Err()))
-			return
+			err := w.Close()
+			if err != nil {
+				log.Error("runFlushToDisk close fail", zap.String("changefeedID", w.cfg.ChangeFeedID), zap.Error(err))
+			}
 		case <-ticker.C:
 			err := w.Flush()
 			if err != nil {
-				log.Error("redo log flush error", zap.Error(err))
+				log.Error("redo log flush fail", zap.String("changefeedID", w.cfg.ChangeFeedID), zap.Error(err))
 			}
 		}
 	}
@@ -266,13 +261,13 @@ func (w *Writer) Close() error {
 		return err
 	}
 
-	w.state.Store(stopped)
+	w.running.Store(false)
 	return nil
 }
 
 // IsRunning implement IsRunning interface
 func (w *Writer) IsRunning() bool {
-	return w.state.Load()
+	return w.running.Load()
 }
 
 func (w *Writer) isGCRunning() bool {
@@ -523,14 +518,10 @@ func (w *Writer) flush() error {
 }
 
 func (w *Writer) writeToS3(ctx context.Context, name string) error {
-	log.Debug("writeToS3", zap.String("name", name))
-
 	fileData, err := os.ReadFile(name)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-
-	log.Debug("storage.WriteFile", zap.String("name", filepath.Base(name)), zap.Int("data size", len(fileData)))
 
 	// Key in s3: aws.String(rs.options.Prefix + name), prefix should be changefeed name
 	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.WriteFile(ctx, filepath.Base(name), fileData))
