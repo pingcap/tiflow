@@ -466,6 +466,11 @@ error = '''
 owner lease timeout
 '''
 
+["CDC:ErrLevelDBSorterError"]
+error = '''
+leveldb error: %s
+'''
+
 ["CDC:ErrLoadTimezone"]
 error = '''
 load timezone
