@@ -112,7 +112,7 @@ type Writer struct {
 	commitTS atomic.Uint64
 	// the ts send with the event
 	eventCommitTS atomic.Uint64
-	state         atomic.Bool
+	running       atomic.Bool
 	gcRunning     atomic.Bool
 	size          int64
 	file          *os.File
@@ -155,7 +155,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		storage:   s3storage,
 	}
 
-	w.state.Store(true)
+	w.running.Store(true)
 	go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
 
 	return w, nil
@@ -261,13 +261,13 @@ func (w *Writer) Close() error {
 		return err
 	}
 
-	w.state.Store(false)
+	w.running.Store(false)
 	return nil
 }
 
 // IsRunning implement IsRunning interface
 func (w *Writer) IsRunning() bool {
-	return w.state.Load()
+	return w.running.Load()
 }
 
 func (w *Writer) isGCRunning() bool {
