@@ -178,7 +178,7 @@ func (b *binlogPoint) String() string {
 	return fmt.Sprintf("%v(flushed %v)", b.location, b.flushedLocation)
 }
 
-// SnapshotInfo contains the id of checkpoint snapshot and its global position
+// SnapshotInfo contains the id of checkpoint snapshot and its global position.
 type SnapshotInfo struct {
 	// the snapshot id
 	id int

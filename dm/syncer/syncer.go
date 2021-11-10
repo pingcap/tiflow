@@ -2077,7 +2077,7 @@ func (s *Syncer) handleRotateEvent(ev *replication.RotateEvent, ec eventContext)
 	return nil
 }
 
-// getSeq is used for assigning an auto-incremental sequence number for each job
+// getSeq is used for assigning an auto-incremental sequence number for each job.
 func (s *Syncer) getSeq() int64 {
 	s.seq++
 	return s.seq
