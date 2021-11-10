@@ -343,8 +343,8 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	vars := map[string]string{
 		"time_zone": s.timezone.String(),
 	}
-	sessCtx := utils.NewSessionCtx(vars)
-	s.exprFilterGroup = NewExprFilterGroup(sessCtx, s.cfg.ExprFilter)
+	s.sessCtx = utils.NewSessionCtx(vars)
+	s.exprFilterGroup = NewExprFilterGroup(s.sessCtx, s.cfg.ExprFilter)
 
 	if len(s.cfg.ColumnMappingRules) > 0 {
 		s.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
