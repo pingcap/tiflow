@@ -1073,7 +1073,9 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
 		// So we will prepare a REPLACE SQL here.
 		// For insert event:
-		// It will be translated directly into a INSERT(old value is enabled and not in safe mode)/REPLACE(old value is disabled or in safe mod) SQL.
+		// It will be translated directly into a
+		// INSERT(old value is enabled and not in safe mode)
+		// or REPLACE(old value is disabled or in safe mode) SQL.
 		if len(row.Columns) != 0 {
 			if s.params.batchReplaceEnabled {
 				query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
