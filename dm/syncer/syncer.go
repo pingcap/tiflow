@@ -64,12 +64,14 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/relay"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 	operator "github.com/pingcap/ticdc/dm/syncer/err-operator"
 	"github.com/pingcap/ticdc/dm/syncer/metrics"
 	onlineddl "github.com/pingcap/ticdc/dm/syncer/online-ddl-tools"
 	sm "github.com/pingcap/ticdc/dm/syncer/safe-mode"
 	"github.com/pingcap/ticdc/dm/syncer/shardddl"
+	"github.com/pingcap/ticdc/pkg/errorutil"
 )
 
 var (
@@ -226,11 +228,11 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
-	notifier streamer.EventNotifier
+	notifier relay.EventNotifier
 }
 
 // NewSyncer creates a new Syncer.
-func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier streamer.EventNotifier) *Syncer {
+func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier relay.EventNotifier) *Syncer {
 	logger := log.With(zap.String("task", cfg.Name), zap.String("unit", "binlog replication"))
 	syncer := &Syncer{
 		pessimist: shardddl.NewPessimist(&logger, etcdClient, cfg.Name, cfg.SourceID),
@@ -1264,7 +1266,7 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.
 
 		if !ignore {
 			var affected int
-			affected, err = db.ExecuteSQLWithIgnore(tctx, ignoreDDLError, ddlJob.ddls)
+			affected, err = db.ExecuteSQLWithIgnore(tctx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			if err != nil {
 				err = s.handleSpecialDDLError(tctx, err, ddlJob.ddls, affected, db)
 				err = terror.WithScope(err, terror.ScopeDownstream)
@@ -1461,7 +1463,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if s.cfg.Mode == config.ModeAll && fresh {
 		delLoadTask = true
 		flushCheckpoint = true
-		// TODO: loadTableStructureFromDump in future
+		err = s.loadTableStructureFromDump(ctx)
+		if err != nil {
+			tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
+			cleanDumpFile = false
+		}
 	} else {
 		cleanDumpFile = false
 	}
@@ -1746,7 +1752,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				return err1
 			}
 			continue
-		case err == streamer.ErrorMaybeDuplicateEvent:
+		case err == relay.ErrorMaybeDuplicateEvent:
 			tctx.L().Warn("read binlog met a truncated file, need to open safe-mode until the next transaction")
 			err = maybeSkipNRowsEvent(eventIndex)
 			if err == nil {
@@ -2184,7 +2190,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		}
 
 		param.safeMode = ec.safeMode
-		dmls, err = s.genAndFilterInsertDMLs(param, exprFilter)
+		dmls, err = s.genAndFilterInsertDMLs(ec.tctx, param, exprFilter)
 		if err != nil {
 			return terror.Annotatef(err, "gen insert sqls failed, sourceTable: %v, targetTable: %v", sourceTable, targetTable)
 		}
@@ -2884,6 +2890,14 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 
 	if shouldExecDDLOnSchemaTracker {
 		if err := s.schemaTracker.Exec(ec.tctx.Ctx, usedSchema, trackInfo.originDDL); err != nil {
+			if ignoreTrackerDDLError(err) {
+				ec.tctx.L().Warn("will ignore a DDL error when tracking",
+					zap.String("schema", usedSchema),
+					zap.String("statement", trackInfo.originDDL),
+					log.WrapStringerField("location", ec.currentLocation),
+					log.ShortError(err))
+				return nil
+			}
 			ec.tctx.L().Error("cannot track DDL",
 				zap.String("schema", usedSchema),
 				zap.String("statement", trackInfo.originDDL),
@@ -2908,7 +2922,6 @@ func (s *Syncer) genRouter() error {
 	return nil
 }
 
-//nolint:unused
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
 

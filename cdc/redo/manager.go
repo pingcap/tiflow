@@ -45,6 +45,7 @@ type consistentStorage string
 
 const (
 	consistentStorageLocal     consistentStorage = "local"
+	consistentStorageNFS       consistentStorage = "nfs"
 	consistentStorageS3        consistentStorage = "s3"
 	consistentStorageBlackhole consistentStorage = "blackhole"
 )
@@ -68,7 +69,8 @@ func IsValidConsistentLevel(level string) bool {
 // IsValidConsistentStorage checks whether a give consistent storage is valid
 func IsValidConsistentStorage(storage string) bool {
 	switch consistentStorage(storage) {
-	case consistentStorageLocal, consistentStorageS3, consistentStorageBlackhole:
+	case consistentStorageLocal, consistentStorageNFS,
+		consistentStorageS3, consistentStorageBlackhole:
 		return true
 	default:
 		return false
@@ -100,6 +102,9 @@ type LogManager interface {
 	// EmitDDLEvent and FlushResolvedAndCheckpointTs are called from owner only
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	FlushResolvedAndCheckpointTs(ctx context.Context, resolvedTs, checkpointTs uint64) (err error)
+
+	// Cleanup removes all redo logs
+	Cleanup(ctx context.Context) error
 }
 
 // ManagerOptions defines options for redo log manager
@@ -154,13 +159,13 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 	switch m.storageType {
 	case consistentStorageBlackhole:
 		m.writer = writer.NewBlackHoleWriter()
-	case consistentStorageLocal, consistentStorageS3:
+	case consistentStorageLocal, consistentStorageNFS, consistentStorageS3:
 		globalConf := config.GetGlobalServerConfig()
 		changeFeedID := util.ChangefeedIDFromCtx(ctx)
 		// We use a temporary dir to storage redo logs before flushing to other backends, such as S3
 		redoDir := filepath.Join(globalConf.DataDir, config.DefaultRedoDir, changeFeedID)
-		if m.storageType == consistentStorageLocal {
-			// When using local as backend, the uri path should be an NFS path.
+		if m.storageType == consistentStorageLocal || m.storageType == consistentStorageNFS {
+			// When using local or nfs as backend, store redo logs to redoDir directly.
 			redoDir = uri.Path
 		}
 
@@ -300,7 +305,11 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 	} else {
 		log.Warn("remove a table not maintained in redo log manager", zap.Int64("table-id", tableID))
 	}
-	// TODO: send remove table command to redo log writer
+}
+
+// Cleanup removes all redo logs of this manager, it is called when changefeed is removed
+func (m *ManagerImpl) Cleanup(ctx context.Context) error {
+	return m.writer.DeleteAllLogs(ctx)
 }
 
 // updatertsMap reads rtsMap from redo log writer and calculate the minimum
