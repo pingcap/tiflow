@@ -121,7 +121,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 			Code:    code,
 			Message: err.Error(),
 		})
-		c.releaseResources(ctx, false /*isRemoved*/)
+		c.releaseResources(ctx)
 	}
 }
 
@@ -150,7 +150,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	}
 
 	if !c.feedStateManager.ShouldRunning() {
-		c.releaseResources(ctx, c.feedStateManager.ShouldRemoved())
+		c.isRemoved = c.feedStateManager.ShouldRemoved()
+		c.releaseResources(ctx)
 		return nil
 	}
 
@@ -284,17 +285,17 @@ LOOP:
 	return nil
 }
 
-func (c *changefeed) releaseResources(ctx context.Context, isRemoved bool) {
+func (c *changefeed) releaseResources(ctx context.Context) {
 	if !c.initialized {
 		return
 	}
 	log.Info("close changefeed", zap.String("changefeed", c.state.ID),
-		zap.Stringer("info", c.state.Info), zap.Bool("isRemoved", isRemoved))
+		zap.Stringer("info", c.state.Info), zap.Bool("isRemoved", c.isRemoved))
 	c.cancel()
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
-	if isRemoved && c.redoManager.Enabled() {
+	if c.isRemoved && c.redoManager.Enabled() {
 		err := c.redoManager.Cleanup(ctx)
 		if err != nil {
 			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id), zap.Error(err))
@@ -504,5 +505,5 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 }
 
 func (c *changefeed) Close(ctx context.Context) {
-	c.releaseResources(ctx, c.isRemoved)
+	c.releaseResources(ctx)
 }
