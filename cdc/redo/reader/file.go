@@ -96,7 +96,7 @@ func newReader(ctx context.Context, cfg *readerConfig) ([]fileReader, error) {
 		cfg.workerNums = defaultWorkerNum
 	}
 
-	rr, err := openSelectedFiles(ctx, cfg.dir, cfg.fileType, cfg.startTs, cfg.endTs, cfg.workerNums)
+	rr, err := openSelectedFiles(ctx, cfg.dir, cfg.fileType, cfg.startTs, cfg.workerNums)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func downLoadToLocal(ctx context.Context, dir string, s3storage storage.External
 	return eg.Wait()
 }
 
-func openSelectedFiles(ctx context.Context, dir, fixedType string, startTs, endTs uint64, workerNum int) ([]io.ReadCloser, error) {
+func openSelectedFiles(ctx context.Context, dir, fixedType string, startTs uint64, workerNum int) ([]io.ReadCloser, error) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotatef(err, "can't read log file directory: %s", dir))
@@ -181,7 +181,7 @@ func openSelectedFiles(ctx context.Context, dir, fixedType string, startTs, endT
 	unSortedFile := []string{}
 	for _, f := range files {
 		name := f.Name()
-		ret, err := shouldOpen(startTs, endTs, name, fixedType)
+		ret, err := shouldOpen(startTs, name, fixedType)
 		if err != nil {
 			log.Warn("check selected log file fail",
 				zap.String("log file", name),
@@ -348,7 +348,7 @@ func createSortedFile(ctx context.Context, dir string, name string, errCh chan e
 	retCh <- file
 }
 
-func shouldOpen(startTs, endTs uint64, name, fixedType string) (bool, error) {
+func shouldOpen(startTs uint64, name, fixedType string) (bool, error) {
 	// .sort.tmp will return error
 	commitTs, fileType, err := common.ParseLogFileName(name)
 	if err != nil {
@@ -361,7 +361,9 @@ func shouldOpen(startTs, endTs uint64, name, fixedType string) (bool, error) {
 	if filepath.Ext(name) == common.TmpEXT {
 		return true, nil
 	}
-	return commitTs > startTs && commitTs <= endTs, nil
+	// the commitTs=max(ts of log item in the file), if max > startTs then should open,
+	// filter out ts in (startTs, endTs] for consume
+	return commitTs > startTs, nil
 }
 
 // Read implement Read interface.
