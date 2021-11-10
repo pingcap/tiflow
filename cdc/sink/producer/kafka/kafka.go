@@ -422,7 +422,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 	info, created := topics[topic]
 	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
 	if created {
-		// make sure that topic's `max.message.bytes` is not less than given `max-message-size`
+		// make sure that topic's `max.message.bytes` is not less than given `max-message-bytes`
 		// else the producer will send message that too large to make topic reject, then changefeed would error.
 		if a, found := info.ConfigEntries["max.message.bytes"]; found {
 			topicMaxMessageBytes, err := strconv.Atoi(*a)
@@ -498,7 +498,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		}
 	}
 
-	// this should not happen, broker would have a default setting for
+	// this should not happen, broker should have a default setting.
 	if !found {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 		return cerror.ErrKafkaNewSaramaProducer.GenWithStack(
