@@ -501,8 +501,9 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 	// this should not happen, broker would have a default setting for
 	if !found {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
-		return cerror.ErrKafkaNewSaramaProducer.GenWithStack("topic cannot be created, " +
-			"since doesn't the `max.message.bytes` for the topic")
+		return cerror.ErrKafkaNewSaramaProducer.GenWithStack(
+			"since cannot find the `message.max.bytes` from the broker's configuration, " +
+				"ticdc decline to create the topic and changefeed to prevent potential error")
 	}
 
 	brokerMessageMaxBytes, err := strconv.Atoi(maxMessageBytes)
