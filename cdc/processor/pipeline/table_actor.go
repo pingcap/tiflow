@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -133,13 +134,12 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 		}
 
 		switch msgs[i].Tp {
-		case message.TypeStop, message.TypeTick, message.TypeBarrier:
+		case message.TypeTick, message.TypeBarrier:
 			err := t.actorMessageHandler.HandleActorMessage(ctx, msgs[i])
 			if err != nil {
 				t.stop(err)
 			}
-		}
-		if msgs[i].Tp == message.TypeStop {
+		case message.TypeStop:
 			t.stop(nil)
 			return false
 		}
@@ -251,13 +251,13 @@ func (t *tableActor) CheckpointTs() model.Ts {
 
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
-	// if t.sinkNode.BarrierTs() != ts {
-	msg := message.BarrierMessage(ts)
-	err := t.router.Send(actor.ID(t.tableID), msg)
-	if err != nil {
-		log.Warn("send fails", zap.Reflect("msg", msg), zap.Error(err))
+	if t.sinkNode.BarrierTs() != ts {
+		msg := message.BarrierMessage(ts)
+		err := t.router.Send(actor.ID(t.tableID), msg)
+		if err != nil {
+			log.Warn("send fails", zap.Reflect("msg", msg), zap.Error(err))
+		}
 	}
-	//}
 }
 
 // AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
@@ -310,7 +310,9 @@ func (t *tableActor) Cancel() {
 
 // Wait waits for table pipeline destroyed
 func (t *tableActor) Wait() {
+	fmt.Println("wait started")
 	_ = t.wg.Wait()
+	fmt.Println("wait done")
 }
 
 type Node struct {
