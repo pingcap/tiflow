@@ -99,12 +99,6 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 		c.Assert(v, check.Equals, expectedOpts[k])
 	}
 
-	uri = "kafka://127.0.0.1:9092/?kafka-version=2.6.0"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	err = cfg.Initialize(sinkURI, replicaConfig, opts)
-	c.Assert(err, check.ErrorMatches, ".*topic name not found.*")
-
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0"
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
