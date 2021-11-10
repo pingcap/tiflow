@@ -10,8 +10,8 @@ In the beginning of the TiCDC project, we chose a solution that sends all inform
 
 To succinctly describe the algorithm used here, we need to abstract the TiCDC Owner and Processor. To simplify the matter, we will omit "changefeed" management here, and suppose that multiple "changefeeds" are isolated from each other as far as scheduling is concerned (which they basically are).
 
-- The Owner is a piece of code that can persist and restores a timestamp `global checkpoint`, which is guaranteed to be monotonically increasing and a lower bound of the progresses of all nodes on all tables. The Owner will call our `ScheduleDispatcher` periodically and supply it with both the latest `global checkpoint` and a list of tables that should currently be replicating.
-- The Processor is a piece of code that actually replicates the tables. We can `Add` and `Remove` tables from it, and query it about the status of a table.
+- The Owner is a piece of code that can persist and restore a timestamp `global checkpoint`, which is guaranteed to be monotonically increasing and is a lower bound of the progresses of all nodes on all tables. The Owner will call our `ScheduleDispatcher` periodically and supply it with both the latest `global checkpoint` and a list of tables that should currently be replicating.
+- The Processor is a piece of code that actually replicates the tables. We can `Add` and `Remove` tables from it, and query about the status of a table.
 
 ## The Protocol
 
@@ -135,11 +135,11 @@ In addition to safety, *liveness* is also in a broad sense part of correctness. 
 
 In other words, the liveness guarantee says that *the cluster does not deadlock itself, and when everything is running and network is working, the cluster eventually works as a whole*.
 
-We will be focusing on *safety* here because it is more tricky to detect.
+We will be focusing on *safety* here because it is more difficult to detect.
 
 ### Owner switches
 
-- For *No Double Write* to be violated, the new owner must assigns a table again when the table is still running. But since the new owner will only assign table when all captures registered to Etcd at some point (*T0*) have all sent *Sync* to the new owner, the owner cannot reassign a table already running on any of these captures.  The only possibility for *No Double Write* to be violated is for the capture to be running at some point *T1* after *T0*, but this would imply that the capture has gone online after the new owner is elected, and since the new owner cannot reassign a table, the must have been an old owner who has assigned the table. But since *EtcdWorker* does not allow the old owner to receive new capture information after the new owner gets elected, it is an impossibility. 
+- For *No Double Write* to be violated, the new owner must not assign a table again when the table is still running. But since the new owner will only assign tables when the captures registered to Etcd at some point (*T0*) have all sent *Sync* to the new owner, the owner cannot reassign a table already running on any of these captures.  To see the impossibility, we know the only possibility for *No Double Write* to be violated is for a processor to be running at some point *T1* after *T0*, but this would imply that the capture has gone online after the new owner is elected, and since the new owner cannot reassign a table, it must have been an old owner who has assigned the table. But since *EtcdWorker* does not allow the old owner to receive new capture information after the new owner gets elected, it is an impossibility. 
 - *No Lost Table* is guaranteed because the owner will advance the watermarks only if all captures have sent *Sync* and sent their respective watermarks.
 
 ### Processor restarts
