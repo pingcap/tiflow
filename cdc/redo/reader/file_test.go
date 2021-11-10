@@ -133,11 +133,13 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	f, err := os.Open(path)
 	require.Nil(t, err)
 
+	// no data, wil not open
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf11", time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT)
 	path = filepath.Join(dir, fileName)
 	_, err = os.Create(path)
 	require.Nil(t, err)
 
+	// SortLogEXT, wil open
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf111", time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT) + common.SortLogEXT
 	path = filepath.Join(dir, fileName)
 	f1, err := os.Create(path)
@@ -153,7 +155,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 
 	type arg struct {
 		dir, fixedName string
-		startTs, endTs uint64
+		startTs        uint64
 	}
 
 	tests := []struct {
@@ -168,7 +170,6 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 				dir:       dir + "test",
 				fixedName: common.DefaultDDLLogFileType,
 				startTs:   0,
-				endTs:     12,
 			},
 			wantErr: ".*CDC:ErrRedoFileOp*.",
 		},
@@ -178,7 +179,6 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 				dir:       dir,
 				fixedName: common.DefaultDDLLogFileType,
 				startTs:   0,
-				endTs:     12,
 			},
 			wantRet: []io.ReadCloser{f, f1},
 		},
@@ -187,8 +187,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 			args: arg{
 				dir:       dir,
 				fixedName: common.DefaultDDLLogFileType,
-				startTs:   0,
-				endTs:     9,
+				startTs:   12,
 			},
 			wantRet: []io.ReadCloser{f},
 		},
@@ -198,7 +197,6 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 				dir:       dir,
 				fixedName: common.DefaultDDLLogFileType + "test",
 				startTs:   0,
-				endTs:     9,
 			},
 		},
 		{
@@ -207,13 +205,12 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 				dir:       dir1,
 				fixedName: common.DefaultDDLLogFileType,
 				startTs:   0,
-				endTs:     12,
 			},
 		},
 	}
 
 	for _, tt := range tests {
-		ret, err := openSelectedFiles(ctx, tt.args.dir, tt.args.fixedName, tt.args.startTs, tt.args.endTs, 100)
+		ret, err := openSelectedFiles(ctx, tt.args.dir, tt.args.fixedName, tt.args.startTs, 100)
 		if tt.wantErr == "" {
 			require.Nil(t, err, tt.name)
 			require.Equal(t, len(tt.wantRet), len(ret), tt.name)

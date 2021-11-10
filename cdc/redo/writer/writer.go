@@ -561,6 +561,10 @@ func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
+	err = tmpFile.Close()
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
 
 	err = os.Rename(tmpFileName, l.filePath())
 	if err != nil {

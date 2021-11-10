@@ -342,7 +342,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 			readerRet: &model.RedoLog{
 				RedoRow: &model.RedoRowChangedEvent{
 					Row: &model.RowChangedEvent{
-						CommitTs: 5,
+						CommitTs: 15,
 						RowID:    1,
 					},
 				},
@@ -500,9 +500,8 @@ func TestLogReaderReadNextLog(t *testing.T) {
 					require.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.RedoRow.Row.CommitTs, tt.name)
 					continue
 				}
-				require.Equal(t, ret[i].Row.CommitTs, tt.readerRet.RedoRow.Row.CommitTs, tt.name)
+				require.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.RedoRow.Row.CommitTs, tt.name)
 			}
-
 		}
 	}
 }
@@ -530,7 +529,7 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 			readerRet: &model.RedoLog{
 				RedoDDL: &model.RedoDDLEvent{
 					DDL: &model.DDLEvent{
-						CommitTs: 5,
+						CommitTs: 15,
 					},
 				},
 			},
@@ -677,7 +676,7 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 					require.Equal(t, ret[i].DDL.CommitTs, tt.readerRet1.RedoDDL.DDL.CommitTs, tt.name)
 					continue
 				}
-				require.Equal(t, ret[i].DDL.CommitTs, tt.readerRet.RedoDDL.DDL.CommitTs, tt.name)
+				require.Equal(t, ret[i].DDL.CommitTs, tt.readerRet1.RedoDDL.DDL.CommitTs, tt.name)
 			}
 		}
 	}
