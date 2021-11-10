@@ -140,16 +140,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 						return nil
 					case n.mounter.Input() <- msg:
 					}
-					err := msg.WaitPrepare(ctx)
-					if err != nil {
-						if errors.Cause(err) != context.Canceled {
-							ctx.Throw(err)
-						}
-						return errors.Trace(err)
-					}
-					// We calculate memory consumption by RowChangedEvent size.
-					// It's much larger than RawKVEntry.
-					size := uint64(msg.Row.ApproximateBytes())
+
 					commitTs := msg.CRTs
 					// We interpolate a resolved-ts if none has been sent for some time.
 					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
@@ -164,6 +155,18 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 							ctx.SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
 						}
 					}
+
+					// Must wait before accessing msg.Row
+					err := msg.WaitPrepare(ctx)
+					if err != nil {
+						if errors.Cause(err) != context.Canceled {
+							ctx.Throw(err)
+						}
+						return errors.Trace(err)
+					}
+					// We calculate memory consumption by RowChangedEvent size.
+					// It's much larger than RawKVEntry.
+					size := uint64(msg.Row.ApproximateBytes())
 					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
 					// Otherwise the pipeline would deadlock.
 					err = n.flowController.Consume(commitTs, size, func() error {
