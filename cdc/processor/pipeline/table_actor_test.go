@@ -47,7 +47,8 @@ func TestNewTableActor(t *testing.T) {
 	cctx := cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TableActorSystem: tableActorSystem,
 		TableActorRouter: tableActorRouter,
-		CaptureInfo:      &model.CaptureInfo{ID: "1", AdvertiseAddr: "1", Version: "v5.3.0"}}),
+		CaptureInfo:      &model.CaptureInfo{ID: "1", AdvertiseAddr: "1", Version: "v5.3.0"},
+	}),
 		&cdcContext.ChangefeedVars{
 			ID: "1",
 			Info: &model.ChangeFeedInfo{
@@ -96,11 +97,13 @@ func TestNewTableActor(t *testing.T) {
 	cctx = cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TableActorSystem: tableActorSystem,
 		TableActorRouter: tableActorRouter,
-		CaptureInfo:      &model.CaptureInfo{ID: "1", AdvertiseAddr: "1", Version: "v5.3.0"}}),
-		&cdcContext.ChangefeedVars{ID: "2", Info: &model.ChangeFeedInfo{
-			Config: replicaConfig,
-			Engine: model.SortInMemory,
-		},
+		CaptureInfo:      &model.CaptureInfo{ID: "1", AdvertiseAddr: "1", Version: "v5.3.0"},
+	}),
+		&cdcContext.ChangefeedVars{
+			ID: "2", Info: &model.ChangeFeedInfo{
+				Config: replicaConfig,
+				Engine: model.SortInMemory,
+			},
 		})
 	tbl2, err := NewTableActor(cctx, nil, 2, "t2",
 		&model.TableReplicaInfo{StartTs: 3, MarkTableID: 4}, blackHoleSink, 100, nodeCreator)
@@ -131,17 +134,17 @@ func TestNewTableActor(t *testing.T) {
 func TestPollStartAndStoppedActor(t *testing.T) {
 	var f ActorMessageHandlerFunc = func(ctx context.Context, msg message.Message) error { return nil }
 	tbl := &tableActor{stopped: false, actorMessageHandler: f}
-	var called = false
+	called := false
 	var dataHolderFunc AsyncDataHolderFunc = func() *pipeline.Message {
 		called = true
 		return nil
 	}
-	tbl.nodes = []*Node{{
-		tableActor:    tbl,
-		eventStash:    nil,
-		parentNode:    dataHolderFunc,
-		dataProcessor: nil,
-	},
+	tbl.nodes = []*Node{
+		{
+			eventStash:    nil,
+			parentNode:    dataHolderFunc,
+			dataProcessor: nil,
+		},
 	}
 	require.True(t, tbl.Poll(context.TODO(), []message.Message{message.TickMessage()}))
 	require.True(t, called)
@@ -175,7 +178,7 @@ func TestTryRun(t *testing.T) {
 	require.NotNil(t, n.eventStash)
 	require.Equal(t, pipeline.MessageTypeBarrier, n.eventStash.Tp)
 	require.Equal(t, model.Ts(1), n.eventStash.BarrierTs)
-	//data process is blocked
+	// data process is blocked
 	dp = func(ctx context.Context, msg pipeline.Message) (bool, error) {
 		return false, nil
 	}
@@ -185,7 +188,7 @@ func TestTryRun(t *testing.T) {
 	require.Equal(t, pipeline.MessageTypeBarrier, n.eventStash.Tp)
 	require.Equal(t, model.Ts(1), n.eventStash.BarrierTs)
 
-	//data process is ok
+	// data process is ok
 	dp = func(ctx context.Context, msg pipeline.Message) (bool, error) { return true, nil }
 	msg := 0
 	pN = func() *pipeline.Message {
@@ -221,7 +224,8 @@ func TestStartFailed(t *testing.T) {
 	cctx := cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TableActorSystem: tableActorSystem,
 		TableActorRouter: tableActorRouter,
-		CaptureInfo:      &model.CaptureInfo{ID: "1", AdvertiseAddr: "1", Version: "v5.3.0"}}),
+		CaptureInfo:      &model.CaptureInfo{ID: "1", AdvertiseAddr: "1", Version: "v5.3.0"},
+	}),
 		&cdcContext.ChangefeedVars{
 			ID: "1",
 			Info: &model.ChangeFeedInfo{
@@ -277,7 +281,7 @@ func TestAsyncStopFailed(t *testing.T) {
 	}()
 
 	var f ActorMessageHandlerFunc = func(ctx context.Context, msg message.Message) error { return nil }
-	tbl := &tableActor{stopped: false, tableID: 1, tableActorRouter: tableActorRouter, actorMessageHandler: f, cancel: func() {}, reportErr: func(err error) {}}
+	tbl := &tableActor{stopped: false, tableID: 1, router: tableActorRouter, actorMessageHandler: f, cancel: func() {}, reportErr: func(err error) {}}
 	require.Panics(t, func() { tbl.AsyncStop(1) })
 
 	mb := actor.NewMailbox(actor.ID(1), 0)
@@ -312,9 +316,9 @@ type FakeTableNodeCreator struct {
 func TestNewTablePipelineNodeCreator(t *testing.T) {
 	creator := NewTablePipelineNodeCreator()
 	require.NotNil(t, creator)
-	_, ok := creator.NewPullerNode(1, nil, "t1").(*pullerNode)
+	_, ok := creator.NewPullerNode(1, "t1", nil).(*pullerNode)
 	require.True(t, ok)
-	_, ok = creator.NewSorterNode("t1", 1, 1, common.NewTableFlowController(2), nil).(*sorterNode)
+	_, ok = creator.NewSorterNode(1, "t1", 1, common.NewTableFlowController(2), nil).(*sorterNode)
 	require.True(t, ok)
 	_, ok = creator.NewCyclicNode(1).(*cyclicMarkNode)
 	require.True(t, ok)

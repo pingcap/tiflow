@@ -198,7 +198,7 @@ func (s *markSuite) TestCyclicMarkNode(c *check.C) {
 			check.Commentf("%s", cmp.Diff(output, tc.expected)))
 	}
 
-	//table actor
+	// table actor
 	for _, tc := range testCases {
 		ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{

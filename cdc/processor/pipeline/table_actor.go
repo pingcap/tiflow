@@ -32,6 +32,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var (
+	_ TablePipeline = (*tableActor)(nil)
+	_ actor.Actor   = (*tableActor)(nil)
+)
+
 type tableActor struct {
 	cancel    context.CancelFunc
 	wg        *errgroup.Group
@@ -55,234 +60,14 @@ type tableActor struct {
 	stopped bool
 	err     error
 
-	info             *cdcContext.ChangefeedVars
-	vars             *cdcContext.GlobalVars
-	tableActorRouter *actor.Router
+	info   *cdcContext.ChangefeedVars
+	vars   *cdcContext.GlobalVars
+	router *actor.Router
 
 	actorMessageHandler ActorMessageHandler
 	sinkNode            TableActorSinkNode
 
 	nodes []*Node
-}
-
-var _ TablePipeline = (*tableActor)(nil)
-var _ actor.Actor = (*tableActor)(nil)
-
-func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
-	for i := range msgs {
-		if t.stopped {
-			// No need to handle remaining messages.
-			break
-		}
-
-		switch msgs[i].Tp {
-		case message.TypeStop, message.TypeTick, message.TypeBarrier:
-			err := t.actorMessageHandler.HandleActorMessage(ctx, msgs[i])
-			if err != nil {
-				t.stop(err)
-			}
-		}
-		if msgs[i].Tp == message.TypeStop {
-			t.stop(nil)
-			return false
-		}
-		// process message for each node
-		for _, n := range t.nodes {
-			if err := n.TryRun(ctx); err != nil {
-				log.Error("failed to process message, stop table actor ", zap.Int64("tableID", t.tableID), zap.Error(err))
-				t.stop(err)
-				break
-			}
-		}
-	}
-	// Report error to processor if there is any.
-	t.checkError()
-	return !t.stopped
-}
-
-type Node struct {
-	eventStash    *pipeline.Message
-	parentNode    AsyncDataHolder
-	dataProcessor AsyncDataProcessor
-}
-
-func (n *Node) TryRun(ctx context.Context) error {
-	for {
-		// batch?
-		if n.eventStash == nil {
-			n.eventStash = n.parentNode.TryGetProcessedMessage()
-		}
-		if n.eventStash == nil {
-			return nil
-		}
-		ok, err := n.dataProcessor.TryHandleDataMessage(ctx, *n.eventStash)
-		// process message failed, stop table actor
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		if ok {
-			n.eventStash = nil
-		} else {
-			return nil
-		}
-	}
-}
-
-func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePipelineNodeCreator) error {
-	if t.started {
-		log.Panic("start an already started table",
-			zap.String("changefeedID", t.changefeedID),
-			zap.Int64("tableID", t.tableID),
-			zap.String("tableName", t.tableName))
-	}
-	log.Debug("creating table flow controller",
-		zap.String("changefeedID", t.changefeedID),
-		zap.Int64("tableID", t.tableID),
-		zap.String("tableName", t.tableName),
-		zap.Uint64("quota", t.memoryQuota))
-
-	actorPullerNode := tablePipelineNodeCreator.NewPullerNode(t.tableID, t.replicaInfo, t.tableName)
-	if err := actorPullerNode.StartActorNode(ctx, t.tableActorRouter, t.wg, t.info, t.vars); err != nil {
-		log.Error("puller fails to start", zap.Error(err))
-		return err
-	}
-
-	flowController := common.NewTableFlowController(t.memoryQuota)
-	sorterActorNode := tablePipelineNodeCreator.NewSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs, flowController, t.mounter)
-	if err := sorterActorNode.StartActorNode(ctx, t.tableActorRouter, t.wg, t.info, t.vars); err != nil {
-		log.Error("sorter fails to start", zap.Error(err))
-		return err
-	}
-	t.nodes = append(t.nodes, &Node{
-		parentNode:    actorPullerNode,
-		dataProcessor: sorterActorNode,
-	})
-
-	var cyclicNode TableActorDataNode
-	if t.cyclicEnabled {
-		cyclicNode = tablePipelineNodeCreator.NewCyclicNode(t.replicaInfo.MarkTableID)
-		if err := cyclicNode.StartActorNode(ctx, t.tableActorRouter, t.wg, t.info, t.vars); err != nil {
-			log.Error("sink fails to start", zap.Error(err))
-			return err
-		}
-		t.nodes = append(t.nodes, &Node{
-			parentNode:    sorterActorNode,
-			dataProcessor: cyclicNode,
-		})
-	}
-
-	actorSinkNode := tablePipelineNodeCreator.NewSinkNode(t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
-	if err := actorSinkNode.StartActorNode(ctx, t.tableActorRouter, t.wg, t.info, t.vars); err != nil {
-		log.Error("sink fails to start", zap.Error(err))
-		return err
-	}
-	t.actorMessageHandler = actorSinkNode
-	t.sinkNode = actorSinkNode
-	node := &Node{dataProcessor: actorSinkNode}
-	if t.cyclicEnabled {
-		node.parentNode = cyclicNode
-	} else {
-		node.parentNode = sorterActorNode
-	}
-	t.nodes = append(t.nodes, node)
-	t.started = true
-	log.Info("table actor is started", zap.Int64("tableID", t.tableID))
-	return nil
-}
-
-func (t *tableActor) stop(err error) {
-	if t.stopped {
-		return
-	}
-	t.stopped = true
-	t.err = err
-	t.cancel()
-	log.Info("table actor will be stopped",
-		zap.Int64("tableID", t.tableID), zap.Error(err))
-}
-
-func (t *tableActor) checkError() {
-	if t.err != nil {
-		t.reportErr(t.err)
-		t.err = nil
-	}
-}
-
-// ============ Implement TablePipline, must be threadsafe ============
-
-// ResolvedTs returns the resolved ts in this table pipeline
-func (t *tableActor) ResolvedTs() model.Ts {
-	return t.sinkNode.ResolvedTs()
-}
-
-// CheckpointTs returns the checkpoint ts in this table pipeline
-func (t *tableActor) CheckpointTs() model.Ts {
-	return t.sinkNode.CheckpointTs()
-}
-
-// UpdateBarrierTs updates the barrier ts in this table pipeline
-func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
-	//if t.sinkNode.BarrierTs() != ts {
-	msg := message.BarrierMessage(ts)
-	err := t.tableActorRouter.Send(actor.ID(t.tableID), msg)
-	if err != nil {
-		log.Warn("send fails", zap.Reflect("msg", msg), zap.Error(err))
-	}
-	//}
-}
-
-// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
-func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
-	msg := message.StopMessage()
-	err := t.tableActorRouter.Send(actor.ID(t.tableID), msg)
-	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
-	if err != nil {
-		if cerror.ErrMailboxFull.Equal(err) {
-			return false
-		}
-		if cerror.ErrSendToClosedPipeline.Equal(err) {
-			return true
-		}
-		log.Panic("send fails", zap.Reflect("msg", msg), zap.Error(err))
-	}
-	return true
-}
-
-// Workload returns the workload of this table
-func (t *tableActor) Workload() model.WorkloadInfo {
-	// We temporarily set the value to constant 1
-	return workload
-}
-
-// Status returns the status of this table pipeline
-func (t *tableActor) Status() TableStatus {
-	return t.sinkNode.Status()
-}
-
-// ID returns the ID of source table and mark table
-func (t *tableActor) ID() (tableID, markTableID int64) {
-	return t.tableID, t.markTableID
-}
-
-// Name returns the quoted schema and table name
-func (t *tableActor) Name() string {
-	return t.tableName
-}
-
-// Cancel stops this table actor immediately and destroy all resources
-// created by this table pipeline
-func (t *tableActor) Cancel() {
-	// TODO(neil): pass context.
-	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
-		log.Warn("fails to send Stop message",
-			zap.Uint64("tableID", uint64(t.tableID)))
-	}
-}
-
-// Wait waits for table pipeline destroyed
-func (t *tableActor) Wait() {
-	_ = t.wg.Wait()
 }
 
 // NewTableActor creates a table actor.
@@ -322,9 +107,9 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		targetTs:      targetTs,
 		started:       false,
 
-		info:             info,
-		vars:             vars,
-		tableActorRouter: vars.TableActorRouter,
+		info:   info,
+		vars:   vars,
+		router: vars.TableActorRouter,
 	}
 
 	log.Info("spawn and start table actor", zap.Int64("tableID", tableID))
@@ -340,6 +125,223 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	return table, nil
 }
 
+func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
+	for i := range msgs {
+		if t.stopped {
+			// No need to handle remaining messages.
+			break
+		}
+
+		switch msgs[i].Tp {
+		case message.TypeStop, message.TypeTick, message.TypeBarrier:
+			err := t.actorMessageHandler.HandleActorMessage(ctx, msgs[i])
+			if err != nil {
+				t.stop(err)
+			}
+		}
+		if msgs[i].Tp == message.TypeStop {
+			t.stop(nil)
+			return false
+		}
+		// process message for each node
+		for _, n := range t.nodes {
+			if err := n.TryRun(ctx); err != nil {
+				log.Error("failed to process message, stop table actor ", zap.Int64("tableID", t.tableID), zap.Error(err))
+				t.stop(err)
+				break
+			}
+		}
+	}
+	// Report error to processor if there is any.
+	t.checkError()
+	return !t.stopped
+}
+
+func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePipelineNodeCreator) error {
+	if t.started {
+		log.Panic("start an already started table",
+			zap.String("changefeedID", t.changefeedID),
+			zap.Int64("tableID", t.tableID),
+			zap.String("tableName", t.tableName))
+	}
+	log.Debug("creating table flow controller",
+		zap.String("changefeedID", t.changefeedID),
+		zap.Int64("tableID", t.tableID),
+		zap.String("tableName", t.tableName),
+		zap.Uint64("quota", t.memoryQuota))
+
+	actorPullerNode := tablePipelineNodeCreator.NewPullerNode(t.tableID, t.tableName, t.replicaInfo)
+	if err := actorPullerNode.StartActorNode(ctx, t.router, t.wg, t.info, t.vars); err != nil {
+		log.Error("puller fails to start", zap.Error(err))
+		return err
+	}
+
+	flowController := common.NewTableFlowController(t.memoryQuota)
+	actorSorterNode := tablePipelineNodeCreator.NewSorterNode(t.tableID, t.tableName, t.replicaInfo.StartTs, flowController, t.mounter)
+	if err := actorSorterNode.StartActorNode(ctx, t.router, t.wg, t.info, t.vars); err != nil {
+		log.Error("sorter fails to start", zap.Error(err))
+		return err
+	}
+	t.nodes = append(t.nodes, &Node{
+		parentNode:    actorPullerNode,
+		dataProcessor: actorSorterNode,
+	})
+
+	var cyclicNode TableActorDataNode
+	if t.cyclicEnabled {
+		cyclicNode = tablePipelineNodeCreator.NewCyclicNode(t.replicaInfo.MarkTableID)
+		if err := cyclicNode.StartActorNode(ctx, t.router, t.wg, t.info, t.vars); err != nil {
+			log.Error("sink fails to start", zap.Error(err))
+			return err
+		}
+		t.nodes = append(t.nodes, &Node{
+			parentNode:    actorSorterNode,
+			dataProcessor: cyclicNode,
+		})
+	}
+
+	actorSinkNode := tablePipelineNodeCreator.NewSinkNode(t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
+	if err := actorSinkNode.StartActorNode(ctx, t.router, t.wg, t.info, t.vars); err != nil {
+		log.Error("sink fails to start", zap.Error(err))
+		return err
+	}
+	t.actorMessageHandler = actorSinkNode
+	t.sinkNode = actorSinkNode
+	node := &Node{dataProcessor: actorSinkNode}
+	if t.cyclicEnabled {
+		node.parentNode = cyclicNode
+	} else {
+		node.parentNode = actorSorterNode
+	}
+	t.nodes = append(t.nodes, node)
+	t.started = true
+	log.Info("table actor is started", zap.Int64("tableID", t.tableID))
+	return nil
+}
+
+func (t *tableActor) stop(err error) {
+	if t.stopped {
+		return
+	}
+	t.stopped = true
+	t.err = err
+	t.cancel()
+	log.Info("table actor will be stopped",
+		zap.Int64("tableID", t.tableID), zap.Error(err))
+}
+
+func (t *tableActor) checkError() {
+	if t.err != nil {
+		t.reportErr(t.err)
+		t.err = nil
+	}
+}
+
+// ============ Implement TablePipline, must be threadsafe ============
+
+// ResolvedTs returns the resolved ts in this table pipeline
+func (t *tableActor) ResolvedTs() model.Ts {
+	return t.sinkNode.ResolvedTs()
+}
+
+// CheckpointTs returns the checkpoint ts in this table pipeline
+func (t *tableActor) CheckpointTs() model.Ts {
+	return t.sinkNode.CheckpointTs()
+}
+
+// UpdateBarrierTs updates the barrier ts in this table pipeline
+func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
+	// if t.sinkNode.BarrierTs() != ts {
+	msg := message.BarrierMessage(ts)
+	err := t.router.Send(actor.ID(t.tableID), msg)
+	if err != nil {
+		log.Warn("send fails", zap.Reflect("msg", msg), zap.Error(err))
+	}
+	//}
+}
+
+// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
+func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
+	msg := message.StopMessage()
+	err := t.router.Send(actor.ID(t.tableID), msg)
+	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
+	if err != nil {
+		if cerror.ErrMailboxFull.Equal(err) {
+			return false
+		}
+		if cerror.ErrSendToClosedPipeline.Equal(err) {
+			return true
+		}
+		log.Panic("send fails", zap.Reflect("msg", msg), zap.Error(err))
+	}
+	return true
+}
+
+// Workload returns the workload of this table
+func (t *tableActor) Workload() model.WorkloadInfo {
+	// We temporarily set the value to constant 1
+	return workload
+}
+
+// Status returns the status of this table pipeline
+func (t *tableActor) Status() TableStatus {
+	return t.sinkNode.Status()
+}
+
+// ID returns the ID of source table and mark table
+func (t *tableActor) ID() (tableID, markTableID int64) {
+	return t.tableID, t.markTableID
+}
+
+// Name returns the quoted schema and table name
+func (t *tableActor) Name() string {
+	return t.tableName
+}
+
+// Cancel stops this table actor immediately and destroy all resources
+// created by this table pipeline
+func (t *tableActor) Cancel() {
+	// TODO(neil): pass context.
+	if err := t.router.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
+		log.Warn("fails to send Stop message",
+			zap.Uint64("tableID", uint64(t.tableID)))
+	}
+}
+
+// Wait waits for table pipeline destroyed
+func (t *tableActor) Wait() {
+	_ = t.wg.Wait()
+}
+
+type Node struct {
+	eventStash    *pipeline.Message
+	parentNode    AsyncDataHolder
+	dataProcessor AsyncDataProcessor
+}
+
+func (n *Node) TryRun(ctx context.Context) error {
+	for {
+		// batch?
+		if n.eventStash == nil {
+			n.eventStash = n.parentNode.TryGetProcessedMessage()
+		}
+		if n.eventStash == nil {
+			return nil
+		}
+		ok, err := n.dataProcessor.TryHandleDataMessage(ctx, *n.eventStash)
+		// process message failed, stop table actor
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if ok {
+			n.eventStash = nil
+		} else {
+			return nil
+		}
+	}
+}
+
 type AsyncDataProcessor interface {
 	TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error)
 }
@@ -351,7 +353,7 @@ func (fn AsyncDataProcessorFunc) TryHandleDataMessage(ctx context.Context, msg p
 }
 
 type NodeStarter interface {
-	StartActorNode(ctx context.Context, tableActorRouter *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error
+	StartActorNode(ctx context.Context, router *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error
 }
 
 type AsyncDataHolder interface {
@@ -390,20 +392,19 @@ func (fn ActorMessageHandlerFunc) HandleActorMessage(ctx context.Context, msg me
 }
 
 type TablePipelineNodeCreator interface {
-	NewPullerNode(tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) TableActorDataNode
-	NewSorterNode(tableName string, tableID model.TableID, startTs model.Ts, flowController tableFlowController, mounter entry.Mounter) TableActorDataNode
+	NewPullerNode(tableID model.TableID, tableName string, replicaInfo *model.TableReplicaInfo) TableActorDataNode
+	NewSorterNode(tableID model.TableID, tableName string, startTs model.Ts, flowController tableFlowController, mounter entry.Mounter) TableActorDataNode
 	NewCyclicNode(markTableID model.TableID) TableActorDataNode
 	NewSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) TableActorSinkNode
 }
 
-type nodeCreatorImpl struct {
-}
+type nodeCreatorImpl struct{}
 
-func (n *nodeCreatorImpl) NewPullerNode(tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) TableActorDataNode {
+func (n *nodeCreatorImpl) NewPullerNode(tableID model.TableID, tableName string, replicaInfo *model.TableReplicaInfo) TableActorDataNode {
 	return newPullerNode(tableID, replicaInfo, tableName).(*pullerNode)
 }
 
-func (n *nodeCreatorImpl) NewSorterNode(tableName string, tableID model.TableID, startTs model.Ts, flowController tableFlowController, mounter entry.Mounter) TableActorDataNode {
+func (n *nodeCreatorImpl) NewSorterNode(tableID model.TableID, tableName string, startTs model.Ts, flowController tableFlowController, mounter entry.Mounter) TableActorDataNode {
 	return newSorterNode(tableName, tableID, startTs, flowController, mounter)
 }
 
