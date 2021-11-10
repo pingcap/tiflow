@@ -161,6 +161,7 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 	// begin; insert into t (id) values (1); delete from t where id=1; commit;
 	// Just ignore these row changed events
 	if colLen == 0 && preColLen == 0 {
+		log.Warn("skip emit empty rows", zap.Any("event", event))
 		return nil
 	}
 
