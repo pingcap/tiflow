@@ -71,8 +71,6 @@ var (
 	defaultBatch                   = 100
 	defaultQueueSize               = 1024 // do not give too large default value to avoid OOM
 	defaultCheckpointFlushInterval = 30   // in seconds
-	// force use UTC time_zone.
-	defaultTimeZone = "+00:00"
 
 	// TargetDBConfig.
 	defaultSessionCfg = []struct {
@@ -976,11 +974,6 @@ func NewTaskConfigForDowngrade(taskConfig *TaskConfig) *TaskConfigForDowngrade {
 // If any default value for new config item is not empty(0 or false or nil),
 // we should change it to empty.
 func (c *TaskConfigForDowngrade) omitDefaultVals() {
-	if len(c.TargetDB.Session) > 0 {
-		if timeZone, ok := c.TargetDB.Session["time_zone"]; ok && timeZone == defaultTimeZone {
-			delete(c.TargetDB.Session, "time_zone")
-		}
-	}
 	if len(c.ShadowTableRules) == 1 && c.ShadowTableRules[0] == DefaultShadowTableRules {
 		c.ShadowTableRules = nil
 	}
