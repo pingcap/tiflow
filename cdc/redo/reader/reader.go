@@ -95,6 +95,11 @@ func NewLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error)
 		if err != nil {
 			return nil, err
 		}
+		// remove logs in local dir first, if have logs left belongs to previous changefeed with the same name may have error when apply logs
+		err = os.RemoveAll(cfg.Dir)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrRedoFileOp, err)
+		}
 		err = downLoadToLocal(ctx, cfg.Dir, s3storage, common.DefaultMetaFileType)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrRedoDownloadFailed, err)
