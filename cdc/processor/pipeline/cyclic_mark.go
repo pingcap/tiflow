@@ -91,7 +91,7 @@ func (n *cyclicMarkNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *cyclicMarkNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
-	if n.tableActorRouter != nil && n.queue.Len() >= defaultSyncResolvedBatch {
+	if n.isTableActorMode && n.queue.Len() >= defaultSyncResolvedBatch {
 		return false, nil
 	}
 	switch msg.Tp {
