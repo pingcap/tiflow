@@ -431,8 +431,8 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 			}
 			if topicMaxMessageBytes < config.MaxMessageBytes {
 				return cerror.ErrKafkaInvalidConfig.GenWithStack(
-					"topic already exist, and topic's max.message.bytes(%d) less than max-message-bytes(%d) "+
-						"specified in sink-uri. Please make sure `max-message-bytes` not greater than topic `max.message.bytes`",
+					"topic already exist, and topic's max.message.bytes(%d) less than max-message-bytes(%d)."+
+						"Please make sure `max-message-bytes` not greater than topic `max.message.bytes`",
 					topicMaxMessageBytes, config.MaxMessageBytes)
 			}
 		}
@@ -513,7 +513,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 
 	if brokerMessageMaxBytes < config.MaxMessageBytes {
 		return cerror.ErrKafkaInvalidConfig.GenWithStack(
-			"broker's message.max.bytes(%d) less than max-message-bytes(%d) specified in sink-uri."+
+			"broker's message.max.bytes(%d) less than max-message-bytes(%d)"+
 				"Please make sure `max-message-bytes` not greater than broker's `message.max.bytes`",
 			brokerMessageMaxBytes, config.MaxMessageBytes)
 	}
