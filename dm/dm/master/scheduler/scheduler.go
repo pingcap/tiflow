@@ -2070,16 +2070,15 @@ func (s *Scheduler) updateStatusToBound(w *Worker, b ha.SourceBound) error {
 // - record the unbound relationship in the scheduler.
 // this func is called after the bound relationship removed from etcd.
 func (s *Scheduler) updateStatusToUnbound(source string) {
+	s.unbounds[source] = struct{}{}
 	w, ok := s.bounds[source]
 	if !ok {
-		s.unbounds[source] = struct{}{}
 		return
 	}
 	if err := w.Unbound(); err != nil {
 		s.logger.DPanic("cannot updateStatusToUnbound", zap.Error(err))
 	}
 	delete(s.bounds, source)
-	s.unbounds[source] = struct{}{}
 }
 
 // reset resets the internal status.
