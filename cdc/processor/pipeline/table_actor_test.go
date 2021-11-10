@@ -326,7 +326,7 @@ func TestNewTablePipelineNodeCreator(t *testing.T) {
 	require.True(t, ok)
 }
 
-func (n *FakeTableNodeCreator) NewPullerNode(_ model.TableID, _ *model.TableReplicaInfo, _ string) TableActorDataNode {
+func (n *FakeTableNodeCreator) NewPullerNode(_ model.TableID, _ string, _ *model.TableReplicaInfo) TableActorDataNode {
 	n.actorPullerNode = &FakeTableActorDataNode{
 		outputCh:  make(chan pipeline.Message, 1),
 		failStart: n.failStart,
