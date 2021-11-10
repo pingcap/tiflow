@@ -476,9 +476,9 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 
 	// topic not created yet, and user does not specify the `partition-num` in the sink uri.
 	if config.PartitionNum == 0 {
+		config.PartitionNum = defaultPartitionNum
 		log.Warn("partition-num is not set, use the default partition count",
 			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
-		config.PartitionNum = defaultPartitionNum
 	}
 
 	_, controllerID, err := admin.DescribeCluster()
