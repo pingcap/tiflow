@@ -151,12 +151,23 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 
 func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
 	if event == nil || event.Row == nil {
-		log.Warn("skip emit empty rows", zap.Any("event", event))
+		log.Warn("skip emit nil event", zap.Any("event", event))
 		return nil
 	}
 
 	colLen := len(event.Row.Columns)
 	preColLen := len(event.Row.PreColumns)
+<<<<<<< HEAD
+=======
+	// Some transactions could generate empty row change event, such as
+	// begin; insert into t (id) values (1); delete from t where id=1; commit;
+	// Just ignore these row changed events
+	if colLen == 0 && preColLen == 0 {
+		log.Warn("skip emit empty row event", zap.Any("event", event))
+		return nil
+	}
+
+>>>>>>> 732d558ed (sink: add log when skip the empty row event (#3357))
 	config := ctx.ChangefeedVars().Info.Config
 
 	// This indicates that it is an update event,
