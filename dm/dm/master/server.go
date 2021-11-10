@@ -672,8 +672,7 @@ type hasWokers interface {
 	GetName() string
 }
 
-func extractSources(s *Server, req hasWokers) ([]string, error) {
-	var sources []string
+func extractSources(s *Server, req hasWokers) (sources []string, specicySource bool, err error) {
 	switch {
 	case len(req.GetSources()) > 0:
 		sources = req.GetSources()
@@ -684,20 +683,21 @@ func extractSources(s *Server, req hasWokers) ([]string, error) {
 			}
 		}
 		if len(invalidSource) > 0 {
-			return nil, errors.Errorf("sources %s haven't been added", invalidSource)
+			return nil, false, errors.Errorf("sources %s haven't been added", invalidSource)
 		}
+		specicySource = true
 	case len(req.GetName()) > 0:
 		// query specified task's sources
 		sources = s.getTaskResources(req.GetName())
 		if len(sources) == 0 {
-			return nil, errors.Errorf("task %s has no source or not exist", req.GetName())
+			return nil, false, errors.Errorf("task %s has no source or not exist", req.GetName())
 		}
 	default:
 		// query all sources
 		log.L().Info("get sources")
 		sources = s.scheduler.BoundSources()
 	}
-	return sources, nil
+	return
 }
 
 // QueryStatus implements MasterServer.QueryStatus.
@@ -710,7 +710,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 	if shouldRet {
 		return resp2, err2
 	}
-	sources, err := extractSources(s, req)
+	sources, specicySource, err := extractSources(s, req)
 	sort.Strings(sources)
 	if err != nil {
 		// nolint:nilerr
@@ -724,7 +724,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 		// if user specified sources, query relay workers instead of task workers
 		queryRelayWorker = true
 	}
-	resps := s.getStatusFromWorkers(ctx, sources, req.Name, queryRelayWorker)
+	resps := s.getStatusFromWorkers(ctx, sources, req.Name, queryRelayWorker, specicySource)
 	// sourceName -> worker QueryStatusResponse
 	workerRespMap := make(map[string][]*pb.QueryStatusResponse, len(sources))
 	inSlice := func(s []string, e string) bool {
@@ -735,6 +735,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 		}
 		return false
 	}
+
 	for _, workerResp := range resps {
 		workerRespMap[workerResp.SourceStatus.Source] = append(workerRespMap[workerResp.SourceStatus.Source], workerResp)
 		// append some offline worker responses
@@ -742,8 +743,9 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 			sources = append(sources, workerResp.SourceStatus.Source)
 		}
 	}
-	workerResps := make([]*pb.QueryStatusResponse, 0, len(sources))
+	workerResps := make([]*pb.QueryStatusResponse, 0)
 	for _, sourceName := range sources {
+		// sort by source name
 		workerResps = append(workerResps, workerRespMap[sourceName]...)
 	}
 	return &pb.QueryStatusListResponse{Result: true, Sources: workerResps}, nil
@@ -976,7 +978,8 @@ func (s *Server) getTaskResources(task string) []string {
 }
 
 // getStatusFromWorkers does RPC request to get status from dm-workers.
-func (s *Server) getStatusFromWorkers(ctx context.Context, sources []string, taskName string, relayWorker bool) []*pb.QueryStatusResponse {
+func (s *Server) getStatusFromWorkers(
+	ctx context.Context, sources []string, taskName string, relayWorker bool, specicySource bool) []*pb.QueryStatusResponse {
 	workerReq := &workerrpc.Request{
 		Type:        workerrpc.CmdQueryStatus,
 		QueryStatus: &pb.QueryStatusRequest{Name: taskName},
@@ -1083,8 +1086,9 @@ func (s *Server) getStatusFromWorkers(ctx context.Context, sources []string, tas
 		}
 		return false
 	}
-	// when taskName is empty, we need list all task even the worker that handle this task is not running.
-	if taskName == "" {
+	// when taskName is empty and not want to get specify source status
+	// we need list all task even the worker that handle this task is not running.
+	if taskName == "" && !specicySource {
 		for taskName, sourceM := range s.scheduler.GetSubTaskCfgs() {
 			if !findTaskInResp(taskName) {
 				msg := fmt.Sprintf("can't find task: %s from dm-worker, please user dmctl list-member to check if worker is offline.", taskName)

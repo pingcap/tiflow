@@ -922,7 +922,7 @@ func (s *Scheduler) GetSubTaskCfgsByTask(task string) map[string]*config.SubTask
 
 // GetSubTaskCfgs gets all subconfig, return nil when error happens.
 func (s *Scheduler) GetSubTaskCfgs() map[string]map[string]config.SubTaskConfig {
-	// taskName -> sourceID -> SubTaskConfig
+	// taskName -> sourceName -> SubTaskConfig
 	clone := make(map[string]map[string]config.SubTaskConfig)
 	s.subTaskCfgs.Range(func(k, v interface{}) bool {
 		task := k.(string)
