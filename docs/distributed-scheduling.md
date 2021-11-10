@@ -17,13 +17,137 @@ To succinctly describe the algorithm used here, we need to abstract the TiCDC Ow
 
 The communication protocol between the Owner and the Processors is as follows:
 
-|   Name	          |   Direction	|   Schema	|   Notes	|
-|---	              |---	        |---	    |---	    |
-|   DispatchTable	  |Owner->Processor|   	|   	|
-|   DispatchTableResponse	|Processor->Owner|   	|   	|
-|   Announce	|Owner->Processor|   	|   	|
-|   Sync	|Processor->Owner|   	|   	|
-|   Checkpoint	|Processor->Owner|   	|   	|
+### Message Types
+
+#### DispatchTable
+
+- Direction: Owner -> Processor
+
+- Semantics: Informs the processor to start (or stop) replicating a table.
+
+- ```go
+  type DispatchTableMessage struct {
+  	OwnerRev int64   `json:"owner-rev"`
+  	ID       TableID `json:"id"`
+  	IsDelete bool    `json:"is-delete"`
+  }
+  ```
+
+#### DispatchTableResponse
+
+- Direction: Processor -> Owner
+
+- Semantics: Informs the owner that the processor has finished a table operation on the given table.
+
+- ```go
+  type DispatchTableResponseMessage struct {
+  	ID TableID `json:"id"`
+  }
+  ```
+
+#### Announce
+
+- Direction: Owner -> Processor
+
+- Semantics: Announces the election of the sender node as the owner.
+
+- ```go
+  type AnnounceMessage struct {
+  	OwnerRev int64 `json:"owner-rev"`
+  	// Sends the owner's version for compatibility check
+  	OwnerVersion string `json:"owner-version"`
+  }
+  ```
+
+#### Sync
+
+- Direction: Processor -> Owner
+
+- Semantics: Tells the newly elected owner the processor's state, or tells the owner that the processor has restarted.
+
+- ```go
+  type SyncMessage struct {
+  	// Sends the processor's version for compatibility check
+  	ProcessorVersion string
+      
+  	Running          []TableID
+  	Adding           []TableID
+  	Removing         []TableID
+  }
+  ```
+
+#### Checkpoint
+
+- Direction: Processor -> Owner
+
+- Semantics: The processor reports to the owner its current watermarks.
+
+- ```go
+  type CheckpointMessage struct {
+  	CheckpointTs Ts `json:"checkpoint-ts"`
+  	ResolvedTs   Ts `json:"resolved-ts"`
+      // We can add more fields in the future
+  }
+  ```
+
+### Interaction
+
+![](./media/scheduling_proto.svg)
+
+The figure above shows the basic flow of interaction between the Owner and the Processors. 
+
+1. **Owner** gets elected and announces its ownership to **Processor A**.
+2. Similarly, **Owner** announces its ownership to **Processor B**.
+3. **Processor A** reports to **Owner** its internal state, which includes which tables are being added, removed and run.
+4. **Processor B** does the same.
+5. **Owner** tells **Processor A** to start replicating *Table 1*.
+6. **Owner** tells **Processor B** to start replicating *Table 2*.
+7. **Processor A** reports that *Table 1* has finished initializing and is now being replicated.
+8. **Processor B** reports that *Table 2* has finished initializing and is now being replicated.
+9. **Processor A** sends its watermark.
+10. **Processor B** sends its watermark too.
+
+### Owner Switches
+
+Because of TiCDC's high availability, the communication protocol needs to handle owner switches. The basic idea here is that, when a new owner takes over, it queries all alive processors' states and prepares to react to the processors' messages (especially `DispatchTableResponse` and `Checkpoint`) exactly as the previous owner would.
+
+Moreover, if the old owner is ignorant of the fact that it is no longer the owner and still tries to act as the owner, the processors would reject the old owner's commands once it receives at least one message from the new owner. The order of owners' succession is recorded by the `owner-rev` field in `Announce` and `DispatchTable`.
+
+![](./media/scheduling_proto_owner_change.svg)
+
+## Correctness Discussion
+
+### Assumptions
+
+Here are some basic assumptions needed before we discuss correctness.
+
+- Etcd is correctly implemented, i.e. it does not violate its own safety promises. For example, we should not have two owners elected at the same time, and two successive owners should hold `owner-rev` with one larger than the other.
+- The Processors can stop writing to the downstream immediately after it loses its Etcd session. This is a very strong assumption and is not realistic. But if we accept the possibility of a processor writing to the downstream infinitely into the future even after it loses connection to Etcd, no protocol would be correct for our purpose.
+
+One part of correctness is *safety*, and it mainly consists of two parts:
+
+1. Two processors do not write to the same downstream table at the same time (No Double Write)
+2. The owner does not push `checkpoint-ts` unless all tables are being replicated and all of them meet the `checkpoint`(No Lost Table).
+
+In addition to safety, *liveness* is also in a broad sense part of correctness. Our liveness guarantee is simple:
+
+- If the cluster is stable, i.e., no node crashes and no network isolation happens, replication will *eventually* make progress.
+
+In other words, the liveness guarantee says that *the cluster does not deadlock itself, and when everything is running and network is working, the cluster eventually works as a whole*.
+
+We will be focusing on *safety* here because it is more tricky to detect.
+
+### Owner switches
+
+- For *No Double Write* to be violated, the new owner must assigns a table again when the table is still running. But since the new owner will only assign table when all captures registered to Etcd at some point (*T0*) have all sent *Sync* to the new owner, the owner cannot reassign a table already running on any of these captures.  The only possibility for *No Double Write* to be violated is for the capture to be running at some point *T1* after *T0*, but this would imply that the capture has gone online after the new owner is elected, and since the new owner cannot reassign a table, the must have been an old owner who has assigned the table. But since *EtcdWorker* does not allow the old owner to receive new capture information after the new owner gets elected, it is an impossibility. 
+- *No Lost Table* is guaranteed because the owner will advance the watermarks only if all captures have sent *Sync* and sent their respective watermarks.
+
+### Processor restarts
+
+Definition: a processor is called to have restarted if its internal state has been cleared but its capture ID has **not** changed.
+
+- First assume that the system is correct before the restart. Then since the restart only makes certain tables' replication stop, it will not create any *Double Write*. Then the restarted processor will send *Sync* to the owner, which tells the owner that it is no longer replicating any table, and then the owner will re-dispatch the lost tables. So *No Double Write* is not violated.
+-  *No Lost Table* is not violated either, because a restarted processor does not replicate any table, which means that it will not upload any *checkpoint*. In other words, the global checkpoint will not be advanced during the restart of the processor.
 
 
 
