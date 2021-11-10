@@ -416,7 +416,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 
 	topics, err := admin.ListTopics()
 	if err != nil {
-		return err
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
 	info, created := topics[topic]
@@ -424,17 +424,15 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 	if created {
 		// make sure that topic's `max.message.bytes` is not less than given `max-message-bytes`
 		// else the producer will send message that too large to make topic reject, then changefeed would error.
-		if a, found := info.ConfigEntries["max.message.bytes"]; found {
-			topicMaxMessageBytes, err := strconv.Atoi(*a)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-			}
-			if topicMaxMessageBytes < config.MaxMessageBytes {
-				return cerror.ErrKafkaInvalidConfig.GenWithStack(
-					"topic already exist, and topic's max.message.bytes(%d) less than max-message-bytes(%d)."+
-						"Please make sure `max-message-bytes` not greater than topic `max.message.bytes`",
-					topicMaxMessageBytes, config.MaxMessageBytes)
-			}
+		topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
+		if topicMaxMessageBytes < config.MaxMessageBytes {
+			return cerror.ErrKafkaInvalidConfig.GenWithStack(
+				"topic already exist, and topic's max.message.bytes(%d) less than max-message-bytes(%d)."+
+					"Please make sure `max-message-bytes` not greater than topic `max.message.bytes`",
+				topicMaxMessageBytes, config.MaxMessageBytes)
 		}
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
@@ -474,44 +472,13 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
 	}
 
-	_, controllerID, err := admin.DescribeCluster()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
-		Type:        sarama.BrokerResource,
-		Name:        strconv.Itoa(int(controllerID)),
-		ConfigNames: []string{"message.max.bytes"},
-	})
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	// when try to create the topic, we don't know how to set the `max.message.bytes` for the topic.
-	// Kafka would create the topic with broker's `message.max.bytes` by default,
+	// Kafka would create the topic with broker's `message.max.bytes`,
 	// we have to make sure it's not greater than `max-message-bytes`
-	var (
-		brokerMessageMaxBytes int
-		found                 = false
-	)
-	for _, entry := range configEntries {
-		if entry.Name == "message.max.bytes" {
-			brokerMessageMaxBytes, err = strconv.Atoi(entry.Value)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			found = true
-			break
-		}
-	}
-
-	// this should not happen, broker should have a default setting.
-	if !found {
+	brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
+	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
-		return cerror.ErrKafkaNewSaramaProducer.GenWithStack(
-			"since cannot find the `message.max.bytes` from the broker's configuration, " +
-				"ticdc decline to create the topic and changefeed to prevent potential error")
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
 	if brokerMessageMaxBytes < config.MaxMessageBytes {
@@ -708,4 +675,45 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	}
 
 	return config, err
+}
+
+func getBrokerMessageMaxBytes(admin sarama.ClusterAdmin) (int, error) {
+	_, controllerID, err := admin.DescribeCluster()
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
+		Type:        sarama.BrokerResource,
+		Name:        strconv.Itoa(int(controllerID)),
+		ConfigNames: []string{"message.max.bytes"},
+	})
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	if len(configEntries) == 0 {
+		return 0, cerror.ErrKafkaNewSaramaProducer.GenWithStack(
+			"since cannot find the `message.max.bytes` from the broker's configuration, " +
+				"ticdc decline to create the topic and changefeed to prevent potential error")
+	}
+
+	result, err := strconv.Atoi(configEntries[0].Value)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	return result, nil
+}
+
+func getTopicMaxMessageBytes(admin sarama.ClusterAdmin, info sarama.TopicDetail) (int, error) {
+	if a, ok := info.ConfigEntries["max.message.bytes"]; ok {
+		result, err := strconv.Atoi(*a)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+		return result, nil
+	}
+
+	return getBrokerMessageMaxBytes(admin)
 }
