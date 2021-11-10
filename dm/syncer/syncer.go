@@ -2064,7 +2064,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		}
 
 		param.safeMode = ec.safeMode
-		dmls, err = s.genAndFilterInsertDMLs(param, exprFilter)
+		dmls, err = s.genAndFilterInsertDMLs(ec.tctx, param, exprFilter)
 		if err != nil {
 			return terror.Annotatef(err, "gen insert sqls failed, sourceTable: %v, targetTable: %v", sourceTable, targetTable)
 		}
@@ -2764,6 +2764,14 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 
 	if shouldExecDDLOnSchemaTracker {
 		if err := s.schemaTracker.Exec(ec.tctx.Ctx, usedSchema, trackInfo.originDDL); err != nil {
+			if ignoreTrackerDDLError(err) {
+				ec.tctx.L().Warn("will ignore a DDL error when tracking",
+					zap.String("schema", usedSchema),
+					zap.String("statement", trackInfo.originDDL),
+					log.WrapStringerField("location", ec.currentLocation),
+					log.ShortError(err))
+				return nil
+			}
 			ec.tctx.L().Error("cannot track DDL",
 				zap.String("schema", usedSchema),
 				zap.String("statement", trackInfo.originDDL),
