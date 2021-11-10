@@ -116,25 +116,45 @@ func (w *DMLWorker) run() {
 
 	for j := range w.inCh {
 		metrics.QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
-		if j.tp == flush || j.tp == conflict {
-			if j.tp == conflict {
-				w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
-				j.wg = &sync.WaitGroup{}
-				j.wg.Add(len(jobChs))
-			}
+		switch j.tp {
+		case flush:
+			j.wg = &sync.WaitGroup{}
+			j.wg.Add(len(jobChs))
+
 			// flush for every DML queue
 			for i, jobCh := range jobChs {
 				startTime := time.Now()
 				jobCh <- j
 				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
 			}
-			if j.tp == conflict {
-				j.wg.Wait()
-				w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
-			} else {
-				w.flushCh <- j
+
+			j.wg.Wait()
+
+			w.flushCh <- j
+		case asyncFlush:
+			// flush for every DML queue
+			for i, jobCh := range jobChs {
+				startTime := time.Now()
+				jobCh <- j
+				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
 			}
-		} else {
+
+			w.flushCh <- j
+		case conflict:
+			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			j.wg = &sync.WaitGroup{}
+			j.wg.Add(w.workerCount)
+
+			// flush for every DML queue
+			for i, jobCh := range jobChs {
+				startTime := time.Now()
+				jobCh <- j
+				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
+			}
+
+			j.wg.Wait()
+			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
+		default:
 			queueBucket := int(utils.GenHashKey(j.dml.key)) % w.workerCount
 			w.addCountFunc(false, queueBucketMapping[queueBucket], j.tp, 1, j.targetTable)
 			startTime := time.Now()
@@ -172,7 +192,7 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 		})
 
 		w.executeBatchJobs(queueID, jobs)
-		if j.tp == conflict || j.tp == flush {
+		if j.tp == conflict || j.tp == flush || j.tp == asyncFlush {
 			j.wg.Done()
 		}
 

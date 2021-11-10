@@ -178,12 +178,12 @@ func (b *binlogPoint) String() string {
 	return fmt.Sprintf("%v(flushed %v)", b.location, b.flushedLocation)
 }
 
-// SnapshotID is the id of a checkpoint snapshot
-type SnapshotID struct {
-	// the corresponding snapshot id
+// SnapshotInfo contains the id of checkpoint snapshot and its global position
+type SnapshotInfo struct {
+	// the snapshot id
 	id int
 	// global checkpoint position.
-	pos binlog.Location
+	globalPos binlog.Location
 }
 
 // CheckPoint represents checkpoints status for syncer
@@ -228,7 +228,7 @@ type CheckPoint interface {
 	SaveGlobalPoint(point binlog.Location)
 
 	// Snapshot make a snapshot of current checkpoint and return its id
-	Snapshot() SnapshotID
+	Snapshot() SnapshotInfo
 
 	// FlushGlobalPointsExcept flushes the global checkpoint and tables'
 	// checkpoints except exceptTables, it also flushes SQLs with Args providing
@@ -343,10 +343,17 @@ func NewRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id s
 	return cp
 }
 
-// Snapshot make a snapshot of checkpoint and return the snapshot id.
-func (cp *RemoteCheckPoint) Snapshot() SnapshotID {
+// Snapshot make a snapshot of checkpoint and return the snapshot info.
+func (cp *RemoteCheckPoint) Snapshot() SnapshotInfo {
 	cp.Lock()
 	defer cp.Unlock()
+
+	if cp.globalPoint == nil {
+		return SnapshotInfo{
+			id: 0,
+		}
+	}
+
 	// make snapshot is visit in single thread, so depend on rlock should be enough
 	cp.snapshotSeq++
 	id := cp.snapshotSeq
@@ -367,8 +374,8 @@ func (cp *RemoteCheckPoint) Snapshot() SnapshotID {
 	}
 
 	// if there is no change just return an empty snapshot
-	if len(tableCheckPoints) == 0 && (cp.globalPoint == nil || !cp.globalPoint.outOfDate()) && !cp.needFlushSafeModeExitPoint {
-		return SnapshotID{
+	if len(tableCheckPoints) == 0 && !cp.globalPoint.outOfDate() && !cp.needFlushSafeModeExitPoint {
+		return SnapshotInfo{
 			id: 0,
 		}
 	}
@@ -380,18 +387,16 @@ func (cp *RemoteCheckPoint) Snapshot() SnapshotID {
 		points:                     tableCheckPoints,
 	}
 
-	if cp.globalPoint != nil {
-		globalLocation := &tablePoint{
-			location: cp.globalPoint.location.location.Clone(),
-			ti:       cp.globalPoint.location.ti,
-		}
-		snapshot.globalPoint = globalLocation
+	globalLocation := &tablePoint{
+		location: cp.globalPoint.location.location.Clone(),
+		ti:       cp.globalPoint.location.ti,
 	}
+	snapshot.globalPoint = globalLocation
 
 	cp.snapshots = append(cp.snapshots, snapshot)
-	return SnapshotID{
-		id:  id,
-		pos: cp.globalPoint.location.location,
+	return SnapshotInfo{
+		id:        id,
+		globalPos: snapshot.globalPoint.location,
 	}
 }
 
@@ -592,6 +597,7 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	extraArgs [][]interface{},
 ) error {
 	cp.Lock()
+	defer cp.Unlock()
 
 	if len(cp.snapshots) == 0 || cp.snapshots[0].id != snapshot {
 		cp.logCtx.Logger.DPanic("snapshot not found", zap.Int("id", snapshot))
@@ -658,8 +664,6 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 		sqls = append(sqls, extraSQLs[i])
 		args = append(args, extraArgs[i])
 	}
-	// execute SQLs might be slow, so release the lock here add relock after exec finished.
-	cp.Unlock()
 
 	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
 	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
@@ -669,8 +673,6 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 		return err
 	}
 
-	cp.Lock()
-	defer cp.Unlock()
 	cp.globalPoint.flushBy(*snapshotCp.globalPoint)
 	for _, point := range points {
 		point.pos.flushBy(point.spLoc)

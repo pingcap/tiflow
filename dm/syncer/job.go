@@ -34,11 +34,12 @@ const (
 	ddl
 	xid
 	flush
+	asyncFlush
 	skip // used by Syncer.recordSkipSQLsLocation to record global location, but not execute SQL
 	rotate
 	conflict
 	compact
-  gc // used to clean up out dated causality keys
+	gc // used to clean up out dated causality keys
 )
 
 func (t opType) String() string {
@@ -55,6 +56,8 @@ func (t opType) String() string {
 		return "xid"
 	case flush:
 		return "flush"
+	case asyncFlush:
+		return "asyncFlush"
 	case skip:
 		return "skip"
 	case rotate:
@@ -88,7 +91,6 @@ type job struct {
 	eventHeader *replication.EventHeader
 	jobAddTime  time.Time       // job commit time
 	seq         int64           // sequence number for this job
-	sync        bool            // whether the flush job is sync or async
 	wg          *sync.WaitGroup // wait group for flush job
 }
 
@@ -183,7 +185,26 @@ func newFlushJob() *job {
 		tp:          flush,
 		targetTable: &filter.Table{},
 		jobAddTime:  time.Now(),
-		wg:          &sync.WaitGroup{},
+	}
+}
+
+func newAsyncFlushJob(workerCount int, seq int64) *job {
+	wg := &sync.WaitGroup{}
+	wg.Add(workerCount)
+
+	return &job{
+		tp:          asyncFlush,
+		targetTable: &filter.Table{},
+		jobAddTime:  time.Now(),
+		wg:          wg,
+		seq:         seq,
+	}
+}
+
+func newGCJob(flushJobSeq int64) *job {
+	return &job{
+		tp:  gc,
+		seq: flushJobSeq,
 	}
 }
 
