@@ -192,4 +192,7 @@ func TestLogManagerInOwner(t *testing.T) {
 	ddl := &model.DDLEvent{StartTs: 100, CommitTs: 120, Query: "CREATE TABLE `TEST.T1`"}
 	err = logMgr.EmitDDLEvent(ctx, ddl)
 	require.Nil(t, err)
+
+	err = logMgr.writer.DeleteAllLogs(ctx)
+	require.Nil(t, err)
 }
