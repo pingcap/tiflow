@@ -21,8 +21,6 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/errno"
-	"github.com/pingcap/tidb/infoschema"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
 
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
@@ -33,22 +31,6 @@ func newMysqlErr(number uint16, message string) *mysql.MySQLError {
 	return &mysql.MySQLError{
 		Number:  number,
 		Message: message,
-	}
-}
-
-func (s *testSyncerSuite) TestIgnoreDDLError(c *C) {
-	cases := []struct {
-		err error
-		ret bool
-	}{
-		{errors.New("raw error"), false},
-		{newMysqlErr(tmysql.ErrDupKeyName, "Error: Duplicate key name 'some_key'"), true},
-		{newMysqlErr(uint16(infoschema.ErrDatabaseExists.Code()), "Can't create database"), true},
-		{newMysqlErr(uint16(infoschema.ErrAccessDenied.Code()), "Access denied for user"), false},
-	}
-
-	for _, t := range cases {
-		c.Assert(ignoreDDLError(t.err), Equals, t.ret)
 	}
 }
 
