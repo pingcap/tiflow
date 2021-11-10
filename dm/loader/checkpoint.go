@@ -515,7 +515,7 @@ func (cp *LightningCheckpointList) RegisterCheckPoint(ctx context.Context, worke
 		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
 	}
 
-	sql := fmt.Sprintf("INSERT INGORE INTO %s (`id`, `worker_name`, `task_name`) VALUES(?,?)", cp.tableName)
+	sql := fmt.Sprintf("INSERT INGORE INTO %s (`worker_name`, `task_name`) VALUES(?,?)", cp.tableName)
 	cp.logger.Info("initial checkpoint record",
 		zap.String("sql", sql),
 		zap.String("worker-name", workerName),
