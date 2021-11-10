@@ -488,14 +488,21 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		return errors.Trace(err)
 	}
 
+	// when try to create the topic, we don't know how to set the `max.message.bytes` for the topic.
+	// Kafka would create the topic with broker's `message.max.bytes` by default,
+	// we have to make sure it's not greater than `max-message-bytes`
 	var (
-		maxMessageBytes string
-		found           = false
+		brokerMessageMaxBytes int
+		found                 = false
 	)
 	for _, entry := range configEntries {
 		if entry.Name == "message.max.bytes" {
-			maxMessageBytes = entry.Value
+			brokerMessageMaxBytes, err = strconv.Atoi(entry.Value)
+			if err != nil {
+				return errors.Trace(err)
+			}
 			found = true
+			break
 		}
 	}
 
@@ -505,11 +512,6 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		return cerror.ErrKafkaNewSaramaProducer.GenWithStack(
 			"since cannot find the `message.max.bytes` from the broker's configuration, " +
 				"ticdc decline to create the topic and changefeed to prevent potential error")
-	}
-
-	brokerMessageMaxBytes, err := strconv.Atoi(maxMessageBytes)
-	if err != nil {
-		return errors.Trace(err)
 	}
 
 	if brokerMessageMaxBytes < config.MaxMessageBytes {
@@ -537,8 +539,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 
 	log.Info("TiCDC create the topic",
 		zap.Int32("partition-num", config.PartitionNum),
-		zap.Int16("replication-factor", config.ReplicationFactor),
-		zap.String("max.message.bytes", maxMessageBytes))
+		zap.Int16("replication-factor", config.ReplicationFactor))
 
 	return nil
 }
