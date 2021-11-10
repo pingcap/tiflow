@@ -414,6 +414,21 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		}
 	}()
 
+	_, controllerID, err := admin.DescribeCluster()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
+		Type: sarama.BrokerResource,
+		Name: strconv.Itoa(int(controllerID)),
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	log.Info("broker config", zap.Any("entries", configEntries))
+
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return err
@@ -480,21 +495,6 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		log.Warn("partition-num is not set, use the default partition count",
 			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
 	}
-
-	_, controllerID, err := admin.DescribeCluster()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
-		Type: sarama.BrokerResource,
-		Name: strconv.Itoa(int(controllerID)),
-	})
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	log.Info("broker config", zap.Any("entries", configEntries))
 
 	maxMessageBytes := strconv.Itoa(config.MaxMessageBytes)
 	err = admin.CreateTopic(topic, &sarama.TopicDetail{
