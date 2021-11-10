@@ -26,11 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-<<<<<<< HEAD
-=======
 	"go.uber.org/zap"
-
->>>>>>> 28424edb9 (http_*: add log for http api and refine the err handle logic (#2997))
 	// use for OpenAPI online docs
 	_ "github.com/pingcap/ticdc/docs/api"
 )

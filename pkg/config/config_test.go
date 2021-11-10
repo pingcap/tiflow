@@ -74,18 +74,12 @@ func (s *replicaConfigSuite) TestOutDated(c *check.C) {
 	c.Assert(conf2, check.DeepEquals, conf)
 }
 
-<<<<<<< HEAD
 type serverConfigSuite struct{}
 
 var _ = check.Suite(&serverConfigSuite{})
 
 func (s *serverConfigSuite) TestMarshal(c *check.C) {
 	defer testleak.AfterTest(c)()
-=======
-func TestServerConfigMarshal(t *testing.T) {
-	t.Parallel()
-
->>>>>>> 28424edb9 (http_*: add log for http api and refine the err handle logic (#2997))
 	rawConfig := `{"addr":"192.155.22.33:8887","advertise-addr":"","log-file":"","log-level":"info","log":{"file":{"max-size":300,"max-days":0,"max-backups":0}},"data-dir":"","gc-ttl":86400,"tz":"System","capture-session-ttl":10,"owner-flush-interval":200000000,"processor-flush-interval":100000000,"sorter":{"num-concurrent-worker":4,"chunk-size-limit":999,"max-memory-percentage":30,"max-memory-consumption":17179869184,"num-workerpool-goroutine":16,"sort-dir":"/tmp/sorter"},"security":{"ca-path":"","cert-path":"","key-path":"","cert-allowed-cn":null},"per-table-memory-quota":10485760,"kv-client":{"worker-concurrent":8,"worker-pool-size":0,"region-scan-limit":40}}`
 
 	conf := GetDefaultServerConfig()
