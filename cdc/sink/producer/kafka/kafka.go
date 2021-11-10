@@ -480,6 +480,16 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
 		config.PartitionNum = defaultPartitionNum
 	}
+
+	brokerConfigEntry, err := admin.DescribeConfig(sarama.ConfigResource{
+		Type:        sarama.BrokerResource,
+		Name:        "message.max.bytes",
+		ConfigNames: nil,
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	maxMessageBytes := strconv.Itoa(config.MaxMessageBytes)
 	err = admin.CreateTopic(topic, &sarama.TopicDetail{
 		NumPartitions:     config.PartitionNum,
