@@ -3193,8 +3193,6 @@
             "align": false,
             "alignLevel": null
           }
-<<<<<<< HEAD
-=======
         },
         {
           "columns": [],
@@ -3348,7 +3346,6 @@
             }
           ],
           "type": "table"
->>>>>>> 837508bbc (metrics: add changefeed checkepoint catch-up ETA (#3300))
         }
       ],
       "title": "Changefeed",
