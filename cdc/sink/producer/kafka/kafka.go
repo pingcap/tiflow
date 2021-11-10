@@ -480,8 +480,9 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 	}
 
 	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
-		Type: sarama.BrokerResource,
-		Name: strconv.Itoa(int(controllerID)),
+		Type:        sarama.BrokerResource,
+		Name:        strconv.Itoa(int(controllerID)),
+		ConfigNames: []string{"message.max.bytes"},
 	})
 	if err != nil {
 		return errors.Trace(err)
