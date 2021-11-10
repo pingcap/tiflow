@@ -26,7 +26,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Span represents a arbitrary kv range
+// Span represents an arbitrary kv range
 type Span struct {
 	Start []byte
 	End   []byte
@@ -40,7 +40,7 @@ func (s Span) String() string {
 // UpperBoundKey represents the maximum value.
 var UpperBoundKey = []byte{255, 255, 255, 255, 255}
 
-// ComparableSpan represents a arbitrary kv range which is comparable
+// ComparableSpan represents an arbitrary kv range which is comparable
 type ComparableSpan Span
 
 // String returns a string that encodes ComparableSpan in hex format.
