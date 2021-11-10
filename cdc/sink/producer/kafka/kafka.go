@@ -414,21 +414,6 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		}
 	}()
 
-	_, controllerID, err := admin.DescribeCluster()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
-		Type: sarama.BrokerResource,
-		Name: strconv.Itoa(int(controllerID)),
-	})
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	log.Info("broker config", zap.Any("entries", configEntries))
-
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return err
@@ -446,8 +431,8 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 			}
 			if topicMaxMessageBytes < config.MaxMessageBytes {
 				return cerror.ErrKafkaInvalidConfig.GenWithStack(
-					"topic already exist, and max.message.size(%d) less than max-message-size(%d)."+
-						"Please make sure `max-message-size` not greater than topic `max.message.size`",
+					"topic already exist, and topic's max.message.bytes(%d) less than max-message-bytes(%d) "+
+						"specified in sink-uri. Please make sure `max-message-bytes` not greater than topic `max.message.bytes`",
 					topicMaxMessageBytes, config.MaxMessageBytes)
 			}
 		}
@@ -489,6 +474,49 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
 	}
 
+	_, controllerID, err := admin.DescribeCluster()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
+		Type: sarama.BrokerResource,
+		Name: strconv.Itoa(int(controllerID)),
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	var (
+		maxMessageBytes string
+		found           = false
+	)
+	for _, entry := range configEntries {
+		if entry.Name == "message.max.bytes" {
+			maxMessageBytes = entry.Value
+			found = true
+		}
+	}
+
+	// this should not happen, broker would have a default setting for
+	if !found {
+		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
+		return cerror.ErrKafkaNewSaramaProducer.GenWithStack("topic cannot be created, " +
+			"since doesn't the `max.message.bytes` for the topic")
+	}
+
+	brokerMessageMaxBytes, err := strconv.Atoi(maxMessageBytes)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if brokerMessageMaxBytes < config.MaxMessageBytes {
+		return cerror.ErrKafkaInvalidConfig.GenWithStack(
+			"broker's message.max.bytes(%d) less than max-message-bytes(%d) specified in sink-uri."+
+				"Please make sure `max-message-bytes` not greater than broker's `message.max.bytes`",
+			brokerMessageMaxBytes, config.MaxMessageBytes)
+	}
+
 	// topic not created yet, and user does not specify the `partition-num` in the sink uri.
 	if config.PartitionNum == 0 {
 		config.PartitionNum = defaultPartitionNum
@@ -496,7 +524,6 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
 	}
 
-	maxMessageBytes := strconv.Itoa(config.MaxMessageBytes)
 	err = admin.CreateTopic(topic, &sarama.TopicDetail{
 		NumPartitions:     config.PartitionNum,
 		ReplicationFactor: config.ReplicationFactor,
@@ -508,6 +535,12 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 	if err != nil && !strings.Contains(err.Error(), "already exists") {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+
+	log.Info("TiCDC create the topic",
+		zap.Int32("partition-num", config.PartitionNum),
+		zap.Int16("replication-factor", config.ReplicationFactor),
+		zap.String("max.message.bytes", maxMessageBytes))
+
 	return nil
 }
 
