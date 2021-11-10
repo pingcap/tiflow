@@ -488,7 +488,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 
 	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
 		Type: sarama.BrokerResource,
-		Name: string(controllerID),
+		Name: strconv.Itoa(int(controllerID)),
 	})
 	if err != nil {
 		return errors.Trace(err)
