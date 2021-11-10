@@ -769,7 +769,7 @@ func AdjustDBTimeZone(config *DBConfig, timeZone string) {
 	for k, v := range config.Session {
 		if strings.ToLower(k) == "time_zone" {
 			if v != timeZone {
-				log.L().Warn("session variable 'time_zone' is overwritten by default UTC timezone.",
+				log.L().Warn("session variable 'time_zone' is overwritten by task config's timezone",
 					zap.String("time_zone", config.Session[k]))
 				config.Session[k] = timeZone
 			}

@@ -286,6 +286,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	c.EnableHeartbeat = stCfg0.EnableHeartbeat
 	c.HeartbeatUpdateInterval = stCfg0.HeartbeatUpdateInterval
 	c.HeartbeatReportInterval = stCfg0.HeartbeatReportInterval
+	c.Timezone = stCfg0.Timezone
 	c.CaseSensitive = stCfg0.CaseSensitive
 	c.TargetDB = &stCfg0.To // just ref
 	c.OnlineDDL = stCfg0.OnlineDDL
