@@ -104,7 +104,7 @@ func (t *testServer) testWorker(c *C) {
 	c.Assert(task, NotNil)
 	c.Assert(task.Result().String(), Matches, ".*worker already closed.*")
 
-	err = w.UpdateSubTask(&config.SubTaskConfig{
+	err = w.UpdateSubTask(context.Background(), &config.SubTaskConfig{
 		Name: "testStartTask",
 	})
 	c.Assert(err, ErrorMatches, ".*worker already closed.*")
@@ -196,6 +196,7 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 	c.Assert(subtaskCfg.DecodeFile("./subtask.toml", true), IsNil)
 	c.Assert(err, IsNil)
 	subtaskCfg.Mode = "full"
+	subtaskCfg.Timezone = "UTC"
 	c.Assert(s.getWorker(true).StartSubTask(&subtaskCfg, pb.Stage_Running, true), IsNil)
 
 	// check task in paused state
