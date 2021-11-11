@@ -435,6 +435,6 @@ func (b *CanalFlatEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	if err := json.Unmarshal(b.msg.Value, message); err != nil {
 		return 0, errors.Trace(err)
 	}
-
+	b.msg = nil
 	return message.Extensions.WatermarkTs, nil
 }
