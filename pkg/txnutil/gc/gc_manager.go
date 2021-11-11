@@ -17,13 +17,12 @@ import (
 	"context"
 	"time"
 
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
@@ -112,16 +111,14 @@ func (m *gcManager) CheckStaleCheckpointTs(
 ) error {
 	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
-		cctx := ctx.(cdcContext.Context)
-		pdTime := time.Now()
-		var err error
-		// only nil in test
-		if cctx.GlobalVars().TimeAcquirer != nil {
-			pdTime, err = cctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
-			// TODO: should we return err here, or just log it?
-			if err != nil {
-				return errors.Trace(err)
-			}
+		cctx, ok := ctx.(cdcContext.Context)
+		if !ok {
+			return cerror.ErrOwnerUnknown.GenWithStack("ctx not an cdcContext.Context, it should be")
+		}
+		pdTime, err := cctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		// TODO: should we return err here, or just log it?
+		if err != nil {
+			return errors.Trace(err)
 		}
 		if pdTime.Sub(oracle.GetTimeFromTS(gcSafepointUpperBound)) > time.Duration(m.gcTTL)*time.Second {
 			return cerror.ErrGCTTLExceeded.GenWithStackByArgs(checkpointTs, changefeedID)

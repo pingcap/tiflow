@@ -61,7 +61,7 @@ type Capture struct {
 	kvStorage    tidbkv.Storage
 	etcdClient   *etcd.CDCEtcdClient
 	grpcPool     kv.GrpcPool
-	TimeAcquirer *pdtime.TimeAcquirer
+	TimeAcquirer pdtime.TimeAcquirer
 
 	cancel context.CancelFunc
 

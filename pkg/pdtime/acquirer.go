@@ -19,44 +19,50 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-
-	"github.com/pingcap/ticdc/pkg/retry"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 )
 
 const pdTimeUpdateInterval = 200 * time.Millisecond
 
-// TimeAcquirer cache time get from PD periodically and cache it
-type TimeAcquirer struct {
+type TimeAcquirer interface {
+	// Run run the TimeAcquirer
+	Run(ctx context.Context)
+	// CurrentTimeFromCached returns current time from cache
+	CurrentTimeFromCached() (time.Time, error)
+	// Stop stops the TimeAcquirer
+	Stop()
+}
+
+// TimeAcquirerImpl cache time get from PD periodically and cache it
+type TimeAcquirerImpl struct {
 	pdClient  pd.Client
 	timeCache time.Time
 	mu        sync.RWMutex
-	stop      chan struct{}
+	cancel    context.CancelFunc
 	err       error
 }
 
 // NewTimeAcquirer return a new TimeAcquirer
-func NewTimeAcquirer(pdClient pd.Client) *TimeAcquirer {
-	return &TimeAcquirer{
+func NewTimeAcquirer(pdClient pd.Client) TimeAcquirer {
+	return TimeAcquirerImpl{
 		pdClient: pdClient,
-		stop:     make(chan struct{}),
 	}
 }
 
 // Run will get time from pd periodically to cache in pdPhysicalTimeCache
-func (c *TimeAcquirer) Run(ctx context.Context) {
+func (c TimeAcquirerImpl) Run(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
 	ticker := time.NewTicker(pdTimeUpdateInterval)
 	for {
 		select {
+		// c.Stop() was called or parent ctx was canceled
 		case <-ctx.Done():
 			log.Info("TimeAcquirer exit")
-			return
-		case <-c.stop:
-			log.Info("TimeAcquirer eixt")
 			return
 		case <-ticker.C:
 			err := retry.Do(ctx, func() error {
@@ -83,7 +89,7 @@ func (c *TimeAcquirer) Run(ctx context.Context) {
 }
 
 // CurrentTimeFromCached return current time from pd cache
-func (c *TimeAcquirer) CurrentTimeFromCached() (time.Time, error) {
+func (c TimeAcquirerImpl) CurrentTimeFromCached() (time.Time, error) {
 	c.mu.RLock()
 	err := c.err
 	cacheTime := c.timeCache
@@ -91,6 +97,18 @@ func (c *TimeAcquirer) CurrentTimeFromCached() (time.Time, error) {
 	return cacheTime, errors.Trace(err)
 }
 
-func (c *TimeAcquirer) Stop() {
-	c.stop <- struct{}{}
+func (c TimeAcquirerImpl) Stop() {
+	c.cancel()
+}
+
+type TimeAcquirer4Test struct{}
+
+func (c TimeAcquirer4Test) CurrentTimeFromCached() (time.Time, error) {
+	return time.Now(), nil
+}
+
+func (c TimeAcquirer4Test) Run(ctx context.Context) {
+}
+
+func (c TimeAcquirer4Test) Stop() {
 }

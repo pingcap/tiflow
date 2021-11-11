@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -184,14 +183,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		return errors.Trace(err)
 	}
 	if shouldUpdateState {
-		pdTime := time.Now()
-		// only nil in test
-		if ctx.GlobalVars().TimeAcquirer != nil {
-			pdTime, err = ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
-			if err != nil {
-				log.Warn("get time from pd failed, will use local time as pd time")
-			}
-		}
+		pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
 		currentTs := oracle.GetPhysical(pdTime)
 		c.updateStatus(currentTs, barrierTs)
 	}
