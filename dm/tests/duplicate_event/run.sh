@@ -41,7 +41,7 @@ function run() {
 
 	# with a 5 rows insert txn: 1 * FormatDesc + 1 * PreviousGTID + 1 * GTID + 1 * BEGIN + 5 * (Table_map + Write_rows) + 1 * XID
 	# here we fail at the third write rows event, sync should retry and auto recover without any duplicate event
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/relay/RelayGetEventFailed=15*return(3);github.com/pingcap/ticdc/dm/relay/retry/RelayAllowRetry=return"
+	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/relay/RelayGetEventFailed=15*return(3);github.com/pingcap/ticdc/dm/relay/RelayAllowRetry=return"
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT

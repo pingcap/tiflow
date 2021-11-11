@@ -37,7 +37,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay/purger"
+	"github.com/pingcap/ticdc/dm/relay"
 )
 
 // SourceWorker manages a source(upstream) which is mainly related to subtasks and relay.
@@ -76,7 +76,7 @@ type SourceWorker struct {
 	relayCancel  context.CancelFunc
 	relayWg      sync.WaitGroup
 	relayHolder  RelayHolder
-	relayPurger  purger.Purger
+	relayPurger  relay.Purger
 
 	taskStatusChecker TaskStatusChecker
 
@@ -301,11 +301,11 @@ func (w *SourceWorker) EnableRelay() (err error) {
 	defer dcancel()
 	minLoc, err1 := getMinLocInAllSubTasks(dctx, subTaskCfgs)
 	if err1 != nil {
-		return err1
+		w.l.Error("meet error when EnableRelay", zap.Error(err1))
 	}
 
 	if minLoc != nil {
-		log.L().Info("get min location in all subtasks", zap.Stringer("location", *minLoc))
+		w.l.Info("get min location in all subtasks", zap.Stringer("location", *minLoc))
 		w.cfg.RelayBinLogName = binlog.AdjustPosition(minLoc.Position).Name
 		w.cfg.RelayBinlogGTID = minLoc.GTIDSetStr()
 		// set UUIDSuffix when bound to a source
@@ -321,7 +321,7 @@ func (w *SourceWorker) EnableRelay() (err error) {
 
 	// 2. initial relay holder, the cfg's password need decrypt
 	w.relayHolder = NewRelayHolder(w.cfg)
-	relayPurger, err := w.relayHolder.Init(w.relayCtx, []purger.PurgeInterceptor{
+	relayPurger, err := w.relayHolder.Init(w.relayCtx, []relay.PurgeInterceptor{
 		w,
 	})
 	if err != nil {

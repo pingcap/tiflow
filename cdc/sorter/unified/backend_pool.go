@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/sorter"
 	sorterencoding "github.com/pingcap/ticdc/cdc/sorter/encoding"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
@@ -93,9 +94,10 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 		ticker := time.NewTicker(backgroundJobInterval)
 		defer ticker.Stop()
 
-		metricSorterInMemoryDataSizeGauge := sorterInMemoryDataSizeGauge.WithLabelValues(captureAddr)
-		metricSorterOnDiskDataSizeGauge := sorterOnDiskDataSizeGauge.WithLabelValues(captureAddr)
-		metricSorterOpenFileCountGauge := sorterOpenFileCountGauge.WithLabelValues(captureAddr)
+		id := "0" // A placeholder for ID label in metrics.
+		metricSorterInMemoryDataSizeGauge := sorter.InMemoryDataSizeGauge.WithLabelValues(captureAddr, id)
+		metricSorterOnDiskDataSizeGauge := sorter.OnDiskDataSizeGauge.WithLabelValues(captureAddr, id)
+		metricSorterOpenFileCountGauge := sorter.OpenFileCountGauge.WithLabelValues(captureAddr, id)
 
 		for {
 			select {

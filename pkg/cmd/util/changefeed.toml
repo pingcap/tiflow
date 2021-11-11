@@ -52,23 +52,20 @@ filter-replica-ids = [2,3]
 sync-ddl = true
 
 [consistent]
-# 一致性级别，normal 为默认，非灾难场景，提供 finished-ts 情况下的最终一致性；eventual 使用 redo log，提供上游灾难情况下的最终一致性
-# consistent level, normal is the default value.
-# normal: eventual consistent support in non-disaster scenario(should provide a finished-ts)
+# 一致性级别，none 为默认，非灾难场景，提供 finished-ts 情况下的最终一致性；eventual 使用 redo log，提供上游灾难情况下的最终一致性
+# consistent level, none is the default value.
+# none: eventual consistent support in non-disaster scenario(should provide a finished-ts)
 # eventual: eventual consistent in disaster scenario
-level = "normal"
+level = "none"
 # 单个 redo log 文件大小，单位 MB
 # file size of single redo log, unit is MB
 max-log-size = 64
 # 刷新或上传 redo log 至 S3 的间隔，单位毫秒
 # interval to flush or upload redo log, default is 1000ms, unit is microseconds
 flush-interval = 1000
-# 存储 redo log 的形式，包括 local（本地文件），S3（上传至S3），blackhole（测试用）
+# 存储 redo log 的形式，包括 nfs（NFS 目录），S3（上传至S3），blackhole（测试用）
 # storage type for redo log
-# local: local file system
-# s3: s3 storage
+# nfs: store redo logs in nfs directly
+# s3: upload redo logs to s3 storage
 # blackhole: used for test only
-storage = "local"
-# S3 地址，示例：s3-uri="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-# S3 address, sample: s3-uri="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-s3-uri = ""
+storage = "s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"

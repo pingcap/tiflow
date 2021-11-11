@@ -13,7 +13,10 @@ function DM_001_CASE() {
 	# schema tracker could track per table without error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Duplicate column name 'new_col1'" 1
+		"\"result\": true" 2 \
+		"\"synced\": true" 1
+	# only downstream sees a duplicate error, but currently ignored by DM
+	check_log_contain_with_retry "Duplicate column name 'new_col1'" $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
 }
 
 function DM_001() {
@@ -625,6 +628,12 @@ function DM_MULTIPLE_ROWS_CASE() {
 	done
 	for i in $(seq 1 10 $END); do
 		run_sql_source1 "delete from ${shardddl1}.${tb1} where a<=$((0 - i)) and a>$((-10 - i))"
+	done
+
+	# insert new values, otherwise there may not be any data in downstream in middle stage and check_sync_diff return true immediately
+	for i in $(seq 100 110 $END); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values($i,$i),($((i + 1)),$((i + 1))),($((i + 2)),$((i + 2))),($((i + 3)),$((i + 3))),($((i + 4)),$((i + 4))),\
+		($((i + 5)),$((i + 5))),($((i + 6)),$((i + 6))),($((i + 7)),$((i + 7))),($((i + 8)),$((i + 8))),($((i + 9)),$((i + 9)))"
 	done
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
 	insertMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '"original op"=insert' | wc -l)

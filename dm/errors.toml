@@ -2962,6 +2962,48 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-schema-tracker-44013]
+message = "can not marshal struct maybe `%v` is unable to serialize"
+description = ""
+workaround = ""
+tags = ["downstream", "high"]
+
+[error.DM-schema-tracker-44014]
+message = "can not unmarshal json maybe `%s` is not proper JSON"
+description = ""
+workaround = ""
+tags = ["downstream", "high"]
+
+[error.DM-schema-tracker-44015]
+message = "can not find `%s` in tracker"
+description = ""
+workaround = ""
+tags = ["downstream", "high"]
+
+[error.DM-schema-tracker-44016]
+message = "failed to set default downstream sql_mode %v in schema tracker"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-schema-tracker-44017]
+message = "failed to init downstream parser by sql_mode %v in schema tracker"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-schema-tracker-44018]
+message = "failed to mock downstream table by create table statement %v in schema tracker"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-schema-tracker-44019]
+message = "failed to fetch downstream table %v by show create table statement in schema tracker"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-scheduler-46001]
 message = "the scheduler has not started"
 description = ""

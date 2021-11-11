@@ -19,12 +19,15 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/util/mock"
 
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/schema"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
@@ -54,9 +57,23 @@ func (s *testSyncerSuite) TestDetectConflict(c *C) {
 func (s *testSyncerSuite) TestCasuality(c *C) {
 	p := parser.New()
 	se := mock.NewContext()
-	schema := "create table tb(a int primary key, b int unique);"
-	ti, err := createTableInfo(p, se, int64(0), schema)
+	schemaStr := "create table tb(a int primary key, b int unique);"
+	ti, err := createTableInfo(p, se, int64(0), schemaStr)
 	c.Assert(err, IsNil)
+	tiIndex := &model.IndexInfo{
+		Table:   ti.Name,
+		Unique:  true,
+		Primary: true,
+		State:   model.StatePublic,
+		Tp:      model.IndexTypeBtree,
+		Columns: []*model.IndexColumn{{
+			Name:   ti.Columns[0].Name,
+			Offset: ti.Columns[0].Offset,
+			Length: types.UnspecifiedLength,
+		}},
+	}
+	downTi := schema.GetDownStreamTi(ti, ti)
+	c.Assert(downTi, NotNil)
 
 	jobCh := make(chan *job, 10)
 	syncer := &Syncer{
@@ -103,7 +120,7 @@ func (s *testSyncerSuite) TestCasuality(c *C) {
 	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
 
 	for _, tc := range testCases {
-		job := newDMLJob(tc.op, table, table, newDML(tc.op, false, "", table, tc.oldVals, tc.vals, tc.oldVals, tc.vals, ti.Columns, ti), ec)
+		job := newDMLJob(tc.op, table, table, newDML(tc.op, false, "", table, tc.oldVals, tc.vals, tc.oldVals, tc.vals, ti.Columns, ti, tiIndex, downTi), ec)
 		jobCh <- job
 	}
 

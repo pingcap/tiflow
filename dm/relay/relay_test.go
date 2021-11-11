@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
@@ -35,12 +36,8 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay/reader"
-	"github.com/pingcap/ticdc/dm/relay/retry"
 	"github.com/pingcap/ticdc/dm/relay/transformer"
-	"github.com/pingcap/ticdc/dm/relay/writer"
 )
 
 var _ = Suite(&testRelaySuite{})
@@ -50,10 +47,6 @@ func TestSuite(t *testing.T) {
 }
 
 type testRelaySuite struct{}
-
-func (t *testRelaySuite) SetUpSuite(c *C) {
-	c.Assert(log.InitLogger(&log.Config{}), IsNil)
-}
 
 func newRelayCfg(c *C, flavor string) *Config {
 	dbCfg := getDBConfigForTest()
@@ -68,7 +61,7 @@ func newRelayCfg(c *C, flavor string) *Config {
 			User:     dbCfg.User,
 			Password: dbCfg.Password,
 		},
-		ReaderRetry: retry.ReaderRetryConfig{
+		ReaderRetry: ReaderRetryConfig{
 			BackoffRollback: 200 * time.Millisecond,
 			BackoffMax:      1 * time.Second,
 			BackoffMin:      1 * time.Millisecond,
@@ -102,7 +95,7 @@ func getDBConfigForTest() config.DBConfig {
 
 // mockReader is used only for relay testing.
 type mockReader struct {
-	result reader.Result
+	result RResult
 	err    error
 }
 
@@ -114,10 +107,10 @@ func (r *mockReader) Close() error {
 	return nil
 }
 
-func (r *mockReader) GetEvent(ctx context.Context) (reader.Result, error) {
+func (r *mockReader) GetEvent(ctx context.Context) (RResult, error) {
 	select {
 	case <-ctx.Done():
-		return reader.Result{}, ctx.Err()
+		return RResult{}, ctx.Err()
 	default:
 	}
 	return r.result, r.err
@@ -125,7 +118,7 @@ func (r *mockReader) GetEvent(ctx context.Context) (reader.Result, error) {
 
 // mockWriter is used only for relay testing.
 type mockWriter struct {
-	result      writer.Result
+	result      WResult
 	err         error
 	latestEvent *replication.BinlogEvent
 }
@@ -138,11 +131,11 @@ func (w *mockWriter) Close() error {
 	return nil
 }
 
-func (w *mockWriter) Recover(ctx context.Context) (writer.RecoverResult, error) {
-	return writer.RecoverResult{}, nil
+func (w *mockWriter) Recover(ctx context.Context) (RecoverResult, error) {
+	return RecoverResult{}, nil
 }
 
-func (w *mockWriter) WriteEvent(ev *replication.BinlogEvent) (writer.Result, error) {
+func (w *mockWriter) WriteEvent(ev *replication.BinlogEvent) (WResult, error) {
 	w.latestEvent = ev // hold it
 	return w.result, w.err
 }
@@ -421,9 +414,10 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 			Timestamp: uint32(time.Now().Unix()),
 			ServerID:  11,
 		}
-		binlogPos   = gmysql.Position{Name: "mysql-bin.666888", Pos: 4}
-		rotateEv, _ = event.GenRotateEvent(eventHeader, 123, []byte(binlogPos.Name), uint64(binlogPos.Pos))
-		queryEv, _  = event.GenQueryEvent(eventHeader, 123, 0, 0, 0, nil, nil, []byte("CREATE DATABASE db_relay_test"))
+		binlogPos       = gmysql.Position{Name: "mysql-bin.666888", Pos: 4}
+		rotateEv, _     = event.GenRotateEvent(eventHeader, 123, []byte(binlogPos.Name), uint64(binlogPos.Pos))
+		fakeRotateEv, _ = event.GenRotateEvent(eventHeader, 0, []byte(binlogPos.Name), uint64(1234))
+		queryEv, _      = event.GenQueryEvent(eventHeader, 123, 0, 0, 0, nil, nil, []byte("CREATE DATABASE db_relay_test"))
 	)
 	cfg := getDBConfigForTest()
 	conn.InitMockDB(c)
@@ -439,9 +433,6 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	queryEv2 := queryEv.Event.(*replication.QueryEvent)
 	queryEv2.GSet, _ = gmysql.ParseGTIDSet(relayCfg.Flavor, "1-2-3")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-
 	// reader return with an error
 	for _, reader2.err = range []error{
 		errors.New("reader error for testing"),
@@ -449,8 +440,38 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		replication.ErrSyncClosed,
 		replication.ErrNeedSyncAgain,
 	} {
-		_, handleErr := r.handleEvents(ctx, reader2, transformer2, writer2)
+		_, handleErr := r.handleEvents(context.Background(), reader2, transformer2, writer2)
 		c.Assert(errors.Cause(handleErr), Equals, reader2.err)
+	}
+
+	// reader return fake rotate event
+	reader2.err = nil
+	reader2.result.Event = fakeRotateEv
+	// writer return error to force handleEvents return
+	writer2.err = errors.New("writer error for testing")
+	// return with the annotated writer error
+	_, err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
+	c.Assert(errors.Cause(err), Equals, writer2.err)
+	// after handle rotate event, we save and flush the meta immediately
+	c.Assert(r.meta.Dirty(), Equals, false)
+	{
+		lm := r.meta.(*LocalMeta)
+		c.Assert(lm.BinLogName, Equals, "mysql-bin.666888")
+		c.Assert(lm.BinLogPos, Equals, uint32(1234))
+		filename := filepath.Join(lm.baseDir, lm.currentUUID, utils.MetaFilename)
+		lm2 := &LocalMeta{}
+		_, err2 := toml.DecodeFile(filename, lm2)
+		c.Assert(err2, IsNil)
+		c.Assert(lm2.BinLogName, Equals, "mysql-bin.666888")
+		c.Assert(lm2.BinLogPos, Equals, uint32(1234))
+	}
+	{
+		lm := r.meta.(*LocalMeta)
+		backupUUID := lm.currentUUID
+		lm.currentUUID = "not exist"
+		_, err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
+		c.Assert(os.IsNotExist(errors.Cause(err)), Equals, true)
+		lm.currentUUID = backupUUID
 	}
 
 	// reader return valid event
@@ -460,12 +481,13 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// writer return error
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
-	_, err = r.handleEvents(ctx, reader2, transformer2, writer2)
+	_, err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
 	c.Assert(errors.Cause(err), Equals, writer2.err)
-	// after handle rotate event, we save and flush the meta immediately
 	c.Assert(r.meta.Dirty(), Equals, false)
 
 	// writer without error
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
 	writer2.err = nil
 	_, err = r.handleEvents(ctx, reader2, transformer2, writer2) // returned when ctx timeout
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
