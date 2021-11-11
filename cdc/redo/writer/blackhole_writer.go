@@ -31,6 +31,10 @@ type blackHoleWriter struct {
 	checkpointTs uint64
 }
 
+func (bs *blackHoleWriter) DeleteAllLogs(ctx context.Context) error {
+	return nil
+}
+
 // NewBlackHoleWriter creates a blackHole writer
 func NewBlackHoleWriter() *blackHoleWriter {
 	return &blackHoleWriter{
