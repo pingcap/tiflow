@@ -100,7 +100,12 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 }
 
 // GetPatches implements the ReactorState interface
+<<<<<<< HEAD:cdc/model/reactor_state.go
 func (s *GlobalReactorState) GetPatches() [][]orchestrator.DataPatch {
+=======
+// Every []DataPatch slice in [][]DataPatch slice is the patches of a ChangefeedReactorState
+func (s *GlobalReactorState) GetPatches() [][]DataPatch {
+>>>>>>> 2569abaa3 (etcd_worker: batch etcd patch (#3277)):pkg/orchestrator/reactor_state.go
 	pendingPatches := s.pendingPatches
 	for _, changefeedState := range s.Changefeeds {
 		pendingPatches = append(pendingPatches, changefeedState.getPatches())
