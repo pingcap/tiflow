@@ -241,10 +241,7 @@ type testWorkerFunctionalities struct {
 	expectedCreateUnitCount int32
 }
 
-func TestWorkerFunctionalities(t *testing.T) {
-	_ = Suite(&testWorkerFunctionalities{})
-	TestingT(t)
-}
+var _ = Suite(&testWorkerFunctionalities{})
 
 func (t *testWorkerFunctionalities) SetUpSuite(c *C) {
 	NewRelayHolder = NewDummyRelayHolder
@@ -416,11 +413,7 @@ func (t *testWorkerFunctionalities) testEnableHandleSubtasks(c *C, w *SourceWork
 
 type testWorkerEtcdCompact struct{}
 
-func TestWorkerEtcdCompact(t *testing.T) {
-	_ = Suite(&testWorkerEtcdCompact{})
-	TestingT(t)
-}
-
+var _ = Suite(&testWorkerEtcdCompact{})
 
 func (t *testWorkerEtcdCompact) SetUpSuite(c *C) {
 	NewRelayHolder = NewDummyRelayHolder
