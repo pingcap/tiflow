@@ -22,7 +22,17 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
+<<<<<<< HEAD
 	"github.com/pingcap/ticdc/pkg/config"
+=======
+	"github.com/pingcap/ticdc/cdc/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter/leveldb"
+	"github.com/pingcap/ticdc/cdc/sorter/memory"
+	"github.com/pingcap/ticdc/cdc/sorter/unified"
+	"github.com/pingcap/ticdc/pkg/actor"
+	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
+>>>>>>> 2569abaa3 (etcd_worker: batch etcd patch (#3277))
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -36,6 +46,17 @@ func init() {
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
+<<<<<<< HEAD
+=======
+	processor.InitMetrics(registry)
+	tablepipeline.InitMetrics(registry)
+	owner.InitMetrics(registry)
+	etcd.InitMetrics(registry)
+	initServerMetrics(registry)
+	actor.InitMetrics(registry)
+	orchestrator.InitMetrics(registry)
+	// Sorter metrics
+>>>>>>> 2569abaa3 (etcd_worker: batch etcd patch (#3277))
 	sorter.InitMetrics(registry)
 	if config.NewReplicaImpl {
 		processor.InitMetrics(registry)
