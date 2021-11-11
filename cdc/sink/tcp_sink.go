@@ -17,6 +17,7 @@ import (
 	//"bufio"
 	"context"
 	"fmt"
+	"github.com/pingcap/ticdc/cdc/sink/publicUtils"
 	"github.com/pingcap/ticdc/cdc/sink/socket"
 	"github.com/pingcap/ticdc/cdc/sink/vo"
 	"net/url"
@@ -284,20 +285,26 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 
 func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 	//rowdata := &vo.RowInfos{}
-	columnInfos :=make([]*vo.ColumnVo,0);
+	columnInfos :=make([]*vo.ColumnVo,0)
 
 	for _, column := range columns {
 		columnVo := new(vo.ColumnVo)
 
 		columnVo.ColumnName = column.Name
 		if column.Value == nil {
-			columnVo.ColumnLen = 1
-			columnVo.ColumnValue = "0x00"
+			columnVo.ColumnLen = 0
+			columnValueArr := make([]byte,1)
+			//columnValueArr[0] = 0x00
+			columnVo.ColumnValue = columnValueArr
+
 		}else{
-			columnVo.ColumnValue = model.ColumnValueString(column.Value)
-			columnVo.ColumnLen = int32(len(columnVo.ColumnValue))
-
-
+			//columnVo.ColumnValue = model.ColumnValueString(column.Value)
+			//columnVo.ColumnLen = int32(len(columnVo.ColumnValue))
+			columnValue := model.ColumnValueString(column.Value)
+			columnValueArr := make([]byte,1+len(columnValue))
+			publicUtils.BlockByteArrCopy([]byte(columnValue),0,columnValueArr,0,len(columnValue))
+			columnVo.ColumnValue = columnValueArr
+			columnVo.ColumnLen = int32(len(columnVo.ColumnValue)-1)
 		}
 
 		columnVo.IsPkFlag = column.Flag.IsPrimaryKey()

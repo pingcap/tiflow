@@ -1,7 +1,7 @@
 package vo
 
 type BatchRowsInfo struct{
-	
+
 	RowList    []*RowInfos
 }
 
@@ -26,7 +26,7 @@ type ColumnVo struct{
 	ColumnType byte
 	CFlag  byte
 	ColumnLen int32
-	ColumnValue string
+	ColumnValue []byte
 	ColumnName string
 
 }
