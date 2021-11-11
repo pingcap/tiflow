@@ -17,12 +17,6 @@ check-struct-only = false
 
 
 [data-sources]
-[data-sources.mysql1]
-host = "127.0.0.1"
-port = 3306
-user = "root"
-password = "123456"
-
 [data-sources.mysql2]
 host = "127.0.0.1"
 port = 3307
