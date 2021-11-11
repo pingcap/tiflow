@@ -235,6 +235,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 }
 
 func (s *kafkaSuite) TestAdjustPartitionNum(c *check.C) {
+	defer testleak.AfterTest(c)()
 	config := NewConfig()
 	err := config.adjustPartitionNum(2)
 	c.Assert(err, check.IsNil)
