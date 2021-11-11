@@ -144,7 +144,7 @@ function empty_data() {
 	check_log_contains $WORK_DIR/worker2/log/dm-worker.log "progress=\"100.00 %\""
 
 	cleanup_data full_mode
-	cleanup_data full_mode
+	cleanup_data_upstream full_mode
 	cleanup_process $*
 }
 
