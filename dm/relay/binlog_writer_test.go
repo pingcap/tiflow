@@ -18,16 +18,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
 
 	. "github.com/pingcap/check"
 
 	"github.com/pingcap/ticdc/dm/pkg/log"
 )
-
-func TestBinlogWriterSuite(t *testing.T) {
-	TestingT(t)
-}
 
 var _ = Suite(&testBinlogWriterSuite{})
 

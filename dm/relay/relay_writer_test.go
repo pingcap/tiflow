@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"testing"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
@@ -30,10 +29,6 @@ import (
 )
 
 var _ = check.Suite(&testFileWriterSuite{})
-
-func TestFileWriterSuite(t *testing.T) {
-	check.TestingT(t)
-}
 
 type testFileWriterSuite struct{}
 

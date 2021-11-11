@@ -25,7 +25,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -51,10 +50,6 @@ var _ = Suite(&testReaderSuite{})
 type testReaderSuite struct {
 	lastPos  uint32
 	lastGTID gtid.Set
-}
-
-func TestReader(t *testing.T) {
-	TestingT(t)
 }
 
 func (t *testReaderSuite) SetUpSuite(c *C) {
