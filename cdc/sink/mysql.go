@@ -78,16 +78,6 @@ type mysqlSink struct {
 	cancel         func()
 }
 
-func needSwitchDB(ddl *model.DDLEvent) bool {
-	if len(ddl.TableInfo.Schema) > 0 {
-		if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
-			return false
-		}
-		return true
-	}
-	return false
-}
-
 var _ Sink = &mysqlSink{}
 
 // newMySQLSink creates a new MySQL sink using schema storage
@@ -362,6 +352,16 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
 	return nil
+}
+
+func needSwitchDB(ddl *model.DDLEvent) bool {
+	if len(ddl.TableInfo.Schema) > 0 {
+		if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 // adjustSQLMode adjust sql mode according to sink config.
