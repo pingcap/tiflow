@@ -73,6 +73,7 @@ type canalFlatMessageInterface interface {
 	getTikvTs() uint64
 	getSchema() *string
 	getTable() *string
+	getCommitTs() uint64
 }
 
 // adapted from https://github.com/alibaba/canal/blob/master/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java
@@ -113,6 +114,11 @@ func (c *canalFlatMessage) getTable() *string {
 	return &c.Table
 }
 
+// for canalFlatMessage, we lost the commit-ts
+func (c *canalFlatMessage) getCommitTs() uint64 {
+	return 0
+}
+
 type tidbExtension struct {
 	CommitTs    uint64 `json:"commit-ts"`
 	WatermarkTs uint64 `json:"watermark-ts"`
@@ -137,6 +143,10 @@ func (c *canalFlatMessageWithTiDBExtension) getSchema() *string {
 
 func (c *canalFlatMessageWithTiDBExtension) getTable() *string {
 	return &c.Table
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getCommitTs() uint64 {
+	return c.Extensions.CommitTs
 }
 
 func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEvent) (canalFlatMessageInterface, error) {
@@ -365,14 +375,16 @@ func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 
 // CanalFlatEventBatchDecoder decodes the byte into the original message.
 type CanalFlatEventBatchDecoder struct {
-	data []byte
-	msg  *MQMessage
+	data                []byte
+	msg                 *MQMessage
+	enableTiDBExtension bool
 }
 
-func NewCanalFlatEventBatchDecoder(data []byte) (EventBatchDecoder, error) {
+func NewCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) (EventBatchDecoder, error) {
 	return &CanalFlatEventBatchDecoder{
-		data: data,
-		msg:  nil,
+		data:                data,
+		msg:                 nil,
+		enableTiDBExtension: enableTiDBExtension,
 	}, nil
 }
 
@@ -381,56 +393,105 @@ func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error
 	if len(b.data) == 0 {
 		return model.MqMessageTypeUnknown, false, nil
 	}
-	if err := json.Unmarshal(b.data, b.msg); err != nil {
+	msg := &MQMessage{}
+	if err := json.Unmarshal(b.data, msg); err != nil {
 		return model.MqMessageTypeUnknown, false, err
 	}
+	b.msg = msg
 	b.data = nil
 	return b.msg.Type, true, nil
+}
+
+// func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChangedEvent {
+// 	e := new(model.RowChangedEvent)
+// 	// TODO: we lost the startTs from kafka message
+// 	// startTs-based txn filter is out of work
+// 	e.CommitTs = key.Ts
+// 	e.Table = &model.TableName{
+// 		Schema: key.Schema,
+// 		Table:  key.Table,
+// 	}
+// 	// TODO: we lost the tableID from kafka message
+// 	if key.Partition != nil {
+// 		e.Table.TableID = *key.Partition
+// 		e.Table.IsPartition = true
+// 	}
+//
+// 	if len(value.Delete) != 0 {
+// 		e.PreColumns = jsonColumns2SinkColumns(value.Delete)
+// 	} else {
+// 		e.Columns = jsonColumns2SinkColumns(value.Update)
+// 		e.PreColumns = jsonColumns2SinkColumns(value.PreColumns)
+// 	}
+// 	return e
+// }
+
+func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) *model.RowChangedEvent {
+	result := new(model.RowChangedEvent)
+	result.CommitTs = flatMessage.getCommitTs()
+	result.Table = &model.TableName{
+		Schema: *flatMessage.getSchema(),
+		Table:  *flatMessage.getTable(),
+	}
+
+	return result
+}
+
+func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEvent {
+	result := new(model.DDLEvent)
+
+	return result
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
-	if b.msg == nil {
-		log.Panic("Cannot find message, bug?", zap.Any("decoder", b))
-	}
-	if b.msg.Type != model.MqMessageTypeRow {
+	if b.msg == nil || b.msg.Type != model.MqMessageTypeRow {
 		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found row changed event message")
 	}
-	ev := &model.RowChangedEvent{}
-	if err := json.Unmarshal(b.msg.Value, ev); err != nil {
+
+	var data canalFlatMessageInterface
+	if b.enableTiDBExtension {
+		data = &canalFlatMessageWithTiDBExtension{}
+	} else {
+		data = &canalFlatMessage{}
+	}
+
+	if err := json.Unmarshal(b.msg.Value, data); err != nil {
 		return nil, errors.Trace(err)
 	}
 	b.msg = nil
-	return ev, nil
+	return canalFlatMessage2RowChangedEvent(data), nil
 }
 
 // NextDDLEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
-	if b.msg == nil {
-		log.Panic("Cannot find message, bug?", zap.Any("decoder", b))
+	if b.msg == nil || b.msg.Type != model.MqMessageTypeDDL {
+		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found ddl event message")
 	}
-	if b.msg.Type != model.MqMessageTypeDDL {
-		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found row changed event message")
+
+	var data canalFlatMessageInterface
+	if b.enableTiDBExtension {
+		data = &canalFlatMessageWithTiDBExtension{}
+	} else {
+		data = &canalFlatMessage{}
 	}
-	ev := &model.DDLEvent{}
-	if err := json.Unmarshal(b.msg.Value, ev); err != nil {
+
+	if err := json.Unmarshal(b.msg.Value, data); err != nil {
 		return nil, errors.Trace(err)
 	}
 	b.msg = nil
-	return ev, nil
+	return canalFlatMessage2DDLEvent(data), nil
 }
 
 // NextResolvedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextResolvedEvent() (uint64, error) {
-	if b.msg == nil {
-		log.Panic("Cannot find message, bug?", zap.Any("decoder", b))
+	if b.msg == nil || b.msg.Type != model.MqMessageTypeResolved {
+		return 0, cerrors.ErrCanalDecodeFailed.GenWithStack("not found resolved event message")
 	}
-	if b.msg.Type != model.MqMessageTypeResolved {
-		return 0, cerrors.ErrCanalDecodeFailed.GenWithStack("not found row changed event message")
-	}
+
 	message := &canalFlatMessageWithTiDBExtension{}
 	if err := json.Unmarshal(b.msg.Value, message); err != nil {
 		return 0, errors.Trace(err)
