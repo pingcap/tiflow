@@ -60,7 +60,7 @@ func (l *locationRecorder) setCurEndLocation(location binlog.Location) {
 func (l *locationRecorder) saveTxnEndLocation(needLock bool) {
 	if needLock {
 		l.mu.Lock()
-        defer l.mu.Unlock()
+		defer l.mu.Unlock()
 	}
 
 	l.txnEndLocation = l.curEndLocation
@@ -86,7 +86,6 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 
 	l.curEndLocation.Position.Pos = e.Header.LogPos
 
-	This is GTID, not GTID set
 	updateGTIDSet := func(gset mysql.GTIDSet) {
 		err := l.curEndLocation.SetGTID(gset)
 		if err != nil {
@@ -128,7 +127,7 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 		}
 
 		updateGTIDSet(ev.GSet)
-		// don't update txnEndLocation, because the Query may not be a DDL (for example, mixed binlog format)
+		// don't update txnEndLocation, because the Query may not be a DDL because binlog format is a session variable
 		// let handleQueryEvent do this
 	}
 }

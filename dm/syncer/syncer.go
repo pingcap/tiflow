@@ -1746,9 +1746,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		ec := eventContext{
 			tctx:                tctx,
 			header:              e.Header,
-			curStartLocation: s.locations.curStartLocation,
-			curEndLocation: s.locations.getCurEndLocation(),
-			txnEndLocation: s.locations.txnEndLocation,
+			curStartLocation:    s.locations.curStartLocation,
+			curEndLocation:      s.locations.getCurEndLocation(),
+			txnEndLocation:      s.locations.txnEndLocation,
 			shardingReSync:      shardingReSync,
 			closeShardingResync: closeShardingResync,
 			traceSource:         traceSource,
@@ -1788,7 +1788,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				}
 			}
 
-
 			tctx.L().Debug("", zap.String("event", "XID"),
 				zap.Stringer("txnEndLocation", s.locations.txnEndLocation),
 				log.WrapStringerField("curEndLocation", s.locations.getCurEndLocation()))
@@ -1816,13 +1815,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 }
 
 type eventContext struct {
-	tctx                *tcontext.Context
-	header           *replication.EventHeader
+	tctx   *tcontext.Context
+	header *replication.EventHeader
 	// TODO: remove three locations in future
-	curStartLocation binlog.Location
-	curEndLocation binlog.Location
-	txnEndLocation binlog.Location
-	shardingReSync *ShardingReSync
+	curStartLocation    binlog.Location
+	curEndLocation      binlog.Location
+	txnEndLocation      binlog.Location
+	shardingReSync      *ShardingReSync
 	closeShardingResync func() error
 	traceSource         string
 	// safeMode is the value of syncer.safeMode when process this event
@@ -1889,7 +1888,6 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		Name:   string(ev.Table.Table),
 	}
 	targetTable := s.route(sourceTable)
-
 
 	if ec.shardingReSync != nil {
 		ec.shardingReSync.currLocation = s.locations.getCurEndLocation()
