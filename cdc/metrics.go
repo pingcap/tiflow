@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/actor"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -44,6 +45,7 @@ func init() {
 	etcd.InitMetrics(registry)
 	initServerMetrics(registry)
 	actor.InitMetrics(registry)
+	orchestrator.InitMetrics(registry)
 	// Sorter metrics
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
