@@ -30,25 +30,26 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
+var _ = Suite(&testPurgerSuite{
+	uuids: []string{
+		"c6ae5afe-c7a3-11e8-a19d-0242ac130006.000001",
+		"e9540a0d-f16d-11e8-8cb7-0242ac130008.000002",
+		"195c342f-f46e-11e8-927c-0242ac150008.000003",
+	},
+	relayFiles: [][]string{
+		{"mysql-bin.000001", "mysql-bin.000002", "mysql-bin.000003"},
+		{"mysql-bin.000001", "mysql-bin.000002", "mysql-bin.000003"},
+		{"mysql-bin.000001", "mysql-bin.000002", "mysql-bin.000003"},
+	},
+	activeRelayLog: &streamer.RelayLogInfo{
+		TaskName:   fakeStrategyTaskName,
+		UUID:       "e9540a0d-f16d-11e8-8cb7-0242ac130008.000002",
+		UUIDSuffix: 2,
+		Filename:   "mysql-bin.000003", // last in second sub dir
+	},
+})
+
 func TestPurgerSuite(t *testing.T) {
-	_ = Suite(&testPurgerSuite{
-		uuids: []string{
-			"c6ae5afe-c7a3-11e8-a19d-0242ac130006.000001",
-			"e9540a0d-f16d-11e8-8cb7-0242ac130008.000002",
-			"195c342f-f46e-11e8-927c-0242ac150008.000003",
-		},
-		relayFiles: [][]string{
-			{"mysql-bin.000001", "mysql-bin.000002", "mysql-bin.000003"},
-			{"mysql-bin.000001", "mysql-bin.000002", "mysql-bin.000003"},
-			{"mysql-bin.000001", "mysql-bin.000002", "mysql-bin.000003"},
-		},
-		activeRelayLog: &streamer.RelayLogInfo{
-			TaskName:   fakeStrategyTaskName,
-			UUID:       "e9540a0d-f16d-11e8-8cb7-0242ac130008.000002",
-			UUIDSuffix: 2,
-			Filename:   "mysql-bin.000003", // last in second sub dir
-		},
-	})
 	TestingT(t)
 }
 
