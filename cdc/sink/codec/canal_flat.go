@@ -494,21 +494,6 @@ func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEve
 	return canalFlatMessage2RowChangedEvent(data)
 }
 
-func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEvent {
-	result := new(model.DDLEvent)
-	// we lost the startTs from kafka message
-	result.CommitTs = flatDDL.getCommitTs()
-
-	result.TableInfo = new(model.SimpleTableInfo)
-	result.TableInfo.Schema = *flatDDL.getSchema()
-	result.TableInfo.Table = *flatDDL.getTable()
-
-	// we lost DDL type from canal flat json format, only got the DDL SQL.
-	result.Query = flatDDL.getQuery()
-
-	return result
-}
-
 // NextDDLEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
