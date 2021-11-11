@@ -2,15 +2,17 @@ package syncer
 
 import (
 	"fmt"
+	"strings"
+	"sync"
+
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"go.uber.org/zap"
-	"strings"
-	"sync"
 )
 
 type locationRecorder struct {
@@ -76,7 +78,7 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 	l.curStartLocation = l.curEndLocation
 	if event, ok := e.Event.(*replication.RotateEvent); ok {
 		// event for the outdated fake rotate events that is sent when MySQL replication is started, we still update
-		// curEndLocation. those values should not be saved to checkpoint.
+		// curEndLocation. those short-lived values should not be saved to checkpoint.
 		if utils.IsFakeRotateEvent(e.Header) {
 			l.curEndLocation.Position.Name = string(event.NextLogName)
 		}
@@ -84,6 +86,7 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 
 	l.curEndLocation.Position.Pos = e.Header.LogPos
 
+	This is GTID, not GTID set
 	updateGTIDSet := func(gset mysql.GTIDSet) {
 		err := l.curEndLocation.SetGTID(gset)
 		if err != nil {

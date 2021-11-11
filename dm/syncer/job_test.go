@@ -76,7 +76,7 @@ func (t *testJobSuite) TestJob(c *C) {
 	}
 	table := &filter.Table{Schema: "test", Name: "t1"}
 	location := binlog.NewLocation("")
-	ec := &eventContext{startLocation: &location, endLocation: &location, lastLocation: &location}
+	ec := &eventContext{curStartLocation: location, curEndLocation: location, txnEndLocation: location}
 	qec := &queryEventContext{
 		eventContext:    ec,
 		originSQL:       "create database test",

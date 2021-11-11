@@ -69,7 +69,7 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 	}
 
 	location := binlog.NewLocation("")
-	ec := &eventContext{startLocation: &location, endLocation: &location, lastLocation: &location}
+	ec := &eventContext{curStartLocation: location, curEndLocation: location, txnEndLocation: location}
 	p := parser.New()
 	se := mock.NewContext()
 	targetTableID := "`test`.`tb`"
@@ -184,7 +184,7 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 
 func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 	location := binlog.NewLocation("")
-	ec := &eventContext{startLocation: &location, endLocation: &location, lastLocation: &location}
+	ec := &eventContext{curStartLocation: location, curEndLocation: location, txnEndLocation: location}
 	p := parser.New()
 	se := mock.NewContext()
 	targetTableID := "`test`.`tb`"

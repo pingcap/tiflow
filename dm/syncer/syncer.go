@@ -1697,7 +1697,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				if apply {
 					if op == pb.ErrorOp_Replace {
 						s.isReplacingErr = true
-						// revert endLocation to startLocation
+						// revert curEndLocation to curStartLocation
 						s.locations.setCurEndLocation(s.locations.curStartLocation)
 					} else if op == pb.ErrorOp_Skip {
 						s.saveGlobalPoint(curEndLocation)
@@ -1712,7 +1712,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					continue
 				}
 			}
-			// set endLocation.Suffix=0 of last replace event
+			// set curEndLocation.Suffix=0 of last replace event
 			// also redirect stream to next event
 			if curEndLocation.Suffix > 0 && e.Header.EventSize > 0 {
 				curEndLocation.Suffix = 0
@@ -1746,6 +1746,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		ec := eventContext{
 			tctx:                tctx,
 			header:              e.Header,
+			curStartLocation: s.locations.curStartLocation,
+			curEndLocation: s.locations.getCurEndLocation(),
+			txnEndLocation: s.locations.txnEndLocation,
 			shardingReSync:      shardingReSync,
 			closeShardingResync: closeShardingResync,
 			traceSource:         traceSource,
@@ -1814,8 +1817,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 type eventContext struct {
 	tctx                *tcontext.Context
-	header              *replication.EventHeader
-	shardingReSync      *ShardingReSync
+	header           *replication.EventHeader
+	// TODO: remove three locations in future
+	curStartLocation binlog.Location
+	curEndLocation binlog.Location
+	txnEndLocation binlog.Location
+	shardingReSync *ShardingReSync
 	closeShardingResync func() error
 	traceSource         string
 	// safeMode is the value of syncer.safeMode when process this event
@@ -1922,7 +1929,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	}
 	if needSkip {
 		metrics.SkipBinlogDurationHistogram.WithLabelValues("rows", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
-		// for RowsEvent, we should record lastLocation rather than endLocation
+		// for RowsEvent, we should record txnEndLocation rather than curEndLocation
 		return s.recordSkipSQLsLocation(&ec)
 	}
 
@@ -2145,7 +2152,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		zap.String("event", "query"),
 		zap.Stringer("queryEventContext", qec),
 		zap.Stringer("locations", s.locations))
-	s.locations.saveTxnEndLocation(true) // update lastLocation, because we have checked `isDDL`
+	s.locations.saveTxnEndLocation(true) // update txnEndLocation, because we have checked `isDDL`
 
 	// TiDB can't handle multi schema change DDL, so we split it here.
 	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
@@ -3218,9 +3225,9 @@ func (s *Syncer) handleEventError(err error, startLocation binlog.Location, isQu
 
 	s.setErrLocation(&startLocation, isQueryEvent)
 	if len(originSQL) > 0 {
-		return terror.Annotatef(err, "startLocation: [%s], origin SQL: [%s]", startLocation, originSQL)
+		return terror.Annotatef(err, "curStartLocation: [%s], origin SQL: [%s]", startLocation, originSQL)
 	}
-	return terror.Annotatef(err, "startLocation: [%s]", startLocation)
+	return terror.Annotatef(err, "curStartLocation: [%s]", startLocation)
 }
 
 // getEvent gets an event from streamerController or errOperatorHolder.

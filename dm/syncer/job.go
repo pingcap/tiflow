@@ -108,9 +108,9 @@ func newDMLJob(tp opType, sourceTable, targetTable *filter.Table, dml *DML, ec *
 		dml:         dml,
 		retry:       true,
 
-		txnEndLocation:   *ec.lastLocation,
-		curStartLocation: *ec.startLocation,
-		curEndLocation:   *ec.endLocation,
+		txnEndLocation:   ec.txnEndLocation,
+		curStartLocation: ec.curStartLocation,
+		curEndLocation:   ec.curEndLocation,
 		eventHeader:      ec.header,
 		jobAddTime:       time.Now(),
 	}
@@ -126,9 +126,9 @@ func newDDLJob(qec *queryEventContext) *job {
 		ddls:        qec.needHandleDDLs,
 		originSQL:   qec.originSQL,
 
-		txnEndLocation:   *qec.lastLocation,
-		curStartLocation: *qec.startLocation,
-		curEndLocation:   *qec.endLocation,
+		txnEndLocation:   qec.txnEndLocation,
+		curStartLocation: qec.curStartLocation,
+		curEndLocation:   qec.curEndLocation,
 		eventHeader:      qec.header,
 		jobAddTime:       time.Now(),
 	}
@@ -155,7 +155,7 @@ func newDDLJob(qec *queryEventContext) *job {
 func newSkipJob(ec *eventContext) *job {
 	return &job{
 		tp:             skip,
-		txnEndLocation: *ec.lastLocation,
+		txnEndLocation: ec.txnEndLocation,
 		eventHeader:    ec.header,
 		jobAddTime:     time.Now(),
 	}
