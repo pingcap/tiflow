@@ -130,7 +130,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	//
 	// See more gc doc.
 	if err = o.updateGCSafepoint(stdCtx, state); err != nil {
-		return state, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	o.handleJobs()
