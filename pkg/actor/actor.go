@@ -54,7 +54,7 @@ type Mailbox interface {
 	// It may return context.Canceled or context.DeadlineExceeded.
 	SendB(ctx context.Context, msg message.Message) error
 
-	// Try to receive a message.
+	// Receive a message.
 	// It must be nonblocking and should only be called by System.
 	Receive() (message.Message, bool)
 	// Return the length of a mailbox.
