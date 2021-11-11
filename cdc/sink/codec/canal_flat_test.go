@@ -250,7 +250,7 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 	rawData, err := json.Marshal(msg)
 	c.Assert(err, check.IsNil)
 
-	decoder, err := NewCanalFlatEventBatchDecoder(rawData)
+	decoder, err := NewCanalFlatEventBatchDecoder(rawData, true)
 	c.Assert(err, check.IsNil)
 
 	ty, hasNext, err := decoder.HasNext()
