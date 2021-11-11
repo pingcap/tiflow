@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
+	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
 )
@@ -41,6 +42,36 @@ type CanalFlatEventBatchEncoder struct {
 }
 
 const tidbWaterMarkType = "TIDB_WATERMARK"
+
+var str2MySQLType = map[string]byte{
+	"bit":         mysql.TypeBit,
+	"text":        mysql.TypeBlob,
+	"date":        mysql.TypeDate,
+	"datetime":    mysql.TypeDatetime,
+	"unspecified": mysql.TypeUnspecified,
+	"decimal":     mysql.TypeNewDecimal,
+	"double":      mysql.TypeDatetime,
+	"enum":        mysql.TypeEnum,
+	"float":       mysql.TypeFloat,
+	"geometry":    mysql.TypeGeometry,
+	"mediumint":   mysql.TypeInt24,
+	"json":        mysql.TypeJSON,
+	"int":         mysql.TypeLong,
+	"bigint":      mysql.TypeLonglong,
+	"longtext":    mysql.TypeLongBlob,
+	"mediumtext":  mysql.TypeMediumBlob,
+	"null":        mysql.TypeNull,
+	"set":         mysql.TypeSet,
+	"smallint":    mysql.TypeShort,
+	"char":        mysql.TypeString,
+	"time":        mysql.TypeDuration,
+	"timestamp":   mysql.TypeTimestamp,
+	"tinyint":     mysql.TypeTiny,
+	"tinytext":    mysql.TypeTinyBlob,
+	"varchar":     mysql.TypeVarchar,
+	"var_string":  mysql.TypeVarString,
+	"year":        mysql.TypeYear,
+}
 
 // NewCanalFlatEventBatchEncoder creates a new CanalFlatEventBatchEncoder
 func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
@@ -461,6 +492,21 @@ func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEve
 	}
 	b.msg = nil
 	return canalFlatMessage2RowChangedEvent(data)
+}
+
+func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEvent {
+	result := new(model.DDLEvent)
+	// we lost the startTs from kafka message
+	result.CommitTs = flatDDL.getCommitTs()
+
+	result.TableInfo = new(model.SimpleTableInfo)
+	result.TableInfo.Schema = *flatDDL.getSchema()
+	result.TableInfo.Table = *flatDDL.getTable()
+
+	// we lost DDL type from canal flat json format, only got the DDL SQL.
+	result.Query = flatDDL.getQuery()
+
+	return result
 }
 
 // NextDDLEvent implements the EventBatchDecoder interface
