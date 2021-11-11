@@ -132,7 +132,7 @@ function empty_data() {
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Finished\"" 2 \
 		"\"totalBytes\": \"0\"" 2 \
