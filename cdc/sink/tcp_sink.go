@@ -292,7 +292,7 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 
 		columnVo.ColumnName = column.Name
 		if column.Value == nil {
-			columnVo.ColumnLen = 0
+			columnVo.ColumnLen = 1
 			columnValueArr := make([]byte,1)
 			//columnValueArr[0] = 0x00
 			columnVo.ColumnValue = columnValueArr
@@ -301,10 +301,10 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 			//columnVo.ColumnValue = model.ColumnValueString(column.Value)
 			//columnVo.ColumnLen = int32(len(columnVo.ColumnValue))
 			columnValue := model.ColumnValueString(column.Value)
-			columnValueArr := make([]byte,1+len(columnValue))
+			columnValueArr := make([]byte,len(columnValue))
 			publicUtils.BlockByteArrCopy([]byte(columnValue),0,columnValueArr,0,len(columnValue))
 			columnVo.ColumnValue = columnValueArr
-			columnVo.ColumnLen = int32(len(columnVo.ColumnValue)-1)
+			columnVo.ColumnLen = int32(len(columnVo.ColumnValue))
 		}
 
 		columnVo.IsPkFlag = column.Flag.IsPrimaryKey()

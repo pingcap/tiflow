@@ -2,7 +2,6 @@ package socket
 
 import (
 	"bytes"
-	"container/list"
 	"fmt"
 	"github.com/pingcap/ticdc/cdc/sink/publicUtils"
 	"github.com/pingcap/ticdc/cdc/sink/vo"
@@ -13,8 +12,8 @@ import (
 	//"unsafe"
 )
 
-var tcpAddr TCPAddr
-var conn Conn
+var conn net.Conn
+var tcpconn *net.TCPConn
 
 func CheckError(err error) {
     if err != nil {
@@ -57,26 +56,27 @@ func chkError(err error) {
 }
 
 func JddmDDLClient_ByResolveTcp(host string,ddlInfos *vo.DDLInfos){
-	
-	
-	if(tcpAddr != nil){
-		
+
+
+	if tcpconn != nil {
+
 	}else{
-		
+
 		//ResolveTCPAddr用于获取一个TCPAddr
 	    //net参数是"tcp4"、"tcp6"、"tcp"
 	    //addr表示域名或IP地址加端口号
 	    tcpaddr, err := net.ResolveTCPAddr("tcp", host);
 	    chkError(err);
-	    
+
 	    //DialTCP建立一个TCP连接
 	    //net参数是"tcp4"、"tcp6"、"tcp"
 	    //laddr表示本机地址，一般设为nil
 	    //raddr表示远程地址
-	    tcpconn, err2 := net.DialTCP("tcp", nil, tcpaddr);
-	    chkError(err2);
+	    tempTcp, err2 := net.DialTCP("tcp", nil, tcpaddr)
+		tcpconn = tempTcp
+	    chkError(err2)
 	}
-	
+
 }
 
 func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
@@ -87,10 +87,12 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",serverAddress)*/
 
 	if(conn ==nil){
-		
+
 		//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
-		conn, err := net.Dial("tcp", host)
+		tempConn, err := net.Dial("tcp", host)
+		conn = tempConn
 	    if err != nil {
+			conn = nil
 	        fmt.Println("Error dialing", err.Error())
 	        return
 	    }
@@ -159,8 +161,9 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 	//createBytesFromRowInfoList(rowInfos);
 	***/
 
-	_, err = conn.Write(createBytes_FromDdlInfoVo(ddlInfos))
+	_, err := conn.Write(createBytes_FromDdlInfoVo(ddlInfos))
     if err != nil {
+		fmt.Println("Error dialing", err.Error())
 		return
 	}
 
@@ -173,11 +176,14 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 	/*fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
 	serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)*/
 
-	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
+	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",conn)
 
 	if(conn ==nil){
-		conn, err := net.Dial("tcp", host)
+		fmt.Printf(" rest conn ::[%s] \n",conn)
+		tempConn, err := net.Dial("tcp", host)
+		conn = tempConn
 		if err != nil {
+			conn = nil
 			fmt.Println("Error dialing", err.Error())
 			return
 		}
@@ -297,8 +303,9 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 	//createBytesFromRowInfoList(rowInfos);
 	***/
 
-	_, err = conn.Write(createBytesFromRowInfo(rowInfos))
+	_, err := conn.Write(createBytesFromRowInfo(rowInfos))
 	if err != nil {
+		conn = nil
 		return
 	}
 
@@ -962,12 +969,16 @@ func Log(v ...interface{}) {
 func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 
 	//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
-
-	conn, err := net.Dial("tcp", host)
-	if err != nil {
-		fmt.Println("Error dialing", err.Error())
-		return 0, nil
+	if conn!=nil{
+		tempConn, err := net.Dial("tcp", host)
+		conn = tempConn
+		if err != nil {
+			conn = nil
+			fmt.Println("Error dialing", err.Error())
+			return 0, nil
+		}
 	}
+
 
 
 	verifyArr := make([]byte,4)
@@ -977,23 +988,20 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 	verifyArr[2] = 0x01
 	verifyArr[3] = 0x23
 
-	defer conn.Close()
+	//defer conn.Close()
 
 	//fmt.Println("resolvedTs：：：：：：：：：：：：：：：：：：：：：：：：",resolvedTs)
 
 	//=============================================
-
-	_, err = conn.Write(createBytesFromResolvedTs(resolvedTs))
-	if err != nil {
-		return 0, nil
+	if conn!=nil {
+		_, err := conn.Write(createBytesFromResolvedTs(resolvedTs))
+		if err != nil {
+			conn = nil
+			return 0, nil
+		}
 	}
 
-	// 声明链表
-	l := list.New()
-	// 数据添加到尾部
-	l.PushBack(4)
-	l.PushBack(5)
-	l.PushBack(6)
+
 
 	// 遍历
 	/*for e := l.Front(); e != nil; e = e.Next() {
@@ -1005,8 +1013,12 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 
 	//1 等待客户端通过conn发送信息
 	//2 如果没有writer发送就一直阻塞在这
+	if conn==nil{
+		return 0, nil
+	}
 	re, err := conn.Read(buf)
 	if err != nil {
+		conn = nil
 		fmt.Println("服务器read err=", err) //出错退出
 		return 0, nil
 	}
@@ -1030,38 +1042,29 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
 	//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
-
-	conn, err := net.Dial("tcp", host)
-	if err != nil {
-		fmt.Println("Error dialing", err.Error())
-		return 0, nil
+	if conn ==nil {
+		tempConn, err := net.Dial("tcp", host)
+		conn = tempConn
+		if err != nil {
+			conn = nil
+			fmt.Println("Error dialing", err.Error())
+			return 0, nil
+		}
 	}
 
 
-	verifyArr := make([]byte,4)
 
-	verifyArr[0] = 0x06
-	verifyArr[1] = 0xce
-	verifyArr[2] = 0x01
-	verifyArr[3] = 0x15
-
-	defer conn.Close()
+	//defer conn.Close()
 
 	//fmt.Println("resolvedTs：：：：：：：：：：：：：：：：：：：：：：：：",resolvedTs)
 
 	//=============================================
 
-	_, err = conn.Write(createBytesFromResolvedTs(resolvedTs))
+	_, err := conn.Write(createBytesFromResolvedTs(resolvedTs))
 	if err != nil {
 		return 0, nil
 	}
 
-	// 声明链表
-	l := list.New()
-	// 数据添加到尾部
-	l.PushBack(4)
-	l.PushBack(5)
-	l.PushBack(6)
 
 	// 遍历
 	/*for e := l.Front(); e != nil; e = e.Next() {
@@ -1075,6 +1078,7 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 	//2 如果没有writer发送就一直阻塞在这
 	re, err := conn.Read(buf)
 	if err != nil {
+		conn = nil
 		fmt.Println("服务器read err=", err) //出错退出
 		return 0, nil
 	}
