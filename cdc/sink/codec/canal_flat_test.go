@@ -110,7 +110,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder(c *check.C) {
 		rawBytes, err := json.Marshal(item)
 		c.Assert(err, check.IsNil)
 
-		decoder, err := NewCanalFlatEventBatchDecoder(rawBytes)
+		decoder, err := NewCanalFlatEventBatchDecoder(rawBytes, false)
 		c.Assert(err, check.IsNil)
 
 		ty, hasNext, err := decoder.HasNext()
@@ -148,7 +148,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	rawData, err := json.Marshal(msg)
 	c.Assert(err, check.IsNil)
 
-	decoder, err := NewCanalFlatEventBatchDecoder(rawData)
+	decoder, err := NewCanalFlatEventBatchDecoder(rawData, false)
 	c.Assert(err, check.IsNil)
 
 	ty, hasNext, err := decoder.HasNext()
@@ -175,7 +175,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	rawData, err = json.Marshal(message)
 	c.Assert(err, check.IsNil)
 
-	decoder, err = NewCanalFlatEventBatchDecoder(rawData)
+	decoder, err = NewCanalFlatEventBatchDecoder(rawData, true)
 	c.Assert(err, check.IsNil)
 
 	ty, hasNext, err = decoder.HasNext()

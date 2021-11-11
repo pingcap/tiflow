@@ -74,6 +74,7 @@ type canalFlatMessageInterface interface {
 	getSchema() *string
 	getTable() *string
 	getCommitTs() uint64
+	getQuery() string
 }
 
 // adapted from https://github.com/alibaba/canal/blob/master/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java
@@ -119,6 +120,10 @@ func (c *canalFlatMessage) getCommitTs() uint64 {
 	return 0
 }
 
+func (c *canalFlatMessage) getQuery() string {
+	return c.Query
+}
+
 type tidbExtension struct {
 	CommitTs    uint64 `json:"commit-ts"`
 	WatermarkTs uint64 `json:"watermark-ts"`
@@ -147,6 +152,10 @@ func (c *canalFlatMessageWithTiDBExtension) getTable() *string {
 
 func (c *canalFlatMessageWithTiDBExtension) getCommitTs() uint64 {
 	return c.Extensions.CommitTs
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getQuery() string {
+	return c.Query
 }
 
 func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEvent) (canalFlatMessageInterface, error) {
@@ -402,30 +411,6 @@ func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error
 	return b.msg.Type, true, nil
 }
 
-// func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChangedEvent {
-// 	e := new(model.RowChangedEvent)
-// 	// TODO: we lost the startTs from kafka message
-// 	// startTs-based txn filter is out of work
-// 	e.CommitTs = key.Ts
-// 	e.Table = &model.TableName{
-// 		Schema: key.Schema,
-// 		Table:  key.Table,
-// 	}
-// 	// TODO: we lost the tableID from kafka message
-// 	if key.Partition != nil {
-// 		e.Table.TableID = *key.Partition
-// 		e.Table.IsPartition = true
-// 	}
-//
-// 	if len(value.Delete) != 0 {
-// 		e.PreColumns = jsonColumns2SinkColumns(value.Delete)
-// 	} else {
-// 		e.Columns = jsonColumns2SinkColumns(value.Update)
-// 		e.PreColumns = jsonColumns2SinkColumns(value.PreColumns)
-// 	}
-// 	return e
-// }
-
 func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) *model.RowChangedEvent {
 	result := new(model.RowChangedEvent)
 	result.CommitTs = flatMessage.getCommitTs()
@@ -434,11 +419,37 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) *mo
 		Table:  *flatMessage.getTable(),
 	}
 
+	// StartTs  uint64 `json:"start-ts" msg:"start-ts"`
+	// CommitTs uint64 `json:"commit-ts" msg:"commit-ts"`
+	//
+	// RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
+	//
+	// Table *TableName `json:"table" msg:"table"`
+	//
+	// TableInfoVersion uint64 `json:"table-info-version,omitempty" msg:"table-info-version"`
+	//
+	// ReplicaID    uint64    `json:"replica-id" msg:"replica-id"`
+	// Columns      []*Column `json:"columns" msg:"-"`
+	// PreColumns   []*Column `json:"pre-columns" msg:"-"`
+	// IndexColumns [][]int   `json:"-" msg:"index-columns"`
+	//
+	// // approximate size of this event, calculate by tikv proto bytes size
+	// ApproximateSize int64 `json:"-" msg:"-"`
+
 	return result
 }
 
 func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEvent {
 	result := new(model.DDLEvent)
+	// we lost the startTs from kafka message
+	result.CommitTs = flatDDL.getCommitTs()
+
+	result.TableInfo = new(model.SimpleTableInfo)
+	result.TableInfo.Schema = *flatDDL.getSchema()
+	result.TableInfo.Table = *flatDDL.getTable()
+
+	// we lost DDL type from canal flat json format, only got the DDL SQL.
+	result.Query = flatDDL.getQuery()
 
 	return result
 }
