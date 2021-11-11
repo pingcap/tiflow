@@ -13,6 +13,8 @@ import (
 	//"unsafe"
 )
 
+var tcpAddr TCPAddr
+var conn Conn
 
 func CheckError(err error) {
     if err != nil {
@@ -48,6 +50,34 @@ type SliceMock struct {
 	len  int
 }
 
+func chkError(err error) {
+    if err != nil {
+        log.Fatal(err);
+    }
+}
+
+func JddmDDLClient_ByResolveTcp(host string,ddlInfos *vo.DDLInfos){
+	
+	
+	if(tcpAddr != nil){
+		
+	}else{
+		
+		//ResolveTCPAddr用于获取一个TCPAddr
+	    //net参数是"tcp4"、"tcp6"、"tcp"
+	    //addr表示域名或IP地址加端口号
+	    tcpaddr, err := net.ResolveTCPAddr("tcp", host);
+	    chkError(err);
+	    
+	    //DialTCP建立一个TCP连接
+	    //net参数是"tcp4"、"tcp6"、"tcp"
+	    //laddr表示本机地址，一般设为nil
+	    //raddr表示远程地址
+	    tcpconn, err2 := net.DialTCP("tcp", nil, tcpaddr);
+	    chkError(err2);
+	}
+	
+}
 
 func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 
@@ -56,13 +86,15 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 
 	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",serverAddress)*/
 
-	//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
-	conn, err := net.Dial("tcp", host)
-    if err != nil {
-        fmt.Println("Error dialing", err.Error())
-        return
-    }
-
+	if(conn ==nil){
+		
+		//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
+		conn, err := net.Dial("tcp", host)
+	    if err != nil {
+	        fmt.Println("Error dialing", err.Error())
+	        return
+	    }
+	}
     //serviceNum := 1742
 	//// 前4bytes消息长度
 	//lengthArr := make([]byte,4)
@@ -88,7 +120,7 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 	//verifyArr[2] := 0x01;
 	//verifyArr[3] := 0x13;
 
-    defer conn.Close()
+    //defer conn.Close()
 
 
     sendMsg :=" Connect Server Test  !";
@@ -143,10 +175,12 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 
 	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
 
-	conn, err := net.Dial("tcp", host)
-	if err != nil {
-		fmt.Println("Error dialing", err.Error())
-		return
+	if(conn ==nil){
+		conn, err := net.Dial("tcp", host)
+		if err != nil {
+			fmt.Println("Error dialing", err.Error())
+			return
+		}
 	}
 
 	//serviceNum := 1742
@@ -174,7 +208,7 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 	//verifyArr[2] := 0x01;
 	//verifyArr[3] := 0x13;
 
-	defer conn.Close()
+	//defer conn.Close()
 
 
 	sendMsg :=" Connect Server Test  !";
