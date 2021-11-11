@@ -98,8 +98,8 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 
 	TimeAcquirer := pdtime.NewTimeAcquirer(mockPDClient)
 	go TimeAcquirer.Run(ctx)
-	defer TimeAcquirer.Stop()
 	time.Sleep(1 * time.Second)
+	defer TimeAcquirer.Stop()
 
 	cCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TimeAcquirer: TimeAcquirer,

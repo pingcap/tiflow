@@ -48,13 +48,13 @@ type TimeAcquirerImpl struct {
 
 // NewTimeAcquirer return a new TimeAcquirer
 func NewTimeAcquirer(pdClient pd.Client) TimeAcquirer {
-	return TimeAcquirerImpl{
+	return &TimeAcquirerImpl{
 		pdClient: pdClient,
 	}
 }
 
 // Run will get time from pd periodically to cache in pdPhysicalTimeCache
-func (c TimeAcquirerImpl) Run(ctx context.Context) {
+func (c *TimeAcquirerImpl) Run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 	ticker := time.NewTicker(pdTimeUpdateInterval)
@@ -89,7 +89,7 @@ func (c TimeAcquirerImpl) Run(ctx context.Context) {
 }
 
 // CurrentTimeFromCached return current time from pd cache
-func (c TimeAcquirerImpl) CurrentTimeFromCached() (time.Time, error) {
+func (c *TimeAcquirerImpl) CurrentTimeFromCached() (time.Time, error) {
 	c.mu.RLock()
 	err := c.err
 	cacheTime := c.timeCache
@@ -97,18 +97,22 @@ func (c TimeAcquirerImpl) CurrentTimeFromCached() (time.Time, error) {
 	return cacheTime, errors.Trace(err)
 }
 
-func (c TimeAcquirerImpl) Stop() {
+func (c *TimeAcquirerImpl) Stop() {
 	c.cancel()
 }
 
 type TimeAcquirer4Test struct{}
 
-func (c TimeAcquirer4Test) CurrentTimeFromCached() (time.Time, error) {
+func NewTimeAcquirer4Test() TimeAcquirer {
+	return &TimeAcquirer4Test{}
+}
+
+func (c *TimeAcquirer4Test) CurrentTimeFromCached() (time.Time, error) {
 	return time.Now(), nil
 }
 
-func (c TimeAcquirer4Test) Run(ctx context.Context) {
+func (c *TimeAcquirer4Test) Run(ctx context.Context) {
 }
 
-func (c TimeAcquirer4Test) Stop() {
+func (c *TimeAcquirer4Test) Stop() {
 }

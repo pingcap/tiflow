@@ -186,7 +186,7 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
-		TimeAcquirer: pdtime.TimeAcquirer4Test{},
+		TimeAcquirer: pdtime.NewTimeAcquirer4Test(),
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
