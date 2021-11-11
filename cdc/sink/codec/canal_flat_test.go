@@ -86,6 +86,21 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 		},
 	})
 
+	rawData, err := json.Marshal(message)
+	c.Assert(err, check.IsNil)
+
+	decoder, err := NewCanalFlatEventBatchDecoder(rawData)
+	c.Assert(err, check.IsNil)
+
+	ty, hasNext, err := decoder.HasNext()
+	c.Assert(err, check.IsNil)
+	c.Assert(hasNext, check.IsTrue)
+	c.Assert(ty, check.Equals, model.MqMessageTypeDDL)
+
+	consumed, err := decoder.NextRowChangedEvent()
+	c.Assert(err, check.IsNil)
+	c.Assert(consumed, check.Equals, msg)
+
 	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
 	c.Assert(encoder, check.NotNil)
 	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
@@ -96,6 +111,21 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 
 	c.Assert(withExtension.Extensions, check.NotNil)
 	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseUpdate.CommitTs)
+
+	rawData, err = json.Marshal(message)
+	c.Assert(err, check.IsNil)
+
+	decoder, err = NewCanalFlatEventBatchDecoder(rawData)
+	c.Assert(err, check.IsNil)
+
+	ty, hasNext, err = decoder.HasNext()
+	c.Assert(err, check.IsNil)
+	c.Assert(hasNext, check.IsTrue)
+	c.Assert(ty, check.Equals, model.MqMessageTypeDDL)
+
+	consumed, err = decoder.NextRowChangedEvent()
+	c.Assert(err, check.IsNil)
+	c.Assert(consumed, check.Equals, msg)
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C) {
@@ -194,6 +224,21 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	c.Assert(msg.Query, check.Equals, testCaseDdl.Query)
 	c.Assert(msg.EventType, check.Equals, "CREATE")
 
+	rawData, err := json.Marshal(msg)
+	c.Assert(err, check.IsNil)
+
+	decoder, err := NewCanalFlatEventBatchDecoder(rawData)
+	c.Assert(err, check.IsNil)
+
+	ty, hasNext, err := decoder.HasNext()
+	c.Assert(err, check.IsNil)
+	c.Assert(hasNext, check.IsTrue)
+	c.Assert(ty, check.Equals, model.MqMessageTypeDDL)
+
+	consumed, err := decoder.NextDDLEvent()
+	c.Assert(err, check.IsNil)
+	c.Assert(consumed, check.Equals, msg)
+
 	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
 	c.Assert(encoder, check.NotNil)
 
@@ -205,6 +250,21 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 
 	c.Assert(withExtension.Extensions, check.NotNil)
 	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseDdl.CommitTs)
+
+	rawData, err = json.Marshal(message)
+	c.Assert(err, check.IsNil)
+
+	decoder, err = NewCanalFlatEventBatchDecoder(rawData)
+	c.Assert(err, check.IsNil)
+
+	ty, hasNext, err = decoder.HasNext()
+	c.Assert(err, check.IsNil)
+	c.Assert(hasNext, check.IsTrue)
+	c.Assert(ty, check.Equals, model.MqMessageTypeDDL)
+
+	consumed, err = decoder.NextDDLEvent()
+	c.Assert(err, check.IsNil)
+	c.Assert(consumed, check.Equals, msg)
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C) {
@@ -315,7 +375,17 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 		c.Assert(err, check.IsNil)
 		c.Assert(rawBytes, check.NotNil)
 
+<<<<<<< HEAD
 		decoder := NewCanalFlatEventBatchDecoder(rawBytes, enable)
+=======
+	decoder, err := NewCanalFlatEventBatchDecoder(rawData)
+	c.Assert(err, check.IsNil)
+
+	ty, hasNext, err := decoder.HasNext()
+	c.Assert(err, check.IsNil)
+	c.Assert(hasNext, check.IsTrue)
+	c.Assert(ty, check.Equals, model.MqMessageTypeResolved)
+>>>>>>> 820d4446e (add several unit test for canal flat json decoder.)
 
 		ty, hasNext, err := decoder.HasNext()
 		c.Assert(err, check.IsNil)
