@@ -15,7 +15,6 @@ package pipeline
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -310,9 +309,7 @@ func (t *tableActor) Cancel() {
 
 // Wait waits for table pipeline destroyed
 func (t *tableActor) Wait() {
-	fmt.Println("wait started")
 	_ = t.wg.Wait()
-	fmt.Println("wait done")
 }
 
 type Node struct {

@@ -380,7 +380,7 @@ func (n *sinkNode) HandleActorMessage(ctx context.Context, msg message.Message) 
 	case message.TypeStop:
 		return n.stop(ctx)
 	case message.TypeBarrier:
-		n.barrierTs = msg.BarrierTs
+		atomic.StoreUint64(&n.barrierTs, msg.BarrierTs)
 		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
 			return errors.Trace(err)
 		}
