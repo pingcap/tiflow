@@ -19,7 +19,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"testing"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
@@ -32,10 +31,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 )
 
-func TestFileUtilSuite(t *testing.T) {
-	_ = check.Suite(&testFileUtilSuite{})
-	check.TestingT(t)
-}
+var _ = check.Suite(&testFileUtilSuite{})
 
 type testFileUtilSuite struct{}
 

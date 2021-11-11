@@ -25,8 +25,9 @@ import (
 	br "github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 )
 
+var _ = check.Suite(&testRemoteReaderSuite{})
+
 func TestRemoteReaderSuite(t *testing.T) {
-	_ = check.Suite(&testRemoteReaderSuite{})
 	check.TestingT(t)
 }
 

@@ -39,8 +39,9 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
-func TestRelaySuite(t *testing.T) {
-	_ = Suite(&testRelaySuite{})
+var _ = Suite(&testRelaySuite{})
+
+func TestSuite(t *testing.T) {
 	TestingT(t)
 }
 

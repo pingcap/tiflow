@@ -26,9 +26,10 @@ import (
 )
 
 func TestBinlogWriterSuite(t *testing.T) {
-	_ = Suite(&testBinlogWriterSuite{})
 	TestingT(t)
 }
+
+var _ = Suite(&testBinlogWriterSuite{})
 
 type testBinlogWriterSuite struct{}
 

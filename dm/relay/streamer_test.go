@@ -15,7 +15,6 @@ package relay
 
 import (
 	"context"
-	"testing"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
@@ -27,10 +26,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
-func TestStreamerSuite(t *testing.T) {
-	_ = Suite(&testStreamerSuite{})
-	TestingT(t)
-}
+var _ = Suite(&testStreamerSuite{})
 
 type testStreamerSuite struct{}
 

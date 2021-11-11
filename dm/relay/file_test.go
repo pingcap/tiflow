@@ -20,7 +20,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"testing"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -31,10 +30,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
-func TestFileSuite(t *testing.T) {
-	_ = Suite(&testFileSuite{})
-	TestingT(t)
-}
+var _ = Suite(&testFileSuite{})
 
 type testFileSuite struct{}
 

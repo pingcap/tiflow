@@ -29,8 +29,9 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
+var _ = check.Suite(&testFileWriterSuite{})
+
 func TestFileWriterSuite(t *testing.T) {
-	_ = check.Suite(&testFileWriterSuite{})
 	check.TestingT(t)
 }
 
