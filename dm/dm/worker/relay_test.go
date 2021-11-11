@@ -15,7 +15,6 @@ package worker
 
 import (
 	"context"
-	"testing"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -35,10 +34,7 @@ import (
 
 type testRelay struct{}
 
-func TestRelay(t *testing.T) {
-	_ = Suite(&testRelay{})
-	TestingT(t)
-}
+var _ = Suite(&testRelay{})
 
 /*********** dummy relay log process unit, used only for testing *************/
 

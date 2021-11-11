@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -116,10 +115,7 @@ func (t *testServer) testWorker(c *C) {
 
 type testServer2 struct{}
 
-func TestServer2(t *testing.T) {
-	_ = Suite(&testServer2{})
-	TestingT(t)
-}
+var _ = Suite(&testServer2{})
 
 func (t *testServer2) SetUpSuite(c *C) {
 	err := log.InitLogger(&log.Config{})

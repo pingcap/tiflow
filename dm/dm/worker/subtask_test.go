@@ -16,7 +16,6 @@ package worker
 import (
 	"context"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/pingcap/ticdc/dm/dm/config"
@@ -42,10 +41,7 @@ const (
 
 type testSubTask struct{}
 
-func TestSubTask(t *testing.T) {
-	_ = Suite(&testSubTask{})
-	TestingT(t)
-}
+var _ = Suite(&testSubTask{})
 
 func (t *testSubTask) TestCreateUnits(c *C) {
 	cfg := &config.SubTaskConfig{

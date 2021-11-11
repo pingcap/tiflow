@@ -53,11 +53,12 @@ const (
 var etcdErrCompacted = v3rpc.ErrCompacted
 
 func TestServer(t *testing.T) {
-	_ = Suite(&testServer{})
 	TestingT(t)
 }
 
 type testServer struct{}
+
+var _ = Suite(&testServer{})
 
 func (t *testServer) SetUpSuite(c *C) {
 	err := log.InitLogger(&log.Config{})
