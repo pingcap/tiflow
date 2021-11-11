@@ -292,10 +292,10 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 
 		columnVo.ColumnName = column.Name
 		if column.Value == nil {
-			columnVo.ColumnLen = 1
-			columnValueArr := make([]byte,1)
+			columnVo.ColumnLen = 0
+			//columnValueArr := make([]byte,1)
 			//columnValueArr[0] = 0x00
-			columnVo.ColumnValue = columnValueArr
+			//columnVo.ColumnValue = columnValueArr
 
 		}else{
 			//columnVo.ColumnValue = model.ColumnValueString(column.Value)
