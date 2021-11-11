@@ -24,7 +24,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/mackerelio/go-osstat/memory"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -34,6 +33,7 @@ import (
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filelock"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/util/memory"
 	"go.uber.org/zap"
 )
 
@@ -99,6 +99,12 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 		metricSorterOnDiskDataSizeGauge := sorter.OnDiskDataSizeGauge.WithLabelValues(captureAddr, id)
 		metricSorterOpenFileCountGauge := sorter.OpenFileCountGauge.WithLabelValues(captureAddr, id)
 
+		// TODO: The underlaying implementation only recognizes cgroups set by
+		// containers, we need to support cgroups set by systemd or manually.
+		totalMemory, err := memory.MemTotal()
+		if err != nil {
+			log.Panic("read memory stat failed", zap.Error(err))
+		}
 		for {
 			select {
 			case <-ret.cancelCh:
@@ -112,13 +118,10 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 			metricSorterOpenFileCountGauge.Set(float64(atomic.LoadInt64(&openFDCount)))
 
 			// update memPressure
-			m, err := memory.Get()
-
+			usedMemory, err := memory.MemUsed()
 			failpoint.Inject("getMemoryPressureFails", func() {
-				m = nil
 				err = errors.New("injected get memory pressure failure")
 			})
-
 			if err != nil {
 				failpoint.Inject("sorterDebug", func() {
 					log.Panic("unified sorter: getting system memory usage failed", zap.Error(err))
@@ -130,7 +133,7 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 				// encountered, we can fail gracefully.
 				atomic.StoreInt32(&ret.memPressure, 100)
 			} else {
-				memPressure := m.Used * 100 / m.Total
+				memPressure := usedMemory * 100 / totalMemory
 				atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 			}
 
