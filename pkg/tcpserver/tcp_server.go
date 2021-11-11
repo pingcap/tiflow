@@ -43,6 +43,8 @@ type TCPServer interface {
 	HTTP1Listener() net.Listener
 	// IsTLSEnabled returns whether TLS has been enabled.
 	IsTLSEnabled() bool
+	// Close closed the TCPServer.
+	Close() error
 }
 
 type tcpServerImpl struct {
@@ -93,6 +95,9 @@ func NewTCPServer(address string, credentials *security.Credential) (TCPServer, 
 
 // Run runs the mux. The mux has to be running to accept connections.
 func (s *tcpServerImpl) Run(ctx context.Context) error {
+	defer func() {
+		_ = s.rootListener.Close()
+	}()
 	errg, ctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
@@ -126,6 +131,10 @@ func (s *tcpServerImpl) HTTP1Listener() net.Listener {
 
 func (s *tcpServerImpl) IsTLSEnabled() bool {
 	return s.isTLSEnabled
+}
+
+func (s *tcpServerImpl) Close() error {
+	return errors.Trace(s.rootListener.Close())
 }
 
 // wrapTLSListener takes a plain Listener and security credentials,

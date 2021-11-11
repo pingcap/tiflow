@@ -34,6 +34,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/p2p"
 	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -67,6 +68,20 @@ type Capture struct {
 
 	tableActorSystem *system.System
 
+	// MessageServer is the receiver of the messages from the other nodes.
+	// It should be recreated each time the capture is restarted.
+	MessageServer *p2p.MessageServer
+
+	// MessageRouter manages the clients to send messages to all peers.
+	MessageRouter p2p.MessageRouter
+
+	// grpcService is a wrapper that can hold a MessageServer.
+	// The instance should last for the whole life of the server,
+	// regardless of server restarting.
+	// This design is to solve the problem that grpc-go cannot gracefully
+	// unregister a service.
+	grpcService *p2p.ServerWrapper
+
 	cancel context.CancelFunc
 
 	newProcessorManager func() *processor.Manager
@@ -74,12 +89,13 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.CDCEtcdClient) *Capture {
+func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
 	return &Capture{
-		pdClient:   pdClient,
-		kvStorage:  kvStorage,
-		etcdClient: etcdClient,
-		cancel:     func() {},
+		pdClient:    pdClient,
+		kvStorage:   kvStorage,
+		etcdClient:  etcdClient,
+		grpcService: grpcService,
+		cancel:      func() {},
 
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
@@ -129,11 +145,32 @@ func (c *Capture) reset(ctx context.Context) error {
 			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 		}
 	}
+
+	if config.SchedulerV2Enabled {
+		c.grpcService.Reset(nil)
+
+		if c.MessageRouter != nil {
+			c.MessageRouter.Close()
+			c.MessageRouter.Wait()
+			c.MessageRouter = nil
+		}
+	}
+
 	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
 	if c.regionCache != nil {
 		c.regionCache.Close()
 	}
 	c.regionCache = tikv.NewRegionCache(c.pdClient)
+
+	if config.SchedulerV2Enabled {
+		messageServerConfig := conf.Debug.Messages.ToMessageServerConfig()
+		c.MessageServer = p2p.NewMessageServer(c.info.ID, messageServerConfig)
+		c.grpcService.Reset(c.MessageServer)
+
+		messageClientConfig := conf.Debug.Messages.ToMessageClientConfig()
+		c.MessageRouter = p2p.NewMessageRouter(c.info.ID, conf.Security, messageClientConfig)
+	}
+
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
@@ -199,8 +236,8 @@ func (c *Capture) run(stdCtx context.Context) error {
 		cancel()
 	}()
 	wg := new(sync.WaitGroup)
-	wg.Add(4)
-	var ownerErr, processorErr error
+	var ownerErr, processorErr, messageServerErr error
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer c.AsyncClose()
@@ -210,6 +247,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		ownerErr = c.campaignOwner(ctx)
 		log.Info("the owner routine has exited", zap.Error(ownerErr))
 	}()
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer c.AsyncClose()
@@ -221,20 +259,34 @@ func (c *Capture) run(stdCtx context.Context) error {
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, orchestrator.NewGlobalState(), processorFlushInterval)
 		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		c.TimeAcquirer.Run(ctx)
 	}()
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		c.grpcPool.RecycleConn(ctx)
 	}()
+	if config.SchedulerV2Enabled {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer c.AsyncClose()
+			defer c.grpcService.Reset(nil)
+			messageServerErr = c.MessageServer.Run(ctx)
+		}()
+	}
 	wg.Wait()
 	if ownerErr != nil {
 		return errors.Annotate(ownerErr, "owner exited with error")
 	}
 	if processorErr != nil {
 		return errors.Annotate(processorErr, "processor exited with error")
+	}
+	if messageServerErr != nil {
+		return errors.Annotate(messageServerErr, "message server exited with error")
 	}
 	return nil
 }
@@ -420,6 +472,15 @@ func (c *Capture) AsyncClose() {
 			log.Warn("stop table actor system failed", zap.Error(err))
 		}
 		c.tableActorSystem = nil
+	}
+	if config.SchedulerV2Enabled {
+		c.grpcService.Reset(nil)
+
+		if c.MessageRouter != nil {
+			c.MessageRouter.Close()
+			c.MessageRouter.Wait()
+			c.MessageRouter = nil
+		}
 	}
 }
 

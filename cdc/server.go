@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,8 +31,11 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/httputil"
+	"github.com/pingcap/ticdc/pkg/p2p"
+	"github.com/pingcap/ticdc/pkg/tcpserver"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
+	p2pProto "github.com/pingcap/ticdc/proto/p2p"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
@@ -52,8 +55,12 @@ const (
 )
 
 // Server is the capture server
+// TODO: we need to make Server more unit testable and add more test cases.
+// Especially we need to decouple the HTTPServer out of Server.
 type Server struct {
 	capture      *capture.Capture
+	tcpServer    tcpserver.TCPServer
+	grpcService  *p2p.ServerWrapper
 	statusServer *http.Server
 	pdClient     pd.Client
 	etcdClient   *etcd.CDCEtcdClient
@@ -69,9 +76,29 @@ func NewServer(pdEndpoints []string) (*Server, error) {
 		zap.Stringer("config", conf),
 	)
 
+	// This is to make communication between nodes possible.
+	// In other words, the nodes have to trust each other.
+	err := conf.Security.AddSelfCommonName()
+	if err != nil {
+		log.Error("status server set tls config failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	// tcpServer is the unified frontend of the CDC server that serves
+	// both RESTful APIs and gRPC APIs.
+	// Note that we pass the TLS config to the tcpServer, so there is no need to
+	// configure TLS elsewhere.
+	tcpServer, err := tcpserver.NewTCPServer(conf.Addr, conf.Security)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	s := &Server{
 		pdEndpoints: pdEndpoints,
+		grpcService: p2p.NewServerWrapper(),
+		tcpServer:   tcpServer,
 	}
+
 	return s, nil
 }
 
@@ -166,9 +193,9 @@ func (s *Server) Run(ctx context.Context) error {
 	s.kvStorage = kvStore
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
-	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
+	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcService)
 
-	err = s.startStatusHTTP()
+	err = s.startStatusHTTP(s.tcpServer.HTTP1Listener())
 	if err != nil {
 		return err
 	}
@@ -240,6 +267,24 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return kv.RunWorkerPool(cctx)
 	})
 
+	wg.Go(func() error {
+		return s.tcpServer.Run(cctx)
+	})
+
+	if config.SchedulerV2Enabled {
+		grpcServer := grpc.NewServer()
+		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
+
+		wg.Go(func() error {
+			return grpcServer.Serve(s.tcpServer.GrpcListener())
+		})
+		wg.Go(func() error {
+			<-cctx.Done()
+			grpcServer.Stop()
+			return nil
+		})
+	}
+
 	return wg.Wait()
 }
 
@@ -254,6 +299,13 @@ func (s *Server) Close() {
 			log.Error("close status server", zap.Error(err))
 		}
 		s.statusServer = nil
+	}
+	if s.tcpServer != nil {
+		err := s.tcpServer.Close()
+		if err != nil {
+			log.Error("close tcp server", zap.Error(err))
+		}
+		s.tcpServer = nil
 	}
 }
 
