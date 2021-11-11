@@ -290,8 +290,24 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 		columnVo := new(vo.ColumnVo)
 
 		columnVo.ColumnName = column.Name
-		columnVo.ColumnValue = model.ColumnValueString(column.Value)
+		if column.Value == nil {
+			columnVo.ColumnLen = 1
+			columnVo.ColumnValue = "0x00"
+		}else{
+			columnVo.ColumnValue = model.ColumnValueString(column.Value)
+			columnVo.ColumnLen = int32(len(columnVo.ColumnValue))
+
+
+		}
+
 		columnVo.IsPkFlag = column.Flag.IsPrimaryKey()
+		columnVo.IsBinary = column.Flag.IsBinary()
+
+
+
+
+		fmt.Println(column.Name,":::type[",column.Type,"]::column.IsBinary:::::",column.Flag.IsBinary(),":::columnVo.ColumnValue:",columnVo.ColumnValue,"::columnVo.ColumnLen:::",columnVo.ColumnLen)
+
 		columnVo.CFlag = colFlag
 		columnVo.ColumnType = column.Type
 		//fmt.Println("column.Value:::::",column.Value)
@@ -363,7 +379,7 @@ func (b *dsgSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) 
 }*/
 
 func (b *dsgSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	log.Debug("dsgSocketSink: Checkpoint Event", zap.Uint64("ts", ts))
+	log.Info("dsgSocketSink: Checkpoint Event", zap.Uint64("ts", ts))
 
 	commitTs,err:=socket.JddmClientByCheckPoint(b.sinkURI.Host,ts)
 	//commitTs,err:=socket.JddmClientFlush("127.0.0.1:9889",resolvedTs)
@@ -377,7 +393,7 @@ func (b *dsgSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	log.Debug("dsgSocketSink: DDL Event", zap.Any("ddl", ddl))
+	log.Info("dsgSocketSink: DDL Event", zap.Any("ddl", ddl))
 	//fmt.Println(">>>>>>>>>>>>>>>>>>>>===================EmitDDLEvent===================================================================>>>>>>>>>>>>>>>>>>>")
 
 
