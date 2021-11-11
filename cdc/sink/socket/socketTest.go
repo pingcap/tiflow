@@ -688,8 +688,9 @@ func ddlColumnInfoVoToByte(columnInfo *vo.ColVo) []byte{
 func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 
 	colPos:=0;
-    thisColLen := 4+len(columnInfo.ColumnName)+1+len(columnInfo.ColumnValue)+1+4;
-
+    //thisColLen := 4+len(columnInfo.ColumnName)+1+len(publicUtils.BytesToHexString(columnInfo.ColumnValue))+1+4
+    thisColLen := 4+len(columnInfo.ColumnName)+1+len(columnInfo.ColumnValue)+4
+	fmt.Printf(columnInfo.ColumnName," ColumnValue length %s \n",len(columnInfo.ColumnValue))
     columnInfoArr := make([]byte,thisColLen)
 
 
@@ -697,8 +698,7 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
     columnNameArr := make([]byte,1+len(columnInfo.ColumnName))
     publicUtils.BlockByteArrCopy([]byte(columnInfo.ColumnName),0,columnNameArr,0,len(columnInfo.ColumnName))
 
-    columnValueArr := make([]byte,1+len(columnInfo.ColumnValue))
-    publicUtils.BlockByteArrCopy([]byte(columnInfo.ColumnValue),0,columnValueArr,0,len(columnInfo.ColumnValue))
+    columnValueArr := columnInfo.ColumnValue
 
     //Create byte[] Array
     //publicUtils.BlockByteArrCopy([]byte(lengthArr),0,columnInfoArr,colPos,len(lengthArr))
@@ -735,7 +735,7 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 	//colPos = colPos+4
 	//fmt.Printf(" columnValueArr[] %s \n",publicUtils.BytestoHex(columnValueArr))
 
-	publicUtils.BlockByteArrCopy([]byte(columnValueArr),0,columnInfoArr,colPos,len(columnValueArr))
+	publicUtils.BlockByteArrCopy(columnValueArr,0,columnInfoArr,colPos,len(columnValueArr))
     //fmt.Printf(" pos : %d  namArrLen : %s -> %d \n", colPos,columnInfo.ColumnValue,len(ColumnValueArr))
 
 	//fmt.Printf(" columnInfoArr[]Arr %s \n",publicUtils.BytestoHex(columnInfoArr))

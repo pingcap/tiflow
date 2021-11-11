@@ -231,7 +231,7 @@ func BytestoHex(b []byte)(H string){
 }
 
 // bytes to hex string
-func bytesToHexString(b []byte) string {
+func BytesToHexString(b []byte) string {
 	var buf bytes.Buffer
 	for _, v := range b {
 		t := strconv.FormatInt(int64(v), 16)
