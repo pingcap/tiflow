@@ -355,13 +355,13 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 func needSwitchDB(ddl *model.DDLEvent) bool {
-	if len(ddl.TableInfo.Schema) > 0 {
-		if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
-			return false
-		}
-		return true
+	if len(ddl.TableInfo.Schema) == 0 {
+		return false
 	}
-	return false
+	if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
+		return false
+	}
+	return true
 }
 
 // adjustSQLMode adjust sql mode according to sink config.
