@@ -121,16 +121,6 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseDdl.CommitTs)
 }
 
-func (s *canalFlatSuite) TestNewCanalFlatMessage4CheckpointEvent(c *check.C) {
-	defer testleak.AfterTest(c)()
-	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
-	c.Assert(encoder, check.NotNil)
-
-	msg := encoder.newFlatMessage4CheckpointEvent(23333)
-	c.Assert(msg, check.NotNil)
-	c.Assert(msg.EventType, check.Equals, "WATERMARK")
-}
-
 func (s *canalFlatSuite) TestBatching(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
@@ -180,14 +170,28 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: false}
 	c.Assert(encoder, check.NotNil)
 
-	msg, err := encoder.EncodeCheckpointEvent(2333)
+	var watermark uint64 = 2333
+	msg, err := encoder.EncodeCheckpointEvent(watermark)
 	c.Assert(err, check.IsNil)
 	c.Assert(msg, check.IsNil)
 
 	encoder.enableTiDBExtension = true
-	msg, err = encoder.EncodeCheckpointEvent(2333)
+	msg, err = encoder.EncodeCheckpointEvent(watermark)
 	c.Assert(err, check.IsNil)
 	c.Assert(msg, check.NotNil)
+
+	rawData, err := json.Marshal(msg)
+	c.Assert(err, check.IsNil)
+
+	decoder, err := NewCanalFlatEventBatchDecoder(rawData)
+	ty, hasNext, err := decoder.HasNext()
+	c.Assert(err, check.IsNil)
+	c.Assert(hasNext, check.IsTrue)
+	c.Assert(ty, check.Equals, model.MqMessageTypeResolved)
+
+	consumed, err := decoder.NextResolvedEvent()
+	c.Assert(err, check.IsNil)
+	c.Assert(consumed, check.Equals, watermark)
 }
 
 var testCaseUpdate = &model.RowChangedEvent{
