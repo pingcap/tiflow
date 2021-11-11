@@ -16,7 +16,9 @@ package codec
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -24,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
+	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 )
 
@@ -38,6 +41,36 @@ type CanalFlatEventBatchEncoder struct {
 }
 
 const tidbWaterMarkType = "TIDB_WATERMARK"
+
+var str2MySQLType = map[string]byte{
+	"bit":         mysql.TypeBit,
+	"text":        mysql.TypeBlob,
+	"date":        mysql.TypeDate,
+	"datetime":    mysql.TypeDatetime,
+	"unspecified": mysql.TypeUnspecified,
+	"decimal":     mysql.TypeNewDecimal,
+	"double":      mysql.TypeDatetime,
+	"enum":        mysql.TypeEnum,
+	"float":       mysql.TypeFloat,
+	"geometry":    mysql.TypeGeometry,
+	"mediumint":   mysql.TypeInt24,
+	"json":        mysql.TypeJSON,
+	"int":         mysql.TypeLong,
+	"bigint":      mysql.TypeLonglong,
+	"longtext":    mysql.TypeLongBlob,
+	"mediumtext":  mysql.TypeMediumBlob,
+	"null":        mysql.TypeNull,
+	"set":         mysql.TypeSet,
+	"smallint":    mysql.TypeShort,
+	"char":        mysql.TypeString,
+	"time":        mysql.TypeDuration,
+	"timestamp":   mysql.TypeTimestamp,
+	"tinyint":     mysql.TypeTiny,
+	"tinytext":    mysql.TypeTinyBlob,
+	"varchar":     mysql.TypeVarchar,
+	"var_string":  mysql.TypeVarString,
+	"year":        mysql.TypeYear,
+}
 
 // NewCanalFlatEventBatchEncoder creates a new CanalFlatEventBatchEncoder
 func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
@@ -75,6 +108,9 @@ type canalFlatMessageInterface interface {
 	getTable() *string
 	getCommitTs() uint64
 	getQuery() string
+	getOld() map[string]interface{}
+	getData() map[string]interface{}
+	getMySQLType() map[string]string
 }
 
 // adapted from https://github.com/alibaba/canal/blob/master/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java
@@ -124,6 +160,18 @@ func (c *canalFlatMessage) getQuery() string {
 	return c.Query
 }
 
+func (c *canalFlatMessage) getOld() map[string]interface{} {
+	return c.Old[0]
+}
+
+func (c *canalFlatMessage) getData() map[string]interface{} {
+	return c.Data[0]
+}
+
+func (c *canalFlatMessage) getMySQLType() map[string]string {
+	return c.MySQLType
+}
+
 type tidbExtension struct {
 	CommitTs    uint64 `json:"commit-ts"`
 	WatermarkTs uint64 `json:"watermark-ts"`
@@ -156,6 +204,18 @@ func (c *canalFlatMessageWithTiDBExtension) getCommitTs() uint64 {
 
 func (c *canalFlatMessageWithTiDBExtension) getQuery() string {
 	return c.Query
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getOld() map[string]interface{} {
+	return c.Old[0]
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getData() map[string]interface{} {
+	return c.Data[0]
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getMySQLType() map[string]string {
+	return c.MySQLType
 }
 
 func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEvent) (canalFlatMessageInterface, error) {
@@ -419,38 +479,33 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) *mo
 		Table:  *flatMessage.getTable(),
 	}
 
-	// StartTs  uint64 `json:"start-ts" msg:"start-ts"`
-	// CommitTs uint64 `json:"commit-ts" msg:"commit-ts"`
-	//
-	// RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
-	//
-	// Table *TableName `json:"table" msg:"table"`
-	//
-	// TableInfoVersion uint64 `json:"table-info-version,omitempty" msg:"table-info-version"`
-	//
-	// ReplicaID    uint64    `json:"replica-id" msg:"replica-id"`
-	// Columns      []*Column `json:"columns" msg:"-"`
-	// PreColumns   []*Column `json:"pre-columns" msg:"-"`
-	// IndexColumns [][]int   `json:"-" msg:"index-columns"`
-	//
-	// // approximate size of this event, calculate by tikv proto bytes size
-	// ApproximateSize int64 `json:"-" msg:"-"`
+	result.Columns = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(), flatMessage.getMySQLType())
+	result.PreColumns = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(), flatMessage.getMySQLType())
 
 	return result
 }
 
-func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEvent {
-	result := new(model.DDLEvent)
-	// we lost the startTs from kafka message
-	result.CommitTs = flatDDL.getCommitTs()
-
-	result.TableInfo = new(model.SimpleTableInfo)
-	result.TableInfo.Schema = *flatDDL.getSchema()
-	result.TableInfo.Table = *flatDDL.getTable()
-
-	// we lost DDL type from canal flat json format, only got the DDL SQL.
-	result.Query = flatDDL.getQuery()
-
+func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType map[string]string) []*model.Column {
+	result := make([]*model.Column, 0, len(cols))
+	for name, value := range cols {
+		typeStr, ok := mysqlType[name]
+		if !ok {
+			log.Panic("mysql type does not found", zap.String("column name", name), zap.Any("mysqlType", mysqlType))
+		}
+		// since canal-json format lost `Flag`, tp might not be appropriate
+		tp, ok := str2MySQLType[typeStr]
+		if !ok {
+			log.Panic("mysql type does not found", zap.String("column name", name), zap.Any("mysqlType", mysqlType))
+		}
+		col := NewColumn(value, tp).ToSinkColumn(name)
+		result = append(result, col)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return strings.Compare(result[i].Name, result[j].Name) > 0
+	})
 	return result
 }
 
@@ -473,6 +528,21 @@ func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEve
 	}
 	b.msg = nil
 	return canalFlatMessage2RowChangedEvent(data), nil
+}
+
+func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEvent {
+	result := new(model.DDLEvent)
+	// we lost the startTs from kafka message
+	result.CommitTs = flatDDL.getCommitTs()
+
+	result.TableInfo = new(model.SimpleTableInfo)
+	result.TableInfo.Schema = *flatDDL.getSchema()
+	result.TableInfo.Table = *flatDDL.getTable()
+
+	// we lost DDL type from canal flat json format, only got the DDL SQL.
+	result.Query = flatDDL.getQuery()
+
+	return result
 }
 
 // NextDDLEvent implements the EventBatchDecoder interface
