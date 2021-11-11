@@ -97,7 +97,6 @@ type canalFlatMessage struct {
 	// A Datum should be a string or nil
 	Data []map[string]interface{} `json:"data"`
 	Old  []map[string]interface{} `json:"old"`
-
 	// Used internally by CanalFlatEventBatchEncoder
 	tikvTs uint64
 }
@@ -364,94 +363,78 @@ func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 	return nil
 }
 
-// CanalFlatEventBatchDecoder decodes the byte of a batch into the original messages.
+// CanalFlatEventBatchDecoder decodes the byte into the original message.
 type CanalFlatEventBatchDecoder struct {
-	data    []byte
-	msg     *MQMessage
-	decoded bool
+	data []byte
+	msg  *MQMessage
+}
+
+func NewCanalFlatEventBatchDecoder(data []byte) (EventBatchDecoder, error) {
+	return &CanalFlatEventBatchDecoder{
+		data: data,
+		msg:  nil,
+	}, nil
 }
 
 // HasNext implements the EventBatchDecoder interface
 func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
-	if b.decoded {
-		return b.msg.Type, true, nil
-	}
 	if len(b.data) == 0 {
 		return model.MqMessageTypeUnknown, false, nil
 	}
 	if err := json.Unmarshal(b.data, b.msg); err != nil {
 		return model.MqMessageTypeUnknown, false, err
 	}
-	b.decoded = true
+	b.data = nil
 	return b.msg.Type, true, nil
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
+// `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
-	ty, hasNext, err := b.HasNext()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if !hasNext || ty != model.MqMessageTypeRow {
-		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found row changed event message")
-	}
 	if b.msg == nil {
 		log.Panic("Cannot find message, bug?", zap.Any("decoder", b))
+	}
+	if b.msg.Type != model.MqMessageTypeRow {
+		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found row changed event message")
 	}
 	ev := &model.RowChangedEvent{}
 	if err := json.Unmarshal(b.msg.Value, ev); err != nil {
 		return nil, errors.Trace(err)
 	}
-	b.data = nil
+	b.msg = nil
 	return ev, nil
 }
 
 // NextDDLEvent implements the EventBatchDecoder interface
+// `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
-	ty, hasNext, err := b.HasNext()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if !hasNext || ty != model.MqMessageTypeDDL {
-		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found ddl event message")
-	}
 	if b.msg == nil {
 		log.Panic("Cannot find message, bug?", zap.Any("decoder", b))
 	}
-	msg := &model.DDLEvent{}
-	if err := json.Unmarshal(b.msg.Value, msg); err != nil {
+	if b.msg.Type != model.MqMessageTypeDDL {
+		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found row changed event message")
+	}
+	ev := &model.DDLEvent{}
+	if err := json.Unmarshal(b.msg.Value, ev); err != nil {
 		return nil, errors.Trace(err)
 	}
-	b.data = nil
-	return msg, nil
+	b.msg = nil
+	return ev, nil
 }
 
 // NextResolvedEvent implements the EventBatchDecoder interface
+// `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextResolvedEvent() (uint64, error) {
-	ty, hasNext, err := b.HasNext()
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	if !hasNext || ty != model.MqMessageTypeResolved {
-		return 0, cerrors.ErrCanalDecodeFailed.GenWithStack("not found resolved event message")
-	}
 	if b.msg == nil {
 		log.Panic("Cannot find message, bug?", zap.Any("decoder", b))
 	}
-
-	msg := &canalFlatMessage{}
-	if err := json.Unmarshal(b.msg.Value, msg); err != nil {
+	if b.msg.Type != model.MqMessageTypeResolved {
+		return 0, cerrors.ErrCanalDecodeFailed.GenWithStack("not found row changed event message")
+	}
+	message := &canalFlatMessageWithTiDBExtension{}
+	if err := json.Unmarshal(b.msg.Value, message); err != nil {
 		return 0, errors.Trace(err)
 	}
 
-	b.data = nil
-	return msg.CheckpointTs, nil
-}
-
-func NewCanalFlatEventBatchDecoder(data []byte) (EventBatchDecoder, error) {
-	return &CanalFlatEventBatchDecoder{
-		data:    data,
-		msg:     nil,
-		decoded: false,
-	}, nil
+	return message.Extensions.WatermarkTs, nil
 }
