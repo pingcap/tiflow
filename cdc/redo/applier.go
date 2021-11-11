@@ -25,7 +25,7 @@ func NewRedoReader(ctx context.Context, storage string, cfg *reader.LogReaderCon
 	switch consistentStorage(storage) {
 	case consistentStorageBlackhole:
 		rd = reader.NewBlackHoleReader()
-	case consistentStorageLocal, consistentStorageS3:
+	case consistentStorageLocal, consistentStorageNFS, consistentStorageS3:
 		rd, err = reader.NewLogReader(ctx, cfg)
 	default:
 		err = cerror.ErrConsistentStorage.GenWithStackByArgs(storage)
