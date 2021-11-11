@@ -383,9 +383,13 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 		c.Assert(rawBytes, check.NotNil)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 		decoder := NewCanalFlatEventBatchDecoder(rawBytes, enable)
 =======
 	decoder, err := NewCanalFlatEventBatchDecoder(rawData)
+=======
+	decoder, err := NewCanalFlatEventBatchDecoder(rawData, true)
+>>>>>>> c217b2e7a (tiny fix.)
 	c.Assert(err, check.IsNil)
 
 	ty, hasNext, err := decoder.HasNext()
