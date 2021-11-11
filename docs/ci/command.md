@@ -3,7 +3,7 @@
 ## Guide
 
 1. ci pipeline will be triggered when your comment on pull request matched command.
-2. "**Only triggered by command**". What does that mean?
+2. `Only triggered by command`, What does that mean?
    - Yes, this ci will be triggered only when your comment on pr matched command.
    - No, this ci will be triggered by every new commit on current pr, comment matched command also trigger ci pipeline.
 3. [Using saved replies will help you trigger these tasks quickly](https://docs.github.com/en/github/writing-on-github/working-with-saved-replies/using-saved-replies)
