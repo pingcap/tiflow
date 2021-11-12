@@ -302,6 +302,10 @@ func (m *MessageServer) tick(ctx context.Context) {
 		}
 		m.acksMapLock.RUnlock()
 
+		if len(acks) == 0 {
+			continue
+		}
+
 		peer.metricsAckCount.Inc()
 		err := peer.sender.Send(ctx, p2p.SendMessageResponse{
 			Ack:        acks,

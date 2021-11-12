@@ -783,10 +783,7 @@ func TestServerIncomingConnectionStale(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-
-	resp, err := stream.Recv()
-	require.NoError(t, err)
-	require.Equal(t, resp.ExitReason, p2p.ExitReason_OK)
+	_ = stream.CloseSend()
 
 	stream, err = client.SendMessage(ctx)
 	require.NoError(t, err)
