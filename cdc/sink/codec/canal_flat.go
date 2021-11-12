@@ -468,6 +468,9 @@ func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error
 	}
 	b.msg = msg
 	b.data = nil
+	if b.msg.Type == model.MqMessageTypeUnknown {
+		return model.MqMessageTypeUnknown, false, nil
+	}
 	return b.msg.Type, true, nil
 }
 

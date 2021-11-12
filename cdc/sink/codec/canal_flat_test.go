@@ -225,6 +225,15 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C
 
 		c.Assert(consumed.TableInfo, check.DeepEquals, testCaseDdl.TableInfo)
 		c.Assert(consumed.Query, check.Equals, testCaseDdl.Query)
+
+		ty, hasNext, err = decoder.HasNext()
+		c.Assert(err, check.IsNil)
+		c.Assert(hasNext, check.IsFalse)
+		c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
+
+		consumed, err = decoder.NextDDLEvent()
+		c.Assert(err, check.NotNil)
+		c.Assert(consumed, check.IsNil)
 	}
 }
 
@@ -281,7 +290,11 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 
 		msg, err := encoder.EncodeCheckpointEvent(watermark)
 		c.Assert(err, check.IsNil)
-		c.Assert(msg, check.IsNil)
+		if enable {
+			c.Assert(msg, check.NotNil)
+		} else {
+			c.Assert(msg, check.IsNil)
+		}
 
 		rawBytes, err := json.Marshal(msg)
 		c.Assert(err, check.IsNil)
@@ -292,12 +305,21 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 
 		ty, hasNext, err := decoder.HasNext()
 		c.Assert(err, check.IsNil)
-		c.Assert(hasNext, check.IsTrue)
-		c.Assert(ty, check.Equals, model.MqMessageTypeResolved)
+		if enable {
+			c.Assert(hasNext, check.IsTrue)
+			c.Assert(ty, check.Equals, model.MqMessageTypeResolved)
+			consumed, err := decoder.NextResolvedEvent()
+			c.Assert(err, check.IsNil)
+			c.Assert(consumed, check.Equals, watermark)
+		} else {
+			c.Assert(hasNext, check.IsFalse)
+			c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
+		}
 
-		consumed, err := decoder.NextResolvedEvent()
+		ty, hasNext, err = decoder.HasNext()
 		c.Assert(err, check.IsNil)
-		c.Assert(consumed, check.Equals, watermark)
+		c.Assert(hasNext, check.IsFalse)
+		c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
 	}
 }
 
