@@ -16,6 +16,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path"
 
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
@@ -75,7 +76,17 @@ func (s *Security) LoadTLSContent() error {
 }
 
 // DumpTLSContent dump tls certs data to file.
-func (s *Security) DumpTLSContent() error {
+// note that when path in security is empty, we dump certs file to subtask dump dir.
+func (s *Security) DumpTLSContent(baseDirPath string) error {
+	if s.SSLCA == "" {
+		s.SSLCA = path.Join(baseDirPath, "ca.pem")
+	}
+	if s.SSLCert == "" {
+		s.SSLCert = path.Join(baseDirPath, "cert.pem")
+	}
+	if s.SSLKey == "" {
+		s.SSLKey = path.Join(baseDirPath, "key.pem")
+	}
 	if !utils.IsFileExists(s.SSLCA) {
 		if err := utils.WriteFileAtomic(s.SSLCA, s.SSLCABytes, 0o600); err != nil {
 			return err
