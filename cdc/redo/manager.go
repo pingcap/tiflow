@@ -228,7 +228,7 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 		return cerror.ErrBufferLogTimeout.GenWithStackByArgs()
 	case m.logBuffer <- cacheRows{
 		tableID: tableID,
-		// Because the pipeline sink doesn't hold slice memory after call
+		// Because the pipeline sink doesn't hold slice memory after calling
 		// EmitRowChangedEvents, we copy to a new slice to manage memory
 		// in redo manager itself, which is the same behavior as sink manager.
 		rows: append(make([]*model.RowChangedEvent, 0, len(rows)), rows...),
