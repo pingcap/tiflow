@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filelock"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tidb/util/memory"
 )
 
 type backendPoolSuite struct{}
@@ -325,9 +326,17 @@ func (s *backendPoolSuite) TestCleanUpStaleLockNoPermission(c *check.C) {
 func (s *backendPoolSuite) TestGetMemoryPressureFailure(c *check.C) {
 	defer testleak.AfterTest(c)()
 
+<<<<<<< HEAD:cdc/puller/sorter/backend_pool_test.go
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/getMemoryPressureFails", "return(true)")
 	c.Assert(err, check.IsNil)
 	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/getMemoryPressureFails") //nolint:errcheck
+=======
+	origin := memory.MemTotal
+	defer func() {
+		memory.MemTotal = origin
+	}()
+	memory.MemTotal = func() (uint64, error) { return 0, nil }
+>>>>>>> 819615c59 (cdc/sorter: make unified sorter cgroup aware (#3436)):cdc/sorter/unified/backend_pool_test.go
 
 	dir := c.MkDir()
 	backEndPool, err := newBackEndPool(dir, "")
@@ -336,7 +345,7 @@ func (s *backendPoolSuite) TestGetMemoryPressureFailure(c *check.C) {
 	defer backEndPool.terminate()
 
 	after := time.After(time.Second * 20)
-	tick := time.Tick(time.Second * 1)
+	tick := time.Tick(time.Millisecond * 100)
 	for {
 		select {
 		case <-after:
