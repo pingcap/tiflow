@@ -646,16 +646,13 @@ func (s *Scheduler) TransferSource(source, worker string) error {
 
 	// 2. check new worker is free and not started relay for another source
 	switch w.Stage() {
-	case WorkerOffline:
+	case WorkerOffline, WorkerBound:
 		return terror.ErrSchedulerWorkerInvalidTrans.Generate(worker, w.Stage(), WorkerBound)
 	case WorkerFree:
 	case WorkerRelay:
 		if relaySource := w.RelaySourceID(); relaySource != source {
 			return terror.ErrSchedulerBoundDiffWithStartedRelay.Generate(worker, source, relaySource)
 		}
-	case WorkerBound:
-		s.logger.DPanic("worker should not be bound because we have checked it")
-		return terror.ErrSchedulerWorkerInvalidTrans.Generate(worker, w.Stage(), WorkerBound)
 	}
 
 	// 3. if no old worker, bound it directly
