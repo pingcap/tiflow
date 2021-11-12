@@ -331,7 +331,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 			for _, rts := range expired {
 				state, ok := w.getRegionState(rts.regionID)
 				if !ok || state.isStopped() {
-					// state is already deleted or stoppped, just continue,
+					// state is already deleted or stopped, just continue,
 					// and don't need to push resolved ts back to heap.
 					continue
 				}
