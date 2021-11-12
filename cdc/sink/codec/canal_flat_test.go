@@ -100,6 +100,19 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C) {
 	defer testleak.AfterTest(c)()
+
+	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
+	c.Assert(err, check.IsNil)
+	expected := map[string]interface{}{
+		"id":         "1",
+		"name":       "Bob",
+		"tiny":       "255",
+		"comment":    "测试",
+		"blob":       string(encodedBytes),
+		"journalist": "Sharon Cheung Po-Wah run so fast",
+		"elder":      "图样图森破",
+	}
+
 	enableTiDBExtension := []bool{false, true}
 	for _, enable := range enableTiDBExtension {
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: enable}
@@ -136,8 +149,23 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 			}
 
 			c.Assert(consumed.Table, check.DeepEquals, testCaseUpdate.Table)
-			compareColumns(c, consumed.Columns, testCaseUpdate.Columns)
-			compareColumns(c, consumed.PreColumns, testCaseUpdate.PreColumns)
+
+			for _, col := range consumed.Columns {
+				value, ok := expected[col.Name]
+				c.Assert(ok, check.IsTrue)
+
+				if val, ok := col.Value.([]byte); ok {
+					c.Assert(string(val), check.Equals, value)
+				} else {
+					c.Assert(col.Value, check.Equals, value)
+				}
+
+				for _, item := range testCaseUpdate.Columns {
+					if item.Name == col.Name {
+						c.Assert(col.Type, check.Equals, item.Type)
+					}
+				}
+			}
 
 			_, hasNext, _ = decoder.HasNext()
 			c.Assert(hasNext, check.IsFalse)
@@ -146,20 +174,6 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 			c.Assert(err, check.NotNil)
 			c.Assert(consumed, check.IsNil)
 		}
-	}
-}
-
-func compareColumns(c *check.C, obtained, expected []*model.Column) {
-	c.Assert(len(obtained), check.Equals, len(expected))
-	columns := make(map[string]*model.Column)
-	for _, col := range expected {
-		columns[col.Name] = col
-	}
-	for _, col := range obtained {
-		expected := columns[col.Name]
-		c.Assert(col.Name, check.Equals, expected.Name)
-		c.Assert(col.Type, check.Equals, expected.Type)
-		c.Assert(col.Value, check.Equals, expected.Value)
 	}
 }
 

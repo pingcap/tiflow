@@ -483,7 +483,7 @@ func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEve
 
 	var data canalFlatMessageInterface
 	if b.enableTiDBExtension {
-		data = &canalFlatMessageWithTiDBExtension{}
+		data = &canalFlatMessageWithTiDBExtension{canalFlatMessage: &canalFlatMessage{}}
 	} else {
 		data = &canalFlatMessage{}
 	}
@@ -504,7 +504,7 @@ func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 
 	var data canalFlatMessageInterface
 	if b.enableTiDBExtension {
-		data = &canalFlatMessageWithTiDBExtension{}
+		data = &canalFlatMessageWithTiDBExtension{canalFlatMessage: &canalFlatMessage{}}
 	} else {
 		data = &canalFlatMessage{}
 	}
