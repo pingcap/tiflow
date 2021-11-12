@@ -303,6 +303,15 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C
 
 		c.Assert(consumed.TableInfo, check.DeepEquals, testCaseDdl.TableInfo)
 		c.Assert(consumed.Query, check.Equals, testCaseDdl.Query)
+
+		ty, hasNext, err = decoder.HasNext()
+		c.Assert(err, check.IsNil)
+		c.Assert(hasNext, check.IsFalse)
+		c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
+
+		consumed, err = decoder.NextDDLEvent()
+		c.Assert(err, check.NotNil)
+		c.Assert(consumed, check.IsNil)
 	}
 }
 
