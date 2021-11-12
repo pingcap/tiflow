@@ -119,9 +119,6 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 
 			// update memPressure
 			usedMemory, err := memory.MemUsed()
-			failpoint.Inject("getMemoryPressureFails", func() {
-				err = errors.New("injected get memory pressure failure")
-			})
 			if err != nil || totalMemory == 0 {
 				failpoint.Inject("sorterDebug", func() {
 					log.Panic("unified sorter: getting system memory usage failed", zap.Error(err))
