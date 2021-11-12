@@ -211,8 +211,8 @@ func (s *testSyncerSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) []
 		case DMLQuery:
 			dmlData := []*event.DMLData{
 				{
-					Schema:     e.args[0].(string),
-					Query: e.args[1].(string),
+					Schema: e.args[0].(string),
+					Query:  e.args[1].(string),
 				},
 			}
 			evs, _, err := s.eventsGenerator.GenDMLEvents(replication.UNKNOWN_EVENT, dmlData)

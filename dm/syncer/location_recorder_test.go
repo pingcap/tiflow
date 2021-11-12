@@ -100,11 +100,10 @@ func (s *testSyncerSuite) checkOneTxnEvents(c *C, events []*replication.BinlogEv
 		if i == len(events)-1 {
 			switch e.Header.EventType {
 			case replication.XID_EVENT, replication.QUERY_EVENT:
-                c.Assert(r.txnEndLocation, DeepEquals, expected[i+1])
+				c.Assert(r.txnEndLocation, DeepEquals, expected[i+1])
 			default:
 				c.Fatal("type of last event is not expect", e.Header.EventType)
 			}
-
 		} else {
 			c.Assert(r.txnEndLocation, DeepEquals, expected[0])
 		}

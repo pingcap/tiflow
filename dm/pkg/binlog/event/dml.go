@@ -81,8 +81,8 @@ func GenDMLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID g
 		if data.Query != "" {
 			dmlQueryEv, err2 := GenQueryEvent(header, latestPos, defaultSlaveProxyID, defaultExecutionTime, defaultErrorCode, defaultStatusVars, []byte(data.Schema), []byte(data.Query))
 			if err2 != nil {
-                return nil, terror.Annotatef(err2, "generate QueryEvent for %s", data.Query)
-            }
+				return nil, terror.Annotatef(err2, "generate QueryEvent for %s", data.Query)
+			}
 			events = append(events, dmlQueryEv)
 			continue
 		}
