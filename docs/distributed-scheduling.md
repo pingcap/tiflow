@@ -2,7 +2,7 @@
 
 ## Background
 
-TiCDC boasts high availability and horizontal scalability. To make this possible, TiCDC needs a distributed scheduling mechanism, a mechanism by which tables can be distributed across the nodes in the cluster and sustain failures of nodes. We still need a center of control, which we call the Owner, but the Owner should fail over very quickly should the old one fails.
+TiCDC boasts high availability and horizontal scalability. To make this possible, TiCDC needs a distributed scheduling mechanism, a mechanism by which tables can be distributed across the nodes in the cluster and sustain failures of nodes. We still need a center of control, which we call the Owner, but the Owner should fail over very quickly should the old one fail.
 
 In the beginning of the TiCDC project, we chose a solution that sends all information over Etcd, which is a distributed key-value store. However, this solution has proven to be problematic as it fails to scale both horizontally and vertically. As a solution, we created a solution using direct peer-to-peer messages, which not only has semantics better suited to scheduling, but also performs and scales better.
 
