@@ -100,38 +100,66 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
-	c.Assert(encoder, check.NotNil)
+	enableTiDBExtension := []bool{false, true}
+	for _, enable := range enableTiDBExtension {
+		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: enable}
+		c.Assert(encoder, check.NotNil)
 
-	result, err := encoder.AppendRowChangedEvent(testCaseUpdate)
-	c.Assert(err, check.IsNil)
-	c.Assert(result, check.Equals, EncoderNoOperation)
-
-	result, err = encoder.AppendResolvedEvent(417318403368288260)
-	c.Assert(err, check.IsNil)
-	c.Assert(result, check.Equals, EncoderNeedAsyncWrite)
-
-	mqMessages := encoder.Build()
-	c.Assert(len(mqMessages), check.Equals, 1)
-
-	for _, item := range mqMessages {
-		rawBytes, err := json.Marshal(item)
+		result, err := encoder.AppendRowChangedEvent(testCaseUpdate)
 		c.Assert(err, check.IsNil)
+		c.Assert(result, check.Equals, EncoderNoOperation)
 
-		decoder, err := NewCanalFlatEventBatchDecoder(rawBytes, false)
+		result, err = encoder.AppendResolvedEvent(417318403368288260)
 		c.Assert(err, check.IsNil)
+		c.Assert(result, check.Equals, EncoderNeedAsyncWrite)
 
-		ty, hasNext, err := decoder.HasNext()
-		c.Assert(err, check.IsNil)
-		c.Assert(hasNext, check.IsTrue)
-		c.Assert(ty, check.Equals, model.MqMessageTypeRow)
+		mqMessages := encoder.Build()
+		c.Assert(len(mqMessages), check.Equals, 1)
 
-		consumed, err := decoder.NextRowChangedEvent()
-		c.Assert(err, check.IsNil)
-		c.Assert(consumed, check.Equals, testCaseUpdate)
+		for _, item := range mqMessages {
+			rawBytes, err := json.Marshal(item)
+			c.Assert(err, check.IsNil)
 
-		_, hasNext, _ = decoder.HasNext()
-		c.Assert(hasNext, check.IsFalse)
+			decoder, err := NewCanalFlatEventBatchDecoder(rawBytes, enable)
+			c.Assert(err, check.IsNil)
+
+			ty, hasNext, err := decoder.HasNext()
+			c.Assert(err, check.IsNil)
+			c.Assert(hasNext, check.IsTrue)
+			c.Assert(ty, check.Equals, model.MqMessageTypeRow)
+
+			consumed, err := decoder.NextRowChangedEvent()
+			c.Assert(err, check.IsNil)
+
+			if enable {
+				c.Assert(consumed.CommitTs, check.Equals, testCaseUpdate)
+			}
+
+			c.Assert(consumed.Table, check.DeepEquals, testCaseUpdate.Table)
+			compareColumns(c, consumed.Columns, testCaseUpdate.Columns)
+			compareColumns(c, consumed.PreColumns, testCaseUpdate.PreColumns)
+
+			_, hasNext, _ = decoder.HasNext()
+			c.Assert(hasNext, check.IsFalse)
+
+			consumed, err = decoder.NextRowChangedEvent()
+			c.Assert(err, check.NotNil)
+			c.Assert(consumed, check.IsNil)
+		}
+	}
+}
+
+func compareColumns(c *check.C, obtained, expected []*model.Column) {
+	c.Assert(len(obtained), check.Equals, len(expected))
+	columns := make(map[string]*model.Column)
+	for _, col := range expected {
+		columns[col.Name] = col
+	}
+	for _, col := range obtained {
+		expected := columns[col.Name]
+		c.Assert(col.Name, check.Equals, expected.Name)
+		c.Assert(col.Type, check.Equals, expected.Type)
+		c.Assert(col.Value, check.Equals, expected.Value)
 	}
 }
 
@@ -382,21 +410,7 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 		c.Assert(err, check.IsNil)
 		c.Assert(rawBytes, check.NotNil)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 		decoder := NewCanalFlatEventBatchDecoder(rawBytes, enable)
-=======
-	decoder, err := NewCanalFlatEventBatchDecoder(rawData)
-=======
-	decoder, err := NewCanalFlatEventBatchDecoder(rawData, true)
->>>>>>> c217b2e7a (tiny fix.)
-	c.Assert(err, check.IsNil)
-
-	ty, hasNext, err := decoder.HasNext()
-	c.Assert(err, check.IsNil)
-	c.Assert(hasNext, check.IsTrue)
-	c.Assert(ty, check.Equals, model.MqMessageTypeResolved)
->>>>>>> 820d4446e (add several unit test for canal flat json decoder.)
 
 		ty, hasNext, err := decoder.HasNext()
 		c.Assert(err, check.IsNil)
