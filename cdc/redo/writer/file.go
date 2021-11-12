@@ -255,13 +255,13 @@ func (w *Writer) Close() error {
 	}
 	w.Lock()
 	defer w.Unlock()
+	defer w.running.Store(false)
 
 	err := w.close()
 	if err != nil {
 		return err
 	}
 
-	w.running.Store(false)
 	return nil
 }
 
