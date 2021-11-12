@@ -866,7 +866,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			nil,
 		}, {
 			insert,
-			[]string{"INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)"},
+			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(580981944116838401), "a"}},
 		}, {
 			flush,
@@ -878,7 +878,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			nil,
 		}, {
 			insert,
-			[]string{"INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)"},
+			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(580981944116838402), "b"}},
 		}, {
 			del,
@@ -887,7 +887,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		}, {
 			// safe mode is true, will split update to delete + replace
 			update,
-			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)"},
+			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(580981944116838402)}, {int64(580981944116838401), "b"}},
 		}, {
 			flush,
@@ -1124,7 +1124,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			nil,
 		}, {
 			insert,
-			[]string{"INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)"},
+			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int32(1), "a"}},
 		}, {
 			del,
@@ -1132,7 +1132,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			[][]interface{}{{int32(1)}},
 		}, {
 			update,
-			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)"},
+			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int32(2)}, {int32(1), "b"}},
 		}, {
 			// start from this event, location passes safeModeExitLocation and safe mode should exit
