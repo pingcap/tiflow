@@ -554,7 +554,8 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 		if !ok {
 			log.Panic("mysql type does not found", zap.String("column name", name), zap.Any("mysqlType", mysqlType))
 		}
-		// since canal-json format lost `Flag`, typeStr might not be a valid MysqlType, we have to convert them back.
+		// since canal-json format lost `Flag`, we cannot easily figure out whether it's binary,
+		// typeStr might not be a valid MysqlType, we have to convert them back.
 		typeStr = strings.Replace(typeStr, "blob", "text", 1)
 		typeStr = strings.Replace(typeStr, "binary", "char", 1)
 		tp, ok := str2MySQLType[typeStr]
