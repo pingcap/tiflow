@@ -583,14 +583,10 @@ func (p *processor) handlePosition(currentTs int64) {
 	}
 
 	resolvedPhyTs := oracle.ExtractPhysical(minResolvedTs)
-	// It is more accurate to get tso from PD, but in most cases we have
-	// deployed NTP service, a little bias is acceptable here.
 	p.metricResolvedTsLagGauge.Set(float64(currentTs-resolvedPhyTs) / 1e3)
 	p.metricResolvedTsGauge.Set(float64(resolvedPhyTs))
 
 	checkpointPhyTs := oracle.ExtractPhysical(minCheckpointTs)
-	// It is more accurate to get tso from PD, but in most cases we have
-	// deployed NTP service, a little bias is acceptable here.
 	p.metricCheckpointTsLagGauge.Set(float64(currentTs-checkpointPhyTs) / 1e3)
 	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
 

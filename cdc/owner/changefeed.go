@@ -498,9 +498,8 @@ func (c *changefeed) updateStatus(currentTs int64, barrierTs model.Ts) {
 		return status, changed, nil
 	})
 	phyTs := oracle.ExtractPhysical(checkpointTs)
+
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
-	// It is more accurate to get tso from PD, but in most cases since we have
-	// deployed NTP service, a little bias is acceptable here.
 	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyTs) / 1e3)
 }
 

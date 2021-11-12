@@ -20,8 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/pdtime"
-
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -35,6 +33,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
 	pd "github.com/tikv/pd/client"
