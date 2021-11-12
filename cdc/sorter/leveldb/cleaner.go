@@ -46,7 +46,7 @@ var _ actor.Actor = (*CleanerActor)(nil)
 
 // NewCleanerActor returns a cleaner actor.
 func NewCleanerActor(
-	ctx context.Context, id int, db *leveldb.DB, router *actor.Router,
+	id int, db *leveldb.DB, router *actor.Router,
 	cfg *config.SorterConfig, wg *sync.WaitGroup,
 ) (*CleanerActor, actor.Mailbox, error) {
 	wg.Add(1)
