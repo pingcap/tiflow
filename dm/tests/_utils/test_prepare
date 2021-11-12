@@ -229,6 +229,27 @@ function run_sql_tidb_with_retry() {
     fi
 }
 
+# shortcut for run tidb sql and check result with retry
+function run_sql_tidb_with_retry_times() {
+    rc=0
+    for ((k=1; k<$3; k++)); do
+        run_sql_tidb "$1"
+        if grep -Fq "$2" "$TEST_DIR/sql_res.$TEST_NAME.txt"; then
+            rc=1
+            break
+        fi
+        echo "run tidb sql failed $k-th time, retry later"
+        sleep 2
+    done
+    if [[ $rc = 0 ]]; then
+        echo "TEST FAILED: OUTPUT DOES NOT CONTAIN '$2'"
+        echo "____________________________________"
+        cat "$TEST_DIR/sql_res.$TEST_NAME.txt"
+        echo "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+        exit 1
+    fi
+}
+
 # shortcut for check log contain with retry
 function check_log_contain_with_retry() {
     text=$1
