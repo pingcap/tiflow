@@ -2099,7 +2099,6 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		// don't return error if parse fail and filter success
 		metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
 		ec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
-		s.locations.saveTxnEndLocation(true) // if we can't parse a query event, mostly it's a DDL
 		return s.recordSkipSQLsLocation(&ec)
 	}
 
@@ -2137,7 +2136,6 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 			// in re-syncing, we can simply skip all DDLs,
 			// as they have been added to sharding DDL sequence
 			// only update lastPos when the query is a real DDL
-			s.locations.saveTxnEndLocation(true)
 			qec.tctx.L().Debug("skip event in re-replicating sharding group",
 				zap.String("event", "query"),
 				zap.Stringer("queryEventContext", qec),
@@ -2150,7 +2148,6 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		zap.String("event", "query"),
 		zap.Stringer("queryEventContext", qec),
 		zap.Stringer("locations", s.locations))
-	s.locations.saveTxnEndLocation(true) // update txnEndLocation, because we have checked `isDDL`
 
 	// TiDB can't handle multi schema change DDL, so we split it here.
 	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)

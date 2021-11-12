@@ -87,6 +87,8 @@ const (
 	Write
 	Update
 	Delete
+
+	DMLQuery
 )
 
 type testSyncerSuite struct {
@@ -202,6 +204,17 @@ func (s *testSyncerSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) []
 				c.Fatal(fmt.Sprintf("mock event generator don't support event type: %d", e.typ))
 			}
 			evs, _, err := s.eventsGenerator.GenDMLEvents(eventType, dmlData)
+			c.Assert(err, IsNil)
+			events = append(events, evs...)
+
+		case DMLQuery:
+			dmlData := []*event.DMLData{
+				{
+					Schema:     e.args[0].(string),
+					Query: e.args[1].(string),
+				},
+			}
+			evs, _, err := s.eventsGenerator.GenDMLEvents(replication.UNKNOWN_EVENT, dmlData)
 			c.Assert(err, IsNil)
 			events = append(events, evs...)
 		}

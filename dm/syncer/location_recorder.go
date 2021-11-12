@@ -34,6 +34,10 @@ type locationRecorder struct {
 	curEndLocation   binlog.Location
 	txnEndLocation   binlog.Location
 
+	// DML will also generate a query event if user set session binlog_format='statement', we use this field to
+	// distinguish DML query event.
+	inDML bool
+
 	mu sync.Mutex // guard curEndLocation because Syncer.printStatus is reading it from another goroutine.
 }
 
@@ -57,6 +61,7 @@ func (l *locationRecorder) setCurEndLocation(location binlog.Location) {
 	l.curEndLocation = location
 }
 
+// NOTE only locationRecorder should call this.
 func (l *locationRecorder) saveTxnEndLocation(needLock bool) {
 	if needLock {
 		l.mu.Lock()
@@ -119,16 +124,19 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 	case *replication.XIDEvent:
 		updateGTIDSet(ev.GSet)
 		l.saveTxnEndLocation(false)
+		l.inDML = false
 	case *replication.QueryEvent:
-		// we should update locations when the query is DDL, so skip BEGIN here
 		query := strings.TrimSpace(string(ev.Query))
 		if query == "BEGIN" {
+			l.inDML = true
+		}
+
+		if l.inDML {
 			return
 		}
 
 		updateGTIDSet(ev.GSet)
-		// don't update txnEndLocation, because the Query may not be a DDL because binlog format is a session variable
-		// let handleQueryEvent do this
+		l.saveTxnEndLocation(false)
 	}
 }
 
