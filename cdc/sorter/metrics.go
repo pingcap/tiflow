@@ -18,40 +18,40 @@ import (
 )
 
 var (
-	// SorterEventCount is the metric that counts events output by the sorter.
-	SorterEventCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+	// EventCount is the metric that counts events output by the sorter.
+	EventCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
 		Name:      "event_count",
 		Help:      "The number of events output by the sorter",
 	}, []string{"capture", "changefeed", "type"})
 
-	// SorterResolvedTsGauge is the metric that records sorter resolved ts.
-	SorterResolvedTsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	// ResolvedTsGauge is the metric that records sorter resolved ts.
+	ResolvedTsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
 		Name:      "resolved_ts_gauge",
 		Help:      "the resolved ts of the sorter",
 	}, []string{"capture", "changefeed"})
 
-	// SorterInMemoryDataSizeGauge is the metric that records sorter memory usage.
-	SorterInMemoryDataSizeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	// InMemoryDataSizeGauge is the metric that records sorter memory usage.
+	InMemoryDataSizeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
 		Name:      "in_memory_data_size_gauge",
 		Help:      "The amount of pending data stored in-memory by the sorter",
 	}, []string{"capture", "id"})
 
-	// SorterOnDiskDataSizeGauge is the metric that records sorter disk usage.
-	SorterOnDiskDataSizeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	// OnDiskDataSizeGauge is the metric that records sorter disk usage.
+	OnDiskDataSizeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
 		Name:      "on_disk_data_size_gauge",
 		Help:      "The amount of pending data stored on-disk by the sorter",
 	}, []string{"capture", "id"})
 
-	// SorterOpenFileCountGauge is the metric that records sorter open files.
-	SorterOpenFileCountGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	// OpenFileCountGauge is the metric that records sorter open files.
+	OpenFileCountGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
 		Name:      "open_file_count_gauge",
@@ -61,9 +61,9 @@ var (
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(SorterEventCount)
-	registry.MustRegister(SorterResolvedTsGauge)
-	registry.MustRegister(SorterInMemoryDataSizeGauge)
-	registry.MustRegister(SorterOnDiskDataSizeGauge)
-	registry.MustRegister(SorterOpenFileCountGauge)
+	registry.MustRegister(EventCount)
+	registry.MustRegister(ResolvedTsGauge)
+	registry.MustRegister(InMemoryDataSizeGauge)
+	registry.MustRegister(OnDiskDataSizeGauge)
+	registry.MustRegister(OpenFileCountGauge)
 }
