@@ -15,7 +15,7 @@ check-struct-only = false
 
     #tables = ["usertable","simple1","simple2"]
     #tables = ["usertable"]
-    target-check-tables = ["testSync.*"]
+    target-check-tables = ["testSync.?*"]
 
 [data-sources]
 [data-sources.mysql1]
