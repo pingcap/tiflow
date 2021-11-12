@@ -34,6 +34,7 @@ type statusSuite struct{}
 
 func (t *statusSuite) TestStatusRace(c *C) {
 	s := &Syncer{}
+	s.locations = &locationRecorder{}
 
 	l := log.With(zap.String("unit test", "TestStatueRace"))
 	s.tctx = tcontext.Background().WithLogger(l)
