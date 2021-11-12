@@ -1076,29 +1076,48 @@ func (s *Server) getStatusFromWorkers(
 	}
 	wg.Wait()
 	s.fillUnsyncedStatus(workerResps)
-	findTaskInResp := func(taskName string) bool {
+
+	// find if all sources status are provided in resps
+	findEnoughTaskInResp := func(taskName string) bool {
+		cnt := 0
 		for _, resp := range workerResps {
 			for _, status := range resp.SubTaskStatus {
 				if status.Name == taskName {
+					cnt += 1
+				}
+				if cnt == len(sources) {
 					return true
 				}
 			}
 		}
 		return false
 	}
-	// when taskName is empty and not want to get specify source status
-	// we need list all task even the worker that handle this task is not running.
-	if taskName == "" && !specicySource {
+	appendFakeResp := func(taskName, sourceName, msg string) {
+		setWorkerResp(&pb.QueryStatusResponse{
+			Result: false, Msg: msg, SubTaskStatus: []*pb.SubTaskStatus{{Name: taskName}},
+			SourceStatus: &pb.SourceStatus{Source: sourceName, Worker: "unknown-offline-worker"},
+		})
+	}
+	// when taskName is empty we need list all task even the worker that handle this task is not running.
+	if taskName == "" {
 		for taskName, sourceM := range s.scheduler.GetSubTaskCfgs() {
-			if !findTaskInResp(taskName) {
+			if !findEnoughTaskInResp(taskName) {
 				msg := fmt.Sprintf("can't find task: %s from dm-worker, please user dmctl list-member to check if worker is offline.", taskName)
 				log.L().Warn(msg)
-				for source := range sourceM {
-					setWorkerResp(&pb.QueryStatusResponse{
-						Result: false, Msg: msg,
-						SourceStatus:  &pb.SourceStatus{Source: source, Worker: "unknown-offline-worker"},
-						SubTaskStatus: []*pb.SubTaskStatus{{Name: taskName}},
-					})
+				// only add use specified source related to this task
+				if specicySource {
+					for _, needDisplayedSource := range sources {
+						if _, ok := sourceM[needDisplayedSource]; ok && !findEnoughTaskInResp(taskName) {
+							appendFakeResp(taskName, needDisplayedSource, msg)
+						}
+					}
+				} else {
+					// make fake response for every source related to this task
+					for source := range sourceM {
+						if !findEnoughTaskInResp(taskName) {
+							appendFakeResp(taskName, source, msg)
+						}
+					}
 				}
 			}
 		}
