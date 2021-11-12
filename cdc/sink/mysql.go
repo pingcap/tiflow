@@ -18,7 +18,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,36 +34,15 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/errorutil"
 	tifilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
-	tddl "github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/infoschema"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
-)
-
-const (
-	// expose these two variables for redo log applier
-	DefaultWorkerCount = 16
-	DefaultMaxTxnRow   = 256
-
-	defaultDMLMaxRetryTime     = 8
-	defaultDDLMaxRetryTime     = 20
-	defaultTiDBTxnMode         = "optimistic"
-	defaultFlushInterval       = time.Millisecond * 50
-	defaultBatchReplaceEnabled = true
-	defaultBatchReplaceSize    = 20
-	defaultReadTimeout         = "2m"
-	defaultWriteTimeout        = "2m"
-	defaultDialTimeout         = "2m"
-	defaultSafeMode            = true
 )
 
 const (
@@ -73,25 +51,11 @@ const (
 	backoffMaxDelayInMs = 60 * 1000
 )
 
-// SyncpointTableName is the name of table where all syncpoint maps sit
-const syncpointTableName string = "syncpoint_v1"
-
-var validSchemes = map[string]bool{
-	"mysql":     true,
-	"mysql+ssl": true,
-	"tidb":      true,
-	"tidb+ssl":  true,
-}
-
-type mysqlSyncpointStore struct {
-	db *sql.DB
-}
-
 type mysqlSink struct {
 	db     *sql.DB
 	params *sinkParams
 
-	filter *filter.Filter
+	filter *tifilter.Filter
 	cyclic *cyclic.Cyclic
 
 	txnCache      *common.UnresolvedTxnCache
@@ -114,13 +78,144 @@ type mysqlSink struct {
 	cancel         func()
 }
 
+func needSwitchDB(ddl *model.DDLEvent) bool {
+	if len(ddl.TableInfo.Schema) > 0 {
+		if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+var _ Sink = &mysqlSink{}
+
+// newMySQLSink creates a new MySQL sink using schema storage
+func newMySQLSink(
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI *url.URL,
+	filter *tifilter.Filter,
+	replicaConfig *config.ReplicaConfig,
+	opts map[string]string,
+) (Sink, error) {
+	opts[OptChangefeedID] = changefeedID
+	params, err := parseSinkURIToParams(ctx, sinkURI, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	params.enableOldValue = replicaConfig.EnableOldValue
+
+	// dsn format of the driver:
+	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+	username := sinkURI.User.Username()
+	password, _ := sinkURI.User.Password()
+	port := sinkURI.Port()
+	if username == "" {
+		username = "root"
+	}
+	if port == "" {
+		port = "4000"
+	}
+
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, params.tls)
+	dsn, err := dmysql.ParseDSN(dsnStr)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+
+	// create test db used for parameter detection
+	if dsn.Params == nil {
+		dsn.Params = make(map[string]string, 1)
+	}
+	if params.timezone != "" {
+		dsn.Params["time_zone"] = params.timezone
+	}
+	dsn.Params["readTimeout"] = params.readTimeout
+	dsn.Params["writeTimeout"] = params.writeTimeout
+	dsn.Params["timeout"] = params.dialTimeout
+	testDB, err := GetDBConnImpl(ctx, dsn.FormatDSN())
+	if err != nil {
+		return nil, err
+	}
+	defer testDB.Close()
+
+	dsnStr, err = generateDSNByParams(ctx, dsn, params, testDB)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	db, err := GetDBConnImpl(ctx, dsnStr)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info("Start mysql sink")
+
+	db.SetMaxIdleConns(params.workerCount)
+	db.SetMaxOpenConns(params.workerCount)
+
+	metricConflictDetectDurationHis := conflictDetectDurationHis.WithLabelValues(
+		params.captureAddr, params.changefeedID)
+	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
+	for i := 0; i < params.workerCount; i++ {
+		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
+			params.captureAddr, params.changefeedID, strconv.Itoa(i))
+	}
+	ctx, cancel := context.WithCancel(ctx)
+
+	sink := &mysqlSink{
+		db:                              db,
+		params:                          params,
+		filter:                          filter,
+		txnCache:                        common.NewUnresolvedTxnCache(),
+		statistics:                      NewStatistics(ctx, "mysql", opts),
+		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
+		metricBucketSizeCounters:        metricBucketSizeCounters,
+		errCh:                           make(chan error, 1),
+		forceReplicate:                  replicaConfig.ForceReplicate,
+		cancel:                          cancel,
+	}
+
+	if val, ok := opts[mark.OptCyclicConfig]; ok {
+		cfg := new(config.CyclicConfig)
+		err := cfg.Unmarshal([]byte(val))
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		sink.cyclic = cyclic.NewCyclic(cfg)
+
+		err = sink.adjustSQLMode(ctx)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	sink.execWaitNotifier = new(notify.Notifier)
+	sink.resolvedNotifier = new(notify.Notifier)
+
+	err = sink.createSinkWorkers(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	receiver, err := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	go sink.flushRowChangedEvents(ctx, receiver)
+
+	return sink, nil
+}
+
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	count := s.txnCache.Append(s.filter, rows...)
 	s.statistics.AddRowsCount(count)
 	return nil
 }
 
-// FlushRowChangedEvents will flushes all received events, we don't allow mysql
+// FlushRowChangedEvents will flush all received events, we don't allow mysql
 // sink to receive events before resolving
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	if atomic.LoadUint64(&s.maxResolvedTs) < resolvedTs {
@@ -214,7 +309,7 @@ func (s *mysqlSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
 	return retry.Do(ctx, func() error {
 		err := s.execDDL(ctx, ddl)
-		if isIgnorableDDLError(err) {
+		if errorutil.IsIgnorableMySQLDDLError(err) {
 			log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
 			return nil
 		}
@@ -226,7 +321,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
-	shouldSwitchDB := len(ddl.TableInfo.Schema) > 0 && ddl.Type != timodel.ActionCreateSchema
+	shouldSwitchDB := needSwitchDB(ddl)
 
 	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
 		select {
@@ -289,362 +384,6 @@ func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
 	return nil
-}
-
-var _ Sink = &mysqlSink{}
-
-type sinkParams struct {
-	workerCount         int
-	maxTxnRow           int
-	tidbTxnMode         string
-	changefeedID        string
-	captureAddr         string
-	batchReplaceEnabled bool
-	batchReplaceSize    int
-	readTimeout         string
-	writeTimeout        string
-	dialTimeout         string
-	enableOldValue      bool
-	safeMode            bool
-	timezone            string
-	tls                 string
-}
-
-func (s *sinkParams) Clone() *sinkParams {
-	clone := *s
-	return &clone
-}
-
-var defaultParams = &sinkParams{
-	workerCount:         DefaultWorkerCount,
-	maxTxnRow:           DefaultMaxTxnRow,
-	tidbTxnMode:         defaultTiDBTxnMode,
-	batchReplaceEnabled: defaultBatchReplaceEnabled,
-	batchReplaceSize:    defaultBatchReplaceSize,
-	readTimeout:         defaultReadTimeout,
-	writeTimeout:        defaultWriteTimeout,
-	dialTimeout:         defaultDialTimeout,
-	safeMode:            defaultSafeMode,
-}
-
-func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (string, error) {
-	var name string
-	var value string
-	querySQL := fmt.Sprintf("show session variables like '%s';", variableName)
-	err := db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
-	if err != nil && err != sql.ErrNoRows {
-		errMsg := "fail to query session variable " + variableName
-		return "", errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), errMsg)
-	}
-	// session variable works, use given default value
-	if err == nil {
-		return defaultValue, nil
-	}
-	// session variable not exists, return "" to ignore it
-	return "", nil
-}
-
-func configureSinkURI(
-	ctx context.Context,
-	dsnCfg *dmysql.Config,
-	params *sinkParams,
-	testDB *sql.DB,
-) (string, error) {
-	if dsnCfg.Params == nil {
-		dsnCfg.Params = make(map[string]string, 1)
-	}
-	dsnCfg.DBName = ""
-	dsnCfg.InterpolateParams = true
-	dsnCfg.MultiStatements = true
-	// if timezone is empty string, we don't pass this variable in dsn
-	if params.timezone != "" {
-		dsnCfg.Params["time_zone"] = params.timezone
-	}
-	dsnCfg.Params["readTimeout"] = params.readTimeout
-	dsnCfg.Params["writeTimeout"] = params.writeTimeout
-	dsnCfg.Params["timeout"] = params.dialTimeout
-
-	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
-	if err != nil {
-		return "", err
-	}
-	if autoRandom != "" {
-		dsnCfg.Params["allow_auto_random_explicit_insert"] = autoRandom
-	}
-
-	txnMode, err := checkTiDBVariable(ctx, testDB, "tidb_txn_mode", params.tidbTxnMode)
-	if err != nil {
-		return "", err
-	}
-	if txnMode != "" {
-		dsnCfg.Params["tidb_txn_mode"] = txnMode
-	}
-
-	dsnClone := dsnCfg.Clone()
-	dsnClone.Passwd = "******"
-	log.Info("sink uri is configured", zap.String("format dsn", dsnClone.FormatDSN()))
-
-	return dsnCfg.FormatDSN(), nil
-}
-
-func parseSinkURI(ctx context.Context, sinkURI *url.URL, opts map[string]string) (*sinkParams, error) {
-	params := defaultParams.Clone()
-
-	if cid, ok := opts[OptChangefeedID]; ok {
-		params.changefeedID = cid
-	}
-	if caddr, ok := opts[OptCaptureAddr]; ok {
-		params.captureAddr = caddr
-	}
-
-	if sinkURI == nil {
-		return nil, cerror.ErrMySQLConnectionError.GenWithStack("fail to open MySQL sink, empty URL")
-	}
-	scheme := strings.ToLower(sinkURI.Scheme)
-	if _, ok := validSchemes[scheme]; !ok {
-		return nil, cerror.ErrMySQLConnectionError.GenWithStack("can't create mysql sink with unsupported scheme: %s", scheme)
-	}
-	s := sinkURI.Query().Get("worker-count")
-	if s != "" {
-		c, err := strconv.Atoi(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		if c > 0 {
-			params.workerCount = c
-		}
-	}
-	s = sinkURI.Query().Get("max-txn-row")
-	if s != "" {
-		c, err := strconv.Atoi(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		params.maxTxnRow = c
-	}
-	s = sinkURI.Query().Get("tidb-txn-mode")
-	if s != "" {
-		if s == "pessimistic" || s == "optimistic" {
-			params.tidbTxnMode = s
-		} else {
-			log.Warn("invalid tidb-txn-mode, should be pessimistic or optimistic, use optimistic as default")
-		}
-	}
-	if sinkURI.Query().Get("ssl-ca") != "" {
-		credential := security.Credential{
-			CAPath:   sinkURI.Query().Get("ssl-ca"),
-			CertPath: sinkURI.Query().Get("ssl-cert"),
-			KeyPath:  sinkURI.Query().Get("ssl-key"),
-		}
-		tlsCfg, err := credential.ToTLSConfig()
-		if err != nil {
-			return nil, errors.Annotate(err, "fail to open MySQL connection")
-		}
-		name := "cdc_mysql_tls" + params.changefeedID
-		err = dmysql.RegisterTLSConfig(name, tlsCfg)
-		if err != nil {
-			return nil, errors.Annotate(
-				cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
-		}
-		params.tls = "?tls=" + name
-	}
-
-	s = sinkURI.Query().Get("batch-replace-enable")
-	if s != "" {
-		enable, err := strconv.ParseBool(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		params.batchReplaceEnabled = enable
-	}
-	if params.batchReplaceEnabled && sinkURI.Query().Get("batch-replace-size") != "" {
-		size, err := strconv.Atoi(sinkURI.Query().Get("batch-replace-size"))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		params.batchReplaceSize = size
-	}
-
-	// TODO: force safe mode in startup phase
-	s = sinkURI.Query().Get("safe-mode")
-	if s != "" {
-		safeModeEnabled, err := strconv.ParseBool(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		params.safeMode = safeModeEnabled
-	}
-
-	if _, ok := sinkURI.Query()["time-zone"]; ok {
-		s = sinkURI.Query().Get("time-zone")
-		if s == "" {
-			params.timezone = ""
-		} else {
-			params.timezone = fmt.Sprintf(`"%s"`, s)
-		}
-	} else {
-		tz := util.TimezoneFromCtx(ctx)
-		params.timezone = fmt.Sprintf(`"%s"`, tz.String())
-	}
-
-	// read, write, and dial timeout for each individual connection, equals to
-	// readTimeout, writeTimeout, timeout in go mysql driver respectively.
-	// ref: https://github.com/go-sql-driver/mysql#connection-pool-and-timeouts
-	// To keep the same style with other sink parameters, we use dash as word separator.
-	s = sinkURI.Query().Get("read-timeout")
-	if s != "" {
-		params.readTimeout = s
-	}
-	s = sinkURI.Query().Get("write-timeout")
-	if s != "" {
-		params.writeTimeout = s
-	}
-	s = sinkURI.Query().Get("timeout")
-	if s != "" {
-		params.dialTimeout = s
-	}
-
-	return params, nil
-}
-
-// GetDBConnImpl is the implement holder to get db connection. Export it for tests
-var GetDBConnImpl = getDBConn
-
-func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
-	db, err := sql.Open("mysql", dsnStr)
-	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "Open database connection failed")
-	}
-	err = db.PingContext(ctx)
-	if err != nil {
-		// close db to recycle resources
-		if closeErr := db.Close(); closeErr != nil {
-			log.Warn("close db failed", zap.Error(err))
-		}
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
-	}
-	return db, nil
-}
-
-// newMySQLSink creates a new MySQL sink using schema storage
-func newMySQLSink(
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	sinkURI *url.URL,
-	filter *tifilter.Filter,
-	replicaConfig *config.ReplicaConfig,
-	opts map[string]string,
-) (Sink, error) {
-	opts[OptChangefeedID] = changefeedID
-	params, err := parseSinkURI(ctx, sinkURI, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	params.enableOldValue = replicaConfig.EnableOldValue
-
-	// dsn format of the driver:
-	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
-	username := sinkURI.User.Username()
-	password, _ := sinkURI.User.Password()
-	port := sinkURI.Port()
-	if username == "" {
-		username = "root"
-	}
-	if port == "" {
-		port = "4000"
-	}
-
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, params.tls)
-	dsn, err := dmysql.ParseDSN(dsnStr)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-	}
-
-	// create test db used for parameter detection
-	if dsn.Params == nil {
-		dsn.Params = make(map[string]string, 1)
-	}
-	if params.timezone != "" {
-		dsn.Params["time_zone"] = params.timezone
-	}
-	dsn.Params["readTimeout"] = params.readTimeout
-	dsn.Params["writeTimeout"] = params.writeTimeout
-	dsn.Params["timeout"] = params.dialTimeout
-	testDB, err := GetDBConnImpl(ctx, dsn.FormatDSN())
-	if err != nil {
-		return nil, err
-	}
-	defer testDB.Close()
-
-	dsnStr, err = configureSinkURI(ctx, dsn, params, testDB)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	db, err := GetDBConnImpl(ctx, dsnStr)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Info("Start mysql sink")
-
-	db.SetMaxIdleConns(params.workerCount)
-	db.SetMaxOpenConns(params.workerCount)
-
-	metricConflictDetectDurationHis := conflictDetectDurationHis.WithLabelValues(
-		params.captureAddr, params.changefeedID)
-	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
-	for i := 0; i < params.workerCount; i++ {
-		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
-			params.captureAddr, params.changefeedID, strconv.Itoa(i))
-	}
-	ctx, cancel := context.WithCancel(ctx)
-
-	sink := &mysqlSink{
-		db:                              db,
-		params:                          params,
-		filter:                          filter,
-		txnCache:                        common.NewUnresolvedTxnCache(),
-		statistics:                      NewStatistics(ctx, "mysql", opts),
-		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
-		metricBucketSizeCounters:        metricBucketSizeCounters,
-		errCh:                           make(chan error, 1),
-		forceReplicate:                  replicaConfig.ForceReplicate,
-		cancel:                          cancel,
-	}
-
-	if val, ok := opts[mark.OptCyclicConfig]; ok {
-		cfg := new(config.CyclicConfig)
-		err := cfg.Unmarshal([]byte(val))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		sink.cyclic = cyclic.NewCyclic(cfg)
-
-		err = sink.adjustSQLMode(ctx)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-
-	sink.execWaitNotifier = new(notify.Notifier)
-	sink.resolvedNotifier = new(notify.Notifier)
-
-	err = sink.createSinkWorkers(ctx)
-
-	if err != nil {
-		return nil, err
-	}
-
-	receiver, err := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
-	if err != nil {
-		return nil, err
-	}
-	go sink.flushRowChangedEvents(ctx, receiver)
-
-	return sink, nil
 }
 
 func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
@@ -729,156 +468,6 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 		s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
 	})
 	s.notifyAndWaitExec(ctx)
-}
-
-type mysqlSinkWorker struct {
-	txnCh            chan *model.SingleTableTxn
-	maxTxnRow        int
-	bucket           int
-	execDMLs         func(context.Context, []*model.RowChangedEvent, uint64, int) error
-	metricBucketSize prometheus.Counter
-	receiver         *notify.Receiver
-	checkpointTs     uint64
-	closedCh         chan struct{}
-}
-
-func newMySQLSinkWorker(
-	maxTxnRow int,
-	bucket int,
-	metricBucketSize prometheus.Counter,
-	receiver *notify.Receiver,
-	execDMLs func(context.Context, []*model.RowChangedEvent, uint64, int) error,
-) *mysqlSinkWorker {
-	return &mysqlSinkWorker{
-		txnCh:            make(chan *model.SingleTableTxn, 1024),
-		maxTxnRow:        maxTxnRow,
-		bucket:           bucket,
-		metricBucketSize: metricBucketSize,
-		execDMLs:         execDMLs,
-		receiver:         receiver,
-		closedCh:         make(chan struct{}, 1),
-	}
-}
-
-func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.SingleTableTxn) {
-	if txn == nil {
-		return
-	}
-	select {
-	case <-ctx.Done():
-	case w.txnCh <- txn:
-	}
-}
-
-func (w *mysqlSinkWorker) appendFinishTxn(wg *sync.WaitGroup) {
-	// since worker will always fetch txns from txnCh, we don't need to worry the
-	// txnCh full and send is blocked.
-	wg.Add(1)
-	w.txnCh <- &model.SingleTableTxn{
-		FinishWg: wg,
-	}
-}
-
-func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
-	var (
-		toExecRows   []*model.RowChangedEvent
-		replicaID    uint64
-		txnNum       int
-		lastCommitTs uint64
-	)
-
-	// mark FinishWg before worker exits, all data txns can be omitted.
-	defer func() {
-		for {
-			select {
-			case txn := <-w.txnCh:
-				if txn.FinishWg != nil {
-					txn.FinishWg.Done()
-				}
-			default:
-				return
-			}
-		}
-	}()
-
-	defer func() {
-		if r := recover(); r != nil {
-			buf := make([]byte, 4096)
-			stackSize := runtime.Stack(buf, false)
-			buf = buf[:stackSize]
-			err = cerror.ErrMySQLWorkerPanic.GenWithStack("mysql sink concurrent execute panic, stack: %v", string(buf))
-			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stack trace"))
-		}
-	}()
-
-	flushRows := func() error {
-		if len(toExecRows) == 0 {
-			return nil
-		}
-		rows := make([]*model.RowChangedEvent, len(toExecRows))
-		copy(rows, toExecRows)
-		err := w.execDMLs(ctx, rows, replicaID, w.bucket)
-		if err != nil {
-			txnNum = 0
-			return err
-		}
-		atomic.StoreUint64(&w.checkpointTs, lastCommitTs)
-		toExecRows = toExecRows[:0]
-		w.metricBucketSize.Add(float64(txnNum))
-		txnNum = 0
-		return nil
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case txn := <-w.txnCh:
-			if txn == nil {
-				return errors.Trace(flushRows())
-			}
-			if txn.FinishWg != nil {
-				if err := flushRows(); err != nil {
-					return errors.Trace(err)
-				}
-				txn.FinishWg.Done()
-				continue
-			}
-			if txn.ReplicaID != replicaID || len(toExecRows)+len(txn.Rows) > w.maxTxnRow {
-				if err := flushRows(); err != nil {
-					txnNum++
-					return errors.Trace(err)
-				}
-			}
-			replicaID = txn.ReplicaID
-			toExecRows = append(toExecRows, txn.Rows...)
-			lastCommitTs = txn.CommitTs
-			txnNum++
-		case <-w.receiver.C:
-			if err := flushRows(); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
-}
-
-// cleanup waits for notification from closedCh and consumes all txns from txnCh.
-// The exit sequence is
-// 1. producer(sink.flushRowChangedEvents goroutine) of txnCh exits
-// 2. goroutine in 1 sends notification to closedCh of each sink worker
-// 3. each sink worker receives the notification from closedCh and mark FinishWg as Done
-func (w *mysqlSinkWorker) cleanup() {
-	<-w.closedCh
-	for {
-		select {
-		case txn := <-w.txnCh:
-			if txn.FinishWg != nil {
-				txn.FinishWg.Done()
-			}
-		default:
-			return
-		}
-	}
 }
 
 func (s *mysqlSink) Close(ctx context.Context) error {
@@ -1042,7 +631,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		var args []interface{}
 		quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
 
-		// Translate to UPDATE if old value is enabled, not in safe mode and is update event
+		// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
+		// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 			flushCacheDMLs()
 			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
@@ -1054,9 +644,12 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			continue
 		}
 
-		// Case for delete event or update event
-		// If old value is enabled and not in safe mode,
-		// update will be translated to DELETE + INSERT(or REPLACE) SQL.
+		// Case for update event or delete event.
+		// For update event:
+		// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
+		// So we will prepare a DELETE SQL here.
+		// For delete event:
+		// It will be translated directly into a DELETE SQL.
 		if len(row.PreColumns) != 0 {
 			flushCacheDMLs()
 			query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
@@ -1067,7 +660,14 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			}
 		}
 
-		// Case for insert event or update event
+		// Case for update event or insert event.
+		// For update event:
+		// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
+		// So we will prepare a REPLACE SQL here.
+		// For insert event:
+		// It will be translated directly into a
+		// INSERT(old value is enabled and not in safe mode)
+		// or REPLACE(old value is disabled or in safe mode) SQL.
 		if len(row.Columns) != 0 {
 			if s.params.batchReplaceEnabled {
 				query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
@@ -1291,27 +891,6 @@ func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, a
 	return
 }
 
-func isIgnorableDDLError(err error) bool {
-	errCode, ok := getSQLErrCode(err)
-	if !ok {
-		return false
-	}
-	// we can get error code from:
-	// infoschema's error definition: https://github.com/pingcap/tidb/blob/master/infoschema/infoschema.go
-	// DDL's error definition: https://github.com/pingcap/tidb/blob/master/ddl/ddl.go
-	// tidb/mysql error code definition: https://github.com/pingcap/tidb/blob/master/mysql/errcode.go
-	switch errCode {
-	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseNotExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
-		infoschema.ErrTableExists.Code(), infoschema.ErrTableNotExists.Code(), infoschema.ErrTableDropExists.Code(),
-		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(), infoschema.ErrIndexExists.Code(),
-		infoschema.ErrKeyNotExists.Code(), tddl.ErrCantDropFieldOrKey.Code(), mysql.ErrDupKeyName, mysql.ErrSameNamePartition,
-		mysql.ErrDropPartitionNonExistent, mysql.ErrMultiplePriKey:
-		return true
-	default:
-		return false
-	}
-}
-
 func getSQLErrCode(err error) (errors.ErrCode, bool) {
 	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
 	if !ok {
@@ -1334,168 +913,21 @@ func buildColumnList(names []string) string {
 	return b.String()
 }
 
-// newSyncpointStore create a sink to record the syncpoint map in downstream DB for every changefeed
-func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (SyncpointStore, error) {
-	var syncDB *sql.DB
+// GetDBConnImpl is the implement holder to get db connection. Export it for tests
+var GetDBConnImpl = getDBConn
 
-	// todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
-	scheme := strings.ToLower(sinkURI.Scheme)
-	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
-		return nil, errors.New("can create mysql sink with unsupported scheme")
+func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
+	db, err := sql.Open("mysql", dsnStr)
+	if err != nil {
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 	}
-	params := defaultParams.Clone()
-	s := sinkURI.Query().Get("tidb-txn-mode")
-	if s != "" {
-		if s == "pessimistic" || s == "optimistic" {
-			params.tidbTxnMode = s
-		} else {
-			log.Warn("invalid tidb-txn-mode, should be pessimistic or optimistic, use optimistic as default")
+	err = db.PingContext(ctx)
+	if err != nil {
+		// close db to recycle resources
+		if closeErr := db.Close(); closeErr != nil {
+			log.Warn("close db failed", zap.Error(err))
 		}
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 	}
-	var tlsParam string
-	if sinkURI.Query().Get("ssl-ca") != "" {
-		credential := security.Credential{
-			CAPath:   sinkURI.Query().Get("ssl-ca"),
-			CertPath: sinkURI.Query().Get("ssl-cert"),
-			KeyPath:  sinkURI.Query().Get("ssl-key"),
-		}
-		tlsCfg, err := credential.ToTLSConfig()
-		if err != nil {
-			return nil, errors.Annotate(err, "fail to open MySQL connection")
-		}
-		name := "cdc_mysql_tls" + "syncpoint" + id
-		err = dmysql.RegisterTLSConfig(name, tlsCfg)
-		if err != nil {
-			return nil, errors.Annotate(err, "fail to open MySQL connection")
-		}
-		tlsParam = "?tls=" + name
-	}
-	if _, ok := sinkURI.Query()["time-zone"]; ok {
-		s = sinkURI.Query().Get("time-zone")
-		if s == "" {
-			params.timezone = ""
-		} else {
-			params.timezone = fmt.Sprintf(`"%s"`, s)
-		}
-	} else {
-		tz := util.TimezoneFromCtx(ctx)
-		params.timezone = fmt.Sprintf(`"%s"`, tz.String())
-	}
-
-	// dsn format of the driver:
-	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
-	username := sinkURI.User.Username()
-	password, _ := sinkURI.User.Password()
-	port := sinkURI.Port()
-	if username == "" {
-		username = "root"
-	}
-	if port == "" {
-		port = "4000"
-	}
-
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
-	dsn, err := dmysql.ParseDSN(dsnStr)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	// create test db used for parameter detection
-	if dsn.Params == nil {
-		dsn.Params = make(map[string]string, 1)
-	}
-	testDB, err := sql.Open("mysql", dsn.FormatDSN())
-	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection when configuring sink")
-	}
-	defer testDB.Close()
-	dsnStr, err = configureSinkURI(ctx, dsn, params, testDB)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	syncDB, err = sql.Open("mysql", dsnStr)
-	if err != nil {
-		return nil, errors.Annotate(err, "Open database connection failed")
-	}
-	err = syncDB.PingContext(ctx)
-	if err != nil {
-		return nil, errors.Annotate(err, "fail to open MySQL connection")
-	}
-
-	log.Info("Start mysql syncpoint sink")
-	syncpointStore := &mysqlSyncpointStore{
-		db: syncDB,
-	}
-
-	return syncpointStore, nil
-}
-
-func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
-	database := mark.SchemaName
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		log.Error("create sync table: begin Tx fail", zap.Error(err))
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	_, err = tx.Exec("CREATE DATABASE IF NOT EXISTS " + database)
-	if err != nil {
-		err2 := tx.Rollback()
-		if err2 != nil {
-			log.Error("failed to create syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
-		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	_, err = tx.Exec("USE " + database)
-	if err != nil {
-		err2 := tx.Rollback()
-		if err2 != nil {
-			log.Error("failed to create syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
-		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS " + syncpointTableName + " (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `cf`, `primary_ts` ) )")
-	if err != nil {
-		err2 := tx.Rollback()
-		if err2 != nil {
-			log.Error("failed to create syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
-		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	err = tx.Commit()
-	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-}
-
-func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, checkpointTs uint64) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		log.Error("sync table: begin Tx fail", zap.Error(err))
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	row := tx.QueryRow("select @@tidb_current_ts")
-	var secondaryTs string
-	err = row.Scan(&secondaryTs)
-	if err != nil {
-		log.Info("sync table: get tidb_current_ts err")
-		err2 := tx.Rollback()
-		if err2 != nil {
-			log.Error("failed to write syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
-		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	_, err = tx.Exec("insert ignore into "+mark.SchemaName+"."+syncpointTableName+"(cf, primary_ts, secondary_ts) VALUES (?,?,?)", id, checkpointTs, secondaryTs)
-	if err != nil {
-		err2 := tx.Rollback()
-		if err2 != nil {
-			log.Error("failed to write syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
-		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	err = tx.Commit()
-	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-}
-
-func (s *mysqlSyncpointStore) Close() error {
-	err := s.db.Close()
-	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
+	return db, nil
 }
