@@ -255,6 +255,7 @@ func (w *Writer) Close() error {
 	}
 	w.Lock()
 	defer w.Unlock()
+	// always set to false when closed, since if having err may not get fixed just by retry
 	defer w.running.Store(false)
 
 	err := w.close()
