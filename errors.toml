@@ -681,6 +681,11 @@ error = '''
 peer-to-peer message server has too many pending tasks
 '''
 
+["CDC:ErrPeerMessageToManyPeers"]
+error = '''
+peer-to-peer message server got too many peers: %d peers
+'''
+
 ["CDC:ErrPeerMessageTopicCongested"]
 error = '''
 peer-to-peer message topic has congested, aborting all connections

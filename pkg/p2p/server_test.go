@@ -50,6 +50,7 @@ var defaultServerConfig4Testing = &MessageServerConfig{
 	SendChannelSize:      16,
 	AckInterval:          time.Millisecond * 200,
 	WorkerPoolSize:       4,
+	MaxPeerCount:         1024,
 }
 
 func newServerForTesting(t *testing.T, serverID string) (server *MessageServer, newClient func() (p2p.CDCPeerToPeerClient, func()), cancel func()) {
@@ -759,6 +760,168 @@ func TestServerTopicCongestedDueToNoHandler(t *testing.T) {
 	wg.Wait()
 }
 
+func TestServerIncomingConnectionStale(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	server, newClient, closer := newServerForTesting(t, "test-server-1")
+	defer closer()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(ctx)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	client, closeClient := newClient()
+	defer closeClient()
+
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer cancelStream()
+	stream, err := client.SendMessage(streamCtx)
+	require.NoError(t, err)
+
+	err = stream.Send(&p2p.MessagePacket{
+		Meta: &p2p.StreamMeta{
+			SenderId:      "test-client-1",
+			ReceiverId:    "test-server-1",
+			Epoch:         5, // a larger epoch
+			ClientVersion: version.ReleaseSemver(),
+		},
+	})
+	require.NoError(t, err)
+
+	resp, err := stream.Recv()
+	require.NoError(t, err)
+	require.Equal(t, resp.ExitReason, p2p.ExitReason_OK)
+
+	stream, err = client.SendMessage(ctx)
+	require.NoError(t, err)
+
+	err = stream.Send(&p2p.MessagePacket{
+		Meta: &p2p.StreamMeta{
+			SenderId:      "test-client-1",
+			ReceiverId:    "test-server-1",
+			Epoch:         4, // a smaller epoch
+			ClientVersion: version.ReleaseSemver(),
+		},
+	})
+	require.NoError(t, err)
+
+	for {
+		resp, err := stream.Recv()
+		require.NoError(t, err)
+		if resp.ExitReason == p2p.ExitReason_OK {
+			continue
+		}
+		require.Equal(t, resp.ExitReason, p2p.ExitReason_STALE_CONNECTION)
+		break
+	}
+
+	cancel()
+	wg.Wait()
+}
+
+func TestServerRepeatedMessages(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	server, newClient, closer := newServerForTesting(t, "test-server-1")
+	defer closer()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(ctx)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	var lastIndex int64
+	_ = mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
+		require.Equal(t, "test-client-1", senderID)
+		require.IsType(t, &testTopicContent{}, i)
+		content := i.(*testTopicContent)
+		require.Equal(t, content.Index-1, atomic.LoadInt64(&lastIndex))
+		atomic.StoreInt64(&lastIndex, content.Index)
+		return nil
+	})
+
+	client, closeClient := newClient()
+	defer closeClient()
+
+	stream, err := client.SendMessage(ctx)
+	require.NoError(t, err)
+
+	err = stream.Send(&p2p.MessagePacket{
+		Meta: &p2p.StreamMeta{
+			SenderId:      "test-client-1",
+			ReceiverId:    "test-server-1",
+			Epoch:         0,
+			ClientVersion: version.ReleaseSemver(),
+		},
+	})
+	require.NoError(t, err)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer cancel()
+		for {
+			resp, err := stream.Recv()
+			require.NoError(t, err)
+			require.Equal(
+				t,
+				p2p.ExitReason_OK,
+				resp.ExitReason,
+				"unexpected error: %s",
+				resp.ErrorMessage,
+			)
+			if resp.Ack[0].LastSeq == defaultMessageBatchSizeSmall {
+				return
+			}
+		}
+	}()
+
+	for i := 0; i < defaultMessageBatchSizeSmall; i++ {
+		content := &testTopicContent{Index: int64(i + 1)}
+		bytes, err := json.Marshal(content)
+		require.NoError(t, err)
+
+		err = stream.Send(&p2p.MessagePacket{
+			Entries: []*p2p.MessageEntry{
+				{
+					Topic:    "test-topic-1",
+					Content:  bytes,
+					Sequence: int64(i + 1),
+				},
+			},
+		})
+		if err != nil {
+			require.Regexp(t, "EOF", err.Error())
+			return
+		}
+
+		err = stream.Send(&p2p.MessagePacket{
+			Entries: []*p2p.MessageEntry{
+				{
+					Topic:    "test-topic-1",
+					Content:  bytes,
+					Sequence: int64(i + 1),
+				},
+			},
+		})
+		if err != nil {
+			require.Regexp(t, "EOF", err.Error())
+			return
+		}
+	}
+
+	wg.Wait()
+}
+
 func TestServerExitWhileAddingHandler(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
@@ -792,7 +955,7 @@ func TestServerExitWhileAddingHandler(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		time.Sleep(time.Millisecond * 100)
-		_, err := server.MustAddHandler(ctx, "test-topic", &testTopicContent{}, func(s string, i interface{}) error {
+		_, err := server.SyncAddHandler(ctx, "test-topic", &testTopicContent{}, func(s string, i interface{}) error {
 			return nil
 		})
 		require.Error(t, err)
@@ -832,7 +995,7 @@ func TestServerExitWhileRemovingHandler(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_, err := server.MustAddHandler(ctx, "test-topic", &testTopicContent{}, func(s string, i interface{}) error {
+		_, err := server.SyncAddHandler(ctx, "test-topic", &testTopicContent{}, func(s string, i interface{}) error {
 			return nil
 		})
 		require.NoError(t, err)
@@ -841,7 +1004,7 @@ func TestServerExitWhileRemovingHandler(t *testing.T) {
 		})
 		require.NoError(t, err)
 		time.Sleep(time.Millisecond * 100)
-		err = server.MustRemoveHandler(ctx, "test-topic")
+		err = server.SyncRemoveHandler(ctx, "test-topic")
 		require.NoError(t, err)
 	}()
 
@@ -852,5 +1015,48 @@ func TestServerExitWhileRemovingHandler(t *testing.T) {
 		cancelServer()
 	}()
 
+	wg.Wait()
+}
+
+func TestServerVersionsIncompatible(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	server, newClient, closer := newServerForTesting(t, "test-server-1")
+	defer closer()
+
+	// enables version check
+	server.config.EnableVersionCheck = true
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(ctx)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	client, closeClient := newClient()
+	defer closeClient()
+
+	stream, err := client.SendMessage(ctx)
+	require.NoError(t, err)
+
+	err = stream.Send(&p2p.MessagePacket{
+		Meta: &p2p.StreamMeta{
+			SenderId:      "test-client-1",
+			ReceiverId:    "test-server-1",
+			Epoch:         0,
+			ClientVersion: "v5.1.0",
+		},
+	})
+	require.NoError(t, err)
+
+	resp, err := stream.Recv()
+	require.NoError(t, err)
+	require.Equal(t, p2p.ExitReason_UNKNOWN, resp.ExitReason)
+	require.Regexp(t, ".*illegal version.*", resp.String())
+
+	cancel()
 	wg.Wait()
 }

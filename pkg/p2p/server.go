@@ -31,12 +31,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 	gRPCPeer "google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
 const (
+	// waitUnregisterHandleTimeout specifies how long to wait for
+	// the topic handler to consume all pending messages before
+	// forcefully unregister the handler.
+	// For a correct implementation of the handler, the time it needs
+	// to consume these messages is minimal, as the handler is not
+	// expected to block on channels, etc.
 	waitUnregisterHandleTimeout = time.Second * 5
 )
 
@@ -52,6 +59,12 @@ type MessageServerConfig struct {
 	AckInterval time.Duration
 	// The size of the goroutine pool for running the handlers.
 	WorkerPoolSize int
+	// The maximum send rate per stream (per peer).
+	SendRateLimitPerStream float64
+	// The maximum number of peers acceptable by this server
+	MaxPeerCount int
+	// Whether to reject clients with other versions
+	EnableVersionCheck bool
 }
 
 // cdcPeer is used to store information on one connected client.
@@ -96,7 +109,7 @@ type MessageServer struct {
 	peerLock sync.RWMutex
 	peers    map[string]*cdcPeer // all currently connected clients
 
-	// messages for topics with NO registered handle.
+	// pendingMessages store messages for topics with NO registered handle.
 	// This can happen when the server is slow.
 	// The upper limit of pending messages is restricted by
 	// MaxTopicPendingCount in MessageServerConfig.
@@ -289,10 +302,6 @@ func (m *MessageServer) tick(ctx context.Context) {
 			})
 		}
 		m.acksMapLock.RUnlock()
-		if len(acks) == 0 {
-			// No topic to ack, skip.
-			continue
-		}
 
 		peer.metricsAckCount.Inc()
 		err := peer.sender.Send(ctx, p2p.SendMessageResponse{
@@ -322,12 +331,19 @@ func (m *MessageServer) deregisterPeer(ctx context.Context, peer *cdcPeer, err e
 	}
 }
 
-// MustAddHandler registers a handler for messages in a given topic and waits for the operation
+// We use an empty interface to hold the information on the type of the object
+// that we want to deserialize a message to.
+// We pass an object of the desired type, and use `reflect.TypeOf` to extract the type,
+// and then when we need it, we can use `reflect.New` to allocate a new object of this
+// type.
+type typeInformation = interface{}
+
+// SyncAddHandler registers a handler for messages in a given topic and waits for the operation
 // to complete.
-func (m *MessageServer) MustAddHandler(
+func (m *MessageServer) SyncAddHandler(
 	ctx context.Context,
 	topic string,
-	tpi interface{},
+	tpi typeInformation,
 	fn func(string, interface{}) error,
 ) (<-chan error, error) {
 	doneCh, errCh, err := m.AddHandler(ctx, topic, tpi, fn)
@@ -348,7 +364,7 @@ func (m *MessageServer) MustAddHandler(
 func (m *MessageServer) AddHandler(
 	ctx context.Context,
 	topic string,
-	tpi interface{},
+	tpi typeInformation,
 	fn func(string, interface{}) error) (chan struct{}, <-chan error, error) {
 	tp := reflect.TypeOf(tpi)
 
@@ -423,9 +439,9 @@ func (m *MessageServer) AddHandler(
 	return doneCh, poolHandle.ErrCh(), nil
 }
 
-// MustRemoveHandler removes the registered handler for the given topic and wait
+// SyncRemoveHandler removes the registered handler for the given topic and wait
 // for the operation to complete.
-func (m *MessageServer) MustRemoveHandler(ctx context.Context, topic string) error {
+func (m *MessageServer) SyncRemoveHandler(ctx context.Context, topic string) error {
 	doneCh, err := m.RemoveHandler(ctx, topic)
 	if err != nil {
 		return errors.Trace(err)
@@ -509,6 +525,11 @@ func (m *MessageServer) registerPeer(
 	m.peerLock.Lock()
 	peer, ok := m.peers[streamMeta.SenderId]
 	if !ok {
+		peerCount := len(m.peers)
+		if peerCount > m.config.MaxPeerCount {
+			m.peerLock.Unlock()
+			return cerror.ErrPeerMessageToManyPeers.GenWithStackByArgs(peerCount)
+		}
 		// no existing peer
 		m.peers[streamMeta.SenderId] = newCDCPeer(streamMeta.SenderId, streamMeta.Epoch, sender)
 		m.peerLock.Unlock()
@@ -603,6 +624,7 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 		return nil
 	})
 	errg.Go(func() error {
+		rl := rate.NewLimiter(rate.Limit(m.config.SendRateLimitPerStream), 1)
 		for {
 			select {
 			case <-ctx.Done():
@@ -613,6 +635,9 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 					cancel()
 					return nil
 				}
+				if err := rl.Wait(ctx); err != nil {
+					return errors.Trace(err)
+				}
 				if err := stream.Send(&resp); err != nil {
 					return errors.Trace(err)
 				}
@@ -620,6 +645,10 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 		}
 	})
 
+	// We need to select on `m.closeCh` and `ctx.Done()` to make sure that
+	// the request handler returns when we need it to.
+	// We cannot allow `Send` and `Recv` to block the handler when it needs to exit,
+	// such as when the MessageServer is exiting due to an error.
 	select {
 	case <-ctx.Done():
 		return status.New(codes.Canceled, "context canceled").Err()
@@ -757,8 +786,8 @@ func (m *MessageServer) verifyStreamMeta(streamMeta *p2p.StreamMeta) error {
 		)
 	}
 
-	if version.ReleaseSemver() == "" {
-		// skip checking versions for some unit test cases
+	if !m.config.EnableVersionCheck {
+		// skip checking versions
 		return nil
 	}
 
