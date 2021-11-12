@@ -30,8 +30,13 @@ require (
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/klauspost/compress v1.11.1 // indirect
 	github.com/lib/pq v1.3.0 // indirect
+<<<<<<< HEAD
 	github.com/linkedin/goavro/v2 v2.9.7
 	github.com/mackerelio/go-osstat v0.1.0
+=======
+	github.com/linkedin/goavro/v2 v2.9.8
+	github.com/mattn/go-colorable v0.1.11 // indirect
+>>>>>>> 819615c59 (cdc/sorter: make unified sorter cgroup aware (#3436))
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
 	github.com/onsi/ginkgo v1.9.0 // indirect
