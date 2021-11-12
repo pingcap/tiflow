@@ -1015,7 +1015,7 @@ func TestServerVersionsIncompatible(t *testing.T) {
 	defer closer()
 
 	// enables version check
-	server.config.ServerVersion = "v5.2.0"
+	server.config.ServerVersion = "5.2.0"
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -1036,7 +1036,7 @@ func TestServerVersionsIncompatible(t *testing.T) {
 			SenderId:      "test-client-1",
 			ReceiverId:    "test-server-1",
 			Epoch:         0,
-			ClientVersion: "v5.1.0",
+			ClientVersion: "5.1.0",
 		},
 	})
 	require.NoError(t, err)
