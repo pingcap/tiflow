@@ -187,7 +187,7 @@ func (s *Server) DMAPIGetSourceList(ctx echo.Context, params openapi.DMAPIGetSou
 	if params.WithStatus != nil && *params.WithStatus {
 		nexCtx := ctx.Request().Context()
 		for idx := range sourceList {
-			sourceStatusList, err := s.getSourceStatusListFromWorker(nexCtx, sourceList[idx].SourceName)
+			sourceStatusList, err := s.getSourceStatusListFromWorker(nexCtx, sourceList[idx].SourceName, false)
 			if err != nil {
 				return err
 			}
@@ -309,8 +309,8 @@ func (s *Server) DMAPIGetSourceTableList(ctx echo.Context, sourceName string, sc
 	return ctx.JSON(http.StatusOK, tableList)
 }
 
-func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName string) ([]openapi.SourceStatus, error) {
-	workerStatusList := s.getStatusFromWorkers(ctx, []string{sourceName}, "", true, false)
+func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName string, specicySource bool) ([]openapi.SourceStatus, error) {
+	workerStatusList := s.getStatusFromWorkers(ctx, []string{sourceName}, "", true, specicySource)
 	sourceStatusList := make([]openapi.SourceStatus, len(workerStatusList))
 	for i, workerStatus := range workerStatusList {
 		if workerStatus == nil {
@@ -349,7 +349,7 @@ func (s *Server) DMAPIGetSourceStatus(ctx echo.Context, sourceName string) error
 		resp.Total = len(resp.Data)
 		return ctx.JSON(http.StatusOK, resp)
 	}
-	sourceStatusList, err := s.getSourceStatusListFromWorker(ctx.Request().Context(), sourceName)
+	sourceStatusList, err := s.getSourceStatusListFromWorker(ctx.Request().Context(), sourceName, true)
 	if err != nil {
 		return err
 	}
@@ -482,17 +482,21 @@ func (s *Server) DMAPIGetTaskList(ctx echo.Context) error {
 // DMAPIGetTaskStatus url is:(GET /api/v1/tasks/{task-name}/status).
 func (s *Server) DMAPIGetTaskStatus(ctx echo.Context, taskName string, params openapi.DMAPIGetTaskStatusParams) error {
 	// 1. get task source list from scheduler
-	var sourceList []string
+	var (
+		sourceList    []string
+		specicySource bool
+	)
 	if params.SourceNameList == nil {
 		sourceList = s.getTaskResources(taskName)
 	} else {
 		sourceList = *params.SourceNameList
+		specicySource = true
 	}
 	if len(sourceList) == 0 {
 		return terror.ErrSchedulerTaskNotExist.Generate(taskName)
 	}
 	// 2. get status from workers
-	workerStatusList := s.getStatusFromWorkers(ctx.Request().Context(), sourceList, taskName, true, false)
+	workerStatusList := s.getStatusFromWorkers(ctx.Request().Context(), sourceList, taskName, true, specicySource)
 	subTaskStatusList := make([]openapi.SubTaskStatus, len(workerStatusList))
 	for i, workerStatus := range workerStatusList {
 		if workerStatus == nil || workerStatus.SourceStatus == nil {
