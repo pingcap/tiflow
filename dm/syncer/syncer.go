@@ -920,7 +920,7 @@ func (s *Syncer) addJob(job *job) error {
 		return nil
 	}
 
-	// avoid data race with compactor
+	// avoid job.type data race with compactor.run()
 	// simply copy the opType for performance, though copy a new job in compactor is better
 	tp := job.tp
 	switch tp {
