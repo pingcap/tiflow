@@ -995,6 +995,55 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
+func (s MySQLSinkSuite) TestNeedSwitchDB(c *check.C) {
+	defer testleak.AfterTest(c)()
+	testCases := []struct {
+		ddl        *model.DDLEvent
+		needSwitch bool
+	}{
+		{
+			&model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "",
+				},
+				Type: timodel.ActionCreateTable,
+			},
+			false,
+		},
+		{
+			&model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "golang",
+				},
+				Type: timodel.ActionCreateSchema,
+			},
+			false,
+		},
+		{
+			&model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "golang",
+				},
+				Type: timodel.ActionDropSchema,
+			},
+			false,
+		},
+		{
+			&model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "golang",
+				},
+				Type: timodel.ActionCreateTable,
+			},
+			true,
+		},
+	}
+
+	for _, tc := range testCases {
+		c.Assert(needSwitchDB(tc.ddl), check.Equals, tc.needSwitch)
+	}
+}
+
 func (s MySQLSinkSuite) TestNewMySQLSink(c *check.C) {
 	defer testleak.AfterTest(c)()
 
