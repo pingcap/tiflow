@@ -672,7 +672,7 @@ type hasWokers interface {
 	GetName() string
 }
 
-func extractSources(s *Server, req hasWokers) (sources []string, specicySource bool, err error) {
+func specifiedSource(s *Server, req hasWokers) (sources []string, specicySource bool, err error) {
 	switch {
 	case len(req.GetSources()) > 0:
 		sources = req.GetSources()
@@ -710,7 +710,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 	if shouldRet {
 		return resp2, err2
 	}
-	sources, specicySource, err := extractSources(s, req)
+	sources, specicySource, err := specifiedSource(s, req)
 	sort.Strings(sources)
 	if err != nil {
 		// nolint:nilerr
