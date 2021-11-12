@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/ticdc/proto/p2p"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -154,10 +153,9 @@ func TestServerSingleClientSingleTopic(t *testing.T) {
 
 	err = stream.Send(&p2p.MessagePacket{
 		Meta: &p2p.StreamMeta{
-			SenderId:      "test-client-1",
-			ReceiverId:    "test-server-1",
-			Epoch:         1,
-			ClientVersion: version.ReleaseSemver(),
+			SenderId:   "test-client-1",
+			ReceiverId: "test-server-1",
+			Epoch:      1,
 		},
 	})
 	require.NoError(t, err)
@@ -252,10 +250,9 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 
 			err = stream.Send(&p2p.MessagePacket{
 				Meta: &p2p.StreamMeta{
-					SenderId:      fmt.Sprintf("test-client-%d", i),
-					ReceiverId:    "test-server-2",
-					Epoch:         0,
-					ClientVersion: version.ReleaseSemver(),
+					SenderId:   fmt.Sprintf("test-client-%d", i),
+					ReceiverId: "test-server-2",
+					Epoch:      0,
 				},
 			})
 			require.NoError(t, err)
@@ -356,10 +353,9 @@ func TestServerSingleClientMultiTopic(t *testing.T) {
 
 	err = stream.Send(&p2p.MessagePacket{
 		Meta: &p2p.StreamMeta{
-			SenderId:      "test-client-1",
-			ReceiverId:    "test-server-1",
-			Epoch:         0,
-			ClientVersion: version.ReleaseSemver(),
+			SenderId:   "test-client-1",
+			ReceiverId: "test-server-1",
+			Epoch:      0,
 		},
 	})
 	require.NoError(t, err)
@@ -461,10 +457,9 @@ func TestServerDeregisterHandler(t *testing.T) {
 
 	err = stream.Send(&p2p.MessagePacket{
 		Meta: &p2p.StreamMeta{
-			SenderId:      "test-client-1",
-			ReceiverId:    "test-server-1",
-			Epoch:         0,
-			ClientVersion: version.ReleaseSemver(),
+			SenderId:   "test-client-1",
+			ReceiverId: "test-server-1",
+			Epoch:      0,
 		},
 	})
 	require.NoError(t, err)
@@ -574,10 +569,9 @@ func TestServerSingleClientReconnection(t *testing.T) {
 
 		err = stream.Send(&p2p.MessagePacket{
 			Meta: &p2p.StreamMeta{
-				SenderId:      "test-client-1",
-				ReceiverId:    "test-server-1",
-				Epoch:         int64(i),
-				ClientVersion: version.ReleaseSemver(),
+				SenderId:   "test-client-1",
+				ReceiverId: "test-server-1",
+				Epoch:      int64(i),
 			},
 		})
 		require.NoError(t, err)
@@ -671,10 +665,9 @@ func TestServerClosed(t *testing.T) {
 
 	err = stream.Send(&p2p.MessagePacket{
 		Meta: &p2p.StreamMeta{
-			SenderId:      "test-client-1",
-			ReceiverId:    "test-server-1",
-			Epoch:         0,
-			ClientVersion: version.ReleaseSemver(),
+			SenderId:   "test-client-1",
+			ReceiverId: "test-server-1",
+			Epoch:      0,
 		},
 	})
 	require.NoError(t, err)
@@ -714,10 +707,9 @@ func TestServerTopicCongestedDueToNoHandler(t *testing.T) {
 
 	err = stream.Send(&p2p.MessagePacket{
 		Meta: &p2p.StreamMeta{
-			SenderId:      "test-client-1",
-			ReceiverId:    "test-server-1",
-			Epoch:         0,
-			ClientVersion: version.ReleaseSemver(),
+			SenderId:   "test-client-1",
+			ReceiverId: "test-server-1",
+			Epoch:      0,
 		},
 	})
 	require.NoError(t, err)
@@ -785,10 +777,9 @@ func TestServerIncomingConnectionStale(t *testing.T) {
 
 	err = stream.Send(&p2p.MessagePacket{
 		Meta: &p2p.StreamMeta{
-			SenderId:      "test-client-1",
-			ReceiverId:    "test-server-1",
-			Epoch:         5, // a larger epoch
-			ClientVersion: version.ReleaseSemver(),
+			SenderId:   "test-client-1",
+			ReceiverId: "test-server-1",
+			Epoch:      5, // a larger epoch
 		},
 	})
 	require.NoError(t, err)
@@ -802,10 +793,9 @@ func TestServerIncomingConnectionStale(t *testing.T) {
 
 	err = stream.Send(&p2p.MessagePacket{
 		Meta: &p2p.StreamMeta{
-			SenderId:      "test-client-1",
-			ReceiverId:    "test-server-1",
-			Epoch:         4, // a smaller epoch
-			ClientVersion: version.ReleaseSemver(),
+			SenderId:   "test-client-1",
+			ReceiverId: "test-server-1",
+			Epoch:      4, // a smaller epoch
 		},
 	})
 	require.NoError(t, err)
@@ -857,10 +847,9 @@ func TestServerRepeatedMessages(t *testing.T) {
 
 	err = stream.Send(&p2p.MessagePacket{
 		Meta: &p2p.StreamMeta{
-			SenderId:      "test-client-1",
-			ReceiverId:    "test-server-1",
-			Epoch:         0,
-			ClientVersion: version.ReleaseSemver(),
+			SenderId:   "test-client-1",
+			ReceiverId: "test-server-1",
+			Epoch:      0,
 		},
 	})
 	require.NoError(t, err)
@@ -1026,7 +1015,7 @@ func TestServerVersionsIncompatible(t *testing.T) {
 	defer closer()
 
 	// enables version check
-	server.config.EnableVersionCheck = true
+	server.config.ServerVersion = "v5.2.0"
 
 	var wg sync.WaitGroup
 	wg.Add(1)

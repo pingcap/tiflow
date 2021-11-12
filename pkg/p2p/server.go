@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/ticdc/pkg/workerpool"
 	"github.com/pingcap/ticdc/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
@@ -63,8 +62,8 @@ type MessageServerConfig struct {
 	SendRateLimitPerStream float64
 	// The maximum number of peers acceptable by this server
 	MaxPeerCount int
-	// Whether to reject clients with other versions
-	EnableVersionCheck bool
+	// Semver of the server. Empty string means no version check.
+	ServerVersion string
 }
 
 // cdcPeer is used to store information on one connected client.
@@ -786,7 +785,7 @@ func (m *MessageServer) verifyStreamMeta(streamMeta *p2p.StreamMeta) error {
 		)
 	}
 
-	if !m.config.EnableVersionCheck {
+	if m.config.ServerVersion == "" {
 		// skip checking versions
 		return nil
 	}
@@ -799,11 +798,11 @@ func (m *MessageServer) verifyStreamMeta(streamMeta *p2p.StreamMeta) error {
 		return cerror.ErrPeerMessageIllegalClientVersion.GenWithStackByArgs(streamMeta.ClientVersion)
 	}
 
-	serverVer := semver.New(version.ReleaseSemver())
+	serverVer := semver.New(m.config.ServerVersion)
 
 	// Only allow clients with the same Major and Minor.
 	if serverVer.Major != clientVer.Major || serverVer.Minor != clientVer.Minor {
-		return cerror.ErrVersionIncompatible.GenWithStackByArgs(version.ReleaseSemver())
+		return cerror.ErrVersionIncompatible.GenWithStackByArgs(m.config.ServerVersion)
 	}
 
 	return nil
