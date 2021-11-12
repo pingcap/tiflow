@@ -69,7 +69,7 @@ func TestCleanerPoll(t *testing.T) {
 	db, err := OpenDB(ctx, 1, cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	clean, _, err := NewCleanerActor(ctx, 1, db, nil, cfg, closedWg, "")
+	clean, _, err := NewCleanerActor(ctx, 1, db, nil, cfg, closedWg)
 	require.Nil(t, err)
 
 	// Put data to db.
@@ -152,7 +152,7 @@ func TestCleanerContextCancel(t *testing.T) {
 	db, err := OpenDB(ctx, 1, cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewCleanerActor(ctx, 0, db, nil, cfg, closedWg, "")
+	ldb, _, err := NewCleanerActor(ctx, 0, db, nil, cfg, closedWg)
 	require.Nil(t, err)
 
 	cancel()
@@ -175,7 +175,7 @@ func TestCleanerWriteRateLimited(t *testing.T) {
 	db, err := OpenDB(ctx, 1, cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	clean, _, err := NewCleanerActor(ctx, 1, db, nil, cfg, closedWg, "")
+	clean, _, err := NewCleanerActor(ctx, 1, db, nil, cfg, closedWg)
 	require.Nil(t, err)
 
 	// Put data to db.
@@ -253,7 +253,7 @@ func TestCleanerTaskRescheduled(t *testing.T) {
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	router := actor.NewRouter("test")
-	clean, mb, err := NewCleanerActor(ctx, 1, db, router, cfg, closedWg, "")
+	clean, mb, err := NewCleanerActor(ctx, 1, db, router, cfg, closedWg)
 	require.Nil(t, err)
 	router.InsertMailbox4Test(actor.ID(1), mb)
 	require.Nil(t, router.SendB(ctx, actor.ID(1), actormsg.TickMessage()))
