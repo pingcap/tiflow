@@ -969,7 +969,7 @@ func Log(v ...interface{}) {
 func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 
 	//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
-	if conn!=nil{
+	if conn==nil{
 		tempConn, err := net.Dial("tcp", host)
 		conn = tempConn
 		if err != nil {

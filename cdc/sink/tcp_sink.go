@@ -291,11 +291,15 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 		columnVo := new(vo.ColumnVo)
 
 		columnVo.ColumnName = column.Name
+
+
+
 		if column.Value == nil {
-			columnVo.ColumnLen = 0
-			//columnValueArr := make([]byte,1)
-			//columnValueArr[0] = 0x00
-			//columnVo.ColumnValue = columnValueArr
+			columnVo.ColumnLen = 1
+			columnValueArr := make([]byte,1)
+			columnValueArr[0] = 0x00
+			columnVo.ColumnValue = columnValueArr
+			fmt.Println(column.Name,":::000type[",column.Type,"]::####column.Value[",column.Value,"]####column.IsBinary:::::",column.Flag.IsBinary(),":::columnVo.ColumnValue:",columnVo.ColumnValue,"::columnVo.ColumnLen:::",columnVo.ColumnLen)
 
 		}else{
 			//columnVo.ColumnValue = model.ColumnValueString(column.Value)
@@ -313,7 +317,7 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 
 
 
-		fmt.Println(column.Name,":::type[",column.Type,"]::column.IsBinary:::::",column.Flag.IsBinary(),":::columnVo.ColumnValue:",columnVo.ColumnValue,"::columnVo.ColumnLen:::",columnVo.ColumnLen)
+		fmt.Println(column.Name,":::type[",column.Type,"]::####column.Value[",column.Value,"]####column.IsBinary:::::",column.Flag.IsBinary(),":::columnVo.ColumnValue:",columnVo.ColumnValue,"::columnVo.ColumnLen:::",columnVo.ColumnLen)
 
 		columnVo.CFlag = colFlag
 		columnVo.ColumnType = column.Type
