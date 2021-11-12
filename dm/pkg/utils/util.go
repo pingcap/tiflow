@@ -268,7 +268,7 @@ func NewStoppedTimer() *time.Timer {
 	// stopped timer should be Reset with correct duration, so use 0 here
 	t := time.NewTimer(0)
 	if !t.Stop() {
-		<- t.C
+		<-t.C
 	}
 	return t
 }

@@ -35,10 +35,10 @@ var heartbeatInterval = common.MasterHeartbeatPeriod
 
 // LocalStreamer reads and parses binlog events from local binlog file.
 type LocalStreamer struct {
-	ch  chan *replication.BinlogEvent
-	ech chan error
+	ch            chan *replication.BinlogEvent
+	ech           chan error
 	heatBeatTimer *time.Timer
-	err error
+	err           error
 }
 
 // GetEvent gets the binlog event one by one, it will block until parser occurs some errors.
@@ -64,8 +64,8 @@ func (s *LocalStreamer) GetEvent(ctx context.Context) (*replication.BinlogEvent,
 	defer func() {
 		if !fired {
 			if !s.heatBeatTimer.Stop() {
-                <-s.heatBeatTimer.C
-            }
+				<-s.heatBeatTimer.C
+			}
 		}
 	}()
 	select {
