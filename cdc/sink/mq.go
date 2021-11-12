@@ -394,7 +394,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		return r == '/'
 	})
 	if topic == "" {
-		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("topic name not found")
+		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
 	var protocol codec.Protocol
