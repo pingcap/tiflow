@@ -35,6 +35,10 @@ type Task struct {
 	Irange *lutil.Range
 	// Set NeedIter whenever caller wants to read something from an iterator.
 	NeedIter bool
+
+	// For clean-up table task.
+	Cleanup            bool
+	CleanupRatelimited bool
 }
 
 // Key is the key that is written to leveldb.
@@ -53,4 +57,13 @@ func (k Key) String() string {
 type LimitedIterator struct {
 	Iterator.Iterator
 	Sema *semaphore.Weighted
+}
+
+// NewCleanupTask returns a clean up task to clean up table data.
+func NewCleanupTask(uid uint32, tableID uint64) Task {
+	return Task{
+		TableID: tableID,
+		UID:     uid,
+		Cleanup: true,
+	}
 }
