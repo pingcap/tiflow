@@ -44,37 +44,45 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	c.Assert(msg.Table, check.Equals, "person")
 	c.Assert(msg.IsDDL, check.IsFalse)
 	c.Assert(msg.SQLType, check.DeepEquals, map[string]int32{
-		"id":      int32(JavaSQLTypeBIGINT),
-		"name":    int32(JavaSQLTypeVARCHAR),
-		"tiny":    int32(JavaSQLTypeSMALLINT),
-		"comment": int32(JavaSQLTypeVARCHAR),
-		"blob":    int32(JavaSQLTypeBLOB),
+		"id":         int32(JavaSQLTypeBIGINT),
+		"name":       int32(JavaSQLTypeVARCHAR),
+		"tiny":       int32(JavaSQLTypeSMALLINT),
+		"comment":    int32(JavaSQLTypeVARCHAR),
+		"blob":       int32(JavaSQLTypeBLOB),
+		"journalist": int32(JavaSQLTypeCHAR),
+		"elder":      int32(JavaSQLTypeVARCHAR),
 	})
 	c.Assert(msg.MySQLType, check.DeepEquals, map[string]string{
-		"id":      "int",
-		"name":    "varchar",
-		"tiny":    "tinyint",
-		"comment": "text",
-		"blob":    "blob",
+		"id":         "int",
+		"name":       "varchar",
+		"tiny":       "tinyint",
+		"comment":    "text",
+		"blob":       "blob",
+		"journalist": "binary",
+		"elder":      "varbinary",
 	})
 	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
 	c.Assert(err, check.IsNil)
 	c.Assert(msg.Data, check.DeepEquals, []map[string]interface{}{
 		{
-			"id":      "1",
-			"name":    "Bob",
-			"tiny":    "255",
-			"comment": "测试",
-			"blob":    string(encodedBytes),
+			"id":         "1",
+			"name":       "Bob",
+			"tiny":       "255",
+			"comment":    "测试",
+			"blob":       string(encodedBytes),
+			"journalist": "Sharon Cheung Po-Wah run so fast",
+			"elder":      "图样图森破",
 		},
 	})
 	c.Assert(msg.Old, check.DeepEquals, []map[string]interface{}{
 		{
-			"id":      "1",
-			"name":    "Alice",
-			"tiny":    "255",
-			"comment": "测试",
-			"blob":    string(encodedBytes),
+			"id":         "1",
+			"name":       "Alice",
+			"tiny":       "255",
+			"comment":    "测试",
+			"blob":       string(encodedBytes),
+			"journalist": "Sharon Cheung Po-Wah run so fast",
+			"elder":      "图样图森破",
 		},
 	})
 
@@ -92,38 +100,66 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
-	c.Assert(encoder, check.NotNil)
+	enableTiDBExtension := []bool{false, true}
+	for _, enable := range enableTiDBExtension {
+		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: enable}
+		c.Assert(encoder, check.NotNil)
 
-	result, err := encoder.AppendRowChangedEvent(testCaseUpdate)
-	c.Assert(err, check.IsNil)
-	c.Assert(result, check.Equals, EncoderNoOperation)
-
-	result, err = encoder.AppendResolvedEvent(417318403368288260)
-	c.Assert(err, check.IsNil)
-	c.Assert(result, check.Equals, EncoderNeedAsyncWrite)
-
-	mqMessages := encoder.Build()
-	c.Assert(len(mqMessages), check.Equals, 1)
-
-	for _, item := range mqMessages {
-		rawBytes, err := json.Marshal(item)
+		result, err := encoder.AppendRowChangedEvent(testCaseUpdate)
 		c.Assert(err, check.IsNil)
+		c.Assert(result, check.Equals, EncoderNoOperation)
 
-		decoder, err := NewCanalFlatEventBatchDecoder(rawBytes, false)
+		result, err = encoder.AppendResolvedEvent(417318403368288260)
 		c.Assert(err, check.IsNil)
+		c.Assert(result, check.Equals, EncoderNeedAsyncWrite)
 
-		ty, hasNext, err := decoder.HasNext()
-		c.Assert(err, check.IsNil)
-		c.Assert(hasNext, check.IsTrue)
-		c.Assert(ty, check.Equals, model.MqMessageTypeRow)
+		mqMessages := encoder.Build()
+		c.Assert(len(mqMessages), check.Equals, 1)
 
-		consumed, err := decoder.NextRowChangedEvent()
-		c.Assert(err, check.IsNil)
-		c.Assert(consumed, check.Equals, testCaseUpdate)
+		for _, item := range mqMessages {
+			rawBytes, err := json.Marshal(item)
+			c.Assert(err, check.IsNil)
 
-		_, hasNext, _ = decoder.HasNext()
-		c.Assert(hasNext, check.IsFalse)
+			decoder, err := NewCanalFlatEventBatchDecoder(rawBytes, enable)
+			c.Assert(err, check.IsNil)
+
+			ty, hasNext, err := decoder.HasNext()
+			c.Assert(err, check.IsNil)
+			c.Assert(hasNext, check.IsTrue)
+			c.Assert(ty, check.Equals, model.MqMessageTypeRow)
+
+			consumed, err := decoder.NextRowChangedEvent()
+			c.Assert(err, check.IsNil)
+
+			if enable {
+				c.Assert(consumed.CommitTs, check.Equals, testCaseUpdate)
+			}
+
+			c.Assert(consumed.Table, check.DeepEquals, testCaseUpdate.Table)
+			compareColumns(c, consumed.Columns, testCaseUpdate.Columns)
+			compareColumns(c, consumed.PreColumns, testCaseUpdate.PreColumns)
+
+			_, hasNext, _ = decoder.HasNext()
+			c.Assert(hasNext, check.IsFalse)
+
+			consumed, err = decoder.NextRowChangedEvent()
+			c.Assert(err, check.NotNil)
+			c.Assert(consumed, check.IsNil)
+		}
+	}
+}
+
+func compareColumns(c *check.C, obtained, expected []*model.Column) {
+	c.Assert(len(obtained), check.Equals, len(expected))
+	columns := make(map[string]*model.Column)
+	for _, col := range expected {
+		columns[col.Name] = col
+	}
+	for _, col := range obtained {
+		expected := columns[col.Name]
+		c.Assert(col.Name, check.Equals, expected.Name)
+		c.Assert(col.Type, check.Equals, expected.Type)
+		c.Assert(col.Value, check.Equals, expected.Value)
 	}
 }
 
@@ -275,6 +311,8 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
 		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		{Name: "journalist", Type: mysql.TypeString, Value: "Sharon Cheung Po-Wah run so fast", Flag: model.BinaryFlag},
+		{Name: "elder", Type: mysql.TypeVarchar, Value: []byte("图样图森破"), Flag: model.BinaryFlag},
 	},
 	PreColumns: []*model.Column{
 		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
@@ -282,6 +320,8 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
 		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		{Name: "journalist", Type: mysql.TypeString, Value: "Sharon Cheung Po-Wah run so fast", Flag: model.BinaryFlag},
+		{Name: "elder", Type: mysql.TypeVarchar, Value: []byte("图样图森破"), Flag: model.BinaryFlag},
 	},
 }
 

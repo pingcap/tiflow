@@ -520,7 +520,9 @@ func (b *CanalFlatEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 		return 0, cerrors.ErrCanalDecodeFailed.GenWithStack("not found resolved event message")
 	}
 
-	message := &canalFlatMessageWithTiDBExtension{}
+	message := &canalFlatMessageWithTiDBExtension{
+		canalFlatMessage: &canalFlatMessage{},
+	}
 	if err := json.Unmarshal(b.msg.Value, message); err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -549,7 +551,9 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 		if !ok {
 			log.Panic("mysql type does not found", zap.String("column name", name), zap.Any("mysqlType", mysqlType))
 		}
-		// since canal-json format lost `Flag`, tp might not be appropriate
+		// since canal-json format lost `Flag`, typeStr might not be a valid MysqlType, we have to convert them back.
+		typeStr = strings.Replace(typeStr, "blob", "text", 1)
+		typeStr = strings.Replace(typeStr, "binary", "char", 1)
 		tp, ok := str2MySQLType[typeStr]
 		if !ok {
 			log.Panic("mysql type does not found", zap.String("column name", name), zap.Any("mysqlType", mysqlType))
