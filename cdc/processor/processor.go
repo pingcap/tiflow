@@ -217,6 +217,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	p.cancel = cancel
 
+	// We don't close this error channel, since it is only safe to close channel
+	// in sender, and this channel will be used in many modules including sink,
+	// redo log manager, etc. Let runtime GC to recycle it.
 	errCh := make(chan error, 16)
 	p.wg.Add(1)
 	go func() {
@@ -228,7 +231,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
-				close(errCh)
 				return
 			case err := <-errCh:
 				if err == nil {
