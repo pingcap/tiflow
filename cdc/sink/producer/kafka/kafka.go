@@ -445,7 +445,7 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 		}
 
 		if err := config.adjustPartitionNum(info.NumPartitions); err != nil {
-			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+			return errors.Trace(err)
 		}
 
 		return nil
@@ -461,7 +461,7 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 	brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
 	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
-		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return errors.Trace(err)
 	}
 
 	if brokerMessageMaxBytes < config.MaxMessageBytes {
@@ -664,7 +664,7 @@ func getBrokerMessageMaxBytes(admin sarama.ClusterAdmin) (int, error) {
 	target := "message.max.bytes"
 	_, controllerID, err := admin.DescribeCluster()
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
 	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
@@ -673,7 +673,7 @@ func getBrokerMessageMaxBytes(admin sarama.ClusterAdmin) (int, error) {
 		ConfigNames: []string{target},
 	})
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
 	if len(configEntries) == 0 || configEntries[0].Name != target {
@@ -684,7 +684,7 @@ func getBrokerMessageMaxBytes(admin sarama.ClusterAdmin) (int, error) {
 
 	result, err := strconv.Atoi(configEntries[0].Value)
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
 	return result, nil
@@ -694,7 +694,7 @@ func getTopicMaxMessageBytes(admin sarama.ClusterAdmin, info sarama.TopicDetail)
 	if a, ok := info.ConfigEntries["max.message.bytes"]; ok {
 		result, err := strconv.Atoi(*a)
 		if err != nil {
-			return 0, errors.Trace(err)
+			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
 		return result, nil
 	}
