@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/schema"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
@@ -56,8 +57,8 @@ func (s *testSyncerSuite) TestDetectConflict(c *C) {
 func (s *testSyncerSuite) TestCasuality(c *C) {
 	p := parser.New()
 	se := mock.NewContext()
-	schema := "create table tb(a int primary key, b int unique);"
-	ti, err := createTableInfo(p, se, int64(0), schema)
+	schemaStr := "create table tb(a int primary key, b int unique);"
+	ti, err := createTableInfo(p, se, int64(0), schemaStr)
 	c.Assert(err, IsNil)
 	tiIndex := &model.IndexInfo{
 		Table:   ti.Name,
@@ -71,6 +72,8 @@ func (s *testSyncerSuite) TestCasuality(c *C) {
 			Length: types.UnspecifiedLength,
 		}},
 	}
+	downTi := schema.GetDownStreamTi(ti, ti)
+	c.Assert(downTi, NotNil)
 
 	jobCh := make(chan *job, 10)
 	syncer := &Syncer{
@@ -117,7 +120,7 @@ func (s *testSyncerSuite) TestCasuality(c *C) {
 	ec := &eventContext{curStartLocation: location, curEndLocation: location, txnEndLocation: location}
 
 	for _, tc := range testCases {
-		job := newDMLJob(tc.op, table, table, newDML(tc.op, false, "", table, tc.oldVals, tc.vals, tc.oldVals, tc.vals, ti.Columns, ti, tiIndex), ec)
+		job := newDMLJob(tc.op, table, table, newDML(tc.op, false, "", table, tc.oldVals, tc.vals, tc.oldVals, tc.vals, ti.Columns, ti, tiIndex, downTi), ec)
 		jobCh <- job
 	}
 

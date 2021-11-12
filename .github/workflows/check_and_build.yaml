@@ -28,12 +28,9 @@ jobs:
     - name: Build
       run: docker build -f ./deployments/ticdc/docker/Dockerfile .
 
-  make_check_build:
-    name: Make Check & Build
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+  make_check_build_mac:
+    name: Make Check & Build On Mac OS
+    runs-on: macos-latest
     steps:
 
     - name: Check out code into the Go module directory
@@ -49,7 +46,26 @@ jobs:
       uses: actions/cache@v2
       with:
         path: tools/bin
-        key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
+        key: macos-latest-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
+    - name: Check
+      run: make check
+
+    - name: Build
+      run: make build
+
+  make_check_build_linux:
+    name: Make Check & Build On Linux
+    runs-on: [x64]
+    steps:
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Setup Go environment
+      uses: actions/setup-go@v2
+      with:
+        go-version: '1.16.4'
+
     - name: Check
       run: make check
 
@@ -57,7 +73,7 @@ jobs:
       run: make build
 
   arm_build:
-    runs-on: [self-hosted,ARM64]
+    runs-on: [ARM64]
     name: Make Build
     strategy:
       fail-fast: false
