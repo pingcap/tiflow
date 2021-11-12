@@ -364,7 +364,7 @@ ErrMasterPartWorkerExecDDLFail,[code=38025:class=dm-master:scope=internal:level=
 ErrMasterWorkerExistDDLLock,[code=38026:class=dm-master:scope=internal:level=high], "Message: worker %s exist ddl lock, Workaround: Please unlock ddl lock first."
 ErrMasterGetWorkerCfgExtractor,[code=38027:class=dm-master:scope=internal:level=high]
 ErrMasterTaskConfigExtractor,[code=38028:class=dm-master:scope=internal:level=high]
-ErrMasterWorkerArgsExtractor,[code=38029:class=dm-master:scope=internal:level=high]
+ErrMasterWorkerArgsExtractor,[code=38029:class=dm-master:scope=internal:level=high], "Workaround: Please use list-member command to see if the some workers are offline."
 ErrMasterQueryWorkerConfig,[code=38030:class=dm-master:scope=internal:level=high]
 ErrMasterOperNotFound,[code=38031:class=dm-master:scope=internal:level=high], "Message: operation %d of task %s on worker %s not found, Workaround: Please execute `query-status` to check status."
 ErrMasterOperRespNotSuccess,[code=38032:class=dm-master:scope=internal:level=high], "Message: some error occurs in dm-worker: %s, Workaround: Please execute `query-status` to check status."
