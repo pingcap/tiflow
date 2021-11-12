@@ -1044,7 +1044,7 @@ func TestServerVersionsIncompatible(t *testing.T) {
 	resp, err := stream.Recv()
 	require.NoError(t, err)
 	require.Equal(t, p2p.ExitReason_UNKNOWN, resp.ExitReason)
-	require.Regexp(t, ".*illegal version.*", resp.String())
+	require.Regexp(t, ".*incompatible.*", resp.String())
 
 	cancel()
 	wg.Wait()
