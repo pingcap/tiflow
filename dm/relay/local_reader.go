@@ -397,6 +397,11 @@ func (r *BinlogReader) parseDirAsPossible(ctx context.Context, s *LocalStreamer,
 			latestName string
 			offset     = int64(pos.Pos)
 		)
+		// TODO will this happen?
+		// previously, we use ParseFile which will handle offset < 4, now we use ParseReader which won't
+		if offset < 4 {
+			offset = 4
+		}
 		for i, relayLogFile := range files {
 			select {
 			case <-ctx.Done():
