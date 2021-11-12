@@ -101,6 +101,7 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 
 		// TODO: The underlaying implementation only recognizes cgroups set by
 		// containers, we need to support cgroups set by systemd or manually.
+		// See https://github.com/pingcap/tidb/issues/22132
 		totalMemory, err := memory.MemTotal()
 		if err != nil {
 			log.Panic("read memory stat failed", zap.Error(err))
