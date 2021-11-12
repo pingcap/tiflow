@@ -1,3 +1,16 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package syncer
 
 import (
@@ -27,7 +40,7 @@ type locationRecorder struct {
 	//   For position-based replication, this is the file offset of the last byte of event.
 	//   For GTID-based replication, this is the GTID set just added this GTID.
 	// - txnEndLocation is the end location of last transaction. If this event is the last event of a txn,
-	//   txnEndLocation will assign to curEndLocation
+	//   txnEndLocation will be assigned from curEndLocation
 	// - "End location" (next start location) is used to decide if a handle-error event should be returned, sometimes
 	//   "End location" will be manually adjusted.
 	curStartLocation binlog.Location

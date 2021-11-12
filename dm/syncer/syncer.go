@@ -2717,7 +2717,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 				ec.tctx.L().Warn("will ignore a DDL error when tracking",
 					zap.String("schema", usedSchema),
 					zap.String("statement", trackInfo.originDDL),
-					log.WrapStringerField("location", ec.currentLocation),
+					log.WrapStringerField("location", s.locations.getCurEndLocation()),
 					log.ShortError(err))
 				return nil
 			}

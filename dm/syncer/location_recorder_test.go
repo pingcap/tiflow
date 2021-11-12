@@ -1,3 +1,16 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package syncer
 
 import (
@@ -110,6 +123,7 @@ func (s *testSyncerSuite) checkOneTxnEvents(c *C, events []*replication.BinlogEv
 	}
 }
 
+// nolint:dupl
 func (s *testSyncerSuite) TestDMLUpdateLocationsGTID(c *C) {
 	loc := binlog.Location{
 		Position: mysql.Position{
@@ -188,6 +202,7 @@ func (s *testSyncerSuite) TestDMLUpdateLocationsPos(c *C) {
 	s.checkOneTxnEvents(c, events, expected)
 }
 
+// nolint:dupl
 func (s *testSyncerSuite) TestDDLUpdateLocationsGTID(c *C) {
 	loc := binlog.Location{
 		Position: mysql.Position{
@@ -298,6 +313,7 @@ func (s *testSyncerSuite) generateDMLQueryEvents(c *C) []*replication.BinlogEven
 	return events
 }
 
+// nolint:dupl
 func (s *testSyncerSuite) TestDMLQueryUpdateLocationsGTID(c *C) {
 	loc := binlog.Location{
 		Position: mysql.Position{

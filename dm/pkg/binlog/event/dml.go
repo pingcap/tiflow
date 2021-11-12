@@ -31,7 +31,7 @@ type DMLData struct {
 	ColumnType []byte
 	Rows       [][]interface{}
 
-	// is Query is not empty, we generate a Query event
+	// if Query is not empty, we generate a Query event
 	Query string
 }
 
