@@ -241,6 +241,11 @@ error = '''
 the etcd txn should be aborted and retried immediately
 '''
 
+["CDC:ErrEtcdTxnSizeExceed"]
+error = '''
+patch size of a single changefeed exceed etcd txn max size
+'''
+
 ["CDC:ErrEventFeedAborted"]
 error = '''
 single event feed aborted
@@ -464,6 +469,11 @@ owner lease expired
 ["CDC:ErrLeaseTimeout"]
 error = '''
 owner lease timeout
+'''
+
+["CDC:ErrLevelDBSorterError"]
+error = '''
+leveldb error: %s
 '''
 
 ["CDC:ErrLoadTimezone"]
