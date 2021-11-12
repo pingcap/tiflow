@@ -47,7 +47,7 @@ var _ actor.Actor = (*CleanerActor)(nil)
 // NewCleanerActor returns a cleaner actor.
 func NewCleanerActor(
 	ctx context.Context, id int, db *leveldb.DB, router *actor.Router,
-	cfg *config.SorterConfig, wg *sync.WaitGroup, captureAddr string,
+	cfg *config.SorterConfig, wg *sync.WaitGroup,
 ) (*CleanerActor, actor.Mailbox, error) {
 	wg.Add(1)
 	wbSize := 500 // default write batch size.
@@ -105,7 +105,7 @@ TASKS:
 		}
 		iter := clean.db.NewIterator(iterRange, nil)
 
-		// Force write the first batch if the task is rescheduled (rate limited).
+		// Force writes the first batch if the task is rescheduled (rate limited).
 		force := task.CleanupRatelimited
 
 		for hasNext := iter.Seek(start); hasNext; hasNext = iter.Next() {
@@ -131,7 +131,7 @@ TASKS:
 		}
 		// Release iterator in time.
 		iter.Release()
-		// Ignore rate limter and force write remaining kv.
+		// Ignore rate limit and force write remaining kv.
 		_, err := clean.writeRateLimited(&batch, true)
 		if err != nil {
 			log.Panic("leveldb error", zap.Error(err))
