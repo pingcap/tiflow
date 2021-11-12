@@ -45,9 +45,6 @@ import (
 // this is mainly happened when upstream master changed when relay log not finish reading a transaction.
 var ErrorMaybeDuplicateEvent = errors.New("truncate binlog file found, event may be duplicated")
 
-// polling interval for watcher.
-var watcherInterval = 100 * time.Millisecond
-
 // BinlogReaderConfig is the configuration for BinlogReader.
 type BinlogReaderConfig struct {
 	RelayDir string
@@ -608,7 +605,6 @@ func (r *BinlogReader) parseFile(
 			return false, false, terror.Annotatef(err2, "send event %+v", e.Header)
 		}
 		r.tctx.L().Info("start parse relay log file", zap.String("file", state.fullPath), zap.Int64("offset", offset))
-
 	} else {
 		r.tctx.L().Debug("start parse relay log file", zap.String("file", state.fullPath), zap.Int64("offset", offset))
 	}
@@ -745,8 +741,7 @@ func (r *BinlogReader) parseFormatDescEvent(state *binlogFileParseState) error {
 	}
 
 	onEvent := func(e *replication.BinlogEvent) error {
-		switch e.Event.(type) {
-		case *replication.FormatDescriptionEvent:
+		if _, ok := e.Event.(*replication.FormatDescriptionEvent); ok {
 			return nil
 		}
 		// the first event in binlog file must be FORMAT_DESCRIPTION event.
