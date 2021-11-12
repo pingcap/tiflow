@@ -634,6 +634,9 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 				return errors.Trace(ctx.Err())
 			case resp, ok := <-streamHandle.sendCh:
 				if !ok {
+					log.Info("peer stream handle is closed",
+						zap.String("peer-addr", streamHandle.streamMeta.SenderAdvertisedAddr),
+						zap.String("peer-id", streamHandle.streamMeta.SenderId))
 					// cancel the stream when sendCh is closed
 					cancel()
 					return nil
