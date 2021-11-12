@@ -1078,14 +1078,14 @@ func (s *Server) getStatusFromWorkers(
 	s.fillUnsyncedStatus(workerResps)
 
 	// find if all sources status are provided in resps
-	findEnoughTaskInResp := func(taskName string) bool {
+	findEnoughTaskInResp := func(taskName string, needCnt int) bool {
 		cnt := 0
 		for _, resp := range workerResps {
 			for _, status := range resp.SubTaskStatus {
 				if status.Name == taskName {
 					cnt += 1
 				}
-				if cnt == len(sources) {
+				if cnt == needCnt {
 					return true
 				}
 			}
@@ -1101,20 +1101,20 @@ func (s *Server) getStatusFromWorkers(
 	// when taskName is empty we need list all task even the worker that handle this task is not running.
 	if taskName == "" {
 		for taskName, sourceM := range s.scheduler.GetSubTaskCfgs() {
-			if !findEnoughTaskInResp(taskName) {
-				msg := fmt.Sprintf("can't find task: %s from dm-worker, please user dmctl list-member to check if worker is offline.", taskName)
+			if !findEnoughTaskInResp(taskName, len(sourceM)) {
+				msg := fmt.Sprintf("can't find task: %s from dm-worker, please use dmctl list-member to check if worker is offline.", taskName)
 				log.L().Warn(msg)
 				// only add use specified source related to this task
 				if specicySource {
 					for _, needDisplayedSource := range sources {
-						if _, ok := sourceM[needDisplayedSource]; ok && !findEnoughTaskInResp(taskName) {
+						if _, ok := sourceM[needDisplayedSource]; ok && !findEnoughTaskInResp(taskName, len(sourceM)) {
 							appendFakeResp(taskName, needDisplayedSource, msg)
 						}
 					}
 				} else {
 					// make fake response for every source related to this task
 					for source := range sourceM {
-						if !findEnoughTaskInResp(taskName) {
+						if !findEnoughTaskInResp(taskName, len(sourceM)) {
 							appendFakeResp(taskName, source, msg)
 						}
 					}
