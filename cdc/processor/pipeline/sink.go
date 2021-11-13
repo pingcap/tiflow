@@ -165,7 +165,6 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 		return nil
 	}
 
->>>>>>> 732d558ed (sink: add log when skip the empty row event (#3357))
 	config := ctx.ChangefeedVars().Info.Config
 
 	// This indicates that it is an update event,
