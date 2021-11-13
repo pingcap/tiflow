@@ -346,28 +346,6 @@ func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	c.Check(sum, check.Equals, 10000)
 }
 
-func (s *batchSuite) TestEmptyMessage(c *check.C) {
-	defer testleak.AfterTest(c)()
-	encoder := NewJSONEventBatchEncoder()
-	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
-	c.Check(err, check.IsNil)
-
-	emptyEvent := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{},
-	}
-
-	for i := 0; i < 10000; i++ {
-		r, err := encoder.AppendRowChangedEvent(emptyEvent)
-		c.Check(r, check.Equals, EncoderNoOperation)
-		c.Check(err, check.IsNil)
-	}
-
-	messages := encoder.Build()
-	c.Assert(messages, check.HasLen, 0)
-}
-
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
 	s.testBatchCodec(c, func() EventBatchEncoder {
