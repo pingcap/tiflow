@@ -126,6 +126,8 @@ function run() {
 	cd $WORK_DIR
 	run_sql "CREATE DATABASE testSync;"
 	run_sql "CREATE DATABASE testSync;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "CREATE table testSync.dummy_table_avoid_sync_diff_no_table_fatal(id int primary key, val int);"
+	run_sql "CREATE table testSync.dummy_table_avoid_sync_diff_no_table_fatal(id int primary key, val int);" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
