@@ -13,7 +13,7 @@ check-struct-only = false
 
     target-instance = "tidb0"
 
-    target-check-tables = ["testSync.usertable","testSync.simple1","testSync.simple2"]
+    target-check-tables = ["testSync.*"]
 
 [data-sources]
 [data-sources.mysql1]
