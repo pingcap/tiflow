@@ -78,9 +78,10 @@ func NewConfig() *Config {
 	return &Config{
 		timezone:        "system",
 		Version:         "2.4.0",
-		GroupID:         fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String()),
 		maxMessageBytes: math.MaxInt,
 		maxBatchSize:    math.MaxInt,
+		GroupID:         fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String()),
+		changefeedID:    "kafka-consumer",
 	}
 }
 
