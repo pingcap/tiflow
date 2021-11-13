@@ -156,7 +156,6 @@ ClaimMessages:
 		default:
 			log.Panic("protocol not supported", zap.Any("protocol", c.protocol))
 		}
-
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -165,7 +164,7 @@ ClaimMessages:
 		for {
 			tp, hasNext, err := decoder.HasNext()
 			if err != nil {
-				log.Fatal("decode message key failed", zap.Error(err))
+				log.Panic("decode message key failed", zap.Error(err))
 			}
 			if !hasNext {
 				break
@@ -174,7 +173,7 @@ ClaimMessages:
 			counter++
 			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
 			if len(message.Key)+len(message.Value) > c.maxMessageBytes && counter > 1 {
-				log.Fatal("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", c.maxMessageBytes),
+				log.Panic("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", c.maxMessageBytes),
 					zap.Int("received-bytes", len(message.Key)+len(message.Value)))
 			}
 
@@ -182,13 +181,13 @@ ClaimMessages:
 			case model.MqMessageTypeDDL:
 				ddl, err := decoder.NextDDLEvent()
 				if err != nil {
-					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				c.appendDDL(ddl)
 			case model.MqMessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
-					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
@@ -209,7 +208,7 @@ ClaimMessages:
 					c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
 				err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
-					log.Fatal("emit row changed event failed", zap.Error(err))
+					log.Panic("emit row changed event failed", zap.Error(err))
 				}
 			case model.MqMessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
@@ -228,7 +227,7 @@ ClaimMessages:
 		}
 
 		if counter > c.maxBatchSize {
-			log.Fatal("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", c.maxBatchSize),
+			log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", c.maxBatchSize),
 				zap.Int("actual-batch-size", counter))
 		}
 	}
