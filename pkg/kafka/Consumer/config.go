@@ -29,6 +29,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Config is for Kafka consumer
 type Config struct {
 	BrokerEndpoints []string
 	Topic           string
@@ -40,28 +41,57 @@ type Config struct {
 
 	timezone string
 
-	upstreamURI *url.URL
-
+	upstreamStr   string
 	downstreamStr string
-	changefeedID  string
+
+	changefeedID string
 }
 
+type configOption func(c *Config)
+
+func WithUpstream(upstream string) configOption {
+	return func(c *Config) {
+		c.upstreamStr = upstream
+	}
+}
+
+func WithDownstream(downstream string) configOption {
+	return func(c *Config) {
+		c.downstreamStr = downstream
+	}
+}
+
+func WithTimezone(timezone string) configOption {
+	return func(c *Config) {
+		c.timezone = timezone
+	}
+}
+
+// NewConfig return a default `Config`
 func NewConfig() *Config {
 	return &Config{
 		timezone:        "system",
-		downstreamStr:   downstreamURIStr,
 		GroupID:         fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String()),
 		maxMessageBytes: math.MaxInt,
 		maxBatchSize:    math.MaxInt,
 	}
 }
 
-func (c *Config) Initialize(upstream string) error {
-	uri, err := url.Parse(upstream)
+func (c *Config) Initialize(upstream, downstream string, opts ...configOption) error {
+	c.upstreamStr = upstream
+	c.downstreamStr = downstream
+	if c.upstreamStr == "" || c.downstreamStr == "" {
+		return errors.Errorf("upstream-url or downstream-url not found")
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	uri, err := url.Parse(c.upstreamStr)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.upstreamURI = uri
 
 	scheme := strings.ToLower(uri.Scheme)
 	if scheme != "kafka" {
@@ -84,11 +114,11 @@ func (c *Config) Initialize(upstream string) error {
 	}
 	c.Topic = topic
 
-	addresses := strings.Split(uri.Host, ",")
-	if len(addresses) == 0 {
+	endPoints := strings.Split(uri.Host, ",")
+	if len(endPoints) == 0 {
 		return errors.New("kafka broker addresses not found")
 	}
-	c.BrokerEndpoints = addresses
+	c.BrokerEndpoints = endPoints
 
 	if s := params.Get("max-message-bytes"); s != "" {
 		a, err := strconv.Atoi(s)
@@ -110,6 +140,7 @@ func (c *Config) Initialize(upstream string) error {
 	return nil
 }
 
+// NewSaramaConfig can be used to initialize a sarama kafka consumer.
 func NewSaramaConfig(version string, credential *security.Credential) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 

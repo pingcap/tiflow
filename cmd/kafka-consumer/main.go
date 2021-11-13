@@ -21,10 +21,11 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/kafka"
 	"github.com/pingcap/ticdc/pkg/kafka/Consumer"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -32,8 +33,8 @@ import (
 )
 
 var (
-	upstreamURIStr   string
-	downstreamURIStr string
+	upstreamStr   string
+	downstreamStr string
 
 	logPath       string
 	logLevel      string
@@ -46,8 +47,8 @@ var (
 )
 
 func init() {
-	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
-	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
+	flag.StringVar(&upstreamStr, "upstream-uri", "", "Kafka uri")
+	flag.StringVar(&downstreamStr, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
 	flag.StringVar(&timezone, "tz", "System", "Specify time zone of Kafka consumer")
@@ -70,12 +71,11 @@ func main() {
 	log.Info("Starting a new TiCDC open protocol consumer")
 
 	config := Consumer.NewConfig()
-	if err := config.Initialize(upstreamURIStr); err != nil {
+	if err := config.Initialize(
+		upstreamStr, downstreamStr,
+		Consumer.WithTimezone(timezone)); err != nil {
 		log.Panic("initialize consumer config failed", zap.Error(err))
 	}
-
-	config.WithTimezone()
-	config.WithDownstream()
 
 	/**
 	 * Construct a new Sarama configuration.
@@ -90,21 +90,25 @@ func main() {
 		log.Panic("creating saramaConfig failed", zap.Error(err))
 	}
 
-	admin, err := kafka.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
+	admin, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		log.Panic("create cluster admin failed", zap.Error(err))
 	}
 	defer admin.Close()
 
-	if err := admin.WaitTopicCreated(config.Topic); err != nil {
+	if err := WaitTopicCreated(admin, config.Topic); err != nil {
 		log.Panic("wait topic created failed", zap.Error(err))
 	}
 
-	count, err := admin.GetPartitionCount(config.Topic)
+	topics, err := admin.ListTopics()
 	if err != nil {
-		log.Panic("get partition count failed", zap.Error(err))
+		log.Panic("try to get topic information failed", zap.Error(err))
 	}
-	config.PartitionCount = count
+	info, ok := topics[config.Topic]
+	if !ok {
+		log.Panic("try to get topic information failed")
+	}
+	config.PartitionCount = info.NumPartitions
 
 	/**
 	 * Setup a new Sarama consumer group
@@ -163,4 +167,20 @@ func main() {
 	if err = client.Close(); err != nil {
 		log.Fatal("Error closing client", zap.Error(err))
 	}
+}
+
+func WaitTopicCreated(admin sarama.ClusterAdmin, topic string) error {
+	for i := 0; i <= 30; i++ {
+		topics, err := admin.ListTopics()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if _, ok := topics[topic]; ok {
+			return nil
+		}
+		log.Info("wait the topic created", zap.String("topic", topic))
+		time.Sleep(1 * time.Second)
+	}
+	return errors.Errorf("wait the topic(%s) created timeout", topic)
 }

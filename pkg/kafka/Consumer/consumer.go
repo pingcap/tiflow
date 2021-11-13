@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
@@ -42,18 +42,19 @@ type Consumer struct {
 	maxDDLReceivedTs uint64
 	ddlListMu        sync.Mutex
 
+	ddlSink              sink.Sink
+	fakeTableIDGenerator *fakeTableIDGenerator
+
 	sinks []*struct {
 		sink.Sink
 		resolvedTs uint64
 	}
 	sinksMu sync.Mutex
 
-	ddlSink              sink.Sink
-	fakeTableIDGenerator *fakeTableIDGenerator
-
 	globalResolvedTs uint64
 	maxMessageBytes  int
 	maxBatchSize     int
+	protocol         codec.Protocol
 }
 
 // New return a kafka consumer
