@@ -374,7 +374,7 @@ func (s *outputSuite) TestIgnoreEmptyRowChangeEvent(c *check.C) {
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test-ignore-empty-row-change-event",
 		Info: &model.ChangeFeedInfo{
-			StartTs: oracle.GoTimeToTS(time.Now()),
+			StartTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now())),
 			Config:  config.GetDefaultReplicaConfig(),
 		},
 	})
