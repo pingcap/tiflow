@@ -79,13 +79,13 @@ func New(ctx context.Context, c *Config) (*Consumer, error) {
 		sinks: make([]*struct {
 			sink.Sink
 			resolvedTs uint64
-		}, c.PartitionCount),
+		}, c.PartitionNum),
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
 	opts := map[string]string{}
-	for i := 0; i < int(c.PartitionCount); i++ {
+	for i := 0; i < int(c.PartitionNum); i++ {
 		s, err := sink.New(ctx, c.changefeedID, c.downstreamStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 		if err != nil {
 			cancel()

@@ -108,7 +108,7 @@ func main() {
 	if !ok {
 		log.Panic("try to get topic information failed")
 	}
-	config.PartitionCount = info.NumPartitions
+	config.PartitionNum = info.NumPartitions
 
 	/**
 	 * Setup a new Sarama consumer group

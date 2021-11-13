@@ -33,7 +33,7 @@ import (
 type Config struct {
 	BrokerEndpoints []string
 	Topic           string
-	PartitionCount  int32
+	PartitionNum    int32
 	GroupID         string
 	Version         string
 	maxMessageBytes int
@@ -44,26 +44,57 @@ type Config struct {
 	upstreamStr   string
 	downstreamStr string
 
+	protocol     string
 	changefeedID string
 }
 
-type configOption func(c *Config)
+type option func(c *Config)
 
-func WithUpstream(upstream string) configOption {
+func WithProtocol(protocol string) option {
+	return func(c *Config) {
+		c.protocol = protocol
+	}
+}
+
+func WithUpstream(upstream string) option {
 	return func(c *Config) {
 		c.upstreamStr = upstream
 	}
 }
 
-func WithDownstream(downstream string) configOption {
+func WithDownstream(downstream string) option {
 	return func(c *Config) {
 		c.downstreamStr = downstream
 	}
 }
 
-func WithTimezone(timezone string) configOption {
+func WithTimezone(timezone string) option {
 	return func(c *Config) {
 		c.timezone = timezone
+	}
+}
+
+func WithKafkaVersion(version string) option {
+	return func(c *Config) {
+		c.Version = version
+	}
+}
+
+func WithPartitionNum(partitions int32) option {
+	return func(c *Config) {
+		c.PartitionNum = partitions
+	}
+}
+
+func WithMaxMessageBytes(mmb int) option {
+	return func(c *Config) {
+		c.maxMessageBytes = mmb
+	}
+}
+
+func WithMaxBatchSize(batch int) option {
+	return func(c *Config) {
+		c.maxBatchSize = batch
 	}
 }
 
@@ -71,13 +102,14 @@ func WithTimezone(timezone string) configOption {
 func NewConfig() *Config {
 	return &Config{
 		timezone:        "system",
+		Version:         "2.4.0",
 		GroupID:         fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String()),
 		maxMessageBytes: math.MaxInt,
 		maxBatchSize:    math.MaxInt,
 	}
 }
 
-func (c *Config) Initialize(upstream, downstream string, opts ...configOption) error {
+func (c *Config) Initialize(upstream, downstream string, opts ...option) error {
 	c.upstreamStr = upstream
 	c.downstreamStr = downstream
 	if c.upstreamStr == "" || c.downstreamStr == "" {
