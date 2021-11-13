@@ -45,7 +45,7 @@ type Config struct {
 	downstreamStr string
 	changefeedID  string
 
-	protocol            string
+	Protocol            string
 	EnableTiDBExtension bool
 }
 
@@ -123,7 +123,7 @@ func NewConfig(upstream, downstream string) (*Config, error) {
 	}
 
 	if s := params.Get("protocol"); s != "" {
-		result.protocol = s
+		result.Protocol = s
 	}
 
 	if s := params.Get("enable-tidb-extension"); s != "" {
@@ -131,7 +131,7 @@ func NewConfig(upstream, downstream string) (*Config, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		if b && result.protocol != "canal-json" {
+		if b && result.Protocol != "canal-json" {
 			return nil, errors.Errorf("enable-tidb-extension only support Canal-JSON")
 		}
 
@@ -142,7 +142,7 @@ func NewConfig(upstream, downstream string) (*Config, error) {
 }
 
 func (c *Config) WithProtocol(protocol string) *Config {
-	c.protocol = protocol
+	c.Protocol = protocol
 	return c
 }
 

@@ -71,6 +71,9 @@ func New(ctx context.Context, c *Config) (*Consumer, error) {
 		return nil, errors.Trace(err)
 	}
 
+	var protocol codec.Protocol
+	protocol.FromString(c.Protocol)
+
 	consumer := &Consumer{
 		maxMessageBytes: c.maxMessageBytes,
 		maxBatchSize:    c.maxBatchSize,
@@ -82,6 +85,8 @@ func New(ctx context.Context, c *Config) (*Consumer, error) {
 			sink.Sink
 			resolvedTs uint64
 		}, c.PartitionNum),
+		protocol:            protocol,
+		enableTiDBExtension: c.EnableTiDBExtension,
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -154,7 +159,7 @@ ClaimMessages:
 		case codec.ProtocolCanalJSON:
 			decoder, err = codec.NewCanalFlatEventBatchDecoder(message.Value, c.enableTiDBExtension)
 		default:
-			log.Panic("protocol not supported", zap.Any("protocol", c.protocol))
+			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
 		}
 		if err != nil {
 			return errors.Trace(err)
@@ -198,7 +203,7 @@ ClaimMessages:
 					break ClaimMessages
 				}
 				// FIXME: hack to set start-ts in row changed event, as start-ts
-				// is not contained in TiCDC open protocol
+				// is not contained in TiCDC open Protocol
 				row.StartTs = row.CommitTs
 				var partitionID int64
 				if row.Table.IsPartition {
