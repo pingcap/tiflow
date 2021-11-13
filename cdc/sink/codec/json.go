@@ -377,12 +377,6 @@ func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, er
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	// Some transactions could generate empty row change event, such as
-	// begin; insert into t (id) values (1); delete from t where id=1; commit;
-	// Just ignore these row changed events
-	if len(e.Columns) == 0 && len(e.PreColumns) == 0 {
-		return EncoderNoOperation, nil
-	}
 	keyMsg, valueMsg := rowEventToMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
