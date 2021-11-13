@@ -43,8 +43,10 @@ type Config struct {
 	timezone string
 
 	downstreamStr string
-	protocol      string
 	changefeedID  string
+
+	protocol            string
+	EnableTiDBExtension bool
 }
 
 // NewConfig return a default `Config`
@@ -118,6 +120,22 @@ func NewConfig(upstream, downstream string) (*Config, error) {
 		}
 		log.Info("Setting max-batch-size", zap.Int("max-batch-size", a))
 		result.maxBatchSize = a
+	}
+
+	if s := params.Get("protocol"); s != "" {
+		result.protocol = s
+	}
+
+	if s := params.Get("enable-tidb-extension"); s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if b && result.protocol != "canal-json" {
+			return nil, errors.Errorf("enable-tidb-extension only support Canal-JSON")
+		}
+
+		result.EnableTiDBExtension = b
 	}
 
 	return result, nil

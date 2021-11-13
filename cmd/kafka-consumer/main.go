@@ -68,7 +68,13 @@ func init() {
 func main() {
 	log.Info("Starting a new TiCDC open protocol consumer")
 
-	config := Consumer.NewConfig()
+	config, err := Consumer.NewConfig(upstreamStr, downstreamStr)
+	if err != nil {
+		log.Panic("create config failed", zap.Error(err))
+	}
+	if timezone != "" {
+		config = config.WithTimezone(timezone)
+	}
 
 	/**
 	 * Construct a new Sarama configuration.
@@ -101,12 +107,8 @@ func main() {
 	if !ok {
 		log.Panic("try to get topic information failed")
 	}
-	config.PartitionNum = info.NumPartitions
-
-	if err := config.Initialize(
-		upstreamStr, downstreamStr,
-		Consumer.WithTimezone(timezone)); err != nil {
-		log.Panic("initialize consumer config failed", zap.Error(err))
+	if info.NumPartitions != config.PartitionNum {
+		config.WithPartitionNum(info.NumPartitions)
 	}
 
 	/**
