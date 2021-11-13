@@ -67,6 +67,12 @@ func WithPartitionNum(partitions int32) option {
 	}
 }
 
+func WithChangefeedID(id string) option {
+	return func(c *Config) {
+		c.changefeedID = id
+	}
+}
+
 // NewConfig return a default `Config`
 func NewConfig() *Config {
 	return &Config{
@@ -89,10 +95,6 @@ func (c *Config) Initialize(upstream, downstream string, opts ...option) error {
 	}
 
 	c.downstreamStr = downstream
-
-	for _, opt := range opts {
-		opt(c)
-	}
 
 	scheme := strings.ToLower(uri.Scheme)
 	if scheme != "kafka" {
@@ -121,6 +123,14 @@ func (c *Config) Initialize(upstream, downstream string, opts ...option) error {
 		c.GroupID = s
 	}
 
+	if s := params.Get("partition-num"); s != "" {
+		a, err := strconv.Atoi(s)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		c.PartitionNum = int32(a)
+	}
+
 	if s := params.Get("max-message-bytes"); s != "" {
 		a, err := strconv.Atoi(s)
 		if err != nil {
@@ -138,6 +148,11 @@ func (c *Config) Initialize(upstream, downstream string, opts ...option) error {
 		log.Info("Setting max-batch-size", zap.Int("max-batch-size", a))
 		c.maxBatchSize = a
 	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
 	return nil
 }
 
