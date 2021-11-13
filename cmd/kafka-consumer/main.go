@@ -42,8 +42,6 @@ var (
 	ca, cert, key string
 
 	protocol string
-
-	changefeedID = "kafka-consumer"
 )
 
 func init() {
@@ -71,11 +69,6 @@ func main() {
 	log.Info("Starting a new TiCDC open protocol consumer")
 
 	config := Consumer.NewConfig()
-	if err := config.Initialize(
-		upstreamStr, downstreamStr,
-		Consumer.WithTimezone(timezone)); err != nil {
-		log.Panic("initialize consumer config failed", zap.Error(err))
-	}
 
 	/**
 	 * Construct a new Sarama configuration.
@@ -109,6 +102,12 @@ func main() {
 		log.Panic("try to get topic information failed")
 	}
 	config.PartitionNum = info.NumPartitions
+
+	if err := config.Initialize(
+		upstreamStr, downstreamStr,
+		Consumer.WithTimezone(timezone)); err != nil {
+		log.Panic("initialize consumer config failed", zap.Error(err))
+	}
 
 	/**
 	 * Setup a new Sarama consumer group

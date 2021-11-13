@@ -47,35 +47,31 @@ type Config struct {
 	changefeedID  string
 }
 
-type option func(c *Config)
-
-func WithProtocol(protocol string) option {
-	return func(c *Config) {
-		c.protocol = protocol
-	}
-}
-
-func WithTimezone(timezone string) option {
-	return func(c *Config) {
-		c.timezone = timezone
-	}
-}
-
-func WithPartitionNum(partitions int32) option {
-	return func(c *Config) {
-		c.PartitionNum = partitions
-	}
-}
-
-func WithChangefeedID(id string) option {
-	return func(c *Config) {
-		c.changefeedID = id
-	}
-}
-
 // NewConfig return a default `Config`
-func NewConfig() *Config {
-	return &Config{
+func NewConfig(upstream, downstream string) (*Config, error) {
+	if upstream == "" || downstream == "" {
+		return nil, errors.Errorf("upstream-url or downstream-url not found")
+	}
+
+	uri, err := url.Parse(upstream)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	scheme := strings.ToLower(uri.Scheme)
+	if scheme != "kafka" {
+		return nil, errors.Errorf("scheme is not kafka, but %v", scheme)
+	}
+
+	topic := strings.TrimFunc(uri.Path, func(r rune) bool {
+		return r == '/'
+	})
+	if topic == "" {
+		return nil, errors.New("topic should be given")
+	}
+
+	result := &Config{
+		Topic:           topic,
+		downstreamStr:   downstream,
 		timezone:        "system",
 		Version:         "2.4.0",
 		maxMessageBytes: math.MaxInt,
@@ -83,78 +79,68 @@ func NewConfig() *Config {
 		GroupID:         fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String()),
 		changefeedID:    "kafka-consumer",
 	}
-}
-
-func (c *Config) Initialize(upstream, downstream string, opts ...option) error {
-	if upstream == "" || downstream == "" {
-		return errors.Errorf("upstream-url or downstream-url not found")
-	}
-
-	uri, err := url.Parse(upstream)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	c.downstreamStr = downstream
-
-	scheme := strings.ToLower(uri.Scheme)
-	if scheme != "kafka" {
-		return errors.Errorf("scheme is not kafka, but %v", scheme)
-	}
 
 	endPoints := strings.Split(uri.Host, ",")
 	if len(endPoints) == 0 {
-		return errors.New("kafka broker addresses not found")
+		return nil, errors.New("kafka broker addresses not found")
 	}
-	c.BrokerEndpoints = endPoints
-
-	topic := strings.TrimFunc(uri.Path, func(r rune) bool {
-		return r == '/'
-	})
-	if topic == "" {
-		return errors.New("topic should be given")
-	}
-	c.Topic = topic
+	result.BrokerEndpoints = endPoints
 
 	params := uri.Query()
 	if s := params.Get("version"); s != "" {
-		c.Version = s
+		result.Version = s
 	}
 	if s := params.Get("consumer-group-id"); s != "" {
-		c.GroupID = s
+		result.GroupID = s
 	}
 
 	if s := params.Get("partition-num"); s != "" {
 		a, err := strconv.Atoi(s)
 		if err != nil {
-			return errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
-		c.PartitionNum = int32(a)
+		result.PartitionNum = int32(a)
 	}
 
 	if s := params.Get("max-message-bytes"); s != "" {
 		a, err := strconv.Atoi(s)
 		if err != nil {
-			return errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 		log.Info("Setting max-message-bytes", zap.Int("max-message-bytes", a))
-		c.maxMessageBytes = a
+		result.maxMessageBytes = a
 	}
 
 	if s := params.Get("max-batch-size"); s != "" {
 		a, err := strconv.Atoi(s)
 		if err != nil {
-			return errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 		log.Info("Setting max-batch-size", zap.Int("max-batch-size", a))
-		c.maxBatchSize = a
+		result.maxBatchSize = a
 	}
 
-	for _, opt := range opts {
-		opt(c)
-	}
+	return result, nil
+}
 
-	return nil
+func (c *Config) WithProtocol(protocol string) *Config {
+	c.protocol = protocol
+	return c
+}
+
+func (c *Config) WithTimezone(timezone string) *Config {
+	c.timezone = timezone
+	return c
+}
+
+func (c *Config) WithPartitionNum(partitions int32) *Config {
+	c.PartitionNum = partitions
+	return c
+}
+
+func (c *Config) WithChangefeedID(id string) *Config {
+	c.changefeedID = id
+	return c
 }
 
 // NewSaramaConfig can be used to initialize a sarama kafka consumer.
