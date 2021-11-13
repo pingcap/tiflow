@@ -32,6 +32,7 @@ import (
 // Config is for Kafka consumer
 type Config struct {
 	BrokerEndpoints []string
+
 	Topic           string
 	PartitionNum    int32
 	GroupID         string
@@ -41,11 +42,9 @@ type Config struct {
 
 	timezone string
 
-	upstreamStr   string
 	downstreamStr string
-
-	protocol     string
-	changefeedID string
+	protocol      string
+	changefeedID  string
 }
 
 type option func(c *Config)
@@ -56,45 +55,15 @@ func WithProtocol(protocol string) option {
 	}
 }
 
-func WithUpstream(upstream string) option {
-	return func(c *Config) {
-		c.upstreamStr = upstream
-	}
-}
-
-func WithDownstream(downstream string) option {
-	return func(c *Config) {
-		c.downstreamStr = downstream
-	}
-}
-
 func WithTimezone(timezone string) option {
 	return func(c *Config) {
 		c.timezone = timezone
 	}
 }
 
-func WithKafkaVersion(version string) option {
-	return func(c *Config) {
-		c.Version = version
-	}
-}
-
 func WithPartitionNum(partitions int32) option {
 	return func(c *Config) {
 		c.PartitionNum = partitions
-	}
-}
-
-func WithMaxMessageBytes(mmb int) option {
-	return func(c *Config) {
-		c.maxMessageBytes = mmb
-	}
-}
-
-func WithMaxBatchSize(batch int) option {
-	return func(c *Config) {
-		c.maxBatchSize = batch
 	}
 }
 
@@ -110,19 +79,19 @@ func NewConfig() *Config {
 }
 
 func (c *Config) Initialize(upstream, downstream string, opts ...option) error {
-	c.upstreamStr = upstream
-	c.downstreamStr = downstream
-	if c.upstreamStr == "" || c.downstreamStr == "" {
+	if upstream == "" || downstream == "" {
 		return errors.Errorf("upstream-url or downstream-url not found")
 	}
 
-	for _, opt := range opts {
-		opt(c)
-	}
-
-	uri, err := url.Parse(c.upstreamStr)
+	uri, err := url.Parse(upstream)
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	c.downstreamStr = downstream
+
+	for _, opt := range opts {
+		opt(c)
 	}
 
 	scheme := strings.ToLower(uri.Scheme)
@@ -130,13 +99,11 @@ func (c *Config) Initialize(upstream, downstream string, opts ...option) error {
 		return errors.Errorf("scheme is not kafka, but %v", scheme)
 	}
 
-	params := uri.Query()
-	if s := params.Get("version"); s != "" {
-		c.Version = s
+	endPoints := strings.Split(uri.Host, ",")
+	if len(endPoints) == 0 {
+		return errors.New("kafka broker addresses not found")
 	}
-	if s := params.Get("consumer-group-id"); s != "" {
-		c.GroupID = s
-	}
+	c.BrokerEndpoints = endPoints
 
 	topic := strings.TrimFunc(uri.Path, func(r rune) bool {
 		return r == '/'
@@ -146,11 +113,13 @@ func (c *Config) Initialize(upstream, downstream string, opts ...option) error {
 	}
 	c.Topic = topic
 
-	endPoints := strings.Split(uri.Host, ",")
-	if len(endPoints) == 0 {
-		return errors.New("kafka broker addresses not found")
+	params := uri.Query()
+	if s := params.Get("version"); s != "" {
+		c.Version = s
 	}
-	c.BrokerEndpoints = endPoints
+	if s := params.Get("consumer-group-id"); s != "" {
+		c.GroupID = s
+	}
 
 	if s := params.Get("max-message-bytes"); s != "" {
 		a, err := strconv.Atoi(s)
