@@ -15,7 +15,6 @@ package Consumer
 
 import (
 	"fmt"
-	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -76,8 +75,8 @@ func NewConfig(upstream, downstream string) (*Config, error) {
 		downstreamStr:   downstream,
 		timezone:        "system",
 		Version:         "2.4.0",
-		maxMessageBytes: math.MaxInt,
-		maxBatchSize:    math.MaxInt,
+		maxMessageBytes: 1 * 1024 * 1024,
+		maxBatchSize:    16,
 		GroupID:         fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String()),
 		changefeedID:    "kafka-consumer",
 	}
