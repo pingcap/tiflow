@@ -1,11 +1,19 @@
-import React from 'react'
+import React, { Suspense } from 'react'
 import { Outlet } from 'react-router-dom'
 
-import { Layout } from '~/uikit'
+import { Layout, Spin } from '~/uikit'
 import SiderMenu from '~/layouts/SiderMenu'
 import HeaderNav from '~/layouts/Header'
 
 const { Header, Sider, Content } = Layout
+
+const CenteredLoading = () => {
+  return (
+    <div className="h-full w-full flex justify-center items-center">
+      <Spin size="large" />
+    </div>
+  )
+}
 
 const GlobalLayout: React.FC = () => {
   return (
@@ -18,7 +26,9 @@ const GlobalLayout: React.FC = () => {
           <HeaderNav />
         </Header>
         <Content>
-          <Outlet />
+          <Suspense fallback={<CenteredLoading />}>
+            <Outlet />
+          </Suspense>
         </Content>
       </Layout>
     </Layout>

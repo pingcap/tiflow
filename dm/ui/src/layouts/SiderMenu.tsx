@@ -17,7 +17,7 @@ const items = [
       },
       {
         text: '上游配置',
-        itemKey: '/migration/upstream',
+        itemKey: '/migration/source',
       },
       {
         text: '任务配置',

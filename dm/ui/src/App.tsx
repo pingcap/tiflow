@@ -1,9 +1,11 @@
-import React from 'react'
+import React, { lazy } from 'react'
 import { Provider } from 'react-redux'
 import { BrowserRouter, RouteObject, useRoutes } from 'react-router-dom'
 
 import { store } from '~/models'
 import Layout from '~/pages/_layout'
+
+const SourceList = lazy(() => import('~/pages/migration/source'))
 
 const routes: RouteObject[] = [
   {
@@ -19,8 +21,8 @@ const routes: RouteObject[] = [
         element: <div>TODO 任务列表</div>,
       },
       {
-        path: '/migration/upstream',
-        element: <div>TODO 上游配置</div>,
+        path: '/migration/source',
+        element: <SourceList />,
       },
       {
         path: '/migration/task-config',
