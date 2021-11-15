@@ -30,7 +30,7 @@ Please update the tracking issue according to the progress of succeeding impleme
 
 ## Style of Design Documents
 
-Run lints (you must have [Node.js](https://nodejs.org) installed):
+Run lints in `docs` directory (you must have [Node.js](https://nodejs.org) installed):
 
 ```bash
 # Install linters: npm install

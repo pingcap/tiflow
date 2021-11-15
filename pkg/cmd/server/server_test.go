@@ -177,11 +177,11 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 			SortDir:                config.DefaultSortDir,
 			EnableLevelDB:          false,
 			LevelDB: config.LevelDBConfig{
-				LevelDBCount:           16,
-				LevelDBConcurrency:     256,
+				Count:                  16,
+				Concurrency:            256,
 				MaxOpenFiles:           10000,
 				BlockSize:              65536,
-				BlockCacheSize:         0,
+				BlockCacheSize:         4294967296,
 				WriterBufferSize:       8388608,
 				Compression:            "snappy",
 				TargetFileSizeBase:     8388608,
@@ -239,8 +239,8 @@ num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
 enable-leveldb-sorter = false
 [sorter.leveldb]
-leveldb-count = 5
-leveldb-concurrency = 6
+count = 5
+concurrency = 6
 max-open-files = 7
 block-size = 32768 # 32 KB
 block-cache-size = 8
@@ -292,8 +292,8 @@ cleanup-speed-limit = 14
 			SortDir:                config.DefaultSortDir,
 			EnableLevelDB:          false,
 			LevelDB: config.LevelDBConfig{
-				LevelDBCount:           5,
-				LevelDBConcurrency:     6,
+				Count:                  5,
+				Concurrency:            6,
 				MaxOpenFiles:           7,
 				BlockSize:              32768,
 				BlockCacheSize:         8,
@@ -410,11 +410,11 @@ cert-allowed-cn = ["dd","ee"]
 			SortDir:                config.DefaultSortDir,
 			EnableLevelDB:          false,
 			LevelDB: config.LevelDBConfig{
-				LevelDBCount:           16,
-				LevelDBConcurrency:     256,
+				Count:                  16,
+				Concurrency:            256,
 				MaxOpenFiles:           10000,
 				BlockSize:              65536,
-				BlockCacheSize:         0,
+				BlockCacheSize:         4294967296,
 				WriterBufferSize:       8388608,
 				Compression:            "snappy",
 				TargetFileSizeBase:     8388608,
