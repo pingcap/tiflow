@@ -417,3 +417,34 @@ func (t *testParserSuite) TestResolveDDL(c *C) {
 		}
 	}
 }
+
+func (t *testParserSuite) TestCheckIsDDL(c *C) {
+	var (
+		cases = []struct {
+			sql   string
+			isDDL bool
+		}{
+			{
+				sql:   "CREATE DATABASE test_is_ddl",
+				isDDL: true,
+			},
+			{
+				sql:   "BEGIN",
+				isDDL: false,
+			},
+			{
+				sql:   "INSERT INTO test_is_ddl.test_is_ddl_table VALUES (1)",
+				isDDL: false,
+			},
+			{
+				sql:   "INVAID SQL STATEMENT",
+				isDDL: false,
+			},
+		}
+		parser2 = parser.New()
+	)
+
+	for _, cs := range cases {
+		c.Assert(CheckIsDDL(cs.sql, parser2), Equals, cs.isDDL)
+	}
+}
