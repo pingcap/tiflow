@@ -4,7 +4,7 @@ relay-dir: /tmp/dm_test/dmctl_basic/worker2/relay_log
 meta-dir: ""
 flavor: mysql
 charset: ""
-enable-relay: true
+enable-relay: false
 relay-binlog-name: ""
 relay-binlog-gtid: ""
 source-id: mysql-replica-02

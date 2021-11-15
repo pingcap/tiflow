@@ -341,6 +341,10 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 					}
 					rev = rev1
 					if relaySource == nil {
+						if w := s.getWorker(true); w != nil && w.startedRelayBySourceCfg {
+							break
+						}
+						log.L().Info("didn't found relay config after etcd retryable error. Will stop relay now")
 						err = s.disableRelay("")
 						if err != nil {
 							log.L().Error("fail to disableRelay after etcd retryable error", zap.Error(err))
@@ -388,6 +392,9 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 	}
 }
 
+// observeSourceBound will
+// 1. keep bound relation updated from DM-master
+// 2. keep enable-relay in source config updated. (TODO) This relies on DM-master re-put SourceBound after change it.
 func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 	var wg sync.WaitGroup
 	for {
@@ -670,6 +677,16 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 	if err != nil {
 		return err
 	}
+
+	if sourceCfg.EnableRelay {
+		w.startedRelayBySourceCfg = true
+		if err2 := w.EnableRelay(); err2 != nil {
+			log.L().Error("found a `enable-relay: true` source, but failed to enable relay for DM worker",
+				zap.Error(err2))
+			return err2
+		}
+	}
+
 	if err2 := w.EnableHandleSubtasks(); err2 != nil {
 		s.setSourceStatus(sourceCfg.SourceID, err2, false)
 		return err2
@@ -685,7 +702,15 @@ func (s *Server) disableHandleSubtasks(source string) error {
 		log.L().Warn("worker has already stopped before DisableHandleSubtasks", zap.String("source", source))
 		return nil
 	}
+
 	w.DisableHandleSubtasks()
+
+	// now the worker is unbound, stop relay if it's started by source config
+	if w.cfg.EnableRelay && w.startedRelayBySourceCfg {
+		log.L().Info("stop relay because the source is unbound")
+		w.DisableRelay()
+	}
+
 	var err error
 	if !w.relayEnabled.Load() {
 		log.L().Info("relay is not enabled after disabling subtask, so stop worker")
