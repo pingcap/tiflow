@@ -147,7 +147,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 			if encodeEnable && decodeEnable {
 				c.Assert(consumed.CommitTs, check.Equals, testCaseUpdate.CommitTs)
 			} else {
-				c.Assert(consumed.CommitTs, check.Equals, 0)
+				c.Assert(consumed.CommitTs, check.Equals, uint64(0))
 			}
 
 			for _, col := range consumed.Columns {
@@ -236,7 +236,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C
 			if encodeEnable && decodeEnable {
 				c.Assert(consumed.CommitTs, check.Equals, testCaseDdl.CommitTs)
 			} else {
-				c.Assert(consumed.CommitTs, check.Equals, 0)
+				c.Assert(consumed.CommitTs, check.Equals, uint64(0))
 			}
 
 			c.Assert(consumed.TableInfo, check.DeepEquals, testCaseDdl.TableInfo)
