@@ -101,7 +101,11 @@ func (s *System) CleanerRouter() *actor.Router {
 func (s *System) broadcast(ctx context.Context, router *actor.Router, msg message.Message) {
 	dbCount := s.cfg.LevelDB.Count
 	for id := 0; id < dbCount; id++ {
-		_ = router.SendB(ctx, actor.ID(id), msg)
+		err := router.SendB(ctx, actor.ID(id), msg)
+		if err != nil {
+			log.Warn("broadcast message failed",
+				zap.Int("ID", id), zap.Any("message", msg))
+		}
 	}
 }
 
