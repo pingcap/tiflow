@@ -131,7 +131,7 @@ func (o *options) run(cmd *cobra.Command) error {
 		return errors.Annotate(err, "run server")
 	}
 	server.Close()
-	unified.UnifiedSorterCleanUp()
+	unified.CleanUp()
 	log.Info("cdc server exits successfully")
 
 	return nil
