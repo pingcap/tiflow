@@ -47,6 +47,8 @@ func (t *testFileWriterSuite) TestInterfaceMethods(c *check.C) {
 		ev, _            = event.GenFormatDescriptionEvent(header, latestPos)
 	)
 
+	c.Assert(os.MkdirAll(path.Join(relayDir, uuid), 0o755), check.IsNil)
+
 	w := NewFileWriter(log.L(), relayDir)
 	c.Assert(w, check.NotNil)
 
@@ -106,6 +108,8 @@ func (t *testFileWriterSuite) TestRelayDir(c *check.C) {
 	_, err = w4.WriteEvent(ev)
 	c.Assert(err, check.ErrorMatches, ".*not valid.*")
 
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
+
 	// valid directory, valid filename
 	w5 := NewFileWriter(log.L(), relayDir)
 	defer w5.Close()
@@ -129,7 +133,7 @@ func (t *testFileWriterSuite) TestFormatDescriptionEvent(c *check.C) {
 	)
 	formatDescEv, err := event.GenFormatDescriptionEvent(header, latestPos)
 	c.Assert(err, check.IsNil)
-	c.Assert(os.Mkdir(path.Join(relayDir, uuid), 0755), check.IsNil)
+	c.Assert(os.Mkdir(path.Join(relayDir, uuid), 0o755), check.IsNil)
 
 	// write FormatDescriptionEvent to empty file
 	w := NewFileWriter(log.L(), relayDir)
@@ -238,6 +242,7 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 
 	// 2. fake RotateEvent before FormatDescriptionEvent
 	relayDir = c.MkDir() // use a new relay directory
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
 	w2 := NewFileWriter(log.L(), relayDir)
 	defer w2.Close()
 	w2.Init(uuid, filename)
@@ -254,8 +259,8 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 	t.verifyFilenameOffset(c, w2, nextFilename, fileSize)
 
 	// filename should be empty, next file should contain only one FormatDescriptionEvent
-	filename1 := filepath.Join(relayDir, filename)
-	filename2 := filepath.Join(relayDir, nextFilename)
+	filename1 := filepath.Join(relayDir, uuid, filename)
+	filename2 := filepath.Join(relayDir, uuid, nextFilename)
 	_, err = os.Stat(filename1)
 	c.Assert(os.IsNotExist(err), check.IsTrue)
 	data, err := os.ReadFile(filename2)
@@ -266,6 +271,7 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 
 	// 3. FormatDescriptionEvent before fake RotateEvent
 	relayDir = c.MkDir() // use a new relay directory
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
 	w3 := NewFileWriter(log.L(), relayDir)
 	defer w3.Close()
 	w3.Init(uuid, filename)
@@ -283,8 +289,8 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 	t.verifyFilenameOffset(c, w3, nextFilename, fileSize)
 
 	// filename should contain only one FormatDescriptionEvent, next file should be empty
-	filename1 = filepath.Join(relayDir, filename)
-	filename2 = filepath.Join(relayDir, nextFilename)
+	filename1 = filepath.Join(relayDir, uuid, filename)
+	filename2 = filepath.Join(relayDir, uuid, nextFilename)
 	_, err = os.Stat(filename2)
 	c.Assert(os.IsNotExist(err), check.IsTrue)
 	data, err = os.ReadFile(filename1)
@@ -294,6 +300,7 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 
 	// 4. FormatDescriptionEvent before non-fake RotateEvent
 	relayDir = c.MkDir() // use a new relay directory
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
 	w4 := NewFileWriter(log.L(), relayDir)
 	defer w4.Close()
 	w4.Init(uuid, filename)
@@ -318,8 +325,8 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 	c.Assert(err, check.ErrorMatches, ".*(no such file or directory|The system cannot find the file specified).*")
 
 	// filename should contain both one FormatDescriptionEvent and one RotateEvent, next file should be empty
-	filename1 = filepath.Join(relayDir, filename)
-	filename2 = filepath.Join(relayDir, nextFilename)
+	filename1 = filepath.Join(relayDir, uuid, filename)
+	filename2 = filepath.Join(relayDir, uuid, nextFilename)
 	_, err = os.Stat(filename2)
 	c.Assert(os.IsNotExist(err), check.IsTrue)
 	data, err = os.ReadFile(filename1)
@@ -382,6 +389,8 @@ func (t *testFileWriterSuite) TestWriteMultiEvents(c *check.C) {
 	allEvents = append(allEvents, events...)
 	allData.Write(data)
 
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
+
 	// write the events to the file
 	w := NewFileWriter(log.L(), relayDir)
 	w.Init(uuid, filename)
@@ -394,7 +403,7 @@ func (t *testFileWriterSuite) TestWriteMultiEvents(c *check.C) {
 	t.verifyFilenameOffset(c, w, filename, int64(allData.Len()))
 
 	// read the data back from the file
-	fullName := filepath.Join(relayDir, filename)
+	fullName := filepath.Join(relayDir, uuid, filename)
 	obtainData, err := os.ReadFile(fullName)
 	c.Assert(err, check.IsNil)
 	c.Assert(obtainData, check.DeepEquals, allData.Bytes())
@@ -414,6 +423,8 @@ func (t *testFileWriterSuite) TestHandleFileHoleExist(c *check.C) {
 	formatDescEv, err := event.GenFormatDescriptionEvent(header, latestPos)
 	c.Assert(err, check.IsNil)
 	c.Assert(formatDescEv, check.NotNil)
+
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
 
 	w := NewFileWriter(log.L(), relayDir)
 	defer w.Close()
@@ -452,7 +463,7 @@ func (t *testFileWriterSuite) TestHandleFileHoleExist(c *check.C) {
 		events = append(events, e)
 		return nil
 	}
-	fullName := filepath.Join(relayDir, filename)
+	fullName := filepath.Join(relayDir, uuid, filename)
 	err = replication.NewBinlogParser().ParseFile(fullName, 0, onEventFunc)
 	c.Assert(err, check.IsNil)
 	c.Assert(events, check.HasLen, 3)
@@ -478,7 +489,7 @@ func (t *testFileWriterSuite) TestHandleDuplicateEventsExist(c *check.C) {
 		}
 		latestPos uint32 = 4
 	)
-	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0755), check.IsNil)
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
 	w := NewFileWriter(log.L(), relayDir)
 	defer w.Close()
 	w.Init(uuid, filename)

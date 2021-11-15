@@ -115,7 +115,6 @@ func (t *testRemoteReaderSuite) TestGetEventWithError(c *check.C) {
 	errOther := errors.New("other error")
 	in := []error{
 		context.Canceled,
-		context.DeadlineExceeded, // retried without return
 		errOther,
 	}
 	expected := []error{
