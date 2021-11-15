@@ -437,7 +437,7 @@ func (r *Relay) tryRecoverLatestFile(ctx context.Context, parser2 *parser.Parser
 			}
 		}
 	}
-	return terror.Annotatef(err, "recover for UUID %s with config %s, %s", uuid, binlogDir, latestPos.Name)
+	return terror.Annotatef(err, "recover for UUID %s with relay dir %s, filename %s", uuid, binlogDir, latestPos.Name)
 }
 
 // recoverResult represents a result for a binlog recover operation.
