@@ -16,6 +16,7 @@ package relay
 import (
 	"bytes"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -128,6 +129,7 @@ func (t *testFileWriterSuite) TestFormatDescriptionEvent(c *check.C) {
 	)
 	formatDescEv, err := event.GenFormatDescriptionEvent(header, latestPos)
 	c.Assert(err, check.IsNil)
+	c.Assert(os.Mkdir(path.Join(relayDir, uuid), 0755), check.IsNil)
 
 	// write FormatDescriptionEvent to empty file
 	w := NewFileWriter(log.L(), relayDir)
@@ -174,7 +176,7 @@ func (t *testFileWriterSuite) TestFormatDescriptionEvent(c *check.C) {
 		events = append(events, e)
 		return nil
 	}
-	fullName := filepath.Join(relayDir, filename)
+	fullName := filepath.Join(relayDir, uuid, filename)
 	err = replication.NewBinlogParser().ParseFile(fullName, 0, onEventFunc)
 	c.Assert(err, check.IsNil)
 	c.Assert(events, check.HasLen, 2)
@@ -476,6 +478,7 @@ func (t *testFileWriterSuite) TestHandleDuplicateEventsExist(c *check.C) {
 		}
 		latestPos uint32 = 4
 	)
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0755), check.IsNil)
 	w := NewFileWriter(log.L(), relayDir)
 	defer w.Close()
 	w.Init(uuid, filename)

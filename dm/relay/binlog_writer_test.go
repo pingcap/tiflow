@@ -31,9 +31,10 @@ type testBinlogWriterSuite struct{}
 func (t *testBinlogWriterSuite) TestWrite(c *C) {
 	dir := c.MkDir()
 	uuid := "3ccc475b-2343-11e7-be21-6c0b84d59f30.000001"
-	c.Assert(os.Mkdir(filepath.Join(dir, uuid), 0o755), IsNil)
+	binlogDir := filepath.Join(dir, uuid)
+	c.Assert(os.Mkdir(binlogDir, 0o755), IsNil)
 
-	filename := filepath.Join(dir, "test-mysql-bin.000001")
+	filename := "test-mysql-bin.000001"
 	var (
 		allData bytes.Buffer
 		data1   = []byte("test-data")
@@ -96,7 +97,8 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 		c.Assert(w.Close(), IsNil) // noop
 
 		// try to read the data back
-		dataInFile, err := os.ReadFile(filename)
+		fullName := filepath.Join(binlogDir, filename)
+		dataInFile, err := os.ReadFile(fullName)
 		c.Assert(err, IsNil)
 		c.Assert(dataInFile, DeepEquals, allData.Bytes())
 	}
