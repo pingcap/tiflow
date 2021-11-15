@@ -119,7 +119,6 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	sourceCfg1, err := config.LoadFromFile(sourceSampleFile)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
-	sourceCfg1.EnableRelay = true
 	sourceCfg2 := *sourceCfg1
 	sourceCfg2.SourceID = sourceID2
 
@@ -1086,7 +1085,7 @@ func (t *testScheduler) TestLastBound(c *C) {
 	c.Assert(bounded, IsFalse)
 
 	// after worker3 become offline, source2 should be bounded to worker2
-	s.updateStatusForUnbound(sourceID2)
+	s.updateStatusToUnbound(sourceID2)
 	_, ok := s.bounds[sourceID2]
 	c.Assert(ok, IsFalse)
 	worker3.ToOffline()
@@ -1337,7 +1336,7 @@ func (t *testScheduler) TestStartStopRelay(c *C) {
 	c.Assert(s.bounds[sourceID1].baseInfo.Name, Equals, workerName1)
 	c.Assert(s.bounds[sourceID2].baseInfo.Name, Equals, workerName2)
 
-	s.updateStatusForUnbound(sourceID2)
+	s.updateStatusToUnbound(sourceID2)
 	c.Assert(worker2.Stage(), Equals, WorkerRelay)
 	c.Assert(s.StopRelay(sourceID2, []string{workerName2}), IsNil)
 	c.Assert(worker2.Stage(), Equals, WorkerFree)

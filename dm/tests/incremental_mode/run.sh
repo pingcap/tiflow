@@ -76,7 +76,8 @@ function run() {
 	sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
 	dmctl_start_task $WORK_DIR/dm-task.yaml
 
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
 
 	dmctl_stop_task $TASK_NAME
 
@@ -218,7 +219,9 @@ function run() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
 	sleep 3
-	dmctl_start_task $WORK_DIR/dm-task.yaml
+	# start DM task. don't check error because it will meet injected error soon
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml"
 
 	# the task should paused by `FlushCheckpointStage` failpont before flush old checkpoint.
 	# `db2.increment.sql` has no DDL, so we check count of content as `1`.
@@ -263,7 +266,8 @@ function run() {
 		"resume-task test" \
 		"\"result\": true" 3
 
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
 
 	# test rotate binlog, after rotate and ddl, master binlog should be equal to sync binlog
 	run_sql "flush logs;" $MYSQL_PORT1 $MYSQL_PASSWORD1

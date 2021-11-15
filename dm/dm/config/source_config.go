@@ -393,8 +393,6 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 	// omit default values, so we can ignore them for later marshal
 	s.omitDefaultVals()
 
-	// not write this field when exporting
-	s.EnableRelay = false
 	return s.Yaml()
 }
 
@@ -408,6 +406,7 @@ type SourceConfigForDowngrade struct {
 	MetaDir         string                 `yaml:"meta-dir"`
 	Flavor          string                 `yaml:"flavor"`
 	Charset         string                 `yaml:"charset"`
+	EnableRelay     bool                   `yaml:"enable-relay"`
 	RelayBinLogName string                 `yaml:"relay-binlog-name"`
 	RelayBinlogGTID string                 `yaml:"relay-binlog-gtid"`
 	UUIDSuffix      int                    `yaml:"-"`
@@ -420,8 +419,6 @@ type SourceConfigForDowngrade struct {
 	// any new config item, we mark it omitempty
 	CaseSensitive bool                  `yaml:"case-sensitive,omitempty"`
 	Filters       []*bf.BinlogEventRule `yaml:"filters,omitempty"`
-	// deprecated, DM will not write this field when exporting
-	EnableRelay bool `yaml:"enable-relay,omitempty"`
 }
 
 // NewSourceConfigForDowngrade creates a new base config for downgrade.
