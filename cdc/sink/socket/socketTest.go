@@ -979,15 +979,6 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 		}
 	}
 
-
-
-	verifyArr := make([]byte,4)
-
-	verifyArr[0] = 0x06
-	verifyArr[1] = 0xce
-	verifyArr[2] = 0x01
-	verifyArr[3] = 0x23
-
 	//defer conn.Close()
 
 	//fmt.Println("resolvedTs：：：：：：：：：：：：：：：：：：：：：：：：",resolvedTs)
@@ -1053,14 +1044,13 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 	}
 
 
-
 	//defer conn.Close()
 
 	//fmt.Println("resolvedTs：：：：：：：：：：：：：：：：：：：：：：：：",resolvedTs)
 
 	//=============================================
 
-	_, err := conn.Write(createBytesFromResolvedTs(resolvedTs))
+	_, err := conn.Write(createFlushBytesFromResolvedTs(resolvedTs))
 	if err != nil {
 		return 0, nil
 	}
@@ -1098,6 +1088,48 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
 }
 
+func createFlushBytesFromResolvedTs(resolvedTs uint64)  []byte{
+
+	//var buffer bytes.Buffer
+	//colsArr = make([]byte,0)
+	//fmt.Printf(" resolvedTs   = %d\n", resolvedTs)
+
+
+	verifyArr := make([]byte,4)
+	//serviceNumArr := make([]byte,4)
+
+	verifyArr[0] = 0x06
+	verifyArr[1] = 0xce
+	verifyArr[2] = 0x01
+	//verifyArr[3] = 0x23
+	verifyArr[3] = 0x15
+
+	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
+	sendBatchRowsArr :=new(bytes.Buffer)
+
+	//当前时间戳
+	/*t1 := time.Now().Unix()  //1564552562
+	fmt.Println(t1)*/
+
+	//	buffer.Write(publicUtils.LongToBytes(rowInfo.StartTimer))
+	buffer.Write(publicUtils.LongToBytes(int64(resolvedTs)))
+
+	/*operTypeArr := make([]byte,4)
+	operTypeArr[3]=byte('I')
+	buffer.Write(operTypeArr)
+	fmt.Printf(" allColumnArrByRow[%d]Arr %s \n",len(buffer.Bytes()),publicUtils.BytestoHex(buffer.Bytes()))*/
+
+
+	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()));
+	sendBatchRowsArr.Write(lengthArr)
+	sendBatchRowsArr.Write(verifyArr)
+	sendBatchRowsArr.Write(buffer.Bytes())
+	//fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
+
+
+	return sendBatchRowsArr.Bytes()
+
+}
 
 func createBytesFromResolvedTs(resolvedTs uint64)  []byte{
 
