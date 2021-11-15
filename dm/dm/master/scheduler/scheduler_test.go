@@ -119,7 +119,6 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	sourceCfg1, err := config.LoadFromFile(sourceSampleFile)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
-	sourceCfg1.EnableRelay = true
 	sourceCfg2 := *sourceCfg1
 	sourceCfg2.SourceID = sourceID2
 
