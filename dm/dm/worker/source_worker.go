@@ -78,6 +78,8 @@ type SourceWorker struct {
 	relayHolder  RelayHolder
 	relayPurger  relay.Purger
 
+	startedRelayBySourceCfg bool
+
 	taskStatusChecker TaskStatusChecker
 
 	etcdClient *clientv3.Client
@@ -279,13 +281,15 @@ func (w *SourceWorker) EnableRelay() (err error) {
 		failpoint.Goto("bypass")
 	})
 
-	// we need update worker source config from etcd first
-	// because the configuration of the relay part of the data source may be changed via scheduler.UpdateSourceCfg
-	sourceCfg, _, err = ha.GetRelayConfig(w.etcdClient, w.name)
-	if err != nil {
-		return err
+	if !w.startedRelayBySourceCfg {
+		// we need update worker source config from etcd first
+		// because the configuration of the relay part of the data source may be changed via scheduler.UpdateSourceCfg
+		sourceCfg, _, err = ha.GetRelayConfig(w.etcdClient, w.name)
+		if err != nil {
+			return err
+		}
+		w.cfg = sourceCfg
 	}
-	w.cfg = sourceCfg
 
 	failpoint.Label("bypass")
 
