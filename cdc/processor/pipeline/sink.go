@@ -260,7 +260,7 @@ func splitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 }
 
 // clear event buffer and row buffer.
-// Also, it unrefs data that are holded by buffers.
+// Also, it dereferences data that are held by buffers.
 func (n *sinkNode) clearBuffers() {
 	// Do not hog memory.
 	if cap(n.rowBuffer) > defaultSyncResolvedBatch {

@@ -1228,11 +1228,6 @@ func (s *Server) OperateSource(ctx context.Context, req *pb.OperateSourceRequest
 			err      error
 		)
 		for _, cfg := range cfgs {
-			// tell user he should use `start-relay` to manually specify relay workers
-			if cfg.EnableRelay {
-				resp.Msg = "Please use `start-relay` to specify which workers should pull relay log of relay-enabled sources."
-			}
-
 			err = s.scheduler.AddSourceCfg(cfg)
 			// return first error and try to revert, so user could copy-paste same start command after error
 			if err != nil {

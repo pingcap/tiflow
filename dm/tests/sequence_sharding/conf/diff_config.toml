@@ -25,10 +25,9 @@ target-table = "t_target"
 
 [table-configs]
 [table-configs.config1]
-schema = "sharding_target2"
-table = "t_target"
+target-tables = ["sharding_target2.t_target"]
 ignore-columns = ["id"]
-index-fields = "uid"
+index-fields = ["uid"]
 # range-placeholder
 
 [data-sources]
