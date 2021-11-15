@@ -1495,7 +1495,10 @@ func extractWorkerError(result *pb.ProcessResult) error {
 //     * stop: related task can't be found in worker's result
 // Relay:
 //   OperateRelay:
-//     * pause: related relay status is paused
+//     * start: related relay status is running
+//     * stop: related relay status can't be found in worker's result
+//   OperateWorkerRelay:
+//     * pause: `related relay status is paused
 //     * resume: related relay status is running
 // returns OK, error message of QueryStatusResponse, raw QueryStatusResponse, error that not from QueryStatusResponse.
 func (s *Server) waitOperationOk(
@@ -1532,6 +1535,13 @@ func (s *Server) waitOperationOk(
 		case pb.RelayOp_PauseRelay:
 			expect = pb.Stage_Paused
 		case pb.RelayOp_StopRelay:
+			expect = pb.Stage_Stopped
+		}
+	case *pb.OperateRelayRequest:
+		switch req.Op {
+		case pb.RelayOpV2_StartRelayV2:
+			expect = pb.Stage_Running
+		case pb.RelayOpV2_StopRelayV2:
 			expect = pb.Stage_Stopped
 		}
 	default:
@@ -1646,6 +1656,25 @@ func (s *Server) waitOperationOk(
 					}
 				} else {
 					return false, "", queryResp, terror.ErrMasterOperRespNotSuccess.Generate("relay is disabled for this source")
+				}
+			case *pb.OperateRelayRequest:
+				// including the situation that source status is nil and relay status is nil
+				relayStatus := queryResp.GetSourceStatus().GetRelayStatus()
+				if expect == pb.Stage_Stopped && relayStatus == nil {
+					return true, "", queryResp, nil
+				} else if relayStatus != nil {
+					msg := ""
+					if err2 := extractWorkerError(relayStatus.Result); err2 != nil {
+						msg = err2.Error()
+					}
+					ok := false
+					if relayStatus.Stage == expect {
+						ok = true
+					}
+
+					if ok || msg != "" {
+						return ok, msg, queryResp, nil
+					}
 				}
 			}
 			log.L().Info("fail to get expect operation result", zap.Int("retryNum", num), zap.String("task", taskName),
