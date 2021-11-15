@@ -36,6 +36,9 @@ const (
 
 	// DefaultRedoDir is the sub directory path of data-dir.
 	DefaultRedoDir = "/tmp/redo"
+
+	// DebugConfigurationItem is the name of debug configurations
+	DebugConfigurationItem = "debug"
 )
 
 func init() {
