@@ -1,4 +1,3 @@
 [consistent]
 level = "eventual"
-storage = "s3"
-s3-uri = "s3://logbucket/test-changefeed?endpoint=http://127.0.0.1:24927/"
+storage = "s3://logbucket/test-changefeed?endpoint=http://127.0.0.1:24927/"

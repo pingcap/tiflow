@@ -30,8 +30,8 @@ import (
 func NewProducer(u *url.URL, errCh chan error) (*Producer, error) {
 	failpoint.Inject("MockPulsar", func() {
 		failpoint.Return(&Producer{
-			errCh:      errCh,
-			partitions: 4,
+			errCh:        errCh,
+			partitionNum: 4,
 		}, nil)
 	})
 
@@ -54,21 +54,21 @@ func NewProducer(u *url.URL, errCh chan error) (*Producer, error) {
 		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
 	}
 	return &Producer{
-		errCh:      errCh,
-		opt:        *opt,
-		client:     client,
-		producer:   producer,
-		partitions: len(partitions),
+		errCh:        errCh,
+		opt:          *opt,
+		client:       client,
+		producer:     producer,
+		partitionNum: len(partitions),
 	}, nil
 }
 
 // Producer provide a way to send msg to pulsar.
 type Producer struct {
-	opt        Option
-	client     pulsar.Client
-	producer   pulsar.Producer
-	errCh      chan error
-	partitions int
+	opt          Option
+	client       pulsar.Client
+	producer     pulsar.Producer
+	errCh        chan error
+	partitionNum int
 }
 
 func createProperties(message *codec.MQMessage, partition int32) map[string]string {
@@ -86,7 +86,7 @@ func createProperties(message *codec.MQMessage, partition int32) map[string]stri
 }
 
 // SendMessage send key-value msg to target partition.
-func (p *Producer) SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
+func (p *Producer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
 	p.producer.SendAsync(ctx, &pulsar.ProducerMessage{
 		Payload:    message.Value,
 		Key:        string(message.Key),
@@ -108,7 +108,7 @@ func (p *Producer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err err
 
 // SyncBroadcastMessage send key-value msg to all partition.
 func (p *Producer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
-	for partition := 0; partition < p.partitions; partition++ {
+	for partition := 0; partition < p.partitionNum; partition++ {
 		_, err := p.producer.Send(ctx, &pulsar.ProducerMessage{
 			Payload:    message.Value,
 			Key:        string(message.Key),
@@ -127,9 +127,9 @@ func (p *Producer) Flush(_ context.Context) error {
 	return cerror.WrapError(cerror.ErrPulsarSendMessage, p.producer.Flush())
 }
 
-// GetPartitionNum got current topic's partitions size.
+// GetPartitionNum got current topic's partition size.
 func (p *Producer) GetPartitionNum() int32 {
-	return int32(p.partitions)
+	return int32(p.partitionNum)
 }
 
 // Close closes the producer and client.

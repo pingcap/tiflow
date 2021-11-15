@@ -1,3 +1,0 @@
-[consistent]
-level = "eventual"
-storage = "local"

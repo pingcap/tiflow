@@ -166,7 +166,7 @@ func (s *changefeedSuite) TestInitialize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
@@ -181,7 +181,7 @@ func (s *changefeedSuite) TestHandleError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
@@ -226,7 +226,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	})
 
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 	tickThreeTime := func() {
 		cf.Tick(ctx, state, captures)
 		tester.MustApplyPatches()
@@ -298,7 +298,7 @@ func (s *changefeedSuite) TestSyncPoint(c *check.C) {
 	ctx.ChangefeedVars().Info.SyncPointEnabled = true
 	ctx.ChangefeedVars().Info.SyncPointInterval = 1 * time.Second
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -329,7 +329,7 @@ func (s *changefeedSuite) TestFinished(c *check.C) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.TargetTs = ctx.ChangefeedVars().Info.StartTs + 1000
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 
 	// pre check
 	cf.Tick(ctx, state, captures)

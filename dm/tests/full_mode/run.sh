@@ -60,6 +60,7 @@ function fail_acquire_global_lock() {
 		"you need (at least one of) the RELOAD privilege(s) for this operation" 2
 
 	cleanup_data full_mode
+	cleanup_data_upstream full_mode
 	cleanup_process $*
 }
 
@@ -68,7 +69,8 @@ function escape_schema() {
 	cp $cur/data/db2.prepare.sql $WORK_DIR/db2.prepare.sql
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	cp $cur/conf/diff_config.toml $WORK_DIR/diff_config.toml
-	sed -i "s/full_mode/full\/mode/g" $WORK_DIR/db1.prepare.sql $WORK_DIR/db2.prepare.sql $WORK_DIR/dm-task.yaml $WORK_DIR/diff_config.toml
+	sed -i "s/full_mode/full\\\\\\\\\/mode/g" $WORK_DIR/diff_config.toml
+	sed -i "s/full_mode/full\/mode/g" $WORK_DIR/db1.prepare.sql $WORK_DIR/db2.prepare.sql $WORK_DIR/dm-task.yaml
 
 	run_sql_file $WORK_DIR/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
@@ -103,7 +105,6 @@ function escape_schema() {
 
 	# start DM task only
 	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
-	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml
 
 	check_log_contain_with_retry 'clean dump files' $WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry 'clean dump files' $WORK_DIR/worker2/log/dm-worker.log
@@ -117,6 +118,7 @@ function escape_schema() {
 	check_metric $WORKER2_PORT 'dumpling_dump_finished_tables' 3 0 3
 
 	cleanup_data full/mode
+	cleanup_data_upstream full/mode
 	cleanup_process $*
 }
 
@@ -129,7 +131,8 @@ function empty_data() {
 	init_cluster
 
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
@@ -141,6 +144,7 @@ function empty_data() {
 	check_log_contains $WORK_DIR/worker2/log/dm-worker.log "progress=\"100.00 %\""
 
 	cleanup_data full_mode
+	cleanup_data_upstream full_mode
 	cleanup_process $*
 }
 
@@ -189,7 +193,8 @@ function run() {
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 
 	# use sync_diff_inspector to check full dump loader
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
 
 	echo "check dump files have been cleaned"
 	ls $WORK_DIR/worker1/dumped_data.test && exit 1 || echo "worker1 auto removed dump files"

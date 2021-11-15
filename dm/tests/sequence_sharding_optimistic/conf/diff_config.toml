@@ -1,54 +1,50 @@
 # diff Configuration.
 
-log-level = "info"
-
-chunk-size = 10
-
 check-thread-count = 4
 
-sample-percent = 100
+export-fix-sql = true
 
-use-checksum = true
+check-struct-only = false
 
-fix-sql-file = "fix.sql"
+[task]
+    output-dir = "/tmp/ticdc_dm_test/output"
 
-# tables need to check.
-[[check-tables]]
-schema = "sharding_target_opt"
-tables = ["t_target"]
+    source-instances = ["mysql1", "mysql2"]
 
-[[table-config]]
-schema = "sharding_target_opt"
-table = "t_target"
-is-sharding = true
-index-fields = "id"
+    target-instance = "tidb0"
+
+    target-check-tables = ["sharding_target_opt.t_target"]
+
+    target-configs= ["config1"]
+
+[routes.rule1]
+schema-pattern = "sharding_seq_opt"
+table-pattern = "t?*"
+target-schema = "sharding_target_opt"
+target-table = "t_target"
+
+[table-configs]
+[table-configs.config1]
+target-tables = ["sharding_target_opt.t_target"]
+index-fields = ["id"]
 # range-placeholder
 
-[[table-config.source-tables]]
-instance-id = "source-1"
-schema = "sharding_seq_opt"
-table  = "~t.*"
-
-[[table-config.source-tables]]
-instance-id = "source-2"
-schema = "sharding_seq_opt"
-table  = "~t.*"
-
-[[source-db]]
+[data-sources]
+[data-sources.mysql1]
 host = "127.0.0.1"
 port = 3306
 user = "root"
 password = "123456"
-instance-id = "source-1"
+route-rules = ["rule1"]
 
-[[source-db]]
+[data-sources.mysql2]
 host = "127.0.0.1"
 port = 3307
 user = "root"
 password = "123456"
-instance-id = "source-2"
+route-rules = ["rule1"]
 
-[target-db]
+[data-sources.tidb0]
 host = "127.0.0.1"
 port = 4000
 user = "test"

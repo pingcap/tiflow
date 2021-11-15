@@ -26,8 +26,9 @@ function run() {
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
-	# start DM task only
-	dmctl_start_task_standalone "$cur/conf/dm-task.yaml" "--remove-meta"
+	# start DM task. don't check error because it will meet injected error soon
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $cur/conf/dm-task.yaml --remove-meta"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"relayCatchUpMaster\": true" 1
@@ -64,6 +65,12 @@ function run() {
 
 	# use sync_diff_inspector to check data now!
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	run_sql_file $cur/data/db1.increment2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Running\"" 2 \
+		"\"synced\": true" 1
 
 	# check column covered by multi-column indices won't drop, and its indices won't drop
 	run_sql "alter table drop_column_with_index.t1 drop column c2;" $MYSQL_PORT1 $MYSQL_PASSWORD1

@@ -143,8 +143,6 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 	return ti
 }
 
-// TODO(hi-rustin): After we don't need to subscribe index update,
-// findHandleIndex may be not necessary any more.
 func (ti *TableInfo) findHandleIndex() {
 	if ti.HandleIndexID == HandleIndexPKIsHandle {
 		// pk is handle
