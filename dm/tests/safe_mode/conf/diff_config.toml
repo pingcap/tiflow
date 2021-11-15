@@ -19,8 +19,7 @@ check-struct-only = false
 
 [table-configs]
 [table-configs.config1]
-schema = "safe_mode_target"
-table = "t_target"
+target-tables = ["safe_mode_target.t_target"]
 ignore-columns = ["id"]
 
 [routes.rule1]
