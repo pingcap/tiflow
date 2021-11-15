@@ -25,20 +25,10 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/integralist/go-findroot v0.0.0-20160518114804-ac90681525dc
 	github.com/jarcoal/httpmock v1.0.5
-<<<<<<< HEAD
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/klauspost/compress v1.11.1 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
-	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-runewidth v0.0.10 // indirect
-=======
-	github.com/jmoiron/sqlx v1.3.3
-	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
-	github.com/labstack/echo/v4 v4.6.1
-	github.com/lib/pq v1.3.0 // indirect
-	github.com/linkedin/goavro/v2 v2.9.8
-	github.com/mattn/go-colorable v0.1.11 // indirect
->>>>>>> 819615c59 (cdc/sorter: make unified sorter cgroup aware (#3436))
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/br v4.0.11-0.20210119023619-139df44843ab+incompatible
