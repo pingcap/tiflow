@@ -614,26 +614,30 @@ function DM_COMPACT() {
 function DM_COMPACT_USE_DOWNSTREAM_SCHEMA_CASE() {
 	END=10
 	for i in $(seq 0 $END); do
-		run_sql_source1 "insert into ${shardddl1}.${tb1}(b,c) values($i,$i)"
-		run_sql_source1 "update ${shardddl1}.${tb1} set c=1 where a=$((i * 2 + 100))"
-		run_sql_source1 "update ${shardddl1}.${tb1} set c=c+1 where a=$((i * 2 + 100))"
-		run_sql_source1 "update ${shardddl1}.${tb1} set b=b+1 where a=$((i * 2 + 100))"
-		run_sql_source1 "update ${shardddl1}.${tb1} set a=a+100 where a=$((i * 2 + 100))"
-		run_sql_source1 "delete from ${shardddl1}.${tb1} where a=$((i * 2 + 200))"
-		run_sql_source1 "insert into ${shardddl1}.${tb1}(b,c) values($i,$i)"
+		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b,c) values($((i + 100)),$i,$i)"
+		run_sql_source1 "update ${shardddl1}.${tb1} set c=20 where a=$((i + 100))"
+		run_sql_source1 "update ${shardddl1}.${tb1} set c=c+1 where a=$((i + 100))"
+		run_sql_source1 "update ${shardddl1}.${tb1} set b=b+1 where a=$((i + 100))"
+		run_sql_source1 "update ${shardddl1}.${tb1} set a=a+100 where a=$((i + 100))"
+		run_sql_source1 "delete from ${shardddl1}.${tb1} where a=$((i + 200))"
+		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b,c) values($((i + 100)),$i,$i)"
 	done
 	run_sql_tidb_with_retry_times "select count(1) from ${shardddl}.${tb};" "count(1): 11" 30
 	run_sql_tidb "create table ${shardddl}.${tb}_temp (a int primary key auto_increment, b int unique not null, c int) auto_increment = 100; 
-	             insert into ${shardddl}.${tb}_temp (a, b, c) select a, b, c from ${shardddl}.${tb};
-				 drop table ${shardddl}.${tb}; rename table ${shardddl}.${tb}_temp to ${shardddl}.${tb};"
+		insert into ${shardddl}.${tb}_temp (a, b, c) select a, b, c from ${shardddl}.${tb}; 
+		drop table ${shardddl}.${tb}; rename table ${shardddl}.${tb}_temp to ${shardddl}.${tb};"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
+	# DownstreamIdentifyKeyCheckInCompact=return(20) will check whether the key value in compact is less than 20
+	# As this kind of sql is no use, like "update tb1 set c=1 where a=100" which is behind of "insert into tb1(a,b,c) values(100,1,1)"
+	# We should avoid this kind of sql to make sure the count of $downstreamSuccess
 	downstreamSuccess=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "downstream identifyKey check success" | wc -l)
 	downstreamFail=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "downstream identifyKey check failed" | wc -l)
-	if [[ "$downstreamSuccess" -le 50 || "$downstreamFail" -ne 0 ]]; then
-		echo "compact use wrong downstream identify key"
+	if [[ "$downstreamSuccess" -ne 88 || "$downstreamFail" -ne 0 ]]; then
+		echo "compact use wrong downstream identify key. $downstreamSuccess success should be 88. $downstreamFail failed should be 0."
 		exit 1
 	fi
 	compactCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "finish to compact" | wc -l)
+	# As compact is affected by "j.tp == flush", the check count of compact use "-le 50"
 	if [[ "$compactCnt" -le 50 ]]; then
 		echo "compact $compactCnt dmls which is less than 50"
 		exit 1
@@ -652,18 +656,9 @@ function DM_COMPACT_USE_DOWNSTREAM_SCHEMA() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
 	run_case COMPACT_USE_DOWNSTREAM_SCHEMA "single-source-no-sharding" \
-		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key auto_increment, b int unique not null, c int) auto_increment = 100;\"; 
-		run_sql_tidb \"create table ${shardddl}.${tb} (a int, b int unique not null, c int, d int primary key auto_increment) auto_increment = 100;\"" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique not null, c int);\"; 
+		run_sql_tidb \"drop database if exists ${shardddl}; create database ${shardddl}; create table ${shardddl}.${tb} (a int, b int unique not null, c int, d int primary key auto_increment) auto_increment = 100;\"" \
 		"clean_table" ""
-
-	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/BlockExecuteSQLs=return(1)'
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 }
 
 function DM_MULTIPLE_ROWS_CASE() {
@@ -701,6 +696,16 @@ function DM_MULTIPLE_ROWS_CASE() {
 }
 
 function DM_MULTIPLE_ROWS() {
+
+	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/BlockExecuteSQLs=return(1)'
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
 	run_case MULTIPLE_ROWS "single-source-no-sharding" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique, c int);\"" \
 		"clean_table" ""
@@ -741,8 +746,8 @@ function DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA_CASE() {
 
 	run_sql_tidb_with_retry_times "select count(1) from ${shardddl}.${tb} where a =1 and b=3;" "count(1): 1" 30
 	run_sql_tidb "create table ${shardddl}.${tb}_temp (a int primary key, b int unique); 
-	             insert into ${shardddl}.${tb}_temp (a, b) select a, b from ${shardddl}.${tb};
-				 drop table ${shardddl}.${tb}; rename table ${shardddl}.${tb}_temp to ${shardddl}.${tb};"
+		insert into ${shardddl}.${tb}_temp (a, b) select a, b from ${shardddl}.${tb};
+		drop table ${shardddl}.${tb}; rename table ${shardddl}.${tb}_temp to ${shardddl}.${tb};"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	causalityCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "meet causality key, will generate a conflict job to flush all sqls" | wc -l)
@@ -756,7 +761,7 @@ function DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA() {
 	# mock downstream pk/uk/column is diffrent with upstream, causality use downstream schema.
 	run_case CAUSALITY_USE_DOWNSTREAM_SCHEMA "single-source-no-sharding" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique);\"; 
-		run_sql_tidb \"create table ${shardddl}.${tb} (a int, b int unique, c int primary key auto_increment) auto_increment = 100;\"" \
+		run_sql_tidb \"drop database if exists ${shardddl}; create database ${shardddl}; create table ${shardddl}.${tb} (a int, b int unique, c int primary key auto_increment) auto_increment = 100;\"" \
 		"clean_table" ""
 }
 
