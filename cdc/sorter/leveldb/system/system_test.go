@@ -60,8 +60,8 @@ func TestActorID(t *testing.T) {
 
 	sys := NewSystem(cfg)
 	require.Nil(t, sys.Start(ctx))
-	id1 := sys.GetActorID(1)
-	id2 := sys.GetActorID(1)
+	id1 := sys.ActorID(1)
+	id2 := sys.ActorID(1)
 	// tableID to actor ID must be deterministic.
 	require.Equal(t, id1, id2)
 	require.Nil(t, sys.Stop())

@@ -16,8 +16,8 @@ package system
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"hash/fnv"
+	"strconv"
 	"sync"
 	"time"
 
@@ -40,9 +40,9 @@ const defaultMetricInterval = 15 * time.Second
 type sysState int
 
 const (
-	sysStateInit    sysState = 0
-	sysStateStarted sysState = 1
-	sysStateStopped sysState = 2
+	sysStateInit sysState = iota
+	sysStateStarted
+	sysStateStopped
 )
 
 // System manages leveldb sorter resource.
@@ -79,8 +79,8 @@ func NewSystem(cfg *config.SorterConfig) *System {
 	}
 }
 
-// GetActorID returns an ActorID correspond with tableID.
-func (s *System) GetActorID(tableID uint64) actor.ID {
+// ActorID returns an ActorID correspond with tableID.
+func (s *System) ActorID(tableID uint64) actor.ID {
 	h := fnv.New64()
 	b := [8]byte{}
 	binary.LittleEndian.PutUint64(b[:], tableID)
@@ -174,7 +174,7 @@ func (s *System) Stop() error {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 	if s.state == sysStateStopped {
-		// Already started.
+		// Already stopped.
 		return nil
 	}
 	s.state = sysStateStopped
@@ -219,7 +219,7 @@ func collectMetrics(dbs []*leveldb.DB, captureAddr string) {
 		if err != nil {
 			log.Panic("leveldb error", zap.Error(err), zap.Int("db", i))
 		}
-		id := fmt.Sprint(i)
+		id := strconv.Itoa(i)
 		sorter.OnDiskDataSizeGauge.
 			WithLabelValues(captureAddr, id).Set(float64(stats.LevelSizes.Sum()))
 		sorter.InMemoryDataSizeGauge.
@@ -241,7 +241,7 @@ func collectMetrics(dbs []*leveldb.DB, captureAddr string) {
 		metricLevelCount := sorterDBLevelCount.
 			MustCurryWith(map[string]string{"capture": captureAddr, "id": id})
 		for level, count := range stats.LevelTablesCounts {
-			metricLevelCount.WithLabelValues(fmt.Sprint(level)).Set(float64(count))
+			metricLevelCount.WithLabelValues(strconv.Itoa(level)).Set(float64(count))
 		}
 	}
 }
