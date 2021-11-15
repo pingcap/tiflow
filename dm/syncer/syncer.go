@@ -70,6 +70,7 @@ import (
 	onlineddl "github.com/pingcap/ticdc/dm/syncer/online-ddl-tools"
 	sm "github.com/pingcap/ticdc/dm/syncer/safe-mode"
 	"github.com/pingcap/ticdc/dm/syncer/shardddl"
+	"github.com/pingcap/ticdc/pkg/errorutil"
 )
 
 var (
@@ -1155,7 +1156,7 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.
 
 		if !ignore {
 			var affected int
-			affected, err = db.ExecuteSQLWithIgnore(tctx, ignoreDDLError, ddlJob.ddls)
+			affected, err = db.ExecuteSQLWithIgnore(tctx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			if err != nil {
 				err = s.handleSpecialDDLError(tctx, err, ddlJob.ddls, affected, db)
 				err = terror.WithScope(err, terror.ScopeDownstream)
@@ -2064,7 +2065,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		}
 
 		param.safeMode = ec.safeMode
-		dmls, err = s.genAndFilterInsertDMLs(param, exprFilter)
+		dmls, err = s.genAndFilterInsertDMLs(ec.tctx, param, exprFilter)
 		if err != nil {
 			return terror.Annotatef(err, "gen insert sqls failed, sourceTable: %v, targetTable: %v", sourceTable, targetTable)
 		}
@@ -2764,6 +2765,14 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 
 	if shouldExecDDLOnSchemaTracker {
 		if err := s.schemaTracker.Exec(ec.tctx.Ctx, usedSchema, trackInfo.originDDL); err != nil {
+			if ignoreTrackerDDLError(err) {
+				ec.tctx.L().Warn("will ignore a DDL error when tracking",
+					zap.String("schema", usedSchema),
+					zap.String("statement", trackInfo.originDDL),
+					log.WrapStringerField("location", ec.currentLocation),
+					log.ShortError(err))
+				return nil
+			}
 			ec.tctx.L().Error("cannot track DDL",
 				zap.String("schema", usedSchema),
 				zap.String("statement", trackInfo.originDDL),

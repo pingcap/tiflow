@@ -32,11 +32,10 @@ target-table = "t_target"
 
 [table-configs]
 [table-configs.config1]
-schema = "db_target"
-table = "t_target"
+target-tables = ["db_target.t_target"]
 # currently sync_diff does not support json fields well
 ignore-columns = ["id", "info_json"]
-index-fields = "uid"
+index-fields = ["uid"]
 # range-placeholder
 
 

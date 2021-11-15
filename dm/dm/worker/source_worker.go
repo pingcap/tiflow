@@ -78,6 +78,8 @@ type SourceWorker struct {
 	relayHolder  RelayHolder
 	relayPurger  relay.Purger
 
+	startedRelayBySourceCfg bool
+
 	taskStatusChecker TaskStatusChecker
 
 	etcdClient *clientv3.Client
@@ -279,13 +281,15 @@ func (w *SourceWorker) EnableRelay() (err error) {
 		failpoint.Goto("bypass")
 	})
 
-	// we need update worker source config from etcd first
-	// because the configuration of the relay part of the data source may be changed via scheduler.UpdateSourceCfg
-	sourceCfg, _, err = ha.GetRelayConfig(w.etcdClient, w.name)
-	if err != nil {
-		return err
+	if !w.startedRelayBySourceCfg {
+		// we need update worker source config from etcd first
+		// because the configuration of the relay part of the data source may be changed via scheduler.UpdateSourceCfg
+		sourceCfg, _, err = ha.GetRelayConfig(w.etcdClient, w.name)
+		if err != nil {
+			return err
+		}
+		w.cfg = sourceCfg
 	}
-	w.cfg = sourceCfg
 
 	failpoint.Label("bypass")
 
@@ -301,11 +305,11 @@ func (w *SourceWorker) EnableRelay() (err error) {
 	defer dcancel()
 	minLoc, err1 := getMinLocInAllSubTasks(dctx, subTaskCfgs)
 	if err1 != nil {
-		return err1
+		w.l.Error("meet error when EnableRelay", zap.Error(err1))
 	}
 
 	if minLoc != nil {
-		log.L().Info("get min location in all subtasks", zap.Stringer("location", *minLoc))
+		w.l.Info("get min location in all subtasks", zap.Stringer("location", *minLoc))
 		w.cfg.RelayBinLogName = binlog.AdjustPosition(minLoc.Position).Name
 		w.cfg.RelayBinlogGTID = minLoc.GTIDSetStr()
 		// set UUIDSuffix when bound to a source
