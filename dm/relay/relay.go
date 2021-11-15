@@ -515,7 +515,6 @@ const (
 	ignoreReasonArtificialFlag = "artificial flag (0x0020) set"
 )
 
-// Result represents a transform result.
 type preprocessResult struct {
 	Ignore       bool          // whether the event should be ignored
 	IgnoreReason string        // why the transformer ignore the event
