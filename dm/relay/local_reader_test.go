@@ -97,6 +97,21 @@ func (t *testReaderSuite) createBinlogFileParseState(c *C, relayLogDir, relayLog
 	}
 }
 
+func (t *testReaderSuite) TestparseFileAsPossibleFileNotExist(c *C) {
+	var (
+		baseDir     = c.MkDir()
+		currentUUID = "b60868af-5a6f-11e9-9ea3-0242ac160006.000001"
+		filename    = "test-mysql-bin.000001"
+		relayDir    = path.Join(baseDir, currentUUID)
+	)
+	cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
+	r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
+	needSwitch, lastestPos, err := r.parseFileAsPossible(context.Background(), nil, filename, 0, relayDir, true, false)
+	c.Assert(needSwitch, IsFalse)
+	c.Assert(lastestPos, Equals, int64(0))
+	c.Assert(err, ErrorMatches, ".*no such file or directory.*")
+}
+
 func (t *testReaderSuite) TestParseFileBase(c *C) {
 	var (
 		filename         = "test-mysql-bin.000001"
