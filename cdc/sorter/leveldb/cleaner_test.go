@@ -206,12 +206,12 @@ func TestCleanerWriteRateLimited(t *testing.T) {
 
 	// Must speed limited.
 	wb := &leveldb.Batch{}
-	for i := 0; i < cfg.LevelDB.CleanupSpeedLimit/2; i++ {
-		wb.Delete(keys[i])
-	}
 	var delay time.Duration
 	var count int
 	for {
+		for i := 0; i < cfg.LevelDB.CleanupSpeedLimit/2; i++ {
+			wb.Delete(keys[i])
+		}
 		delay, err = clean.writeRateLimited(wb, false)
 		require.Nil(t, err)
 		if delay != 0 {
@@ -221,7 +221,7 @@ func TestCleanerWriteRateLimited(t *testing.T) {
 	}
 
 	// Sleep and write again.
-	time.Sleep(delay * 2)
+	time.Sleep(delay * 4)
 	delay, err = clean.writeRateLimited(wb, false)
 	require.EqualValues(t, 0, delay)
 	require.Nil(t, err)
@@ -339,5 +339,8 @@ func TestCleanerTaskRescheduled(t *testing.T) {
 	closed = !clean.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
 	closedWg.Wait()
+	stats := leveldb.DBStats{}
+	require.Nil(t, db.Stats(&stats))
+	require.Zero(t, stats.AliveIterators)
 	require.Nil(t, db.Close())
 }
