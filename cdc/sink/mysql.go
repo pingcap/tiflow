@@ -34,13 +34,11 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/errorutil"
 	tifilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/retry"
-	tddl "github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/infoschema"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/prometheus/client_golang/prometheus"
@@ -57,7 +55,7 @@ type mysqlSink struct {
 	db     *sql.DB
 	params *sinkParams
 
-	filter *filter.Filter
+	filter *tifilter.Filter
 	cyclic *cyclic.Cyclic
 
 	txnCache      *common.UnresolvedTxnCache
@@ -301,7 +299,7 @@ func (s *mysqlSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
 	return retry.Do(ctx, func() error {
 		err := s.execDDL(ctx, ddl)
-		if isIgnorableDDLError(err) {
+		if errorutil.IsIgnorableMySQLDDLError(err) {
 			log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
 			return nil
 		}
@@ -313,7 +311,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
-	shouldSwitchDB := len(ddl.TableInfo.Schema) > 0 && ddl.Type != timodel.ActionCreateSchema
+	shouldSwitchDB := needSwitchDB(ddl)
 
 	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
 		select {
@@ -354,6 +352,16 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
 	return nil
+}
+
+func needSwitchDB(ddl *model.DDLEvent) bool {
+	if len(ddl.TableInfo.Schema) == 0 {
+		return false
+	}
+	if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
+		return false
+	}
+	return true
 }
 
 // adjustSQLMode adjust sql mode according to sink config.
@@ -623,7 +631,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		var args []interface{}
 		quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
 
-		// Translate to UPDATE if old value is enabled, not in safe mode and is update event
+		// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
+		// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 			flushCacheDMLs()
 			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
@@ -635,9 +644,12 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			continue
 		}
 
-		// Case for delete event or update event
-		// If old value is enabled and not in safe mode,
-		// update will be translated to DELETE + INSERT(or REPLACE) SQL.
+		// Case for update event or delete event.
+		// For update event:
+		// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
+		// So we will prepare a DELETE SQL here.
+		// For delete event:
+		// It will be translated directly into a DELETE SQL.
 		if len(row.PreColumns) != 0 {
 			flushCacheDMLs()
 			query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
@@ -648,7 +660,14 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			}
 		}
 
-		// Case for insert event or update event
+		// Case for update event or insert event.
+		// For update event:
+		// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
+		// So we will prepare a REPLACE SQL here.
+		// For insert event:
+		// It will be translated directly into a
+		// INSERT(old value is enabled and not in safe mode)
+		// or REPLACE(old value is disabled or in safe mode) SQL.
 		if len(row.Columns) != 0 {
 			if s.params.batchReplaceEnabled {
 				query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
@@ -870,27 +889,6 @@ func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, a
 		}
 	}
 	return
-}
-
-func isIgnorableDDLError(err error) bool {
-	errCode, ok := getSQLErrCode(err)
-	if !ok {
-		return false
-	}
-	// we can get error code from:
-	// infoschema's error definition: https://github.com/pingcap/tidb/blob/master/infoschema/infoschema.go
-	// DDL's error definition: https://github.com/pingcap/tidb/blob/master/ddl/ddl.go
-	// tidb/mysql error code definition: https://github.com/pingcap/tidb/blob/master/mysql/errcode.go
-	switch errCode {
-	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseNotExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
-		infoschema.ErrTableExists.Code(), infoschema.ErrTableNotExists.Code(), infoschema.ErrTableDropExists.Code(),
-		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(), infoschema.ErrIndexExists.Code(),
-		infoschema.ErrKeyNotExists.Code(), tddl.ErrCantDropFieldOrKey.Code(), mysql.ErrDupKeyName, mysql.ErrSameNamePartition,
-		mysql.ErrDropPartitionNonExistent, mysql.ErrMultiplePriKey:
-		return true
-	default:
-		return false
-	}
 }
 
 func getSQLErrCode(err error) (errors.ErrCode, bool) {

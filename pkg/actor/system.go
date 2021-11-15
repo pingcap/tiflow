@@ -57,7 +57,7 @@ func (p *proc) batchReceiveMsgs(batchMsg []message.Message) int {
 	n := 0
 	max := len(batchMsg)
 	for i := 0; i < max; i++ {
-		msg, ok := p.mb.tryReceive()
+		msg, ok := p.mb.Receive()
 		if !ok {
 			// Stop receive if there is no more messages.
 			break
@@ -113,8 +113,8 @@ func (rd *ready) enqueueLocked(p *proc, force bool) error {
 	if p.isClosed() {
 		// Drop all remaining messages.
 		counter := 0
-		_, ok := p.mb.tryReceive()
-		for ; ok; _, ok = p.mb.tryReceive() {
+		_, ok := p.mb.Receive()
+		for ; ok; _, ok = p.mb.Receive() {
 			counter++
 		}
 		rd.metricDropMessage.Add(float64(counter))
@@ -179,7 +179,8 @@ type Router struct {
 	procs sync.Map
 }
 
-func newRouter(name string) *Router {
+// NewRouter returns a new router.
+func NewRouter(name string) *Router {
 	r := &Router{
 		rd: &ready{},
 	}
@@ -325,7 +326,7 @@ func (b *SystemBuilder) handleFatal(
 
 // Build builds a system and a router.
 func (b *SystemBuilder) Build() (*System, *Router) {
-	router := newRouter(b.name)
+	router := NewRouter(b.name)
 	metricWorkingDurations := make([]prometheus.Counter, b.numWorker)
 	for i := range metricWorkingDurations {
 		metricWorkingDurations[i] =

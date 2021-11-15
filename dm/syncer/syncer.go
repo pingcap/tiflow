@@ -70,6 +70,7 @@ import (
 	onlineddl "github.com/pingcap/ticdc/dm/syncer/online-ddl-tools"
 	sm "github.com/pingcap/ticdc/dm/syncer/safe-mode"
 	"github.com/pingcap/ticdc/dm/syncer/shardddl"
+	"github.com/pingcap/ticdc/pkg/errorutil"
 )
 
 var (
@@ -1155,7 +1156,7 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.
 
 		if !ignore {
 			var affected int
-			affected, err = db.ExecuteSQLWithIgnore(tctx, ignoreDDLError, ddlJob.ddls)
+			affected, err = db.ExecuteSQLWithIgnore(tctx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			if err != nil {
 				err = s.handleSpecialDDLError(tctx, err, ddlJob.ddls, affected, db)
 				err = terror.WithScope(err, terror.ScopeDownstream)

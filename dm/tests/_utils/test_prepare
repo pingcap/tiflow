@@ -10,6 +10,13 @@ function cleanup_data() {
     run_sql "drop database if exists dm_meta" $TIDB_PORT $TIDB_PASSWORD
 }
 
+function cleanup_data_upstream() {
+    for target_db in "$@"; do
+        run_sql "drop database if exists \`${target_db}\`" $MYSQL_PORT1 $MYSQL_PASSWORD1
+        run_sql "drop database if exists \`${target_db}\`" $MYSQL_PORT2 $MYSQL_PASSWORD2
+    done
+}
+
 function cleanup_process() {
     dm_master_num=$(ps aux >temp && grep "dm-master.test" temp | wc -l && rm temp)
     echo "$dm_master_num dm-master alive"
