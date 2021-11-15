@@ -70,7 +70,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 			"tiny":       "255",
 			"comment":    "测试",
 			"blob":       string(encodedBytes),
-			"journalist": "Sharon Cheung Po-Wah run so fast",
+			"journalist": "Sharon run so fast",
 			"elder":      "图样图森破",
 		},
 	})
@@ -81,7 +81,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 			"tiny":       "255",
 			"comment":    "测试",
 			"blob":       string(encodedBytes),
-			"journalist": "Sharon Cheung Po-Wah run so fast",
+			"journalist": "Sharon run so fast",
 			"elder":      "图样图森破",
 		},
 	})
@@ -109,7 +109,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 		"tiny":       "255",
 		"comment":    "测试",
 		"blob":       string(encodedBytes),
-		"journalist": "Sharon Cheung Po-Wah run so fast",
+		"journalist": "Sharon run so fast",
 		"elder":      "图样图森破",
 	}
 
@@ -173,6 +173,18 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 			consumed, err = decoder.NextRowChangedEvent()
 			c.Assert(err, check.NotNil)
 			c.Assert(consumed, check.IsNil)
+
+			decoder, err = NewCanalFlatEventBatchDecoder(rawBytes, !enable)
+			c.Assert(err, check.IsNil)
+
+			ty, hasNext, err = decoder.HasNext()
+			c.Assert(err, check.IsNil)
+			c.Assert(hasNext, check.IsTrue)
+			c.Assert(ty, check.Equals, model.MqMessageTypeRow)
+
+			consumed, err = decoder.NextRowChangedEvent()
+			c.Assert(err, check.IsNil)
+			c.Assert(consumed, check.NotNil)
 		}
 	}
 }
@@ -349,7 +361,7 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
 		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
-		{Name: "journalist", Type: mysql.TypeString, Value: "Sharon Cheung Po-Wah run so fast", Flag: model.BinaryFlag},
+		{Name: "journalist", Type: mysql.TypeString, Value: "Sharon run so fast", Flag: model.BinaryFlag},
 		{Name: "elder", Type: mysql.TypeVarchar, Value: []byte("图样图森破"), Flag: model.BinaryFlag},
 	},
 	PreColumns: []*model.Column{
@@ -358,7 +370,7 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
 		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
-		{Name: "journalist", Type: mysql.TypeString, Value: "Sharon Cheung Po-Wah run so fast", Flag: model.BinaryFlag},
+		{Name: "journalist", Type: mysql.TypeString, Value: "Sharon run so fast", Flag: model.BinaryFlag},
 		{Name: "elder", Type: mysql.TypeVarchar, Value: []byte("图样图森破"), Flag: model.BinaryFlag},
 	},
 }
