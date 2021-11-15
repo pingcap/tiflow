@@ -44,7 +44,7 @@ func (l *Loader) printStatus() {
 	totalSize := l.totalDataSize.Load()
 	totalFileCount := l.totalFileCount.Load()
 
-	interval := time.Since(l.dbTableDataLastUpdatedTime)
+	interval := time.Since(l.dbTableDataLastUpdatedTime.Load())
 	intervalSecond := interval.Seconds()
 	if intervalSecond == 0 {
 		return
@@ -62,7 +62,7 @@ func (l *Loader) printStatus() {
 			}
 		}
 	}
-	l.dbTableDataLastUpdatedTime = time.Now()
+	l.dbTableDataLastUpdatedTime.Store(time.Now())
 
 	l.logger.Info("progress status of load",
 		zap.Int64("finished_bytes", finishedSize),
