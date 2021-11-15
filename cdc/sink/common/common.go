@@ -80,22 +80,29 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
-		txns := c.unresolvedTxns[row.Table.TableID]
-		if len(txns) == 0 || txns[len(txns)-1].commitTs != row.CommitTs {
-			// fail-fast check
-			if len(txns) != 0 && txns[len(txns)-1].commitTs > row.CommitTs {
-				log.Panic("the commitTs of the emit row is less than the received row",
-					zap.Stringer("table", row.Table),
-					zap.Uint64("emit row startTs", row.StartTs),
-					zap.Uint64("emit row commitTs", row.CommitTs),
-					zap.Uint64("last received row commitTs", txns[len(txns)-1].commitTs))
-			}
-			txns = append(txns, &txnsWithTheSameCommitTs{
+		// group by tableID
+		txnsGroup := c.unresolvedTxns[row.Table.TableID]
+		lastIndex := len(txnsGroup) - 1
+
+		// new txn with different commitTs are coming
+		if len(txnsGroup) == 0 || txnsGroup[lastIndex].commitTs < row.CommitTs {
+			// group by CommitTs
+			txns := &txnsWithTheSameCommitTs{
 				commitTs: row.CommitTs,
-			})
-			c.unresolvedTxns[row.Table.TableID] = txns
+			}
+			// it will be grouped by startTs in Append()
+			txns.Append(row)
+			txnsGroup = append(txnsGroup, txns)
+			c.unresolvedTxns[row.Table.TableID] = txnsGroup
+		} else if txnsGroup[lastIndex].commitTs == row.CommitTs {
+			txnsGroup[lastIndex].Append(row)
+		} else {
+			log.Panic("the commitTs of the emit row is less than the received row",
+				zap.Stringer("table", row.Table),
+				zap.Uint64("emit row startTs", row.StartTs),
+				zap.Uint64("emit row commitTs", row.CommitTs),
+				zap.Uint64("last received row commitTs", txnsGroup[lastIndex].commitTs))
 		}
-		txns[len(txns)-1].Append(row)
 		appendRows++
 	}
 	return appendRows
