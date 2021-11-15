@@ -71,7 +71,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 			"comment":    "测试",
 			"blob":       string(encodedBytes),
 			"journalist": "Sharon run so fast",
-			"elder":      "图样图森破",
+			"elder":      "谈笑风生",
 		},
 	})
 	c.Assert(msg.Old, check.DeepEquals, []map[string]interface{}{
@@ -82,7 +82,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 			"comment":    "测试",
 			"blob":       string(encodedBytes),
 			"journalist": "Sharon run so fast",
-			"elder":      "图样图森破",
+			"elder":      "谈笑风生",
 		},
 	})
 
@@ -110,7 +110,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 		"comment":    "测试",
 		"blob":       string(encodedBytes),
 		"journalist": "Sharon run so fast",
-		"elder":      "图样图森破",
+		"elder":      "谈笑风生",
 	}
 
 	for _, encodeEnable := range []bool{false, true} {
@@ -132,8 +132,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 		c.Assert(err, check.IsNil)
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder, err := NewCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
-			c.Assert(err, check.IsNil)
+			decoder := NewCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
 
 			ty, hasNext, err := decoder.HasNext()
 			c.Assert(err, check.IsNil)
@@ -222,8 +221,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C
 		c.Assert(err, check.IsNil)
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder, err := NewCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
-			c.Assert(err, check.IsNil)
+			decoder := NewCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
 
 			ty, hasNext, err := decoder.HasNext()
 			c.Assert(err, check.IsNil)
@@ -317,8 +315,7 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 		c.Assert(err, check.IsNil)
 		c.Assert(rawBytes, check.NotNil)
 
-		decoder, err := NewCanalFlatEventBatchDecoder(rawBytes, enable)
-		c.Assert(err, check.IsNil)
+		decoder := NewCanalFlatEventBatchDecoder(rawBytes, enable)
 
 		ty, hasNext, err := decoder.HasNext()
 		c.Assert(err, check.IsNil)
@@ -353,7 +350,7 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		{Name: "journalist", Type: mysql.TypeString, Value: "Sharon run so fast", Flag: model.BinaryFlag},
-		{Name: "elder", Type: mysql.TypeVarchar, Value: []byte("图样图森破"), Flag: model.BinaryFlag},
+		{Name: "elder", Type: mysql.TypeVarchar, Value: []byte("谈笑风生"), Flag: model.BinaryFlag},
 	},
 	PreColumns: []*model.Column{
 		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
@@ -362,7 +359,7 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		{Name: "journalist", Type: mysql.TypeString, Value: "Sharon run so fast", Flag: model.BinaryFlag},
-		{Name: "elder", Type: mysql.TypeVarchar, Value: []byte("图样图森破"), Flag: model.BinaryFlag},
+		{Name: "elder", Type: mysql.TypeVarchar, Value: []byte("谈笑风生"), Flag: model.BinaryFlag},
 	},
 }
 

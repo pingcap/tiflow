@@ -449,12 +449,12 @@ type CanalFlatEventBatchDecoder struct {
 	enableTiDBExtension bool
 }
 
-func NewCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) (EventBatchDecoder, error) {
+func NewCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
 	return &CanalFlatEventBatchDecoder{
 		data:                data,
 		msg:                 nil,
 		enableTiDBExtension: enableTiDBExtension,
-	}, nil
+	}
 }
 
 // HasNext implements the EventBatchDecoder interface
