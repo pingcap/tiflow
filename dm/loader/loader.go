@@ -442,7 +442,7 @@ type Loader struct {
 	dbTableDataTotalSize        map[string]map[string]*atomic.Int64
 	dbTableDataFinishedSize     map[string]map[string]*atomic.Int64
 	dbTableDataLastFinishedSize map[string]map[string]*atomic.Int64
-	dbTableDataLastUpdatedTime  time.Time
+	dbTableDataLastUpdatedTime  atomic.Time
 
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
