@@ -28,19 +28,19 @@ import (
 func testMailbox(t *testing.T, mb Mailbox) {
 	// Empty mailbox.
 	require.Equal(t, 0, mb.len())
-	_, ok := mb.tryReceive()
+	_, ok := mb.Receive()
 	require.False(t, ok)
 
 	// Send and receive.
 	err := mb.Send(message.BarrierMessage(model.Ts(1)))
 	require.Nil(t, err)
 	require.Equal(t, 1, mb.len())
-	msg, ok := mb.tryReceive()
+	msg, ok := mb.Receive()
 	require.Equal(t, message.BarrierMessage(1), msg)
 	require.True(t, ok)
 
 	// Empty mailbox.
-	_, ok = mb.tryReceive()
+	_, ok = mb.Receive()
 	require.False(t, ok)
 
 	// Mailbox has a bounded capacity.
@@ -65,7 +65,7 @@ func testMailbox(t *testing.T, mb Mailbox) {
 		t.Fatalf("must timeout, got error %v", err)
 	}
 	// Receive unblocks SendB
-	msg, ok = mb.tryReceive()
+	msg, ok = mb.Receive()
 	require.Equal(t, message.BarrierMessage(1), msg)
 	require.True(t, ok)
 	select {

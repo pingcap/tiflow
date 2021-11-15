@@ -92,12 +92,12 @@ function test_pause_task() {
 
 	for name in ${task_name[@]}; do
 		echo "resume tasks $name"
-		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"resume-task $name" \
 			"\"result\": true" 3
 
 		# resume twice, just used to test resume by the way
-		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"resume-task $name" \
 			"\"result\": true" 3
 

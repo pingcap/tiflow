@@ -18,17 +18,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/context"
 )
 
-// Agent is an interface for an object inside Processor that is responsible
-// for receiving commands from the Owner.
-// Ideally the processor should drive the Agent by Tick.
-type Agent interface {
-	// Tick is called periodically by the processor to drive the Agent's internal logic.
-	Tick(ctx context.Context) error
-
-	// LastSentCheckpointTs returns the last checkpoint-ts already sent to the Owner.
-	LastSentCheckpointTs() (checkpointTs model.Ts)
-}
-
 // ProcessorMessenger implements how messages should be sent to the owner,
 // and should be able to know whether there are any messages not yet acknowledged
 // by the owner.
