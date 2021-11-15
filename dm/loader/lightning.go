@@ -197,10 +197,10 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	l.logger.Info("lightning load start")
 	errs := make([]*pb.ProcessError, 0, 1)
-	failpoint.Inject("lightingAlwaysErr", func(_ failpoint.Value) {
-		l.logger.Info("", zap.String("failpoint", "lightingAlwaysErr"))
+	failpoint.Inject("lightningAlwaysErr", func(_ failpoint.Value) {
+		l.logger.Info("", zap.String("failpoint", "lightningAlwaysErr"))
 		pr <- pb.ProcessResult{
-			Errors: []*pb.ProcessError{unit.NewProcessError(errors.New("failpoint lightingAlwaysErr"))},
+			Errors: []*pb.ProcessError{unit.NewProcessError(errors.New("failpoint lightningAlwaysErr"))},
 		}
 		failpoint.Return()
 	})
