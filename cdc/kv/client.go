@@ -326,7 +326,7 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grp
 		pd:             pd,
 		kvStorage:      store,
 		grpcPool:       grpcPool,
-		regionCache:    tikv.NewRegionCache(pd),
+		regionCache:    getRegionCacheInstance(pd),
 		regionLimiters: defaultRegionEventFeedLimiters,
 	}
 	return
