@@ -481,11 +481,9 @@ func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEve
 		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found row changed event message")
 	}
 
-	var data canalFlatMessageInterface
+	var data canalFlatMessageInterface = &canalFlatMessage{}
 	if b.enableTiDBExtension {
-		data = &canalFlatMessageWithTiDBExtension{canalFlatMessage: &canalFlatMessage{}}
-	} else {
-		data = &canalFlatMessage{}
+		data = &canalFlatMessageWithTiDBExtension{canalFlatMessage: &canalFlatMessage{}, Extensions: &tidbExtension{}}
 	}
 
 	if err := json.Unmarshal(b.msg.Value, data); err != nil {
@@ -502,11 +500,9 @@ func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found ddl event message")
 	}
 
-	var data canalFlatMessageInterface
+	var data canalFlatMessageInterface = &canalFlatMessage{}
 	if b.enableTiDBExtension {
-		data = &canalFlatMessageWithTiDBExtension{canalFlatMessage: &canalFlatMessage{}}
-	} else {
-		data = &canalFlatMessage{}
+		data = &canalFlatMessageWithTiDBExtension{canalFlatMessage: &canalFlatMessage{}, Extensions: &tidbExtension{}}
 	}
 
 	if err := json.Unmarshal(b.msg.Value, data); err != nil {
