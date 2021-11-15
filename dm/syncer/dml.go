@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/parser/model"
@@ -26,9 +28,35 @@ import (
 	"github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
 
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/schema"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
+
+// this type is used to generate DML SQL, opType is used to mark type in binlog.
+type dmlOpType int64
+
+const (
+	insertDML                      = dmlOpType(insert)
+	updateDML                      = dmlOpType(update)
+	deleteDML                      = dmlOpType(del)
+	insertOnDuplicateDML dmlOpType = iota + 1
+)
+
+func (op dmlOpType) String() (str string) {
+	switch op {
+	case insertDML:
+		return "insert"
+	case updateDML:
+		return "update"
+	case deleteDML:
+		return "delete"
+	case insertOnDuplicateDML:
+		return "insert on duplicate update"
+	}
+	return
+}
 
 // genDMLParam stores pruned columns, data as well as the original columns, data, index.
 type genDMLParam struct {
@@ -49,14 +77,22 @@ func extractValueFromData(data []interface{}, columns []*model.ColumnInfo) []int
 	return value
 }
 
-func (s *Syncer) genAndFilterInsertDMLs(param *genDMLParam, filterExprs []expression.Expression) ([]*DML, error) {
+func (s *Syncer) genAndFilterInsertDMLs(tctx *tcontext.Context, param *genDMLParam, filterExprs []expression.Expression) ([]*DML, error) {
 	var (
+		tableID         = param.targetTableID
 		dataSeq         = param.data
 		originalDataSeq = param.originalData
 		columns         = param.columns
 		ti              = param.sourceTableInfo
 		dmls            = make([]*DML, 0, len(dataSeq))
 	)
+
+	// if downstream pk/uk(not null) exits, then use downstream pk/uk(not null)
+	downstreamTableInfo, err := s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, ti)
+	if err != nil {
+		return nil, err
+	}
+	downstreamIndexColumns := downstreamTableInfo.AbsoluteUKIndexInfo
 
 RowLoop:
 	for dataIdx, data := range dataSeq {
@@ -81,24 +117,37 @@ RowLoop:
 			}
 		}
 
-		dmls = append(dmls, newDML(insert, param.safeMode, param.targetTableID, param.sourceTable, nil, value, nil, originalValue, columns, ti))
+		if downstreamIndexColumns == nil {
+			downstreamIndexColumns = s.schemaTracker.GetAvailableDownStreamUKIndexInfo(tableID, value)
+		}
+
+		dmls = append(dmls, newDML(insert, param.safeMode, tableID, param.sourceTable, nil, value, nil, originalValue, columns, ti, downstreamIndexColumns, downstreamTableInfo))
 	}
 
 	return dmls, nil
 }
 
 func (s *Syncer) genAndFilterUpdateDMLs(
+	tctx *tcontext.Context,
 	param *genDMLParam,
 	oldValueFilters []expression.Expression,
 	newValueFilters []expression.Expression,
 ) ([]*DML, error) {
 	var (
+		tableID      = param.targetTableID
 		data         = param.data
 		originalData = param.originalData
 		columns      = param.columns
 		ti           = param.sourceTableInfo
 		dmls         = make([]*DML, 0, len(data)/2)
 	)
+
+	// if downstream pk/uk(not null) exits, then use downstream pk/uk(not null)
+	downstreamTableInfo, err := s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, ti)
+	if err != nil {
+		return nil, err
+	}
+	downstreamIndexColumns := downstreamTableInfo.AbsoluteUKIndexInfo
 
 RowLoop:
 	for i := 0; i < len(data); i += 2 {
@@ -145,18 +194,30 @@ RowLoop:
 			}
 		}
 
-		dmls = append(dmls, newDML(update, param.safeMode, param.targetTableID, param.sourceTable, oldValues, changedValues, oriOldValues, oriChangedValues, columns, ti))
+		if downstreamIndexColumns == nil {
+			downstreamIndexColumns = s.schemaTracker.GetAvailableDownStreamUKIndexInfo(tableID, oriOldValues)
+		}
+
+		dmls = append(dmls, newDML(update, param.safeMode, param.targetTableID, param.sourceTable, oldValues, changedValues, oriOldValues, oriChangedValues, columns, ti, downstreamIndexColumns, downstreamTableInfo))
 	}
 
 	return dmls, nil
 }
 
-func (s *Syncer) genAndFilterDeleteDMLs(param *genDMLParam, filterExprs []expression.Expression) ([]*DML, error) {
+func (s *Syncer) genAndFilterDeleteDMLs(tctx *tcontext.Context, param *genDMLParam, filterExprs []expression.Expression) ([]*DML, error) {
 	var (
+		tableID = param.targetTableID
 		dataSeq = param.originalData
 		ti      = param.sourceTableInfo
 		dmls    = make([]*DML, 0, len(dataSeq))
 	)
+
+	// if downstream pk/uk(not null) exits, then use downstream pk/uk(not null)
+	downstreamTableInfo, err := s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, ti)
+	if err != nil {
+		return nil, err
+	}
+	downstreamIndexColumns := downstreamTableInfo.AbsoluteUKIndexInfo
 
 RowLoop:
 	for _, data := range dataSeq {
@@ -176,7 +237,12 @@ RowLoop:
 				continue RowLoop
 			}
 		}
-		dmls = append(dmls, newDML(del, false, param.targetTableID, param.sourceTable, nil, value, nil, value, ti.Columns, ti))
+
+		if downstreamIndexColumns == nil {
+			downstreamIndexColumns = s.schemaTracker.GetAvailableDownStreamUKIndexInfo(tableID, value)
+		}
+
+		dmls = append(dmls, newDML(del, false, param.targetTableID, param.sourceTable, nil, value, nil, value, ti.Columns, ti, downstreamIndexColumns, downstreamTableInfo))
 	}
 
 	return dmls, nil
@@ -282,14 +348,6 @@ func findFitIndex(ti *model.TableInfo) *model.IndexInfo {
 	// second find not null unique key
 	fn := func(i int) bool {
 		return !mysql.HasNotNullFlag(ti.Columns[i].Flag)
-	}
-
-	return getSpecifiedIndexColumn(ti, fn)
-}
-
-func getAvailableIndexColumn(ti *model.TableInfo, data []interface{}) *model.IndexInfo {
-	fn := func(i int) bool {
-		return data[i] == nil
 	}
 
 	return getSpecifiedIndexColumn(ti, fn)
@@ -408,32 +466,36 @@ func checkLogColumns(skipped [][]int) error {
 
 // DML stores param for DML.
 type DML struct {
-	targetTableID   string
-	sourceTable     *filter.Table
-	op              opType
-	oldValues       []interface{} // only for update SQL
-	values          []interface{}
-	columns         []*model.ColumnInfo
-	sourceTableInfo *model.TableInfo
-	originOldValues []interface{} // only for update SQL
-	originValues    []interface{} // use to gen key and `WHERE`
-	safeMode        bool
-	key             string // use to detect causality
+	targetTableID             string
+	sourceTable               *filter.Table
+	op                        opType
+	oldValues                 []interface{} // only for update SQL
+	values                    []interface{}
+	columns                   []*model.ColumnInfo
+	sourceTableInfo           *model.TableInfo
+	originOldValues           []interface{} // only for update SQL
+	originValues              []interface{} // use to gen key and `WHERE`
+	safeMode                  bool
+	key                       string                      // use to detect causality
+	pickedDownstreamIndexInfo *model.IndexInfo            // pick an index from downstream which comes from pk/uk not null/uk value not null and is only used in genWhere
+	downstreamTableInfo       *schema.DownstreamTableInfo // downstream table info
 }
 
 // newDML creates DML.
-func newDML(op opType, safeMode bool, targetTableID string, sourceTable *filter.Table, oldValues, values, originOldValues, originValues []interface{}, columns []*model.ColumnInfo, sourceTableInfo *model.TableInfo) *DML {
+func newDML(op opType, safeMode bool, targetTableID string, sourceTable *filter.Table, oldValues, values, originOldValues, originValues []interface{}, columns []*model.ColumnInfo, sourceTableInfo *model.TableInfo, pickedDownstreamIndexInfo *model.IndexInfo, downstreamTableInfo *schema.DownstreamTableInfo) *DML {
 	return &DML{
-		op:              op,
-		safeMode:        safeMode,
-		targetTableID:   targetTableID,
-		sourceTable:     sourceTable,
-		oldValues:       oldValues,
-		values:          values,
-		columns:         columns,
-		sourceTableInfo: sourceTableInfo,
-		originOldValues: originOldValues,
-		originValues:    originValues,
+		op:                        op,
+		safeMode:                  safeMode,
+		targetTableID:             targetTableID,
+		sourceTable:               sourceTable,
+		oldValues:                 oldValues,
+		values:                    values,
+		columns:                   columns,
+		sourceTableInfo:           sourceTableInfo,
+		originOldValues:           originOldValues,
+		originValues:              originValues,
+		pickedDownstreamIndexInfo: pickedDownstreamIndexInfo,
+		downstreamTableInfo:       downstreamTableInfo,
 	}
 }
 
@@ -466,7 +528,7 @@ func updateToDelAndInsert(updateDML *DML) (*DML, *DML) {
 // identifyColumns gets columns of unique not null index.
 // This is used for compact.
 func (dml *DML) identifyColumns() []string {
-	if defaultIndexColumns := findFitIndex(dml.sourceTableInfo); defaultIndexColumns != nil {
+	if defaultIndexColumns := dml.downstreamTableInfo.AbsoluteUKIndexInfo; defaultIndexColumns != nil {
 		columns := make([]string, 0, len(defaultIndexColumns.Columns))
 		for _, column := range defaultIndexColumns.Columns {
 			columns = append(columns, column.Name.O)
@@ -479,7 +541,7 @@ func (dml *DML) identifyColumns() []string {
 // identifyValues gets values of unique not null index.
 // This is used for compact.
 func (dml *DML) identifyValues() []interface{} {
-	if defaultIndexColumns := findFitIndex(dml.sourceTableInfo); defaultIndexColumns != nil {
+	if defaultIndexColumns := dml.downstreamTableInfo.AbsoluteUKIndexInfo; defaultIndexColumns != nil {
 		values := make([]interface{}, 0, len(defaultIndexColumns.Columns))
 		for _, column := range defaultIndexColumns.Columns {
 			values = append(values, dml.values[column.Offset])
@@ -492,7 +554,7 @@ func (dml *DML) identifyValues() []interface{} {
 // oldIdentifyValues gets old values of unique not null index.
 // only for update SQL.
 func (dml *DML) oldIdentifyValues() []interface{} {
-	if defaultIndexColumns := findFitIndex(dml.sourceTableInfo); defaultIndexColumns != nil {
+	if defaultIndexColumns := dml.downstreamTableInfo.AbsoluteUKIndexInfo; defaultIndexColumns != nil {
 		values := make([]interface{}, 0, len(defaultIndexColumns.Columns))
 		for _, column := range defaultIndexColumns.Columns {
 			values = append(values, dml.oldValues[column.Offset])
@@ -538,11 +600,11 @@ func (dml *DML) identifyKeys() []string {
 	var keys []string
 	// for UPDATE statement
 	if dml.originOldValues != nil {
-		keys = append(keys, genMultipleKeys(dml.sourceTableInfo, dml.originOldValues, dml.targetTableID)...)
+		keys = append(keys, genMultipleKeys(dml.downstreamTableInfo, dml.sourceTableInfo, dml.originOldValues, dml.targetTableID)...)
 	}
 
 	if dml.originValues != nil {
-		keys = append(keys, genMultipleKeys(dml.sourceTableInfo, dml.originValues, dml.targetTableID)...)
+		keys = append(keys, genMultipleKeys(dml.downstreamTableInfo, dml.sourceTableInfo, dml.originValues, dml.targetTableID)...)
 	}
 	return keys
 }
@@ -565,19 +627,23 @@ func (dml *DML) whereColumnsAndValues() ([]string, []interface{}) {
 		values = dml.originOldValues
 	}
 
-	defaultIndexColumns := findFitIndex(dml.sourceTableInfo)
-
-	if defaultIndexColumns == nil {
-		defaultIndexColumns = getAvailableIndexColumn(dml.sourceTableInfo, values)
-	}
-	if defaultIndexColumns != nil {
-		columns, values = getColumnData(dml.sourceTableInfo.Columns, defaultIndexColumns, values)
+	if dml.pickedDownstreamIndexInfo != nil {
+		columns, values = getColumnData(dml.sourceTableInfo.Columns, dml.pickedDownstreamIndexInfo, values)
 	}
 
 	columnNames := make([]string, 0, len(columns))
 	for _, column := range columns {
 		columnNames = append(columnNames, column.Name.O)
 	}
+
+	failpoint.Inject("DownstreamTrackerWhereCheck", func() {
+		if dml.op == update {
+			log.L().Info("UpdateWhereColumnsCheck", zap.String("Columns", fmt.Sprintf("%v", columnNames)))
+		} else if dml.op == del {
+			log.L().Info("DeleteWhereColumnsCheck", zap.String("Columns", fmt.Sprintf("%v", columnNames)))
+		}
+	})
+
 	return columnNames, values
 }
 
@@ -619,21 +685,10 @@ func genKeyList(table string, columns []*model.ColumnInfo, dataSeq []interface{}
 
 // genMultipleKeys gens keys with UNIQUE NOT NULL value.
 // if not UNIQUE NOT NULL value, use table name instead.
-func genMultipleKeys(ti *model.TableInfo, value []interface{}, table string) []string {
-	multipleKeys := make([]string, 0, len(ti.Indices)+1)
-	if ti.PKIsHandle {
-		if pk := ti.GetPkColInfo(); pk != nil {
-			cols := []*model.ColumnInfo{pk}
-			vals := []interface{}{value[pk.Offset]}
-			multipleKeys = append(multipleKeys, genKeyList(table, cols, vals))
-		}
-	}
+func genMultipleKeys(downstreamTableInfo *schema.DownstreamTableInfo, ti *model.TableInfo, value []interface{}, table string) []string {
+	multipleKeys := make([]string, 0, len(downstreamTableInfo.AvailableUKIndexList))
 
-	for _, indexCols := range ti.Indices {
-		// PK also has a true Unique
-		if !indexCols.Unique {
-			continue
-		}
+	for _, indexCols := range downstreamTableInfo.AvailableUKIndexList {
 		cols, vals := getColumnData(ti.Columns, indexCols, value)
 		key := genKeyList(table, cols, vals)
 		if len(key) > 0 { // ignore `null` value.
@@ -661,12 +716,11 @@ func (dml *DML) genWhere(buf *strings.Builder) []interface{} {
 		if i != 0 {
 			buf.WriteString(" AND ")
 		}
-		buf.WriteByte('`')
-		buf.WriteString(strings.ReplaceAll(col, "`", "``"))
+		buf.WriteString(dbutil.ColumnName(col))
 		if whereValues[i] == nil {
-			buf.WriteString("` IS ?")
+			buf.WriteString(" IS ?")
 		} else {
-			buf.WriteString("` = ?")
+			buf.WriteString(" = ?")
 		}
 	}
 	return whereValues
@@ -702,9 +756,9 @@ func (dml *DML) genUpdateSQL() ([]string, [][]interface{}) {
 
 	for i, column := range dml.columns {
 		if i == len(dml.columns)-1 {
-			fmt.Fprintf(&buf, "`%s` = ?", strings.ReplaceAll(column.Name.O, "`", "``"))
+			fmt.Fprintf(&buf, "%s = ?", dbutil.ColumnName(column.Name.O))
 		} else {
-			fmt.Fprintf(&buf, "`%s` = ?, ", strings.ReplaceAll(column.Name.O, "`", "``"))
+			fmt.Fprintf(&buf, "%s = ?, ", dbutil.ColumnName(column.Name.O))
 		}
 	}
 
@@ -734,15 +788,16 @@ func (dml *DML) genDeleteSQL() ([]string, [][]interface{}) {
 // if in safemode, generates a `INSERT ON DUPLICATE UPDATE` statement.
 func (dml *DML) genInsertSQL() ([]string, [][]interface{}) {
 	var buf strings.Builder
-	buf.Grow(256)
+	buf.Grow(1024)
 	buf.WriteString("INSERT INTO ")
 	buf.WriteString(dml.targetTableID)
 	buf.WriteString(" (")
 	for i, column := range dml.columns {
+		buf.WriteString(dbutil.ColumnName(column.Name.O))
 		if i != len(dml.columns)-1 {
-			buf.WriteString("`" + strings.ReplaceAll(column.Name.O, "`", "``") + "`,")
+			buf.WriteByte(',')
 		} else {
-			buf.WriteString("`" + strings.ReplaceAll(column.Name.O, "`", "``") + "`)")
+			buf.WriteByte(')')
 		}
 	}
 	buf.WriteString(" VALUES (")
@@ -758,12 +813,270 @@ func (dml *DML) genInsertSQL() ([]string, [][]interface{}) {
 	if dml.safeMode {
 		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
 		for i, column := range dml.columns {
-			col := strings.ReplaceAll(column.Name.O, "`", "``")
-			buf.WriteString("`" + col + "`=VALUES(`" + col + "`)")
+			col := dbutil.ColumnName(column.Name.O)
+			buf.WriteString(col + "=VALUES(" + col + ")")
 			if i != len(dml.columns)-1 {
 				buf.WriteByte(',')
 			}
 		}
 	}
 	return []string{buf.String()}, [][]interface{}{dml.values}
+}
+
+// valuesHolder gens values holder like (?,?,?).
+func valuesHolder(n int) string {
+	builder := new(strings.Builder)
+	builder.WriteByte('(')
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			builder.WriteString(",")
+		}
+		builder.WriteString("?")
+	}
+	builder.WriteByte(')')
+	return builder.String()
+}
+
+// genInsertOnDuplicateSQLMultipleRows generates a `INSERT` with multiple rows like 'INSERT INTO tb(a,b) VALUES (1,1),(2,2)'
+// if onDuplicate, generates a `INSERT ON DUPLICATE KEY UPDATE` statement like 'INSERT INTO tb(a,b) VALUES (1,1),(2,2) ON DUPLICATE KEY UPDATE a=VALUES(a),b=VALUES(b)'.
+func genInsertOnDuplicateSQLMultipleRows(onDuplicate bool, dmls []*DML) ([]string, [][]interface{}) {
+	if len(dmls) == 0 {
+		return nil, nil
+	}
+
+	var buf strings.Builder
+	buf.Grow(1024)
+	buf.WriteString("INSERT INTO")
+	buf.WriteString(" " + dmls[0].targetTableID + " (")
+	for i, column := range dmls[0].columns {
+		buf.WriteString(dbutil.ColumnName(column.Name.O))
+		if i != len(dmls[0].columns)-1 {
+			buf.WriteByte(',')
+		} else {
+			buf.WriteByte(')')
+		}
+	}
+	buf.WriteString(" VALUES ")
+
+	holder := valuesHolder(len(dmls[0].columns))
+	for i := range dmls {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		buf.WriteString(holder)
+	}
+
+	if onDuplicate {
+		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
+		for i, column := range dmls[0].columns {
+			col := dbutil.ColumnName(column.Name.O)
+			buf.WriteString(col + "=VALUES(" + col + ")")
+			if i != len(dmls[0].columns)-1 {
+				buf.WriteByte(',')
+			}
+		}
+	}
+
+	args := make([]interface{}, 0, len(dmls)*len(dmls[0].columns))
+	for _, dml := range dmls {
+		args = append(args, dml.values...)
+	}
+	return []string{buf.String()}, [][]interface{}{args}
+}
+
+// genDeleteSQLMultipleRows generates delete statement with multiple rows like 'DELETE FROM tb WHERE (a,b) IN (1,1),(2,2)'.
+func genDeleteSQLMultipleRows(dmls []*DML) ([]string, [][]interface{}) {
+	if len(dmls) == 0 {
+		return nil, nil
+	}
+
+	var buf strings.Builder
+	buf.Grow(1024)
+	buf.WriteString("DELETE FROM ")
+	buf.WriteString(dmls[0].targetTableID)
+	buf.WriteString(" WHERE (")
+
+	whereColumns, _ := dmls[0].whereColumnsAndValues()
+	for i, column := range whereColumns {
+		if i != len(whereColumns)-1 {
+			buf.WriteString(dbutil.ColumnName(column) + ",")
+		} else {
+			buf.WriteString(dbutil.ColumnName(column) + ")")
+		}
+	}
+	buf.WriteString(" IN (")
+
+	holder := valuesHolder(len(whereColumns))
+	args := make([]interface{}, 0, len(dmls)*len(dmls[0].columns))
+	for i, dml := range dmls {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		buf.WriteString(holder)
+		_, whereValues := dml.whereColumnsAndValues()
+		// whereValues will have same length because we have checked it in genDMLsWithSameCols.
+		args = append(args, whereValues...)
+	}
+	buf.WriteString(")")
+	return []string{buf.String()}, [][]interface{}{args}
+}
+
+// genSQLMultipleRows generates multiple rows SQL with different dmlOpType.
+func genSQLMultipleRows(op dmlOpType, dmls []*DML) (queries []string, args [][]interface{}) {
+	if len(dmls) > 1 {
+		log.L().Debug("generate DMLs with multiple rows", zap.Stringer("op", op), zap.Stringer("original op", dmls[0].op), zap.Int("rows", len(dmls)))
+	}
+	switch op {
+	case insertDML:
+		return genInsertOnDuplicateSQLMultipleRows(false, dmls)
+	case insertOnDuplicateDML:
+		return genInsertOnDuplicateSQLMultipleRows(true, dmls)
+	case deleteDML:
+		return genDeleteSQLMultipleRows(dmls)
+	}
+	return
+}
+
+// sameColumns check whether two DMLs have same columns.
+func sameColumns(lhs *DML, rhs *DML) bool {
+	var lhsCols, rhsCols []string
+	if lhs.op == del {
+		lhsCols, _ = lhs.whereColumnsAndValues()
+		rhsCols, _ = rhs.whereColumnsAndValues()
+	} else {
+		// if source table is same, columns will be same.
+		if lhs.sourceTable.Schema == rhs.sourceTable.Schema && lhs.sourceTable.Name == rhs.sourceTable.Name {
+			return true
+		}
+		lhsCols = lhs.columnNames()
+		rhsCols = rhs.columnNames()
+	}
+	if len(lhsCols) != len(rhsCols) {
+		return false
+	}
+	for i := 0; i < len(lhsCols); i++ {
+		if lhsCols[i] != rhsCols[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// genDMLsWithSameCols group and gen dmls by same columns.
+// in optimistic shard mode, different upstream tables may have different columns.
+// e.g.
+// insert into tb(a,b,c) values(1,1,1)
+// insert into tb(a,b,d) values(2,2,2)
+// we can only combine DMLs with same column names.
+// all dmls should have same dmlOpType and same tableName.
+func genDMLsWithSameCols(op dmlOpType, dmls []*DML) ([]string, [][]interface{}) {
+	queries := make([]string, 0, len(dmls))
+	args := make([][]interface{}, 0, len(dmls))
+	var lastDML *DML
+	var query []string
+	var arg [][]interface{}
+	groupDMLs := make([]*DML, 0, len(dmls))
+
+	// group dmls by same columns
+	for i, dml := range dmls {
+		if i == 0 {
+			lastDML = dml
+		}
+		if !sameColumns(lastDML, dml) {
+			query, arg = genSQLMultipleRows(op, groupDMLs)
+			queries = append(queries, query...)
+			args = append(args, arg...)
+
+			groupDMLs = groupDMLs[0:0]
+			lastDML = dml
+		}
+		groupDMLs = append(groupDMLs, dml)
+	}
+	if len(groupDMLs) > 0 {
+		query, arg = genSQLMultipleRows(op, groupDMLs)
+		queries = append(queries, query...)
+		args = append(args, arg...)
+	}
+	return queries, args
+}
+
+// genDMLsWithSameTable groups and generates dmls with same table.
+// all the dmls should have same dmlOpType.
+func genDMLsWithSameTable(op dmlOpType, dmls []*DML) ([]string, [][]interface{}) {
+	queries := make([]string, 0, len(dmls))
+	args := make([][]interface{}, 0, len(dmls))
+	var lastTable string
+	groupDMLs := make([]*DML, 0, len(dmls))
+
+	// for updateDML, generate SQLs one by one
+	if op == updateDML {
+		for _, dml := range dmls {
+			query, arg := dml.genUpdateSQL()
+			queries = append(queries, query...)
+			args = append(args, arg...)
+		}
+		return queries, args
+	}
+
+	// group dmls with same table
+	for i, dml := range dmls {
+		if i == 0 {
+			lastTable = dml.targetTableID
+		}
+		if lastTable != dml.targetTableID {
+			query, arg := genDMLsWithSameCols(op, groupDMLs)
+			queries = append(queries, query...)
+			args = append(args, arg...)
+
+			groupDMLs = groupDMLs[0:0]
+			lastTable = dml.targetTableID
+		}
+		groupDMLs = append(groupDMLs, dml)
+	}
+	if len(groupDMLs) > 0 {
+		query, arg := genDMLsWithSameCols(op, groupDMLs)
+		queries = append(queries, query...)
+		args = append(args, arg...)
+	}
+	return queries, args
+}
+
+// genDMLsWithSameOp groups and generates dmls by dmlOpType.
+// TODO: implement a volcano iterator interface for genDMLsWithSameXXX.
+func genDMLsWithSameOp(dmls []*DML) ([]string, [][]interface{}) {
+	queries := make([]string, 0, len(dmls))
+	args := make([][]interface{}, 0, len(dmls))
+	var lastOp dmlOpType
+	groupDMLs := make([]*DML, 0, len(dmls))
+
+	// group dmls with same dmlOp
+	for i, dml := range dmls {
+		curOp := dmlOpType(dml.op)
+		// if update statement didn't update identify values, regard it as insert on duplicate.
+		// if insert with safemode, regard it as insert on duplicate.
+		if (curOp == updateDML && !dml.updateIdentify()) || (curOp == insertDML && dml.safeMode) {
+			curOp = insertOnDuplicateDML
+		}
+
+		if i == 0 {
+			lastOp = curOp
+		}
+
+		// now there are 4 situations: [insert, insert on duplicate(insert with safemode/update without identify keys), update(update identify keys), delete]
+		if lastOp != curOp {
+			query, arg := genDMLsWithSameTable(lastOp, groupDMLs)
+			queries = append(queries, query...)
+			args = append(args, arg...)
+
+			groupDMLs = groupDMLs[0:0]
+			lastOp = curOp
+		}
+		groupDMLs = append(groupDMLs, dml)
+	}
+	if len(groupDMLs) > 0 {
+		query, arg := genDMLsWithSameTable(lastOp, groupDMLs)
+		queries = append(queries, query...)
+		args = append(args, arg...)
+	}
+	return queries, args
 }

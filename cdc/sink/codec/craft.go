@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"math"
 	"strconv"
 
@@ -96,31 +97,29 @@ func (e *CraftEventBatchEncoder) Reset() {
 // SetParams reads relevant parameters for craft protocol
 func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
+
+	e.maxMessageSize = DefaultMaxMessageBytes
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
 		e.maxMessageSize, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
-	} else {
-		e.maxMessageSize = DefaultMaxMessageBytes
 	}
-
 	if e.maxMessageSize <= 0 || e.maxMessageSize > math.MaxInt32 {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", e.maxMessageSize))
 	}
 
+	e.maxBatchSize = DefaultMaxBatchSize
 	if maxBatchSize, ok := params["max-batch-size"]; ok {
 		e.maxBatchSize, err = strconv.Atoi(maxBatchSize)
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
-	} else {
-		e.maxBatchSize = DefaultMaxBatchSize
 	}
-
 	if e.maxBatchSize <= 0 || e.maxBatchSize > math.MaxUint16 {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", e.maxBatchSize))
 	}
+
 	return nil
 }
 
@@ -130,6 +129,24 @@ func NewCraftEventBatchEncoder() EventBatchEncoder {
 	// 1. Most table will not have more than 64 columns
 	// 2. It only worth allocating slices in batch for slices that's small enough
 	return NewCraftEventBatchEncoderWithAllocator(craft.NewSliceAllocator(64))
+}
+
+type craftEventBatchEncoderBuilder struct {
+	opts map[string]string
+}
+
+// Build a CraftEventBatchEncoder
+func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+	encoder := NewCraftEventBatchEncoder()
+	if err := encoder.SetParams(b.opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	return encoder, nil
+}
+
+func newCraftEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
+	return &craftEventBatchEncoderBuilder{opts: opts}
 }
 
 // NewCraftEventBatchEncoderWithAllocator creates a new CraftEventBatchEncoder with given allocator.

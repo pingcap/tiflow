@@ -21,6 +21,8 @@ import (
 
 // options defines flags for the `redo` command.
 type options struct {
+	storage  string
+	dir      string
 	logLevel string
 }
 
@@ -32,7 +34,11 @@ func newOptions() *options {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *options) addFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVar(&o.storage, "storage", "", "storage of redo log, specify the url where backup redo logs will store, eg, \"s3://bucket/path/prefix\"")
+	cmd.PersistentFlags().StringVar(&o.dir, "tmp-dir", "", "temporary path used to download redo log with S3 backend")
 	cmd.PersistentFlags().StringVar(&o.logLevel, "log-level", "info", "log level (etc: debug|info|warn|error)")
+	// the possible error returned from MarkFlagRequired is `no such flag`
+	cmd.MarkFlagRequired("storage") //nolint:errcheck
 }
 
 // NewCmdRedo creates the `redo` command.
@@ -46,6 +52,7 @@ func NewCmdRedo() *cobra.Command {
 			// Here we will initialize the logging configuration and set the current default context.
 			util.InitCmd(cmd, &logutil.Config{Level: o.logLevel})
 			util.LogHTTPProxies()
+
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -54,8 +61,8 @@ func NewCmdRedo() *cobra.Command {
 	o.addFlags(cmds)
 
 	// Add subcommands.
-	cmds.AddCommand(newCmdApply())
-	cmds.AddCommand(newCmdMeta())
+	cmds.AddCommand(newCmdApply(o))
+	cmds.AddCommand(newCmdMeta(o))
 
 	return cmds
 }
