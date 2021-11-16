@@ -1078,11 +1078,9 @@ func (s *Scheduler) StartRelay(source string, workers []string) error {
 		stage := ha.NewRelayStage(pb.Stage_Running, source)
 		_, err = ha.PutRelayStageSourceBound(s.etcdCli, stage, w.Bound())
 		return err
-	} else {
-		// should not mix `start-relay` with/without worker name
-		if sourceCfg.EnableRelay {
-			return terror.ErrSchedulerStartRelayOnBound.Generate()
-		}
+	} else if sourceCfg.EnableRelay {
+		// error when `enable-relay` and `start-relay` with worker name
+		return terror.ErrSchedulerStartRelayOnBound.Generate()
 	}
 
 	if startedWorkers == nil {
@@ -1193,11 +1191,9 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 		}
 		_, err = ha.PutSourceBound(s.etcdCli, w.Bound())
 		return err
-	} else {
-		// should not mix `stop-relay` with/without worker name
-        if sourceCfg.EnableRelay {
-            return terror.ErrSchedulerStopRelayOnBound.Generate()
-        }
+	} else if sourceCfg.EnableRelay {
+		// error when `enable-relay` and `stop-relay` with worker name
+		return terror.ErrSchedulerStopRelayOnBound.Generate()
 	}
 
 	var (

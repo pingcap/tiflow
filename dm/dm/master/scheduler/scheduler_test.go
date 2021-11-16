@@ -1353,7 +1353,6 @@ func (t *testScheduler) TestStartStopRelay(c *C) {
 	c.Assert(bound, IsFalse)
 }
 
-
 func (t *testScheduler) TestRelayWithWithoutWorker(c *C) {
 	defer clearTestInfoOperation(c)
 
@@ -1407,7 +1406,27 @@ func (t *testScheduler) TestRelayWithWithoutWorker(c *C) {
 	c.Assert(worker2.Stage(), Equals, WorkerFree)
 
 	// step 4: check when enable-relay = true, can't start/stop relay without worker name
-	// TODO: NOT FINISHED!!!
+	c.Assert(s.StartRelay(sourceID1, []string{}), IsNil)
+
+	err := s.StartRelay(sourceID1, []string{workerName1})
+	c.Assert(terror.ErrSchedulerStartRelayOnBound.Equal(err), IsTrue)
+	err = s.StartRelay(sourceID1, []string{workerName2})
+	c.Assert(terror.ErrSchedulerStartRelayOnBound.Equal(err), IsTrue)
+
+	err = s.StopRelay(sourceID1, []string{workerName1})
+	c.Assert(terror.ErrSchedulerStopRelayOnBound.Equal(err), IsTrue)
+	err = s.StopRelay(sourceID1, []string{workerName2})
+	c.Assert(terror.ErrSchedulerStopRelayOnBound.Equal(err), IsTrue)
+
+	c.Assert(s.StopRelay(sourceID1, []string{}), IsNil)
+
+	// step5. check when started relay with workerName, can't turn on enable-relay
+	c.Assert(s.StartRelay(sourceID1, []string{workerName1}), IsNil)
+
+	err = s.StartRelay(sourceID1, []string{})
+	c.Assert(terror.ErrSchedulerStartRelayOnSpecified.Equal(err), IsTrue)
+	err = s.StopRelay(sourceID1, []string{})
+	c.Assert(terror.ErrSchedulerStopRelayOnSpecified.Equal(err), IsTrue)
 }
 
 func checkAllWorkersClosed(c *C, s *Scheduler, closed bool) {
