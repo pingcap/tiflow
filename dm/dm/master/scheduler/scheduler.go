@@ -1052,7 +1052,8 @@ func (s *Scheduler) StartRelay(source string, workers []string) error {
 	}
 
 	// 1. precheck
-	if _, ok := s.sourceCfgs[source]; !ok {
+	sourceCfg, ok := s.sourceCfgs[source]
+	if !ok {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
 	startedWorkers := s.relayWorkers[source]
@@ -1063,7 +1064,6 @@ func (s *Scheduler) StartRelay(source string, workers []string) error {
 			return terror.ErrSchedulerStartRelayOnSpecified.Generate(startedWorkers)
 		}
 		// update enable-relay in source config
-		sourceCfg := s.sourceCfgs[source]
 		sourceCfg.EnableRelay = true
 		_, err := ha.PutSourceCfg(s.etcdCli, sourceCfg)
 		if err != nil {
@@ -1071,13 +1071,18 @@ func (s *Scheduler) StartRelay(source string, workers []string) error {
 		}
 		s.sourceCfgs[source] = sourceCfg
 		// notify bound worker
-		w, ok := s.bounds[source]
-		if !ok {
+		w, ok2 := s.bounds[source]
+		if !ok2 {
 			return nil
 		}
 		stage := ha.NewRelayStage(pb.Stage_Running, source)
 		_, err = ha.PutRelayStageSourceBound(s.etcdCli, stage, w.Bound())
 		return err
+	} else {
+		// should not mix `start-relay` with/without worker name
+		if sourceCfg.EnableRelay {
+			return terror.ErrSchedulerStartRelayOnBound.Generate()
+		}
 	}
 
 	if startedWorkers == nil {
@@ -1163,7 +1168,8 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 	}
 
 	// 1. precheck
-	if _, ok := s.sourceCfgs[source]; !ok {
+	sourceCfg, ok := s.sourceCfgs[source]
+	if !ok {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
 
@@ -1174,7 +1180,6 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 			return terror.ErrSchedulerStopRelayOnSpecified.Generate(startedWorker)
 		}
 		// update enable-relay in source config
-		sourceCfg := s.sourceCfgs[source]
 		sourceCfg.EnableRelay = false
 		_, err := ha.PutSourceCfg(s.etcdCli, sourceCfg)
 		if err != nil {
@@ -1182,12 +1187,17 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 		}
 		s.sourceCfgs[source] = sourceCfg
 		// notify bound worker
-		w, ok := s.bounds[source]
-		if !ok {
+		w, ok2 := s.bounds[source]
+		if !ok2 {
 			return nil
 		}
 		_, err = ha.PutSourceBound(s.etcdCli, w.Bound())
 		return err
+	} else {
+		// should not mix `stop-relay` with/without worker name
+        if sourceCfg.EnableRelay {
+            return terror.ErrSchedulerStopRelayOnBound.Generate()
+        }
 	}
 
 	var (
