@@ -144,7 +144,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 		dbCfg := instance.cfg.From
 		dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(readTimeout)
-		instance.sourceDB, err = conn.DefaultDBProvider.Apply(dbCfg)
+		instance.sourceDB, err = conn.DefaultDBProvider.Apply(&dbCfg)
 		if err != nil {
 			return terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.From.User, instance.cfg.From.Host, instance.cfg.From.Port), terror.ScopeUpstream)
 		}
@@ -157,7 +157,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 		dbCfg = instance.cfg.To
 		dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(readTimeout)
-		instance.targetDB, err = conn.DefaultDBProvider.Apply(dbCfg)
+		instance.targetDB, err = conn.DefaultDBProvider.Apply(&dbCfg)
 		if err != nil {
 			return terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.To.User, instance.cfg.To.Host, instance.cfg.To.Port), terror.ScopeDownstream)
 		}
@@ -405,7 +405,7 @@ func (c *Checker) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 }
 
 // Update implements Unit.Update.
-func (c *Checker) Update(cfg *config.SubTaskConfig) error {
+func (c *Checker) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	// not support update configuration now
 	return nil
 }
