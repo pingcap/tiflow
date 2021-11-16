@@ -2048,7 +2048,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		return err2
 	}
 
-	extRows := genrateExtendColumn(rows, s.tableRouter, sourceTable, s.cfg.SourceID)
+	extRows, extendValues := generateExtendColumn(rows, s.tableRouter, sourceTable, s.cfg.SourceID)
 
 	prunedColumns, prunedRows, err := pruneGeneratedColumnDML(tableInfo, extRows)
 	if err != nil {
@@ -2063,10 +2063,12 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	param := &genDMLParam{
 		targetTableID:   utils.GenTableID(targetTable),
 		data:            prunedRows,
-		originalData:    extRows,
+		originalData:    rows,
 		columns:         prunedColumns,
 		sourceTableInfo: tableInfo,
 		sourceTable:     sourceTable,
+		extendData:      extRows,
+		extendValues:    extendValues,
 	}
 
 	switch ec.header.EventType {
@@ -2171,11 +2173,11 @@ func (qec *queryEventContext) String() string {
 		qec.ddlSchema, qec.originSQL, startLocation, currentLocation, lastLocation, shardingReSync, needHandleDDLs, strings.Join(trackInfos, ","))
 }
 
-// genrateExtendColumn generate extended columns by extractor.
-func genrateExtendColumn(data [][]interface{}, r *router.Table, table *filter.Table, sourceID string) [][]interface{} {
+// generateExtendColumn generate extended columns by extractor.
+func generateExtendColumn(data [][]interface{}, r *router.Table, table *filter.Table, sourceID string) ([][]interface{}, []string) {
 	extendCol, extendVal := r.FetchExtendColumn(table.Schema, table.Name, sourceID)
 	if len(extendCol) == 0 {
-		return data
+		return data, extendVal
 	}
 
 	rows := make([][]interface{}, len(data))
@@ -2185,7 +2187,7 @@ func genrateExtendColumn(data [][]interface{}, r *router.Table, table *filter.Ta
 			rows[i] = append(rows[i], v)
 		}
 	}
-	return rows
+	return rows, extendVal
 }
 
 func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
