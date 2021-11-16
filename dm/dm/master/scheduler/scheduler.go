@@ -121,9 +121,10 @@ type Scheduler struct {
 	// a mirror of bounds whose element is not deleted when worker unbound. worker -> SourceBound
 	lastBound map[string]ha.SourceBound
 
+	// TODO: seems this memory status is useless.
 	// expectant relay stages for sources, source ID -> stage.
 	// add:
-	// - bound the source to a worker (at first time). // TODO: change this to add a relay-enabled source
+	// - bound the source to a worker (at first time).
 	// - recover from etcd (calling `recoverSources`).
 	// update:
 	// - update stage by user request (calling `UpdateExpectRelayStage`).
@@ -2003,7 +2004,13 @@ func (s *Scheduler) boundSourceToWorker(source string, w *Worker) error {
 	// 1. put the bound relationship into etcd.
 	var err error
 	bound := ha.NewSourceBound(source, w.BaseInfo().Name)
-	_, err = ha.PutSourceBound(s.etcdCli, bound)
+	sourceCfg, ok := s.sourceCfgs[source]
+	if ok && sourceCfg.EnableRelay {
+		stage := ha.NewRelayStage(pb.Stage_Running, source)
+		_, err = ha.PutRelayStageSourceBound(s.etcdCli, stage, bound)
+	} else {
+		_, err = ha.PutSourceBound(s.etcdCli, bound)
+	}
 	if err != nil {
 		return err
 	}
