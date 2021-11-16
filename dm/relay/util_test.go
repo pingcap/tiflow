@@ -18,11 +18,10 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/pingcap/errors"
-
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	"github.com/pingcap/ticdc/dm/pkg/utils"

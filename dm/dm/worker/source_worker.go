@@ -78,6 +78,8 @@ type SourceWorker struct {
 	relayHolder  RelayHolder
 	relayPurger  relay.Purger
 
+	startedRelayBySourceCfg bool
+
 	taskStatusChecker TaskStatusChecker
 
 	etcdClient *clientv3.Client
@@ -279,13 +281,15 @@ func (w *SourceWorker) EnableRelay() (err error) {
 		failpoint.Goto("bypass")
 	})
 
-	// we need update worker source config from etcd first
-	// because the configuration of the relay part of the data source may be changed via scheduler.UpdateSourceCfg
-	sourceCfg, _, err = ha.GetRelayConfig(w.etcdClient, w.name)
-	if err != nil {
-		return err
+	if !w.startedRelayBySourceCfg {
+		// we need update worker source config from etcd first
+		// because the configuration of the relay part of the data source may be changed via scheduler.UpdateSourceCfg
+		sourceCfg, _, err = ha.GetRelayConfig(w.etcdClient, w.name)
+		if err != nil {
+			return err
+		}
+		w.cfg = sourceCfg
 	}
-	w.cfg = sourceCfg
 
 	failpoint.Label("bypass")
 
@@ -353,11 +357,9 @@ func (w *SourceWorker) EnableRelay() (err error) {
 		w.observeRelayStage(w.relayCtx, w.etcdClient, revRelay)
 	}()
 
-	w.relayHolder.RegisterListener(w.subTaskHolder)
-
 	w.relayEnabled.Store(true)
 	w.l.Info("relay enabled")
-	w.subTaskHolder.resetAllSubTasks(true)
+	w.subTaskHolder.resetAllSubTasks(w.getRelayWithoutLock())
 	return nil
 }
 
@@ -382,12 +384,11 @@ func (w *SourceWorker) DisableRelay() {
 		w.l.Info("finish refreshing task checker")
 	}
 
-	w.subTaskHolder.resetAllSubTasks(false)
+	w.subTaskHolder.resetAllSubTasks(nil)
 
 	if w.relayHolder != nil {
 		r := w.relayHolder
 		w.relayHolder = nil
-		r.UnRegisterListener(w.subTaskHolder)
 		r.Close()
 	}
 	if w.relayPurger != nil {
@@ -519,7 +520,15 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage pb.St
 	}
 
 	w.l.Info("subtask created", zap.Stringer("config", cfg2))
-	st.Run(expectStage)
+	st.Run(expectStage, w.getRelayWithoutLock())
+	return nil
+}
+
+// caller should make sure w.Lock is locked before calling this method.
+func (w *SourceWorker) getRelayWithoutLock() relay.Process {
+	if w.relayHolder != nil {
+		return w.relayHolder.Relay()
+	}
 	return nil
 }
 
@@ -566,10 +575,10 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		err = st.Pause()
 	case pb.TaskOp_Resume:
 		w.l.Info("resume sub task", zap.String("task", name))
-		err = st.Resume()
+		err = st.Resume(w.getRelayWithoutLock())
 	case pb.TaskOp_AutoResume:
 		w.l.Info("auto_resume sub task", zap.String("task", name))
-		err = st.Resume()
+		err = st.Resume(w.getRelayWithoutLock())
 	default:
 		err = terror.ErrWorkerUpdateTaskStage.Generatef("invalid operate %s on subtask %v", op, name)
 	}
@@ -1039,5 +1048,5 @@ func (w *SourceWorker) HandleError(ctx context.Context, req *pb.HandleWorkerErro
 		return terror.ErrWorkerSubTaskNotFound.Generate(req.Task)
 	}
 
-	return st.HandleError(ctx, req)
+	return st.HandleError(ctx, req, w.getRelayWithoutLock())
 }
