@@ -28,7 +28,6 @@ require (
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/klauspost/compress v1.11.1 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
-	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-runewidth v0.0.10 // indirect
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/philhofer/fwd v1.0.0 // indirect
