@@ -613,6 +613,8 @@ function DM_COMPACT() {
 
 function DM_COMPACT_USE_DOWNSTREAM_SCHEMA_CASE() {
 	END=10
+	# As this kind of sql is no use, like "update tb1 set c=1 where a=100" which is behind of "insert into tb1(a,b,c) values(100,1,1)"
+	# We should avoid this kind of sql to make sure the count of dmls
 	for i in $(seq 0 $END); do
 		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b,c) values($((i + 100)),$i,$i)"
 		run_sql_source1 "update ${shardddl1}.${tb1} set c=20 where a=$((i + 100))"
@@ -627,11 +629,13 @@ function DM_COMPACT_USE_DOWNSTREAM_SCHEMA_CASE() {
 		insert into ${shardddl}.${tb}_temp (a, b, c) select a, b, c from ${shardddl}.${tb}; 
 		drop table ${shardddl}.${tb}; rename table ${shardddl}.${tb}_temp to ${shardddl}.${tb};"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
-	# DownstreamIdentifyKeyCheckInCompact=return(20) will check whether the key value in compact is less than 20
-	# As this kind of sql is no use, like "update tb1 set c=1 where a=100" which is behind of "insert into tb1(a,b,c) values(100,1,1)"
-	# We should avoid this kind of sql to make sure the count of $downstreamSuccess
+	# DownstreamIdentifyKeyCheckInCompact=return(20) will check whether the key value in compact is less than 20.
+	# This goal is check whether it use downstream schema in compator.
+	# if use downstream schema, key will be 'b' with value less than 20.
+	# If use upstream schema, key will be 'a' with value greater than 100.
 	downstreamSuccess=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "downstream identifyKey check success" | wc -l)
 	downstreamFail=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "downstream identifyKey check failed" | wc -l)
+	# As update pk/uk row will be divided into delete and update, the count will be 8 in each loop, so total is 11*8 = 88
 	if [[ "$downstreamSuccess" -ne 88 || "$downstreamFail" -ne 0 ]]; then
 		echo "compact use wrong downstream identify key. $downstreamSuccess success should be 88. $downstreamFail failed should be 0."
 		exit 1
@@ -645,7 +649,7 @@ function DM_COMPACT_USE_DOWNSTREAM_SCHEMA_CASE() {
 }
 
 function DM_COMPACT_USE_DOWNSTREAM_SCHEMA() {
-	# mock downstream pk/uk/column is diffrent with upstream, compact use downstream schema.
+	# downstream pk/uk/column is diffrent with upstream, compact use downstream schema.
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
@@ -758,7 +762,7 @@ function DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA_CASE() {
 }
 
 function DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA() {
-	# mock downstream pk/uk/column is diffrent with upstream, causality use downstream schema.
+	# downstream pk/uk/column is diffrent with upstream, causality use downstream schema.
 	run_case CAUSALITY_USE_DOWNSTREAM_SCHEMA "single-source-no-sharding" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique);\"; 
 		run_sql_tidb \"drop database if exists ${shardddl}; create database ${shardddl}; create table ${shardddl}.${tb} (a int, b int unique, c int primary key auto_increment) auto_increment = 100;\"" \
