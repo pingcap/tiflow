@@ -154,8 +154,9 @@ function test_restart_relay_status() {
 		"\"worker\": \"worker3\"" 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"list-member -n worker2 -n worker3" \
-		"relay" 1
+		"list-member --worker" \
+		"relay" 1 \
+		"bound" 2
 }
 
 function test_kill_dump_connection() {
