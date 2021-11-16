@@ -104,7 +104,6 @@ func (r *sizedRegionRouter) AddRegion(sri singleRegionInfo) {
 		r.buffer[id] = append(r.buffer[id], sri)
 		if _, ok := r.metrics.cachedRegions[id]; !ok {
 			r.metrics.cachedRegions[id] = cachedRegionSize.WithLabelValues(id, r.metrics.changefeed, r.metrics.capture)
-			r.metrics.cachedRegions[id].Set(0)
 		}
 		r.metrics.cachedRegions[id].Inc()
 	}
@@ -119,7 +118,6 @@ func (r *sizedRegionRouter) Acquire(id string) {
 	r.tokens[id]++
 	if _, ok := r.metrics.tokens[id]; !ok {
 		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed, r.metrics.capture)
-		r.metrics.tokens[id].Set(0)
 	}
 	r.metrics.tokens[id].Inc()
 }
@@ -132,19 +130,19 @@ func (r *sizedRegionRouter) Release(id string) {
 	r.tokens[id]--
 	if _, ok := r.metrics.tokens[id]; !ok {
 		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed, r.metrics.capture)
-		r.metrics.tokens[id].Set(0)
 	}
 	r.metrics.tokens[id].Dec()
 }
 
 func (r *sizedRegionRouter) Run(ctx context.Context) error {
 	ticker := time.NewTicker(sizedRegionCheckInterval)
+	defer ticker.Stop()
 	defer func() {
 		ticker.Stop()
 		r.lock.Lock()
 		defer r.lock.Unlock()
-		for _, m := range r.metrics.cachedRegions {
-			m.Set(0)
+		for id, buf := range r.buffer {
+			r.metrics.cachedRegions[id].Sub(float64(len(buf)))
 		}
 	}()
 	for {
