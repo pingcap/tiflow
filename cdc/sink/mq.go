@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,11 +38,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type mqEvent struct {
-	row        *model.RowChangedEvent
-	resolvedTs uint64
-}
-
 const (
 	defaultPartitionInputChSize = 12800
 	// -1 means broadcast to all partitions, it's the default for the default open protocol.
@@ -56,12 +52,15 @@ type mqSink struct {
 	protocol       codec.Protocol
 
 	partitionNum        int32
-	partitionInput      []chan mqEvent
+	partitionCache      [][]*model.RowChangedEvent
+	cacheMu             []sync.Mutex
 	partitionResolvedTs []uint64
 
-	checkpointTs     uint64
-	resolvedNotifier *notify.Notifier
-	resolvedReceiver *notify.Receiver
+	resolvedTs   uint64
+	checkpointTs uint64
+
+	resolvedNotifier  *notify.Notifier
+	resolvedReceivers []*notify.Receiver
 
 	statistics *Statistics
 }
@@ -92,15 +91,16 @@ func newMqSink(
 		return nil, errors.Trace(err)
 	}
 
-	partitionInput := make([]chan mqEvent, partitionNum)
-	for i := 0; i < int(partitionNum); i++ {
-		partitionInput[i] = make(chan mqEvent, defaultPartitionInputChSize)
-	}
+	partitionCache := make([][]*model.RowChangedEvent, partitionNum)
 
 	notifier := new(notify.Notifier)
-	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
-	if err != nil {
-		return nil, errors.Trace(err)
+	var resolvedReceivers []*notify.Receiver
+	for i := 0; i < int(partitionNum); i++ {
+		resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		resolvedReceivers = append(resolvedReceivers, resolvedReceiver)
 	}
 
 	s := &mqSink{
@@ -111,10 +111,11 @@ func newMqSink(
 		protocol:       protocol,
 
 		partitionNum:        partitionNum,
-		partitionInput:      partitionInput,
+		partitionCache:      partitionCache,
+		cacheMu:             make([]sync.Mutex, partitionNum),
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
-		resolvedReceiver:    resolvedReceiver,
+		resolvedReceivers:   resolvedReceivers,
 
 		statistics: NewStatistics(ctx, "MQ", opts),
 	}
@@ -133,66 +134,72 @@ func newMqSink(
 	return s, nil
 }
 
+// EmitRowChangedEvents is a non-blocking method, it put rows into partitionInputCache
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	rowsCount := 0
+	partitionRows := make([][]*model.RowChangedEvent, k.partitionNum)
 	for _, row := range rows {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
 		partition := k.dispatcher.Dispatch(row)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case k.partitionInput[partition] <- struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}{row: row}:
-		}
+		partitionRows[partition] = append(partitionRows[partition], row)
 		rowsCount++
 	}
+
+	for i, row := range partitionRows {
+		if len(row) == 0 {
+			continue
+		}
+		k.cacheMu[i].Lock()
+		k.partitionCache[i] = append(k.partitionCache[i], row...)
+		k.cacheMu[i].Unlock()
+	}
+
 	k.statistics.AddRowsCount(rowsCount)
 	return nil
 }
 
 func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
-	if resolvedTs <= k.checkpointTs {
-		return k.checkpointTs, nil
+	checkpointTs := atomic.LoadUint64(&k.checkpointTs)
+	if resolvedTs <= checkpointTs {
+		return checkpointTs, nil
 	}
 
+	atomic.StoreUint64(&k.resolvedTs, resolvedTs)
+	k.resolvedNotifier.Notify()
+	checkpointTs = resolvedTs
 	for i := 0; i < int(k.partitionNum); i++ {
 		select {
 		case <-ctx.Done():
 			return 0, ctx.Err()
-		case k.partitionInput[i] <- struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}{resolvedTs: resolvedTs}:
+		default:
+		}
+		pResolvedTs := atomic.LoadUint64(&k.partitionResolvedTs[i])
+		if pResolvedTs < checkpointTs {
+			checkpointTs = pResolvedTs
 		}
 	}
-
-	// waiting for all row events are sent to mq producer
-flushLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			return 0, ctx.Err()
-		case <-k.resolvedReceiver.C:
-			for i := 0; i < int(k.partitionNum); i++ {
-				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
-					continue flushLoop
-				}
-			}
-			break flushLoop
-		}
-	}
-	err := k.mqProducer.Flush(ctx)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	k.checkpointTs = resolvedTs
 	k.statistics.PrintStatus(ctx)
-	return k.checkpointTs, nil
+	return checkpointTs, nil
+}
+
+func (k *mqSink) updateCheckPointTs() {
+	checkpointTs := k.resolvedTs
+	for i := 0; i < int(k.partitionNum); i++ {
+		pResolvedTs := atomic.LoadUint64(&k.partitionResolvedTs[i])
+		if pResolvedTs < checkpointTs {
+			checkpointTs = pResolvedTs
+		}
+	}
+	atomic.StoreUint64(&k.checkpointTs, checkpointTs)
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -267,8 +274,14 @@ func (k *mqSink) Barrier(cxt context.Context) error {
 }
 
 func (k *mqSink) run(ctx context.Context) error {
-	defer k.resolvedReceiver.Stop()
+	defer func() {
+		for _, receiver := range k.resolvedReceivers {
+			receiver.Stop()
+		}
+	}()
+
 	wg, ctx := errgroup.WithContext(ctx)
+
 	for i := int32(0); i < k.partitionNum; i++ {
 		partition := i
 		wg.Go(func() error {
@@ -281,12 +294,11 @@ func (k *mqSink) run(ctx context.Context) error {
 const batchSizeLimit = 4 * 1024 * 1024 // 4MB
 
 func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
-	input := k.partitionInput[partition]
 	encoder, err := k.encoderBuilder.Build(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	tick := time.NewTicker(500 * time.Millisecond)
+	tick := time.NewTicker(200 * time.Millisecond)
 	defer tick.Stop()
 
 	flushToProducer := func(op codec.EncoderResult) error {
@@ -314,35 +326,47 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			return thisBatchSize, nil
 		})
 	}
+
 	for {
-		var e mqEvent
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-tick.C:
+			if err := k.flushPartitionCache(encoder, partition, flushToProducer); err != nil {
+				return errors.Trace(err)
+			}
 			if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
 				return errors.Trace(err)
 			}
 			continue
-		case e = <-input:
-		}
-		if e.row == nil {
-			if e.resolvedTs != 0 {
-				op, err := encoder.AppendResolvedEvent(e.resolvedTs)
-				if err != nil {
-					return errors.Trace(err)
-				}
-
-				if err := flushToProducer(op); err != nil {
-					return errors.Trace(err)
-				}
-
-				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
-				k.resolvedNotifier.Notify()
+		case <-k.resolvedReceivers[partition].C:
+			resolvedTs := atomic.LoadUint64(&k.resolvedTs)
+			op, err := encoder.AppendResolvedEvent(resolvedTs)
+			if err != nil {
+				return errors.Trace(err)
 			}
-			continue
+			if err := k.flushPartitionCache(encoder, partition, flushToProducer); err != nil {
+				return errors.Trace(err)
+			}
+			if err := flushToProducer(op); err != nil {
+				return errors.Trace(err)
+			}
+			log.Info("update partition resolved ts")
+			atomic.StoreUint64(&k.partitionResolvedTs[partition], resolvedTs)
+			k.updateCheckPointTs()
 		}
-		op, err := encoder.AppendRowChangedEvent(e.row)
+	}
+}
+
+func (k *mqSink) flushPartitionCache(encoder codec.EventBatchEncoder, partition int32, flushToProducer func(op codec.EncoderResult) error) error {
+	k.cacheMu[partition].Lock()
+	// log.Info("partition length", zap.Int("l", len(k.partitionCache)))
+	rows := k.partitionCache[partition]
+	k.partitionCache[partition] = k.partitionCache[partition][:0]
+	k.cacheMu[partition].Unlock()
+
+	for _, row := range rows {
+		op, err := encoder.AppendRowChangedEvent(row)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -351,12 +375,13 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			op = codec.EncoderNeedAsyncWrite
 		}
 
-		if encoder.Size() >= batchSizeLimit || op != codec.EncoderNoOperation {
+		if op != codec.EncoderNoOperation {
 			if err := flushToProducer(op); err != nil {
 				return errors.Trace(err)
 			}
 		}
 	}
+	return nil
 }
 
 func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, op codec.EncoderResult, partition int32) error {

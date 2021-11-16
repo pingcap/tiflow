@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
@@ -93,7 +94,8 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	c.Assert(err, check.IsNil)
 	checkpointTs, err := sink.FlushRowChangedEvents(ctx, uint64(120))
 	c.Assert(err, check.IsNil)
-	c.Assert(checkpointTs, check.Equals, uint64(120))
+	c.Assert(checkpointTs, check.Equals, uint64(0))
+	time.Sleep(1 * time.Second)
 	// flush older resolved ts
 	checkpointTs, err = sink.FlushRowChangedEvents(ctx, uint64(110))
 	c.Assert(err, check.IsNil)
