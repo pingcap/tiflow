@@ -21,8 +21,6 @@ import (
 )
 
 // outputBuffer a struct that facilitate leveldb table sorter.
-// TODO remove unused lint
-//nolint:unused
 type outputBuffer struct {
 	// A slice of keys need to be deleted.
 	deleteKeys []message.Key
@@ -32,8 +30,6 @@ type outputBuffer struct {
 	advisedCapacity int
 }
 
-// TODO remove unused lint
-//nolint:unused
 func newOutputBuffer(advisedCapacity int) *outputBuffer {
 	return &outputBuffer{
 		deleteKeys:      make([]message.Key, 0, advisedCapacity),
@@ -43,8 +39,6 @@ func newOutputBuffer(advisedCapacity int) *outputBuffer {
 }
 
 // maybeShrink try to shrink slices to the advised capacity.
-// TODO remove unused lint
-//nolint:unused
 func (b *outputBuffer) maybeShrink() {
 	if len(b.deleteKeys) < b.advisedCapacity {
 		if cap(b.deleteKeys) > b.advisedCapacity {
@@ -64,8 +58,6 @@ func (b *outputBuffer) maybeShrink() {
 
 // In place left shift resolved events slice. After the call,
 // `index` will become the first element in the slice
-// TODO remove unused lint
-//nolint:unused
 func (b *outputBuffer) shiftResolvedEvents(index int) {
 	if index > len(b.resolvedEvents) {
 		log.Panic("index out of range", zap.Int("len", len(b.resolvedEvents)))
@@ -83,8 +75,6 @@ func (b *outputBuffer) shiftResolvedEvents(index int) {
 }
 
 // appendResolvedEvent appends resolved events to the buffer.
-// TODO remove unused lint
-//nolint:unused
 func (b *outputBuffer) appendResolvedEvent(event *model.PolymorphicEvent) {
 	if len(b.resolvedEvents) > 0 {
 		if b.resolvedEvents[0].CRTs != event.CRTs {
@@ -97,22 +87,16 @@ func (b *outputBuffer) appendResolvedEvent(event *model.PolymorphicEvent) {
 }
 
 // appendDeleteKey appends to-be-deleted keys to the buffer.
-// TODO remove unused lint
-//nolint:unused
 func (b *outputBuffer) appendDeleteKey(key message.Key) {
 	b.deleteKeys = append(b.deleteKeys, key)
 }
 
 // resetDeleteKey reset deleteKeys to a zero len slice.
-// TODO remove unused lint
-//nolint:unused
 func (b *outputBuffer) resetDeleteKey() {
 	b.deleteKeys = b.deleteKeys[:0]
 }
 
 // len returns the length of resolvedEvents and delete keys.
-// TODO remove unused lint
-//nolint:unused
 func (b *outputBuffer) len() (int, int) {
 	return len(b.resolvedEvents), len(b.deleteKeys)
 }
