@@ -71,7 +71,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 			"comment":      "测试",
 			"blob":         string(encodedBytes),
 			"binaryString": "Chengdu International Airport",
-			"binaryBlob":   "儒雅随和",
+			"binaryBlob":   "熊猫基地",
 		},
 	})
 	c.Assert(msg.Old, check.DeepEquals, []map[string]interface{}{
@@ -82,7 +82,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 			"comment":      "测试",
 			"blob":         string(encodedBytes),
 			"binaryString": "Chengdu International Airport",
-			"binaryBlob":   "儒雅随和",
+			"binaryBlob":   "熊猫基地",
 		},
 	})
 
@@ -110,7 +110,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 		"comment":      "测试",
 		"blob":         string(encodedBytes),
 		"binaryString": "Chengdu International Airport",
-		"binaryBlob":   "儒雅随和",
+		"binaryBlob":   "熊猫基地",
 	}
 
 	for _, encodeEnable := range []bool{false, true} {
@@ -350,7 +350,7 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
-		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("儒雅随和"), Flag: model.BinaryFlag},
+		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("熊猫基地"), Flag: model.BinaryFlag},
 	},
 	PreColumns: []*model.Column{
 		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
@@ -359,7 +359,7 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
-		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("儒雅随和"), Flag: model.BinaryFlag},
+		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("熊猫基地"), Flag: model.BinaryFlag},
 	},
 }
 
