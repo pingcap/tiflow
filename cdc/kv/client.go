@@ -334,7 +334,8 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grp
 
 // Close CDCClient
 func (c *CDCClient) Close() error {
-	c.regionCache.Close()
+	// make sure regionCache is only closed once
+	closeRegionCacheInstance(c.regionCache)
 
 	return nil
 }

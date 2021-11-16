@@ -21,14 +21,21 @@ import (
 )
 
 var (
-	regionCacheInstance *tikv.RegionCache
-	regionCacheOnce     sync.Once
+	regionCacheInstance  *tikv.RegionCache
+	regionCacheInitOnce  sync.Once
+	regionCacheCloseOnce sync.Once
 )
 
 func getRegionCacheInstance(pd pd.Client) *tikv.RegionCache {
-	regionCacheOnce.Do(func() {
+	regionCacheInitOnce.Do(func() {
 		regionCacheInstance = tikv.NewRegionCache(pd)
 	})
 
 	return regionCacheInstance
+}
+
+func closeRegionCacheInstance(rc *tikv.RegionCache) {
+	regionCacheCloseOnce.Do(func() {
+		rc.Close()
+	})
 }

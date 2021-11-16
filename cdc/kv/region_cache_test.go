@@ -32,8 +32,22 @@ func TestRegionCacheSingleton(t *testing.T) {
 	for i := 0; i < N; i++ {
 		v := getRegionCacheInstance(pdClient)
 		if v != rc {
-			t.Fatalf("regioncache singleton is not the same")
+			t.Fatalf("regionCache singleton is not the same")
 		}
+	}
+}
+
+func TestRegionCacheClose(t *testing.T) {
+	const N = 10000
+	_, _, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
+	if err != nil {
+		t.Error(err)
+	}
+
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	rc := getRegionCacheInstance(pdClient)
+	for i := 0; i < N; i++ {
+		closeRegionCacheInstance(rc)
 	}
 }
 
