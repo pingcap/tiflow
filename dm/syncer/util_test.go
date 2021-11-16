@@ -20,6 +20,8 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	_ "github.com/pingcap/tidb/types/parser_driver"
+
+	"github.com/pingcap/ticdc/dm/relay"
 )
 
 var _ = Suite(&testUtilSuite{})
@@ -91,20 +93,20 @@ func (t *testUtilSuite) TestGetTableByDML(c *C) {
 
 func (t *testUtilSuite) TestToBinlogType(c *C) {
 	testCases := []struct {
-		enableRelay bool
-		tp          BinlogType
+		relay relay.Process
+		tp    BinlogType
 	}{
 		{
-			true,
+			&relay.Relay{},
 			LocalBinlog,
 		}, {
-			false,
+			nil,
 			RemoteBinlog,
 		},
 	}
 
 	for _, testCase := range testCases {
-		tp := toBinlogType(testCase.enableRelay)
+		tp := toBinlogType(testCase.relay)
 		c.Assert(tp, Equals, testCase.tp)
 	}
 }
