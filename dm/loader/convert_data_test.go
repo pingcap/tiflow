@@ -168,7 +168,7 @@ func (t *testConvertDataSuite) TestParseTable(c *C) {
 	r, err := router.NewTableRouter(false, rules)
 	c.Assert(err, IsNil)
 
-	tableInfo, err := parseTable(tcontext.Background(), r, "test1", "t2", "./dumpfile/test1.t2-schema.sql", "ANSI_QUOTES", "")
+	tableInfo, err := parseTable(tcontext.Background(), r, "test1", "t2", "./dumpfile/test1.t2-schema.sql", "ANSI_QUOTES", "source-mysql-01")
 	c.Assert(err, IsNil)
 	c.Assert(tableInfo, DeepEquals, expectedTableInfo)
 }
@@ -196,7 +196,7 @@ func (t *testConvertDataSuite) TestParseTableWithGeneratedColumn(c *C) {
 	r, err := router.NewTableRouter(false, rules)
 	c.Assert(err, IsNil)
 
-	tableInfo, err := parseTable(tcontext.Background(), r, "test1", "t3", "./dumpfile/test1.t3-schema.sql", "", "")
+	tableInfo, err := parseTable(tcontext.Background(), r, "test1", "t3", "./dumpfile/test1.t3-schema.sql", "", "source-mysql-01")
 	c.Assert(err, IsNil)
 	c.Assert(tableInfo, DeepEquals, expectedTableInfo)
 }
