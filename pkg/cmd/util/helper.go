@@ -94,24 +94,41 @@ func findProxyFields() []zap.Field {
 
 // StrictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
 // into the Config struct, issue an error and stop the server from starting.
-func StrictDecodeFile(path, component string, cfg interface{}) error {
+func StrictDecodeFile(path, component string, cfg interface{}, ignoreCheckItems ...string) error {
 	metaData, err := toml.DecodeFile(path, cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
+	// check if item is a ignoreCheckItem
+	hasIgnoreItem := func(item []string) bool {
+		for _, ignoreCheckItem := range ignoreCheckItems {
+			if item[0] == ignoreCheckItem {
+				return true
+			}
+		}
+		return false
+	}
+
 	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
 		var b strings.Builder
-		for i, item := range undecoded {
-			if i != 0 {
+		hasUnknownConfigSize := 0
+		for _, item := range undecoded {
+			if hasIgnoreItem(item) {
+				continue
+			}
+
+			if hasUnknownConfigSize > 0 {
 				b.WriteString(", ")
 			}
 			b.WriteString(item.String())
+			hasUnknownConfigSize++
 		}
-		err = errors.Errorf("component %s's config file %s contained unknown configuration options: %s",
-			component, path, b.String())
+		if hasUnknownConfigSize > 0 {
+			err = errors.Errorf("component %s's config file %s contained unknown configuration options: %s",
+				component, path, b.String())
+		}
 	}
-
 	return errors.Trace(err)
 }
 
