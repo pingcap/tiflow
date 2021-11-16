@@ -15,7 +15,6 @@ package relay
 
 import (
 	"context"
-	"testing"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
@@ -26,10 +25,6 @@ import (
 )
 
 var _ = check.Suite(&testRemoteReaderSuite{})
-
-func TestRemoteReaderSuite(t *testing.T) {
-	check.TestingT(t)
-}
 
 type testRemoteReaderSuite struct{}
 
