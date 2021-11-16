@@ -144,7 +144,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 	cfg := config.GetDefaultServerConfig()
 
 	if len(o.serverConfigFilePath) > 0 {
-		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", cfg); err != nil {
+		// strict decode config file, but ignore debug item
+		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", cfg, config.DebugConfigurationItem); err != nil {
 			return err
 		}
 
