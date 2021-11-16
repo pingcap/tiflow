@@ -132,6 +132,105 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 	wg.Wait()
 }
 
+func (s *mockEntrySorterSuite) TestEntrySorterNonBlocking(c *check.C) {
+	defer testleak.AfterTest(c)()
+	testCases := []struct {
+		input      []*model.RawKVEntry
+		resolvedTs uint64
+		expect     []*model.RawKVEntry
+	}{
+		{
+			input: []*model.RawKVEntry{
+				{CRTs: 1, OpType: model.OpTypePut},
+				{CRTs: 2, OpType: model.OpTypePut},
+				{CRTs: 4, OpType: model.OpTypeDelete},
+				{CRTs: 2, OpType: model.OpTypeDelete},
+			},
+			resolvedTs: 0,
+			expect: []*model.RawKVEntry{
+				{CRTs: 0, OpType: model.OpTypeResolved},
+			},
+		},
+		{
+			input: []*model.RawKVEntry{
+				{CRTs: 3, OpType: model.OpTypePut},
+				{CRTs: 2, OpType: model.OpTypePut},
+				{CRTs: 5, OpType: model.OpTypePut},
+			},
+			resolvedTs: 3,
+			expect: []*model.RawKVEntry{
+				{CRTs: 1, OpType: model.OpTypePut},
+				{CRTs: 2, OpType: model.OpTypeDelete},
+				{CRTs: 2, OpType: model.OpTypePut},
+				{CRTs: 2, OpType: model.OpTypePut},
+				{CRTs: 3, OpType: model.OpTypePut},
+				{CRTs: 3, OpType: model.OpTypeResolved},
+			},
+		},
+		{
+			input:      []*model.RawKVEntry{},
+			resolvedTs: 3,
+			expect:     []*model.RawKVEntry{{CRTs: 3, OpType: model.OpTypeResolved}},
+		},
+		{
+			input: []*model.RawKVEntry{
+				{CRTs: 7, OpType: model.OpTypePut},
+			},
+			resolvedTs: 6,
+			expect: []*model.RawKVEntry{
+				{CRTs: 4, OpType: model.OpTypeDelete},
+				{CRTs: 5, OpType: model.OpTypePut},
+				{CRTs: 6, OpType: model.OpTypeResolved},
+			},
+		},
+		{
+			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
+			resolvedTs: 6,
+			expect: []*model.RawKVEntry{
+				{CRTs: 6, OpType: model.OpTypeResolved},
+			},
+		},
+		{
+			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
+			resolvedTs: 8,
+			expect: []*model.RawKVEntry{
+				{CRTs: 7, OpType: model.OpTypeDelete},
+				{CRTs: 7, OpType: model.OpTypeDelete},
+				{CRTs: 7, OpType: model.OpTypePut},
+				{CRTs: 8, OpType: model.OpTypeResolved},
+			},
+		},
+		{
+			input:      []*model.RawKVEntry{},
+			resolvedTs: 15,
+			expect: []*model.RawKVEntry{
+				{CRTs: 15, OpType: model.OpTypeResolved},
+			},
+		},
+	}
+	es := NewEntrySorter()
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := es.Run(ctx)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+	}()
+	for _, tc := range testCases {
+		for _, entry := range tc.input {
+			c.Assert(es.TryAddEntry(ctx, model.NewPolymorphicEvent(entry)), check.IsTrue)
+		}
+		c.Assert(es.TryAddEntry(ctx, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs)), check.IsTrue)
+		for i := 0; i < len(tc.expect); i++ {
+			e := <-es.Output()
+			c.Check(e.RawKV, check.DeepEquals, tc.expect[i])
+		}
+	}
+	cancel()
+	wg.Wait()
+}
+
 func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 	defer testleak.AfterTest(c)()
 	es := NewEntrySorter()

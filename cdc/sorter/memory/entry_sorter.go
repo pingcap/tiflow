@@ -173,6 +173,11 @@ func (es *EntrySorter) AddEntry(ctx context.Context, entry *model.PolymorphicEve
 	es.lock.Unlock()
 }
 
+func (es *EntrySorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) bool {
+	es.AddEntry(ctx, entry)
+	return true
+}
+
 // Output returns the sorted raw kv output channel
 func (es *EntrySorter) Output() <-chan *model.PolymorphicEvent {
 	return es.outputCh

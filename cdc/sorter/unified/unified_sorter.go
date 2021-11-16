@@ -281,6 +281,23 @@ func (s *Sorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 	}
 }
 
+// TryAddEntry implements the EventSorter interface
+func (s *Sorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-s.closeCh:
+		return false
+	default:
+	}
+	select {
+	case s.inputCh <- entry:
+		return true
+	default:
+		return false
+	}
+}
+
 // Output implements the EventSorter interface
 func (s *Sorter) Output() <-chan *model.PolymorphicEvent {
 	return s.outputCh
