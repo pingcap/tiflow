@@ -98,6 +98,8 @@ func (s *System) CleanerRouter() *actor.Router {
 	return s.cleanRouter
 }
 
+// broadcase messages to actors in the router.
+// Caveats it may lose messages quietly.
 func (s *System) broadcast(ctx context.Context, router *actor.Router, msg message.Message) {
 	dbCount := s.cfg.LevelDB.Count
 	for id := 0; id < dbCount; id++ {
