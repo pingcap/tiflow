@@ -80,8 +80,6 @@ type SourceWorker struct {
 
 	startedRelayBySourceCfg bool
 
-	startedRelayBySourceCfg bool
-
 	taskStatusChecker TaskStatusChecker
 
 	etcdClient *clientv3.Client

@@ -3166,6 +3166,18 @@ description = ""
 workaround = "If you intend to bind the source with worker, you can stop-relay for current source."
 tags = ["internal", "medium"]
 
+[error.DM-scheduler-46028]
+message = "the source has `start-relay` with worker name for workers %v, so it can't `start-relay` without worker name now"
+description = ""
+workaround = "Please stop all relay workers first, or specify worker name for `start-relay`."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46029]
+message = "the source has `start-relay` with worker name for workers %v, so it can't `stop-relay` without worker name now"
+description = ""
+workaround = "Please specify worker names for `start-relay`."
+tags = ["internal", "low"]
+
 [error.DM-dmctl-48001]
 message = "can not create grpc connection"
 description = ""
