@@ -24,7 +24,7 @@ function test_cant_dail_upstream() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	kill_dm_worker
 
@@ -57,7 +57,7 @@ function test_cant_dail_downstream() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	dmctl_start_task_standalone $cur/conf/dm-task.yaml "--remove-meta"
 
 	kill_dm_worker
@@ -100,7 +100,7 @@ function test_kill_dump_connection() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID1" \
@@ -146,7 +146,7 @@ function run() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 3
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"transfer-source $SOURCE_ID1 worker1" \
 		"\"result\": true" 1

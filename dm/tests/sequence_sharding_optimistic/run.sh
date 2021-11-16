@@ -37,7 +37,7 @@ run() {
 		grep 'source' | awk -F: '{print $2}' | cut -d'"' -f 2)
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $worker1bound worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	# try to get schema for the table, the subtask has not started.
 	curl -X PUT ${API_URL} -d '{"op":1, "task":"sequence_sharding_optimistic", "sources": ["mysql-replica-01"], "database":"sharding_seq_opt", "table":"t1"}' >${WORK_DIR}/get_schema.log

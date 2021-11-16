@@ -112,7 +112,7 @@ function start_relay() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s mysql-replica-02 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 }
 
 function gen_full_data() {

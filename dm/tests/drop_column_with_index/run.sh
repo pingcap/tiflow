@@ -28,7 +28,7 @@ function run() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	# start DM task. don't check error because it will meet injected error soon
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
