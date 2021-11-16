@@ -37,7 +37,6 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay/transformer"
 )
 
 var _ = Suite(&testRelaySuite{})
@@ -123,16 +122,11 @@ type mockWriter struct {
 	latestEvent *replication.BinlogEvent
 }
 
-func (w *mockWriter) Start() error {
-	return nil
-}
-
 func (w *mockWriter) Close() error {
 	return nil
 }
 
-func (w *mockWriter) Recover(ctx context.Context) (RecoverResult, error) {
-	return RecoverResult{}, nil
+func (w *mockWriter) Init(relayDir, filename string) {
 }
 
 func (w *mockWriter) WriteEvent(ev *replication.BinlogEvent) (WResult, error) {
@@ -404,11 +398,11 @@ func genBinlogEventsWithGTIDs(c *C, flavor string, previousGTIDSet, latestGTID1,
 func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// NOTE: we can test metrics later.
 	var (
-		reader2      = &mockReader{}
-		transformer2 = transformer.NewTransformer(parser.New())
-		writer2      = &mockWriter{}
-		relayCfg     = newRelayCfg(c, gmysql.MariaDBFlavor)
-		r            = NewRelay(relayCfg).(*Relay)
+		reader2  = &mockReader{}
+		parser2  = parser.New()
+		writer2  = &mockWriter{}
+		relayCfg = newRelayCfg(c, gmysql.MariaDBFlavor)
+		r        = NewRelay(relayCfg).(*Relay)
 
 		eventHeader = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
@@ -419,6 +413,9 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		fakeRotateEv, _ = event.GenRotateEvent(eventHeader, 0, []byte(binlogPos.Name), uint64(1234))
 		queryEv, _      = event.GenQueryEvent(eventHeader, 123, 0, 0, 0, nil, nil, []byte("CREATE DATABASE db_relay_test"))
 	)
+
+	r.writer = writer2
+
 	cfg := getDBConfigForTest()
 	conn.InitMockDB(c)
 	db, err := conn.DefaultDBProvider.Apply(cfg)
@@ -433,9 +430,6 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	queryEv2 := queryEv.Event.(*replication.QueryEvent)
 	queryEv2.GSet, _ = gmysql.ParseGTIDSet(relayCfg.Flavor, "1-2-3")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-
 	// reader return with an error
 	for _, reader2.err = range []error{
 		errors.New("reader error for testing"),
@@ -443,7 +437,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		replication.ErrSyncClosed,
 		replication.ErrNeedSyncAgain,
 	} {
-		_, handleErr := r.handleEvents(ctx, reader2, transformer2, writer2)
+		_, handleErr := r.handleEvents(context.Background(), reader2, parser2)
 		c.Assert(errors.Cause(handleErr), Equals, reader2.err)
 	}
 
@@ -453,7 +447,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// writer return error to force handleEvents return
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
-	_, err = r.handleEvents(ctx, reader2, transformer2, writer2)
+	_, err = r.handleEvents(context.Background(), reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, writer2.err)
 	// after handle rotate event, we save and flush the meta immediately
 	c.Assert(r.meta.Dirty(), Equals, false)
@@ -472,7 +466,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		lm := r.meta.(*LocalMeta)
 		backupUUID := lm.currentUUID
 		lm.currentUUID = "not exist"
-		_, err = r.handleEvents(ctx, reader2, transformer2, writer2)
+		_, err = r.handleEvents(context.Background(), reader2, parser2)
 		c.Assert(os.IsNotExist(errors.Cause(err)), Equals, true)
 		lm.currentUUID = backupUUID
 	}
@@ -484,14 +478,15 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// writer return error
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
-	_, err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
+	_, err = r.handleEvents(context.Background(), reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, writer2.err)
-	// after handle rotate event, we save and flush the meta immediately
 	c.Assert(r.meta.Dirty(), Equals, false)
 
 	// writer without error
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
 	writer2.err = nil
-	_, err = r.handleEvents(ctx, reader2, transformer2, writer2) // returned when ctx timeout
+	_, err = r.handleEvents(ctx, reader2, parser2) // returned when ctx timeout
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	// check written event
 	c.Assert(writer2.latestEvent, Equals, reader2.result.Event)
@@ -506,7 +501,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 
 	// write a QueryEvent with GTID sets
 	reader2.result.Event = queryEv
-	_, err = r.handleEvents(ctx2, reader2, transformer2, writer2)
+	_, err = r.handleEvents(ctx2, reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	// check written event
 	c.Assert(writer2.latestEvent, Equals, reader2.result.Event)
@@ -525,7 +520,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	}
 	ctx4, cancel4 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel4()
-	_, err = r.handleEvents(ctx4, reader2, transformer2, writer2)
+	_, err = r.handleEvents(ctx4, reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	select {
 	case <-ctx4.Done():
@@ -538,7 +533,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	writer2.result.Ignore = true
 	ctx5, cancel5 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel5()
-	_, err = r.handleEvents(ctx5, reader2, transformer2, writer2)
+	_, err = r.handleEvents(ctx5, reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	select {
 	case <-ctx5.Done():
@@ -637,4 +632,312 @@ func (t *testRelaySuite) verifyMetadata(c *C, r *Relay, uuidExpected string,
 	UUIDs, err := utils.ParseUUIDIndex(indexFile)
 	c.Assert(err, IsNil)
 	c.Assert(UUIDs, DeepEquals, uuidsExpected)
+}
+
+func (t *testRelaySuite) TestPreprocessEvent(c *C) {
+	type Case struct {
+		event  *replication.BinlogEvent
+		result preprocessResult
+	}
+	relay := &Relay{}
+	parser2 := parser.New()
+	var (
+		header = &replication.EventHeader{
+			Timestamp: uint32(time.Now().Unix()),
+			ServerID:  11,
+			Flags:     0x01,
+		}
+		latestPos  uint32 = 456789
+		gtidStr           = "9f61c5f9-1eef-11e9-b6cf-0242ac140003:5"
+		gtidSet, _        = gtid.ParserGTID(gmysql.MySQLFlavor, gtidStr)
+		schema            = []byte("test_schema")
+		cases             = make([]Case, 0, 10)
+	)
+
+	// RotateEvent
+	nextLogName := "mysql-bin.000123"
+	position := uint64(4)
+	ev, err := event.GenRotateEvent(header, latestPos, []byte(nextLogName), position)
+	c.Assert(err, IsNil)
+	cases = append(cases, Case{
+		event: ev,
+		result: preprocessResult{
+			LogPos:      uint32(position),
+			NextLogName: nextLogName,
+		},
+	})
+
+	// fake RotateEvent with zero timestamp
+	header.Timestamp = 0
+	ev, err = event.GenRotateEvent(header, latestPos, []byte(nextLogName), position)
+	c.Assert(err, IsNil)
+	cases = append(cases, Case{
+		event: ev,
+		result: preprocessResult{
+			LogPos:      uint32(position),
+			NextLogName: nextLogName,
+		},
+	})
+	header.Timestamp = uint32(time.Now().Unix()) // set to non-zero
+
+	// fake RotateEvent with zero logPos
+	fakeRotateHeader := *header
+	ev, err = event.GenRotateEvent(&fakeRotateHeader, latestPos, []byte(nextLogName), position)
+	c.Assert(err, IsNil)
+	ev.Header.LogPos = 0 // set to zero
+	cases = append(cases, Case{
+		event: ev,
+		result: preprocessResult{
+			LogPos:      uint32(position),
+			NextLogName: nextLogName,
+		},
+	})
+
+	// QueryEvent for DDL
+	query := []byte("CREATE TABLE test_tbl (c1 INT)")
+	ev, err = event.GenQueryEvent(header, latestPos, 0, 0, 0, nil, schema, query)
+	c.Assert(err, IsNil)
+	ev.Event.(*replication.QueryEvent).GSet = gtidSet.Origin() // set GTIDs manually
+	cases = append(cases, Case{
+		event: ev,
+		result: preprocessResult{
+			LogPos:      ev.Header.LogPos,
+			GTIDSet:     gtidSet.Origin(),
+			CanSaveGTID: true,
+		},
+	})
+
+	// QueryEvent for non-DDL
+	query = []byte("BEGIN")
+	ev, err = event.GenQueryEvent(header, latestPos, 0, 0, 0, nil, schema, query)
+	c.Assert(err, IsNil)
+	cases = append(cases, Case{
+		event: ev,
+		result: preprocessResult{
+			LogPos: ev.Header.LogPos,
+		},
+	})
+
+	// XIDEvent
+	xid := uint64(135)
+	ev, err = event.GenXIDEvent(header, latestPos, xid)
+	c.Assert(err, IsNil)
+	ev.Event.(*replication.XIDEvent).GSet = gtidSet.Origin() // set GTIDs manually
+	cases = append(cases, Case{
+		event: ev,
+		result: preprocessResult{
+			LogPos:      ev.Header.LogPos,
+			GTIDSet:     gtidSet.Origin(),
+			CanSaveGTID: true,
+		},
+	})
+
+	// GenericEvent, non-HEARTBEAT_EVENT
+	ev = &replication.BinlogEvent{Header: header, Event: &replication.GenericEvent{}}
+	cases = append(cases, Case{
+		event: ev,
+		result: preprocessResult{
+			LogPos: ev.Header.LogPos,
+		},
+	})
+
+	// GenericEvent, HEARTBEAT_EVENT
+	genericHeader := *header
+	ev = &replication.BinlogEvent{Header: &genericHeader, Event: &replication.GenericEvent{}}
+	ev.Header.EventType = replication.HEARTBEAT_EVENT
+	cases = append(cases, Case{
+		event: ev,
+		result: preprocessResult{
+			Ignore:       true,
+			IgnoreReason: ignoreReasonHeartbeat,
+			LogPos:       ev.Header.LogPos,
+		},
+	})
+
+	// other event type without LOG_EVENT_ARTIFICIAL_F
+	ev, err = event.GenCommonGTIDEvent(gmysql.MySQLFlavor, header.ServerID, latestPos, gtidSet)
+	c.Assert(err, IsNil)
+	cases = append(cases, Case{
+		event: ev,
+		result: preprocessResult{
+			LogPos: ev.Header.LogPos,
+		},
+	})
+
+	// other event type with LOG_EVENT_ARTIFICIAL_F
+	ev, err = event.GenCommonGTIDEvent(gmysql.MySQLFlavor, header.ServerID, latestPos, gtidSet)
+	c.Assert(err, IsNil)
+	ev.Header.Flags |= replication.LOG_EVENT_ARTIFICIAL_F
+	cases = append(cases, Case{
+		event: ev,
+		result: preprocessResult{
+			Ignore:       true,
+			IgnoreReason: ignoreReasonArtificialFlag,
+			LogPos:       ev.Header.LogPos,
+		},
+	})
+
+	for _, cs := range cases {
+		c.Assert(relay.preprocessEvent(cs.event, parser2), DeepEquals, cs.result)
+	}
+}
+
+func (t *testRelaySuite) TestRecoverMySQL(c *C) {
+	var (
+		relayDir           = c.MkDir()
+		filename           = "test-mysql-bin.000001"
+		parser2            = parser.New()
+		flavor             = gmysql.MySQLFlavor
+		previousGTIDSetStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14,406a3f61-690d-11e7-87c5-6c92bf46f384:123-456,53bfca22-690d-11e7-8a62-18ded7a37b78:1-495,686e1ab6-c47e-11e7-a42c-6c92bf46f384:234-567"
+		latestGTIDStr1     = "3ccc475b-2343-11e7-be21-6c0b84d59f30:14"
+		latestGTIDStr2     = "53bfca22-690d-11e7-8a62-18ded7a37b78:495"
+	)
+
+	r := NewRelay(&Config{Flavor: flavor}).(*Relay)
+
+	// different SIDs in GTID set
+	previousGTIDSet, err := gtid.ParserGTID(flavor, previousGTIDSetStr)
+	c.Assert(err, IsNil)
+	latestGTID1, err := gtid.ParserGTID(flavor, latestGTIDStr1)
+	c.Assert(err, IsNil)
+	latestGTID2, err := gtid.ParserGTID(flavor, latestGTIDStr2)
+	c.Assert(err, IsNil)
+
+	// generate binlog events
+	g, _, baseData := genBinlogEventsWithGTIDs(c, flavor, previousGTIDSet, latestGTID1, latestGTID2)
+
+	// expected latest pos/GTID set
+	expectedPos := gmysql.Position{Name: filename, Pos: uint32(len(baseData))}
+	// 3 DDL + 10 DML
+	expectedGTIDsStr := "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-17,53bfca22-690d-11e7-8a62-18ded7a37b78:1-505,406a3f61-690d-11e7-87c5-6c92bf46f384:123-456,686e1ab6-c47e-11e7-a42c-6c92bf46f384:234-567"
+	expectedGTIDs, err := gtid.ParserGTID(flavor, expectedGTIDsStr)
+	c.Assert(err, IsNil)
+
+	// write the events to a file
+	fullName := filepath.Join(relayDir, filename)
+	err = os.WriteFile(fullName, baseData, 0o644)
+	c.Assert(err, IsNil)
+
+	// try recover, but in fact do nothing
+	result, err := r.doRecovering(context.Background(), relayDir, filename, parser2)
+	c.Assert(err, IsNil)
+	c.Assert(result.Truncated, IsFalse)
+	c.Assert(result.LatestPos, DeepEquals, expectedPos)
+	c.Assert(result.LatestGTIDs, DeepEquals, expectedGTIDs)
+
+	// check file size, whether no recovering operation applied
+	fs, err := os.Stat(fullName)
+	c.Assert(err, IsNil)
+	c.Assert(fs.Size(), Equals, int64(len(baseData)))
+
+	// generate another transaction, DDL
+	extraEvents, extraData, err := g.GenDDLEvents("db2", "CREATE DATABASE db2")
+	c.Assert(err, IsNil)
+	c.Assert(extraEvents, HasLen, 2) // [GTID, Query]
+
+	// write an incomplete event to the file
+	corruptData := extraEvents[0].RawData[:len(extraEvents[0].RawData)-2]
+	f, err := os.OpenFile(fullName, os.O_WRONLY|os.O_APPEND, 0o644)
+	c.Assert(err, IsNil)
+	_, err = f.Write(corruptData)
+	c.Assert(err, IsNil)
+	c.Assert(f.Close(), IsNil)
+
+	// check file size, increased
+	fs, err = os.Stat(fullName)
+	c.Assert(err, IsNil)
+	c.Assert(fs.Size(), Equals, int64(len(baseData)+len(corruptData)))
+
+	// try recover, truncate the incomplete event
+	result, err = r.doRecovering(context.Background(), relayDir, filename, parser2)
+	c.Assert(err, IsNil)
+	c.Assert(result.Truncated, IsTrue)
+	c.Assert(result.LatestPos, DeepEquals, expectedPos)
+	c.Assert(result.LatestGTIDs, DeepEquals, expectedGTIDs)
+
+	// check file size, truncated
+	fs, err = os.Stat(fullName)
+	c.Assert(err, IsNil)
+	c.Assert(fs.Size(), Equals, int64(len(baseData)))
+
+	// write an incomplete transaction
+	f, err = os.OpenFile(fullName, os.O_WRONLY|os.O_APPEND, 0o644)
+	c.Assert(err, IsNil)
+	var extraLen int64
+	for i := 0; i < len(extraEvents)-1; i++ {
+		_, err = f.Write(extraEvents[i].RawData)
+		c.Assert(err, IsNil)
+		extraLen += int64(len(extraEvents[i].RawData))
+	}
+	c.Assert(f.Close(), IsNil)
+
+	// check file size, increased
+	fs, err = os.Stat(fullName)
+	c.Assert(err, IsNil)
+	c.Assert(fs.Size(), Equals, int64(len(baseData))+extraLen)
+
+	// try recover, truncate the incomplete transaction
+	result, err = r.doRecovering(context.Background(), relayDir, filename, parser2)
+	c.Assert(err, IsNil)
+	c.Assert(result.Truncated, IsTrue)
+	c.Assert(result.LatestPos, DeepEquals, expectedPos)
+	c.Assert(result.LatestGTIDs, DeepEquals, expectedGTIDs)
+
+	// check file size, truncated
+	fs, err = os.Stat(fullName)
+	c.Assert(err, IsNil)
+	c.Assert(fs.Size(), Equals, int64(len(baseData)))
+
+	// write an completed transaction
+	f, err = os.OpenFile(fullName, os.O_WRONLY|os.O_APPEND, 0o644)
+	c.Assert(err, IsNil)
+	for i := 0; i < len(extraEvents); i++ {
+		_, err = f.Write(extraEvents[i].RawData)
+		c.Assert(err, IsNil)
+	}
+	c.Assert(f.Close(), IsNil)
+
+	// check file size, increased
+	fs, err = os.Stat(fullName)
+	c.Assert(err, IsNil)
+	c.Assert(fs.Size(), Equals, int64(len(baseData)+len(extraData)))
+
+	// try recover, no operation applied
+	expectedPos.Pos += uint32(len(extraData))
+	// 4 DDL + 10 DML
+	expectedGTIDsStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-17,53bfca22-690d-11e7-8a62-18ded7a37b78:1-506,406a3f61-690d-11e7-87c5-6c92bf46f384:123-456,686e1ab6-c47e-11e7-a42c-6c92bf46f384:234-567"
+	expectedGTIDs, err = gtid.ParserGTID(flavor, expectedGTIDsStr)
+	c.Assert(err, IsNil)
+	result, err = r.doRecovering(context.Background(), relayDir, filename, parser2)
+	c.Assert(err, IsNil)
+	c.Assert(result.Truncated, IsFalse)
+	c.Assert(result.LatestPos, DeepEquals, expectedPos)
+	c.Assert(result.LatestGTIDs, DeepEquals, expectedGTIDs)
+
+	// compare file data
+	var allData bytes.Buffer
+	allData.Write(baseData)
+	allData.Write(extraData)
+	fileData, err := os.ReadFile(fullName)
+	c.Assert(err, IsNil)
+	c.Assert(fileData, DeepEquals, allData.Bytes())
+}
+
+func (t *testRelaySuite) TestRecoverMySQLNone(c *C) {
+	relayDir := c.MkDir()
+	parser2 := parser.New()
+
+	r := NewRelay(&Config{Flavor: gmysql.MySQLFlavor}).(*Relay)
+
+	// no file specified to recover
+	result, err := r.doRecovering(context.Background(), relayDir, "", parser2)
+	c.Assert(err, IsNil)
+	c.Assert(result.Truncated, IsFalse)
+
+	filename := "mysql-bin.000001"
+
+	// file not exist, no need to recover
+	result, err = r.doRecovering(context.Background(), relayDir, filename, parser2)
+	c.Assert(err, IsNil)
+	c.Assert(result.Truncated, IsFalse)
 }

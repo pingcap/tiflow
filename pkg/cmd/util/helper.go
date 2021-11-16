@@ -129,7 +129,6 @@ func StrictDecodeFile(path, component string, cfg interface{}, ignoreCheckItems 
 				component, path, b.String())
 		}
 	}
-
 	return errors.Trace(err)
 }
 

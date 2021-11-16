@@ -40,11 +40,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
-	metricSorterEventCount := sorter.SorterEventCount.MustCurryWith(map[string]string{
+	metricSorterEventCount := sorter.EventCount.MustCurryWith(map[string]string{
 		"capture":    captureAddr,
 		"changefeed": changefeedID,
 	})
-	metricSorterResolvedTsGauge := sorter.SorterResolvedTsGauge.WithLabelValues(captureAddr, changefeedID)
+	metricSorterResolvedTsGauge := sorter.ResolvedTsGauge.WithLabelValues(captureAddr, changefeedID)
 	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(captureAddr, changefeedID)
 	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(captureAddr, changefeedID)
 
@@ -64,7 +64,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			default:
 				// The task has not finished, so we give up.
 				// It does not matter because:
-				// 1) if the async workerpool has exited, it means the CDC process is exiting, UnifiedSorterCleanUp will
+				// 1) if the async workerpool has exited, it means the CDC process is exiting, CleanUp will
 				// take care of the temp files,
 				// 2) if the async workerpool is not exiting, the unfinished tasks will eventually be executed,
 				// and by that time, since the `onExit` have canceled them, they will not do any IO and clean up themselves.

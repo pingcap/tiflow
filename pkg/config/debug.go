@@ -13,7 +13,7 @@
 
 package config
 
-// DebugConfig represents config for ticdc debug feature
+// DebugConfig represents config for ticdc unexposed feature configurations
 type DebugConfig struct {
 	// identify if the table actor is enabled for table pipeline
 	EnableTableActor bool `toml:"enable-table-actor" json:"enable-table-actor"`

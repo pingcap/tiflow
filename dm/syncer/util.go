@@ -26,10 +26,11 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/relay"
 )
 
-func toBinlogType(enableRelay bool) BinlogType {
-	if enableRelay {
+func toBinlogType(relay relay.Process) BinlogType {
+	if relay != nil {
 		return LocalBinlog
 	}
 

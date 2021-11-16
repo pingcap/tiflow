@@ -50,7 +50,7 @@ type sorterNode struct {
 
 	mounter entry.Mounter
 
-	wg     *errgroup.Group
+	eg     *errgroup.Group
 	cancel context.CancelFunc
 
 	// The latest resolved ts that sorter has received.
@@ -81,7 +81,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 }
 
 func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error {
-	n.wg = wg
+	n.eg = wg
 	if tableActorRouter != nil {
 		n.isTableActorMode = true
 		n.tableActorRouter = tableActorRouter
@@ -99,7 +99,7 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 				zap.String("changefeed-id", info.ID), zap.String("table-name", n.tableName))
 		}
 		sortDir := info.Info.SortDir
-		err := unified.UnifiedSorterCheckDir(sortDir)
+		err := unified.CheckDir(sortDir)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -113,7 +113,7 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 	failpoint.Inject("ProcessorAddTableError", func() {
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
-	n.wg.Go(func() error {
+	n.eg.Go(func() error {
 		if !n.isTableActorMode {
 			ctx.(pipeline.NodeContext).Throw(errors.Trace(sorter.Run(stdCtx)))
 		} else {
@@ -125,7 +125,7 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 		}
 		return nil
 	})
-	n.wg.Go(func() error {
+	n.eg.Go(func() error {
 		// Since the flowController is implemented by `Cond`, it is not cancelable
 		// by a context. We need to listen on cancellation and aborts the flowController
 		// manually.
@@ -133,7 +133,7 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 		n.flowController.Abort()
 		return nil
 	})
-	n.wg.Go(func() error {
+	n.eg.Go(func() error {
 		lastSentResolvedTs := uint64(0)
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
@@ -275,7 +275,7 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
-	return n.wg.Wait()
+	return n.eg.Wait()
 }
 
 func (n *sorterNode) ResolvedTs() model.Ts {

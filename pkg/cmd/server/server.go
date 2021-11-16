@@ -131,7 +131,7 @@ func (o *options) run(cmd *cobra.Command) error {
 		return errors.Annotate(err, "run server")
 	}
 	server.Close()
-	unified.UnifiedSorterCleanUp()
+	unified.CleanUp()
 	log.Info("cdc server exits successfully")
 
 	return nil
@@ -144,7 +144,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 	cfg := config.GetDefaultServerConfig()
 
 	if len(o.serverConfigFilePath) > 0 {
-		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", cfg, "debug"); err != nil {
+		// strict decode config file, but ignore debug item
+		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", cfg, config.DebugConfigurationItem); err != nil {
 			return err
 		}
 

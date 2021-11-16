@@ -241,7 +241,6 @@ func (s *utilsSuite) TestIgnoreStrictCheckItem(c *check.C) {
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
 data-dir = "%+v"
-
 [unknown]
 max-size = 200
 max-days = 1
@@ -256,12 +255,10 @@ max-backups = 1
 
 	configContent = fmt.Sprintf(`
 data-dir = "%+v"
-
 [unknown]
 max-size = 200
 max-days = 1
 max-backups = 1
-
 [unknown2]
 max-size = 200
 max-days = 1

@@ -34,9 +34,8 @@ const (
 	heapCollectChSize = 128 // this should be not be too small, to guarantee IO concurrency
 )
 
-// UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
-//nolint:revive
-type UnifiedSorter struct {
+// Sorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
+type Sorter struct {
 	inputCh     chan *model.PolymorphicEvent
 	outputCh    chan *model.PolymorphicEvent
 	dir         string
@@ -55,13 +54,12 @@ type metricsInfo struct {
 
 type ctxKey struct{}
 
-// UnifiedSorterCheckDir checks whether the directory needed exists and is writable.
+// CheckDir checks whether the directory needed exists and is writable.
 // If it does not exist, we try to create one.
 // parameter: cfSortDir - the directory designated in changefeed's setting,
 // which will be overridden by a non-empty local setting of `sort-dir`.
 // TODO better way to organize this function after we obsolete chanegfeed setting's `sort-dir`
-//nolint:revive
-func UnifiedSorterCheckDir(cfSortDir string) error {
+func CheckDir(cfSortDir string) error {
 	dir := cfSortDir
 	sorterConfig := config.GetGlobalServerConfig().Sorter
 	if sorterConfig.SortDir != "" {
@@ -84,13 +82,13 @@ func UnifiedSorterCheckDir(cfSortDir string) error {
 	return nil
 }
 
-// NewUnifiedSorter creates a new UnifiedSorter
+// NewUnifiedSorter creates a new Sorter
 func NewUnifiedSorter(
 	dir string,
 	changeFeedID model.ChangeFeedID,
 	tableName string,
 	tableID model.TableID,
-	captureAddr string) (*UnifiedSorter, error) {
+	captureAddr string) (*Sorter, error) {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
@@ -108,7 +106,7 @@ func NewUnifiedSorter(
 	}
 
 	lazyInitWorkerPool()
-	return &UnifiedSorter{
+	return &Sorter{
 		inputCh:  make(chan *model.PolymorphicEvent, inputChSize),
 		outputCh: make(chan *model.PolymorphicEvent, outputChSize),
 		dir:      dir,
@@ -123,9 +121,8 @@ func NewUnifiedSorter(
 	}, nil
 }
 
-// UnifiedSorterCleanUp cleans up the files that might have been used.
-//nolint:revive
-func UnifiedSorterCleanUp() {
+// CleanUp cleans up the files that might have been used.
+func CleanUp() {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
@@ -146,7 +143,7 @@ func ResetGlobalPoolWithoutCleanup() {
 }
 
 // Run implements the EventSorter interface
-func (s *UnifiedSorter) Run(ctx context.Context) error {
+func (s *Sorter) Run(ctx context.Context) error {
 	failpoint.Inject("sorterDebug", func() {
 		log.Info("sorterDebug: Running Unified Sorter in debug mode")
 	})
@@ -275,7 +272,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 }
 
 // TryAddEntry implements the EventSorter interface
-func (s *UnifiedSorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) bool {
+func (s *Sorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) bool {
 	select {
 	case <-ctx.Done():
 	case <-s.closeCh:
@@ -287,7 +284,7 @@ func (s *UnifiedSorter) TryAddEntry(ctx context.Context, entry *model.Polymorphi
 }
 
 // AddEntry implements the EventSorter interface
-func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
+func (s *Sorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 	select {
 	case <-ctx.Done():
 		return
@@ -297,7 +294,7 @@ func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEv
 }
 
 // Output implements the EventSorter interface
-func (s *UnifiedSorter) Output() <-chan *model.PolymorphicEvent {
+func (s *Sorter) Output() <-chan *model.PolymorphicEvent {
 	return s.outputCh
 }
 
