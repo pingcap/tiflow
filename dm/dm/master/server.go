@@ -1735,9 +1735,12 @@ func (s *Server) getSourceRespsAfterOperation(ctx context.Context, taskName stri
 			defer wg.Done()
 			source1, _ := args[0].(string)
 			worker1, _ := args[1].(string)
-			workerCli := s.scheduler.GetWorkerBySource(source1)
-			if workerCli == nil && worker1 != "" {
+			var workerCli *scheduler.Worker
+			if worker1 != "" {
 				workerCli = s.scheduler.GetWorkerByName(worker1)
+			}
+			if workerCli == nil {
+				workerCli = s.scheduler.GetWorkerBySource(source1)
 			}
 			sourceResp := s.handleOperationResult(ctx, workerCli, taskName, source1, req)
 			sourceResp.Source = source1 // may return other source's ID during stop worker
@@ -2277,6 +2280,13 @@ func (s *Server) OperateRelay(ctx context.Context, req *pb.OperateRelayRequest) 
 		return resp2, nil
 	}
 	resp2.Result = true
+	// TODO: now we make sure req.Source isn't empty and len(req.Worker)>=1 in dmctl,
+	// we need refactor the logic here if this behavior changed in the future
+	sources := make([]string, len(req.Worker))
+	for i := range req.Worker {
+		sources[i] = req.Source
+	}
+	resp2.Sources = s.getSourceRespsAfterOperation(ctx, "", sources, req.Worker, req)
 	return resp2, nil
 }
 
