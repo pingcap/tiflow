@@ -1758,9 +1758,9 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 		// of course nothing, so we find the relay source from a better place
 		for source, workerM := range s.relayWorkers {
 			if _, ok2 := workerM[w.BaseInfo().Name]; ok2 {
-                lastRelaySource = source
-                break
-            }
+				lastRelaySource = source
+				break
+			}
 		}
 	}
 	w.ToFree()
