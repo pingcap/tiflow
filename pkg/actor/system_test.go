@@ -77,7 +77,7 @@ func TestMailboxSendAndSendB(t *testing.T) {
 	err = mb.Send(message.TickMessage())
 	require.True(t, strings.Contains(err.Error(), "mailbox is full"))
 
-	msg, ok := mb.tryReceive()
+	msg, ok := mb.Receive()
 	require.Equal(t, true, ok)
 	require.Equal(t, message.TickMessage(), msg)
 
@@ -100,7 +100,7 @@ func TestRouterSendAndSendB(t *testing.T) {
 	t.Parallel()
 	id := ID(0)
 	mb := NewMailbox(id, 1)
-	router := newRouter(t.Name())
+	router := NewRouter(t.Name())
 	err := router.insert(id, &proc{mb: mb})
 	require.Nil(t, err)
 	err = router.Send(id, message.TickMessage())
@@ -109,7 +109,7 @@ func TestRouterSendAndSendB(t *testing.T) {
 	err = router.Send(id, message.TickMessage())
 	require.True(t, strings.Contains(err.Error(), "mailbox is full"))
 
-	msg, ok := mb.tryReceive()
+	msg, ok := mb.Receive()
 	require.Equal(t, true, ok)
 	require.Equal(t, message.TickMessage(), msg)
 

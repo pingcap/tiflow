@@ -16,16 +16,11 @@ package relay
 import (
 	"context"
 	"errors"
-	"testing"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
 )
-
-func TestReaderRetrySuite(t *testing.T) {
-	TestingT(t)
-}
 
 var _ = Suite(&testReaderRetrySuite{})
 

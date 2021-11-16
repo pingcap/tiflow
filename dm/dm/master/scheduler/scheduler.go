@@ -101,9 +101,9 @@ type Scheduler struct {
 
 	// all bound relationship, source ID -> worker.
 	// add:
-	// - when bounding a source to a worker.
+	// - when bind a source to a worker, in updateStatusToBound
 	// delete:
-	// - when unbounding a source from a worker.
+	// - when unbind a source from a worker, in updateStatusToUnbound
 	// see `Cases trigger a source-to-worker bound try` above.
 	bounds map[string]*Worker
 
@@ -112,18 +112,19 @@ type Scheduler struct {
 	// add:
 	// - add source by user request (calling `AddSourceCfg`).
 	// - recover from etcd (calling `recoverWorkersBounds`).
-	// - when the bounding worker become offline.
+	// - when the bounding worker become offline, in updateStatusToUnbound.
 	// delete:
 	// - remove source by user request (calling `RemoveSourceCfg`).
-	// - when bounded the source to a worker.
+	// - when bounded the source to a worker, in updateStatusToBound.
 	unbounds map[string]struct{}
 
 	// a mirror of bounds whose element is not deleted when worker unbound. worker -> SourceBound
 	lastBound map[string]ha.SourceBound
 
+	// TODO: seems this memory status is useless.
 	// expectant relay stages for sources, source ID -> stage.
 	// add:
-	// - bound the source to a worker (at first time). // TODO: change this to add a relay-enabled source
+	// - bound the source to a worker (at first time).
 	// - recover from etcd (calling `recoverSources`).
 	// update:
 	// - update stage by user request (calling `UpdateExpectRelayStage`).
@@ -314,16 +315,11 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 
 	// 3. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg
+	s.unbounds[cfg.SourceID] = struct{}{}
 
 	// 4. try to bound it to a Free worker.
-	bounded, err := s.tryBoundForSource(cfg.SourceID)
-	if err != nil {
-		return err
-	} else if !bounded {
-		// 5. record the source as unbounded.
-		s.unbounds[cfg.SourceID] = struct{}{}
-	}
-	return nil
+	_, err = s.tryBoundForSource(cfg.SourceID)
+	return err
 }
 
 // UpdateSourceCfg update the upstream source config to the cluster.
@@ -429,7 +425,7 @@ func (s *Scheduler) RemoveSourceCfg(source string) error {
 	delete(s.expectRelayStages, source)
 
 	// 6. unbound for the source.
-	s.updateStatusForUnbound(source)
+	s.updateStatusToUnbound(source)
 
 	// 7. remove it from unbounds.
 	delete(s.unbounds, source)
@@ -499,30 +495,6 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 		ok           bool
 	)
 
-	updateBound := func(source string, worker *Worker, bound ha.SourceBound) {
-		if err := s.updateStatusForBound(worker, bound); err == nil {
-			delete(s.unbounds, source)
-		}
-		// TODO: if we failed here, etcd has been modified!! we should try this memory check then modify persistent data
-		// and revert if failed
-	}
-
-	updateUnbound := func(source string) {
-		s.updateStatusForUnbound(source)
-		s.unbounds[source] = struct{}{}
-	}
-
-	boundForSource := func(source string) error {
-		bounded, err := s.tryBoundForSource(source)
-		if err != nil {
-			return err
-		}
-		if bounded {
-			delete(s.unbounds, source)
-		}
-		return nil
-	}
-
 	s.logger.Info("transfer source and worker", zap.String("left worker", lworker), zap.String("left source", lsource), zap.String("right worker", rworker), zap.String("right source", rsource))
 
 	inputWorkers[0], inputWorkers[1] = lworker, rworker
@@ -573,7 +545,7 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	// update unbound sources
 	for _, sourceID := range inputSources {
 		if sourceID != "" {
-			updateUnbound(sourceID)
+			s.updateStatusToUnbound(sourceID)
 		}
 	}
 
@@ -595,7 +567,12 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	for i := range inputWorkers {
 		another := i ^ 1 // make use of XOR to flip 0 and 1
 		if inputWorkers[i] != "" && inputSources[another] != "" {
-			updateBound(inputSources[another], workers[i], bounds[i])
+			err := s.updateStatusToBound(workers[i], bounds[i])
+			// TODO: if we failed here, etcd has been modified!! we should try this memory check then modify persistent data
+			// and revert if failed
+			if err != nil {
+				s.logger.DPanic("failed to update status to bound, but has written etcd", zap.Error(err))
+			}
 		}
 	}
 
@@ -612,7 +589,7 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	for i := range inputSources {
 		another := i ^ 1 // make use of XOR to flip 0 and 1
 		if inputSources[i] != "" && inputWorkers[another] == "" {
-			if err := boundForSource(inputSources[i]); err != nil {
+			if _, err := s.tryBoundForSource(inputSources[i]); err != nil {
 				return err
 			}
 		}
@@ -660,11 +637,7 @@ func (s *Scheduler) TransferSource(source, worker string) error {
 		s.logger.Warn("in transfer source, found a free worker and not bound source, which should not happened",
 			zap.String("source", source),
 			zap.String("worker", worker))
-		err := s.boundSourceToWorker(source, w)
-		if err == nil {
-			delete(s.unbounds, source)
-		}
-		return err
+		return s.boundSourceToWorker(source, w)
 	}
 
 	// 4. if there's old worker, make sure it's not running
@@ -697,7 +670,7 @@ func (s *Scheduler) TransferSource(source, worker string) error {
 	if err2 := oldWorker.Unbound(); err2 != nil {
 		s.logger.DPanic("the oldWorker is get from s.bound, so there should not be an error", zap.Error(err2))
 	}
-	if err2 := s.updateStatusForBound(w, ha.NewSourceBound(source, worker)); err2 != nil {
+	if err2 := s.updateStatusToBound(w, ha.NewSourceBound(source, worker)); err2 != nil {
 		s.logger.DPanic("we have checked w.stage is free, so there should not be an error", zap.Error(err2))
 	}
 
@@ -1581,7 +1554,7 @@ func (s *Scheduler) recoverWorkersBounds(cli *clientv3.Client) (int64, error) {
 			if bound, ok := sbm[name]; ok {
 				// source bounds without source configuration should be deleted later
 				if _, ok := scm[bound.Source]; ok {
-					err2 = s.updateStatusForBound(w, bound)
+					err2 = s.updateStatusToBound(w, bound)
 					if err2 != nil {
 						// if etcd has saved KV that worker1 started relay for source1, but bound to source2,
 						// we remove the bound to avoid DM master leader failed to bootstrap
@@ -1827,7 +1800,7 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 	}
 
 	// 5. unbound for the source.
-	s.updateStatusForUnbound(bound.Source)
+	s.updateStatusToUnbound(bound.Source)
 
 	// 6. change the stage (from Free) to Offline.
 	w.ToOffline()
@@ -1835,15 +1808,8 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 	s.logger.Info("unbound the worker for source", zap.Stringer("bound", bound), zap.Stringer("event", ev))
 
 	// 7. try to bound the source to a Free worker again.
-	bounded, err := s.tryBoundForSource(bound.Source)
-	if err != nil {
-		return err
-	} else if !bounded {
-		// 8. record the source as unbounded.
-		s.unbounds[bound.Source] = struct{}{}
-	}
-
-	return nil
+	_, err = s.tryBoundForSource(bound.Source)
+	return err
 }
 
 // tryBoundForWorker tries to bind a source to the given worker. The order of picking source is
@@ -1918,17 +1884,7 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 		return false, nil
 	}
 
-	// 2. pop a source to bound, priority supported if needed later.
-	// DO NOT forget to push it back if fail to bound.
-	delete(s.unbounds, source)
-	defer func() {
-		if err != nil {
-			// push the source back.
-			s.unbounds[source] = struct{}{}
-		}
-	}()
-
-	// 3. try to bound them.
+	// 2. try to bound them.
 	err = s.boundSourceToWorker(source, w)
 	if err != nil {
 		return false, err
@@ -2048,13 +2004,19 @@ func (s *Scheduler) boundSourceToWorker(source string, w *Worker) error {
 	// 1. put the bound relationship into etcd.
 	var err error
 	bound := ha.NewSourceBound(source, w.BaseInfo().Name)
-	_, err = ha.PutSourceBound(s.etcdCli, bound)
+	sourceCfg, ok := s.sourceCfgs[source]
+	if ok && sourceCfg.EnableRelay {
+		stage := ha.NewRelayStage(pb.Stage_Running, source)
+		_, err = ha.PutRelayStageSourceBound(s.etcdCli, stage, bound)
+	} else {
+		_, err = ha.PutSourceBound(s.etcdCli, bound)
+	}
 	if err != nil {
 		return err
 	}
 
 	// 2. update the bound relationship in the scheduler.
-	err = s.updateStatusForBound(w, bound)
+	err = s.updateStatusToBound(w, bound)
 	if err != nil {
 		return err
 	}
@@ -2091,31 +2053,34 @@ func (s *Scheduler) deleteWorker(name string) {
 	metrics.RemoveWorkerState(w.baseInfo.Name)
 }
 
-// updateStatusForBound updates the in-memory status for bound, including:
+// updateStatusToBound updates the in-memory status for bound, including:
 // - update the stage of worker to `Bound`.
 // - record the bound relationship and last bound relationship in the scheduler.
+// - remove the unbound relationship in the scheduler.
 // this func is called after the bound relationship existed in etcd.
-// TODO: we could only let updateStatusForBound and updateStatusForUnbound to update s.unbounds/bounds/lastBound.
-func (s *Scheduler) updateStatusForBound(w *Worker, b ha.SourceBound) error {
+func (s *Scheduler) updateStatusToBound(w *Worker, b ha.SourceBound) error {
 	if err := w.ToBound(b); err != nil {
 		return err
 	}
 	s.bounds[b.Source] = w
 	s.lastBound[b.Worker] = b
+	delete(s.unbounds, b.Source)
 	return nil
 }
 
-// updateStatusForUnbound updates the in-memory status for unbound, including:
+// updateStatusToUnbound updates the in-memory status for unbound, including:
 // - update the stage of worker to `Free` or `Relay`.
 // - remove the bound relationship in the scheduler.
+// - record the unbound relationship in the scheduler.
 // this func is called after the bound relationship removed from etcd.
-func (s *Scheduler) updateStatusForUnbound(source string) {
+func (s *Scheduler) updateStatusToUnbound(source string) {
+	s.unbounds[source] = struct{}{}
 	w, ok := s.bounds[source]
 	if !ok {
 		return
 	}
 	if err := w.Unbound(); err != nil {
-		s.logger.DPanic("cannot updateStatusForUnbound", zap.Error(err))
+		s.logger.DPanic("cannot updateStatusToUnbound", zap.Error(err))
 	}
 	delete(s.bounds, source)
 }

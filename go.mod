@@ -9,6 +9,7 @@ require (
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/apache/pulsar-client-go v0.6.0
 	github.com/aws/aws-sdk-go v1.35.3
+	github.com/benbjohnson/clock v1.1.0
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chaos-mesh/go-sqlsmith v0.0.0-20211025024535-03ae33408684
@@ -43,7 +44,6 @@ require (
 	github.com/labstack/echo/v4 v4.6.1
 	github.com/lib/pq v1.3.0 // indirect
 	github.com/linkedin/goavro/v2 v2.9.8
-	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-colorable v0.1.11 // indirect
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect

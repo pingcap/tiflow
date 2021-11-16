@@ -19,7 +19,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
 	"time"
 
 	. "github.com/pingcap/check"
@@ -48,10 +47,6 @@ var _ = Suite(&testPurgerSuite{
 		Filename:   "mysql-bin.000003", // last in second sub dir
 	},
 })
-
-func TestPurgerSuite(t *testing.T) {
-	TestingT(t)
-}
 
 type testPurgerSuite struct {
 	uuids          []string
