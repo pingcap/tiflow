@@ -44,45 +44,45 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	c.Assert(msg.Table, check.Equals, "person")
 	c.Assert(msg.IsDDL, check.IsFalse)
 	c.Assert(msg.SQLType, check.DeepEquals, map[string]int32{
-		"id":         int32(JavaSQLTypeBIGINT),
-		"name":       int32(JavaSQLTypeVARCHAR),
-		"tiny":       int32(JavaSQLTypeSMALLINT),
-		"comment":    int32(JavaSQLTypeVARCHAR),
-		"blob":       int32(JavaSQLTypeBLOB),
-		"journalist": int32(JavaSQLTypeCHAR),
-		"elder":      int32(JavaSQLTypeVARCHAR),
+		"id":           int32(JavaSQLTypeBIGINT),
+		"name":         int32(JavaSQLTypeVARCHAR),
+		"tiny":         int32(JavaSQLTypeSMALLINT),
+		"comment":      int32(JavaSQLTypeVARCHAR),
+		"blob":         int32(JavaSQLTypeBLOB),
+		"binaryString": int32(JavaSQLTypeCHAR),
+		"binaryBlob":   int32(JavaSQLTypeVARCHAR),
 	})
 	c.Assert(msg.MySQLType, check.DeepEquals, map[string]string{
-		"id":         "int",
-		"name":       "varchar",
-		"tiny":       "tinyint",
-		"comment":    "text",
-		"blob":       "blob",
-		"journalist": "binary",
-		"elder":      "varbinary",
+		"id":           "int",
+		"name":         "varchar",
+		"tiny":         "tinyint",
+		"comment":      "text",
+		"blob":         "blob",
+		"binaryString": "binary",
+		"binaryBlob":   "varbinary",
 	})
 	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
 	c.Assert(err, check.IsNil)
 	c.Assert(msg.Data, check.DeepEquals, []map[string]interface{}{
 		{
-			"id":         "1",
-			"name":       "Bob",
-			"tiny":       "255",
-			"comment":    "测试",
-			"blob":       string(encodedBytes),
-			"journalist": "Sharon run so fast",
-			"elder":      "谈笑风生",
+			"id":           "1",
+			"name":         "Bob",
+			"tiny":         "255",
+			"comment":      "测试",
+			"blob":         string(encodedBytes),
+			"binaryString": "Chengdu International Airport",
+			"binaryBlob":   "儒雅随和",
 		},
 	})
 	c.Assert(msg.Old, check.DeepEquals, []map[string]interface{}{
 		{
-			"id":         "1",
-			"name":       "Alice",
-			"tiny":       "255",
-			"comment":    "测试",
-			"blob":       string(encodedBytes),
-			"journalist": "Sharon run so fast",
-			"elder":      "谈笑风生",
+			"id":           "1",
+			"name":         "Alice",
+			"tiny":         "255",
+			"comment":      "测试",
+			"blob":         string(encodedBytes),
+			"binaryString": "Chengdu International Airport",
+			"binaryBlob":   "儒雅随和",
 		},
 	})
 
@@ -104,13 +104,13 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
 	c.Assert(err, check.IsNil)
 	expected := map[string]interface{}{
-		"id":         "1",
-		"name":       "Bob",
-		"tiny":       "255",
-		"comment":    "测试",
-		"blob":       string(encodedBytes),
-		"journalist": "Sharon run so fast",
-		"elder":      "谈笑风生",
+		"id":           "1",
+		"name":         "Bob",
+		"tiny":         "255",
+		"comment":      "测试",
+		"blob":         string(encodedBytes),
+		"binaryString": "Chengdu International Airport",
+		"binaryBlob":   "儒雅随和",
 	}
 
 	for _, encodeEnable := range []bool{false, true} {
@@ -349,8 +349,8 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
 		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
-		{Name: "journalist", Type: mysql.TypeString, Value: "Sharon run so fast", Flag: model.BinaryFlag},
-		{Name: "elder", Type: mysql.TypeVarchar, Value: []byte("谈笑风生"), Flag: model.BinaryFlag},
+		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
+		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("儒雅随和"), Flag: model.BinaryFlag},
 	},
 	PreColumns: []*model.Column{
 		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
@@ -358,8 +358,8 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
 		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
-		{Name: "journalist", Type: mysql.TypeString, Value: "Sharon run so fast", Flag: model.BinaryFlag},
-		{Name: "elder", Type: mysql.TypeVarchar, Value: []byte("谈笑风生"), Flag: model.BinaryFlag},
+		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
+		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("儒雅随和"), Flag: model.BinaryFlag},
 	},
 }
 
