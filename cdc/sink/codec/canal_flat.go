@@ -490,7 +490,7 @@ func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEve
 		return nil, errors.Trace(err)
 	}
 	b.msg = nil
-	return canalFlatMessage2RowChangedEvent(data), nil
+	return canalFlatMessage2RowChangedEvent(data)
 }
 
 // NextDDLEvent implements the EventBatchDecoder interface
@@ -529,7 +529,7 @@ func (b *CanalFlatEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	return message.Extensions.WatermarkTs, nil
 }
 
-func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) *model.RowChangedEvent {
+func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*model.RowChangedEvent, error) {
 	result := new(model.RowChangedEvent)
 	result.CommitTs = flatMessage.getCommitTs()
 	result.Table = &model.TableName{
@@ -537,18 +537,27 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) *mo
 		Table:  *flatMessage.getTable(),
 	}
 
-	result.Columns = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(), flatMessage.getMySQLType())
-	result.PreColumns = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(), flatMessage.getMySQLType())
+	var err error
+	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(), flatMessage.getMySQLType())
+	if err != nil {
+		return nil, err
+	}
+	result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(), flatMessage.getMySQLType())
+	if err != nil {
+		return nil, err
+	}
 
-	return result
+	return result, nil
 }
 
-func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType map[string]string) []*model.Column {
+func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType map[string]string) ([]*model.Column, error) {
 	result := make([]*model.Column, 0, len(cols))
 	for name, value := range cols {
 		typeStr, ok := mysqlType[name]
 		if !ok {
-			log.Panic("mysql type does not found", zap.String("column name", name), zap.Any("mysqlType", mysqlType))
+			// this should not happen, else we have to check encoding for mysqlType.
+			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
+				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
 		// since canal-json format lost `Flag`, we cannot easily figure out whether it's binary,
 		// typeStr might not be a valid MysqlType, we have to convert them back.
@@ -556,18 +565,19 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 		typeStr = strings.Replace(typeStr, "binary", "char", 1)
 		tp, ok := str2MySQLType[typeStr]
 		if !ok {
-			log.Panic("mysql type does not found", zap.String("column name", name), zap.Any("mysqlType", mysqlType))
+			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
+				"mysql type does not found, column: %+v, type: %+v", name, tp)
 		}
 		col := NewColumn(value, tp).ToSinkColumn(name)
 		result = append(result, col)
 	}
 	if len(result) == 0 {
-		return nil
+		return nil, nil
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return strings.Compare(result[i].Name, result[j].Name) > 0
 	})
-	return result
+	return result, nil
 }
 
 func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEvent {
