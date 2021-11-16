@@ -332,14 +332,13 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		} else {
 			continue
 		}
-		// TODO: move column approximate bytes into package cdc/model.
-		const emptyColumnSize = int(unsafe.Sizeof(model.Column{}))
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
-			Name:             colName,
-			Type:             colInfo.Tp,
-			Value:            colValue,
-			Flag:             tableInfo.ColumnsFlag[colInfo.ID],
-			ApproximateBytes: colSize + emptyColumnSize,
+			Name:  colName,
+			Type:  colInfo.Tp,
+			Value: colValue,
+			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
+			// ApproximateBytes = column data size + column struct size
+			ApproximateBytes: colSize + sizeOfEmptyColumn,
 		}
 	}
 	return cols, nil
@@ -418,14 +417,24 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 var emptyBytes = make([]byte, 0)
 
 const (
+	sizeOfEmptyColumn = int(unsafe.Sizeof(model.Column{}))
 	sizeOfEmptyBytes  = int(unsafe.Sizeof(emptyBytes))
 	sizeOfEmptyString = int(unsafe.Sizeof(""))
-	sizeOfEmptyDatum  = int(unsafe.Sizeof(types.Datum{}))
 )
 
-func sizeOfDatumValue(d types.Datum) int {
+func sizeOfDatum(d types.Datum) int {
 	array := [...]types.Datum{d}
-	return int(types.EstimatedMemUsage(array[:], 1)) - sizeOfEmptyDatum
+	return int(types.EstimatedMemUsage(array[:], 1))
+}
+
+func sizeOfString(s string) int {
+	// string data size + string struct size.
+	return len(s) + sizeOfEmptyString
+}
+
+func sizeOfBytes(b []byte) int {
+	// bytes data size + bytes struct size.
+	return len(b) + sizeOfEmptyBytes
 }
 
 func formatColVal(datum types.Datum, tp byte) (
@@ -437,20 +446,21 @@ func formatColVal(datum types.Datum, tp byte) (
 	switch tp {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		v := datum.GetMysqlTime().String()
-		return v, len(v) + sizeOfEmptyString, "", nil
+		return v, sizeOfString(v), "", nil
 	case mysql.TypeDuration:
 		v := datum.GetMysqlDuration().String()
-		return v, len(v) + sizeOfEmptyString, "", nil
+		return v, sizeOfString(v), "", nil
 	case mysql.TypeJSON:
 		v := datum.GetMysqlJSON().String()
-		return v, len(v) + sizeOfEmptyString, "", nil
+		return v, sizeOfString(v), "", nil
 	case mysql.TypeNewDecimal:
 		d := datum.GetMysqlDecimal()
 		if d == nil {
+			// nil takes 0 byte.
 			return nil, 0, "", nil
 		}
 		v := d.String()
-		return v, len(v) + sizeOfEmptyString, "", nil
+		return v, sizeOfString(v), "", nil
 	case mysql.TypeEnum:
 		v := datum.GetMysqlEnum().Value
 		const sizeOfV = unsafe.Sizeof(v)
@@ -470,7 +480,7 @@ func formatColVal(datum types.Datum, tp byte) (
 		if b == nil {
 			b = emptyBytes
 		}
-		return b, len(b) + sizeOfEmptyBytes, "", nil
+		return b, sizeOfBytes(b), "", nil
 	case mysql.TypeFloat, mysql.TypeDouble:
 		v := datum.GetFloat64()
 		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
@@ -480,7 +490,7 @@ func formatColVal(datum types.Datum, tp byte) (
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), warn, nil
 	default:
-		return datum.GetValue(), sizeOfDatumValue(datum), "", nil
+		return datum.GetValue(), sizeOfDatum(datum), "", nil
 	}
 }
 
@@ -496,20 +506,20 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int) {
 
 	if col.GetDefaultValue() != nil {
 		d := types.NewDatum(col.GetDefaultValue())
-		return d.GetValue(), sizeOfDatumValue(d)
+		return d.GetValue(), sizeOfDatum(d)
 	}
 	switch col.Tp {
 	case mysql.TypeEnum:
 		// For enum type, if no default value and not null is set,
 		// the default value is the first element of the enum list
 		d := types.NewDatum(col.FieldType.Elems[0])
-		return d.GetValue(), sizeOfDatumValue(d)
+		return d.GetValue(), sizeOfDatum(d)
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 		return emptyBytes, sizeOfEmptyBytes
 	}
 
 	d := table.GetZeroValue(col)
-	return d.GetValue(), sizeOfDatumValue(d)
+	return d.GetValue(), sizeOfDatum(d)
 }
 
 // DecodeTableID decodes the raw key to a table ID

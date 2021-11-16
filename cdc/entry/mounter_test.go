@@ -47,26 +47,26 @@ func TestMounterDisableOldValue(t *testing.T) {
 		tableName:           "simple",
 		createTableDDL:      "create table simple(id int primary key)",
 		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
-		putApproximateBytes: [][]int{{274, 274, 274, 274, 274}},
-		delApproximateBytes: [][]int{{274, 274, 274, 274, 274}},
+		putApproximateBytes: [][]int{{346, 346, 346, 346, 346}},
+		delApproximateBytes: [][]int{{346, 346, 346, 346, 346}},
 	}, {
 		tableName:           "no_pk",
 		createTableDDL:      "create table no_pk(id int not null unique key)",
 		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
-		putApproximateBytes: [][]int{{273, 273, 273, 273, 273}},
+		putApproximateBytes: [][]int{{345, 345, 345, 345, 345}},
 		delApproximateBytes: [][]int{{217, 217, 217, 217, 217}},
 	}, {
 		tableName:           "many_index",
 		createTableDDL:      "create table many_index(id int not null unique key, c1 int unique key, c2 int, INDEX (c2))",
 		values:              [][]interface{}{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}, {4, 4, 4}, {5, 5, 5}},
-		putApproximateBytes: [][]int{{422, 422, 422, 422, 422}},
+		putApproximateBytes: [][]int{{638, 638, 638, 638, 638}},
 		delApproximateBytes: [][]int{{254, 254, 254, 254, 254}},
 	}, {
 		tableName:           "default_value",
 		createTableDDL:      "create table default_value(id int primary key, c1 int, c2 int not null default 5, c3 varchar(20), c4 varchar(20) not null default '666')",
 		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
-		putApproximateBytes: [][]int{{564, 564, 564, 564, 564}},
-		delApproximateBytes: [][]int{{281, 281, 281, 281, 281}},
+		putApproximateBytes: [][]int{{708, 708, 708, 708, 708}},
+		delApproximateBytes: [][]int{{353, 353, 353, 353, 353}},
 	}, {
 		tableName: "partition_table",
 		createTableDDL: `CREATE TABLE partition_table  (
@@ -91,7 +91,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{18, "aae", "bbf", 21, 14},
 			{15, "afa", "bbc", 11, 12},
 		},
-		putApproximateBytes: [][]int{{559}, {561}, {561}, {561, 561}},
+		putApproximateBytes: [][]int{{775}, {777}, {777}, {777, 777}},
 		delApproximateBytes: [][]int{{227}, {227}, {227}, {227, 227}},
 	}, {
 		tableName: "tp_int",
@@ -113,8 +113,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{4, 127, 32767, 8388607, 2147483647, 9223372036854775807},
 			{5, -128, -32768, -8388608, -2147483648, -9223372036854775808},
 		},
-		putApproximateBytes: [][]int{{554, 634, 554, 554, 554}},
-		delApproximateBytes: [][]int{{274, 274, 274, 274, 274}},
+		putApproximateBytes: [][]int{{986, 706, 986, 986, 986}},
+		delApproximateBytes: [][]int{{346, 346, 346, 346, 346}},
 	}, {
 		tableName: "tp_text",
 		createTableDDL: `create table tp_text
@@ -155,8 +155,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{5, "你好", "我好", "大家好", "道路", "千万条", "安全", "第一条", "行车", "不规范", "亲人", "两行泪", "！"},
 			{6, "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "☺️", "😊", "😇", "🙂"},
 		},
-		putApproximateBytes: [][]int{{1139, 1387, 1339, 1251, 1326, 1297}},
-		delApproximateBytes: [][]int{{275, 275, 275, 275, 275, 275}},
+		putApproximateBytes: [][]int{{1211, 1459, 1411, 1323, 1398, 1369}},
+		delApproximateBytes: [][]int{{347, 347, 347, 347, 347, 347}},
 	}, {
 		tableName: "tp_time",
 		createTableDDL: `create table tp_time
@@ -174,8 +174,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{1},
 			{2, "2020-02-20", "2020-02-20 02:20:20", "2020-02-20 02:20:20", "02:20:20", "2020"},
 		},
-		putApproximateBytes: [][]int{{635, 675}},
-		delApproximateBytes: [][]int{{275, 275}},
+		putApproximateBytes: [][]int{{707, 819}},
+		delApproximateBytes: [][]int{{347, 347}},
 	}, {
 		tableName: "tp_real",
 		createTableDDL: `create table tp_real
@@ -191,8 +191,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{1},
 			{2, "2020.0202", "2020.0303", "2020.0404"},
 		},
-		putApproximateBytes: [][]int{{491, 479}},
-		delApproximateBytes: [][]int{{275, 275}},
+		putApproximateBytes: [][]int{{563, 551}},
+		delApproximateBytes: [][]int{{347, 347}},
 	}, {
 		tableName: "tp_other",
 		createTableDDL: `create table tp_other
@@ -209,8 +209,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{1},
 			{2, "a", "a,c", 888, `{"aa":"bb"}`},
 		},
-		putApproximateBytes: [][]int{{564, 552}},
-		delApproximateBytes: [][]int{{276, 276}},
+		putApproximateBytes: [][]int{{636, 624}},
+		delApproximateBytes: [][]int{{348, 348}},
 	}, {
 		tableName:      "clustered_index1",
 		createTableDDL: "CREATE TABLE clustered_index1 (id VARCHAR(255) PRIMARY KEY, data INT);",
@@ -219,7 +219,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{"你好😘", 666},
 			{"世界🤪", 888},
 		},
-		putApproximateBytes: [][]int{{383, 374, 374}},
+		putApproximateBytes: [][]int{{383, 446, 446}},
 		delApproximateBytes: [][]int{{311, 318, 318}},
 	}, {
 		tableName:      "clustered_index2",
@@ -228,8 +228,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{"你好😘", 666, "2020-11-20"},
 			{"世界🤪", 888, "2020-05-12"},
 		},
-		putApproximateBytes: [][]int{{520, 520}},
-		delApproximateBytes: [][]int{{520, 520}},
+		putApproximateBytes: [][]int{{592, 592}},
+		delApproximateBytes: [][]int{{592, 592}},
 	}}
 	for _, tc := range testCases {
 		testMounterDisableOldValue(t, tc)
