@@ -24,7 +24,8 @@ import (
 type EventSorter interface {
 	Run(ctx context.Context) error
 	AddEntry(ctx context.Context, entry *model.PolymorphicEvent)
-	// TryAddEntry try to add entry to the sorter, returns false if the entry can not be added, otherwise returns true
+	// TryAddEntry try to add entry to the sorter
+	// returns false if the entry can not be added, otherwise returns true
 	TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) bool
 	Output() <-chan *model.PolymorphicEvent
 }
