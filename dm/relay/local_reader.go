@@ -508,11 +508,7 @@ func (r *BinlogReader) parseFile(
 
 		switch ev := e.Event.(type) {
 		case *replication.FormatDescriptionEvent:
-			// go-mysql will send a duplicate FormatDescriptionEvent event when offset > 4, ignore it
-			if offset > 4 {
-				return nil
-			}
-			// else just update lastPos
+			state.formatDescEventRead = true
 			state.latestPos = int64(e.Header.LogPos)
 		case *replication.RotateEvent:
 			// add master UUID suffix to pos.Name
@@ -610,13 +606,15 @@ func (r *BinlogReader) parseFile(
 	}
 
 	// parser needs the FormatDescriptionEvent to work correctly
-	if !state.formatDescEventRead {
+	// if we start parsing from the middle, we need to read FORMAT DESCRIPTION event first
+	if !state.formatDescEventRead && offset > 4 {
 		if err = r.parseFormatDescEvent(state); err != nil {
 			if state.possibleLast && isIgnorableParseError(err) {
 				return r.waitBinlogChanged(ctx, state)
 			}
 			return false, false, terror.ErrParserParseRelayLog.Delegate(err, state.fullPath)
 		}
+		state.formatDescEventRead = true
 	}
 
 	// we need to seek explicitly, as parser may read in-complete event and return error(ignorable) last time
@@ -756,7 +754,6 @@ func (r *BinlogReader) parseFormatDescEvent(state *binlogFileParseState) error {
 		// return EOF so isIgnorableParseError can capture
 		return io.EOF
 	}
-	state.formatDescEventRead = true
 	return nil
 }
 
