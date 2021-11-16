@@ -14,6 +14,7 @@ import (
 
 var conn net.Conn
 var tcpconn *net.TCPConn
+var timeout = time.Duration(60)*time.Second
 
 func CheckError(err error) {
     if err != nil {
@@ -89,7 +90,7 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 	if(conn ==nil){
 
 		//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
-		tempConn, err := net.Dial("tcp", host)
+		tempConn, err := net.DialTimeout("tcp", host,timeout)
 		conn = tempConn
 	    if err != nil {
 			conn = nil
@@ -180,7 +181,8 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 
 	if(conn ==nil){
 		fmt.Printf(" rest conn ::[%s] \n",conn)
-		tempConn, err := net.Dial("tcp", host)
+		//duration := time.Duration(seconds) * time.Second
+		tempConn, err := net.DialTimeout("tcp", host, timeout)
 		conn = tempConn
 		if err != nil {
 			conn = nil
@@ -302,8 +304,13 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 	rowInfos = append(rowInfos,row1)
 	//createBytesFromRowInfoList(rowInfos);
 	***/
-
+	conn.SetWriteDeadline(time.Now().Add(timeout))
 	_, err := conn.Write(createBytesFromRowInfo(rowInfos))
+
+	//err = conn.SetReadDeadline(time.Now().Add(3*time.Second)) // timeout
+	if err != nil {
+		log.Println("setReadDeadline failed:", err)
+	}
 	if err != nil {
 		conn = nil
 		return
@@ -970,7 +977,7 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 
 	//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
 	if conn==nil{
-		tempConn, err := net.Dial("tcp", host)
+		tempConn, err := net.DialTimeout("tcp", host,timeout)
 		conn = tempConn
 		if err != nil {
 			conn = nil
@@ -985,6 +992,7 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 
 	//=============================================
 	if conn!=nil {
+		conn.SetWriteDeadline(time.Now().Add(timeout))
 		_, err := conn.Write(createBytesFromResolvedTs(resolvedTs))
 		if err != nil {
 			conn = nil
@@ -1007,6 +1015,7 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 	if conn==nil{
 		return 0, nil
 	}
+	conn.SetReadDeadline(time.Now().Add(timeout))
 	re, err := conn.Read(buf)
 	if err != nil {
 		conn = nil
@@ -1034,7 +1043,7 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
 	//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
 	if conn ==nil {
-		tempConn, err := net.Dial("tcp", host)
+		tempConn, err := net.DialTimeout("tcp", host,timeout)
 		conn = tempConn
 		if err != nil {
 			conn = nil
@@ -1049,9 +1058,10 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 	//fmt.Println("resolvedTs：：：：：：：：：：：：：：：：：：：：：：：：",resolvedTs)
 
 	//=============================================
-
+	conn.SetWriteDeadline(time.Now().Add(timeout))
 	_, err := conn.Write(createFlushBytesFromResolvedTs(resolvedTs))
 	if err != nil {
+		conn = nil
 		return 0, nil
 	}
 
@@ -1066,7 +1076,11 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
 	//1 等待客户端通过conn发送信息
 	//2 如果没有writer发送就一直阻塞在这
+	conn.SetReadDeadline(time.Now().Add(timeout))
+
 	re, err := conn.Read(buf)
+
+
 	if err != nil {
 		conn = nil
 		fmt.Println("服务器read err=", err) //出错退出

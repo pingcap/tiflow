@@ -65,7 +65,7 @@ type Column struct {
 }
 
 
-func (b *dsgSink) EmitRowChangedEvents_By_Single(ctx context.Context, rows ...*model.RowChangedEvent) error {
+/*func (b *dsgSink) EmitRowChangedEvents_By_Single(ctx context.Context, rows ...*model.RowChangedEvent) error {
 
 
 	for _, row := range rows {
@@ -75,12 +75,12 @@ func (b *dsgSink) EmitRowChangedEvents_By_Single(ctx context.Context, rows ...*m
 	//fmt.Println(">>>>>>>>>>>>>>>>>>>>===================EmitRowChangedEvents===================================================================>>>>>>>>>>>>>>>>>>>")
 
 	//读取配置文件
-	/*configMap := publicUtils.InitConfig("./configuration.txt")
+	//configMap := publicUtils.InitConfig("./configuration.txt")
 	//获取配置里host属性的value
-	fmt.Println(configMap["host"])
-	fmt.Println(configMap["port"])
+	//fmt.Println(configMap["host"])
+	//fmt.Println(configMap["port"])
 	//查看配置文件里所有键值对
-	fmt.Println(configMap)*/
+	//fmt.Println(configMap)
 
 	var eventTypeValue int32
 	var schemaName string
@@ -167,7 +167,7 @@ func (b *dsgSink) EmitRowChangedEvents_By_Single(ctx context.Context, rows ...*m
 	b.statistics.AddRowsCount(rowsCount)
 
 	return nil
-}
+}*/
 
 func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 
