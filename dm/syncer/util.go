@@ -15,9 +15,9 @@ package syncer
 
 import (
 	"fmt"
-	"github.com/pingcap/tidb/br/pkg/version"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/br/pkg/version"
 	"github.com/pingcap/tidb/dumpling/export"
 	dlog "github.com/pingcap/tidb/dumpling/log"
 	"github.com/pingcap/tidb/parser/ast"
