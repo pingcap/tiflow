@@ -286,7 +286,7 @@ func parseTable(ctx *tcontext.Context, r *router.Table, schema, table, file, sql
 	if len(extendCol) > 0 {
 		columns = append(columns, extendCol...)
 	}
-	if hasGeneragedCols || len(extendCol) > 0 {
+	if hasGeneragedCols {
 		var escapeColumns []string
 		for _, column := range columns {
 			escapeColumns = append(escapeColumns, fmt.Sprintf("`%s`", column))
