@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/processor"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
+	redowriter "github.com/pingcap/ticdc/cdc/redo/writer"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sorter"
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb"
@@ -53,4 +54,5 @@ func init() {
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
 	leveldb.InitMetrics(registry)
+	redowriter.InitMetrics(registry)
 }

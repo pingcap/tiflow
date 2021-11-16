@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/atomic"
 	pioutil "go.etcd.io/etcd/pkg/ioutil"
 	"go.uber.org/multierr"
@@ -120,6 +121,10 @@ type Writer struct {
 	uint64buf     []byte
 	storage       storage.ExternalStorage
 	sync.RWMutex
+
+	metricFsyncDuration    prometheus.Observer
+	metricFlushAllDuration prometheus.Observer
+	metricWriteBytes       prometheus.Gauge
 }
 
 // NewWriter return a file rotated writer, TODO: extract to a common rotate Writer
@@ -153,6 +158,10 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		op:        op,
 		uint64buf: make([]byte, 8),
 		storage:   s3storage,
+
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
 	}
 
 	w.running.Store(true)
@@ -221,6 +230,7 @@ func (w *Writer) Write(rawData []byte) (int, error) {
 	}
 
 	n, err := w.bw.Write(rawData)
+	w.metricWriteBytes.Add(float64(n))
 	w.size += int64(n)
 	return n, err
 }
@@ -232,7 +242,9 @@ func (w *Writer) AdvanceTs(commitTs uint64) {
 
 func (w *Writer) writeUint64(n uint64, buf []byte) error {
 	binary.LittleEndian.PutUint64(buf, n)
-	_, err := w.bw.Write(buf)
+	v, err := w.bw.Write(buf)
+	w.metricWriteBytes.Add(float64(v))
+
 	return err
 }
 
@@ -253,6 +265,11 @@ func (w *Writer) Close() error {
 	if !w.IsRunning() {
 		return nil
 	}
+
+	redoFlushAllDurationHistogram.DeleteLabelValues(w.cfg.CaptureID, w.cfg.CaptureID)
+	redoFsyncDurationHistogram.DeleteLabelValues(w.cfg.CaptureID, w.cfg.CaptureID)
+	redoWriteBytesGauge.DeleteLabelValues(w.cfg.CaptureID, w.cfg.CaptureID)
+
 	w.Lock()
 	defer w.Unlock()
 	// always set to false when closed, since if having err may not get fixed just by retry
@@ -485,6 +502,7 @@ func (w *Writer) flushAll() error {
 		return nil
 	}
 
+	start := time.Now()
 	err := w.flush()
 	if err != nil {
 		return err
@@ -495,7 +513,11 @@ func (w *Writer) flushAll() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
 	defer cancel()
-	return w.writeToS3(ctx, w.file.Name())
+
+	err = w.writeToS3(ctx, w.file.Name())
+	w.metricFlushAllDuration.Observe(time.Since(start).Seconds())
+
+	return err
 }
 
 // Flush implement Flush interface
@@ -511,11 +533,17 @@ func (w *Writer) flush() error {
 		return nil
 	}
 
-	err := w.bw.Flush()
+	n, err := w.bw.FlushN()
+	w.metricWriteBytes.Add(float64(n))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	return cerror.WrapError(cerror.ErrRedoFileOp, w.file.Sync())
+
+	start := time.Now()
+	err = w.file.Sync()
+	w.metricFsyncDuration.Observe(time.Since(start).Seconds())
+
+	return cerror.WrapError(cerror.ErrRedoFileOp, err)
 }
 
 func (w *Writer) writeToS3(ctx context.Context, name string) error {

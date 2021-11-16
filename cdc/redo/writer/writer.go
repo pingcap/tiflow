@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -102,6 +103,8 @@ type LogWriter struct {
 	storage   storage.ExternalStorage
 	meta      *common.LogMeta
 	metaLock  sync.RWMutex
+
+	metricTotalRowsCount prometheus.Gauge
 }
 
 // NewLogWriter creates a LogWriter instance. It is guaranteed only one LogWriter per changefeed
@@ -176,6 +179,8 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 			return nil, err
 		}
 	}
+
+	logWriter.metricTotalRowsCount = redoTotalRowsCountGauge.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID)
 	logWriters[cfg.ChangeFeedID] = logWriter
 	go logWriter.runGC(ctx)
 	return logWriter, nil
@@ -267,7 +272,7 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.R
 	}
 
 	maxCommitTs := l.setMaxCommitTs(tableID, 0)
-	for _, r := range rows {
+	for i, r := range rows {
 		if r == nil || r.Row == nil {
 			continue
 		}
@@ -286,11 +291,14 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.R
 		l.rowWriter.AdvanceTs(r.Row.CommitTs)
 		_, err = l.rowWriter.Write(data)
 		if err != nil {
+			l.metricTotalRowsCount.Add(float64(i))
 			return maxCommitTs, err
 		}
+
 		maxCommitTs = l.setMaxCommitTs(tableID, r.Row.CommitTs)
 		redoLogPool.Put(rl)
 	}
+	l.metricTotalRowsCount.Add(float64(len(rows)))
 	return maxCommitTs, nil
 }
 
@@ -487,6 +495,8 @@ var getAllFilesInS3 = func(ctx context.Context, l *LogWriter) ([]string, error) 
 
 // Close implements RedoLogWriter.Close.
 func (l *LogWriter) Close() error {
+	redoTotalRowsCountGauge.DeleteLabelValues(l.cfg.CaptureID, l.cfg.ChangeFeedID)
+
 	var err error
 	err = multierr.Append(err, l.rowWriter.Close())
 	err = multierr.Append(err, l.ddlWriter.Close())
