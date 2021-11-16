@@ -59,6 +59,7 @@ type LightningLoader struct {
 	toDB            *conn.BaseDB
 	toDBConns       []*DBConn
 	lightningConfig *lcfg.GlobalConfig
+	timeZone        string
 
 	finish         atomic.Bool
 	closed         atomic.Bool
@@ -120,6 +121,15 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 	})
 	l.checkPoint = checkpoint
 	l.toDB, l.toDBConns, err = createConns(tctx, l.cfg, 1)
+	timeZone := l.cfg.Timezone
+	if len(timeZone) == 0 {
+		var err1 error
+		timeZone, err1 = conn.FetchTimeZoneSetting(ctx, &l.cfg.To)
+		if err1 != nil {
+			return err1
+		}
+	}
+	l.timeZone = timeZone
 	return err
 }
 
@@ -163,6 +173,9 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		}
 		cfg.Checkpoint.DSN = param.ToDSN()
 		cfg.TiDB.StrSQLMode = l.cfg.LoaderConfig.SQLMode
+		cfg.TiDB.Vars = map[string]string{
+			"time_zone": l.timeZone,
+		}
 		if err = cfg.Adjust(ctx); err != nil {
 			return err
 		}
@@ -281,7 +294,7 @@ func (l *LightningLoader) Resume(ctx context.Context, pr chan pb.ProcessResult) 
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config
 // no binlog filter for loader need to update.
-func (l *LightningLoader) Update(cfg *config.SubTaskConfig) error {
+func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	// update l.cfg
 	l.cfg.BAList = cfg.BAList
 	l.cfg.RouteRules = cfg.RouteRules
