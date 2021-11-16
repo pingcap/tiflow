@@ -123,9 +123,9 @@ TASKS:
 					// After the delay, this batch can be write forcibly.
 					reschedulePos = pos
 					rescheduleDelay = delay
+					iter.Release()
 					break TASKS
 				}
-				batch.Reset()
 				force = false
 			}
 		}
@@ -176,6 +176,7 @@ func (clean *CleanerActor) writeRateLimited(
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
+	batch.Reset()
 	return 0, nil
 }
 
