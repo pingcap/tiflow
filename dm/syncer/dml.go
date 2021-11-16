@@ -690,9 +690,7 @@ func truncateIndexValues(indexColumns *model.IndexInfo, tiColumns []*model.Colum
 	values := make([]interface{}, 0, len(indexColumns.Columns))
 	for i, iColumn := range indexColumns.Columns {
 		tcolumn := tiColumns[i]
-		if data[i] != nil && (tcolumn.Tp == mysql.TypeVarchar || tcolumn.Tp == mysql.TypeVarString ||
-			tcolumn.Tp == mysql.TypeString || tcolumn.Tp == mysql.TypeBlob || tcolumn.Tp == mysql.TypeTinyBlob ||
-			tcolumn.Tp == mysql.TypeMediumBlob || tcolumn.Tp == mysql.TypeLongBlob) {
+		if data[i] != nil {
 			datum := ttypes.NewDatum(data[i])
 			tablecodec.TruncateIndexValue(&datum, iColumn, tcolumn)
 			values = append(values, datum.GetValue())
