@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/docker/go-units"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/br/pkg/lightning"
@@ -248,6 +249,13 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	l.logger.Info("lightning load start")
 	errs := make([]*pb.ProcessError, 0, 1)
+	failpoint.Inject("lightningAlwaysErr", func(_ failpoint.Value) {
+		l.logger.Info("", zap.String("failpoint", "lightningAlwaysErr"))
+		pr <- pb.ProcessResult{
+			Errors: []*pb.ProcessError{unit.NewProcessError(errors.New("failpoint lightningAlwaysErr"))},
+		}
+		failpoint.Return()
+	})
 	binlog, gtid, err := getMydumpMetadata(l.cli, l.cfg, l.workerName)
 	if err != nil {
 		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
