@@ -38,6 +38,16 @@ func TestSystemStartStop(t *testing.T) {
 	require.Error(t, sys.Start(ctx))
 }
 
+func TestSystemStopUnstarted(t *testing.T) {
+	t.Parallel()
+	cfg := config.GetDefaultServerConfig().Clone().Sorter
+	cfg.SortDir = t.TempDir()
+	cfg.LevelDB.Count = 1
+
+	sys := NewSystem(cfg)
+	require.Nil(t, sys.Stop())
+}
+
 func TestCollectMetrics(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

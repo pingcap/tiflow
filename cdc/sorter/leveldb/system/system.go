@@ -179,8 +179,12 @@ func (s *System) Start(ctx context.Context) error {
 func (s *System) Stop() error {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
-	if s.state == sysStateStopped {
+	switch s.state {
+	case sysStateStopped:
 		// Already stopped.
+		return nil
+	case sysStateInit:
+		// Not started.
 		return nil
 	}
 	s.state = sysStateStopped
