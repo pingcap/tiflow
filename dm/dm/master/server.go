@@ -672,7 +672,7 @@ type hasWokers interface {
 	GetName() string
 }
 
-func specifiedSource(s *Server, req hasWokers) (sources []string, specicySource bool, err error) {
+func extractSources(s *Server, req hasWokers) (sources []string, specifiedSource bool, err error) {
 	switch {
 	case len(req.GetSources()) > 0:
 		sources = req.GetSources()
@@ -685,7 +685,7 @@ func specifiedSource(s *Server, req hasWokers) (sources []string, specicySource 
 		if len(invalidSource) > 0 {
 			return nil, false, errors.Errorf("sources %s haven't been added", invalidSource)
 		}
-		specicySource = true
+		specifiedSource = true
 	case len(req.GetName()) > 0:
 		// query specified task's sources
 		sources = s.getTaskResources(req.GetName())
@@ -710,7 +710,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 	if shouldRet {
 		return resp2, err2
 	}
-	sources, specicySource, err := specifiedSource(s, req)
+	sources, specifiedSource, err := extractSources(s, req)
 	sort.Strings(sources)
 	if err != nil {
 		// nolint:nilerr
@@ -724,7 +724,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 		// if user specified sources, query relay workers instead of task workers
 		queryRelayWorker = true
 	}
-	resps := s.getStatusFromWorkers(ctx, sources, req.Name, queryRelayWorker, specicySource)
+	resps := s.getStatusFromWorkers(ctx, sources, req.Name, queryRelayWorker, specifiedSource)
 	// sourceName -> worker QueryStatusResponse
 	workerRespMap := make(map[string][]*pb.QueryStatusResponse, len(sources))
 	inSlice := func(s []string, e string) bool {
@@ -978,7 +978,7 @@ func (s *Server) getTaskResources(task string) []string {
 
 // getStatusFromWorkers does RPC request to get status from dm-workers.
 func (s *Server) getStatusFromWorkers(
-	ctx context.Context, sources []string, taskName string, relayWorker bool, specicySource bool) []*pb.QueryStatusResponse {
+	ctx context.Context, sources []string, taskName string, relayWorker bool, specifiedSource bool) []*pb.QueryStatusResponse {
 	workerReq := &workerrpc.Request{
 		Type:        workerrpc.CmdQueryStatus,
 		QueryStatus: &pb.QueryStatusRequest{Name: taskName},
@@ -1104,7 +1104,7 @@ func (s *Server) getStatusFromWorkers(
 				msg := fmt.Sprintf("can't find task: %s from dm-worker, please use dmctl list-member to check if worker is offline.", taskName)
 				log.L().Warn(msg)
 				// only add use specified source related to this task
-				if specicySource {
+				if specifiedSource {
 					for _, needDisplayedSource := range sources {
 						if _, ok := sourceM[needDisplayedSource]; ok && !findEnoughTaskInResp(taskName, len(sourceM)) {
 							appendFakeResp(taskName, needDisplayedSource, msg)
