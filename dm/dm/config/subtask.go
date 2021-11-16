@@ -548,3 +548,8 @@ func (c *SubTaskConfig) Clone() (*SubTaskConfig, error) {
 
 	return clone, nil
 }
+
+// NeedUseLightning returns whether need to use lightning loader.
+func (c *SubTaskConfig) NeedUseLightning() bool {
+	return (c.Mode == ModeAll || c.Mode == ModeFull) && c.TiDB.Backend != ""
+}
