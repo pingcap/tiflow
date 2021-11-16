@@ -661,6 +661,11 @@ error = '''
 prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s
 '''
 
+["CDC:ErrProcessorDuplicateOperations"]
+error = '''
+table processor duplicate operation, table-id: %d
+'''
+
 ["CDC:ErrProcessorEtcdWatch"]
 error = '''
 etcd watch returns error
