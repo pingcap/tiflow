@@ -106,7 +106,7 @@ func (t *testReaderSuite) TestparseFileAsPossibleFileNotExist(c *C) {
 	)
 	cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
 	r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
-	needSwitch, lastestPos, err := r.parseFileAsPossible(context.Background(), nil, filename, 0, relayDir, true, false)
+	needSwitch, lastestPos, err := r.parseFileAsPossible(context.Background(), nil, filename, 4, relayDir, true, false)
 	c.Assert(needSwitch, IsFalse)
 	c.Assert(lastestPos, Equals, int64(0))
 	c.Assert(err, ErrorMatches, ".*no such file or directory.*")
@@ -133,17 +133,17 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 	c.Assert(err1, IsNil)
 	defer f.Close()
 
-	// empty relay log file, got EOF when reading format description event
+	// empty relay log file, got EOF when reading format description event separately and possibleLast = false
 	{
 		cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
 		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
 		t.setActiveRelayLog(r.relay, currentUUID, filename, 0)
-		state := t.createBinlogFileParseState(c, relayDir, filename, 4, possibleLast)
+		state := t.createBinlogFileParseState(c, relayDir, filename, 100, possibleLast)
 		needSwitch, needReParse, err := r.parseFile(ctx, s, true, state)
 		c.Assert(errors.Cause(err), Equals, io.EOF)
 		c.Assert(needSwitch, IsFalse)
 		c.Assert(needReParse, IsFalse)
-		c.Assert(state.latestPos, Equals, int64(4))
+		c.Assert(state.latestPos, Equals, int64(100))
 		c.Assert(state.formatDescEventRead, IsFalse)
 		c.Assert(state.replaceWithHeartbeat, Equals, false)
 	}
