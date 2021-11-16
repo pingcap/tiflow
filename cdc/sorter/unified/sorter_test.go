@@ -59,7 +59,7 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 
 func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = c.MkDir()
@@ -87,7 +87,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = c.MkDir()
@@ -231,7 +231,7 @@ func testSorter(ctx context.Context, c *check.C, sorter sorter.EventSorter, coun
 
 func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	poolMu.Lock()
 	// Clean up the back-end pool if one has been created
@@ -261,7 +261,7 @@ func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
 
 func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	poolMu.Lock()
 	// Clean up the back-end pool if one has been created
@@ -290,7 +290,7 @@ func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
 // restarted. There should not be any problem, especially file corruptions.
 func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = c.MkDir()
@@ -334,7 +334,7 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 
 func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = c.MkDir()
@@ -378,7 +378,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	case <-finishedCh:
 	}
 
-	UnifiedSorterCleanUp()
+	CleanUp()
 	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndAlloc")
 	// enable the failpoint to simulate backEnd write error (usually would happen when writing to a file)
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndWrite", "return(true)")
@@ -408,7 +408,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 
 func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	log.SetLevel(zapcore.DebugLevel)
 	defer log.SetLevel(zapcore.InfoLevel)
@@ -464,7 +464,7 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 
 func (s *sorterSuite) TestSortClosedAddEntry(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	sorter, err := NewUnifiedSorter(c.MkDir(),
 		"test-cf",
@@ -494,7 +494,7 @@ func (s *sorterSuite) TestSortClosedAddEntry(c *check.C) {
 
 func (s *sorterSuite) TestUnifiedSorterFileLockConflict(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	dir := c.MkDir()
 	captureAddr := "0.0.0.0:0"
