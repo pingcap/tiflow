@@ -208,11 +208,11 @@ func (m *ManagerImpl) Enabled() bool {
 }
 
 // EmitRowChangedEvents sends row changed events to a log buffer, the log buffer
-// will be consumed by a background goroutine, which converts row chagned events
+// will be consumed by a background goroutine, which converts row changed events
 // to redo logs and sends to log writer. Note this function is non-blocking if
 // the channel is not full, otherwise if the channel is always full after timeout,
 // error ErrBufferLogTimeout will be returned.
-// TODO: if the API is truly non-blocking, we should return an error immediatel
+// TODO: if the API is truly non-blocking, we should return an error immediately
 // when the log buffer channel is full.
 func (m *ManagerImpl) EmitRowChangedEvents(
 	ctx context.Context,
@@ -228,9 +228,9 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 		return cerror.ErrBufferLogTimeout.GenWithStackByArgs()
 	case m.logBuffer <- cacheRows{
 		tableID: tableID,
-		// Because the pipeline sink doesn't hold slice memory after EmitRowChangedEvents,
-		// we copy to a new slice to manage memory in redo manager itself, which
-		// is the same behavior as sink mananger.
+		// Because the pipeline sink doesn't hold slice memory after calling
+		// EmitRowChangedEvents, we copy to a new slice to manage memory
+		// in redo manager itself, which is the same behavior as sink manager.
 		rows: append(make([]*model.RowChangedEvent, 0, len(rows)), rows...),
 	}:
 	}
@@ -312,7 +312,7 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 	return m.writer.DeleteAllLogs(ctx)
 }
 
-// updatertsMap reads rtsMap from redo log writer and calculate the minimum
+// updateTableResolvedTs reads rtsMap from redo log writer and calculate the minimum
 // resolved ts of all maintaining tables.
 func (m *ManagerImpl) updateTableResolvedTs(ctx context.Context) error {
 	m.rtsMapMu.Lock()
