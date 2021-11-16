@@ -15,6 +15,7 @@ package worker
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -45,22 +46,12 @@ const (
 	waitRelayCatchupTimeout = 30 * time.Second
 )
 
-type relayNotifier struct {
-	// ch with size = 1, we only need to be notified whether binlog file of relay changed, not how many times
-	ch chan interface{}
-}
-
-// Notified implements streamer.EventNotifier.
-func (r relayNotifier) Notified() chan interface{} {
-	return r.ch
-}
-
 // createRealUnits is subtask units initializer
 // it can be used for testing.
 var createUnits = createRealUnits
 
 // createRealUnits creates process units base on task mode.
-func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, workerName string, notifier relay.EventNotifier) []unit.Unit {
+func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, workerName string, relay relay.Process) []unit.Unit {
 	failpoint.Inject("mockCreateUnitsDumpOnly", func(_ failpoint.Value) {
 		log.L().Info("create mock worker units with dump unit only", zap.String("failpoint", "mockCreateUnitsDumpOnly"))
 		failpoint.Return([]unit.Unit{dumpling.NewDumpling(cfg)})
@@ -70,22 +61,22 @@ func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, wor
 	switch cfg.Mode {
 	case config.ModeAll:
 		us = append(us, dumpling.NewDumpling(cfg))
-		if cfg.TiDB.Backend == "" {
-			us = append(us, loader.NewLoader(cfg, etcdClient, workerName))
-		} else {
+		if cfg.NeedUseLightning() {
 			us = append(us, loader.NewLightning(cfg, etcdClient, workerName))
+		} else {
+			us = append(us, loader.NewLoader(cfg, etcdClient, workerName))
 		}
-		us = append(us, syncer.NewSyncer(cfg, etcdClient, notifier))
+		us = append(us, syncer.NewSyncer(cfg, etcdClient, relay))
 	case config.ModeFull:
 		// NOTE: maybe need another checker in the future?
 		us = append(us, dumpling.NewDumpling(cfg))
-		if cfg.TiDB.Backend == "" {
-			us = append(us, loader.NewLoader(cfg, etcdClient, workerName))
-		} else {
+		if cfg.NeedUseLightning() {
 			us = append(us, loader.NewLightning(cfg, etcdClient, workerName))
+		} else {
+			us = append(us, loader.NewLoader(cfg, etcdClient, workerName))
 		}
 	case config.ModeIncrement:
-		us = append(us, syncer.NewSyncer(cfg, etcdClient, notifier))
+		us = append(us, syncer.NewSyncer(cfg, etcdClient, relay))
 	default:
 		log.L().Error("unsupported task mode", zap.String("subtask", cfg.Name), zap.String("task mode", cfg.Mode))
 	}
@@ -119,8 +110,6 @@ type SubTask struct {
 	etcdClient *clientv3.Client
 
 	workerName string
-
-	notifier relay.EventNotifier
 }
 
 // NewSubTask is subtask initializer
@@ -143,15 +132,21 @@ func NewSubTaskWithStage(cfg *config.SubTaskConfig, stage pb.Stage, etcdClient *
 		cancel:     cancel,
 		etcdClient: etcdClient,
 		workerName: workerName,
-		notifier:   &relayNotifier{ch: make(chan interface{}, 1)},
 	}
 	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, st.stage, st.workerName)
 	return &st
 }
 
 // initUnits initializes the sub task processing units.
-func (st *SubTask) initUnits() error {
-	st.units = createUnits(st.cfg, st.etcdClient, st.workerName, st.notifier)
+func (st *SubTask) initUnits(relay relay.Process) error {
+	// NOTE: because lightning not support init tls with raw certs bytes, we write the certs data to a file.
+	if st.cfg.NeedUseLightning() && st.cfg.To.Security != nil {
+		// NOTE: LoaderConfig.Dir is always not empty because we only dump certs when we use lightning.
+		if err := st.cfg.To.Security.DumpTLSContent(filepath.Join(st.cfg.LoaderConfig.Dir, "..")); err != nil {
+			return terror.Annotatef(err, "fail to dump tls cert data for lightning, subtask %s ", st.cfg.Name)
+		}
+	}
+	st.units = createUnits(st.cfg, st.etcdClient, st.workerName, relay)
 	if len(st.units) < 1 {
 		return terror.ErrWorkerNoAvailUnits.Generate(st.cfg.Name, st.cfg.Mode)
 	}
@@ -211,7 +206,7 @@ func (st *SubTask) initUnits() error {
 
 // Run runs the sub task.
 // TODO: check concurrent problems.
-func (st *SubTask) Run(expectStage pb.Stage) {
+func (st *SubTask) Run(expectStage pb.Stage, relay relay.Process) {
 	if st.Stage() == pb.Stage_Finished || st.Stage() == pb.Stage_Running {
 		st.l.Warn("prepare to run a subtask with invalid stage",
 			zap.Stringer("current stage", st.Stage()),
@@ -219,7 +214,7 @@ func (st *SubTask) Run(expectStage pb.Stage) {
 		return
 	}
 
-	if err := st.initUnits(); err != nil {
+	if err := st.initUnits(relay); err != nil {
 		st.l.Error("fail to initial subtask", log.ShortError(err))
 		st.fail(err)
 		return
@@ -511,9 +506,9 @@ func (st *SubTask) Pause() error {
 
 // Resume resumes the paused sub task
 // TODO: similar to Run, refactor later.
-func (st *SubTask) Resume() error {
+func (st *SubTask) Resume(relay relay.Process) error {
 	if !st.initialized.Load() {
-		st.Run(pb.Stage_Running)
+		st.Run(pb.Stage_Running, relay)
 		return nil
 	}
 
@@ -714,7 +709,7 @@ func (st *SubTask) fail(err error) {
 }
 
 // HandleError handle error for syncer unit.
-func (st *SubTask) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) error {
+func (st *SubTask) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest, relay relay.Process) error {
 	syncUnit, ok := st.currUnit.(*syncer.Syncer)
 	if !ok {
 		return terror.ErrWorkerOperSyncUnitOnly.Generate(st.currUnit.Type())
@@ -726,7 +721,7 @@ func (st *SubTask) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReq
 	}
 
 	if st.Stage() == pb.Stage_Paused {
-		err = st.Resume()
+		err = st.Resume(relay)
 	}
 	return err
 }
@@ -736,13 +731,5 @@ func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) 
 		taskState.DeleteAllAboutLabels(prometheus.Labels{"task": task, "source_id": sourceID})
 	} else {
 		taskState.WithLabelValues(task, sourceID, workerName).Set(float64(stage))
-	}
-}
-
-func (st *SubTask) relayNotify() {
-	// skip if there's pending notify
-	select {
-	case st.notifier.Notified() <- struct{}{}:
-	default:
 	}
 }
