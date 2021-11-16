@@ -335,3 +335,27 @@ func SplitDDL(stmt ast.StmtNode, schema string) (sqls []string, err error) {
 func genTableName(schema string, table string) *filter.Table {
 	return &filter.Table{Schema: schema, Name: table}
 }
+
+// CheckIsDDL checks input SQL whether is a valid DDL statement.
+func CheckIsDDL(sql string, p *parser.Parser) bool {
+	sql = utils.TrimCtrlChars(sql)
+
+	if utils.IsBuildInSkipDDL(sql) {
+		return false
+	}
+
+	// if parse error, treat it as not a DDL
+	stmts, err := Parse(p, sql, "", "")
+	if err != nil || len(stmts) == 0 {
+		return false
+	}
+
+	stmt := stmts[0]
+	switch stmt.(type) {
+	case ast.DDLNode:
+		return true
+	default:
+		// other thing this like `BEGIN`
+		return false
+	}
+}
