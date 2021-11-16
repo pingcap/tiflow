@@ -35,18 +35,29 @@ import (
 // The moveTableManager will help the ScheduleDispatcher to track which tables are being
 // moved to which capture.
 
-type removeTableResult int
-
-const (
-	removeTableResultOK removeTableResult = iota + 1
-	removeTableResultUnavailable
-	removeTableResultGiveUp
-)
-
+// removeTableFunc is a function used to de-schedule a table from its current processor.
 type removeTableFunc = func(
 	ctx context.Context,
 	tableID model.TableID,
 	target model.CaptureID) (result removeTableResult, err error)
+
+type removeTableResult int
+
+const (
+	// removeTableResultOK indicates that the table has been de-scheduled
+	removeTableResultOK removeTableResult = iota + 1
+
+	// removeTableResultUnavailable indicates that the table
+	// is temporarily not available for removal. The operation
+	// can be tried again later.
+	removeTableResultUnavailable
+
+	// removeTableResultGiveUp indicates that the operation is
+	// not successful but there is no point in trying again. Such as when
+	// 1) the table to be removed is not found,
+	// 2) the capture to move the table to is not found.
+	removeTableResultGiveUp
+)
 
 type moveTableManager interface {
 	// Add adds a table to the move table manager.
@@ -80,9 +91,8 @@ const (
 )
 
 type moveTableJob struct {
-	tableID model.TableID
-	target  model.CaptureID
-	status  moveTableJobStatus
+	target model.CaptureID
+	status moveTableJobStatus
 }
 
 type moveTableManagerImpl struct {
@@ -106,9 +116,8 @@ func (m *moveTableManagerImpl) Add(tableID model.TableID, target model.CaptureID
 	}
 
 	m.moveTableJobs[tableID] = &moveTableJob{
-		tableID: tableID,
-		target:  target,
-		status:  moveTableJobStatusReceived,
+		target: target,
+		status: moveTableJobStatusReceived,
 	}
 	return true
 }
@@ -142,6 +151,13 @@ func (m *moveTableManagerImpl) DoRemove(ctx context.Context, fn removeTableFunc)
 			continue
 		case removeTableResultUnavailable:
 		}
+
+		// Returning false means that there is a table that cannot be removed for now.
+		// This is usually caused by temporary unavailability of underlying resources, such
+		// as a congestion in the messaging client.
+		//
+		// So when we have returned false, the caller should try again later and refrain from
+		// other scheduling operations.
 		return false, nil
 	}
 	return true, nil
