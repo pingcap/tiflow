@@ -76,7 +76,9 @@ func (s *Security) LoadTLSContent() error {
 }
 
 // DumpTLSContent dump tls certs data to file.
-// note that when path in security is empty, we dump certs file to subtask dump dir.
+// if user specified the path for certs if the cert exists, don't modify it,if the cert doesn't exist, overwrite certs to dump folder
+// if user didn't specify the path for certs, overwrite certs to dump folder and change the cert path.
+// see more here https://github.com/pingcap/ticdc/pull/3260#discussion_r749052994
 func (s *Security) DumpTLSContent(baseDirPath string) error {
 	if s.SSLCA == "" {
 		s.SSLCA = path.Join(baseDirPath, "ca.pem")
@@ -88,16 +90,19 @@ func (s *Security) DumpTLSContent(baseDirPath string) error {
 		s.SSLKey = path.Join(baseDirPath, "key.pem")
 	}
 	if !utils.IsFileExists(s.SSLCA) {
+		s.SSLCA = path.Join(baseDirPath, "ca.pem")
 		if err := utils.WriteFileAtomic(s.SSLCA, s.SSLCABytes, 0o600); err != nil {
 			return err
 		}
 	}
 	if !utils.IsFileExists(s.SSLCert) {
+		s.SSLCert = path.Join(baseDirPath, "cert.pem")
 		if err := utils.WriteFileAtomic(s.SSLCert, s.SSLCertBytes, 0o600); err != nil {
 			return err
 		}
 	}
 	if !utils.IsFileExists(s.SSLKey) {
+		s.SSLKey = path.Join(baseDirPath, "key.pem")
 		if err := utils.WriteFileAtomic(s.SSLKey, s.SSLKEYBytes, 0o600); err != nil {
 			return err
 		}
