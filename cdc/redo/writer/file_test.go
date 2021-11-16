@@ -98,6 +98,36 @@ func TestWriterWrite(t *testing.T) {
 	info, err = os.Stat(path)
 	require.Nil(t, err)
 	require.Equal(t, fileName, info.Name())
+
+	w1 := &Writer{
+		cfg: &FileWriterConfig{
+			MaxLogSize:   10,
+			Dir:          dir,
+			ChangeFeedID: "test-cf11",
+			CaptureID:    "cp",
+			FileType:     common.DefaultRowLogFileType,
+			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+		},
+		uint64buf: make([]byte, 8),
+		running:   *atomic.NewBool(true),
+	}
+
+	w1.eventCommitTS.Store(1)
+	_, err = w1.Write([]byte("tes1t11111"))
+	require.Nil(t, err)
+	// create a .tmp file
+	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w1.cfg.CaptureID, w1.cfg.ChangeFeedID, w1.cfg.CreateTime.Unix(), w1.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
+	path = filepath.Join(w1.cfg.Dir, fileName)
+	info, err = os.Stat(path)
+	require.Nil(t, err)
+	require.Equal(t, fileName, info.Name())
+	// change the file name, should cause CLose err
+	err = os.Rename(path, path+"new")
+	require.Nil(t, err)
+	err = w1.Close()
+	require.NotNil(t, err)
+	// closed anyway
+	require.False(t, w1.IsRunning())
 }
 
 func TestWriterGC(t *testing.T) {

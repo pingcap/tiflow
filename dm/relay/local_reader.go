@@ -71,11 +71,13 @@ type BinlogReader struct {
 
 	usingGTID          bool
 	prevGset, currGset mysql.GTIDSet
-	notifier           EventNotifier
+	// ch with size = 1, we only need to be notified whether binlog file of relay changed, not how many times
+	notifyCh chan interface{}
+	relay    Process
 }
 
-// NewBinlogReader creates a new BinlogReader.
-func NewBinlogReader(notifier EventNotifier, logger log.Logger, cfg *BinlogReaderConfig) *BinlogReader {
+// newBinlogReader creates a new BinlogReader.
+func newBinlogReader(logger log.Logger, cfg *BinlogReaderConfig, relay Process) *BinlogReader {
 	ctx, cancel := context.WithCancel(context.Background()) // only can be canceled in `Close`
 	parser := replication.NewBinlogParser()
 	parser.SetVerifyChecksum(true)
@@ -87,14 +89,17 @@ func NewBinlogReader(notifier EventNotifier, logger log.Logger, cfg *BinlogReade
 
 	newtctx := tcontext.NewContext(ctx, logger.WithFields(zap.String("component", "binlog reader")))
 
-	return &BinlogReader{
+	binlogReader := &BinlogReader{
 		cfg:       cfg,
 		parser:    parser,
 		indexPath: path.Join(cfg.RelayDir, utils.UUIDIndexFilename),
 		cancel:    cancel,
 		tctx:      newtctx,
-		notifier:  notifier,
+		notifyCh:  make(chan interface{}, 1),
+		relay:     relay,
 	}
+	binlogReader.relay.RegisterListener(binlogReader)
+	return binlogReader
 }
 
 // checkRelayPos will check whether the given relay pos is too big.
@@ -588,7 +593,7 @@ func (r *BinlogReader) parseFile(
 	go func(latestPos int64) {
 		defer wg.Done()
 		checker := relayLogFileChecker{
-			notifier:          r.notifier,
+			notifier:          r,
 			relayDir:          r.cfg.RelayDir,
 			currentUUID:       currentUUID,
 			latestRelayLogDir: relayLogDir,
@@ -641,6 +646,7 @@ func (r *BinlogReader) Close() {
 	r.cancel()
 	r.parser.Stop()
 	r.wg.Wait()
+	r.relay.UnRegisterListener(r)
 	r.tctx.L().Info("binlog reader closed")
 }
 
@@ -685,4 +691,16 @@ func (r *BinlogReader) advanceCurrentGtidSet(gtid string) (bool, error) {
 		return true, nil
 	}
 	return false, err
+}
+
+func (r *BinlogReader) Notified() chan interface{} {
+	return r.notifyCh
+}
+
+func (r *BinlogReader) OnEvent(_ *replication.BinlogEvent) {
+	// skip if there's pending notify
+	select {
+	case r.notifyCh <- struct{}{}:
+	default:
+	}
 }

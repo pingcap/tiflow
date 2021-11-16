@@ -78,16 +78,6 @@ type mysqlSink struct {
 	cancel         func()
 }
 
-func needSwitchDB(ddl *model.DDLEvent) bool {
-	if len(ddl.TableInfo.Schema) > 0 {
-		if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
-			return false
-		}
-		return true
-	}
-	return false
-}
-
 var _ Sink = &mysqlSink{}
 
 // newMySQLSink creates a new MySQL sink using schema storage
@@ -364,6 +354,16 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	return nil
 }
 
+func needSwitchDB(ddl *model.DDLEvent) bool {
+	if len(ddl.TableInfo.Schema) == 0 {
+		return false
+	}
+	if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
+		return false
+	}
+	return true
+}
+
 // adjustSQLMode adjust sql mode according to sink config.
 func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 	// Must relax sql mode to support cyclic replication, as downstream may have
@@ -631,7 +631,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		var args []interface{}
 		quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
 
-		// Translate to UPDATE if old value is enabled, not in safe mode and is update event
+		// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
+		// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 			flushCacheDMLs()
 			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
@@ -643,9 +644,12 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			continue
 		}
 
-		// Case for delete event or update event
-		// If old value is enabled and not in safe mode,
-		// update will be translated to DELETE + INSERT(or REPLACE) SQL.
+		// Case for update event or delete event.
+		// For update event:
+		// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
+		// So we will prepare a DELETE SQL here.
+		// For delete event:
+		// It will be translated directly into a DELETE SQL.
 		if len(row.PreColumns) != 0 {
 			flushCacheDMLs()
 			query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
@@ -656,7 +660,14 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			}
 		}
 
-		// Case for insert event or update event
+		// Case for update event or insert event.
+		// For update event:
+		// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
+		// So we will prepare a REPLACE SQL here.
+		// For insert event:
+		// It will be translated directly into a
+		// INSERT(old value is enabled and not in safe mode)
+		// or REPLACE(old value is disabled or in safe mode) SQL.
 		if len(row.Columns) != 0 {
 			if s.params.batchReplaceEnabled {
 				query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
