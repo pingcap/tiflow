@@ -159,7 +159,7 @@ function safe_mode_recover() {
 		sleep 3
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"Running" 2
+			"Running" 3
 		echo "check sync diff after clean SafeModeExit failpoint"
 		check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
