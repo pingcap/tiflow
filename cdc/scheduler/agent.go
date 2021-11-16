@@ -98,7 +98,7 @@ type BaseAgent struct {
 	communicator ProcessorMessenger
 
 	// pendingOpsMu protects pendingOps.
-	// Notes that we need a mutex because some methods are expected
+	// Note that we need a mutex because some methods are expected
 	// to be called from a message handler goroutine.
 	pendingOpsMu sync.Mutex
 	// pendingOps is a queue of operations yet to be processed.
@@ -290,17 +290,11 @@ func (a *BaseAgent) processOperations(ctx context.Context) error {
 			op.status = operationProcessed
 			fallthrough
 		case operationProcessed:
-			var (
-				done bool
-				err  error
-			)
+			var done bool
 			if !op.IsDelete {
 				done = a.executor.IsAddTableFinished(ctx, op.TableID)
 			} else {
 				done = a.executor.IsRemoveTableFinished(ctx, op.TableID)
-			}
-			if err != nil {
-				return errors.Trace(err)
 			}
 			if !done {
 				break
