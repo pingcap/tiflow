@@ -441,8 +441,8 @@ type Loader struct {
 	// to calculate remainingTimeGauge metric, map will be init in `l.prepare.prepareDataFiles`
 	dbTableDataTotalSize        map[string]map[string]*atomic.Int64
 	dbTableDataFinishedSize     map[string]map[string]*atomic.Int64
-	dbTableDataLastFinishedSize map[string]map[string]int64
-	dbTableDataLastUpdatedTime  time.Time
+	dbTableDataLastFinishedSize map[string]map[string]*atomic.Int64
+	dbTableDataLastUpdatedTime  atomic.Time
 
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
@@ -1053,12 +1053,12 @@ func (l *Loader) prepareDataFiles(files map[string]struct{}) error {
 		if _, ok := l.dbTableDataTotalSize[db]; !ok {
 			l.dbTableDataTotalSize[db] = make(map[string]*atomic.Int64)
 			l.dbTableDataFinishedSize[db] = make(map[string]*atomic.Int64)
-			l.dbTableDataLastFinishedSize[db] = make(map[string]int64)
+			l.dbTableDataLastFinishedSize[db] = make(map[string]*atomic.Int64)
 		}
 		if _, ok := l.dbTableDataTotalSize[db][table]; !ok {
 			l.dbTableDataTotalSize[db][table] = atomic.NewInt64(0)
 			l.dbTableDataFinishedSize[db][table] = atomic.NewInt64(0)
-			l.dbTableDataLastFinishedSize[db][table] = 0
+			l.dbTableDataLastFinishedSize[db][table] = atomic.NewInt64(0)
 		}
 		l.dbTableDataTotalSize[db][table].Add(size)
 
@@ -1083,7 +1083,7 @@ func (l *Loader) prepare() error {
 	l.finishedDataSize.Store(0) // reset before load from checkpoint
 	l.dbTableDataTotalSize = make(map[string]map[string]*atomic.Int64)
 	l.dbTableDataFinishedSize = make(map[string]map[string]*atomic.Int64)
-	l.dbTableDataLastFinishedSize = make(map[string]map[string]int64)
+	l.dbTableDataLastFinishedSize = make(map[string]map[string]*atomic.Int64)
 
 	// check if mydumper dir data exists.
 	if !utils.IsDirExists(l.cfg.Dir) {

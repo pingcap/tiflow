@@ -134,7 +134,6 @@ type Syncer struct {
 
 	binlogType         BinlogType
 	streamerController *StreamerController
-	enableRelay        bool
 
 	wg    sync.WaitGroup // counts goroutines
 	jobWg sync.WaitGroup // counts ddl/flush job in-flight in s.dmlJobCh and s.ddlJobCh
@@ -227,11 +226,11 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
-	notifier relay.EventNotifier
+	relay relay.Process
 }
 
 // NewSyncer creates a new Syncer.
-func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier relay.EventNotifier) *Syncer {
+func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay relay.Process) *Syncer {
 	logger := log.With(zap.String("task", cfg.Name), zap.String("unit", "binlog replication"))
 	syncer := &Syncer{
 		pessimist: shardddl.NewPessimist(&logger, etcdClient, cfg.Name, cfg.SourceID),
@@ -249,12 +248,11 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier 
 	syncer.count.Store(0)
 	syncer.done = nil
 	syncer.addJobFunc = syncer.addJob
-	syncer.enableRelay = cfg.UseRelay
 	syncer.cli = etcdClient
 
 	syncer.checkpoint = NewRemoteCheckPoint(syncer.tctx, cfg, syncer.checkpointID())
 
-	syncer.binlogType = toBinlogType(cfg.UseRelay)
+	syncer.binlogType = toBinlogType(relay)
 	syncer.errOperatorHolder = operator.NewHolder(&logger)
 	syncer.readerHub = streamer.GetReaderHub()
 
@@ -268,7 +266,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier 
 		syncer.workerJobTSArray[i] = atomic.NewInt64(0)
 	}
 	syncer.lastCheckpointFlushedTime = time.Time{}
-	syncer.notifier = notifier
+	syncer.relay = relay
 	return syncer
 }
 
@@ -328,7 +326,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
-	s.streamerController = NewStreamerController(s.notifier, s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.binlogType, s.cfg.RelayDir, s.timezone)
+	s.streamerController = NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
 
 	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
 	if err != nil {
@@ -927,7 +925,11 @@ func (s *Syncer) addJob(job *job) error {
 		s.tctx.L().Info("All jobs is completed before syncer close, the coming job will be reject", zap.Any("job", job))
 		return nil
 	}
-	switch job.tp {
+
+	// avoid job.type data race with compactor.run()
+	// simply copy the opType for performance, though copy a new job in compactor is better
+	tp := job.tp
+	switch tp {
 	case xid:
 		s.waitXIDJob.CAS(int64(waiting), int64(waitComplete))
 		s.saveGlobalPoint(job.location)
@@ -979,7 +981,7 @@ func (s *Syncer) addJob(job *job) error {
 		return nil
 	}
 
-	switch job.tp {
+	switch tp {
 	case ddl:
 		failpoint.Inject("ExitAfterDDLBeforeFlush", func() {
 			s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ExitAfterDDLBeforeFlush"))
@@ -1016,7 +1018,7 @@ func (s *Syncer) addJob(job *job) error {
 		}
 	}
 
-	if needFlush || job.tp == ddl {
+	if needFlush || tp == ddl {
 		// interrupted after save checkpoint and before flush checkpoint.
 		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
 			err := handleFlushCheckpointStage(4, val.(int), "before flush checkpoint")
@@ -3339,7 +3341,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 		return false, nil
 	}
 	// set enableGTID to false for new streamerController
-	streamerController := NewStreamerController(s.notifier, s.syncCfg, false, s.fromDB, s.binlogType, s.cfg.RelayDir, s.timezone)
+	streamerController := NewStreamerController(s.syncCfg, false, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
 
 	endPos := binlog.AdjustPosition(location.Position)
 	startPos := mysql.Position{
