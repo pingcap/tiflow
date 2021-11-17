@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
 )
 
@@ -41,36 +41,6 @@ type CanalFlatEventBatchEncoder struct {
 }
 
 const tidbWaterMarkType = "TIDB_WATERMARK"
-
-var str2MySQLType = map[string]byte{
-	"bit":         mysql.TypeBit,
-	"text":        mysql.TypeBlob,
-	"date":        mysql.TypeDate,
-	"datetime":    mysql.TypeDatetime,
-	"unspecified": mysql.TypeUnspecified,
-	"decimal":     mysql.TypeNewDecimal,
-	"double":      mysql.TypeDatetime,
-	"enum":        mysql.TypeEnum,
-	"float":       mysql.TypeFloat,
-	"geometry":    mysql.TypeGeometry,
-	"mediumint":   mysql.TypeInt24,
-	"json":        mysql.TypeJSON,
-	"int":         mysql.TypeLong,
-	"bigint":      mysql.TypeLonglong,
-	"longtext":    mysql.TypeLongBlob,
-	"mediumtext":  mysql.TypeMediumBlob,
-	"null":        mysql.TypeNull,
-	"set":         mysql.TypeSet,
-	"smallint":    mysql.TypeShort,
-	"char":        mysql.TypeString,
-	"time":        mysql.TypeDuration,
-	"timestamp":   mysql.TypeTimestamp,
-	"tinyint":     mysql.TypeTiny,
-	"tinytext":    mysql.TypeTinyBlob,
-	"varchar":     mysql.TypeVarchar,
-	"var_string":  mysql.TypeVarString,
-	"year":        mysql.TypeYear,
-}
 
 // NewCanalFlatEventBatchEncoder creates a new CanalFlatEventBatchEncoder
 func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
@@ -559,11 +529,7 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		// since canal-json format lost `Flag`, we cannot easily figure out whether it's binary,
-		// typeStr might not be a valid MysqlType, we have to convert them back.
-		typeStr = strings.Replace(typeStr, "blob", "text", 1)
-		typeStr = strings.Replace(typeStr, "binary", "char", 1)
-		tp, ok := str2MySQLType[typeStr]
+		tp := types.StrToType(typeStr)
 		if !ok {
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, type: %+v", name, tp)
