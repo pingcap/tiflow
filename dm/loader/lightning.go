@@ -116,6 +116,15 @@ func (l *LightningLoader) Type() pb.UnitType {
 // if fail, it should not call l.Close.
 func (l *LightningLoader) Init(ctx context.Context) (err error) {
 	tctx := tcontext.NewContext(ctx, l.logger)
+	toCfg, err := l.cfg.Clone()
+	if err != nil {
+		return err
+	}
+	l.toDB, l.toDBConns, err = createConns(tctx, l.cfg, toCfg.Name, toCfg.SourceID, 1)
+	if err != nil {
+		return err
+	}
+
 	checkpoint, err := newRemoteCheckPoint(tctx, l.cfg, l.checkpointID())
 	if err == nil {
 		l.checkPoint = checkpoint
@@ -133,14 +142,7 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	toCfg, err := l.cfg.Clone()
-	if err != nil {
-		return err
-	}
-	l.toDB, l.toDBConns, err = createConns(tctx, l.cfg, toCfg.Name, toCfg.SourceID, 1)
-	if err != nil {
-		return err
-	}
+
 	timeZone := l.cfg.Timezone
 	if len(timeZone) == 0 {
 		var err1 error
