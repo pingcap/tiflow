@@ -416,7 +416,7 @@ func testChangefeedReleaseResource(
 	})
 	// changefeed tick will release resources
 	cf.tick(ctx, state, captures)
-	// cancel()
+	cancel()
 	// check redo log dir is deleted
 	_, err := os.Stat(redoLogDir)
 	c.Assert(os.IsNotExist(err), check.IsTrue)
