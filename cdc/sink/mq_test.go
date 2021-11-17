@@ -16,18 +16,18 @@ package sink
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
-	"github.com/pingcap/ticdc/pkg/retry"
 	"net/url"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
