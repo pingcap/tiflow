@@ -17,7 +17,6 @@ target-database:
   max-allowed-packet: null
   session:
     tidb_txn_mode: optimistic
-    time_zone: "+00:00"
   security: null
 mysql-instances:
 - source-id: mysql-replica-01
