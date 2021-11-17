@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/cdc/processor"
-	"github.com/pingcap/ticdc/pkg/actor"
+	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -61,8 +61,7 @@ type Capture struct {
 	etcdClient *etcd.CDCEtcdClient
 	grpcPool   kv.GrpcPool
 
-	tableActorSystem *actor.System
-	tableActorRouter *actor.Router
+	tableActorSystem *system.System
 
 	cancel context.CancelFunc
 
@@ -108,15 +107,17 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.grpcPool.Close()
 	}
 	if c.tableActorSystem != nil {
+		err := c.tableActorSystem.Stop()
 		if err != nil {
 			log.Warn("stop table actor system failed", zap.Error(err))
 		}
-		log.Warn("stop table actor system failed", zap.Error(err))
 	}
 	if conf.Debug.EnableTableActor {
-		// todo: make the table actor system configurable
-		c.tableActorSystem, c.tableActorRouter = actor.NewSystemBuilder("table").Build()
-		c.tableActorSystem.Start(ctx)
+		c.tableActorSystem = system.NewSystem()
+		err = c.tableActorSystem.Start(ctx)
+		if err != nil {
+			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
+		}
 	}
 	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
@@ -169,7 +170,6 @@ func (c *Capture) run(stdCtx context.Context) error {
 		EtcdClient:       c.etcdClient,
 		GrpcPool:         c.grpcPool,
 		TableActorSystem: c.tableActorSystem,
-		TableActorRouter: c.tableActorRouter,
 	})
 	err := c.register(ctx)
 	if err != nil {
