@@ -242,7 +242,7 @@ function DM_RemoveLock_CASE() {
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column c double;"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column c double;"
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column c double;"
-	check_log_contain_with_retry "wait new ddl info putted into etcd" $WORK_DIR/master/log/dm-master.log
+	check_log_contain_with_retry "wait new ddl info putted into etcd in ${1}" $WORK_DIR/master/log/dm-master.log
 	check_metric_not_contains $MASTER_PORT "dm_master_shard_ddl_error" 3
 	run_sql_source1 "alter table ${shardddl1}.${tb1} drop column b;"
 
