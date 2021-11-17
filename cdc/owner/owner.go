@@ -118,12 +118,13 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	state := rawState.(*orchestrator.GlobalReactorState)
 	o.captures = state.Captures
 	o.updateMetrics(state)
+	o.handleJobs()
+
 	if !o.clusterVersionConsistent(state.Captures) {
 		// sleep one second to avoid printing too much log
 		time.Sleep(1 * time.Second)
 		return state, nil
 	}
-
 	// Owner should update GC safepoint before initializing changefeed, so
 	// changefeed can remove its "ticdc-creating" service GC safepoint during
 	// initializing.
@@ -133,7 +134,6 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		return nil, errors.Trace(err)
 	}
 
-	o.handleJobs()
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
 			o.cleanUpChangefeed(changefeedState)
