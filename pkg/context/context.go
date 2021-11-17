@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/actor"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -33,11 +34,13 @@ import (
 // the lifecycle of vars in the GlobalVars should be aligned with the ticdc server process.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
-	PDClient    pd.Client
-	KVStorage   tidbkv.Storage
-	CaptureInfo *model.CaptureInfo
-	EtcdClient  *etcd.CDCEtcdClient
-	GrpcPool    kv.GrpcPool
+	PDClient         pd.Client
+	KVStorage        tidbkv.Storage
+	CaptureInfo      *model.CaptureInfo
+	EtcdClient       *etcd.CDCEtcdClient
+	GrpcPool         kv.GrpcPool
+	TableActorSystem *actor.System
+	TableActorRouter *actor.Router
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline
