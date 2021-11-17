@@ -172,11 +172,11 @@ func (l *logSink) emitRowChangedEvents(ctx context.Context, newUnit func(int64) 
 	return nil
 }
 
-func (l *logSink) flushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (l *logSink) flushRowChangedEvents(ctx context.Context, resolvedTs uint64) (bool, uint64, error) {
 	// TODO update flush policy with size
 	select {
 	case <-ctx.Done():
-		return 0, ctx.Err()
+		return false, 0, ctx.Err()
 
 	default:
 		needFlushedUnits := make([]logUnit, 0, len(l.units))
@@ -188,7 +188,7 @@ func (l *logSink) flushRowChangedEvents(ctx context.Context, resolvedTs uint64) 
 		if len(needFlushedUnits) > 0 {
 			select {
 			case <-ctx.Done():
-				return 0, ctx.Err()
+				return false, 0, ctx.Err()
 
 			case <-time.After(defaultFlushRowChangedEventDuration):
 				// cannot accumulate enough row events in 5 second
@@ -199,7 +199,7 @@ func (l *logSink) flushRowChangedEvents(ctx context.Context, resolvedTs uint64) 
 			}
 		}
 	}
-	return resolvedTs, nil
+	return true, resolvedTs, nil
 }
 
 type logMeta struct {

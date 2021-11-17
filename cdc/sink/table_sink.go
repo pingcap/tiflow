@@ -54,7 +54,7 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 // FlushRowChangedEvents flushes sorted rows to sink manager, note the resolvedTs
 // is required to be no more than global resolvedTs, table barrierTs and table
 // redo log watermarkTs.
-func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (bool, uint64, error) {
 	i := sort.Search(len(t.buffer), func(i int) bool {
 		return t.buffer[i].CommitTs > resolvedTs
 	})
@@ -62,7 +62,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		atomic.StoreUint64(&t.emittedTs, resolvedTs)
 		ckpt, err := t.flushRedoLogs(ctx, resolvedTs)
 		if err != nil {
-			return ckpt, err
+			return false, ckpt, err
 		}
 		return t.manager.flushBackendSink(ctx)
 	}
@@ -71,12 +71,12 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 
 	err := t.manager.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
-		return t.manager.getCheckpointTs(), errors.Trace(err)
+		return false, t.manager.getCheckpointTs(), errors.Trace(err)
 	}
 	atomic.StoreUint64(&t.emittedTs, resolvedTs)
 	ckpt, err := t.flushRedoLogs(ctx, resolvedTs)
 	if err != nil {
-		return ckpt, err
+		return false, ckpt, err
 	}
 	return t.manager.flushBackendSink(ctx)
 }

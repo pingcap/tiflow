@@ -76,12 +76,12 @@ func (s *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	panic("unreachable")
 }
 
-func (s *mockSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (s *mockSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (bool, uint64, error) {
 	s.received = append(s.received, struct {
 		resolvedTs model.Ts
 		row        *model.RowChangedEvent
 	}{resolvedTs: resolvedTs})
-	return resolvedTs, nil
+	return true, resolvedTs, nil
 }
 
 func (s *mockSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {

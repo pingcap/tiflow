@@ -136,10 +136,17 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 	if err := n.emitRow2Sink(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, resolvedTs)
-	if err != nil {
-		return errors.Trace(err)
+
+	var checkpointTs uint64
+	var ok bool
+	// retry until ok is true
+	for !ok {
+		ok, checkpointTs, err = n.sink.FlushRowChangedEvents(ctx, resolvedTs)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
+
 	if checkpointTs <= n.checkpointTs {
 		return nil
 	}

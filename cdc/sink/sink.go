@@ -45,7 +45,7 @@ type Sink interface {
 
 	// FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
 	// TiCDC guarantees that all the Events whose commitTs is less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
-	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error)
+	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (bool, uint64, error)
 
 	// EmitCheckpointTs sends CheckpointTs to Sink
 	// TiCDC guarantees that all Events **in the cluster** which of commitTs less than or equal `checkpointTs` are sent to downstream successfully.

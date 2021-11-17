@@ -225,7 +225,7 @@ func (f *fileSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowC
 	return f.emitRowChangedEvents(ctx, newTableStream, rows...)
 }
 
-func (f *fileSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (f *fileSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (bool, uint64, error) {
 	log.Debug("[FlushRowChangedEvents] enter", zap.Uint64("ts", resolvedTs))
 	return f.flushRowChangedEvents(ctx, resolvedTs)
 }

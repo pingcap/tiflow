@@ -59,6 +59,7 @@ type mqSink struct {
 	partitionInput      []chan mqEvent
 	partitionResolvedTs []uint64
 
+	resolvedTs       uint64
 	checkpointTs     uint64
 	resolvedNotifier *notify.Notifier
 	resolvedReceiver *notify.Receiver
@@ -155,15 +156,17 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	return nil
 }
 
-func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (bool, uint64, error) {
 	if resolvedTs <= k.checkpointTs {
-		return k.checkpointTs, nil
+		return true, k.checkpointTs, nil
 	}
+
+	atomic.StoreUint64(&k.resolvedTs, resolvedTs)
 
 	for i := 0; i < int(k.partitionNum); i++ {
 		select {
 		case <-ctx.Done():
-			return 0, ctx.Err()
+			return false, 0, ctx.Err()
 		case k.partitionInput[i] <- struct {
 			row        *model.RowChangedEvent
 			resolvedTs uint64
@@ -171,28 +174,31 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (
 		}
 	}
 
-	// waiting for all row events are sent to mq producer
+	checkpointTs := atomic.LoadUint64(&k.checkpointTs)
+	k.statistics.PrintStatus(ctx)
+	return true, checkpointTs, nil
+}
+
+func (k *mqSink) flushRowChangedEvents(ctx context.Context) error {
 flushLoop:
 	for {
 		select {
 		case <-ctx.Done():
-			return 0, ctx.Err()
+			return ctx.Err()
 		case <-k.resolvedReceiver.C:
+			resolvedTs := atomic.LoadUint64(&k.resolvedTs)
 			for i := 0; i < int(k.partitionNum); i++ {
 				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
 					continue flushLoop
 				}
 			}
-			break flushLoop
+			atomic.StoreUint64(&k.checkpointTs, resolvedTs)
+			err := k.mqProducer.Flush(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
-	err := k.mqProducer.Flush(ctx)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	k.checkpointTs = resolvedTs
-	k.statistics.PrintStatus(ctx)
-	return k.checkpointTs, nil
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -269,6 +275,9 @@ func (k *mqSink) Barrier(cxt context.Context) error {
 func (k *mqSink) run(ctx context.Context) error {
 	defer k.resolvedReceiver.Stop()
 	wg, ctx := errgroup.WithContext(ctx)
+	wg.Go(func() error {
+		return k.flushRowChangedEvents(ctx)
+	})
 	for i := int32(0); i < k.partitionNum; i++ {
 		partition := i
 		wg.Go(func() error {

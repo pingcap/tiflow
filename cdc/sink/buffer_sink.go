@@ -109,7 +109,7 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 			b.bufferMu.Unlock()
 
 			start := time.Now()
-			checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, resolvedTs)
+			_, checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, resolvedTs)
 			if err != nil {
 				if errors.Cause(err) != context.Canceled {
 					errCh <- err
@@ -146,11 +146,13 @@ func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Ro
 	return nil
 }
 
-func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (bool, uint64, error) {
 	select {
 	case <-ctx.Done():
-		return atomic.LoadUint64(&b.checkpointTs), ctx.Err()
+		return false, atomic.LoadUint64(&b.checkpointTs), ctx.Err()
 	case b.flushTsChan <- resolvedTs:
+		return true, atomic.LoadUint64(&b.checkpointTs), nil
+	default:
 	}
-	return atomic.LoadUint64(&b.checkpointTs), nil
+	return false, atomic.LoadUint64(&b.checkpointTs), nil
 }

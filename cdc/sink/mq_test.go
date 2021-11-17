@@ -16,10 +16,10 @@ package sink
 import (
 	"context"
 	"fmt"
-	"net/url"
-
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
+	"github.com/pingcap/ticdc/pkg/retry"
+	"net/url"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
@@ -91,13 +91,26 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	}
 	err = sink.EmitRowChangedEvents(ctx, row)
 	c.Assert(err, check.IsNil)
-	checkpointTs, err := sink.FlushRowChangedEvents(ctx, uint64(120))
-	c.Assert(err, check.IsNil)
-	c.Assert(checkpointTs, check.Equals, uint64(120))
+
+	err = retry.Do(context.Background(), func() error {
+		ok, ts, err := sink.FlushRowChangedEvents(ctx, uint64(120))
+		c.Assert(err, check.IsNil)
+		c.Assert(ok, check.IsTrue)
+		if ts < uint64(120) {
+			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 120)
+		}
+		return nil
+	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	// flush older resolved ts
-	checkpointTs, err = sink.FlushRowChangedEvents(ctx, uint64(110))
-	c.Assert(err, check.IsNil)
-	c.Assert(checkpointTs, check.Equals, uint64(120))
+	err = retry.Do(context.Background(), func() error {
+		ok, ts, err := sink.FlushRowChangedEvents(ctx, uint64(110))
+		c.Assert(err, check.IsNil)
+		c.Assert(ok, check.IsTrue)
+		if ts != uint64(120) {
+			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 120)
+		}
+		return nil
+	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
 
 	// mock kafka broker processes 1 checkpoint ts event
 	leader.Returns(prodSuccess)
