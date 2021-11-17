@@ -150,7 +150,9 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage tikv.Storage, kvStor
 	defer cancel()
 
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
-	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool)
+	regionCache := tikv.NewRegionCache(pdCli)
+
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache)
 	defer cli.Close()
 
 	startTS := mustGetTimestamp(t, storage)
@@ -240,7 +242,8 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage tikv.Storage, 
 	defer cancel()
 
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
-	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool)
+	regionCache := tikv.NewRegionCache(pdCli)
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache)
 	defer cli.Close()
 
 	startTS := mustGetTimestamp(t, storage)

@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
@@ -55,10 +56,11 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	pdClient   pd.Client
-	kvStorage  tidbkv.Storage
-	etcdClient *etcd.CDCEtcdClient
-	grpcPool   kv.GrpcPool
+	pdClient    pd.Client
+	kvStorage   tidbkv.Storage
+	etcdClient  *etcd.CDCEtcdClient
+	grpcPool    kv.GrpcPool
+	regionCache *tikv.RegionCache
 
 	cancel context.CancelFunc
 
@@ -104,6 +106,10 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.grpcPool.Close()
 	}
 	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
+	if c.regionCache != nil {
+		c.regionCache.Close()
+	}
+	c.regionCache = tikv.NewRegionCache(c.pdClient)
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
@@ -153,6 +159,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		CaptureInfo: c.info,
 		EtcdClient:  c.etcdClient,
 		GrpcPool:    c.grpcPool,
+		RegionCache: c.regionCache,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -352,6 +359,9 @@ func (c *Capture) AsyncClose() {
 	}
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
+	}
+	if c.regionCache != nil {
+		c.regionCache.Close()
 	}
 }
 

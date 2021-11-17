@@ -291,6 +291,7 @@ var NewCDCKVClient func(
 	pd pd.Client,
 	kvStorage tikv.Storage,
 	grpcPool GrpcPool,
+	regionCache *tikv.RegionCache,
 ) CDCKVClient = NewCDCClient
 
 // CDCClient to get events from TiKV
@@ -308,7 +309,7 @@ type CDCClient struct {
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grpcPool GrpcPool) (c CDCKVClient) {
+func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grpcPool GrpcPool, regionCache *tikv.RegionCache) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
 
 	var store TiKVStorage
@@ -326,7 +327,7 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grp
 		pd:             pd,
 		kvStorage:      store,
 		grpcPool:       grpcPool,
-		regionCache:    getRegionCacheInstance(pd),
+		regionCache:    regionCache,
 		regionLimiters: defaultRegionEventFeedLimiters,
 	}
 	return
@@ -334,9 +335,6 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grp
 
 // Close CDCClient
 func (c *CDCClient) Close() error {
-	// make sure regionCache is only closed once
-	closeRegionCacheInstance(c.regionCache)
-
 	return nil
 }
 
