@@ -283,6 +283,7 @@ func (s *Sorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 
 // TryAddEntry implements the EventSorter interface
 func (s *Sorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) (bool, error) {
+	// add two select to guarantee the done/close condition is checked first.
 	select {
 	case <-ctx.Done():
 		return false, cerror.ErrSorterContextIsDone.GenWithStackByArgs()
