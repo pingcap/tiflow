@@ -409,7 +409,6 @@ func testChangefeedReleaseResource(
 	c.Assert(cf.initialized, check.Equals, expectedInitialized)
 
 	// remove changefeed from state manager by admin job
-	cf.isRemoved = true
 	cf.feedStateManager.PushAdminJob(&model.AdminJob{
 		CfID: cf.id,
 		Type: model.AdminRemove,
