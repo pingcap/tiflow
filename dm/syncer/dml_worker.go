@@ -138,7 +138,6 @@ func (w *DMLWorker) run() {
 				jobCh <- j
 				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
 			}
-
 			w.flushCh <- j
 		case conflict:
 			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
@@ -174,7 +173,7 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 	for j := range jobCh {
 		metrics.QueueSizeGauge.WithLabelValues(w.task, queueBucket, w.source).Set(float64(len(jobCh)))
 
-		if j.tp != flush && j.tp != conflict {
+		if j.tp != flush && j.tp != asyncFlush && j.tp != conflict {
 			if len(jobs) == 0 {
 				// set job TS when received first job of this batch.
 				w.lagFunc(j, workerJobIdx)

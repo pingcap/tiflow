@@ -65,12 +65,12 @@ func (c *causality) run() {
 
 		startTime := time.Now()
 		switch j.tp {
-		case flush:
+		case flush, asyncFlush:
 			c.relations.rotate()
 		case gc:
 			// gc is only used on inner-causality logic
 			c.relations.gc(j.seq)
-			return
+			continue
 		default:
 			keys := j.dml.identifyKeys()
 			// detectConflict before add

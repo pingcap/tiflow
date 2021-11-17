@@ -358,8 +358,6 @@ func (cp *RemoteCheckPoint) Snapshot() SnapshotInfo {
 	cp.snapshotSeq++
 	id := cp.snapshotSeq
 
-	cp.globalPointCheckOrSaveTime = time.Now()
-
 	tableCheckPoints := make(map[string]map[string]tablePoint, len(cp.points))
 	for s, tableCps := range cp.points {
 		tableCpSnapshots := make(map[string]tablePoint)
@@ -374,7 +372,8 @@ func (cp *RemoteCheckPoint) Snapshot() SnapshotInfo {
 	}
 
 	// if there is no change just return an empty snapshot
-	if len(tableCheckPoints) == 0 && !cp.globalPoint.outOfDate() && !cp.needFlushSafeModeExitPoint {
+	if len(tableCheckPoints) == 0 && !cp.globalPoint.outOfDate() && !cp.globalPointCheckOrSaveTime.IsZero() && !cp.needFlushSafeModeExitPoint {
+		cp.globalPointCheckOrSaveTime = time.Now()
 		return SnapshotInfo{
 			id: 0,
 		}
@@ -394,6 +393,7 @@ func (cp *RemoteCheckPoint) Snapshot() SnapshotInfo {
 	snapshot.globalPoint = globalLocation
 
 	cp.snapshots = append(cp.snapshots, snapshot)
+	cp.globalPointCheckOrSaveTime = time.Now()
 	return SnapshotInfo{
 		id:        id,
 		globalPos: snapshot.globalPoint.location,

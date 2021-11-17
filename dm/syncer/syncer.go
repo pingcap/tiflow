@@ -797,7 +797,7 @@ func (s *Syncer) addCount(isFinished bool, queueBucket string, tp opType, n int6
 		m = metrics.FinishedJobsTotal
 	}
 	switch tp {
-	case insert, update, del, ddl, flush, conflict, compact:
+	case insert, update, del, ddl, flush, asyncFlush, conflict, compact:
 		m.WithLabelValues(tp.String(), s.cfg.Name, queueBucket, s.cfg.SourceID, s.cfg.WorkerName, targetTable.Schema, targetTable.Name).Add(float64(n))
 	case skip, xid:
 		// ignore skip/xid jobs
@@ -940,12 +940,10 @@ func (s *Syncer) addJob(job *job) error {
 	case skip:
 		s.updateReplicationJobTS(job, skipJobIdx)
 	case flush:
-		s.addCount(false, adminQueueName, job.tp, 1, job.targetTable)
 		s.jobWg.Add(1)
 		s.dmlJobCh <- job
 		s.jobWg.Wait()
-		err := s.flushCheckPoints()
-		return err
+		return s.flushCheckPoints()
 	case ddl:
 		s.addCount(false, adminQueueName, job.tp, 1, job.targetTable)
 		s.updateReplicationJobTS(job, ddlJobIdx)
@@ -972,7 +970,7 @@ func (s *Syncer) addJob(job *job) error {
 	})
 	if flushFirstJob {
 		s.jobWg.Add(1)
-		s.dmlJobCh <- job
+		s.dmlJobCh <- newFlushJob()
 		s.jobWg.Wait()
 	}
 
@@ -1018,7 +1016,6 @@ func (s *Syncer) addJob(job *job) error {
 		}
 	}
 
-
 	if flushFirstJob || tp == ddl {
 		// interrupted after save checkpoint and before flush checkpoint.
 		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
@@ -1063,7 +1060,6 @@ func (s *Syncer) resetShardingGroup(table *filter.Table) {
 
 type flushCpTask struct {
 	snapshotInfo SnapshotInfo
-	wg           *sync.WaitGroup
 	// flush job seq, used as causality gc max version
 	flushJobSeq int64
 	// extra sharding ddl sqls
@@ -1071,7 +1067,8 @@ type flushCpTask struct {
 	shardMetaSQLs []string
 	shardMetaArgs [][]interface{}
 	// error chan
-	errCh chan error
+	syncFlushErrCh  chan error
+	asyncFlushJobWg *sync.WaitGroup
 }
 
 type checkpointFlushWorker struct {
@@ -1092,8 +1089,8 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 		// for async checkpoint flush, it waits all worker finish execute flush job
 		// for sync checkpoint flush, it skips waiting here because
 		// we waits all worker finish execute flush job before adding flushCPTask into flush worker
-		if task.wg != nil {
-			task.wg.Wait()
+		if task.asyncFlushJobWg != nil {
+			task.asyncFlushJobWg.Wait()
 		}
 
 		err := w.execError.Load()
@@ -1106,15 +1103,15 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 				zap.Stringer("global_pos", task.snapshotInfo.globalPos),
 				zap.Error(err))
 
-			if task.errCh != nil {
-				task.errCh <- err
+			if task.syncFlushErrCh != nil {
+				task.syncFlushErrCh <- err
 			}
 			return
 		}
 
 		err = w.cp.FlushPointsExcept(ctx, task.snapshotInfo.id, task.exceptTables, task.shardMetaSQLs, task.shardMetaArgs)
-		if task.errCh != nil {
-			task.errCh <- err
+		if task.syncFlushErrCh != nil {
+			task.syncFlushErrCh <- err
 		}
 		if err != nil {
 			ctx.L().Warn("flush checkpoint snapshot failed, ignore this error", zap.Any("snapshot", task), zap.Error(err))
@@ -1123,8 +1120,8 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 		ctx.L().Info("flushed checkpoint", zap.Int("snapshot_id", task.snapshotInfo.id),
 			zap.Stringer("pos", task.snapshotInfo.globalPos))
 		if err = w.afterFlushFn(task); err != nil {
-			if task.errCh != nil {
-				task.errCh <- err
+			if task.syncFlushErrCh != nil {
+				task.syncFlushErrCh <- err
 			}
 			ctx.L().Warn("flush post process failed", zap.Error(err))
 		}
@@ -1147,13 +1144,13 @@ func (w *checkpointFlushWorker) Close() {
 //
 // we may need to refactor the concurrency model to make the work-flow more clearer later.
 func (s *Syncer) flushCheckPoints() error {
-	errCh := make(chan error, 1)
+	syncFlushErrCh := make(chan error, 1)
 	// use math.MaxInt64 to clear all the data in causality component.
-	s.flushCheckPointsAsync(nil, errCh, math.MaxInt64)
-	return <-errCh
+	s.flushCheckPointsAsync(nil, syncFlushErrCh, math.MaxInt64)
+	return <-syncFlushErrCh
 }
 
-func (s *Syncer) flushCheckPointsAsync(asyncFlushJobWg *sync.WaitGroup, errCh chan error, flushJobSeq int64) {
+func (s *Syncer) flushCheckPointsAsync(asyncFlushJobWg *sync.WaitGroup, syncFlushErrCh chan error, flushJobSeq int64) {
 	var (
 		exceptTableIDs map[string]bool
 		exceptTables   []*filter.Table
@@ -1174,25 +1171,24 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJobWg *sync.WaitGroup, errCh ch
 	snapshotInfo := s.checkpoint.Snapshot()
 	if snapshotInfo.id == 0 {
 		log.L().Info("checkpoint has no change, skip save checkpoint")
-		if errCh != nil {
-			errCh <- nil
+		if syncFlushErrCh != nil {
+			syncFlushErrCh <- nil
 		}
 		return
 	}
 	task := &flushCpTask{
-		snapshotInfo:  snapshotInfo,
-		wg:            asyncFlushJobWg,
-		exceptTables:  exceptTables,
-		shardMetaSQLs: shardMetaSQLs,
-		shardMetaArgs: shardMetaArgs,
-		errCh:         errCh,
-		flushJobSeq:   flushJobSeq,
+		snapshotInfo:    snapshotInfo,
+		exceptTables:    exceptTables,
+		shardMetaSQLs:   shardMetaSQLs,
+		shardMetaArgs:   shardMetaArgs,
+		flushJobSeq:     flushJobSeq,
+		asyncFlushJobWg: asyncFlushJobWg,
+		syncFlushErrCh:  syncFlushErrCh,
 	}
 	s.flushCpWorker.Add(task)
 }
 
 func (s *Syncer) afterFlushCheckpoint(task *flushCpTask) error {
-	s.addCount(true, adminQueueName, flush, 1, nil)
 	// add a gc job to let causality module gc outdated kvs.
 	s.dmlJobCh <- newGCJob(task.flushJobSeq)
 
