@@ -101,6 +101,9 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
+
+	c.Assert(err, check.IsNil)
+
 	// flush older resolved ts
 	err = retry.Do(context.Background(), func() error {
 		ok, ts, err := sink.FlushRowChangedEvents(ctx, uint64(110))
@@ -111,6 +114,8 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
+
+	c.Assert(err, check.IsNil)
 
 	// mock kafka broker processes 1 checkpoint ts event
 	leader.Returns(prodSuccess)
