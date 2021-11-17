@@ -91,7 +91,7 @@ function run() {
 	# sync without relay
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 

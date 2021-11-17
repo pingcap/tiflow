@@ -259,6 +259,7 @@ function run() {
 	ps aux | grep worker2 | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER2_PORT 20
 
+	stop_relay_on_offline_worker
 	start_relay_on_offline_worker
 
 	echo "restart worker2"

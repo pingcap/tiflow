@@ -126,10 +126,10 @@ function run() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-relay -s $worker1bound worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-relay -s $worker2bound worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
