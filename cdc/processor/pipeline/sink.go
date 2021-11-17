@@ -114,7 +114,9 @@ func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
 	return
 }
 
-func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err error) {
+// flushSink will try to flush all rows commitTs before resolvedTs
+// if the action fails, it will return false.
+func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (ok bool, err error) {
 	defer func() {
 		if err != nil {
 			n.status.Store(TableStatusStopped)
@@ -131,29 +133,24 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 		resolvedTs = n.targetTs
 	}
 	if resolvedTs <= n.checkpointTs {
-		return nil
+		return true, nil
 	}
 	if err := n.emitRow2Sink(ctx); err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
 	}
 
-	var checkpointTs uint64
-	var ok bool
-	// retry until ok is true
-	for !ok {
-		ok, checkpointTs, err = n.sink.FlushRowChangedEvents(ctx, resolvedTs)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	ok, checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, resolvedTs)
+	if err != nil {
+		return false, errors.Trace(err)
 	}
 
 	if checkpointTs <= n.checkpointTs {
-		return nil
+		return ok, nil
 	}
 	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
 
 	n.flowController.Release(checkpointTs)
-	return nil
+	return ok, nil
 }
 
 func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
@@ -322,7 +319,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(errors.New("processor sync resolved injected error"))
 			})
-			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
+			if _, err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
 				return errors.Trace(err)
 			}
 			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
@@ -332,7 +329,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			return errors.Trace(err)
 		}
 	case pipeline.MessageTypeTick:
-		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+		if _, err := n.flushSink(ctx, n.resolvedTs); err != nil {
 			return errors.Trace(err)
 		}
 	case pipeline.MessageTypeCommand:
@@ -341,7 +338,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 		}
 	case pipeline.MessageTypeBarrier:
 		n.barrierTs = msg.BarrierTs
-		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+		if _, err := n.flushSink(ctx, n.resolvedTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
