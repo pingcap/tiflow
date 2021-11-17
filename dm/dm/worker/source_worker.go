@@ -136,7 +136,7 @@ func (w *SourceWorker) Start() {
 	}
 
 	var err error
-	w.sourceDB, err = conn.DefaultDBProvider.Apply(w.cfg.DecryptPassword().From)
+	w.sourceDB, err = conn.DefaultDBProvider.Apply(&w.cfg.DecryptPassword().From)
 	if err != nil {
 		w.l.Error("can't connected to upstream", zap.Error(err))
 	}
@@ -232,7 +232,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	w.sourceDBMu.Lock()
 	if w.sourceDB == nil {
 		var err error
-		w.sourceDB, err = conn.DefaultDBProvider.Apply(w.cfg.DecryptPassword().From)
+		w.sourceDB, err = conn.DefaultDBProvider.Apply(&w.cfg.DecryptPassword().From)
 		if err != nil {
 			w.sourceDBMu.Unlock()
 			return err
@@ -357,11 +357,9 @@ func (w *SourceWorker) EnableRelay() (err error) {
 		w.observeRelayStage(w.relayCtx, w.etcdClient, revRelay)
 	}()
 
-	w.relayHolder.RegisterListener(w.subTaskHolder)
-
 	w.relayEnabled.Store(true)
 	w.l.Info("relay enabled")
-	w.subTaskHolder.resetAllSubTasks(true)
+	w.subTaskHolder.resetAllSubTasks(w.getRelayWithoutLock())
 	return nil
 }
 
@@ -386,12 +384,11 @@ func (w *SourceWorker) DisableRelay() {
 		w.l.Info("finish refreshing task checker")
 	}
 
-	w.subTaskHolder.resetAllSubTasks(false)
+	w.subTaskHolder.resetAllSubTasks(nil)
 
 	if w.relayHolder != nil {
 		r := w.relayHolder
 		w.relayHolder = nil
-		r.UnRegisterListener(w.subTaskHolder)
 		r.Close()
 	}
 	if w.relayPurger != nil {
@@ -523,12 +520,20 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage pb.St
 	}
 
 	w.l.Info("subtask created", zap.Stringer("config", cfg2))
-	st.Run(expectStage)
+	st.Run(expectStage, w.getRelayWithoutLock())
+	return nil
+}
+
+// caller should make sure w.Lock is locked before calling this method.
+func (w *SourceWorker) getRelayWithoutLock() relay.Process {
+	if w.relayHolder != nil {
+		return w.relayHolder.Relay()
+	}
 	return nil
 }
 
 // UpdateSubTask update config for a sub task.
-func (w *SourceWorker) UpdateSubTask(cfg *config.SubTaskConfig) error {
+func (w *SourceWorker) UpdateSubTask(ctx context.Context, cfg *config.SubTaskConfig) error {
 	w.Lock()
 	defer w.Unlock()
 
@@ -542,7 +547,7 @@ func (w *SourceWorker) UpdateSubTask(cfg *config.SubTaskConfig) error {
 	}
 
 	w.l.Info("update sub task", zap.String("task", cfg.Name))
-	return st.Update(cfg)
+	return st.Update(ctx, cfg)
 }
 
 // OperateSubTask stop/resume/pause  sub task.
@@ -570,10 +575,10 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		err = st.Pause()
 	case pb.TaskOp_Resume:
 		w.l.Info("resume sub task", zap.String("task", name))
-		err = st.Resume()
+		err = st.Resume(w.getRelayWithoutLock())
 	case pb.TaskOp_AutoResume:
 		w.l.Info("auto_resume sub task", zap.String("task", name))
-		err = st.Resume()
+		err = st.Resume(w.getRelayWithoutLock())
 	default:
 		err = terror.ErrWorkerUpdateTaskStage.Generatef("invalid operate %s on subtask %v", op, name)
 	}
@@ -1043,5 +1048,5 @@ func (w *SourceWorker) HandleError(ctx context.Context, req *pb.HandleWorkerErro
 		return terror.ErrWorkerSubTaskNotFound.Generate(req.Task)
 	}
 
-	return st.HandleError(ctx, req)
+	return st.HandleError(ctx, req, w.getRelayWithoutLock())
 }
