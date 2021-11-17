@@ -49,7 +49,8 @@ function run() {
 
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"start-relay -s $SOURCE_ID1 worker1" \
-			"\"result\": true" 2
+			"\"result\": true" 1 \
+			"ERROR 1152" 1
 
 		echo "query status, relay log failed"
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
