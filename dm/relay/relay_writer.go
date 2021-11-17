@@ -14,11 +14,13 @@
 package relay
 
 import (
+	"math/rand"
 	"path/filepath"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/pingcap/failpoint"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -233,7 +235,29 @@ func (w *FileWriter) handleEventDefault(ev *replication.BinlogEvent) (WResult, e
 	}
 
 	// write the non-duplicate event
+	failpoint.Inject("SlowDownWriteDMLRelayLog", func(_ failpoint.Value) {
+		if rand.Int()%4 == 0 {
+			switch ev.Header.EventType {
+			case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2,
+				replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2,
+				replication.UPDATE_ROWS_EVENTv0, replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
+				mid := len(ev.RawData) / 2
+				first, second := ev.RawData[:mid], ev.RawData[mid:]
+				err2 := w.out.Write(first)
+				if err2 != nil {
+					w.logger.DPanic("error in failpoint SlowDownWriteDMLRelayLog", zap.Error(err2))
+				}
+				time.Sleep(time.Second)
+				err = w.out.Write(second)
+				failpoint.Goto("afterWrite")
+			}
+		}
+	})
+
 	err = w.out.Write(ev.RawData)
+
+	failpoint.Label("afterWrite")
+
 	return WResult{
 		Ignore: false,
 	}, terror.Annotatef(err, "write event %+v", ev.Header)
