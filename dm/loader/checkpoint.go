@@ -472,7 +472,6 @@ func (cp *RemoteCheckPoint) String() string {
 
 type LightningCheckpointList struct {
 	db        *conn.BaseDB
-	connMutex sync.Mutex
 	schema    string
 	tableName string
 	logger    log.Logger
@@ -515,7 +514,7 @@ func (cp *LightningCheckpointList) RegisterCheckPoint(ctx context.Context, worke
 		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
 	}
 
-	sql := fmt.Sprintf("INSERT INGORE INTO %s (`worker_name`, `task_name`) VALUES(?,?)", cp.tableName)
+	sql := fmt.Sprintf("INSERT IGNORE INTO %s (`worker_name`, `task_name`) VALUES(?,?)", cp.tableName)
 	cp.logger.Info("initial checkpoint record",
 		zap.String("sql", sql),
 		zap.String("worker-name", workerName),
@@ -523,7 +522,6 @@ func (cp *LightningCheckpointList) RegisterCheckPoint(ctx context.Context, worke
 	args := []interface{}{workerName, taskName}
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
 	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{sql}, args)
-	cp.connMutex.Unlock()
 	if err != nil {
 		return terror.WithScope(terror.Annotate(err, "initialize checkpoint"), terror.ScopeDownstream)
 	}
