@@ -49,7 +49,7 @@ func TestUnifiedSorterTryAddEntry(t *testing.T) {
 		cancel()
 		added, err = s.TryAddEntry(ctx, event)
 		require.False(t, added)
-		require.True(t, cerror.ErrSorterContextIsDone.Equal(err))
+		require.False(t, cerror.ErrSorterClosed.Equal(err))
 		<-s.inputCh
 		s.closeCh <- struct{}{}
 		added, err = s.TryAddEntry(context.TODO(), event)

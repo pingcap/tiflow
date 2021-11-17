@@ -286,7 +286,7 @@ func (s *Sorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent)
 	// add two select to guarantee the done/close condition is checked first.
 	select {
 	case <-ctx.Done():
-		return false, cerror.ErrSorterContextIsDone.GenWithStackByArgs()
+		return false, ctx.Err()
 	case <-s.closeCh:
 		return false, cerror.ErrSorterClosed.GenWithStackByArgs()
 	default:

@@ -1011,8 +1011,4 @@ error = '''
 sorter is closed
 '''
 
-["CDC:ErrSorterContextIsDone"]
-error = '''
-the context is done
-'''
 
