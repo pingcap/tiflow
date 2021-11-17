@@ -544,3 +544,59 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 	c.Assert(queries, DeepEquals, expectQueries)
 	c.Assert(args, DeepEquals, expectArgs)
 }
+
+func (s *testSyncerSuite) TestTruncateIndexValues(c *C) {
+	p := parser.New()
+	se := mock.NewContext()
+
+	testCases := []struct {
+		schema    string
+		values    []interface{}
+		preValues []interface{}
+	}{
+		{
+			// test not prefix key
+			schema:    `create table t1(a int, b varchar(20), unique key b(b))`,
+			values:    []interface{}{10, "1234"},
+			preValues: []interface{}{"1234"},
+		},
+		{
+			// test not string key
+			schema:    `create table t1(a int, b text, unique key a(a))`,
+			values:    []interface{}{10, "1234"},
+			preValues: []interface{}{int64(10)},
+		},
+		{
+			// test keys
+			schema:    `create table t1(a int, b text, unique key b(b(3)))`,
+			values:    []interface{}{10, "1234"},
+			preValues: []interface{}{"123"},
+		},
+		{
+			// test multi keys
+			schema:    `create table t1(a int, b text, unique key c2(a, b(3)))`,
+			values:    []interface{}{10, "1234"},
+			preValues: []interface{}{int64(10), "123"},
+		},
+	}
+
+	for i, tc := range testCases {
+		schemaStr := tc.schema
+		assert := func(obtained interface{}, checker Checker, args ...interface{}) {
+			c.Assert(obtained, checker, append(args, Commentf("test case schema: %s", schemaStr))...)
+		}
+		ti, err := createTableInfo(p, se, int64(i+1), tc.schema)
+		assert(err, IsNil)
+		dti := schema.GetDownStreamTi(ti, ti)
+		assert(dti, NotNil)
+		assert(dti.AvailableUKIndexList, NotNil)
+		cols := make([]*model.ColumnInfo, 0, len(dti.AvailableUKIndexList[0].Columns))
+		values := make([]interface{}, 0, len(dti.AvailableUKIndexList[0].Columns))
+		for _, column := range dti.AvailableUKIndexList[0].Columns {
+			cols = append(cols, ti.Columns[column.Offset])
+			values = append(values, tc.values[column.Offset])
+		}
+		realPreValue := truncateIndexValues(dti.AvailableUKIndexList[0], cols, values)
+		assert(realPreValue, DeepEquals, tc.preValues)
+	}
+}
