@@ -27,9 +27,9 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/parser"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay/common"
 )
 
 // GetGTIDsForPosFromStreamer tries to get GTID sets for the specified binlog position (for the corresponding txn) from a Streamer.
@@ -56,7 +56,7 @@ func GetGTIDsForPosFromStreamer(ctx context.Context, r Streamer, endPos gmysql.P
 				log.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err2))
 			}
 
-			isDDL := common.CheckIsDDL(string(ev.Query), parser2)
+			isDDL := parser.CheckIsDDL(string(ev.Query), parser2)
 			if isDDL {
 				if latestGSet == nil {
 					// GTID not enabled, can't get GTIDs for the position.
