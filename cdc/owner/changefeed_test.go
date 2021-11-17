@@ -353,7 +353,7 @@ func (s *changefeedSuite) TestFinished(c *check.C) {
 	c.Assert(state.Info.State, check.Equals, model.StateFinished)
 }
 
-func (s *changefeedSuite) TestReleaseResource(c *check.C) {
+func (s *changefeedSuite) TestRemoveChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 
 	baseCtx, cancel := context.WithCancel(context.Background())
@@ -415,9 +415,10 @@ func testChangefeedReleaseResource(
 		Type: model.AdminRemove,
 	})
 	// changefeed tick will release resources
-	cf.tick(ctx, state, captures)
+	err := cf.tick(ctx, state, captures)
+	c.Assert(err, check.IsNil)
 	cancel()
 	// check redo log dir is deleted
-	_, err := os.Stat(redoLogDir)
+	_, err = os.Stat(redoLogDir)
 	c.Assert(os.IsNotExist(err), check.IsTrue)
 }

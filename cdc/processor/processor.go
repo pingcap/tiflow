@@ -328,8 +328,7 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 	default:
 		return nil
 	}
-	cause := errors.Cause(err)
-	if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
+	if err != nil && !processorIgnoralbeError(err) {
 		log.Error("error on running processor",
 			cdcContext.ZapFieldCapture(ctx),
 			cdcContext.ZapFieldChangefeed(ctx),
