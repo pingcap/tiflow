@@ -139,8 +139,8 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 	}
 	l.toDB, l.toDBConns, err = createConns(tctx, l.cfg, toCfg.Name, toCfg.SourceID, 1)
 	if err != nil {
-        return err
-    }
+		return err
+	}
 	timeZone := l.cfg.Timezone
 	if len(timeZone) == 0 {
 		var err1 error

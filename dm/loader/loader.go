@@ -562,7 +562,7 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 
 	l.logger.Info("loader's sql_mode is", zap.String("sqlmode", lcfg.To.Session["sql_mode"]))
 
-	l.toDB, l.toDBConns, err = createConns(tctx, lcfg.To, lcfg.Name, lcfg.SourceID, l.cfg.PoolSize)
+	l.toDB, l.toDBConns, err = createConns(tctx, lcfg, lcfg.Name, lcfg.SourceID, l.cfg.PoolSize)
 	if err != nil {
 		return err
 	}

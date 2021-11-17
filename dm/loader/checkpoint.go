@@ -105,7 +105,7 @@ type RemoteCheckPoint struct {
 }
 
 func newRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id string) (CheckPoint, error) {
-	db, dbConns, err := createConns(tctx, cfg.To, cfg.Name, cfg.SourceID, 1)
+	db, dbConns, err := createConns(tctx, cfg, cfg.Name, cfg.SourceID, 1)
 	if err != nil {
 		return nil, err
 	}
