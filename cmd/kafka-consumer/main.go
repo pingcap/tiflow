@@ -593,7 +593,7 @@ func syncFlushRowChangedEvents(ctx context.Context, sink sink.Sink, resolvedTs u
 			return ctx.Err()
 		default:
 		}
-		checkpointTs, err := sink.FlushRowChangedEvents(ctx, resolvedTs)
+		_, checkpointTs, err := sink.FlushRowChangedEvents(ctx, resolvedTs)
 		if err != nil {
 			return err
 		}

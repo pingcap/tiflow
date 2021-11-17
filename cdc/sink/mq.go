@@ -157,8 +157,9 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 }
 
 func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (bool, uint64, error) {
-	if resolvedTs <= k.checkpointTs {
-		return true, k.checkpointTs, nil
+	checkpointTs := atomic.LoadUint64(&k.checkpointTs)
+	if resolvedTs <= checkpointTs {
+		return true, checkpointTs, nil
 	}
 
 	atomic.StoreUint64(&k.resolvedTs, resolvedTs)
@@ -174,7 +175,7 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (
 		}
 	}
 
-	checkpointTs := atomic.LoadUint64(&k.checkpointTs)
+	checkpointTs = atomic.LoadUint64(&k.checkpointTs)
 	k.statistics.PrintStatus(ctx)
 	return true, checkpointTs, nil
 }
