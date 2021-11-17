@@ -619,6 +619,7 @@ function DM_COMPACT_USE_DOWNSTREAM_SCHEMA_CASE() {
 		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b,c) values($((i + 100)),$i,$i)"
 		run_sql_source1 "update ${shardddl1}.${tb1} set c=20 where a=$((i + 100))"
 		run_sql_source1 "update ${shardddl1}.${tb1} set c=c+1 where a=$((i + 100))"
+		# Use downstream uk 'b' as key and this sql which modifiies 'b' will be splited to two job(delete+insert)
 		run_sql_source1 "update ${shardddl1}.${tb1} set b=b+1 where a=$((i + 100))"
 		run_sql_source1 "update ${shardddl1}.${tb1} set a=a+100 where a=$((i + 100))"
 		run_sql_source1 "delete from ${shardddl1}.${tb1} where a=$((i + 200))"
@@ -635,7 +636,7 @@ function DM_COMPACT_USE_DOWNSTREAM_SCHEMA_CASE() {
 	# If use upstream schema, key will be 'a' with value greater than 100.
 	downstreamSuccess=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "downstream identifyKey check success" | wc -l)
 	downstreamFail=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "downstream identifyKey check failed" | wc -l)
-	# As update pk/uk row will be divided into delete and update, the count will be 8 in each loop, so total is 11*8 = 88
+	# As update pk/uk row will be splited to delete and update, the count will be 8 in each loop, so total is 11*8 = 88
 	if [[ "$downstreamSuccess" -ne 88 || "$downstreamFail" -ne 0 ]]; then
 		echo "compact use wrong downstream identify key. $downstreamSuccess success should be 88. $downstreamFail failed should be 0."
 		exit 1
