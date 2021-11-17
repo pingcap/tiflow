@@ -1753,6 +1753,16 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 
 	// 3. change the stage (from Offline) to Free or Relay.
 	lastRelaySource := w.RelaySourceID()
+	if lastRelaySource == "" {
+		// when worker is removed (for example lost keepalive when master scheduler boots up), w.RelaySourceID() is
+		// of course nothing, so we find the relay source from a better place
+		for source, workerM := range s.relayWorkers {
+			if _, ok2 := workerM[w.BaseInfo().Name]; ok2 {
+				lastRelaySource = source
+				break
+			}
+		}
+	}
 	w.ToFree()
 	// TODO: rename ToFree to Online and move below logic inside it
 	if lastRelaySource != "" {

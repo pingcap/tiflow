@@ -197,10 +197,10 @@ func (conn *DBConn) resetConn(tctx *tcontext.Context) error {
 	return nil
 }
 
-func createConns(tctx *tcontext.Context, cfg config.DBConfig,
+func createConns(tctx *tcontext.Context, cfg *config.SubTaskConfig,
 	name, sourceID string,
 	workerCount int) (*conn.BaseDB, []*DBConn, error) {
-	baseDB, err := conn.DefaultDBProvider.Apply(cfg)
+	baseDB, err := conn.DefaultDBProvider.Apply(&cfg.To)
 	if err != nil {
 		return nil, nil, terror.WithScope(err, terror.ScopeDownstream)
 	}
