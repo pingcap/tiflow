@@ -230,8 +230,7 @@ data-flow-diagram: docs/data-flow.dot
 clean:
 	go clean -i ./...
 	rm -rf *.out
-	rm -f bin/cdc
-	rm -f bin/cdc_kafka_consumer
+	rm -rf bin
 
 dm: dm-master dm-worker dmctl dm-portal dm-syncer
 
