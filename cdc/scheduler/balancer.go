@@ -31,7 +31,7 @@ type balancer interface {
 	FindVictims(
 		tables *util.TableSet,
 		captures map[model.CaptureID]*model.CaptureInfo,
-	) (tablesToRemove []model.TableID)
+	) (tablesToRemove []*util.TableRecord)
 
 	// FindTarget returns a target capture to add a table to.
 	FindTarget(
@@ -42,6 +42,8 @@ type balancer interface {
 
 // tableNumberBalancer implements a balance strategy based on the
 // current number of tables replicated by each capture.
+// TODO: Implement finer-grained balance strategy based on the actual
+// workload of each table.
 type tableNumberBalancer struct {
 	logger *zap.Logger
 }
@@ -93,7 +95,7 @@ func (r *tableNumberBalancer) FindTarget(
 func (r *tableNumberBalancer) FindVictims(
 	tables *util.TableSet,
 	captures map[model.CaptureID]*model.CaptureInfo,
-) []model.TableID {
+) []*util.TableRecord {
 	// Algorithm overview: We try to remove some tables as the victims so that
 	// no captures are assigned more tables than the average workload measured in table number,
 	// modulo the necessary margin due to the fraction part of the average.
@@ -111,7 +113,7 @@ func (r *tableNumberBalancer) FindVictims(
 		zap.Int("capture-num", captureNum),
 		zap.Int("target-limit", upperLimitPerCapture))
 
-	var victims []model.TableID
+	var victims []*util.TableRecord
 	for _, tables := range tables.GetAllTablesGroupedByCaptures() {
 		var tableList []model.TableID
 		for tableID := range tables {
@@ -119,7 +121,7 @@ func (r *tableNumberBalancer) FindVictims(
 		}
 		// We sort the tableIDs here so that the result is deterministic,
 		// which would aid testing and debugging.
-		util.SorterTableIDs(tableList)
+		util.SortTableIDs(tableList)
 
 		tableNum2Remove := len(tables) - upperLimitPerCapture
 		if tableNum2Remove <= 0 {
@@ -132,9 +134,14 @@ func (r *tableNumberBalancer) FindVictims(
 				break
 			}
 
-			r.logger.Info("Rebalance: remove table",
-				zap.Int64("table-id", tableID))
-			victims = append(victims, tableID)
+			record := tables[tableID]
+			if record == nil {
+				panic("unreachable")
+			}
+
+			r.logger.Info("Rebalance: find victim table",
+				zap.Any("table-record", record))
+			victims = append(victims, record)
 			tableNum2Remove--
 		}
 	}

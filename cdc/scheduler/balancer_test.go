@@ -65,8 +65,14 @@ func TestBalancerFindVictims(t *testing.T) {
 
 	victims := balancer.FindVictims(tables, mockCaptureInfos)
 	require.Len(t, victims, 2)
-	require.Contains(t, victims, model.TableID(1))
-	require.Contains(t, victims, model.TableID(2))
+	require.Contains(t, victims, &util.TableRecord{
+		TableID:   1,
+		CaptureID: "capture-1",
+	})
+	require.Contains(t, victims, &util.TableRecord{
+		TableID:   2,
+		CaptureID: "capture-1",
+	})
 }
 
 func TestBalancerFindTarget(t *testing.T) {
