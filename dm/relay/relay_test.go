@@ -79,7 +79,7 @@ func newRelayCfg(c *C, flavor string) *Config {
 	}
 }
 
-func getDBConfigForTest() config.DBConfig {
+func getDBConfigForTest() *config.DBConfig {
 	host := os.Getenv("MYSQL_HOST")
 	if host == "" {
 		host = "127.0.0.1"
@@ -93,7 +93,7 @@ func getDBConfigForTest() config.DBConfig {
 		user = "root"
 	}
 	password := os.Getenv("MYSQL_PSWD")
-	return config.DBConfig{
+	return &config.DBConfig{
 		Host:     host,
 		Port:     port,
 		User:     user,
@@ -441,9 +441,6 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	queryEv2 := queryEv.Event.(*replication.QueryEvent)
 	queryEv2.GSet, _ = gmysql.ParseGTIDSet(relayCfg.Flavor, "1-2-3")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-
 	// reader return with an error
 	for _, reader2.err = range []error{
 		errors.New("reader error for testing"),
@@ -451,7 +448,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		replication.ErrSyncClosed,
 		replication.ErrNeedSyncAgain,
 	} {
-		handleErr := r.handleEvents(ctx, reader2, transformer2, writer2)
+		handleErr := r.handleEvents(context.Background(), reader2, transformer2, writer2)
 		c.Assert(errors.Cause(handleErr), Equals, reader2.err)
 	}
 
@@ -461,7 +458,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// writer return error to force handleEvents return
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
-	err = r.handleEvents(ctx, reader2, transformer2, writer2)
+	err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
 	c.Assert(errors.Cause(err), Equals, writer2.err)
 	// after handle rotate event, we save and flush the meta immediately
 	c.Assert(r.meta.Dirty(), Equals, false)
@@ -480,7 +477,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		lm := r.meta.(*LocalMeta)
 		backupUUID := lm.currentUUID
 		lm.currentUUID = "not exist"
-		err = r.handleEvents(ctx, reader2, transformer2, writer2)
+		err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
 		c.Assert(os.IsNotExist(errors.Cause(err)), Equals, true)
 		lm.currentUUID = backupUUID
 	}
@@ -494,10 +491,11 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// return with the annotated writer error
 	err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
 	c.Assert(errors.Cause(err), Equals, writer2.err)
-	// after handle rotate event, we save and flush the meta immediately
 	c.Assert(r.meta.Dirty(), Equals, false)
 
 	// writer without error
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
 	writer2.err = nil
 	err = r.handleEvents(ctx, reader2, transformer2, writer2) // returned when ctx timeout
 	c.Assert(errors.Cause(err), Equals, ctx.Err())

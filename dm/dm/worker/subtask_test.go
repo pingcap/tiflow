@@ -122,7 +122,7 @@ func (m MockUnit) Pause() {}
 
 func (m *MockUnit) Resume(ctx context.Context, pr chan pb.ProcessResult) { m.Process(ctx, pr) }
 
-func (m *MockUnit) Update(_ *config.SubTaskConfig) error {
+func (m *MockUnit) Update(context.Context, *config.SubTaskConfig) error {
 	return m.errUpdate
 }
 
@@ -229,7 +229,7 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *C) {
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 
 	// update in running
-	c.Assert(st.Update(nil), NotNil)
+	c.Assert(st.Update(context.Background(), nil), NotNil)
 	c.Assert(st.CurrUnit(), Equals, mockLoader)
 	c.Assert(st.Result(), IsNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
@@ -243,7 +243,7 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *C) {
 	}
 
 	// update again
-	c.Assert(st.Update(&config.SubTaskConfig{Name: "updateSubtask"}), IsNil)
+	c.Assert(st.Update(context.Background(), &config.SubTaskConfig{Name: "updateSubtask"}), IsNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Paused)
 	c.Assert(st.CurrUnit(), Equals, mockLoader)
 	if st.Result() != nil && (!st.Result().IsCanceled || len(st.Result().Errors) > 0) {
