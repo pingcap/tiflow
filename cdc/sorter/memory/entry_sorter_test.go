@@ -17,11 +17,13 @@ import (
 	"context"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
@@ -219,9 +221,13 @@ func (s *mockEntrySorterSuite) TestEntrySorterNonBlocking(c *check.C) {
 	}()
 	for _, tc := range testCases {
 		for _, entry := range tc.input {
-			c.Assert(es.TryAddEntry(ctx, model.NewPolymorphicEvent(entry)), check.IsTrue)
+			added, err := es.TryAddEntry(ctx, model.NewPolymorphicEvent(entry))
+			c.Assert(added, check.IsTrue)
+			c.Assert(err, check.IsNil)
 		}
-		c.Assert(es.TryAddEntry(ctx, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs)), check.IsTrue)
+		added, err := es.TryAddEntry(ctx, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
+		c.Assert(added, check.IsTrue)
+		c.Assert(err, check.IsNil)
 		for i := 0; i < len(tc.expect); i++ {
 			e := <-es.Output()
 			c.Check(e.RawKV, check.DeepEquals, tc.expect[i])
@@ -286,6 +292,15 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 	}
 	cancel()
 	wg.Wait()
+}
+
+func (s *mockEntrySorterSuite) TestEntrySorterClosed(c *check.C) {
+	defer testleak.AfterTest(c)()
+	es := NewEntrySorter()
+	atomic.StoreInt32(&es.closed, 1)
+	added, err := es.TryAddEntry(context.TODO(), model.NewResolvedPolymorphicEvent(0, 1))
+	c.Assert(added, check.IsFalse)
+	c.Assert(cerror.ErrSorterClosed.Equal(err), check.IsTrue)
 }
 
 func BenchmarkSorter(b *testing.B) {

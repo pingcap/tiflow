@@ -996,3 +996,13 @@ error = '''
 error encountered when locking sort-dir
 '''
 
+["CDC:ErrSorterClosed"]
+error = '''
+sorter is closed
+'''
+
+["CDC:ErrSorterContextIsDone"]
+error = '''
+the context is done
+'''
+

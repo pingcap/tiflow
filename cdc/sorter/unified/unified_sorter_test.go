@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,18 +31,29 @@ func TestUnifiedSorterTryAddEntry(t *testing.T) {
 	}
 	for _, event := range events {
 		s := &Sorter{inputCh: make(chan *model.PolymorphicEvent, 2), closeCh: make(chan struct{}, 2)}
-		require.True(t, s.TryAddEntry(context.TODO(), event))
-		require.True(t, s.TryAddEntry(context.TODO(), event))
-		require.False(t, s.TryAddEntry(context.TODO(), event))
+		added, err := s.TryAddEntry(context.TODO(), event)
+		require.True(t, added)
+		require.Nil(t, err)
+		added, err = s.TryAddEntry(context.TODO(), event)
+		require.True(t, added)
+		require.Nil(t, err)
+		added, err = s.TryAddEntry(context.TODO(), event)
+		require.False(t, added)
+		require.Nil(t, err)
 		<-s.inputCh
-		require.True(t, s.TryAddEntry(context.TODO(), event))
+		added, err = s.TryAddEntry(context.TODO(), event)
+		require.True(t, added)
+		require.Nil(t, err)
 		<-s.inputCh
 		ctx, cancel := context.WithCancel(context.TODO())
 		cancel()
-		require.False(t, s.TryAddEntry(ctx, event))
-		require.True(t, s.TryAddEntry(context.TODO(), event))
+		added, err = s.TryAddEntry(ctx, event)
+		require.False(t, added)
+		require.True(t, cerror.ErrSorterContextIsDone.Equal(err))
 		<-s.inputCh
 		s.closeCh <- struct{}{}
-		require.False(t, s.TryAddEntry(ctx, event))
+		added, err = s.TryAddEntry(context.TODO(), event)
+		require.False(t, added)
+		require.True(t, cerror.ErrSorterClosed.Equal(err))
 	}
 }
