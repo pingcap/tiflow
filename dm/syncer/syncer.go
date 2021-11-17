@@ -1620,8 +1620,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			if s.streamerController.CanRetry(err) {
-				// GlobalPoint is the last finished GTID
-				err = s.streamerController.ResetReplicationSyncer(tctx, s.checkpoint.GlobalPoint())
+				// lastLocation is the last finished GTID
+				err = s.streamerController.ResetReplicationSyncer(tctx, lastLocation)
 				if err != nil {
 					return err
 				}
