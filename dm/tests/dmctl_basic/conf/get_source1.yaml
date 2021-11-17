@@ -14,8 +14,7 @@ from:
   user: root
   password: '******'
   max-allowed-packet: null
-  session:
-    time_zone: "+00:00"
+  session: {}
   security: null
 purge:
   interval: 3600
