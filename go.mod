@@ -45,19 +45,19 @@ require (
 	github.com/lib/pq v1.3.0 // indirect
 	github.com/linkedin/goavro/v2 v2.9.8
 	github.com/mattn/go-colorable v0.1.11 // indirect
-	github.com/mattn/go-shellwords v1.0.3
+	github.com/mattn/go-shellwords v1.0.12
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
 	github.com/modern-go/reflect2 v1.0.1
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
-	github.com/pingcap/errors v0.11.5-0.20210513014640-40f9a1999b3b
+	github.com/pingcap/errors v0.11.5-0.20211009033009-93128226aaa3
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
-	github.com/pingcap/kvproto v0.0.0-20211011042309-a4518fcacbc8
+	github.com/pingcap/kvproto v0.0.0-20211029081837-3c7bd947cf9b
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
-	github.com/pingcap/tidb v1.1.0-beta.0.20211026030648-c497d5c06348
+	github.com/pingcap/tidb v1.1.0-beta.0.20211115203106-b076e193b320
 	github.com/pingcap/tidb-tools v5.2.2-0.20211019062242-37a8bef2fa17+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20211026030648-c497d5c06348
+	github.com/pingcap/tidb/parser v0.0.0-20211115203106-b076e193b320
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
@@ -74,8 +74,8 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tidwall/gjson v1.9.1
 	github.com/tidwall/sjson v1.2.2
-	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20211011083157-49c8dd23f1f0
-	github.com/tikv/pd v1.1.0-beta.0.20210818082359-acba1da0018d
+	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20211115071040-a3f1c41ac1a0
+	github.com/tikv/pd v1.1.0-beta.0.20211104095303-69c86d05d379
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
 	github.com/unrolled/render v1.0.1
