@@ -41,7 +41,8 @@ function start_relay_fail() {
 function start_relay_on_offline_worker() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker2" \
-		"fail to get expected result" 1 \
+		"\"result\": true" 2 \
+		"\"msg\": \"source relay is operated but the bounded worker is offline\"" 1 \
 		"\"source\": \"$SOURCE_ID2\"" 1 \
 		"\"worker\": \"worker2\"" 1
 }

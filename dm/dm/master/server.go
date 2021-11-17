@@ -2276,11 +2276,27 @@ func (s *Server) OperateRelay(ctx context.Context, req *pb.OperateRelayRequest) 
 	resp2.Result = true
 	// TODO: now we make sure req.Source isn't empty and len(req.Worker)>=1 in dmctl,
 	// we need refactor the logic here if this behavior changed in the future
-	sources := make([]string, len(req.Worker))
-	for i := range req.Worker {
-		sources[i] = req.Source
+	var workerToCheck []string
+	for _, worker := range req.Worker {
+		w := s.scheduler.GetWorkerByName(worker)
+		if w != nil && w.Stage() != scheduler.WorkerOffline {
+			workerToCheck = append(workerToCheck, worker)
+		} else {
+			resp2.Sources = append(resp2.Sources, &pb.CommonWorkerResponse{
+				Result: true,
+				Msg:    "source relay is operated but the bounded worker is offline",
+				Source: req.Source,
+				Worker: worker,
+			})
+		}
 	}
-	resp2.Sources = s.getSourceRespsAfterOperation(ctx, "", sources, req.Worker, req)
+	if len(workerToCheck) > 0 {
+		sources := make([]string, len(req.Worker))
+		for i := range workerToCheck {
+			sources[i] = req.Source
+		}
+		resp2.Sources = append(resp2.Sources, s.getSourceRespsAfterOperation(ctx, "", sources, workerToCheck, req)...)
+	}
 	return resp2, nil
 }
 
