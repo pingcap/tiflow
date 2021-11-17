@@ -226,6 +226,9 @@ var (
 	ErrActorStopped   = errors.Normalize("actor stopped", errors.RFCCodeText("CDC:ErrActorStopped"))
 	ErrMailboxFull    = errors.Normalize("mailbox is full, please try again. Internal use only, report a bug if seen externally", errors.RFCCodeText("CDC:ErrMailboxFull"))
 
+	// leveldb sorter errors
+	ErrStartAStoppedLevelDBSystem = errors.Normalize("start a stopped leveldb system", errors.RFCCodeText("CDC:ErrStartAStoppedLevelDBSystem"))
+
 	// workerpool errors
 	ErrWorkerPoolHandleCancelled            = errors.Normalize("workerpool handle is cancelled", errors.RFCCodeText("CDC:ErrWorkerPoolHandleCancelled"))
 	ErrAsyncPoolExited                      = errors.Normalize("asyncPool has exited. Report a bug if seen externally.", errors.RFCCodeText("CDC:ErrAsyncPoolExited"))
@@ -249,7 +252,8 @@ var (
 	ErrSorterContextIsDone             = errors.Normalize("the context is done", errors.RFCCodeText("CDC:ErrSorterContextIsDone"))
 
 	// processor errors
-	ErrTableProcessorStoppedSafely = errors.Normalize("table processor stopped safely", errors.RFCCodeText("CDC:ErrTableProcessorStoppedSafely"))
+	ErrTableProcessorStoppedSafely  = errors.Normalize("table processor stopped safely", errors.RFCCodeText("CDC:ErrTableProcessorStoppedSafely"))
+	ErrProcessorDuplicateOperations = errors.Normalize("table processor duplicate operation, table-id: %d", errors.RFCCodeText("CDC:ErrProcessorDuplicateOperations"))
 
 	// owner errors
 	ErrOwnerChangedUnexpectedly = errors.Normalize("owner changed unexpectedly", errors.RFCCodeText("CDC:ErrOwnerChangedUnexpectedly"))

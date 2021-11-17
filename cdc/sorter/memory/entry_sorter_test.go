@@ -16,6 +16,7 @@ package memory
 import (
 	"context"
 	"math/rand"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -292,6 +293,170 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 	}
 	cancel()
 	wg.Wait()
+}
+
+func (s *mockEntrySorterSuite) TestEventLess(c *check.C) {
+	defer testleak.AfterTest(c)()
+	testCases := []struct {
+		i        *model.PolymorphicEvent
+		j        *model.PolymorphicEvent
+		expected bool
+	}{
+		{
+			&model.PolymorphicEvent{
+				CRTs: 1,
+			},
+			&model.PolymorphicEvent{
+				CRTs: 2,
+			},
+			true,
+		},
+		{
+			&model.PolymorphicEvent{
+				CRTs: 2,
+				RawKV: &model.RawKVEntry{
+					OpType: model.OpTypeDelete,
+				},
+			},
+			&model.PolymorphicEvent{
+				CRTs: 2,
+				RawKV: &model.RawKVEntry{
+					OpType: model.OpTypeDelete,
+				},
+			},
+			true,
+		},
+		{
+			&model.PolymorphicEvent{
+				CRTs: 2,
+				RawKV: &model.RawKVEntry{
+					OpType: model.OpTypeResolved,
+				},
+			},
+			&model.PolymorphicEvent{
+				CRTs: 2,
+				RawKV: &model.RawKVEntry{
+					OpType: model.OpTypeResolved,
+				},
+			},
+			true,
+		},
+		{
+			&model.PolymorphicEvent{
+				CRTs: 2,
+				RawKV: &model.RawKVEntry{
+					OpType: model.OpTypeResolved,
+				},
+			},
+			&model.PolymorphicEvent{
+				CRTs: 2,
+				RawKV: &model.RawKVEntry{
+					OpType: model.OpTypeDelete,
+				},
+			},
+			false,
+		},
+		{
+			&model.PolymorphicEvent{
+				CRTs: 3,
+				RawKV: &model.RawKVEntry{
+					OpType: model.OpTypeDelete,
+				},
+			},
+			&model.PolymorphicEvent{
+				CRTs: 2,
+				RawKV: &model.RawKVEntry{
+					OpType: model.OpTypeResolved,
+				},
+			},
+			false,
+		},
+	}
+
+	for _, tc := range testCases {
+		c.Assert(eventLess(tc.i, tc.j), check.Equals, tc.expected)
+	}
+}
+
+func (s *mockEntrySorterSuite) TestMergeEvents(c *check.C) {
+	defer testleak.AfterTest(c)()
+	events1 := []*model.PolymorphicEvent{
+		{
+			CRTs: 1,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeDelete,
+			},
+		},
+		{
+			CRTs: 2,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypePut,
+			},
+		},
+		{
+			CRTs: 3,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypePut,
+			},
+		},
+		{
+			CRTs: 4,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypePut,
+			},
+		},
+		{
+			CRTs: 5,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeDelete,
+			},
+		},
+	}
+	events2 := []*model.PolymorphicEvent{
+		{
+			CRTs: 3,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeResolved,
+			},
+		},
+		{
+			CRTs: 4,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypePut,
+			},
+		},
+		{
+			CRTs: 4,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeResolved,
+			},
+		},
+		{
+			CRTs: 7,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypePut,
+			},
+		},
+		{
+			CRTs: 9,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeDelete,
+			},
+		},
+	}
+
+	var outputResults []*model.PolymorphicEvent
+	output := func(event *model.PolymorphicEvent) {
+		outputResults = append(outputResults, event)
+	}
+
+	expectedResults := append(events1, events2...)
+	sort.Slice(expectedResults, func(i, j int) bool {
+		return eventLess(expectedResults[i], expectedResults[j])
+	})
+
+	mergeEvents(events1, events2, output)
+	c.Assert(outputResults, check.DeepEquals, expectedResults)
 }
 
 func (s *mockEntrySorterSuite) TestEntrySorterClosed(c *check.C) {

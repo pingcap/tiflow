@@ -910,22 +910,22 @@ func (t *testConfig) TestAdjustTargetDBConfig(c *C) {
 	}{
 		{
 			DBConfig{},
-			DBConfig{Session: map[string]string{"time_zone": "+00:00"}},
+			DBConfig{Session: map[string]string{}},
 			semver.New("0.0.0"),
 		},
 		{
 			DBConfig{Session: map[string]string{"SQL_MODE": "ANSI_QUOTES"}},
-			DBConfig{Session: map[string]string{"sql_mode": "ANSI_QUOTES", "time_zone": "+00:00"}},
+			DBConfig{Session: map[string]string{"sql_mode": "ANSI_QUOTES"}},
 			semver.New("2.0.7"),
 		},
 		{
 			DBConfig{},
-			DBConfig{Session: map[string]string{tidbTxnMode: tidbTxnOptimistic, "time_zone": "+00:00"}},
+			DBConfig{Session: map[string]string{tidbTxnMode: tidbTxnOptimistic}},
 			semver.New("3.0.1"),
 		},
 		{
 			DBConfig{Session: map[string]string{"SQL_MODE": "", tidbTxnMode: "pessimistic"}},
-			DBConfig{Session: map[string]string{"sql_mode": "", tidbTxnMode: "pessimistic", "time_zone": "+00:00"}},
+			DBConfig{Session: map[string]string{"sql_mode": "", tidbTxnMode: "pessimistic"}},
 			semver.New("4.0.0-beta.2"),
 		},
 	}
