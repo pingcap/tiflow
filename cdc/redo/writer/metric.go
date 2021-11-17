@@ -26,14 +26,14 @@ var (
 	redoWriteBytesGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
-		Name:      "redo_write_bytes_total",
+		Name:      "write_bytes_total",
 		Help:      "Total number of bytes redo log written",
 	}, []string{"capture", "changefeed"})
 
 	redoFsyncDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
-		Name:      "redo_fsync_duration_seconds",
+		Name:      "fsync_duration_seconds",
 		Help:      "The latency distributions of fsync called by redo writer",
 		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 13),
 	}, []string{"capture", "changefeed"})
@@ -41,7 +41,7 @@ var (
 	redoFlushAllDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
-		Name:      "redo_fsync_duration_seconds",
+		Name:      "flushall_duration_seconds",
 		Help:      "The latency distributions of flushall called by redo writer",
 		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 13),
 	}, []string{"capture", "changefeed"})
@@ -49,7 +49,7 @@ var (
 	redoTotalRowsCountGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
-		Name:      "redo_total_rows_count",
+		Name:      "total_rows_count",
 		Help:      "The total count of rows that are processed by redo writer",
 	}, []string{"capture", "changefeed"})
 )
@@ -59,4 +59,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(redoFsyncDurationHistogram)
 	registry.MustRegister(redoTotalRowsCountGauge)
 	registry.MustRegister(redoWriteBytesGauge)
+	registry.MustRegister(redoFlushAllDurationHistogram)
 }
