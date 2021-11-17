@@ -18,11 +18,11 @@ function test_multi_task_running() {
 	# make sure task to step in "Sync" stage
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT3" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 2 \
+		"\"stage\": \"Running\"" 4 \
 		"\"unit\": \"Sync\"" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT3" \
 		"query-status test2" \
-		"\"stage\": \"Running\"" 2 \
+		"\"stage\": \"Running\"" 4 \
 		"\"unit\": \"Sync\"" 2
 
 	echo "use sync_diff_inspector to check full dump loader"

@@ -36,6 +36,9 @@ const (
 
 	// DefaultRedoDir is the sub directory path of data-dir.
 	DefaultRedoDir = "/tmp/redo"
+
+	// DebugConfigurationItem is the name of debug configurations
+	DebugConfigurationItem = "debug"
 )
 
 func init() {
@@ -199,13 +202,13 @@ var defaultServerConfig = &ServerConfig{
 		// Default leveldb sorter config
 		EnableLevelDB: false,
 		LevelDB: LevelDBConfig{
-			LevelDBCount: 16,
+			Count: 16,
 			// Following configs are optimized for write throughput.
 			// Users should not change them.
-			LevelDBConcurrency:     256,
+			Concurrency:            256,
 			MaxOpenFiles:           10000,
 			BlockSize:              65536,
-			BlockCacheSize:         0,
+			BlockCacheSize:         4294967296,
 			WriterBufferSize:       8388608,
 			Compression:            "snappy",
 			TargetFileSizeBase:     8388608,
@@ -221,6 +224,9 @@ var defaultServerConfig = &ServerConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
 		RegionScanLimit:  40,
+	},
+	Debug: &DebugConfig{
+		EnableTableActor: true,
 	},
 }
 
@@ -247,6 +253,7 @@ type ServerConfig struct {
 	Security            *SecurityConfig `toml:"security" json:"security"`
 	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
 	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
+	Debug               *DebugConfig    `toml:"debug" json:"debug"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig

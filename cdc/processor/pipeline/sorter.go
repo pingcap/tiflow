@@ -47,7 +47,7 @@ type sorterNode struct {
 
 	mounter entry.Mounter
 
-	wg     errgroup.Group
+	eg     errgroup.Group
 	cancel context.CancelFunc
 
 	// The latest resolved ts that sorter has received.
@@ -81,7 +81,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 				zap.String("changefeed-id", ctx.ChangefeedVars().ID), zap.String("table-name", n.tableName))
 		}
 		sortDir := ctx.ChangefeedVars().Info.SortDir
-		err := unified.UnifiedSorterCheckDir(sortDir)
+		err := unified.CheckDir(sortDir)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -95,11 +95,11 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	failpoint.Inject("ProcessorAddTableError", func() {
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
-	n.wg.Go(func() error {
+	n.eg.Go(func() error {
 		ctx.Throw(errors.Trace(sorter.Run(stdCtx)))
 		return nil
 	})
-	n.wg.Go(func() error {
+	n.eg.Go(func() error {
 		// Since the flowController is implemented by `Cond`, it is not cancelable
 		// by a context. We need to listen on cancellation and aborts the flowController
 		// manually.
@@ -107,7 +107,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		n.flowController.Abort()
 		return nil
 	})
-	n.wg.Go(func() error {
+	n.eg.Go(func() error {
 		lastSentResolvedTs := uint64(0)
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
@@ -234,7 +234,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
-	return n.wg.Wait()
+	return n.eg.Wait()
 }
 
 func (n *sorterNode) ResolvedTs() model.Ts {

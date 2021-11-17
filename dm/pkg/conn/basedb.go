@@ -39,7 +39,7 @@ var customID int64
 
 // DBProvider providers BaseDB instance.
 type DBProvider interface {
-	Apply(config config.DBConfig) (*BaseDB, error)
+	Apply(config *config.DBConfig) (*BaseDB, error)
 }
 
 // DefaultDBProviderImpl is default DBProvider implement.
@@ -56,7 +56,7 @@ func init() {
 var mockDB sqlmock.Sqlmock
 
 // Apply will build BaseDB with DBConfig.
-func (d *DefaultDBProviderImpl) Apply(config config.DBConfig) (*BaseDB, error) {
+func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) {
 	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.
 	// https://github.com/go-sql-driver/mysql#maxallowedpacket
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&interpolateParams=true&maxAllowedPacket=0",
@@ -148,11 +148,11 @@ type BaseDB struct {
 	Retry retry.Strategy
 
 	// this function will do when close the BaseDB
-	doFuncInClose func()
+	doFuncInClose []func()
 }
 
 // NewBaseDB returns *BaseDB object.
-func NewBaseDB(db *sql.DB, doFuncInClose func()) *BaseDB {
+func NewBaseDB(db *sql.DB, doFuncInClose ...func()) *BaseDB {
 	conns := make(map[*BaseConn]struct{})
 	return &BaseDB{DB: db, conns: conns, Retry: &retry.FiniteRetryStrategy{}, doFuncInClose: doFuncInClose}
 }
@@ -197,7 +197,9 @@ func (d *BaseDB) Close() error {
 		}
 	}
 	terr := d.DB.Close()
-	d.doFuncInClose()
+	for _, f := range d.doFuncInClose {
+		f()
+	}
 
 	if err == nil {
 		return terr

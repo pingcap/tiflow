@@ -95,11 +95,11 @@ const (
     "sort-dir": "/tmp/sorter",
     "enable-leveldb-sorter": false,
     "leveldb": {
-      "leveldb-count": 16,
-      "leveldb-concurrency": 256,
+      "count": 16,
+      "concurrency": 256,
       "max-open-files": 10000,
       "block-size": 65536,
-      "block-cache-size": 0,
+      "block-cache-size": 4294967296,
       "writer-buffer-size": 8388608,
       "compression": "snappy",
       "target-file-size-base": 8388608,
@@ -120,6 +120,9 @@ const (
     "worker-concurrent": 8,
     "worker-pool-size": 0,
     "region-scan-limit": 40
+  },
+  "debug": {
+    "enable-table-actor": true
   }
 }`
 
