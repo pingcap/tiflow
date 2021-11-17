@@ -856,6 +856,11 @@ error = '''
 table %d not found in schema snapshot
 '''
 
+["CDC:ErrSorterClosed"]
+error = '''
+sorter is closed
+'''
+
 ["CDC:ErrStartAStoppedLevelDBSystem"]
 error = '''
 start a stopped leveldb system
@@ -1005,10 +1010,4 @@ request forward error, an request can only forward to owner one time
 error = '''
 error encountered when locking sort-dir
 '''
-
-["CDC:ErrSorterClosed"]
-error = '''
-sorter is closed
-'''
-
 
