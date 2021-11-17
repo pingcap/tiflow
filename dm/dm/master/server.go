@@ -736,7 +736,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 		}
 	}
 	workerResps := make([]*pb.QueryStatusResponse, 0)
-	sort.Strings(sources) // display status sort by source name
+	sort.Strings(sources) // display status sorted by source name
 	for _, sourceName := range sources {
 		workerResps = append(workerResps, workerRespMap[sourceName]...)
 	}
