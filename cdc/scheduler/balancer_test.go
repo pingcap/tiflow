@@ -59,7 +59,7 @@ func TestBalancerFindVictims(t *testing.T) {
 			ID: "capture-2",
 		},
 		"capture-3": {
-			ID: "capture-2",
+			ID: "capture-3",
 		},
 	}
 
@@ -106,7 +106,7 @@ func TestBalancerFindTarget(t *testing.T) {
 			ID: "capture-2",
 		},
 		"capture-3": {
-			ID: "capture-2",
+			ID: "capture-3",
 		},
 	}
 
