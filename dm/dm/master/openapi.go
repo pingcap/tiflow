@@ -187,7 +187,7 @@ func (s *Server) DMAPIGetSourceList(ctx echo.Context, params openapi.DMAPIGetSou
 	if params.WithStatus != nil && *params.WithStatus {
 		nexCtx := ctx.Request().Context()
 		for idx := range sourceList {
-			sourceStatusList, err := s.getSourceStatusListFromWorker(nexCtx, sourceList[idx].SourceName, false)
+			sourceStatusList, err := s.getSourceStatusListFromWorker(nexCtx, sourceList[idx].SourceName, true)
 			if err != nil {
 				return err
 			}
