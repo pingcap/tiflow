@@ -108,7 +108,9 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.grpcPool.Close()
 	}
 	if c.tableActorSystem != nil {
-		err = c.tableActorSystem.Stop()
+		if err != nil {
+			log.Warn("stop table actor system failed", zap.Error(err))
+		}
 		log.Warn("stop table actor system failed", zap.Error(err))
 	}
 	if conf.Debug.EnableTableActor {
@@ -371,7 +373,10 @@ func (c *Capture) AsyncClose() {
 	}
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
-		log.Warn("stop table actor system failed", zap.Error(err))
+		if err != nil {
+			log.Warn("stop table actor system failed", zap.Error(err))
+		}
+		c.tableActorSystem = nil
 	}
 }
 
