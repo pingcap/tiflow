@@ -27,6 +27,7 @@ import (
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
 )
@@ -561,7 +562,7 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
 		tp := types.StrToType(typeStr)
-		if !ok {
+		if tp == mysql.TypeUnspecified {
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, type: %+v", name, tp)
 		}
