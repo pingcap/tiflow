@@ -35,7 +35,7 @@ import (
 var retryTimeout = 3 * time.Second
 
 // CreateBaseDB creates a db from config.
-func CreateBaseDB(dbCfg config.DBConfig) (*conn.BaseDB, error) {
+func CreateBaseDB(dbCfg *config.DBConfig) (*conn.BaseDB, error) {
 	db, err := conn.DefaultDBProvider.Apply(dbCfg)
 	if err != nil {
 		return nil, terror.WithScope(err, terror.ScopeDownstream)
@@ -233,7 +233,7 @@ func (conn *DBConn) ExecuteSQL(tctx *tcontext.Context, queries []string, args ..
 }
 
 // CreateConns returns a opened DB from dbCfg and number of `count` connections of that DB.
-func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg config.DBConfig, count int) (*conn.BaseDB, []*DBConn, error) {
+func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg *config.DBConfig, count int) (*conn.BaseDB, []*DBConn, error) {
 	conns := make([]*DBConn, 0, count)
 	baseDB, err := CreateBaseDB(dbCfg)
 	if err != nil {

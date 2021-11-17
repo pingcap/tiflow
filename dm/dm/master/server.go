@@ -1168,7 +1168,7 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 
 func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
 	dbConfig := cfg.GenerateDBConfig()
-	fromDB, err := conn.DefaultDBProvider.Apply(*dbConfig)
+	fromDB, err := conn.DefaultDBProvider.Apply(dbConfig)
 	if err != nil {
 		return err
 	}
@@ -1204,7 +1204,7 @@ func adjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 		failpoint.Return(nil)
 	})
 
-	toDB, err := conn.DefaultDBProvider.Apply(cfg)
+	toDB, err := conn.DefaultDBProvider.Apply(&cfg)
 	if err != nil {
 		return err
 	}
@@ -1221,7 +1221,6 @@ func adjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 		config.AdjustTargetDBSessionCfg(dbConfig, version)
 	} else {
 		log.L().Warn("get tidb version", log.ShortError(err))
-		config.AdjustTargetDBTimeZone(dbConfig)
 	}
 	return nil
 }
@@ -1268,11 +1267,6 @@ func (s *Server) OperateSource(ctx context.Context, req *pb.OperateSourceRequest
 			err      error
 		)
 		for _, cfg := range cfgs {
-			// tell user he should use `start-relay` to manually specify relay workers
-			if cfg.EnableRelay {
-				resp.Msg = "Please use `start-relay` to specify which workers should pull relay log of relay-enabled sources."
-			}
-
 			err = s.scheduler.AddSourceCfg(cfg)
 			// return first error and try to revert, so user could copy-paste same start command after error
 			if err != nil {
@@ -1478,7 +1472,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	}
 
 	// set up db and clear meta data in downstream db
-	baseDB, err := conn.DefaultDBProvider.Apply(*toDBCfg)
+	baseDB, err := conn.DefaultDBProvider.Apply(toDBCfg)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
