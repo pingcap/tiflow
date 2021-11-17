@@ -310,7 +310,7 @@ func (s *Server) DMAPIGetSourceTableList(ctx echo.Context, sourceName string, sc
 }
 
 func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName string, specifiedSource bool) ([]openapi.SourceStatus, error) {
-	workerStatusList := s.getStatusFromWorkers(ctx, []string{sourceName}, "", true, specifiedSource)
+	workerStatusList := s.getStatusFromWorkers(ctx, []string{sourceName}, "", specifiedSource)
 	sourceStatusList := make([]openapi.SourceStatus, len(workerStatusList))
 	for i, workerStatus := range workerStatusList {
 		if workerStatus == nil {
@@ -496,7 +496,7 @@ func (s *Server) DMAPIGetTaskStatus(ctx echo.Context, taskName string, params op
 		return terror.ErrSchedulerTaskNotExist.Generate(taskName)
 	}
 	// 2. get status from workers
-	workerStatusList := s.getStatusFromWorkers(ctx.Request().Context(), sourceList, taskName, true, specifiedSource)
+	workerStatusList := s.getStatusFromWorkers(ctx.Request().Context(), sourceList, taskName, specifiedSource)
 	subTaskStatusList := make([]openapi.SubTaskStatus, len(workerStatusList))
 	for i, workerStatus := range workerStatusList {
 		if workerStatus == nil || workerStatus.SourceStatus == nil {

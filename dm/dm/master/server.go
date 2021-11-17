@@ -711,7 +711,6 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 		return resp2, err2
 	}
 	sources, specifiedSource, err := extractSources(s, req)
-	sort.Strings(sources)
 	if err != nil {
 		// nolint:nilerr
 		return &pb.QueryStatusListResponse{
@@ -719,14 +718,8 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 			Msg:    err.Error(),
 		}, nil
 	}
-	queryRelayWorker := false
-	if len(req.GetSources()) > 0 {
-		// if user specified sources, query relay workers instead of task workers
-		queryRelayWorker = true
-	}
-	resps := s.getStatusFromWorkers(ctx, sources, req.Name, queryRelayWorker, specifiedSource)
-	// sourceName -> worker QueryStatusResponse
-	workerRespMap := make(map[string][]*pb.QueryStatusResponse, len(sources))
+	resps := s.getStatusFromWorkers(ctx, sources, req.Name, specifiedSource)
+	workerRespMap := make(map[string][]*pb.QueryStatusResponse, len(sources)) // sourceName -> worker QueryStatusResponse
 	inSlice := func(s []string, e string) bool {
 		for _, v := range s {
 			if v == e {
@@ -743,8 +736,8 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 		}
 	}
 	workerResps := make([]*pb.QueryStatusResponse, 0)
+	sort.Strings(sources) // display status sort by source name
 	for _, sourceName := range sources {
-		// sort by source name
 		workerResps = append(workerResps, workerRespMap[sourceName]...)
 	}
 	return &pb.QueryStatusListResponse{Result: true, Sources: workerResps}, nil
@@ -978,7 +971,7 @@ func (s *Server) getTaskResources(task string) []string {
 
 // getStatusFromWorkers does RPC request to get status from dm-workers.
 func (s *Server) getStatusFromWorkers(
-	ctx context.Context, sources []string, taskName string, relayWorker bool, specifiedSource bool) []*pb.QueryStatusResponse {
+	ctx context.Context, sources []string, taskName string, specifiedSource bool) []*pb.QueryStatusResponse {
 	workerReq := &workerrpc.Request{
 		Type:        workerrpc.CmdQueryStatus,
 		QueryStatus: &pb.QueryStatusRequest{Name: taskName},
@@ -1015,7 +1008,8 @@ func (s *Server) getStatusFromWorkers(
 			workerNameSet = make(map[string]struct{})
 			err2          error
 		)
-		if relayWorker {
+		// if user specified sources, query relay workers instead of task workers
+		if specifiedSource {
 			workers, err2 = s.scheduler.GetRelayWorkers(source)
 			if err2 != nil {
 				handleErr(err2, source, "")
@@ -1028,8 +1022,7 @@ func (s *Server) getStatusFromWorkers(
 		}
 
 		// subtask workers may have been found in relay workers
-		taskWorker := s.scheduler.GetWorkerBySource(source)
-		if taskWorker != nil {
+		if taskWorker := s.scheduler.GetWorkerBySource(source); taskWorker != nil {
 			if _, ok := workerNameSet[taskWorker.BaseInfo().Name]; !ok {
 				workers = append(workers, taskWorker)
 			}
@@ -1076,47 +1069,42 @@ func (s *Server) getStatusFromWorkers(
 	wg.Wait()
 	s.fillUnsyncedStatus(workerResps)
 
-	// find if all sources status are provided in resps
-	findEnoughTaskInResp := func(taskName string, needCnt int) bool {
+	getSubTaskStatusCountInResp := func(taskName string) int {
 		cnt := 0
 		for _, resp := range workerResps {
 			for _, status := range resp.SubTaskStatus {
 				if status.Name == taskName {
 					cnt += 1
 				}
-				if cnt == needCnt {
-					return true
-				}
 			}
 		}
-		return false
+		return cnt
 	}
-	appendFakeResp := func(taskName, sourceName, msg string) {
-		setWorkerResp(&pb.QueryStatusResponse{
-			Result: false, Msg: msg, SubTaskStatus: []*pb.SubTaskStatus{{Name: taskName}},
-			SourceStatus: &pb.SourceStatus{Source: sourceName, Worker: "unknown-offline-worker"},
-		})
+	appendFakeResp := func(taskName, sourceName, msg string, cnt int) {
+		for i := 0; i < cnt; i++ {
+			setWorkerResp(&pb.QueryStatusResponse{
+				Result: false, Msg: msg, SubTaskStatus: []*pb.SubTaskStatus{{Name: taskName}},
+				SourceStatus: &pb.SourceStatus{Source: sourceName, Worker: "unknown-offline-worker"},
+			})
+		}
 	}
+
 	// when taskName is empty we need list all task even the worker that handle this task is not running.
 	if taskName == "" {
 		for taskName, sourceM := range s.scheduler.GetSubTaskCfgs() {
-			if !findEnoughTaskInResp(taskName, len(sourceM)) {
-				msg := fmt.Sprintf("can't find task: %s from dm-worker, please use dmctl list-member to check if worker is offline.", taskName)
-				log.L().Warn(msg)
-				// only add use specified source related to this task
-				if specifiedSource {
-					for _, needDisplayedSource := range sources {
-						if _, ok := sourceM[needDisplayedSource]; ok && !findEnoughTaskInResp(taskName, len(sourceM)) {
-							appendFakeResp(taskName, needDisplayedSource, msg)
-						}
+			msg := fmt.Sprintf("can't find task: %s from dm-worker, please use dmctl list-member to check if worker is offline.", taskName)
+			log.L().Warn(msg)
+			// only add use specified source related to this task
+			if specifiedSource {
+				for _, needDisplayedSource := range sources {
+					if _, ok := sourceM[needDisplayedSource]; ok {
+						appendFakeResp(taskName, needDisplayedSource, msg, len(sourceM)-getSubTaskStatusCountInResp(taskName))
 					}
-				} else {
-					// make fake response for every source related to this task
-					for source := range sourceM {
-						if !findEnoughTaskInResp(taskName, len(sourceM)) {
-							appendFakeResp(taskName, source, msg)
-						}
-					}
+				}
+			} else {
+				// make fake response for every source related to this task
+				for source := range sourceM {
+					appendFakeResp(taskName, source, msg, len(sourceM)-getSubTaskStatusCountInResp(taskName))
 				}
 			}
 		}
