@@ -178,12 +178,13 @@ func NewTablePipeline(ctx cdcContext.Context,
 	sink sink.Sink,
 	targetTs model.Ts) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)
+	replConfig := ctx.ChangefeedVars().Info.Config
 	tablePipeline := &tablePipelineImpl{
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,
 		tableName:   tableName,
 		cancel:      cancel,
-		replConfig:  ctx.ChangefeedVars().Info.Config,
+		replConfig:  replConfig,
 	}
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
@@ -201,7 +202,8 @@ func NewTablePipeline(ctx cdcContext.Context,
 	}
 
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
-	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs, flowController, mounter)
+	sorterNode :=
+		newSorterNode(tableName, tableID, replicaInfo.StartTs, flowController, mounter, replConfig)
 	sinkNode := newSinkNode(sink, replicaInfo.StartTs, targetTs, flowController)
 
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName))

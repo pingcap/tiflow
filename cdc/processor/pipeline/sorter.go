@@ -23,9 +23,11 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/cdc/sorter"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"go.uber.org/zap"
@@ -52,11 +54,17 @@ type sorterNode struct {
 
 	// The latest resolved ts that sorter has received.
 	resolvedTs model.Ts
+
+	// The latest barrier ts that sorter has received.
+	barrierTs model.Ts
+
+	replConfig *config.ReplicaConfig
 }
 
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
 	flowController tableFlowController, mounter entry.Mounter,
+	replConfig *config.ReplicaConfig,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -64,6 +72,7 @@ func newSorterNode(
 		flowController: flowController,
 		mounter:        mounter,
 		resolvedTs:     startTs,
+		replConfig:     replConfig,
 	}
 }
 
@@ -211,8 +220,28 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 					zap.Uint64("oldResolvedTs", oldResolvedTs))
 			}
 			atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
+
+			if resolvedTs > n.barrierTs &&
+				!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
+				// Do not send resolved ts events that is larger than
+				// barrier ts.
+				// When DDL puller stall, it may cause data pile up in memory,
+				// because sorter outputs resolved events that have to wait DDL.
+				//
+				// Disabled if redolog is on, it requires sink reports
+				// resolved ts, conflicts to this change.
+				// TODO: Remove redolog check once redolog decouples for global
+				//       resolved ts.
+				msg = pipeline.PolymorphicEventMessage(
+					model.NewResolvedPolymorphicEvent(0, n.barrierTs))
+			}
 		}
 		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
+	case pipeline.MessageTypeBarrier:
+		if msg.BarrierTs > n.barrierTs {
+			n.barrierTs = msg.BarrierTs
+		}
+		fallthrough
 	default:
 		ctx.SendToNextNode(msg)
 	}
