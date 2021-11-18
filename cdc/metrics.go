@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sorter"
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb"
+	"github.com/pingcap/ticdc/cdc/sorter/leveldb/system"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/actor"
@@ -53,4 +54,5 @@ func init() {
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
 	leveldb.InitMetrics(registry)
+	system.InitMetrics(registry)
 }

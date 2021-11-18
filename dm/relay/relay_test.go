@@ -70,7 +70,7 @@ func newRelayCfg(c *C, flavor string) *Config {
 	}
 }
 
-func getDBConfigForTest() config.DBConfig {
+func getDBConfigForTest() *config.DBConfig {
 	host := os.Getenv("MYSQL_HOST")
 	if host == "" {
 		host = "127.0.0.1"
@@ -84,7 +84,7 @@ func getDBConfigForTest() config.DBConfig {
 		user = "root"
 	}
 	password := os.Getenv("MYSQL_PSWD")
-	return config.DBConfig{
+	return &config.DBConfig{
 		Host:     host,
 		Port:     port,
 		User:     user,
