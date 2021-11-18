@@ -118,12 +118,18 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	state := rawState.(*orchestrator.GlobalReactorState)
 	o.captures = state.Captures
 	o.updateMetrics(state)
+
+	// handleJobs() should be called before clusterVersionConsistent(), because
+	// when there are different versions of cdc nodes in the cluster,
+	// the admin job may not be processed all the time. And http api relies on
+	// admin job, which will cause all http api unavailable.
+	o.handleJobs()
+
 	if !o.clusterVersionConsistent(state.Captures) {
 		// sleep one second to avoid printing too much log
 		time.Sleep(1 * time.Second)
 		return state, nil
 	}
-
 	// Owner should update GC safepoint before initializing changefeed, so
 	// changefeed can remove its "ticdc-creating" service GC safepoint during
 	// initializing.
@@ -133,7 +139,6 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		return nil, errors.Trace(err)
 	}
 
-	o.handleJobs()
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
 			o.cleanUpChangefeed(changefeedState)
