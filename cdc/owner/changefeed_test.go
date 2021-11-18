@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -216,6 +217,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
+		TimeAcquirer: pdtime.NewTimeAcquirer4Test(),
 	})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test",
