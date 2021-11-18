@@ -248,6 +248,7 @@ var (
 	ErrConflictingFileLocks            = errors.Normalize("file lock conflict: %s", errors.RFCCodeText("ErrConflictingFileLocks"))
 	ErrSortDirLockError                = errors.Normalize("error encountered when locking sort-dir", errors.RFCCodeText("ErrSortDirLockError"))
 	ErrLevelDBSorterError              = errors.Normalize("leveldb error: %s", errors.RFCCodeText("CDC:ErrLevelDBSorterError"))
+	ErrSorterClosed                    = errors.Normalize("sorter is closed", errors.RFCCodeText("CDC:ErrSorterClosed"))
 
 	// processor errors
 	ErrTableProcessorStoppedSafely  = errors.Normalize("table processor stopped safely", errors.RFCCodeText("CDC:ErrTableProcessorStoppedSafely"))
