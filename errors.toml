@@ -661,6 +661,11 @@ error = '''
 prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s
 '''
 
+["CDC:ErrProcessorDuplicateOperations"]
+error = '''
+table processor duplicate operation, table-id: %d
+'''
+
 ["CDC:ErrProcessorEtcdWatch"]
 error = '''
 etcd watch returns error
@@ -849,6 +854,16 @@ table %s.%s already exists
 ["CDC:ErrSnapshotTableNotFound"]
 error = '''
 table %d not found in schema snapshot
+'''
+
+["CDC:ErrSorterClosed"]
+error = '''
+sorter is closed
+'''
+
+["CDC:ErrStartAStoppedLevelDBSystem"]
+error = '''
+start a stopped leveldb system
 '''
 
 ["CDC:ErrStartTsBeforeGC"]

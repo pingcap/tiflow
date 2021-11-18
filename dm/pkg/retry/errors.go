@@ -52,6 +52,7 @@ var (
 	// ReplicationErrMsgs list the error message of un-recoverable replication error.
 	ReplicationErrMsgs = []string{
 		"Could not find first log file name in binary log index file",
+		"The slave is connecting using CHANGE MASTER TO MASTER_AUTO_POSITION = 1, but the master has purged binary logs containing GTIDs that the slave requires",
 	}
 
 	// ParseRelayLogErrMsgs list the error messages of some un-recoverable relay log parsing error, which is used in task auto recovery.
