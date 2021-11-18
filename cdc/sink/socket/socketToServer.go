@@ -13,6 +13,8 @@ import (
 )
 
 var conn net.Conn
+var ConnMap map[string]net.Conn = make(map[string]net.Conn)
+
 var tcpconn *net.TCPConn
 var timeout = time.Duration(60)*time.Second
 
@@ -82,12 +84,21 @@ func JddmDDLClient_ByResolveTcp(host string,ddlInfos *vo.DDLInfos){
 
 func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 
-	/*fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
-	serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)
 
-	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",serverAddress)*/
+	_, ok := ConnMap [host]
+	if(!ok){
+		tempConn, err := net.DialTimeout("tcp", host,timeout)
+		//conn = tempConn
+		ConnMap [host] = tempConn
+		if err != nil {
+			delete(ConnMap, host)
+			//conn = nil
+			fmt.Println("Error dialing", err.Error())
+			return
+		}
+	}
 
-	if(conn ==nil){
+	/*if(conn ==nil){
 
 		//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
 		tempConn, err := net.DialTimeout("tcp", host,timeout)
@@ -97,7 +108,7 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 	        fmt.Println("Error dialing", err.Error())
 	        return
 	    }
-	}
+	}*/
     //serviceNum := 1742
 	//// 前4bytes消息长度
 	//lengthArr := make([]byte,4)
@@ -162,7 +173,8 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 	//createBytesFromRowInfoList(rowInfos);
 	***/
 
-	_, err := conn.Write(createBytes_FromDdlInfoVo(ddlInfos))
+	//_, err := conn.Write(createBytes_FromDdlInfoVo(ddlInfos))
+	_, err := ConnMap [host].Write(createBytes_FromDdlInfoVo(ddlInfos))
     if err != nil {
 		fmt.Println("Error dialing", err.Error())
 		return
@@ -179,44 +191,29 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 
 	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",conn)
 
-	if(conn ==nil){
-		fmt.Printf(" rest conn ::[%s] \n",conn)
-		//duration := time.Duration(seconds) * time.Second
-		tempConn, err := net.DialTimeout("tcp", host, timeout)
-		conn = tempConn
+	_, ok := ConnMap [host]
+	if(!ok){
+		tempConn, err := net.DialTimeout("tcp", host,timeout)
+		//conn = tempConn
+		ConnMap [host] = tempConn
 		if err != nil {
-			conn = nil
+			delete(ConnMap, host)
+			//conn = nil
 			fmt.Println("Error dialing", err.Error())
 			return
 		}
 	}
 
-	//serviceNum := 1742
-	//// 前4bytes消息长度
-	//lengthArr := make([]byte,4)
 
 
-	//serviceNumArr := publicUtils.IntTo2Bytes(serviceNum)
-	//tradCodeArr := publicUtils.IntTo2Bytes(113)
 	// 4-8bytes服务号和主次命令
-	//verifyArr := make([]byte,4)
 	verifyArr := make([]byte,4)
-	//serviceNumArr := make([]byte,4)
 
 	verifyArr[0] = 0x06
 	verifyArr[1] = 0xce
 	verifyArr[2] = 0x01
 	verifyArr[3] = 0x13
-	//serviceNumArr = intTo4Bytes(serviceNum)
-	//fmt.Printf(" %s \n",publicUtils.BytestoHex(verifyArr))
-	//verifyArr[0] := 0x06;
-	//verifyArr[1] := 0xCE;
 
-	//校验码
-	//verifyArr[2] := 0x01;
-	//verifyArr[3] := 0x13;
-
-	//defer conn.Close()
 
 
 	sendMsg :=" Connect Server Test  !";
@@ -228,236 +225,21 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 	publicUtils.BlockByteArrCopy([]byte(sendMsg),0,clientSendArr,8,len(sendMsg))
 	fmt.Printf(" SendByte[]Arr %s \n",publicUtils.BytestoHex(clientSendArr))
 
-	/*** ***
-	    _, err = conn.Write(clientSendArr)
-	    if err != nil {
-			return
-		}
-		***/
-
-	/*rowInfoVo:= vo.CreateRowInfo();
-
-	rowInfoVo.SetOwnerName("dsg_test1123456789");
-	rowInfoVo.SetTableName("tbl_pk");
-	rowInfoVo.SetColumnNo(2);
-
-	columnVoList := list.New() //创建一个新的list
-
-	columnInfoVo := vo.CreateColumnInfo();
-	columnInfoVo.SetColumnName(" columnName_1 ");
-	columnInfoVo.SetColumnValue(" columnName_1-> Value_01");
-
-	columnVoList.PushBack(columnInfoVo)
-	columnInfoVo1 := vo.CreateColumnInfo();
-	columnInfoVo1.SetColumnName(" columnName_2 ");
-	columnInfoVo1.SetColumnValue(" columnName_2-> Value_02");
-	columnVoList.PushBack(columnInfoVo)
-
-
-	rowInfoVo.SetColumnVoList(columnVoList)*/
-
-	/*rowInfos := make([]*vo.RowInfos, 0);
-
-	row := new(vo.RowInfos)
-	row.SchemaName = "dsg_test1"
-	row.TableName = "tbl_pk"
-
-	columnInfos :=make([]*vo.ColumnVo,0);
-
-	columnVo := new(vo.ColumnVo)
-	columnVo.ColumnName =" column_1"
-	columnVo.ColumnValue = "column_1 -> Value_01"
-
-	columnInfos = append(columnInfos,columnVo)
-
-	columnVo1 := new(vo.ColumnVo)
-	columnVo1.ColumnName =" column_2"
-	columnVo1.ColumnValue = "column_2 -> Value_02"
-	columnInfos = append(columnInfos,columnVo1)
-
-	row.ColumnList = columnInfos;
-	rowInfos = append(rowInfos,row)*/
-
-
-
 	fmt.Println("rowInfos：：：：：：：：：：：：：：：：：：：：：：：：",rowInfos)
-	//=============================================
-	/***
-	row1 := new(vo.RowInfos)
-	row1.SchemaName = "dsg_test1123456789"
-	row1.TableName = "tbl_pk"
-	row1.ColumnNo=2
 
-	columnInfos2 :=make([]*vo.ColumnVo,0);
-	columnVo2 := new(vo.ColumnVo)
-	columnVo2.ColumnName =" column_1"
-	columnVo2.ColumnValue = "row_2_column_1 -> Value_01"
+	ConnMap [host].SetWriteDeadline(time.Now().Add(timeout))
+	_, err := ConnMap [host].Write(createBytesFromRowInfo(rowInfos))
 
-	columnInfos2 = append(columnInfos2,columnVo2)
 
-	columnVo3 := new(vo.ColumnVo)
-	columnVo3.ColumnName =" column_2"
-	columnVo3.ColumnValue = "row_2_column_2 -> Value_02"
-	columnInfos2 = append(columnInfos2,columnVo3)
-
-	row1.ColumnList = columnInfos2;
-	rowInfos = append(rowInfos,row1)
-	//createBytesFromRowInfoList(rowInfos);
-	***/
-	conn.SetWriteDeadline(time.Now().Add(timeout))
-	_, err := conn.Write(createBytesFromRowInfo(rowInfos))
-
-	//err = conn.SetReadDeadline(time.Now().Add(3*time.Second)) // timeout
 	if err != nil {
+		delete(ConnMap, host)
 		log.Println("setReadDeadline failed:", err)
-	}
-	if err != nil {
-		conn = nil
+
 		return
 	}
 
 
 }
-/*
-func JddmClientByRowList(host string, rowListInfos []*vo.BatchRowsInfo){
-
-	//fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
-	//serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)
-
-	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
-
-	conn, err := net.Dial("tcp", host)
-	if err != nil {
-		fmt.Println("Error dialing", err.Error())
-		return
-	}
-
-	//serviceNum := 1742
-	//// 前4bytes消息长度
-	//lengthArr := make([]byte,4)
-
-
-	//serviceNumArr := publicUtils.IntTo2Bytes(serviceNum)
-	//tradCodeArr := publicUtils.IntTo2Bytes(113)
-	// 4-8bytes服务号和主次命令
-	//verifyArr := make([]byte,4)
-	verifyArr := make([]byte,4)
-	//serviceNumArr := make([]byte,4)
-
-	verifyArr[0] = 0x06
-	verifyArr[1] = 0xce
-	verifyArr[2] = 0x01
-	verifyArr[3] = 0x16
-	//serviceNumArr = intTo4Bytes(serviceNum)
-	//fmt.Printf(" %s \n",publicUtils.BytestoHex(verifyArr))
-	//verifyArr[0] := 0x06;
-	//verifyArr[1] := 0xCE;
-
-	//校验码
-	//verifyArr[2] := 0x01;
-	//verifyArr[3] := 0x13;
-
-	defer conn.Close()
-
-
-	sendMsg :=" Connect Server Test  !";
-	clientSendArr := make([]byte,8+len(sendMsg))
-	lengthArr := publicUtils.IntegerToBytes(len(sendMsg));
-	//fmt.Printf(" %s \n",publicUtils.BytestoHex(lengthArr))
-	publicUtils.BlockByteArrCopy([]byte(lengthArr),0,clientSendArr,0,len(lengthArr))
-	publicUtils.BlockByteArrCopy([]byte(verifyArr),0,clientSendArr,4,len(verifyArr))
-	publicUtils.BlockByteArrCopy([]byte(sendMsg),0,clientSendArr,8,len(sendMsg))
-	fmt.Printf(" SendByte[]Arr %s \n",publicUtils.BytestoHex(clientSendArr))
-
-
-
-	fmt.Println("rowInfos：：：：：：：：：：：：：：：：：：：：：：：：",rowListInfos)
-
-
-	_, err = conn.Write(createBytesFromRowInfoList(rowListInfos))
-	if err != nil {
-		return
-	}
-
-
-}*/
-/*
-func createBytesFromRowInfoList(rowInfos []*vo.BatchRowsInfo) []byte{
-
-	//var buffer bytes.Buffer
-	//colsArr = make([]byte,0)
-	fmt.Printf(" rowCount = %d\n", len(rowInfos))
-
-
-	verifyArr := make([]byte,4)
-	//serviceNumArr := make([]byte,4)
-
-	verifyArr[0] = 0x06
-	verifyArr[1] = 0xce
-	verifyArr[2] = 0x01
-	verifyArr[3] = 0x15
-
-	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
-	sendBatchRowsArr :=new(bytes.Buffer)
-
-	for _, rowInfo := range rowInfos {
-
-		//当前时间戳
-	    t1 := time.Now().Unix()  //1564552562
-	    fmt.Println(t1)
-
-		fmt.Println(rowInfo.TableName+"::::"+rowInfo.SchemaName)
-
-		buffer.Write(publicUtils.LongToBytes(rowInfo.StartTimer))
-		buffer.Write(publicUtils.LongToBytes(rowInfo.CommitTimer))
-		buffer.Write(publicUtils.LongToBytes(rowInfo.ObjnNo))
-		buffer.Write(publicUtils.LongToBytes(rowInfo.RowID))
-		buffer.Write(publicUtils.Int32ToBytes(rowInfo.ColumnNo))
-
-		operTypeArr := make([]byte,4)
-		if rowInfo.OperType==2{
-			operTypeArr[3]=byte('I')
-			//publicUtils.BlockByteArrCopy([]byte("I"),0,operTypeArr,0,len(rowInfo.SchemaName))
-
-		}else if rowInfo.OperType == 4{
-			operTypeArr[3]=byte('D')
-		}else if rowInfo.OperType == 3{
-			operTypeArr[3]=byte('U')
-		}
-
-		buffer.Write(operTypeArr)
-		schemaNameArr := make([]byte,1+len(rowInfo.SchemaName))
-		publicUtils.BlockByteArrCopy([]byte(rowInfo.SchemaName),0,schemaNameArr,0,len(rowInfo.SchemaName))
-		buffer.Write(schemaNameArr)
-		tableNameArr := make([]byte,1+len(rowInfo.TableName))
-		publicUtils.BlockByteArrCopy([]byte(rowInfo.TableName),0,tableNameArr,0,len(rowInfo.TableName))
-		buffer.Write(tableNameArr)
-
-
-
-		for _,col2 := range rowInfo.ColumnList{
-			//fmt.Println("value:"+col2.ColumnValue+"::name::"+col2.ColumnName)
-			//fmt.Println（"%s",col.ColumnValue)
-
-			//allColumnArrByRow = append(allColumnArrByRow,columnInfoVoToByte(col2))
-			//colsArr = append(colsArr)
-			buffer.Write(columnInfoVoToByte(col2))
-		}
-
-		fmt.Printf(" allColumnArrByRow[%d]Arr %s \n",len(buffer.Bytes()),publicUtils.BytestoHex(buffer.Bytes()))
-	}
-	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes())+4)
-	sendBatchRowsArr.Write(lengthArr)
-	sendBatchRowsArr.Write(verifyArr)
-	sendBatchRowsArr.Write(publicUtils.IntegerToBytes(len(rowInfos)))
-	sendBatchRowsArr.Write(buffer.Bytes())
-	fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
-
-
-	return sendBatchRowsArr.Bytes()
-
-}*/
-
 
 func createBytesFromRowInfo(rowInfos []*vo.RowInfos) []byte{
 
@@ -628,82 +410,12 @@ func ddlColumnInfoVoToByte(columnInfo *vo.ColVo) []byte{
 
 
 
-/*func createBytesFromDDLInfoList(rowInfos []*vo.DDLInfos) []byte{
-
-
-
-	//var buffer bytes.Buffer
-	//colsArr = make([]byte,0)
-	fmt.Printf(" rowCount = %d\n", len(rowInfos))
-
-
-	verifyArr := make([]byte,4)
-	//serviceNumArr := make([]byte,4)
-
-	verifyArr[0] = 0x06
-	verifyArr[1] = 0xce
-	verifyArr[2] = 0x01
-	verifyArr[3] = 0x12
-
-	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
-	sendBatchRowsArr :=new(bytes.Buffer)
-	for _, rowInfo := range rowInfos {
-
-		//当前时间戳
-		t1 := time.Now().Unix()  //1564552562
-		fmt.Println(t1)
-
-		fmt.Println(rowInfo.TableName+"::::"+rowInfo.SchemaName)
-
-		buffer.Write(publicUtils.LongToBytes(t1))
-		buffer.Write(publicUtils.LongToBytes(t1))
-
-		buffer.Write(publicUtils.IntegerToBytes(2))
-
-		operTypeArr := make([]byte,4)
-		operTypeArr[3]=byte('I')
-		buffer.Write(operTypeArr)
-		schemaNameArr := make([]byte,1+len(rowInfo.SchemaName))
-		publicUtils.BlockByteArrCopy([]byte(rowInfo.SchemaName),0,schemaNameArr,0,len(rowInfo.SchemaName))
-		buffer.Write(schemaNameArr)
-		tableNameArr := make([]byte,1+len(rowInfo.TableName))
-		publicUtils.BlockByteArrCopy([]byte(rowInfo.TableName),0,tableNameArr,0,len(rowInfo.TableName))
-		buffer.Write(tableNameArr)
-
-
-		for _,col2 := range rowInfo.TableInfoList {
-			fmt.Println("value:"+col2.ColumnName+"::name::"+col2.ColumnName)
-			fmt.Println("ColumnType:",col2.ColumnType)
-
-			buffer.Write(colVoToByte(col2))
-		}
-
-		for _,col2 := range rowInfo.PreTableInfoList {
-			fmt.Println("value:"+col2.ColumnName+"::name::"+col2.ColumnName)
-			fmt.Println("ColumnType:",col2.ColumnType)
-
-			buffer.Write(colVoToByte(col2))
-		}
-
-		fmt.Printf(" allColumnArrByRow[%d]Arr %s \n",len(buffer.Bytes()),publicUtils.BytestoHex(buffer.Bytes()))
-	}
-	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()));
-	sendBatchRowsArr.Write(lengthArr)
-	sendBatchRowsArr.Write(verifyArr)
-	sendBatchRowsArr.Write(buffer.Bytes())
-	fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
-
-
-	return sendBatchRowsArr.Bytes()
-
-}*/
-
 
 func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 
 	colPos:=0;
     //thisColLen := 4+len(columnInfo.ColumnName)+1+len(publicUtils.BytesToHexString(columnInfo.ColumnValue))+1+4
-    thisColLen := 4+len(columnInfo.ColumnName)+1+len(columnInfo.ColumnValue)+4
+    thisColLen := 4+len(columnInfo.ColumnName)+1+len(columnInfo.ColumnValue)+5
 	fmt.Printf(columnInfo.ColumnName," ColumnValue length %s \n",len(columnInfo.ColumnValue))
     columnInfoArr := make([]byte,thisColLen)
 
@@ -728,8 +440,15 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 	}else{
 		columnInfoArr[colPos]=0x30
 	}
-
     colPos = colPos+1
+
+	if(columnInfo.IsNullFlag==true){
+		columnInfoArr[colPos]=0x31
+	}else{
+		columnInfoArr[colPos]=0x30
+	}
+	colPos = colPos+1
+
     columnInfoArr[colPos]=columnInfo.ColumnType
     colPos = colPos+1
 	columnInfoArr[colPos]=columnInfo.CFlag
@@ -757,193 +476,6 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 }
 
 
-/*func colVoToByte(columnInfo *vo.ColVo) []byte{
-
-	colPos:=0;
-	thisColLen := 2+len(columnInfo.ColumnName)+1;
-
-	columnInfoArr := make([]byte,thisColLen)
-
-	//lengthArr := publicUtils.IntegerToBytes(thisColLen);
-	columnNameArr := make([]byte,1+len(columnInfo.ColumnName))
-	publicUtils.BlockByteArrCopy([]byte(columnInfo.ColumnName),0,columnNameArr,0,len(columnInfo.ColumnName))
-
-	//Create byte[] Array
-	//publicUtils.BlockByteArrCopy([]byte(lengthArr),0,columnInfoArr,colPos,len(lengthArr))
-	//colPos = colPos+len(lengthArr);
-	if(columnInfo.IsPkFlag){
-		columnInfoArr[colPos]=0x01
-	}else{
-		columnInfoArr[colPos]=0x00
-	}
-	colPos = colPos+1;
-	columnInfoArr[colPos]=columnInfo.ColumnType
-	colPos = colPos+1;
-	publicUtils.BlockByteArrCopy([]byte(columnNameArr),0,columnInfoArr,colPos,len(columnNameArr))
-
-
-	fmt.Printf(" columnInfoArr[]Arr %s \n",publicUtils.BytestoHex(columnInfoArr))
-	return columnInfoArr;
-}
-*/
-/*func rowInfoToBytes_ByInterFace(rowInfo *vo.RowInfoVo){
-
-
-	fmt.Printf("  view schemaName [%s] \n",rowInfo.GetOwnerName())
-	fmt.Printf("  view tableName  [%s] \n",rowInfo.GetTableName())
-
-	fmt.Printf("使用interface: %v \n",rowInfo.GetColumnVoList())
-
-
-	columns :=vo.GetColumnInfoToVo(rowInfo.GetColumnVoList(),1);
-
-	fmt.Println("id: %v \n" ,   columns)
-
-
-
-	p, ok := (rowInfo.GetColumnVoList()).(vo.ColumnInfoVo)
-     if ok {
-         fmt.Println("id:" + p.ColumnName)
-         fmt.Println("name:" + p.ColumnValue)
-     } else {
-         fmt.Println("can not convert")
-     }
-
-
-	//fmt.Printf(rowInfo.GetColumnVoList());
-	fmt.Printf("\n");
-
-}*/
-
-
-
-/*func JddmAccept(hostIpAddress string, hostPort int) {
-
-	getLocalIp()
-
-
-	fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort));
-	tcpServer, _ := net.ResolveTCPAddr("tcp4", ":"+strconv.Itoa(hostPort))
-
-	//建立socket，listen hostPort
-	netListen, err := net.ListenTCP("tcp",tcpServer)
-	CheckError(err)
-	defer netListen.Close()
-
-	//Log(" Go Engine Accept ["+strconv.Itoa(hostPort)+"] Waiting Message for clients ...")
-	for{
-
-		Log(" Go Engine Accept ["+strconv.Itoa(hostPort)+"] Waiting Message for clients ...")
-
-		conn,err := netListen.Accept()
-		if err != nil{
-			continue
-		}
-
-		//Log(conn.RemoteAddr().String()," --------> tcp connect sucess !")
-		operFlag :=handleConnection_Yloader(conn)
-		if !operFlag {
-			fmt.Printf(" =============== %v ",operFlag)
-		}
-		//conn.Close();
-	}
-
-}*/
-
-
-//处理连接
-/*func handleConnection_Yloader(conn net.Conn)(bool) {
-
-	serviceNum := 1742
-	//// 前4bytes消息长度
-	lengthArr := make([]byte,4)
-
-	// 4-8bytes服务号和主次命令
-	verifyArr := make([]byte,4)
-
-	serviceNumArr := make([]byte,4)
-
-	//resultArr []byte = nil
-
-	//fmt.Printf(" Operation client ----------------> %s \n", conn.RemoteAddr().String())
-	for{
-		fmt.Printf("\n")
-		pkgLen,err := conn.Read(lengthArr)
-
-		if err != nil{
-			Log(conn.RemoteAddr().String()," pkg connection error : ",err)
-			return false
-		}
-		// 将 byte 装换为 16进制的字符串
-	    hex_string_data := publicUtils.BytestoHex(lengthArr[:pkgLen])
-	    _=hex_string_data
-		//Log(conn.RemoteAddr().String()," recveive lengthArr HexString :",hex_string_data)
-
-		verifyLen, err := conn.Read(verifyArr);
-		if err != nil{
-			Log(conn.RemoteAddr().String()," verify connection error : ",err)
-			return false
-		}
-		verifyArr_string_data := publicUtils.BytestoHex(verifyArr[:verifyLen])
-		//Log(conn.RemoteAddr().String()," recveive lengthArr HexString :",verifyArr_string_data)
-		_=verifyArr_string_data
-		serviceNumArr[2] = verifyArr[0]
-		serviceNumArr[3] = verifyArr[1]
-		serviceArr_string :=  publicUtils.BytestoHex(serviceNumArr)
-
-		//fmt.Printf(" ### %s , recveive LengthArr %s --> %5d verifyArr %s=%s --> %5d \n",conn.RemoteAddr().String(),hex_string_data,publicUtils.BytesToInteger(lengthArr),verifyArr_string_data,serviceArr_string,publicUtils.BytesToInteger(serviceNumArr))
-
-		_=serviceArr_string
-		if serviceNum == publicUtils.BytesToInteger(serviceNumArr){
-
-			//fmt.Printf(" ==========>  verify sucess from %s ... \n", conn.RemoteAddr().String())
-
-			if publicUtils.BytesToInteger(lengthArr)>0{
-
-					contentArr := make([]byte,publicUtils.BytesToInteger(lengthArr))
-
-					contentArrLen, err := conn.Read(contentArr)
-					if err != nil {
-						Log(conn.RemoteAddr().String()," content connection error : ",err)
-					}
-					_=contentArrLen
-
-					verifyArr_string_data := publicUtils.BytestoHex(verifyArr[:verifyLen])
-					_=verifyArr_string_data
-					//fmt.Printf(" recv Content Len %5d  %s \n", contentArrLen,verifyArr_string_data)
-
-					AnalysisPkgFromYloader(verifyArr,contentArr,conn);
-			}else{
-				doResponse("default",conn);
-			}
-
-			//conn.Close();
-			//break;
-		} else {
-
-			fmt.Print("  verify Failed !!")
-			errorMsg :=" verfiy ServiceName Error !";
-
-			resultArr := make([]byte,4+len(errorMsg))
-			resultLenArr :=publicUtils.IntegerToBytes(len(errorMsg));
-			publicUtils.BlockByteArrCopy([]byte(resultLenArr),0,resultArr,0,len(resultLenArr));
-			publicUtils.BlockByteArrCopy([]byte(errorMsg),0,resultArr,3,len(errorMsg));
-			resultArr[0] = 0x80;
-			fmt.Printf(" %s \n",publicUtils.BytestoHex(resultArr));
-			conn.Write(resultArr);
-			//conn.Close();
-			//break;
-		}
-
-
-	}
-
-	return true
-}*/
-
-
-
-
 //处理连接
 func handleConnection(conn net.Conn) {
 
@@ -968,19 +500,20 @@ func handleConnection(conn net.Conn) {
 }
 
 
-
 func Log(v ...interface{}) {
     log.Println(v...)
 }
 
 func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 
-	//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
-	if conn==nil{
+	_, ok := ConnMap [host]
+	if(!ok){
 		tempConn, err := net.DialTimeout("tcp", host,timeout)
-		conn = tempConn
+		//conn = tempConn
+		ConnMap [host] = tempConn
 		if err != nil {
-			conn = nil
+			delete(ConnMap, host)
+			//conn = nil
 			fmt.Println("Error dialing", err.Error())
 			return 0, nil
 		}
@@ -991,34 +524,29 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 	//fmt.Println("resolvedTs：：：：：：：：：：：：：：：：：：：：：：：：",resolvedTs)
 
 	//=============================================
-	if conn!=nil {
-		conn.SetWriteDeadline(time.Now().Add(timeout))
-		_, err := conn.Write(createBytesFromResolvedTs(resolvedTs))
+	if ConnMap [host]!=nil {
+		ConnMap [host].SetWriteDeadline(time.Now().Add(timeout))
+		_, err := ConnMap [host].Write(createBytesFromResolvedTs(resolvedTs))
 		if err != nil {
-			conn = nil
+			delete(ConnMap, host)
 			return 0, nil
 		}
 	}
 
 
 
-	// 遍历
-	/*for e := l.Front(); e != nil; e = e.Next() {
-		fmt.Printf("%v\n", e.Value)
-	}*/
-
 	//创建切片
 	buf := make([]byte, 1024)
 
 	//1 等待客户端通过conn发送信息
 	//2 如果没有writer发送就一直阻塞在这
-	if conn==nil{
+	if ConnMap [host]==nil{
 		return 0, nil
 	}
-	conn.SetReadDeadline(time.Now().Add(timeout))
-	re, err := conn.Read(buf)
+	ConnMap [host].SetReadDeadline(time.Now().Add(timeout))
+	re, err := ConnMap [host].Read(buf)
 	if err != nil {
-		conn = nil
+		delete(ConnMap, host)
 		fmt.Println("服务器read err=", err) //出错退出
 		return 0, nil
 	}
@@ -1041,27 +569,34 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 
 func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
-	//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
-	if conn ==nil {
+
+	_, ok := ConnMap [host]
+	if(!ok){
 		tempConn, err := net.DialTimeout("tcp", host,timeout)
-		conn = tempConn
+		//conn = tempConn
+		ConnMap [host] = tempConn
 		if err != nil {
-			conn = nil
+			delete(ConnMap, host)
+			//conn = nil
 			fmt.Println("Error dialing", err.Error())
 			return 0, nil
 		}
 	}
-
 
 	//defer conn.Close()
 
 	//fmt.Println("resolvedTs：：：：：：：：：：：：：：：：：：：：：：：：",resolvedTs)
 
 	//=============================================
-	conn.SetWriteDeadline(time.Now().Add(timeout))
-	_, err := conn.Write(createFlushBytesFromResolvedTs(resolvedTs))
+	if ConnMap [host]==nil {
+		fmt.Println("Error dialing")
+		return 0, nil
+	}
+
+	ConnMap [host].SetWriteDeadline(time.Now().Add(timeout))
+	_, err := ConnMap [host].Write(createFlushBytesFromResolvedTs(resolvedTs))
 	if err != nil {
-		conn = nil
+		delete(ConnMap, host)
 		return 0, nil
 	}
 
@@ -1076,13 +611,13 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
 	//1 等待客户端通过conn发送信息
 	//2 如果没有writer发送就一直阻塞在这
-	conn.SetReadDeadline(time.Now().Add(timeout))
+	ConnMap [host].SetReadDeadline(time.Now().Add(timeout))
 
-	re, err := conn.Read(buf)
+	re, err := ConnMap [host].Read(buf)
 
 
 	if err != nil {
-		conn = nil
+		delete(ConnMap, host)
 		fmt.Println("服务器read err=", err) //出错退出
 		return 0, nil
 	}

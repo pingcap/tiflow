@@ -23,6 +23,7 @@ type ColumnVo struct{
 
 	IsPkFlag bool
 	IsBinary bool
+	IsNullFlag bool
 	ColumnType byte
 	CFlag  byte
 	ColumnLen int32

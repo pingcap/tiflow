@@ -267,7 +267,6 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 
 			//socket.JddmClient("127.0.0.1:9889",rowInfos)
 
-
 		}
 
 		//send
@@ -295,12 +294,13 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 
 
 		if column.Value == nil {
-			columnVo.ColumnLen = 1
-			columnValueArr := make([]byte,1)
+			columnVo.ColumnLen = 0
+			/*columnValueArr := make([]byte,1)
 			columnValueArr[0] = 0x00
 			columnVo.ColumnValue = columnValueArr
 			fmt.Println(column.Name,":::000type[",column.Type,"]::####column.Value[",column.Value,"]####column.IsBinary:::::",column.Flag.IsBinary(),":::columnVo.ColumnValue:",columnVo.ColumnValue,"::columnVo.ColumnLen:::",columnVo.ColumnLen)
-
+			*/
+			columnVo.IsNullFlag = true
 		}else{
 			//columnVo.ColumnValue = model.ColumnValueString(column.Value)
 			//columnVo.ColumnLen = int32(len(columnVo.ColumnValue))
@@ -309,6 +309,8 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 			publicUtils.BlockByteArrCopy([]byte(columnValue),0,columnValueArr,0,len(columnValue))
 			columnVo.ColumnValue = columnValueArr
 			columnVo.ColumnLen = int32(len(columnVo.ColumnValue))
+
+			columnVo.IsNullFlag = false
 		}
 
 		columnVo.IsPkFlag = column.Flag.IsPrimaryKey()
@@ -338,7 +340,9 @@ func (b *dsgSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) 
 		fmt.Println("err=", err) //出错退出
 		return 0, nil
 	}
+	log.Info("host============>>>",zap.String("host", b.sinkURI.Host))
 	log.Info("commitTs============>>>",zap.Uint64("commitTs", commitTs))
+
 	/*err := b.statistics.RecordBatchExecution(func() (int, error) {
 		// TODO: add some random replication latency
 		accumulated := atomic.LoadUint64(&b.accumulated)
@@ -351,43 +355,7 @@ func (b *dsgSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) 
 	return commitTs, err
 }
 
-/*func analysisRowsAndSend(b *dsgSocketSink, ctx context.Context, singleTableTxn *model.SingleTableTxn) error {
 
-	var eventTypeValue int32
-
-	rowsMap, err := analysisRows(singleTableTxn)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	for dmlType, rows := range rowsMap {
-		if dmlType == "I" {
-			eventTypeValue = 2
-			if rows != nil {
-				err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-		} else if dmlType == "U" {
-			if rows != nil {
-				eventTypeValue = 3
-				err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-		} else if dmlType == "D" {
-			if rows != nil {
-				eventTypeValue = 4
-				err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-		}
-	}
-	return nil
-}*/
 
 func (b *dsgSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	log.Info("dsgSocketSink: Checkpoint Event", zap.Uint64("ts", ts))
