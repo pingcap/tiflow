@@ -14,7 +14,6 @@
 package retry
 
 import (
-
 	"github.com/hanfei1991/microcosom/pkg/terror"
 )
 

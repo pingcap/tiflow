@@ -656,6 +656,15 @@ const (
 	codeNotSet ErrCode = iota + 50000
 )
 
+// data flow error code.
+const (
+	codeDFUnknownExecutor ErrCode = iota + 100000
+	codeDFTombstoneExecutor
+	codeDFSubJobSubmitError
+	codeDFClusterResourceNotEnough
+	codeDFBuildJobFailed
+)
+
 // Error instances.
 var (
 	// Database operation related error.
@@ -1279,4 +1288,11 @@ var (
 
 	// default error.
 	ErrNotSet = New(codeNotSet, ClassNotSet, ScopeNotSet, LevelHigh, "", "")
+
+	// This happens when a unknown executor send requests to master.
+	ErrUnknownExecutorID        = New(codeDFUnknownExecutor, ClassNotSet, ScopeInternal, LevelMedium, "cannot find executor ID", "")
+	ErrTombstoneExecutor        = New(codeDFTombstoneExecutor, ClassNotSet, ScopeInternal, LevelLow, "", "")
+	ErrSubJobFailed             = New(codeDFSubJobSubmitError, ClassNotSet, ScopeNotSet, LevelMedium, "", "")
+	ErrClusterResourceNotEnough = New(codeDFClusterResourceNotEnough, ClassNotSet, ScopeNotSet, LevelMedium, "", "please scale out the cluster")
+	ErrBuildJobFailed           = New(codeDFBuildJobFailed, ClassNotSet, ScopeNotSet, LevelMedium, "", "")
 )

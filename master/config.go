@@ -73,7 +73,6 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.PeerUrls, "peer-urls", defaultPeerUrls, "URLs for peer traffic")
 	fs.StringVar(&cfg.AdvertisePeerUrls, "advertise-peer-urls", "", `advertise URLs for peer traffic (default "${peer-urls}")`)
 
-
 	return cfg
 }
 
@@ -94,12 +93,13 @@ type Config struct {
 	// etcd relative config items
 	// NOTE: we use `MasterAddr` to generate `ClientUrls` and `AdvertiseClientUrls`
 	// NOTE: more items will be add when adding leader election
-	Name                    string `toml:"name" json:"name"`
-	DataDir                 string `toml:"data-dir" json:"data-dir"`
-	PeerUrls                string `toml:"peer-urls" json:"peer-urls"`
-	AdvertisePeerUrls       string `toml:"advertise-peer-urls" json:"advertise-peer-urls"`
-	InitialCluster          string `toml:"initial-cluster" json:"initial-cluster"`
-	Join                    string `toml:"join" json:"join"`
+	Name                string `toml:"name" json:"name"`
+	DataDir             string `toml:"data-dir" json:"data-dir"`
+	PeerUrls            string `toml:"peer-urls" json:"peer-urls"`
+	AdvertisePeerUrls   string `toml:"advertise-peer-urls" json:"advertise-peer-urls"`
+	InitialCluster      string `toml:"initial-cluster" json:"initial-cluster"`
+	InitialClusterState string `toml:"initial-cluster-state" json:"initial-cluster-state"`
+	Join                string `toml:"join" json:"join"`
 
 	printVersion      bool
 	printSampleConfig bool
@@ -164,8 +164,31 @@ func (c *Config) Parse(arguments []string) error {
 	if len(c.flagSet.Args()) != 0 {
 		return terror.ErrMasterConfigInvalidFlag.Generate(c.flagSet.Arg(0))
 	}
-
+	c.adjust()
 	return nil
+}
+
+func (c *Config) adjust() {
+	if c.PeerUrls == "" {
+		c.PeerUrls = defaultPeerUrls
+	}
+	if c.AdvertiseAddr == "" {
+		c.AdvertiseAddr = c.PeerUrls
+	}
+	if c.AdvertisePeerUrls == "" {
+		c.AdvertisePeerUrls = c.PeerUrls
+	}
+	if c.InitialCluster == "" {
+		items := strings.Split(c.AdvertisePeerUrls, ",")
+		for i, item := range items {
+			items[i] = fmt.Sprintf("%s=%s", c.Name, item)
+		}
+		c.InitialCluster = strings.Join(items, ",")
+	}
+
+	if c.InitialClusterState == "" {
+		c.InitialClusterState = defaultInitialClusterState
+	}
 }
 
 // configFromFile loads config from file.
@@ -184,7 +207,6 @@ func (c *Config) configFromFile(path string) error {
 	}
 	return nil
 }
-
 
 // genEmbedEtcdConfig generates the configuration needed by embed etcd.
 // This method should be called after logger initialized and before any concurrent gRPC calls.
@@ -214,37 +236,11 @@ func (c *Config) genEmbedEtcdConfig(cfg *embed.Config) (*embed.Config, error) {
 	}
 
 	cfg.InitialCluster = c.InitialCluster
-	// TODO: To be simple, ignore them for now.
-	//cfg.ClusterState = c.InitialClusterState
-	//cfg.AutoCompactionMode = c.AutoCompactionMode
-	//cfg.AutoCompactionRetention = c.AutoCompactionRetention
-	//cfg.QuotaBackendBytes = c.QuotaBackendBytes
-	//cfg.MaxTxnOps = c.MaxTxnOps
-	//cfg.MaxRequestBytes = c.MaxRequestBytes
-
+	cfg.ClusterState = c.InitialClusterState
 	err = cfg.Validate() // verify & trigger the builder
 	if err != nil {
 		return nil, terror.ErrMasterGenEmbedEtcdConfigFail.AnnotateDelegate(err, "fail to validate embed etcd config")
 	}
-
-	// security config
-	//if len(c.SSLCA) != 0 {
-	//	cfg.ClientTLSInfo.TrustedCAFile = c.SSLCA
-	//	cfg.ClientTLSInfo.CertFile = c.SSLCert
-	//	cfg.ClientTLSInfo.KeyFile = c.SSLKey
-
-	//	cfg.PeerTLSInfo.TrustedCAFile = c.SSLCA
-	//	cfg.PeerTLSInfo.CertFile = c.SSLCert
-	//	cfg.PeerTLSInfo.KeyFile = c.SSLKey
-
-	//	// NOTE: etcd only support one allowed CN
-	//	if len(c.CertAllowedCN) > 0 {
-	//		cfg.ClientTLSInfo.AllowedCN = c.CertAllowedCN[0]
-	//		cfg.PeerTLSInfo.AllowedCN = c.CertAllowedCN[0]
-	//		cfg.PeerTLSInfo.ClientCertAuth = len(c.SSLCA) != 0
-	//		cfg.ClientTLSInfo.ClientCertAuth = len(c.SSLCA) != 0
-	//	}
-	//}
 
 	return cfg, nil
 }

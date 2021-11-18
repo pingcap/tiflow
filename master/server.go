@@ -6,8 +6,12 @@ import (
 	"net"
 	"time"
 
+	"github.com/hanfei1991/microcosom/master/cluster"
+	"github.com/hanfei1991/microcosom/master/jobmaster"
+	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pkg/etcdutil"
 	"github.com/hanfei1991/microcosom/pkg/log"
+	"github.com/hanfei1991/microcosom/pkg/terror"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
@@ -17,43 +21,65 @@ import (
 )
 
 // Server handles PRC requests for df master.
-
-// TODO: Do we need pd client?
-
 type Server struct {
-
 	etcd *embed.Etcd
 
 	etcdClient *clientv3.Client
 	//election *election.Election
 
 	// sched scheduler
-	scheduler *Scheduler
-	// jobMng jobManager
-	// 
+	executorManager *cluster.ExecutorManager
+	jobManager      *jobmaster.JobManager
+	//
 
 	cfg *Config
 }
 
-func NewServer(cfg *Config) *Server {
-	server := &Server {
-		cfg: cfg,
-		scheduler: &Scheduler{},
+// NewServer creates a new master-server.
+func NewServer(cfg *Config) (*Server, error) {
+	executorNotifier := make(chan model.ExecutorID, 100)
+	executorManager := cluster.NewExecutorManager(executorNotifier)
+	jobManager := jobmaster.NewJobManager(executorManager, executorManager, executorNotifier)
+	server := &Server{
+		cfg:             cfg,
+		executorManager: executorManager,
+		jobManager: jobManager,
 	}
-	return server
+	return server, nil
 }
 
+// Heartbeat implements pb interface.
+func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
+	return s.executorManager.HandleHeartbeat(req)
+}
+
+// SubmitJob passes request onto "JobManager".
 func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
-	return &pb.SubmitJobResponse{}, nil
+	return s.jobManager.SubmitJob(ctx, req), nil
 }
 
-// 
+// RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	// register executor to scheduler
-	s.scheduler.AddExecutor(req.Name, req.Address)
-	return &pb.RegisterExecutorResponse{}, nil
+	// TODO: check leader, if not leader, return notLeader error.
+	execInfo, err := s.executorManager.AddExecutor(req)
+	if err != nil {
+		log.L().Logger.Error("add executor failed", zap.Error(err))
+		return &pb.RegisterExecutorResponse{
+			Err: terror.ToPBError(err),
+		}, nil
+	}
+	return &pb.RegisterExecutorResponse{
+		ExecutorId: int32(execInfo.ID),
+	}, nil
 }
 
+// DeleteExecutor deletes an executor, but have yet implemented.
+func (s *Server) DeleteExecutor() {
+	// To implement
+}
+
+// Start the master-server.
 func (s *Server) Start(ctx context.Context) (err error) {
 	etcdCfg := genEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
 	// prepare to join an existing etcd cluster.
@@ -75,8 +101,8 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		return
 	}
 
-	gRPCSvr := func(gs *grpc.Server) { 
-		pb.RegisterMasterServer(gs, s) 
+	gRPCSvr := func(gs *grpc.Server) {
+		pb.RegisterMasterServer(gs, s)
 		// TODO: register msg server
 	}
 
@@ -86,19 +112,28 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	//	return
 	//}
 
-
 	// generate grpcServer
 	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, nil, time.Minute)
+	if err != nil {
+		return
+	}
+
+	log.L().Logger.Info("start etcd successfully")
 
 	// start grpc server
 
 	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
+	if err != nil {
+		return
+	}
 
 	// start leader election
 	// TODO: Consider election. And Notify workers when leader changes.
 	//s.election, err = election.NewElection(ctx, )
-	
+
 	// start keep alive
+	s.executorManager.Start(ctx)
+	s.jobManager.Start(ctx)
 	return nil
 }
 

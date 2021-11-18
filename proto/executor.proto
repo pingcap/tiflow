@@ -1,0 +1,34 @@
+
+syntax = "proto3";
+
+package pb;
+import "error.proto";
+
+service Executor {
+    rpc SubmitBatchTasks(SubmitBatchTasksRequest) returns (SubmitBatchTasksResponse) {}
+    rpc CancelBatchTasks(CancelBatchTasksRequest) returns (CancelBatchTasksResponse) {}
+}
+
+message CancelBatchTasksRequest {
+    repeated int32 task_id_list = 1;
+}
+
+message SubmitBatchTasksRequest {
+    repeated TaskRequest tasks = 2;
+}
+
+message TaskRequest {
+    int32 id = 1;
+    repeated int32 inputs = 2;
+    repeated int32 outputs = 3;
+    bytes op = 4;
+    int32 op_tp = 5;
+}
+
+message SubmitBatchTasksResponse {
+    Error err = 1;
+}
+
+message CancelBatchTasksResponse {
+    Error err = 1;
+}

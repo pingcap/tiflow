@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package pb;
 
+import "error.proto";
+
 // I'm trying to phase out the communication protocal.
 // - system level
 //   - Register Executor. After a executor bootstrapped, it has to register itself to join the cluster.
@@ -21,10 +23,23 @@ service Master {
     //GetMembers returns the available master members
     //rpc GetMembers(GetMembersRequest) {}
 
-    //rpc Heartbeat() {}
+    rpc Heartbeat(HeartbeatRequest) returns(HeartbeatResponse) {}
     // TODO: Support more interface.
 
     // - PutClusterConfig
+}
+
+message HeartbeatRequest {
+    int32 executor_id = 1;
+    int32 resource_usage = 2;
+    int32 status = 3;
+    
+    uint64 timestamp = 4;
+    uint64 ttl = 5;
+}
+
+message HeartbeatResponse {
+    Error err = 1;
 }
 
 message SubmitJobRequest {
@@ -34,31 +49,27 @@ message SubmitJobRequest {
         CDC = 1;
         Benchmark = 2;
     }
-    string config = 1;
+    JobType tp = 1;
+    bytes config = 2;
     // User name, token, etc...
-    string user = 2;
-    // TODO: Resouce Limit
-}
-
-enum ErrorCode {
-    None = 0;
-    NotLeader = 1;
+    string user = 3;
+    // TODO: Resource Limit
 }
 
 message SubmitJobResponse {
-    ErrorCode err = 1;
-    string err_message = 2;
+    Error err = 1;
+    int32 job_id = 2;
 }
 
 message RegisterExecutorRequest {
     // dm need 'worker-name' to locate the worker.
     // TODO: Do we really need a "worker name"? Can we use address to identify an executor?
-    string name = 1;
-    string address = 2;
-    string version = 3;
+    string address = 1;
+    string version = 2;
+    int64  capability = 3;
 }
 
 message RegisterExecutorResponse {
-    ErrorCode err = 1;
-    string err_message = 2;
+    Error err = 1;
+    int32  executor_id = 2;
 }

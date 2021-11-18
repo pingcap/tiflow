@@ -8,12 +8,14 @@ import (
 
 	//"io/fs"
 	//"io/ioutil"
-	"github.com/hanfei1991/microcosom/pkg/workerpool"
 	"sync"
 	"time"
 
 	"github.com/hanfei1991/microcosom/pb"
+	"github.com/hanfei1991/microcosom/pkg/log"
+	"github.com/hanfei1991/microcosom/pkg/workerpool"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -21,11 +23,11 @@ type fileWriter struct {
 	mu       sync.Mutex
 	filePath string
 	fd       *os.File
-	tid      int
+	tid      int32
 }
 
 func (f *fileWriter) prepare() error {
-	file, err := os.OpenFile(f.filePath, os.O_APPEND| os.O_CREATE| os.O_WRONLY, 0777)
+	file, err := os.OpenFile(f.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 	f.fd = file
 	return err
 }
@@ -33,10 +35,10 @@ func (f *fileWriter) prepare() error {
 func (f *fileWriter) write(ctx *taskContext, r *Record) {
 	r.end = time.Now()
 	str := []byte(r.toString())
-//	f.mu.Lock()
-//	defer f.mu.Unlock()
-	ctx.stats[f.tid].recordCnt ++
-	ctx.stats[f.tid].totalLag += r.end.Sub(r.start)
+	//	f.mu.Lock()
+	//	defer f.mu.Unlock()
+	//ctx.stats[f.tid].recordCnt ++
+	//ctx.stats[f.tid].totalLag += r.end.Sub(r.start)
 	_, err := f.fd.Write(str)
 	if err != nil {
 		panic(err)
@@ -49,31 +51,34 @@ type tableStats struct {
 }
 
 type taskContext struct {
-	ioPool workerpool.AsyncPool
+	ioPool   workerpool.AsyncPool
 	tableCnt int32
-	stats []tableStats
+	stats    []tableStats
 }
 
 type operator interface {
 	next(ctx *taskContext, r []*Record) ([][]*Record, bool)
-	prepare(ctx *taskContext) error
+	prepare() error
 }
 
 type opReceive struct {
-	addr  string
-	data  chan *Record
-	cache [][]*Record
+	addr     string
+	tableCnt int32
+	data     chan *Record
+	cache    [][]*Record
 }
 
-func (o *opReceive) prepare(ctx *taskContext) error {
+func (o *opReceive) prepare() error {
 	// get connection
+	log.L().Logger.Info("dial to", zap.String("addr", o.addr))
+	o.cache = make([][]*Record, o.tableCnt)
 	conn, err := grpc.Dial(o.addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		return errors.New("conn failed")
 	}
 	client := pb.NewTmpServiceClient(conn)
 	// start receiving data
-	stream, err := client.EventFeed(context.Background(), &pb.Request{MaxTid: ctx.tableCnt})
+	stream, err := client.EventFeed(context.Background(), &pb.Request{MaxTid: o.tableCnt})
 	if err != nil {
 		return errors.New("conn failed")
 	}
@@ -112,7 +117,7 @@ func (o *opReceive) next(ctx *taskContext, _ []*Record) ([][]*Record, bool) {
 		}
 	}
 	if i == 0 {
-		return nil, false 
+		return nil, false
 	} else {
 		return o.cache, false
 	}
@@ -121,7 +126,7 @@ func (o *opReceive) next(ctx *taskContext, _ []*Record) ([][]*Record, bool) {
 type opHash struct {
 }
 
-func (o *opHash) prepare(ctx *taskContext) error { return nil }
+func (o *opHash) prepare() error { return nil }
 
 func (o *opHash) next(ctx *taskContext, records []*Record) ([][]*Record, bool) {
 	for _, record := range records {
@@ -134,7 +139,7 @@ type opSink struct {
 	writer fileWriter
 }
 
-func (o *opSink) prepare(_ *taskContext) error {
+func (o *opSink) prepare() error {
 	return o.writer.prepare()
 }
 
@@ -143,9 +148,9 @@ func (o *opSink) next(ctx *taskContext, records []*Record) ([][]*Record, bool) {
 		return nil, true
 	}
 	//ctx.ioPool.Go(context.Background(), func() {
-		for _, r := range records {
-			o.writer.write(ctx, r)
-		}
+	for _, r := range records {
+		o.writer.write(ctx, r)
+	}
 	//})
 	return nil, false
 }

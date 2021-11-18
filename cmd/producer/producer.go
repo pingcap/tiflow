@@ -1,11 +1,11 @@
-package main 
+package main
 
 import (
 	"log"
-	pb "microcosom/proto"
 	"net"
 	"time"
 
+	"github.com/hanfei1991/microcosom/pb"
 	"google.golang.org/grpc"
 )
 
@@ -32,7 +32,7 @@ func (s *server) EventFeed(in *pb.Request, server pb.TmpService_EventFeedServer)
 			log.Printf("meet error %v", err)
 			return err
 		}
-		i = (i+1) % tid
+		i = (i + 1) % tid
 	}
 }
 

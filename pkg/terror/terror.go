@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/hanfei1991/microcosom/pb"
 	"github.com/pingcap/errors"
 )
 
@@ -387,4 +388,35 @@ func WithClass(err error, class ErrClass) error {
 	}
 	e.class = class
 	return e
+}
+
+// ToPBError translates go error to pb error.
+func ToPBError(err error) *pb.Error {
+	if err == nil {
+		return nil
+	}
+	e, ok := err.(*Error)
+	if !ok {
+		return &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}
+	}
+	pbErr := &pb.Error{}
+	switch e.Code() {
+	case codeDFUnknownExecutor:
+		pbErr.Code = pb.ErrorCode_UnknownExecutor
+	case codeDFTombstoneExecutor:
+		pbErr.Code = pb.ErrorCode_TombstoneExecutor
+	case codeDFSubJobSubmitError:
+		pbErr.Code = pb.ErrorCode_SubJobSubmitFailed
+	case codeDFClusterResourceNotEnough:
+		pbErr.Code = pb.ErrorCode_NotEnoughResource
+	case codeDFBuildJobFailed:
+		pbErr.Code = pb.ErrorCode_SubJobBuildFailed
+	default:
+		pbErr.Code = pb.ErrorCode_UnknownError
+	}
+	pbErr.Message = e.Message()
+	return pbErr
 }

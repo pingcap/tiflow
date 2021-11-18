@@ -27,31 +27,6 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-type ErrorCode int32
-
-const (
-	ErrorCode_None      ErrorCode = 0
-	ErrorCode_NotLeader ErrorCode = 1
-)
-
-var ErrorCode_name = map[int32]string{
-	0: "None",
-	1: "NotLeader",
-}
-
-var ErrorCode_value = map[string]int32{
-	"None":      0,
-	"NotLeader": 1,
-}
-
-func (x ErrorCode) String() string {
-	return proto.EnumName(ErrorCode_name, int32(x))
-}
-
-func (ErrorCode) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{0}
-}
-
 // For compatibility, we still use config file to present a job.
 type SubmitJobRequest_JobType int32
 
@@ -78,20 +53,141 @@ func (x SubmitJobRequest_JobType) String() string {
 }
 
 func (SubmitJobRequest_JobType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{0, 0}
+	return fileDescriptor_f9c348dec43a6705, []int{2, 0}
+}
+
+type HeartbeatRequest struct {
+	ExecutorId    int32  `protobuf:"varint,1,opt,name=executor_id,json=executorId,proto3" json:"executor_id,omitempty"`
+	ResourceUsage int32  `protobuf:"varint,2,opt,name=resource_usage,json=resourceUsage,proto3" json:"resource_usage,omitempty"`
+	Status        int32  `protobuf:"varint,3,opt,name=status,proto3" json:"status,omitempty"`
+	Timestamp     uint64 `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Ttl           uint64 `protobuf:"varint,5,opt,name=ttl,proto3" json:"ttl,omitempty"`
+}
+
+func (m *HeartbeatRequest) Reset()         { *m = HeartbeatRequest{} }
+func (m *HeartbeatRequest) String() string { return proto.CompactTextString(m) }
+func (*HeartbeatRequest) ProtoMessage()    {}
+func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_f9c348dec43a6705, []int{0}
+}
+func (m *HeartbeatRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HeartbeatRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_HeartbeatRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *HeartbeatRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HeartbeatRequest.Merge(m, src)
+}
+func (m *HeartbeatRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *HeartbeatRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_HeartbeatRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HeartbeatRequest proto.InternalMessageInfo
+
+func (m *HeartbeatRequest) GetExecutorId() int32 {
+	if m != nil {
+		return m.ExecutorId
+	}
+	return 0
+}
+
+func (m *HeartbeatRequest) GetResourceUsage() int32 {
+	if m != nil {
+		return m.ResourceUsage
+	}
+	return 0
+}
+
+func (m *HeartbeatRequest) GetStatus() int32 {
+	if m != nil {
+		return m.Status
+	}
+	return 0
+}
+
+func (m *HeartbeatRequest) GetTimestamp() uint64 {
+	if m != nil {
+		return m.Timestamp
+	}
+	return 0
+}
+
+func (m *HeartbeatRequest) GetTtl() uint64 {
+	if m != nil {
+		return m.Ttl
+	}
+	return 0
+}
+
+type HeartbeatResponse struct {
+	Err *Error `protobuf:"bytes,1,opt,name=err,proto3" json:"err,omitempty"`
+}
+
+func (m *HeartbeatResponse) Reset()         { *m = HeartbeatResponse{} }
+func (m *HeartbeatResponse) String() string { return proto.CompactTextString(m) }
+func (*HeartbeatResponse) ProtoMessage()    {}
+func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_f9c348dec43a6705, []int{1}
+}
+func (m *HeartbeatResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HeartbeatResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_HeartbeatResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *HeartbeatResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HeartbeatResponse.Merge(m, src)
+}
+func (m *HeartbeatResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *HeartbeatResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_HeartbeatResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HeartbeatResponse proto.InternalMessageInfo
+
+func (m *HeartbeatResponse) GetErr() *Error {
+	if m != nil {
+		return m.Err
+	}
+	return nil
 }
 
 type SubmitJobRequest struct {
-	Config string `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
+	Tp     SubmitJobRequest_JobType `protobuf:"varint,1,opt,name=tp,proto3,enum=pb.SubmitJobRequest_JobType" json:"tp,omitempty"`
+	Config []byte                   `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
 	// User name, token, etc...
-	User string `protobuf:"bytes,2,opt,name=user,proto3" json:"user,omitempty"`
+	User string `protobuf:"bytes,3,opt,name=user,proto3" json:"user,omitempty"`
 }
 
 func (m *SubmitJobRequest) Reset()         { *m = SubmitJobRequest{} }
 func (m *SubmitJobRequest) String() string { return proto.CompactTextString(m) }
 func (*SubmitJobRequest) ProtoMessage()    {}
 func (*SubmitJobRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{0}
+	return fileDescriptor_f9c348dec43a6705, []int{2}
 }
 func (m *SubmitJobRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -120,11 +216,18 @@ func (m *SubmitJobRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SubmitJobRequest proto.InternalMessageInfo
 
-func (m *SubmitJobRequest) GetConfig() string {
+func (m *SubmitJobRequest) GetTp() SubmitJobRequest_JobType {
+	if m != nil {
+		return m.Tp
+	}
+	return SubmitJobRequest_DM
+}
+
+func (m *SubmitJobRequest) GetConfig() []byte {
 	if m != nil {
 		return m.Config
 	}
-	return ""
+	return nil
 }
 
 func (m *SubmitJobRequest) GetUser() string {
@@ -135,15 +238,15 @@ func (m *SubmitJobRequest) GetUser() string {
 }
 
 type SubmitJobResponse struct {
-	Err        ErrorCode `protobuf:"varint,1,opt,name=err,proto3,enum=pb.ErrorCode" json:"err,omitempty"`
-	ErrMessage string    `protobuf:"bytes,2,opt,name=err_message,json=errMessage,proto3" json:"err_message,omitempty"`
+	Err   *Error `protobuf:"bytes,1,opt,name=err,proto3" json:"err,omitempty"`
+	JobId int32  `protobuf:"varint,2,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
 }
 
 func (m *SubmitJobResponse) Reset()         { *m = SubmitJobResponse{} }
 func (m *SubmitJobResponse) String() string { return proto.CompactTextString(m) }
 func (*SubmitJobResponse) ProtoMessage()    {}
 func (*SubmitJobResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{1}
+	return fileDescriptor_f9c348dec43a6705, []int{3}
 }
 func (m *SubmitJobResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -172,33 +275,33 @@ func (m *SubmitJobResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SubmitJobResponse proto.InternalMessageInfo
 
-func (m *SubmitJobResponse) GetErr() ErrorCode {
+func (m *SubmitJobResponse) GetErr() *Error {
 	if m != nil {
 		return m.Err
 	}
-	return ErrorCode_None
+	return nil
 }
 
-func (m *SubmitJobResponse) GetErrMessage() string {
+func (m *SubmitJobResponse) GetJobId() int32 {
 	if m != nil {
-		return m.ErrMessage
+		return m.JobId
 	}
-	return ""
+	return 0
 }
 
 type RegisterExecutorRequest struct {
 	// dm need 'worker-name' to locate the worker.
 	// TODO: Do we really need a "worker name"? Can we use address to identify an executor?
-	Name    string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Address string `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
-	Version string `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	Address    string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	Version    string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Capability int64  `protobuf:"varint,3,opt,name=capability,proto3" json:"capability,omitempty"`
 }
 
 func (m *RegisterExecutorRequest) Reset()         { *m = RegisterExecutorRequest{} }
 func (m *RegisterExecutorRequest) String() string { return proto.CompactTextString(m) }
 func (*RegisterExecutorRequest) ProtoMessage()    {}
 func (*RegisterExecutorRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{2}
+	return fileDescriptor_f9c348dec43a6705, []int{4}
 }
 func (m *RegisterExecutorRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -227,13 +330,6 @@ func (m *RegisterExecutorRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RegisterExecutorRequest proto.InternalMessageInfo
 
-func (m *RegisterExecutorRequest) GetName() string {
-	if m != nil {
-		return m.Name
-	}
-	return ""
-}
-
 func (m *RegisterExecutorRequest) GetAddress() string {
 	if m != nil {
 		return m.Address
@@ -248,16 +344,23 @@ func (m *RegisterExecutorRequest) GetVersion() string {
 	return ""
 }
 
+func (m *RegisterExecutorRequest) GetCapability() int64 {
+	if m != nil {
+		return m.Capability
+	}
+	return 0
+}
+
 type RegisterExecutorResponse struct {
-	Err        ErrorCode `protobuf:"varint,1,opt,name=err,proto3,enum=pb.ErrorCode" json:"err,omitempty"`
-	ErrMessage string    `protobuf:"bytes,2,opt,name=err_message,json=errMessage,proto3" json:"err_message,omitempty"`
+	Err        *Error `protobuf:"bytes,1,opt,name=err,proto3" json:"err,omitempty"`
+	ExecutorId int32  `protobuf:"varint,2,opt,name=executor_id,json=executorId,proto3" json:"executor_id,omitempty"`
 }
 
 func (m *RegisterExecutorResponse) Reset()         { *m = RegisterExecutorResponse{} }
 func (m *RegisterExecutorResponse) String() string { return proto.CompactTextString(m) }
 func (*RegisterExecutorResponse) ProtoMessage()    {}
 func (*RegisterExecutorResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{3}
+	return fileDescriptor_f9c348dec43a6705, []int{5}
 }
 func (m *RegisterExecutorResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -286,23 +389,24 @@ func (m *RegisterExecutorResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RegisterExecutorResponse proto.InternalMessageInfo
 
-func (m *RegisterExecutorResponse) GetErr() ErrorCode {
+func (m *RegisterExecutorResponse) GetErr() *Error {
 	if m != nil {
 		return m.Err
 	}
-	return ErrorCode_None
+	return nil
 }
 
-func (m *RegisterExecutorResponse) GetErrMessage() string {
+func (m *RegisterExecutorResponse) GetExecutorId() int32 {
 	if m != nil {
-		return m.ErrMessage
+		return m.ExecutorId
 	}
-	return ""
+	return 0
 }
 
 func init() {
-	proto.RegisterEnum("pb.ErrorCode", ErrorCode_name, ErrorCode_value)
 	proto.RegisterEnum("pb.SubmitJobRequest_JobType", SubmitJobRequest_JobType_name, SubmitJobRequest_JobType_value)
+	proto.RegisterType((*HeartbeatRequest)(nil), "pb.HeartbeatRequest")
+	proto.RegisterType((*HeartbeatResponse)(nil), "pb.HeartbeatResponse")
 	proto.RegisterType((*SubmitJobRequest)(nil), "pb.SubmitJobRequest")
 	proto.RegisterType((*SubmitJobResponse)(nil), "pb.SubmitJobResponse")
 	proto.RegisterType((*RegisterExecutorRequest)(nil), "pb.RegisterExecutorRequest")
@@ -312,30 +416,38 @@ func init() {
 func init() { proto.RegisterFile("master.proto", fileDescriptor_f9c348dec43a6705) }
 
 var fileDescriptor_f9c348dec43a6705 = []byte{
-	// 367 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x52, 0x3d, 0x4f, 0xe3, 0x50,
-	0x10, 0xf4, 0x73, 0x22, 0xe7, 0xbc, 0x77, 0x39, 0xf9, 0x56, 0xf7, 0x61, 0xe5, 0x4e, 0xce, 0xc9,
-	0xba, 0xe2, 0xa0, 0x48, 0x11, 0x3a, 0xca, 0x7c, 0x34, 0x11, 0x09, 0x92, 0x81, 0x0e, 0x09, 0xd9,
-	0xf1, 0x12, 0x2c, 0x64, 0x3f, 0xb3, 0xcf, 0x46, 0xf0, 0x2f, 0x68, 0xf8, 0x4f, 0x94, 0x29, 0x29,
-	0x51, 0xf2, 0x47, 0x90, 0x1d, 0x27, 0x42, 0x01, 0x3a, 0xba, 0x9d, 0x19, 0xaf, 0xe7, 0xcd, 0xee,
-	0xc2, 0x97, 0xd8, 0x57, 0x19, 0x71, 0x27, 0x65, 0x99, 0x49, 0xd4, 0xd3, 0xc0, 0x8d, 0xc0, 0x3a,
-	0xca, 0x83, 0x38, 0xca, 0x46, 0x32, 0xf0, 0xe8, 0x2a, 0x27, 0x95, 0xe1, 0x4f, 0x30, 0xa6, 0x32,
-	0x39, 0x8f, 0x66, 0xb6, 0xf8, 0x2b, 0xfe, 0x9b, 0x5e, 0x85, 0x10, 0xa1, 0x9e, 0x2b, 0x62, 0x5b,
-	0x2f, 0xd9, 0xb2, 0x76, 0x77, 0xa0, 0x31, 0x92, 0xc1, 0xf1, 0x6d, 0x4a, 0x68, 0x80, 0x3e, 0x18,
-	0x5b, 0x1a, 0x36, 0xa0, 0xd6, 0x1f, 0xf4, 0x2d, 0x81, 0x4d, 0x30, 0x7b, 0x94, 0x4c, 0x2f, 0x62,
-	0x9f, 0x2f, 0x2d, 0xdd, 0x3d, 0x81, 0x6f, 0x2f, 0xac, 0x54, 0x2a, 0x13, 0x45, 0xd8, 0x86, 0x1a,
-	0x31, 0x97, 0x46, 0x5f, 0xbb, 0xcd, 0x4e, 0x1a, 0x74, 0x86, 0xcc, 0x92, 0xfb, 0x32, 0x24, 0xaf,
-	0x50, 0xb0, 0x0d, 0x9f, 0x89, 0xf9, 0x2c, 0x26, 0xa5, 0xfc, 0x19, 0x55, 0xde, 0x40, 0xcc, 0xe3,
-	0x15, 0xe3, 0xfa, 0xf0, 0xcb, 0xa3, 0x59, 0x54, 0xe4, 0x1a, 0xde, 0xd0, 0x34, 0xcf, 0x24, 0xaf,
-	0x83, 0x20, 0xd4, 0x13, 0x3f, 0xa6, 0x2a, 0x46, 0x59, 0xa3, 0x0d, 0x0d, 0x3f, 0x0c, 0x99, 0x94,
-	0xaa, 0xfe, 0xb5, 0x86, 0x85, 0x72, 0x4d, 0xac, 0x22, 0x99, 0xd8, 0xb5, 0x95, 0x52, 0x41, 0xf7,
-	0x14, 0xec, 0xd7, 0x16, 0x1f, 0x15, 0x60, 0xf7, 0x1f, 0x98, 0x9b, 0x16, 0xfc, 0x04, 0xf5, 0x89,
-	0x4c, 0xc8, 0xd2, 0x8a, 0xe9, 0x4d, 0x64, 0x76, 0x40, 0x7e, 0x48, 0x6c, 0x89, 0xee, 0xbd, 0x00,
-	0x63, 0x5c, 0x6e, 0x0f, 0x0f, 0xc1, 0xda, 0x7e, 0x0e, 0xfe, 0x2e, 0x9c, 0xdf, 0x99, 0x43, 0xeb,
-	0xcf, 0xdb, 0xe2, 0x2a, 0x81, 0xab, 0xe1, 0x3e, 0x98, 0x9b, 0xcd, 0xe0, 0xf7, 0xe2, 0xe3, 0xed,
-	0x9b, 0x68, 0xfd, 0xd8, 0x62, 0xd7, 0xbd, 0x3d, 0xfb, 0x61, 0xe1, 0x88, 0xf9, 0xc2, 0x11, 0x4f,
-	0x0b, 0x47, 0xdc, 0x2d, 0x1d, 0x6d, 0xbe, 0x74, 0xb4, 0xc7, 0xa5, 0xa3, 0x05, 0x46, 0x79, 0x65,
-	0x7b, 0xcf, 0x01, 0x00, 0x00, 0xff, 0xff, 0x59, 0x7e, 0x7b, 0xeb, 0x75, 0x02, 0x00, 0x00,
+	// 488 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x53, 0x4f, 0x6f, 0xd4, 0x3e,
+	0x10, 0x8d, 0xb3, 0xff, 0x94, 0xd9, 0xb6, 0x4a, 0xad, 0x5f, 0x7f, 0x44, 0xdb, 0x55, 0xa8, 0x22,
+	0x21, 0x15, 0x09, 0xad, 0xd0, 0x72, 0xe3, 0xd8, 0x3f, 0x82, 0x56, 0xaa, 0x90, 0x0c, 0x48, 0xdc,
+	0x2a, 0x3b, 0x19, 0x96, 0x94, 0x66, 0x1d, 0x6c, 0x07, 0xd1, 0x6f, 0xc1, 0x8d, 0x3b, 0x9f, 0x86,
+	0x63, 0xb9, 0x71, 0x44, 0xbb, 0x5f, 0x04, 0xd9, 0x9b, 0x94, 0x55, 0x5a, 0xa4, 0xde, 0x3c, 0x6f,
+	0xfc, 0x66, 0xe6, 0x79, 0x9e, 0x61, 0xa3, 0xe0, 0xda, 0xa0, 0x9a, 0x94, 0x4a, 0x1a, 0x49, 0xfd,
+	0x52, 0x8c, 0x86, 0xa8, 0x94, 0xac, 0x81, 0xe4, 0x3b, 0x81, 0xf0, 0x25, 0x72, 0x65, 0x04, 0x72,
+	0xc3, 0xf0, 0x53, 0x85, 0xda, 0xd0, 0x87, 0x30, 0xc4, 0x2f, 0x98, 0x56, 0x46, 0xaa, 0xf3, 0x3c,
+	0x8b, 0xc8, 0x1e, 0xd9, 0xef, 0x31, 0x68, 0xa0, 0x93, 0x8c, 0x3e, 0x82, 0x2d, 0x85, 0x5a, 0x56,
+	0x2a, 0xc5, 0xf3, 0x4a, 0xf3, 0x19, 0x46, 0xbe, 0xbb, 0xb3, 0xd9, 0xa0, 0x6f, 0x2d, 0x48, 0xff,
+	0x87, 0xbe, 0x36, 0xdc, 0x54, 0x3a, 0xea, 0xb8, 0x74, 0x1d, 0xd1, 0x31, 0x04, 0x26, 0x2f, 0x50,
+	0x1b, 0x5e, 0x94, 0x51, 0x77, 0x8f, 0xec, 0x77, 0xd9, 0x5f, 0x80, 0x86, 0xd0, 0x31, 0xe6, 0x32,
+	0xea, 0x39, 0xdc, 0x1e, 0x93, 0xa7, 0xb0, 0xbd, 0x36, 0xa3, 0x2e, 0xe5, 0x5c, 0x23, 0xdd, 0x85,
+	0x0e, 0x2a, 0xe5, 0x86, 0x1b, 0x4e, 0x83, 0x49, 0x29, 0x26, 0xc7, 0x56, 0x17, 0xb3, 0x68, 0xf2,
+	0x8d, 0x40, 0xf8, 0xba, 0x12, 0x45, 0x6e, 0x4e, 0xa5, 0x68, 0x64, 0x3d, 0x01, 0xdf, 0x94, 0x8e,
+	0xb0, 0x35, 0x1d, 0x5b, 0x42, 0xfb, 0xc6, 0xe4, 0x54, 0x8a, 0x37, 0x57, 0x25, 0x32, 0xdf, 0x94,
+	0x76, 0xf8, 0x54, 0xce, 0xdf, 0xe7, 0x33, 0xa7, 0x6d, 0x83, 0xd5, 0x11, 0xa5, 0xd0, 0xad, 0x34,
+	0x2a, 0x27, 0x29, 0x60, 0xee, 0x9c, 0x3c, 0x86, 0x41, 0x4d, 0xa5, 0x7d, 0xf0, 0x8f, 0xce, 0x42,
+	0x8f, 0x0e, 0xa0, 0x73, 0x78, 0x74, 0x18, 0x12, 0xba, 0x09, 0xc1, 0x01, 0xce, 0xd3, 0x0f, 0x05,
+	0x57, 0x1f, 0x43, 0x3f, 0x79, 0x01, 0xdb, 0x6b, 0x6d, 0xef, 0xa1, 0x85, 0xee, 0x40, 0xff, 0x42,
+	0x0a, 0xbb, 0x88, 0xd5, 0x23, 0xf7, 0x2e, 0xa4, 0x38, 0xc9, 0x92, 0x02, 0x1e, 0x30, 0x9c, 0xe5,
+	0x76, 0xb9, 0xc7, 0xf5, 0x66, 0x1a, 0xa1, 0x11, 0x0c, 0x78, 0x96, 0x29, 0xd4, 0xda, 0x95, 0x0c,
+	0x58, 0x13, 0xda, 0xcc, 0x67, 0x54, 0x3a, 0x97, 0x73, 0x57, 0x2c, 0x60, 0x4d, 0x48, 0x63, 0x80,
+	0x94, 0x97, 0x5c, 0xe4, 0x97, 0xb9, 0xb9, 0x72, 0xe2, 0x3a, 0x6c, 0x0d, 0x49, 0xde, 0x41, 0x74,
+	0xbb, 0xdd, 0x7d, 0xc6, 0x6f, 0x99, 0xc9, 0x6f, 0x9b, 0x69, 0xfa, 0x93, 0x40, 0xff, 0xcc, 0x99,
+	0x94, 0xbe, 0x82, 0xb0, 0xdd, 0x84, 0xee, 0xda, 0x7a, 0xff, 0x50, 0x3a, 0x1a, 0xdf, 0x9d, 0x5c,
+	0xcd, 0x95, 0x78, 0xf4, 0x39, 0x04, 0x37, 0xaf, 0x4d, 0xff, 0xbb, 0x6b, 0xe7, 0xa3, 0x9d, 0x16,
+	0xba, 0xce, 0xbd, 0x71, 0xdd, 0x8a, 0xdb, 0xfe, 0x28, 0x2b, 0xee, 0x2d, 0x6b, 0x26, 0xde, 0x41,
+	0xf4, 0x63, 0x11, 0x93, 0xeb, 0x45, 0x4c, 0x7e, 0x2f, 0x62, 0xf2, 0x75, 0x19, 0x7b, 0xd7, 0xcb,
+	0xd8, 0xfb, 0xb5, 0x8c, 0x3d, 0xd1, 0x77, 0xff, 0xee, 0xd9, 0x9f, 0x00, 0x00, 0x00, 0xff, 0xff,
+	0x6a, 0xbe, 0xda, 0x8d, 0x98, 0x03, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -352,6 +464,7 @@ const _ = grpc.SupportPackageIsVersion4
 type MasterClient interface {
 	RegisterExecutor(ctx context.Context, in *RegisterExecutorRequest, opts ...grpc.CallOption) (*RegisterExecutorResponse, error)
 	SubmitJob(ctx context.Context, in *SubmitJobRequest, opts ...grpc.CallOption) (*SubmitJobResponse, error)
+	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
 }
 
 type masterClient struct {
@@ -380,10 +493,20 @@ func (c *masterClient) SubmitJob(ctx context.Context, in *SubmitJobRequest, opts
 	return out, nil
 }
 
+func (c *masterClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error) {
+	out := new(HeartbeatResponse)
+	err := c.cc.Invoke(ctx, "/pb.Master/Heartbeat", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MasterServer is the server API for Master service.
 type MasterServer interface {
 	RegisterExecutor(context.Context, *RegisterExecutorRequest) (*RegisterExecutorResponse, error)
 	SubmitJob(context.Context, *SubmitJobRequest) (*SubmitJobResponse, error)
+	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
 }
 
 // UnimplementedMasterServer can be embedded to have forward compatible implementations.
@@ -395,6 +518,9 @@ func (*UnimplementedMasterServer) RegisterExecutor(ctx context.Context, req *Reg
 }
 func (*UnimplementedMasterServer) SubmitJob(ctx context.Context, req *SubmitJobRequest) (*SubmitJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SubmitJob not implemented")
+}
+func (*UnimplementedMasterServer) Heartbeat(ctx context.Context, req *HeartbeatRequest) (*HeartbeatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Heartbeat not implemented")
 }
 
 func RegisterMasterServer(s *grpc.Server, srv MasterServer) {
@@ -437,6 +563,24 @@ func _Master_SubmitJob_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Master_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HeartbeatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MasterServer).Heartbeat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.Master/Heartbeat",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MasterServer).Heartbeat(ctx, req.(*HeartbeatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Master_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "pb.Master",
 	HandlerType: (*MasterServer)(nil),
@@ -449,9 +593,96 @@ var _Master_serviceDesc = grpc.ServiceDesc{
 			MethodName: "SubmitJob",
 			Handler:    _Master_SubmitJob_Handler,
 		},
+		{
+			MethodName: "Heartbeat",
+			Handler:    _Master_Heartbeat_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "master.proto",
+}
+
+func (m *HeartbeatRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *HeartbeatRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *HeartbeatRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Ttl != 0 {
+		i = encodeVarintMaster(dAtA, i, uint64(m.Ttl))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.Timestamp != 0 {
+		i = encodeVarintMaster(dAtA, i, uint64(m.Timestamp))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.Status != 0 {
+		i = encodeVarintMaster(dAtA, i, uint64(m.Status))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.ResourceUsage != 0 {
+		i = encodeVarintMaster(dAtA, i, uint64(m.ResourceUsage))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.ExecutorId != 0 {
+		i = encodeVarintMaster(dAtA, i, uint64(m.ExecutorId))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HeartbeatResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *HeartbeatResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *HeartbeatResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Err != nil {
+		{
+			size, err := m.Err.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMaster(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *SubmitJobRequest) Marshal() (dAtA []byte, err error) {
@@ -479,14 +710,19 @@ func (m *SubmitJobRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		copy(dAtA[i:], m.User)
 		i = encodeVarintMaster(dAtA, i, uint64(len(m.User)))
 		i--
-		dAtA[i] = 0x12
+		dAtA[i] = 0x1a
 	}
 	if len(m.Config) > 0 {
 		i -= len(m.Config)
 		copy(dAtA[i:], m.Config)
 		i = encodeVarintMaster(dAtA, i, uint64(len(m.Config)))
 		i--
-		dAtA[i] = 0xa
+		dAtA[i] = 0x12
+	}
+	if m.Tp != 0 {
+		i = encodeVarintMaster(dAtA, i, uint64(m.Tp))
+		i--
+		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
@@ -511,17 +747,22 @@ func (m *SubmitJobResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.ErrMessage) > 0 {
-		i -= len(m.ErrMessage)
-		copy(dAtA[i:], m.ErrMessage)
-		i = encodeVarintMaster(dAtA, i, uint64(len(m.ErrMessage)))
+	if m.JobId != 0 {
+		i = encodeVarintMaster(dAtA, i, uint64(m.JobId))
 		i--
-		dAtA[i] = 0x12
+		dAtA[i] = 0x10
 	}
-	if m.Err != 0 {
-		i = encodeVarintMaster(dAtA, i, uint64(m.Err))
+	if m.Err != nil {
+		{
+			size, err := m.Err.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMaster(dAtA, i, uint64(size))
+		}
 		i--
-		dAtA[i] = 0x8
+		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
 }
@@ -546,24 +787,22 @@ func (m *RegisterExecutorRequest) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	_ = i
 	var l int
 	_ = l
+	if m.Capability != 0 {
+		i = encodeVarintMaster(dAtA, i, uint64(m.Capability))
+		i--
+		dAtA[i] = 0x18
+	}
 	if len(m.Version) > 0 {
 		i -= len(m.Version)
 		copy(dAtA[i:], m.Version)
 		i = encodeVarintMaster(dAtA, i, uint64(len(m.Version)))
 		i--
-		dAtA[i] = 0x1a
+		dAtA[i] = 0x12
 	}
 	if len(m.Address) > 0 {
 		i -= len(m.Address)
 		copy(dAtA[i:], m.Address)
 		i = encodeVarintMaster(dAtA, i, uint64(len(m.Address)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.Name) > 0 {
-		i -= len(m.Name)
-		copy(dAtA[i:], m.Name)
-		i = encodeVarintMaster(dAtA, i, uint64(len(m.Name)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -590,17 +829,22 @@ func (m *RegisterExecutorResponse) MarshalToSizedBuffer(dAtA []byte) (int, error
 	_ = i
 	var l int
 	_ = l
-	if len(m.ErrMessage) > 0 {
-		i -= len(m.ErrMessage)
-		copy(dAtA[i:], m.ErrMessage)
-		i = encodeVarintMaster(dAtA, i, uint64(len(m.ErrMessage)))
+	if m.ExecutorId != 0 {
+		i = encodeVarintMaster(dAtA, i, uint64(m.ExecutorId))
 		i--
-		dAtA[i] = 0x12
+		dAtA[i] = 0x10
 	}
-	if m.Err != 0 {
-		i = encodeVarintMaster(dAtA, i, uint64(m.Err))
+	if m.Err != nil {
+		{
+			size, err := m.Err.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMaster(dAtA, i, uint64(size))
+		}
 		i--
-		dAtA[i] = 0x8
+		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
 }
@@ -616,12 +860,52 @@ func encodeVarintMaster(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+func (m *HeartbeatRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.ExecutorId != 0 {
+		n += 1 + sovMaster(uint64(m.ExecutorId))
+	}
+	if m.ResourceUsage != 0 {
+		n += 1 + sovMaster(uint64(m.ResourceUsage))
+	}
+	if m.Status != 0 {
+		n += 1 + sovMaster(uint64(m.Status))
+	}
+	if m.Timestamp != 0 {
+		n += 1 + sovMaster(uint64(m.Timestamp))
+	}
+	if m.Ttl != 0 {
+		n += 1 + sovMaster(uint64(m.Ttl))
+	}
+	return n
+}
+
+func (m *HeartbeatResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Err != nil {
+		l = m.Err.Size()
+		n += 1 + l + sovMaster(uint64(l))
+	}
+	return n
+}
+
 func (m *SubmitJobRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
+	if m.Tp != 0 {
+		n += 1 + sovMaster(uint64(m.Tp))
+	}
 	l = len(m.Config)
 	if l > 0 {
 		n += 1 + l + sovMaster(uint64(l))
@@ -639,12 +923,12 @@ func (m *SubmitJobResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Err != 0 {
-		n += 1 + sovMaster(uint64(m.Err))
-	}
-	l = len(m.ErrMessage)
-	if l > 0 {
+	if m.Err != nil {
+		l = m.Err.Size()
 		n += 1 + l + sovMaster(uint64(l))
+	}
+	if m.JobId != 0 {
+		n += 1 + sovMaster(uint64(m.JobId))
 	}
 	return n
 }
@@ -655,10 +939,6 @@ func (m *RegisterExecutorRequest) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.Name)
-	if l > 0 {
-		n += 1 + l + sovMaster(uint64(l))
-	}
 	l = len(m.Address)
 	if l > 0 {
 		n += 1 + l + sovMaster(uint64(l))
@@ -666,6 +946,9 @@ func (m *RegisterExecutorRequest) Size() (n int) {
 	l = len(m.Version)
 	if l > 0 {
 		n += 1 + l + sovMaster(uint64(l))
+	}
+	if m.Capability != 0 {
+		n += 1 + sovMaster(uint64(m.Capability))
 	}
 	return n
 }
@@ -676,12 +959,12 @@ func (m *RegisterExecutorResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Err != 0 {
-		n += 1 + sovMaster(uint64(m.Err))
-	}
-	l = len(m.ErrMessage)
-	if l > 0 {
+	if m.Err != nil {
+		l = m.Err.Size()
 		n += 1 + l + sovMaster(uint64(l))
+	}
+	if m.ExecutorId != 0 {
+		n += 1 + sovMaster(uint64(m.ExecutorId))
 	}
 	return n
 }
@@ -691,6 +974,237 @@ func sovMaster(x uint64) (n int) {
 }
 func sozMaster(x uint64) (n int) {
 	return sovMaster(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *HeartbeatRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMaster
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HeartbeatRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HeartbeatRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExecutorId", wireType)
+			}
+			m.ExecutorId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ExecutorId |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ResourceUsage", wireType)
+			}
+			m.ResourceUsage = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ResourceUsage |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			m.Status = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Status |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			m.Timestamp = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Timestamp |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ttl", wireType)
+			}
+			m.Ttl = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Ttl |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMaster(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMaster
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *HeartbeatResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMaster
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HeartbeatResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HeartbeatResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Err", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMaster
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMaster
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Err == nil {
+				m.Err = &Error{}
+			}
+			if err := m.Err.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMaster(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMaster
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *SubmitJobRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -722,10 +1236,10 @@ func (m *SubmitJobRequest) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Config", wireType)
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Tp", wireType)
 			}
-			var stringLen uint64
+			m.Tp = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMaster
@@ -735,25 +1249,46 @@ func (m *SubmitJobRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.Tp |= SubmitJobRequest_JobType(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Config", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
 				return ErrInvalidLengthMaster
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + byteLen
 			if postIndex < 0 {
 				return ErrInvalidLengthMaster
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Config = string(dAtA[iNdEx:postIndex])
+			m.Config = append(m.Config[:0], dAtA[iNdEx:postIndex]...)
+			if m.Config == nil {
+				m.Config = []byte{}
+			}
 			iNdEx = postIndex
-		case 2:
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
 			}
@@ -836,10 +1371,10 @@ func (m *SubmitJobResponse) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Err", wireType)
 			}
-			m.Err = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMaster
@@ -849,43 +1384,47 @@ func (m *SubmitJobResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Err |= ErrorCode(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ErrMessage", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+			if msglen < 0 {
 				return ErrInvalidLengthMaster
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + msglen
 			if postIndex < 0 {
 				return ErrInvalidLengthMaster
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ErrMessage = string(dAtA[iNdEx:postIndex])
+			if m.Err == nil {
+				m.Err = &Error{}
+			}
+			if err := m.Err.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field JobId", wireType)
+			}
+			m.JobId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.JobId |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMaster(dAtA[iNdEx:])
@@ -938,38 +1477,6 @@ func (m *RegisterExecutorRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Name = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Address", wireType)
 			}
 			var stringLen uint64
@@ -1000,7 +1507,7 @@ func (m *RegisterExecutorRequest) Unmarshal(dAtA []byte) error {
 			}
 			m.Address = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 3:
+		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
 			}
@@ -1032,6 +1539,25 @@ func (m *RegisterExecutorRequest) Unmarshal(dAtA []byte) error {
 			}
 			m.Version = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Capability", wireType)
+			}
+			m.Capability = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Capability |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMaster(dAtA[iNdEx:])
@@ -1083,10 +1609,10 @@ func (m *RegisterExecutorResponse) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Err", wireType)
 			}
-			m.Err = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMaster
@@ -1096,43 +1622,47 @@ func (m *RegisterExecutorResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Err |= ErrorCode(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ErrMessage", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+			if msglen < 0 {
 				return ErrInvalidLengthMaster
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + msglen
 			if postIndex < 0 {
 				return ErrInvalidLengthMaster
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ErrMessage = string(dAtA[iNdEx:postIndex])
+			if m.Err == nil {
+				m.Err = &Error{}
+			}
+			if err := m.Err.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExecutorId", wireType)
+			}
+			m.ExecutorId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ExecutorId |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMaster(dAtA[iNdEx:])

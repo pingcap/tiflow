@@ -38,13 +38,17 @@ func main() {
 		Format: cfg.LogFormat,
 	})
 	if err != nil {
-//		common.PrintLinesf("init logger error %s", terror.Message(err))
+		//		common.PrintLinesf("init logger error %s", terror.Message(err))
 		os.Exit(2)
 	}
 
 	// 3. start server
 	ctx, cancel := context.WithCancel(context.Background())
-	server := master.NewServer(cfg)
+	server, err := master.NewServer(cfg)
+	if err != nil {
+		log.L().Error("fail to start dm-master", zap.Error(err))
+		os.Exit(2)
+	}
 	err = server.Start(ctx)
 	if err != nil {
 		log.L().Error("fail to start dm-master", zap.Error(err))

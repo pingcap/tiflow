@@ -127,7 +127,7 @@ func InitLogger(cfg *Config) error {
 	if cfg.Level == "debug" {
 		slowQueryLogger := zap.NewExample()
 		slowQueryLogger = slowQueryLogger.With(zap.String("component", "slow query logger"))
-	} 
+	}
 	return nil
 }
 

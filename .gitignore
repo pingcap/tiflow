@@ -1,0 +1,4 @@
+bin
+tools/bin
+*.log
+.vscode/

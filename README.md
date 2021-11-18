@@ -1,24 +1,37 @@
 # Introduction
 
-This repo aims to simulate a streaming workload and do a benchmark of the task scheduler.
+This repo implements a new prototype of distributed task scheduler.
 
-## design
+# Concepts
 
-The task scheduler has some important struct and implements the interface:
+## Job
 
-- **scheduler**, the (singleton) instance organizes and executes tasks.
-  - **Run** function that actually drives the execution of the tasks and is thread-safe.
-  - *Queue* field that contains the runnable tasks.
-- **task**, also called *taskContainer*, wraps the logic of operator and maintains the status and input/output channels.
-  - **Poll** triggers a executing action of the task, which will return quickly. During the poll action, the task will
-    - read inputs channels, if the channels are empty, return `blocked`. The read action fetches a batch of data.
-  - *status* records the current status of task, including
-    - `runnable` means the task is in the *Queue* and can run immediately.
-    - `blocked` means the task is waiting someone to trigger, say output data consuming, input data arriving or i/o task completed.
-    - `awaiting` means this task has been awoken by someone. If the **Poll** function ends and checks this status, we should put this task back to queue and reset the status to runnable.
-- **Operator** actually implement the user logic. Every operator is contained by a task. Ideally, operators can construct an operating tree like a typical sql engine.
-  - **prepare** is called when constructing the operator and prepare some resources such as workerpool or grpc stream.
-  - **next([]\*records)** accepts the incoming data and returns the result data or blocked status.
+## Task
+
+## Operator
+
+# Components
+
+## Build
+
+If this is the first time you build this repo, please run `cd tools && make`, which is to build the proto tools for further building.
+Then execute `make` can build every components of the repo.
+
+## Master
+
+Master is set to process the requests from outside and to schedule and dispatch tasks.
+
+## Executor
+
+Executor executes the tasks.
+
+## Master-Client
+
+Master-Client is set to interact with master. Right now it only supports `submit-job` command.
+
+## producer
+
+producer mimics TiKV and generates records repeatly. The default address is `127.0.0.1:50051`. After launching the producer, write the address to the `servers` in the config file. If you want to read from multiple grpc stream, just repeat the address in the `servers` array.
 
 ## playbook
 
@@ -28,38 +41,34 @@ the workload is designed as three types of task
 - hash task. do some simple computing task, fill the hash value in the record.
 - sink task. write the record to a local file, and records the ending time.
 
-### compile
+### demonstration
 
-execute `go build` in the root dir and `cd producer && go build` to build the producer which emit records continously.
-
-### producer
-
-producer is set to generate records repeatly. The default address is `127.0.0.1:50051`. After launching the producer, write the address to the `servers` in the config file. If you want to read from multiple grpc stream, just repeat the address in the `servers` array.
-
-### config and launch the test
-
-You can set the stream number by setting the `servers` address in the config file, and set the table number by setting the `tableNum` in the config file. Finally, set the `timeout` field which means the bench time.
-
-to run the test
+#### Start Master
 
 ```[shell]
-./microcosom -config demo.toml
+./bin/master --config ./cmd/master/example.toml
 ```
 
-After the timeout, we can get the analysis result, such as
+#### Start Executor 1, 2
 
-```[log]
-2021/10/11 00:19:51 cfg table num 10 addr 127.0.0.1:50051
-2021/10/11 00:20:51 tid 0 qps 28427 avgLag 72 ms
-2021/10/11 00:20:51 tid 1 qps 29543 avgLag 77 ms
-2021/10/11 00:20:51 tid 2 qps 28658 avgLag 80 ms
-2021/10/11 00:20:51 tid 3 qps 27868 avgLag 78 ms
-2021/10/11 00:20:51 tid 4 qps 27039 avgLag 82 ms
-2021/10/11 00:20:51 tid 5 qps 27662 avgLag 79 ms
-2021/10/11 00:20:51 tid 6 qps 28533 avgLag 74 ms
-2021/10/11 00:20:51 tid 7 qps 28347 avgLag 76 ms
-2021/10/11 00:20:51 tid 8 qps 29186 avgLag 71 ms
-2021/10/11 00:20:51 tid 9 qps 29281 avgLag 73 ms
+```[shell]
+./bin/executor --config ./cmd/executor/example.toml
 ```
 
-we can get the qps and average lag of every table.
+change the `worker-addr` field in toml, and start another executor.
+
+#### start producer
+
+```[shell]
+./bin/producer
+```
+
+#### submit a job
+
+```[shell]
+./bin/master-client submit-job --master-addr 127.0.0.1:10240 --config ./cmd/master-client/benchmark-example.toml
+```
+
+#### kill an executor
+
+Then the tasks will be scheduled automatically.

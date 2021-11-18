@@ -5,6 +5,8 @@ import (
 	//"log"
 	"sync/atomic"
 	"time"
+
+	"github.com/hanfei1991/microcosom/model"
 )
 
 type TaskStatus int32
@@ -65,7 +67,8 @@ func (c *Channel) writeBatch(records []*Record) ([]*Record, bool) {
 }
 
 type taskContainer struct {
-	id     int
+	cfg    *model.Task
+	id     model.TaskID
 	status int32
 	cache  [][]*Record
 	op     operator
@@ -75,13 +78,14 @@ type taskContainer struct {
 	ctx *taskContext
 }
 
-func (t *taskContainer) prepare(ctx *taskContext) error {
-	return t.op.prepare(ctx)
+func (t *taskContainer) prepare() error {
+	t.cache = make([][]*Record, len(t.output))
+	return t.op.prepare()
 }
 
 func (t *taskContainer) tryAwake() bool {
 	for {
-//		log.Printf("try wake task %d", t.id)
+		//		log.Printf("try wake task %d", t.id)
 		if atomic.CompareAndSwapInt32(&t.status, int32(Blocked), int32(Waking)) {
 			//log.Printf("wake task %d successful", t.id)
 			return true
@@ -120,7 +124,7 @@ func (t *taskContainer) tryFlush() (blocked bool) {
 }
 
 func (t *taskContainer) Poll() TaskStatus {
-//	log.Printf("task %d polling", t.id)
+	//	log.Printf("task %d polling", t.id)
 	if t.tryFlush() {
 		return Blocked
 	}
