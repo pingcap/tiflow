@@ -96,7 +96,7 @@ func (b *outputBuffer) appendResolvedEvent(event *model.PolymorphicEvent) {
 	b.resolvedEvents = append(b.resolvedEvents, event)
 }
 
-// appendResolvedEvent appends resolved events to the buffer.
+// appendDeleteKey appends to-be-deleted keys to the buffer.
 // TODO remove unused lint
 //nolint:unused
 func (b *outputBuffer) appendDeleteKey(key message.Key) {
