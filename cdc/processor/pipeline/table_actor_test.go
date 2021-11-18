@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/actor"
@@ -33,8 +34,8 @@ import (
 
 func TestNewTableActor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
-	tableActorSystem, tableActorRouter := actor.NewSystemBuilder("table").Build()
-	tableActorSystem.Start(ctx)
+	tableActorSystem := system.NewSystem()
+	require.Nil(t, tableActorSystem.Start(ctx))
 	defer func() {
 		cancel()
 		_ = tableActorSystem.Stop()
@@ -46,7 +47,6 @@ func TestNewTableActor(t *testing.T) {
 	require.Nil(t, err)
 	cctx := cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TableActorSystem: tableActorSystem,
-		TableActorRouter: tableActorRouter,
 		CaptureInfo:      &model.CaptureInfo{ID: "1", AdvertiseAddr: "1", Version: "v5.3.0"},
 	}),
 		&cdcContext.ChangefeedVars{
@@ -88,7 +88,7 @@ func TestNewTableActor(t *testing.T) {
 	}))
 	require.True(t, ok)
 	require.Nil(t, err)
-	require.Nil(t, tableActorRouter.Send(1, message.TickMessage()))
+	require.Nil(t, tableActorSystem.Router().Send(1, message.TickMessage()))
 	time.Sleep(time.Millisecond * 500)
 
 	replicaConfig.Cyclic = &config.CyclicConfig{Enable: false}
@@ -96,7 +96,6 @@ func TestNewTableActor(t *testing.T) {
 	require.Nil(t, err)
 	cctx = cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TableActorSystem: tableActorSystem,
-		TableActorRouter: tableActorRouter,
 		CaptureInfo:      &model.CaptureInfo{ID: "1", AdvertiseAddr: "1", Version: "v5.3.0"},
 	}),
 		&cdcContext.ChangefeedVars{
@@ -210,8 +209,8 @@ func TestTryRun(t *testing.T) {
 
 func TestStartFailed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
-	tableActorSystem, tableActorRouter := actor.NewSystemBuilder("table").Build()
-	tableActorSystem.Start(ctx)
+	tableActorSystem := system.NewSystem()
+	require.Nil(t, tableActorSystem.Start(ctx))
 	defer func() {
 		cancel()
 		_ = tableActorSystem.Stop()
@@ -223,7 +222,6 @@ func TestStartFailed(t *testing.T) {
 	require.Nil(t, err)
 	cctx := cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TableActorSystem: tableActorSystem,
-		TableActorRouter: tableActorRouter,
 		CaptureInfo:      &model.CaptureInfo{ID: "1", AdvertiseAddr: "1", Version: "v5.3.0"},
 	}),
 		&cdcContext.ChangefeedVars{
