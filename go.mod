@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/Shopify/sarama v1.27.2
+	github.com/Shopify/sarama v1.30.0
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/apache/pulsar-client-go v0.6.0
 	github.com/aws/aws-sdk-go v1.35.3
@@ -22,7 +22,6 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/fatih/color v1.10.0
-	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/getkin/kin-openapi v0.79.0
 	github.com/gin-gonic/gin v1.7.0
 	github.com/go-mysql-org/go-mysql v1.1.3-0.20210705101833-83965e516929
@@ -81,6 +80,7 @@ require (
 	github.com/unrolled/render v1.0.1
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
+	github.com/xdg/stringprep v1.0.3 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20210512015243-d19fbe541bf9
 	go.uber.org/atomic v1.9.0
 	go.uber.org/goleak v1.1.11-0.20210813005559-691160354723
