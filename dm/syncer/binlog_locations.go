@@ -20,12 +20,10 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 type locationRecorder struct {
@@ -41,8 +39,6 @@ type locationRecorder struct {
 	//   For GTID-based replication, this is the GTID set just added this GTID.
 	// - txnEndLocation is the end location of last transaction. If this event is the last event of a txn,
 	//   txnEndLocation will be assigned from curEndLocation
-	// - "End location" (next start location) is used to decide if a handle-error event should be returned, sometimes
-	//   "End location" will be manually adjusted.
 	curStartLocation binlog.Location
 	curEndLocation   binlog.Location
 	txnEndLocation   binlog.Location
@@ -85,6 +81,27 @@ func (l *locationRecorder) saveTxnEndLocation(needLock bool) {
 	_ = l.txnEndLocation.SetGTID(l.curEndLocation.GetGTID().Origin().Clone())
 }
 
+// shouldUpdatePos returns true when the given event is from a real upstream writing, returns false when the event is
+// header, heartbeat, etc.
+func shouldUpdatePos(e *replication.BinlogEvent) bool {
+	switch e.Header.EventType {
+	case replication.FORMAT_DESCRIPTION_EVENT, replication.HEARTBEAT_EVENT, replication.IGNORABLE_EVENT,
+		replication.PREVIOUS_GTIDS_EVENT, replication.MARIADB_GTID_LIST_EVENT:
+		return false
+	}
+
+	return true
+}
+
+func (l *locationRecorder) setCurrentGTID(gset mysql.GTIDSet) {
+	err := l.curEndLocation.SetGTID(gset)
+	if err != nil {
+		log.L().DPanic("failed to set GTID set",
+			zap.Any("GTID set", gset),
+			zap.Error(err))
+	}
+}
+
 // update maintains the member of locationRecorder as their definitions.
 // - curStartLocation is assigned to curEndLocation
 // - curEndLocation is tried to be updated in-place
@@ -94,61 +111,48 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 	defer l.mu.Unlock()
 
 	l.curStartLocation = l.curEndLocation
+
+	if !shouldUpdatePos(e) {
+		// so for these events, we'll set streamer to let curStartLocation equals curEndLocation
+		return
+	}
+
 	if event, ok := e.Event.(*replication.RotateEvent); ok {
-		// event for the outdated fake rotate events that is sent when MySQL replication is started, we still update
-		// curEndLocation. those short-lived values should not be saved to checkpoint.
-		if utils.IsFakeRotateEvent(e.Header) {
-			l.curEndLocation.Position.Name = string(event.NextLogName)
+		nextName := string(event.NextLogName)
+		if l.curEndLocation.Position.Name != nextName {
+			l.curEndLocation.Position.Name = nextName
+			l.curEndLocation.Position.Pos = 4
+			l.saveTxnEndLocation(false)
 		}
+		return
 	}
 
 	l.curEndLocation.Position.Pos = e.Header.LogPos
 
-	updateGTIDSet := func(gset mysql.GTIDSet) {
-		err := l.curEndLocation.SetGTID(gset)
-		if err != nil {
-			log.L().DPanic("failed to set GTID set",
-				zap.Any("GTID set", gset),
-				zap.Error(err))
-		}
-	}
-
-	updateGTIDSetFromStr := func(gtidStr string) {
-		gset := l.curEndLocation.GetGTID().Origin().Clone()
-		err := gset.Update(gtidStr)
-		if err != nil {
-			log.L().DPanic("failed to update GTID set",
-				zap.Any("GTID set", gset),
-				zap.String("gtid", gtidStr),
-				zap.Error(err))
-			return
-		}
-	}
-
 	switch ev := e.Event.(type) {
-	// we maintain GTID set like https://github.com/go-mysql-org/go-mysql/blob/423b04c789346b2abc8e248060cf46eed834cbfa/replication/binlogsyncer.go#L792-L809
-	case *replication.GTIDEvent:
-		u, _ := uuid.FromBytes(ev.SID)
-		gtidStr := fmt.Sprintf("%s:%d", u.String(), ev.GNO)
-		updateGTIDSetFromStr(gtidStr)
-	case *replication.MariadbGTIDEvent:
-		gtidStr := fmt.Sprintf("%d-%d-%d", ev.GTID.DomainID, ev.GTID.ServerID, ev.GTID.SequenceNumber)
-		updateGTIDSetFromStr(gtidStr)
 	case *replication.XIDEvent:
-		updateGTIDSet(ev.GSet)
+		// for transactional engines like InnoDB, COMMIT is xid event
+		l.setCurrentGTID(ev.GSet)
 		l.saveTxnEndLocation(false)
 		l.inDML = false
 	case *replication.QueryEvent:
 		query := strings.TrimSpace(string(ev.Query))
-		if query == "BEGIN" {
+		switch query {
+		case "BEGIN":
+			// MySQL will write a "BEGIN" query event when it starts a DML transaction, we use this event to distinguish
+			// DML query event which comes from a session binlog_format = STATEMENT.
+			// But MariaDB will not write "BEGIN" query event, we simply hope user should not do that.
 			l.inDML = true
+		case "COMMIT":
+	        // for non-transactional engines like MyISAM, COMMIT is query event
+            l.inDML = false
 		}
 
 		if l.inDML {
 			return
 		}
 
-		updateGTIDSet(ev.GSet)
+		l.setCurrentGTID(ev.GSet)
 		l.saveTxnEndLocation(false)
 	}
 }

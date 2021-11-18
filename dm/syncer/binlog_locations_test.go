@@ -123,6 +123,27 @@ func (s *testSyncerSuite) checkOneTxnEvents(c *C, events []*replication.BinlogEv
 	}
 }
 
+func (s *testSyncerSuite) generateExpectLocations(
+	initLoc binlog.Location,
+	events []*replication.BinlogEvent,
+) []binlog.Location {
+	expected := make([]binlog.Location, len(events)+1)
+	for i := range expected {
+		if i == 0 {
+			// before receive first event, it should be reset location
+			expected[0] = initLoc
+			continue
+		}
+		expected[i] = initLoc
+		// those not-update-position events only occur in first events in these tests
+		e := events[i-1]
+		if shouldUpdatePos(e) && e.Header.EventType != replication.ROTATE_EVENT {
+            expected[i].Position.Pos = e.Header.LogPos
+        }
+	}
+	return expected
+}
+
 // nolint:dupl
 func (s *testSyncerSuite) TestDMLUpdateLocationsGTID(c *C) {
 	loc := binlog.Location{
@@ -142,16 +163,7 @@ func (s *testSyncerSuite) TestDMLUpdateLocationsGTID(c *C) {
 	// we have 8 events
 	c.Assert(events, HasLen, 8)
 
-	expected := make([]binlog.Location, 9)
-	for i := range expected {
-		if i == 0 {
-			// before receive first event, it should be reset location
-			expected[0] = loc
-			continue
-		}
-		expected[i] = loc
-		expected[i].Position.Pos = events[i-1].Header.LogPos
-	}
+	expected := s.generateExpectLocations(loc, events)
 
 	lastGTID, err := gtid.ParserGTID(flavor, lastGTIDStr)
 	c.Assert(err, IsNil)
@@ -187,17 +199,7 @@ func (s *testSyncerSuite) TestDMLUpdateLocationsPos(c *C) {
 
 	events = append(events[:2], events[4:]...)
 
-	// now we have 6 events, test about their 7 locations
-	expected := make([]binlog.Location, 7)
-	for i := range expected {
-		if i == 0 {
-			// before receive first event, it should be reset location
-			expected[0] = loc
-			continue
-		}
-		expected[i] = loc
-		expected[i].Position.Pos = events[i-1].Header.LogPos
-	}
+	expected := s.generateExpectLocations(loc, events)
 
 	s.checkOneTxnEvents(c, events, expected)
 }
@@ -221,16 +223,7 @@ func (s *testSyncerSuite) TestDDLUpdateLocationsGTID(c *C) {
 	// we have 5 events
 	c.Assert(events, HasLen, 5)
 
-	expected := make([]binlog.Location, 6)
-	for i := range expected {
-		if i == 0 {
-			// before receive first event, it should be reset location
-			expected[0] = loc
-			continue
-		}
-		expected[i] = loc
-		expected[i].Position.Pos = events[i-1].Header.LogPos
-	}
+	expected := s.generateExpectLocations(loc, events)
 
 	lastGTID, err := gtid.ParserGTID(flavor, lastGTIDStr)
 	c.Assert(err, IsNil)
@@ -268,16 +261,7 @@ func (s *testSyncerSuite) TestDDLUpdateLocationsPos(c *C) {
 	events = append(events[:2], events[4:]...)
 
 	// now we have 3 events, test about their 4 locations
-	expected := make([]binlog.Location, 4)
-	for i := range expected {
-		if i == 0 {
-			// before receive first event, it should be reset location
-			expected[0] = loc
-			continue
-		}
-		expected[i] = loc
-		expected[i].Position.Pos = events[i-1].Header.LogPos
-	}
+	expected := s.generateExpectLocations(loc, events)
 
 	s.checkOneTxnEvents(c, events, expected)
 }
@@ -332,16 +316,7 @@ func (s *testSyncerSuite) TestDMLQueryUpdateLocationsGTID(c *C) {
 	// we have 7 events
 	c.Assert(events, HasLen, 7)
 
-	expected := make([]binlog.Location, 8)
-	for i := range expected {
-		if i == 0 {
-			// before receive first event, it should be reset location
-			expected[0] = loc
-			continue
-		}
-		expected[i] = loc
-		expected[i].Position.Pos = events[i-1].Header.LogPos
-	}
+	expected := s.generateExpectLocations(loc, events)
 
 	lastGTID, err := gtid.ParserGTID(flavor, lastGTIDStr)
 	c.Assert(err, IsNil)
@@ -354,3 +329,5 @@ func (s *testSyncerSuite) TestDMLQueryUpdateLocationsGTID(c *C) {
 
 	s.checkOneTxnEvents(c, events, expected)
 }
+
+// TODO: test rotate and heartbeat
