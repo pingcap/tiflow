@@ -426,7 +426,6 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	//    exhaustedResolvedTs
 	//                       maxResolvedTs
 	//                                      maxCommitTs
-	println(state.exhaustedResolvedTs, maxResolvedTs, maxCommitTs)
 	needIter = needIter && state.exhaustedResolvedTs < maxCommitTs
 
 	// Write new events and delele sent keys.
