@@ -379,10 +379,7 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 		fmt.Println("服务器read err=", err) //出错退出
 		return 0, nil
 	}
-	/**
-	_ = buf[:re]
-	_ = buf[:4] */
-	//fmt.Print("\n",publicUtils.BytestoHex(tt1))
+
 	result := buf[4:re]
 	commitTs := publicUtils.BytesToLong(result)
 	fmt.Print("\nCommitTs:::::::::",commitTs)
@@ -431,12 +428,7 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 		fmt.Println("服务器read err=", err) //出错退出
 		return 0, nil
 	}
-	//fmt.Print("read:::::::::::::::",string(buf[:re]))
-	_ = buf[:re]
-	//fmt.Print("\nread:::::::::::::::",tt)
-	//fmt.Print("\n")
-	_ = buf[:4]
-	//fmt.Print("\n",publicUtils.BytestoHex(tt1))
+
 	result := buf[4:re]
 	commitTs := publicUtils.BytesToLong(result)
 	//fmt.Print("\nCommitTs:::::::::",commitTs)
