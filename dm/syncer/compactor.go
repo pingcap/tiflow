@@ -14,6 +14,7 @@
 package syncer
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -171,9 +172,7 @@ func (c *compactor) compactJob(j *job) {
 		value, err := strconv.Atoi(key)
 		upper := v.(int)
 		if err != nil || value > upper {
-			c.logger.Debug("downstream identifyKey check failed.", zap.Error(err), zap.String("identifyKey", key))
-		} else {
-			c.logger.Debug("downstream identifyKey check success.")
+			panic(fmt.Sprintf("downstream identifyKey check failed. key value %v should less than %v", value, upper))
 		}
 	})
 

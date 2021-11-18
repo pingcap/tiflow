@@ -630,17 +630,6 @@ function DM_COMPACT_USE_DOWNSTREAM_SCHEMA_CASE() {
 		insert into ${shardddl}.${tb}_temp (a, b, c) select a, b, c from ${shardddl}.${tb}; 
 		drop table ${shardddl}.${tb}; rename table ${shardddl}.${tb}_temp to ${shardddl}.${tb};"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
-	# DownstreamIdentifyKeyCheckInCompact=return(20) will check whether the key value in compact is less than 20.
-	# This goal is check whether it use downstream schema in compator.
-	# if use downstream schema, key will be 'b' with value less than 20.
-	# If use upstream schema, key will be 'a' with value greater than 100.
-	downstreamSuccess=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "downstream identifyKey check success" | wc -l)
-	downstreamFail=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "downstream identifyKey check failed" | wc -l)
-	# As update pk/uk row will be splited to delete and update, the count will be 8 in each loop, so total is 11*8 = 88
-	if [[ "$downstreamSuccess" -ne 88 || "$downstreamFail" -ne 0 ]]; then
-		echo "compact use wrong downstream identify key. $downstreamSuccess success should be 88. $downstreamFail failed should be 0."
-		exit 1
-	fi
 	compactCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "finish to compact" | wc -l)
 	# As compact is affected by "j.tp == flush", the check count of compact use "-le 50"
 	if [[ "$compactCnt" -le 50 ]]; then
@@ -654,6 +643,10 @@ function DM_COMPACT_USE_DOWNSTREAM_SCHEMA() {
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
+	# DownstreamIdentifyKeyCheckInCompact=return(20) will check whether the key value in compact is less than 20, if false, it will be panic.
+	# This goal is check whether it use downstream schema in compator.
+	# if use downstream schema, key will be 'b' with value less than 20.
+	# If use upstream schema, key will be 'a' with value greater than 100.
 	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/SkipFlushCompactor=return();github.com/pingcap/ticdc/dm/syncer/DownstreamIdentifyKeyCheckInCompact=return(20)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
