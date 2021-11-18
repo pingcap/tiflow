@@ -224,7 +224,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		cfg.Checkpoint.DSN = param.ToDSN()
 		if l.cfg.To.Security != nil {
 			if registerErr := cfg.Security.RegisterMySQL(); registerErr != nil {
-				terror.ErrConnRegistryTLSConfig.Delegate(registerErr)
+				return terror.ErrConnRegistryTLSConfig.Delegate(registerErr)
 			}
 		}
 		cfg.TiDB.Vars = make(map[string]string)
