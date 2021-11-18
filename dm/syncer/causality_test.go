@@ -133,3 +133,77 @@ func (s *testSyncerSuite) TestCasuality(c *C) {
 		c.Assert(job.tp, Equals, op)
 	}
 }
+
+func (s *testSyncerSuite) TestCasualityWithPrefixIndex(c *C) {
+	p := parser.New()
+	se := mock.NewContext()
+	schemaStr := "create table t (c1 text, c2 int unique, unique key c1(c1(3)));"
+	ti, err := createTableInfo(p, se, int64(0), schemaStr)
+	c.Assert(err, IsNil)
+	downTi := schema.GetDownStreamTi(ti, ti)
+	c.Assert(downTi, NotNil)
+	c.Assert(len(downTi.AvailableUKIndexList) == 2, IsTrue)
+	tiIndex := downTi.AvailableUKIndexList[0]
+
+	jobCh := make(chan *job, 10)
+	syncer := &Syncer{
+		cfg: &config.SubTaskConfig{
+			SyncerConfig: config.SyncerConfig{
+				QueueSize: 1024,
+			},
+			Name:     "task",
+			SourceID: "source",
+		},
+		tctx: tcontext.Background().WithLogger(log.L()),
+	}
+	causalityCh := causalityWrap(jobCh, syncer)
+	testCases := []struct {
+		op      opType
+		oldVals []interface{}
+		vals    []interface{}
+	}{
+		{
+			op:   insert,
+			vals: []interface{}{"1234", 1},
+		},
+		{
+			op:   insert,
+			vals: []interface{}{"2345", 2},
+		},
+		{
+			op:      update,
+			oldVals: []interface{}{"2345", 2},
+			vals:    []interface{}{"2345", 3},
+		},
+		{
+			op:   del,
+			vals: []interface{}{"1234", 1},
+		},
+		{
+			op:   insert,
+			vals: []interface{}{"2345", 1},
+		},
+	}
+	results := []opType{insert, insert, update, del, conflict, insert}
+	resultKeys := []string{"123.c1.", "234.c1.", "234.c1.", "123.c1.", "conflict", "234.c1."}
+	table := &filter.Table{Schema: "test", Name: "t1"}
+	location := binlog.NewLocation("")
+	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
+
+	for _, tc := range testCases {
+		job := newDMLJob(tc.op, table, table, newDML(tc.op, false, "", table, tc.oldVals, tc.vals, tc.oldVals, tc.vals, ti.Columns, ti, tiIndex, downTi), ec)
+		jobCh <- job
+	}
+
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return len(causalityCh) == len(results)
+	}), IsTrue)
+
+	for i, op := range results {
+		job := <-causalityCh
+		if job.tp != conflict {
+			c.Assert(job.dml.key, Equals, resultKeys[i])
+		}
+		c.Assert(job.tp, Equals, op)
+	}
+}
