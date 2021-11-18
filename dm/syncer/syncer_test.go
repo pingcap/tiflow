@@ -47,7 +47,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/pkg/errorutil"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -57,6 +56,8 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/ticdc/pkg/errorutil"
 )
 
 var _ = Suite(&testSyncerSuite{})
@@ -89,6 +90,8 @@ const (
 	Write
 	Update
 	Delete
+
+	DMLQuery
 )
 
 type testSyncerSuite struct {
@@ -204,6 +207,16 @@ func (s *testSyncerSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) []
 				c.Fatal(fmt.Sprintf("mock event generator don't support event type: %d", e.typ))
 			}
 			evs, _, err := s.eventsGenerator.GenDMLEvents(eventType, dmlData)
+			c.Assert(err, IsNil)
+			events = append(events, evs...)
+		case DMLQuery:
+			dmlData := []*event.DMLData{
+				{
+					Schema: e.args[0].(string),
+					Query: e.args[1].(string),
+				},
+			}
+			evs, _, err := s.eventsGenerator.GenDMLEvents(replication.UNKNOWN_EVENT, dmlData)
 			c.Assert(err, IsNil)
 			events = append(events, evs...)
 		}
