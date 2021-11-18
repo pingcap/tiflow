@@ -262,25 +262,20 @@ func encodeFrameSize(dataBytes int) (lenField uint64, padBytes int) {
 
 // Close implements fileWriter.Close.
 func (w *Writer) Close() error {
-	if !w.IsRunning() {
-		return nil
-	}
-
-	redoFlushAllDurationHistogram.DeleteLabelValues(w.cfg.CaptureID, w.cfg.CaptureID)
-	redoFsyncDurationHistogram.DeleteLabelValues(w.cfg.CaptureID, w.cfg.CaptureID)
-	redoWriteBytesGauge.DeleteLabelValues(w.cfg.CaptureID, w.cfg.CaptureID)
-
 	w.Lock()
 	defer w.Unlock()
 	// always set to false when closed, since if having err may not get fixed just by retry
 	defer w.running.Store(false)
 
-	err := w.close()
-	if err != nil {
-		return err
+	if !w.IsRunning() {
+		return nil
 	}
 
-	return nil
+	redoFlushAllDurationHistogram.DeleteLabelValues(w.cfg.CaptureID, w.cfg.ChangeFeedID)
+	redoFsyncDurationHistogram.DeleteLabelValues(w.cfg.CaptureID, w.cfg.ChangeFeedID)
+	redoWriteBytesGauge.DeleteLabelValues(w.cfg.CaptureID, w.cfg.ChangeFeedID)
+
+	return w.close()
 }
 
 // IsRunning implement IsRunning interface
