@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/pdtime"
@@ -40,6 +41,7 @@ type GlobalVars struct {
 	EtcdClient   *etcd.CDCEtcdClient
 	GrpcPool     kv.GrpcPool
 	TimeAcquirer pdtime.TimeAcquirer
+	TableActorSystem *system.System
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline

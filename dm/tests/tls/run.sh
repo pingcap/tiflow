@@ -73,6 +73,77 @@ function setup_mysql_tls() {
 	echo "add dm_tls_test user done $mysql_data_path"
 }
 
+function test_worker_download_certs_from_master() {
+	cleanup_data tls
+	cleanup_process
+
+	setup_mysql_tls
+	run_tidb_with_tls
+	prepare_data
+
+	cp $cur/conf/dm-master1.toml $WORK_DIR/
+	cp $cur/conf/dm-master2.toml $WORK_DIR/
+	cp $cur/conf/dm-master3.toml $WORK_DIR/
+	cp $cur/conf/dm-worker1.toml $WORK_DIR/
+	cp $cur/conf/dm-worker2.toml $WORK_DIR/
+	cp $cur/conf/dm-task.yaml $WORK_DIR/
+
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master1.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master2.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master3.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-worker1.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-worker2.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task.yaml
+
+	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $WORK_DIR/dm-master1.toml
+	run_dm_master $WORK_DIR/master2 $MASTER_PORT2 $WORK_DIR/dm-master2.toml
+	run_dm_master $WORK_DIR/master3 $MASTER_PORT3 $WORK_DIR/dm-master3.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT2 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT3 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+
+	# add failpoint to make loader always fail
+	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/loader/lightningAlwaysErr=return()"
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+
+	# operate mysql config to worker
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"operate-source create $WORK_DIR/source1.yaml" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
+
+	echo "start task and check stage"
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"start-task $WORK_DIR/dm-task.yaml"
+
+	# task should be paused.
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"stage\": \"Paused\"" 1
+
+	# change task-ca.pem name to test wheather dm-worker will dump certs from dm-master
+	mv "$cur/conf/task-ca.pem" "$cur/conf/task-ca.pem.bak"
+
+	# kill dm-worker 1 and clean the failpoint
+	export GO_FAILPOINTS=''
+	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+
+	# dm-worker will dump task-ca.pem from dm-master and save it to dm-worker-dir/ca.pem
+	# let's try use this file to connect dm-master
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" /tmp/dm_test/tls/worker1/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"query-status test" \
+		"\"result\": true" 2
+
+	echo "check data"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	mv "$cur/conf/task-ca.pem.bak" "$cur/conf/task-ca.pem"
+}
+
 function test_worker_ha_when_enable_source_tls() {
 	cleanup_data tls
 	cleanup_process
@@ -164,7 +235,6 @@ function test_worker_ha_when_enable_source_tls() {
 
 	# resume ca.pem
 	mv "$mysql_data_path/ca.pem.bak" "$mysql_data_path/ca.pem"
-
 }
 
 function test_master_ha_when_enable_tidb_tls() {
@@ -241,6 +311,7 @@ function test_master_ha_when_enable_tidb_tls() {
 }
 
 function run() {
+	test_worker_download_certs_from_master
 	test_worker_ha_when_enable_source_tls
 	test_master_ha_when_enable_tidb_tls
 }
@@ -248,7 +319,7 @@ function run() {
 cleanup_data tls
 cleanup_process
 
-run $*
+run
 
 # kill the tidb with tls
 pkill -hup tidb-server 2>/dev/null || true

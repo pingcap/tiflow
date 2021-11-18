@@ -25,9 +25,8 @@ target-table = "t_target"
 
 [table-configs]
 [table-configs.config1]
-schema = "sharding_target_opt"
-table = "t_target"
-index-fields = "id"
+target-tables = ["sharding_target_opt.t_target"]
+index-fields = ["id"]
 # range-placeholder
 
 [data-sources]
