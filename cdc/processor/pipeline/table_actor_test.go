@@ -88,7 +88,7 @@ func TestNewTableActor(t *testing.T) {
 	}))
 	require.True(t, ok)
 	require.Nil(t, err)
-	require.Nil(t, tableActorSystem.Router().Send(1, message.TickMessage()))
+	require.Nil(t, tableActorSystem.Router().Send(table1.actorID, message.TickMessage()))
 	time.Sleep(time.Millisecond * 500)
 
 	replicaConfig.Cyclic = &config.CyclicConfig{Enable: false}
@@ -283,6 +283,7 @@ func TestAsyncStopFailed(t *testing.T) {
 	require.Panics(t, func() { tbl.AsyncStop(1) })
 
 	mb := actor.NewMailbox(actor.ID(1), 0)
+	tbl.actorID = actor.ID(1)
 	require.Nil(t, tableActorSystem.Spawn(mb, tbl))
 	tbl.mb = mb
 	require.Nil(t, tableActorSystem.Stop())
