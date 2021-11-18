@@ -2048,9 +2048,11 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		return err2
 	}
 
-	extRows, extendValues := generateExtendColumn(rows, s.tableRouter, sourceTable, s.cfg.SourceID)
-
-	prunedColumns, prunedRows, err := pruneGeneratedColumnDML(tableInfo, extRows)
+	extRows := generateExtendColumn(rows, s.tableRouter, sourceTable, s.cfg.SourceID)
+	if extRows != nil {
+		rows = extRows
+	}
+	prunedColumns, prunedRows, err := pruneGeneratedColumnDML(tableInfo, rows)
 	if err != nil {
 		return err
 	}
@@ -2068,7 +2070,6 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		sourceTableInfo: tableInfo,
 		sourceTable:     sourceTable,
 		extendData:      extRows,
-		extendValues:    extendValues,
 	}
 
 	switch ec.header.EventType {
@@ -2174,10 +2175,10 @@ func (qec *queryEventContext) String() string {
 }
 
 // generateExtendColumn generate extended columns by extractor.
-func generateExtendColumn(data [][]interface{}, r *router.Table, table *filter.Table, sourceID string) ([][]interface{}, []string) {
+func generateExtendColumn(data [][]interface{}, r *router.Table, table *filter.Table, sourceID string) [][]interface{} {
 	extendCol, extendVal := r.FetchExtendColumn(table.Schema, table.Name, sourceID)
 	if len(extendCol) == 0 {
-		return data, extendVal
+		return nil
 	}
 
 	rows := make([][]interface{}, len(data))
@@ -2187,7 +2188,7 @@ func generateExtendColumn(data [][]interface{}, r *router.Table, table *filter.T
 			rows[i] = append(rows[i], v)
 		}
 	}
-	return rows, extendVal
+	return rows
 }
 
 func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {

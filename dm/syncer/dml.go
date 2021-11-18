@@ -70,7 +70,6 @@ type genDMLParam struct {
 	columns         []*model.ColumnInfo // pruned columns
 	sourceTableInfo *model.TableInfo    // all table info
 	extendData      [][]interface{}     // all data include extend data
-	extendValues    []string            // extend values
 }
 
 func extractValueFromData(data []interface{}, columns []*model.ColumnInfo) []interface{} {
@@ -89,7 +88,6 @@ func (s *Syncer) genAndFilterInsertDMLs(tctx *tcontext.Context, param *genDMLPar
 		columns         = param.columns
 		ti              = param.sourceTableInfo
 		extendData      = param.extendData
-		extendValues    = param.extendValues
 		dmls            = make([]*DML, 0, len(dataSeq))
 	)
 
@@ -100,7 +98,7 @@ func (s *Syncer) genAndFilterInsertDMLs(tctx *tcontext.Context, param *genDMLPar
 	}
 	downstreamIndexColumns := downstreamTableInfo.AbsoluteUKIndexInfo
 
-	if len(extendValues) > 0 {
+	if extendData != nil {
 		originalDataSeq = extendData
 	}
 
@@ -150,7 +148,6 @@ func (s *Syncer) genAndFilterUpdateDMLs(
 		columns      = param.columns
 		ti           = param.sourceTableInfo
 		extendData   = param.extendData
-		extendValues = param.extendValues
 		dmls         = make([]*DML, 0, len(data)/2)
 	)
 
@@ -161,7 +158,7 @@ func (s *Syncer) genAndFilterUpdateDMLs(
 	}
 	downstreamIndexColumns := downstreamTableInfo.AbsoluteUKIndexInfo
 
-	if len(extendValues) > 0 {
+	if extendData != nil {
 		originalData = extendData
 	}
 
@@ -222,12 +219,11 @@ RowLoop:
 
 func (s *Syncer) genAndFilterDeleteDMLs(tctx *tcontext.Context, param *genDMLParam, filterExprs []expression.Expression) ([]*DML, error) {
 	var (
-		tableID      = param.targetTableID
-		dataSeq      = param.originalData
-		ti           = param.sourceTableInfo
-		extendData   = param.extendData
-		extendValues = param.extendValues
-		dmls         = make([]*DML, 0, len(dataSeq))
+		tableID    = param.targetTableID
+		dataSeq    = param.originalData
+		ti         = param.sourceTableInfo
+		extendData = param.extendData
+		dmls       = make([]*DML, 0, len(dataSeq))
 	)
 
 	// if downstream pk/uk(not null) exits, then use downstream pk/uk(not null)
@@ -237,7 +233,7 @@ func (s *Syncer) genAndFilterDeleteDMLs(tctx *tcontext.Context, param *genDMLPar
 	}
 	downstreamIndexColumns := downstreamTableInfo.AbsoluteUKIndexInfo
 
-	if len(extendValues) > 0 {
+	if extendData != nil {
 		dataSeq = extendData
 	}
 
