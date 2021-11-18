@@ -116,8 +116,9 @@ func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
 
 // flushSink will try to flush all rows commitTs before resolvedTs
 // if the action fails, it will return false.
-func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (ok bool, err error) {
-	ok = true
+// The caller is responsible for deciding whether to retry.
+func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (bool, error) {
+	var err error
 	defer func() {
 		if err != nil {
 			n.status.Store(TableStatusStopped)
@@ -134,15 +135,15 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (ok 
 		resolvedTs = n.targetTs
 	}
 	if resolvedTs <= n.checkpointTs {
-		return ok, nil
+		return true, nil
 	}
 	if err := n.emitRow2Sink(ctx); err != nil {
-		return !ok, errors.Trace(err)
+		return false, errors.Trace(err)
 	}
 
 	ok, checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, resolvedTs)
 	if err != nil {
-		return false, errors.Trace(err)
+		return ok, errors.Trace(err)
 	}
 
 	if checkpointTs <= n.checkpointTs {
@@ -320,7 +321,15 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(errors.New("processor sync resolved injected error"))
 			})
-			if _, err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
+			// Before the redo log interface is changed to non-blocking mode,
+			// `ok` does not need to be checked. Because resolved ts will
+			// continue to come from upstream, losing the current resolved ts due to
+			// downstream congestion will not cause correctness problems.
+			if ok, err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
+				// check ok here just for pass check-static
+				if ok {
+					log.Error("ok must be false when err not nil", zap.Bool("ok", ok))
+				}
 				return errors.Trace(err)
 			}
 			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
