@@ -87,6 +87,17 @@ func (c *checkSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEven
 	c.ch <- entry
 }
 
+func (c *checkSorter) TryAddEntry(
+	ctx context.Context, entry *model.PolymorphicEvent,
+) (bool, error) {
+	select {
+	case c.ch <- entry:
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
 func (c *checkSorter) Output() <-chan *model.PolymorphicEvent {
 	return c.ch
 }
