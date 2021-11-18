@@ -562,7 +562,7 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 
 	l.logger.Info("loader's sql_mode is", zap.String("sqlmode", lcfg.To.Session["sql_mode"]))
 
-	l.toDB, l.toDBConns, err = createConns(tctx, lcfg, l.cfg.PoolSize)
+	l.toDB, l.toDBConns, err = createConns(tctx, lcfg, lcfg.Name, lcfg.SourceID, l.cfg.PoolSize)
 	if err != nil {
 		return err
 	}
@@ -1328,7 +1328,8 @@ func (q *jobQueue) startConsumers(handler func(ctx context.Context, job *restore
 							}
 						}(baseConn)
 						session = &DBConn{
-							cfg:      job.loader.cfg,
+							name:     job.loader.cfg.Name,
+							sourceID: job.loader.cfg.SourceID,
 							baseConn: baseConn,
 							resetBaseConnFn: func(*tcontext.Context, *conn.BaseConn) (*conn.BaseConn, error) {
 								return nil, terror.ErrDBBadConn.Generate("bad connection error restoreData")

@@ -11,17 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package system
 
 import (
-	"sort"
+	"context"
+	"testing"
 
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/stretchr/testify/require"
 )
 
-// SortTableIDs sorts a slice of table IDs in ascending order.
-func SortTableIDs(tableIDs []model.TableID) {
-	sort.Slice(tableIDs, func(i, j int) bool {
-		return tableIDs[i] < tableIDs[j]
-	})
+func TestStartAndStopSystem(t *testing.T) {
+	t.Parallel()
+
+	s := NewSystem()
+	require.Nil(t, s.Start(context.TODO()))
+	require.Nil(t, s.Stop())
 }
