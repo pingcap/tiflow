@@ -109,7 +109,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 
 		info:   info,
 		vars:   vars,
-		router: vars.TableActorRouter,
+		router: vars.TableActorSystem.Router(),
 	}
 
 	log.Info("spawn and start table actor", zap.Int64("tableID", tableID))
@@ -117,7 +117,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		table.stop(err)
 		return nil, errors.Trace(err)
 	}
-	err := vars.TableActorSystem.Spawn(mb, table)
+	err := vars.TableActorSystem.System().Spawn(mb, table)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

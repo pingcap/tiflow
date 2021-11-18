@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/actor"
+	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -39,8 +39,7 @@ type GlobalVars struct {
 	CaptureInfo      *model.CaptureInfo
 	EtcdClient       *etcd.CDCEtcdClient
 	GrpcPool         kv.GrpcPool
-	TableActorSystem *actor.System
-	TableActorRouter *actor.Router
+	TableActorSystem *system.System
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline
