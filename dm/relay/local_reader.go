@@ -74,7 +74,7 @@ type BinlogReader struct {
 	notifyCh chan interface{}
 	relay    Process
 
-	currentUUID string
+	currentUUID string // current UUID(with suffix)
 }
 
 // newBinlogReader creates a new BinlogReader.

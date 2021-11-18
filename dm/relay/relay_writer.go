@@ -57,7 +57,6 @@ type Writer interface {
 	// It is not safe for concurrent use by multiple goroutines.
 	WriteEvent(ev *replication.BinlogEvent) (WResult, error)
 	// IsActive check whether given uuid+filename is active binlog file, if true return current file offset
-	// it's used inside, no need to be public
 	IsActive(uuid, filename string) (bool, int64)
 }
 
