@@ -25,6 +25,9 @@ import (
 // some victims are chosen and de-scheduled. Later, the victims
 // will be automatically rescheduled, during which the target captures
 // will be chosen so that the workload is the most balanced.
+//
+// The FindTarget method is also used when we need to schedule any table,
+// not only when we need to rebalance.
 type balancer interface {
 	// FindVictims returns a set of possible victim tables.
 	// Removing these tables will make the workload more balanced.
