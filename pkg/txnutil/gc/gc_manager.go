@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
@@ -31,7 +32,6 @@ import (
 const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	CDCServiceSafePointID = "ticdc"
-	pdTimeUpdateInterval  = 10 * time.Minute
 )
 
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
@@ -43,32 +43,27 @@ type Manager interface {
 	// Manager may skip update when it thinks it is too frequent.
 	// Set `forceUpdate` to force Manager update.
 	TryUpdateGCSafePoint(ctx context.Context, checkpointTs model.Ts, forceUpdate bool) error
-	CurrentTimeFromPDCached(ctx context.Context) (time.Time, error)
 	CheckStaleCheckpointTs(ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts) error
 }
 
 type gcManager struct {
 	pdClient pd.Client
-
-	gcTTL int64
+	gcTTL    int64
 
 	lastUpdatedTime   time.Time
 	lastSucceededTime time.Time
 	lastSafePointTs   uint64
 	isTiCDCBlockGC    bool
-
-	pdPhysicalTimeCache time.Time
-	lastUpdatedPdTime   time.Time
 }
 
 // NewManager creates a new Manager.
-func NewManager(pdClint pd.Client) Manager {
+func NewManager(pdClient pd.Client) Manager {
 	serverConfig := config.GetGlobalServerConfig()
 	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))
 	})
 	return &gcManager{
-		pdClient:          pdClint,
+		pdClient:          pdClient,
 		lastSucceededTime: time.Now(),
 		gcTTL:             serverConfig.GcTTL,
 	}
@@ -111,25 +106,17 @@ func (m *gcManager) TryUpdateGCSafePoint(
 	return nil
 }
 
-func (m *gcManager) CurrentTimeFromPDCached(ctx context.Context) (time.Time, error) {
-	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
-		return m.pdPhysicalTimeCache, nil
-	}
-	physical, logical, err := m.pdClient.GetTS(ctx)
-	if err != nil {
-		return time.Now(), errors.Trace(err)
-	}
-	m.pdPhysicalTimeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, logical))
-	m.lastUpdatedPdTime = time.Now()
-	return m.pdPhysicalTimeCache, nil
-}
-
 func (m *gcManager) CheckStaleCheckpointTs(
 	ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
 ) error {
 	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
-		pdTime, err := m.CurrentTimeFromPDCached(ctx)
+		cctx, ok := ctx.(cdcContext.Context)
+		if !ok {
+			return cerror.ErrOwnerUnknown.GenWithStack("ctx not an cdcContext.Context, it should be")
+		}
+		pdTime, err := cctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		// TODO: should we return err here, or just log it?
 		if err != nil {
 			return errors.Trace(err)
 		}
