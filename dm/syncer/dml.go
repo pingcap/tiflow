@@ -26,6 +26,8 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/tablecodec"
+	ttypes "github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
@@ -686,6 +688,22 @@ func genKeyList(table string, columns []*model.ColumnInfo, dataSeq []interface{}
 	return buf.String()
 }
 
+// truncateIndexValues truncate prefix index from data.
+func truncateIndexValues(indexColumns *model.IndexInfo, tiColumns []*model.ColumnInfo, data []interface{}) []interface{} {
+	values := make([]interface{}, 0, len(indexColumns.Columns))
+	for i, iColumn := range indexColumns.Columns {
+		tcolumn := tiColumns[i]
+		if data[i] != nil {
+			datum := ttypes.NewDatum(data[i])
+			tablecodec.TruncateIndexValue(&datum, iColumn, tcolumn)
+			values = append(values, datum.GetValue())
+		} else {
+			values = append(values, data[i])
+		}
+	}
+	return values
+}
+
 // genMultipleKeys gens keys with UNIQUE NOT NULL value.
 // if not UNIQUE NOT NULL value, use table name instead.
 func genMultipleKeys(downstreamTableInfo *schema.DownstreamTableInfo, ti *model.TableInfo, value []interface{}, table string) []string {
@@ -693,7 +711,9 @@ func genMultipleKeys(downstreamTableInfo *schema.DownstreamTableInfo, ti *model.
 
 	for _, indexCols := range downstreamTableInfo.AvailableUKIndexList {
 		cols, vals := getColumnData(ti.Columns, indexCols, value)
-		key := genKeyList(table, cols, vals)
+		// handle prefix index
+		truncVals := truncateIndexValues(indexCols, cols, vals)
+		key := genKeyList(table, cols, truncVals)
 		if len(key) > 0 { // ignore `null` value.
 			multipleKeys = append(multipleKeys, key)
 		} else {
