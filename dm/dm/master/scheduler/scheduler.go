@@ -121,9 +121,10 @@ type Scheduler struct {
 	// a mirror of bounds whose element is not deleted when worker unbound. worker -> SourceBound
 	lastBound map[string]ha.SourceBound
 
+	// TODO: seems this memory status is useless.
 	// expectant relay stages for sources, source ID -> stage.
 	// add:
-	// - bound the source to a worker (at first time). // TODO: change this to add a relay-enabled source
+	// - bound the source to a worker (at first time).
 	// - recover from etcd (calling `recoverSources`).
 	// update:
 	// - update stage by user request (calling `UpdateExpectRelayStage`).
@@ -1752,6 +1753,16 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 
 	// 3. change the stage (from Offline) to Free or Relay.
 	lastRelaySource := w.RelaySourceID()
+	if lastRelaySource == "" {
+		// when worker is removed (for example lost keepalive when master scheduler boots up), w.RelaySourceID() is
+		// of course nothing, so we find the relay source from a better place
+		for source, workerM := range s.relayWorkers {
+			if _, ok2 := workerM[w.BaseInfo().Name]; ok2 {
+				lastRelaySource = source
+				break
+			}
+		}
+	}
 	w.ToFree()
 	// TODO: rename ToFree to Online and move below logic inside it
 	if lastRelaySource != "" {
@@ -2003,7 +2014,13 @@ func (s *Scheduler) boundSourceToWorker(source string, w *Worker) error {
 	// 1. put the bound relationship into etcd.
 	var err error
 	bound := ha.NewSourceBound(source, w.BaseInfo().Name)
-	_, err = ha.PutSourceBound(s.etcdCli, bound)
+	sourceCfg, ok := s.sourceCfgs[source]
+	if ok && sourceCfg.EnableRelay {
+		stage := ha.NewRelayStage(pb.Stage_Running, source)
+		_, err = ha.PutRelayStageSourceBound(s.etcdCli, stage, bound)
+	} else {
+		_, err = ha.PutSourceBound(s.etcdCli, bound)
+	}
 	if err != nil {
 		return err
 	}
