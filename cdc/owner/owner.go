@@ -118,6 +118,11 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	state := rawState.(*orchestrator.GlobalReactorState)
 	o.captures = state.Captures
 	o.updateMetrics(state)
+
+	// handleJobs() should be called before clusterVersionConsistent(), because
+	// when there are different versions of cdc nodes in the cluster,
+	// the admin job may not be processed all the time. And http api relies on
+	// admin job, which will cause all http api unavailable.
 	o.handleJobs()
 
 	if !o.clusterVersionConsistent(state.Captures) {
