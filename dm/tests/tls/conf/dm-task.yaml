@@ -42,3 +42,9 @@ syncers:
   global:
     worker-count: 16
     batch: 100
+<<<<<<< HEAD
+=======
+
+#tidb:
+#  backend: "tidb"
+>>>>>>> eb648394a (DM: add checkpoint test for lightning-loader (#3220))
