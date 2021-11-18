@@ -8,12 +8,14 @@ import (
 	"log"
 	"net"
 	"os"
+	"sync"
 	"time"
 	//"unsafe"
 )
 
 var conn net.Conn
-var ConnMap map[string]net.Conn = make(map[string]net.Conn)
+//var ConnMap sync.Map[string]net.Conn = make(map[string]net.Conn)
+var ConnMap  = sync.Map{}
 
 var tcpconn *net.TCPConn
 var timeout = time.Duration(60)*time.Second
@@ -61,20 +63,25 @@ func chkError(err error) {
 func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 
 
-	_, ok := ConnMap [host]
+	//_, ok := ConnMap [host]
+
+
+	_, ok := ConnMap.Load(host)
 	if(!ok){
 		tempConn, err := net.DialTimeout("tcp", host,timeout)
 		//conn = tempConn
-		ConnMap [host] = tempConn
+		ConnMap.Store(host,tempConn)
 		if err != nil {
-			delete(ConnMap, host)
+			ConnMap.Delete(host)
 			//conn = nil
 			fmt.Println("Error dialing", err.Error())
 			return
 		}
 	}
 
-	_, err := ConnMap [host].Write(createBytes_FromDdlInfoVo(ddlInfos))
+	tempSocket, _ := ConnMap.Load(host)
+
+	_, err := tempSocket.(net.Conn).Write(createBytes_FromDdlInfoVo(ddlInfos))
     if err != nil {
 		fmt.Println("Error dialing", err.Error())
 		return
@@ -88,13 +95,13 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 
 	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",conn)
 
-	_, ok := ConnMap [host]
+	_, ok := ConnMap.Load(host)
 	if(!ok){
 		tempConn, err := net.DialTimeout("tcp", host,timeout)
 		//conn = tempConn
-		ConnMap [host] = tempConn
+		ConnMap.Store(host,tempConn)
 		if err != nil {
-			delete(ConnMap, host)
+			ConnMap.Delete(host)
 			//conn = nil
 			fmt.Println("Error dialing", err.Error())
 			return
@@ -103,11 +110,14 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 
 	fmt.Println("rowInfos：：：：：：：：：：：：：：：：：：：：：：：：",rowInfos)
 
-	ConnMap [host].SetWriteDeadline(time.Now().Add(timeout))
-	_, err := ConnMap [host].Write(createBytesFromRowInfo(rowInfos))
+	tempSocket, _ := ConnMap.Load(host)
+
+	tempSocket.(net.Conn).SetWriteDeadline(time.Now().Add(timeout))
+	_, err := tempSocket.(net.Conn).Write(createBytesFromRowInfo(rowInfos))
 
 	if err != nil {
-		delete(ConnMap, host)
+
+		ConnMap.Delete(host)
 		log.Println("setReadDeadline failed:", err)
 
 		return
@@ -341,25 +351,27 @@ func Log(v ...interface{}) {
 
 func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 
-	_, ok := ConnMap [host]
+	_, ok := ConnMap.Load(host)
 	if(!ok){
 		tempConn, err := net.DialTimeout("tcp", host,timeout)
 		//conn = tempConn
-		ConnMap [host] = tempConn
+		ConnMap.Store(host,tempConn)
 		if err != nil {
-			delete(ConnMap, host)
+			ConnMap.Delete(host)
 			//conn = nil
 			fmt.Println("Error dialing", err.Error())
 			return 0, nil
 		}
 	}
 
+	tempSocket,_ :=ConnMap.Load(host)
+
 	//defer conn.Close()
-	if ConnMap [host]!=nil {
-		ConnMap [host].SetWriteDeadline(time.Now().Add(timeout))
-		_, err := ConnMap [host].Write(createBytesFromResolvedTs(resolvedTs))
+	if tempSocket.(net.Conn)!=nil {
+		tempSocket.(net.Conn).SetWriteDeadline(time.Now().Add(timeout))
+		_, err := tempSocket.(net.Conn).Write(createBytesFromResolvedTs(resolvedTs))
 		if err != nil {
-			delete(ConnMap, host)
+			ConnMap.Delete(host)
 			return 0, nil
 		}
 	}
@@ -369,13 +381,13 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 
 	//1 等待客户端通过conn发送信息
 	//2 如果没有writer发送就一直阻塞在这
-	if ConnMap [host]==nil{
+	if tempSocket.(net.Conn)==nil{
 		return 0, nil
 	}
-	ConnMap [host].SetReadDeadline(time.Now().Add(timeout))
-	re, err := ConnMap [host].Read(buf)
+	tempSocket.(net.Conn).SetReadDeadline(time.Now().Add(timeout))
+	re, err :=tempSocket.(net.Conn).Read(buf)
 	if err != nil {
-		delete(ConnMap, host)
+		ConnMap.Delete(host)
 		fmt.Println("服务器read err=", err) //出错退出
 		return 0, nil
 	}
@@ -392,39 +404,42 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
 
-	_, ok := ConnMap [host]
+	_, ok := ConnMap.Load(host)
 	if(!ok){
 		tempConn, err := net.DialTimeout("tcp", host,timeout)
 		//conn = tempConn
-		ConnMap [host] = tempConn
+		ConnMap.Store(host,tempConn)
 		if err != nil {
-			delete(ConnMap, host)
+			ConnMap.Delete(host)
 			//conn = nil
 			fmt.Println("Error dialing", err.Error())
 			return 0, nil
 		}
 	}
+
+	tempSocket,_ :=ConnMap.Load(host)
+
 	//defer conn.Close()
-	if ConnMap [host]==nil {
+	if tempSocket.(net.Conn)==nil {
 		fmt.Println("Error dialing")
 		return 0, nil
 	}
 
-	ConnMap [host].SetWriteDeadline(time.Now().Add(timeout))
-	_, err := ConnMap [host].Write(createFlushBytesFromResolvedTs(resolvedTs))
+	tempSocket.(net.Conn).SetWriteDeadline(time.Now().Add(timeout))
+	_, err := tempSocket.(net.Conn).Write(createFlushBytesFromResolvedTs(resolvedTs))
 	if err != nil {
-		delete(ConnMap, host)
+		ConnMap.Delete(host)
 		return 0, nil
 	}
 
 	buf := make([]byte, 1024)
 	//1 等待客户端通过conn发送信息
 	//2 如果没有writer发送就一直阻塞在这
-	ConnMap [host].SetReadDeadline(time.Now().Add(timeout))
+	tempSocket.(net.Conn).SetReadDeadline(time.Now().Add(timeout))
 
-	re, err := ConnMap [host].Read(buf)
+	re, err := tempSocket.(net.Conn).Read(buf)
 	if err != nil {
-		delete(ConnMap, host)
+		ConnMap.Delete(host)
 		fmt.Println("服务器read err=", err) //出错退出
 		return 0, nil
 	}
