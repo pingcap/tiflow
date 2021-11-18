@@ -79,6 +79,32 @@ func (s *TableSet) AddTableRecord(record *TableRecord) (successful bool) {
 	return true
 }
 
+// UpdateTableRecord updates an existing TableRecord.
+// All modifications to a table's status should be done by this method.
+func (s *TableSet) UpdateTableRecord(record *TableRecord) (successful bool) {
+	oldRecord, ok := s.tableIDMap[record.TableID]
+	if !ok {
+		// table does not exist
+		return false
+	}
+
+	if record.CaptureID == oldRecord.CaptureID {
+		s.tableIDMap[record.TableID] = record.Clone()
+		s.captureIndex[record.CaptureID][record.TableID] = record.Clone()
+		return true
+	}
+
+	if record.CaptureID != oldRecord.CaptureID {
+		if ok := s.RemoveTableRecord(record.TableID); !ok {
+			panic("unreachable")
+		}
+		if ok := s.AddTableRecord(record); !ok {
+			panic("unreachable")
+		}
+	}
+	return true
+}
+
 // GetTableRecord tries to obtain a record with the specified tableID.
 func (s *TableSet) GetTableRecord(tableID model.TableID) (*TableRecord, bool) {
 	rec, ok := s.tableIDMap[tableID]
@@ -110,16 +136,19 @@ func (s *TableSet) RemoveTableRecord(tableID model.TableID) bool {
 
 // RemoveTableRecordByCaptureID removes all table records associated with
 // captureID.
-func (s *TableSet) RemoveTableRecordByCaptureID(captureID model.CaptureID) {
+func (s *TableSet) RemoveTableRecordByCaptureID(captureID model.CaptureID) []*TableRecord {
 	captureIndexEntry, ok := s.captureIndex[captureID]
 	if !ok {
-		return
+		return nil
 	}
 
-	for tableID := range captureIndexEntry {
+	var ret []*TableRecord
+	for tableID, record := range captureIndexEntry {
 		delete(s.tableIDMap, tableID)
+		ret = append(ret, record)
 	}
 	delete(s.captureIndex, captureID)
+	return ret
 }
 
 // CountTableByCaptureID counts the number of tables associated with the captureID.
