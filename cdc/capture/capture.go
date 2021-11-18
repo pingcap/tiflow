@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/cdc/processor"
+	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -59,6 +60,8 @@ type Capture struct {
 	kvStorage  tidbkv.Storage
 	etcdClient *etcd.CDCEtcdClient
 	grpcPool   kv.GrpcPool
+
+	tableActorSystem *system.System
 
 	cancel context.CancelFunc
 
@@ -102,6 +105,19 @@ func (c *Capture) reset(ctx context.Context) error {
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
+	}
+	if c.tableActorSystem != nil {
+		err := c.tableActorSystem.Stop()
+		if err != nil {
+			log.Warn("stop table actor system failed", zap.Error(err))
+		}
+	}
+	if conf.Debug.EnableTableActor {
+		c.tableActorSystem = system.NewSystem()
+		err = c.tableActorSystem.Start(ctx)
+		if err != nil {
+			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
+		}
 	}
 	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
@@ -148,11 +164,12 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		PDClient:    c.pdClient,
-		KVStorage:   c.kvStorage,
-		CaptureInfo: c.info,
-		EtcdClient:  c.etcdClient,
-		GrpcPool:    c.grpcPool,
+		PDClient:         c.pdClient,
+		KVStorage:        c.kvStorage,
+		CaptureInfo:      c.info,
+		EtcdClient:       c.etcdClient,
+		GrpcPool:         c.grpcPool,
+		TableActorSystem: c.tableActorSystem,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -353,6 +370,13 @@ func (c *Capture) AsyncClose() {
 	}
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
+	}
+	if c.tableActorSystem != nil {
+		err := c.tableActorSystem.Stop()
+		if err != nil {
+			log.Warn("stop table actor system failed", zap.Error(err))
+		}
+		c.tableActorSystem = nil
 	}
 }
 

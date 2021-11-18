@@ -856,6 +856,11 @@ error = '''
 table %d not found in schema snapshot
 '''
 
+["CDC:ErrSorterClosed"]
+error = '''
+sorter is closed
+'''
+
 ["CDC:ErrStartAStoppedLevelDBSystem"]
 error = '''
 start a stopped leveldb system
