@@ -406,7 +406,7 @@ func (t *testConvertDataSuite) TestParseTableWithExtendColumn(c *C) {
 			"schema_name",
 			"source_name",
 		},
-		insertHeadStmt: "INSERT INTO `t` (`id`,`t_boolean`,`t_bigint`,`t_double`,`t_decimal`,`t_bit`,`t_date`,`t_datetime`,`t_timestamp`,`t_time`,`t_year`,`t_char`,`t_varchar`,`t_blob`,`t_text`,`t_enum`,`t_set`,`t_json`,`table_name`,`schema_name`,`source_name`) VALUES",
+		insertHeadStmt: "INSERT INTO `t` VALUES",
 		extendCol:      []string{"table_name", "schema_name", "source_name"},
 		extendVal:      []string{"t2", "test1", "source1"},
 	}
