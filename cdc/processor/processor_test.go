@@ -767,6 +767,7 @@ func (s *processorSuite) TestIgnorableError(c *check.C) {
 		err       error
 		ignorable bool
 	}{
+		{nil, true},
 		{cerror.ErrAdminStopProcessor.GenWithStackByArgs(), true},
 		{cerror.ErrReactorFinished.GenWithStackByArgs(), true},
 		{cerror.ErrRedoWriterStopped.GenWithStackByArgs(), true},
@@ -775,6 +776,6 @@ func (s *processorSuite) TestIgnorableError(c *check.C) {
 		{errors.New("test error"), false},
 	}
 	for _, tc := range testCases {
-		c.Assert(processorIgnoralbeError(tc.err), check.Equals, tc.ignorable)
+		c.Assert(isProcessorIgnorableError(tc.err), check.Equals, tc.ignorable)
 	}
 }
