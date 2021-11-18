@@ -106,6 +106,11 @@ func (r *tableNumberBalancer) FindVictims(
 
 	totalTableNum := len(tables.GetAllTables())
 	captureNum := len(captures)
+
+	if captureNum == 0 {
+		return nil
+	}
+
 	upperLimitPerCapture := int(math.Ceil(float64(totalTableNum) / float64(captureNum)))
 
 	r.logger.Info("Start rebalancing",
