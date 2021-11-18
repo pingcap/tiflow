@@ -36,8 +36,8 @@ func NewCmd() *cobra.Command {
 func Run() {
 	cmd := NewCmd()
 
-	// Outputs cmd.Print to stdout.
-	cmd.SetOut(os.Stdout)
+	// Outputs cmd.Print to stderr.
+	cmd.SetOut(os.Stderr)
 
 	cmd.AddCommand(server.NewCmdServer())
 	cmd.AddCommand(cli.NewCmdCli())
