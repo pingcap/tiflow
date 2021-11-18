@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
 	"github.com/pingcap/ticdc/cdc/sorter"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
@@ -59,6 +60,7 @@ type sorterNode struct {
 	outputCh         chan pipeline.Message
 	tableActorRouter *actor.Router
 	isTableActorMode bool
+	tableActorID     actor.ID
 }
 
 func newSorterNode(
@@ -85,6 +87,7 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 	if tableActorRouter != nil {
 		n.isTableActorMode = true
 		n.tableActorRouter = tableActorRouter
+		n.tableActorID = system.ActorID(info.ID, n.tableID)
 	}
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
@@ -121,7 +124,7 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 			if err != nil {
 				log.Error("sorter stopped", zap.Error(err))
 			}
-			_ = n.tableActorRouter.SendB(stdCtx, actor.ID(n.tableID), message.StopMessage())
+			_ = n.tableActorRouter.SendB(stdCtx, n.tableActorID, message.StopMessage())
 		}
 		return nil
 	})
@@ -170,7 +173,7 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
 							if n.isTableActorMode {
-								_ = tableActorRouter.Send(actor.ID(n.tableID), message.BarrierMessage(lastCRTs))
+								_ = tableActorRouter.Send(n.tableActorID, message.BarrierMessage(lastCRTs))
 							} else {
 								ctx.(pipeline.NodeContext).SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
 							}
@@ -185,7 +188,7 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
 							if n.isTableActorMode {
-								_ = tableActorRouter.Send(actor.ID(n.tableID), message.BarrierMessage(lastCRTs))
+								_ = tableActorRouter.Send(n.tableActorID, message.BarrierMessage(lastCRTs))
 							} else {
 								ctx.(pipeline.NodeContext).SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
 							}
@@ -200,7 +203,7 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 						} else {
 							if n.isTableActorMode {
 								log.Error("sorter stopped", zap.Error(err))
-								_ = tableActorRouter.SendB(stdCtx, actor.ID(n.tableID), message.StopMessage())
+								_ = tableActorRouter.SendB(stdCtx, n.tableActorID, message.StopMessage())
 							} else {
 								ctx.(pipeline.NodeContext).Throw(err)
 							}
@@ -228,7 +231,7 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 
 				if n.isTableActorMode {
 					n.outputCh <- pipeline.PolymorphicEventMessage(msg)
-					_ = tableActorRouter.Send(actor.ID(n.tableID), message.TickMessage())
+					_ = tableActorRouter.Send(n.tableActorID, message.TickMessage())
 				} else {
 					ctx.(pipeline.NodeContext).SendToNextNode(pipeline.PolymorphicEventMessage(msg))
 				}

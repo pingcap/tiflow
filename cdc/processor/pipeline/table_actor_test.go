@@ -279,7 +279,7 @@ func TestAsyncStopFailed(t *testing.T) {
 	}()
 
 	var f ActorMessageHandlerFunc = func(ctx context.Context, msg message.Message) error { return nil }
-	tbl := &tableActor{stopped: false, tableID: 1, router: tableActorRouter, actorMessageHandler: f, cancel: func() {}, reportErr: func(err error) {}}
+	tbl := &tableActor{stopped: false, tableID: 1, tableActorRouter: tableActorRouter, actorMessageHandler: f, cancel: func() {}, reportErr: func(err error) {}}
 	require.Panics(t, func() { tbl.AsyncStop(1) })
 
 	mb := actor.NewMailbox(actor.ID(1), 0)

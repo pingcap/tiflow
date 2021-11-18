@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/actor"
 	"github.com/pingcap/ticdc/pkg/actor/message"
@@ -42,6 +43,7 @@ type pullerNode struct {
 	outputCh         chan pipeline.Message
 	tableActorRouter *actor.Router
 	isTableActorMode bool
+	tableActorID     actor.ID
 }
 
 func newPullerNode(
@@ -74,6 +76,7 @@ func (n *pullerNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 	if tableActorRouter != nil {
 		n.isTableActorMode = true
 		n.tableActorRouter = tableActorRouter
+		n.tableActorID = system.ActorID(info.ID, n.tableID)
 	}
 	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(info.ID, vars.CaptureInfo.AdvertiseAddr, n.tableName)
 	ctxC, cancel := context.WithCancel(ctx)
@@ -88,7 +91,7 @@ func (n *pullerNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 			log.Error("puller stopped", zap.Error(err))
 		}
 		if n.isTableActorMode {
-			_ = tableActorRouter.SendB(ctxC, actor.ID(n.tableID), message.StopMessage())
+			_ = tableActorRouter.SendB(ctxC, n.tableActorID, message.StopMessage())
 		} else {
 			ctx.(pipeline.NodeContext).Throw(err)
 		}
@@ -110,7 +113,7 @@ func (n *pullerNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 				msg := pipeline.PolymorphicEventMessage(pEvent)
 				if n.isTableActorMode {
 					n.outputCh <- msg
-					_ = tableActorRouter.Send(actor.ID(n.tableID), message.TickMessage())
+					_ = tableActorRouter.Send(n.tableActorID, message.TickMessage())
 				} else {
 					ctx.(pipeline.NodeContext).SendToNextNode(msg)
 				}

@@ -15,7 +15,10 @@ package system
 
 import (
 	"context"
+	"encoding/binary"
+	"hash/fnv"
 
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/actor"
 )
 
@@ -49,4 +52,14 @@ func (s *System) Router() *actor.Router {
 
 func (s *System) System() *actor.System {
 	return s.tableActorSystem
+}
+
+// ActorID returns an ActorID correspond with tableID.
+func ActorID(changefeedID string, tableID model.TableID) actor.ID {
+	h := fnv.New64()
+	b := [8]byte{}
+	binary.LittleEndian.PutUint64(b[:], uint64(tableID))
+	h.Write([]byte(changefeedID))
+	h.Write(b[:])
+	return actor.ID(h.Sum64())
 }

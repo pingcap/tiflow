@@ -45,6 +45,7 @@ type cyclicMarkNode struct {
 	queue             list.List
 	tableActorRouter  *actor.Router
 	isTableActorMode  bool
+	tableActorID      actor.ID
 }
 
 func newCyclicMarkNode(markTableID model.TableID) pipeline.Node {
@@ -64,6 +65,7 @@ func (n *cyclicMarkNode) StartActorNode(_ context.Context, tableActorRouter *act
 	if tableActorRouter != nil {
 		n.isTableActorMode = true
 		n.tableActorRouter = tableActorRouter
+		//n.tableActorID = system.ActorID(info.ID, n.tableID)
 	}
 	n.localReplicaID = info.Info.Config.Cyclic.ReplicaID
 	filterReplicaID := info.Info.Config.Cyclic.FilterReplicaID

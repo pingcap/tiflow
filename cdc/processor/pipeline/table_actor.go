@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/actor"
@@ -60,14 +61,15 @@ type tableActor struct {
 	stopped bool
 	err     error
 
-	info   *cdcContext.ChangefeedVars
-	vars   *cdcContext.GlobalVars
-	router *actor.Router
+	info             *cdcContext.ChangefeedVars
+	vars             *cdcContext.GlobalVars
+	tableActorRouter *actor.Router
 
 	actorMessageHandler ActorMessageHandler
 	sinkNode            TableActorSinkNode
 
-	nodes []*Node
+	nodes   []*Node
+	actorID actor.ID
 }
 
 // NewTableActor creates a table actor.
@@ -85,7 +87,8 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	info := cdcCtx.ChangefeedVars()
 	vars := cdcCtx.GlobalVars()
 
-	mb := actor.NewMailbox(actor.ID(tableID), defaultOutputChannelSize)
+	actorID := system.ActorID(info.ID, tableID)
+	mb := actor.NewMailbox(actorID, defaultOutputChannelSize)
 	// Cancel should be able to release all sub-goroutines in the actor.
 	ctx, cancel := context.WithCancel(cdcCtx)
 	// All sub-goroutines should be spawn in the wait group.
@@ -107,9 +110,10 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		targetTs:      targetTs,
 		started:       false,
 
-		info:   info,
-		vars:   vars,
-		router: vars.TableActorSystem.Router(),
+		info:             info,
+		vars:             vars,
+		tableActorRouter: vars.TableActorSystem.Router(),
+		actorID:          actorID,
 	}
 
 	log.Info("spawn and start table actor", zap.Int64("tableID", tableID))
@@ -170,14 +174,14 @@ func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePi
 		zap.Uint64("quota", t.memoryQuota))
 
 	actorPullerNode := tablePipelineNodeCreator.NewPullerNode(t.tableID, t.tableName, t.replicaInfo)
-	if err := actorPullerNode.StartActorNode(ctx, t.router, t.wg, t.info, t.vars); err != nil {
+	if err := actorPullerNode.StartActorNode(ctx, t.tableActorRouter, t.wg, t.info, t.vars); err != nil {
 		log.Error("puller fails to start", zap.Error(err))
 		return err
 	}
 
 	flowController := common.NewTableFlowController(t.memoryQuota)
 	actorSorterNode := tablePipelineNodeCreator.NewSorterNode(t.tableID, t.tableName, t.replicaInfo.StartTs, flowController, t.mounter)
-	if err := actorSorterNode.StartActorNode(ctx, t.router, t.wg, t.info, t.vars); err != nil {
+	if err := actorSorterNode.StartActorNode(ctx, t.tableActorRouter, t.wg, t.info, t.vars); err != nil {
 		log.Error("sorter fails to start", zap.Error(err))
 		return err
 	}
@@ -189,7 +193,7 @@ func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePi
 	var cyclicNode TableActorDataNode
 	if t.cyclicEnabled {
 		cyclicNode = tablePipelineNodeCreator.NewCyclicNode(t.replicaInfo.MarkTableID)
-		if err := cyclicNode.StartActorNode(ctx, t.router, t.wg, t.info, t.vars); err != nil {
+		if err := cyclicNode.StartActorNode(ctx, t.tableActorRouter, t.wg, t.info, t.vars); err != nil {
 			log.Error("sink fails to start", zap.Error(err))
 			return err
 		}
@@ -200,7 +204,7 @@ func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePi
 	}
 
 	actorSinkNode := tablePipelineNodeCreator.NewSinkNode(t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
-	if err := actorSinkNode.StartActorNode(ctx, t.router, t.wg, t.info, t.vars); err != nil {
+	if err := actorSinkNode.StartActorNode(ctx, t.tableActorRouter, t.wg, t.info, t.vars); err != nil {
 		log.Error("sink fails to start", zap.Error(err))
 		return err
 	}
@@ -252,7 +256,7 @@ func (t *tableActor) CheckpointTs() model.Ts {
 func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 	if t.sinkNode.BarrierTs() != ts {
 		msg := message.BarrierMessage(ts)
-		err := t.router.Send(actor.ID(t.tableID), msg)
+		err := t.tableActorRouter.Send(t.actorID, msg)
 		if err != nil {
 			log.Warn("send fails", zap.Reflect("msg", msg), zap.Error(err))
 		}
@@ -262,7 +266,7 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 // AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
 func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
 	msg := message.StopMessage()
-	err := t.router.Send(actor.ID(t.tableID), msg)
+	err := t.tableActorRouter.Send(t.actorID, msg)
 	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
 	if err != nil {
 		if cerror.ErrMailboxFull.Equal(err) {
@@ -301,7 +305,7 @@ func (t *tableActor) Name() string {
 // created by this table pipeline
 func (t *tableActor) Cancel() {
 	// TODO(neil): pass context.
-	if err := t.router.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
+	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
 		log.Warn("fails to send Stop message",
 			zap.Uint64("tableID", uint64(t.tableID)))
 	}
