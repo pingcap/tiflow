@@ -197,8 +197,17 @@ func TestWriterGC(t *testing.T) {
 	require.Nil(t, err, files[0].Name())
 	require.EqualValues(t, 3, ts)
 	require.Equal(t, common.DefaultRowLogFileType, fileType)
-
 	time.Sleep(time.Duration(100) * time.Millisecond)
+
+	w1 := &Writer{
+		cfg:       cfg,
+		uint64buf: make([]byte, 8),
+		storage:   mockStorage,
+	}
+	w1.cfg.Dir += "not-exist"
+	w1.running.Store(true)
+	err = w1.GC(111)
+	require.Nil(t, err)
 }
 
 func TestAdvanceTs(t *testing.T) {

@@ -459,6 +459,10 @@ func (w *Writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error)
 func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, error) {
 	files, err := ioutil.ReadDir(w.cfg.Dir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			log.Warn("check removed log dir fail", zap.Error(err))
+			return []os.FileInfo{}, nil
+		}
 		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotatef(err, "can't read log file directory: %s", w.cfg.Dir))
 	}
 
