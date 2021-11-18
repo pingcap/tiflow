@@ -23,6 +23,9 @@ block-allow-list:
   instance:
     do-dbs: ["load_task3"]
 
+tidb:
+  backend: "tidb"
+
 mydumpers:
   global:
     threads: 4
