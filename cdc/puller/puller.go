@@ -110,8 +110,6 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	defer p.kvCli.Close()
-
 	g, ctx := errgroup.WithContext(ctx)
 
 	checkpointTs := p.checkpointTs

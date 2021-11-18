@@ -282,7 +282,6 @@ type CDCKVClient interface {
 		isPullerInit PullerInitialization,
 		eventCh chan<- model.RegionFeedEvent,
 	) error
-	Close() error
 }
 
 // NewCDCKVClient is the constructor of CDC KV client
@@ -331,11 +330,6 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grp
 		regionLimiters: defaultRegionEventFeedLimiters,
 	}
 	return
-}
-
-// Close CDCClient
-func (c *CDCClient) Close() error {
-	return nil
 }
 
 func (c *CDCClient) getRegionLimiter(regionID uint64) *rate.Limiter {

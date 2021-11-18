@@ -200,7 +200,6 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
-		cdcClient.Close() //nolint:errcheck
 		wg.Done()
 	}()
 
@@ -292,7 +291,6 @@ func prepareBench(b *testing.B, regionNum int) (
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
-		cdcClient.Close() //nolint:errcheck
 		wg.Done()
 	}()
 
