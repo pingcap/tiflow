@@ -102,16 +102,17 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 	//tradCodeArr := publicUtils.IntTo2Bytes(113)
 	// 4-8bytes服务号和主次命令
 	//verifyArr := make([]byte,4)
-	verifyArr := make([]byte,4)
+	/*verifyArr := make([]byte,4)
 	//serviceNumArr := make([]byte,4)
 
 	verifyArr[0] = 0x06
 	verifyArr[1] = 0xce
 	verifyArr[2] = 0x01
 	verifyArr[3] = 0x13
+
 	//serviceNumArr = intTo4Bytes(serviceNum)
 	//fmt.Printf(" %s \n",publicUtils.BytestoHex(verifyArr))
-	
+
     //defer conn.Close()
     sendMsg :=" Connect Server Test  !";
 	clientSendArr := make([]byte,8+len(sendMsg))
@@ -119,7 +120,7 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 	//fmt.Printf(" %s \n",publicUtils.BytestoHex(lengthArr))
 	publicUtils.BlockByteArrCopy([]byte(lengthArr),0,clientSendArr,0,len(lengthArr))
 	publicUtils.BlockByteArrCopy([]byte(verifyArr),0,clientSendArr,4,len(verifyArr))
-	publicUtils.BlockByteArrCopy([]byte(sendMsg),0,clientSendArr,8,len(sendMsg))
+	publicUtils.BlockByteArrCopy([]byte(sendMsg),0,clientSendArr,8,len(sendMsg))*/
 	//fmt.Printf(" SendByte[]Arr %s \n",publicUtils.BytestoHex(clientSendArr))
 
 	//_, err := conn.Write(createBytes_FromDdlInfoVo(ddlInfos))
@@ -153,24 +154,8 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 		}
 	}
 
-	// 4-8bytes服务号和主次命令
-	verifyArr := make([]byte,4)
-	//verifyArr[0] = 0x06
-	//verifyArr[1] = 0xce
-	//verifyArr[2] = 0x01
-	//verifyArr[3] = 0x13
-	verifyArr={0x06,0xce,0x01,0x13}
 
 
-	sendMsg :=" Connect Server Test  !";
-	clientSendArr := make([]byte,8+len(sendMsg))
-	lengthArr := publicUtils.IntegerToBytes(len(sendMsg));
-	//fmt.Printf(" %s \n",publicUtils.BytestoHex(lengthArr))
-	publicUtils.BlockByteArrCopy([]byte(lengthArr),0,clientSendArr,0,len(lengthArr))
-	publicUtils.BlockByteArrCopy([]byte(verifyArr),0,clientSendArr,4,len(verifyArr))
-	publicUtils.BlockByteArrCopy([]byte(sendMsg),0,clientSendArr,8,len(sendMsg))
-	
-	fmt.Printf(" SendByte[]Arr %s \n",publicUtils.BytestoHex(clientSendArr))
 	fmt.Println("rowInfos：：：：：：：：：：：：：：：：：：：：：：：：",rowInfos)
 
 	ConnMap [host].SetWriteDeadline(time.Now().Add(timeout))
@@ -191,14 +176,8 @@ func createBytesFromRowInfo(rowInfos []*vo.RowInfos) []byte{
 	//colsArr = make([]byte,0)
 	fmt.Printf(" rowCount = %d\n", len(rowInfos))
 
-
-	verifyArr := make([]byte,4)
-	//serviceNumArr := make([]byte,4)
-
-	verifyArr[0] = 0x06
-	verifyArr[1] = 0xce
-	verifyArr[2] = 0x01
-	verifyArr[3] = 0x13
+	// 4-8bytes服务号和主次命令
+	verifyArr := []byte{0x06,0xce,0x01,0x13}
 
 	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
 	sendBatchRowsArr :=new(bytes.Buffer)
@@ -263,13 +242,8 @@ func createBytesFromRowInfo(rowInfos []*vo.RowInfos) []byte{
 
 func createBytes_FromDdlInfoVo(ddlInfos *vo.DDLInfos) []byte{
 
-	verifyArr := make([]byte,4)
-	//serviceNumArr := make([]byte,4)
 
-	verifyArr[0] = 0x06
-	verifyArr[1] = 0xce
-	verifyArr[2] = 0x01
-	verifyArr[3] = 0x12
+	verifyArr := []byte{0x06,0xce,0x01,0x12}
 
 	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
 	sendBatchDDLArr :=new(bytes.Buffer)
@@ -549,14 +523,9 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
 func createFlushBytesFromResolvedTs(resolvedTs uint64)  []byte{
 
-	verifyArr := make([]byte,4)
-	//serviceNumArr := make([]byte,4)
 
-	verifyArr[0] = 0x06
-	verifyArr[1] = 0xce
-	verifyArr[2] = 0x01
-	//verifyArr[3] = 0x23
-	verifyArr[3] = 0x15
+
+	verifyArr := []byte{0x06,0xce,0x01,0x15}
 
 	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
 	sendBatchRowsArr :=new(bytes.Buffer)
@@ -574,14 +543,8 @@ func createFlushBytesFromResolvedTs(resolvedTs uint64)  []byte{
 
 func createBytesFromResolvedTs(resolvedTs uint64)  []byte{
 
-	verifyArr := make([]byte,4)
-	//serviceNumArr := make([]byte,4)
 
-	verifyArr[0] = 0x06
-	verifyArr[1] = 0xce
-	verifyArr[2] = 0x01
-	verifyArr[3] = 0x23
-	//verifyArr[3] = 0x15
+	verifyArr := []byte{0x06,0xce,0x01,0x23}
 
 	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
 	sendBatchRowsArr :=new(bytes.Buffer)
@@ -589,7 +552,7 @@ func createBytesFromResolvedTs(resolvedTs uint64)  []byte{
 	//	buffer.Write(publicUtils.LongToBytes(rowInfo.StartTimer))
 	buffer.Write(publicUtils.LongToBytes(int64(resolvedTs)))
 
-	
+
 	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()));
 	sendBatchRowsArr.Write(lengthArr)
 	sendBatchRowsArr.Write(verifyArr)
