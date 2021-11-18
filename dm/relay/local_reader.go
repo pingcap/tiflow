@@ -126,7 +126,7 @@ func (r *BinlogReader) checkRelayPos(pos mysql.Position) error {
 func (r *BinlogReader) IsGTIDCoverPreviousFiles(ctx context.Context, filePath string, gset mysql.GTIDSet) (bool, error) {
 	fileReader := reader.NewFileReader(&reader.FileReaderConfig{Timezone: r.cfg.Timezone})
 	defer fileReader.Close()
-	err := fileReader.StartSyncByPos(mysql.Position{Name: filePath, Pos: 4})
+	err := fileReader.StartSyncByPos(mysql.Position{Name: filePath, Pos: binlog.FileHeaderLen})
 	if err != nil {
 		return false, err
 	}
@@ -203,7 +203,7 @@ func (r *BinlogReader) getPosByGTID(gset mysql.GTIDSet) (*mysql.Position, error)
 				// Start at the beginning of the file
 				return &mysql.Position{
 					Name: binlog.ConstructFilenameWithUUIDSuffix(fileName, utils.SuffixIntToStr(suffix)),
-					Pos:  4,
+					Pos:  binlog.FileHeaderLen,
 				}, nil
 			}
 		}
@@ -336,7 +336,7 @@ func (r *BinlogReader) parseRelay(ctx context.Context, s *LocalStreamer, pos mys
 		r.currentUUID = switchPath.nextUUID
 		// update pos, so can switch to next sub directory
 		realPos.Name = switchPath.nextBinlogName
-		realPos.Pos = 4 // start from pos 4 for next sub directory / file
+		realPos.Pos = binlog.FileHeaderLen // start from pos 4 for next sub directory / file
 		r.tctx.L().Info("switching to next ready sub directory", zap.String("next uuid", r.currentUUID), zap.Stringer("position", pos))
 	}
 }
@@ -396,8 +396,8 @@ func (r *BinlogReader) parseDirAsPossible(ctx context.Context, s *LocalStreamer,
 		)
 		// TODO will this happen?
 		// previously, we use ParseFile which will handle offset < 4, now we use ParseReader which won't
-		if offset < 4 {
-			offset = 4
+		if offset < binlog.FileHeaderLen {
+			offset = binlog.FileHeaderLen
 		}
 		for i, relayLogFile := range files {
 			select {
@@ -410,8 +410,8 @@ func (r *BinlogReader) parseDirAsPossible(ctx context.Context, s *LocalStreamer,
 					return false, terror.ErrFirstRelayLogNotMatchPos.Generate(relayLogFile, pos)
 				}
 			} else {
-				offset = 4        // for other relay log file, start parse from 4
-				firstParse = true // new relay log file need to parse
+				offset = binlog.FileHeaderLen // for other relay log file, start parse from 4
+				firstParse = true             // new relay log file need to parse
 			}
 			needSwitch, latestPos, err = r.parseFileAsPossible(ctx, s, relayLogFile, offset, dir, firstParse, i == len(files)-1)
 			if err != nil {
@@ -607,7 +607,7 @@ func (r *BinlogReader) parseFile(
 
 	// parser needs the FormatDescriptionEvent to work correctly
 	// if we start parsing from the middle, we need to read FORMAT DESCRIPTION event first
-	if !state.formatDescEventRead && offset > 4 {
+	if !state.formatDescEventRead && offset > binlog.FileHeaderLen {
 		if err = r.parseFormatDescEvent(state); err != nil {
 			if state.possibleLast && isIgnorableParseError(err) {
 				return r.waitBinlogChanged(ctx, state)
@@ -734,7 +734,7 @@ func (r *BinlogReader) waitBinlogChanged(ctx context.Context, state *binlogFileP
 
 func (r *BinlogReader) parseFormatDescEvent(state *binlogFileParseState) error {
 	// FORMAT_DESCRIPTION event should always be read by default (despite that fact passed offset may be higher than 4)
-	if _, err := state.f.Seek(4, io.SeekStart); err != nil {
+	if _, err := state.f.Seek(binlog.FileHeaderLen, io.SeekStart); err != nil {
 		return errors.Errorf("seek to 4, error %v", err)
 	}
 
