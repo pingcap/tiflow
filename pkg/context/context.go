@@ -35,12 +35,12 @@ import (
 // the lifecycle of vars in the GlobalVars should be aligned with the ticdc server process.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
-	PDClient     pd.Client
-	KVStorage    tidbkv.Storage
-	CaptureInfo  *model.CaptureInfo
-	EtcdClient   *etcd.CDCEtcdClient
-	GrpcPool     kv.GrpcPool
-	TimeAcquirer pdtime.TimeAcquirer
+	PDClient         pd.Client
+	KVStorage        tidbkv.Storage
+	CaptureInfo      *model.CaptureInfo
+	EtcdClient       *etcd.CDCEtcdClient
+	GrpcPool         kv.GrpcPool
+	TimeAcquirer     pdtime.TimeAcquirer
 	TableActorSystem *system.System
 }
 

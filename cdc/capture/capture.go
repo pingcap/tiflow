@@ -172,12 +172,12 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		PDClient:     c.pdClient,
-		KVStorage:    c.kvStorage,
-		CaptureInfo:  c.info,
-		EtcdClient:   c.etcdClient,
-		GrpcPool:     c.grpcPool,
-		TimeAcquirer: c.TimeAcquirer,
+		PDClient:         c.pdClient,
+		KVStorage:        c.kvStorage,
+		CaptureInfo:      c.info,
+		EtcdClient:       c.etcdClient,
+		GrpcPool:         c.grpcPool,
+		TimeAcquirer:     c.TimeAcquirer,
 		TableActorSystem: c.tableActorSystem,
 	})
 	err := c.register(ctx)
