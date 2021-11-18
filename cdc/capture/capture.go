@@ -32,6 +32,7 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
 	pd "github.com/tikv/pd/client"
@@ -54,10 +55,18 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
+<<<<<<< HEAD
 	pdClient   pd.Client
 	kvStorage  tidbkv.Storage
 	etcdClient *kv.CDCEtcdClient
 	grpcPool   kv.GrpcPool
+=======
+	pdClient     pd.Client
+	kvStorage    tidbkv.Storage
+	etcdClient   *etcd.CDCEtcdClient
+	grpcPool     kv.GrpcPool
+	TimeAcquirer pdtime.TimeAcquirer
+>>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013))
 
 	cancel context.CancelFunc
 
@@ -97,7 +106,17 @@ func (c *Capture) reset(ctx context.Context) error {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
 	c.session = sess
+<<<<<<< HEAD
 	c.election = concurrency.NewElection(sess, kv.CaptureOwnerKey)
+=======
+	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
+
+	if c.TimeAcquirer != nil {
+		c.TimeAcquirer.Stop()
+	}
+	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
+
+>>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013))
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
 	}
@@ -146,11 +165,21 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
+<<<<<<< HEAD
 		PDClient:    c.pdClient,
 		KVStorage:   c.kvStorage,
 		CaptureInfo: c.info,
 		EtcdClient:  c.etcdClient,
 		GrpcPool:    c.grpcPool,
+=======
+		PDClient:         c.pdClient,
+		KVStorage:        c.kvStorage,
+		CaptureInfo:      c.info,
+		EtcdClient:       c.etcdClient,
+		GrpcPool:         c.grpcPool,
+		TimeAcquirer:     c.TimeAcquirer,
+		TableActorSystem: c.tableActorSystem,
+>>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013))
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -164,7 +193,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		cancel()
 	}()
 	wg := new(sync.WaitGroup)
-	wg.Add(3)
+	wg.Add(4)
 	var ownerErr, processorErr error
 	go func() {
 		defer wg.Done()
@@ -185,6 +214,10 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// so we should also stop the owner and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
 		log.Info("the processor routine has exited", zap.Error(processorErr))
+	}()
+	go func() {
+		defer wg.Done()
+		c.TimeAcquirer.Run(ctx)
 	}()
 	go func() {
 		defer wg.Done()

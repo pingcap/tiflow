@@ -29,14 +29,20 @@ import (
 )
 
 const (
+<<<<<<< HEAD:cdc/owner/gc_manager.go
 	// cdcServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	cdcServiceSafePointID = "ticdc"
 	pdTimeUpdateInterval  = 10 * time.Minute
+=======
+	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
+	CDCServiceSafePointID = "ticdc"
+>>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013)):pkg/txnutil/gc/gc_manager.go
 )
 
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
 var gcSafepointUpdateInterval = 1 * time.Minute
 
+<<<<<<< HEAD:cdc/owner/gc_manager.go
 // GcManager is an interface for gc manager
 type GcManager interface {
 	updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error
@@ -46,22 +52,42 @@ type GcManager interface {
 
 type gcManager struct {
 	gcTTL int64
+=======
+// Manager is an interface for gc manager
+type Manager interface {
+	// TryUpdateGCSafePoint tries to update TiCDC service GC safepoint.
+	// Manager may skip update when it thinks it is too frequent.
+	// Set `forceUpdate` to force Manager update.
+	TryUpdateGCSafePoint(ctx context.Context, checkpointTs model.Ts, forceUpdate bool) error
+	CheckStaleCheckpointTs(ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts) error
+}
+
+type gcManager struct {
+	pdClient pd.Client
+	gcTTL    int64
+>>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013)):pkg/txnutil/gc/gc_manager.go
 
 	lastUpdatedTime   time.Time
 	lastSucceededTime time.Time
 	lastSafePointTs   uint64
 	isTiCDCBlockGC    bool
-
-	pdPhysicalTimeCache time.Time
-	lastUpdatedPdTime   time.Time
 }
 
+<<<<<<< HEAD:cdc/owner/gc_manager.go
 func newGCManager() *gcManager {
+=======
+// NewManager creates a new Manager.
+func NewManager(pdClient pd.Client) Manager {
+>>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013)):pkg/txnutil/gc/gc_manager.go
 	serverConfig := config.GetGlobalServerConfig()
 	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))
 	})
 	return &gcManager{
+<<<<<<< HEAD:cdc/owner/gc_manager.go
+=======
+		pdClient:          pdClient,
+>>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013)):pkg/txnutil/gc/gc_manager.go
 		lastSucceededTime: time.Now(),
 		gcTTL:             serverConfig.GcTTL,
 	}
@@ -115,6 +141,7 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 	return nil
 }
 
+<<<<<<< HEAD:cdc/owner/gc_manager.go
 func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error) {
 	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
 		return m.pdPhysicalTimeCache, nil
@@ -134,6 +161,19 @@ func (m *gcManager) checkStaleCheckpointTs(
 	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
 		pdTime, err := m.currentTimeFromPDCached(ctx)
+=======
+func (m *gcManager) CheckStaleCheckpointTs(
+	ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
+) error {
+	gcSafepointUpperBound := checkpointTs - 1
+	if m.isTiCDCBlockGC {
+		cctx, ok := ctx.(cdcContext.Context)
+		if !ok {
+			return cerror.ErrOwnerUnknown.GenWithStack("ctx not an cdcContext.Context, it should be")
+		}
+		pdTime, err := cctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		// TODO: should we return err here, or just log it?
+>>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013)):pkg/txnutil/gc/gc_manager.go
 		if err != nil {
 			return errors.Trace(err)
 		}
