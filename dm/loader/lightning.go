@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
@@ -221,6 +222,11 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			TLS:              cfg.TiDB.TLS,
 		}
 		cfg.Checkpoint.DSN = param.ToDSN()
+		if l.cfg.To.Security != nil {
+			if registerErr := cfg.Security.RegisterMySQL(); registerErr != nil {
+				terror.ErrConnRegistryTLSConfig.Delegate(registerErr)
+			}
+		}
 		cfg.TiDB.Vars = make(map[string]string)
 		if l.cfg.To.Session != nil {
 			for k, v := range l.cfg.To.Session {
@@ -229,9 +235,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		}
 
 		cfg.TiDB.StrSQLMode = l.cfg.LoaderConfig.SQLMode
-		cfg.TiDB.Vars = map[string]string{
-			"time_zone": l.timeZone,
-		}
+		cfg.TiDB.Vars = map[string]string{"time_zone": l.timeZone}
 		if err = cfg.Adjust(ctx); err != nil {
 			return err
 		}
