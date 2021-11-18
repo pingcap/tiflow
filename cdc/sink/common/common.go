@@ -66,7 +66,7 @@ func NewUnresolvedTxnCache() *UnresolvedTxnCache {
 }
 
 // Append adds unresolved rows to cache
-// the rows inputed into this function will go through the following handling logic
+// the rows inputted into this function will go through the following handling logic
 // 1. group by tableID from one input stream
 // 2. for each tableID stream, the callers of this function should **make sure** that the CommitTs of rows is **strictly increasing**
 // 3. group by CommitTs, according to CommitTs cut the rows into many group of rows in the same CommitTs
@@ -84,7 +84,15 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 		txnsGroup := c.unresolvedTxns[row.Table.TableID]
 		lastIndex := len(txnsGroup) - 1
 
-		// new txn with different commitTs are coming
+		if len(txnsGroup) != 0 && txnsGroup[lastIndex].commitTs > row.CommitTs {
+			log.Panic("the commitTs of the coming row is less than the received row",
+				zap.Stringer("table", row.Table),
+				zap.Uint64("coming row startTs", row.StartTs),
+				zap.Uint64("coming row commitTs", row.CommitTs),
+				zap.Uint64("last received row commitTs", txnsGroup[lastIndex].commitTs))
+		}
+
+		// new txn with different commitTs is coming
 		if len(txnsGroup) == 0 || txnsGroup[lastIndex].commitTs < row.CommitTs {
 			// group by CommitTs
 			txns := &txnsWithTheSameCommitTs{
@@ -96,12 +104,6 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 			c.unresolvedTxns[row.Table.TableID] = txnsGroup
 		} else if txnsGroup[lastIndex].commitTs == row.CommitTs {
 			txnsGroup[lastIndex].Append(row)
-		} else {
-			log.Panic("the commitTs of the emit row is less than the received row",
-				zap.Stringer("table", row.Table),
-				zap.Uint64("emit row startTs", row.StartTs),
-				zap.Uint64("emit row commitTs", row.CommitTs),
-				zap.Uint64("last received row commitTs", txnsGroup[lastIndex].commitTs))
 		}
 		appendRows++
 	}
@@ -109,7 +111,8 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 }
 
 // Resolved returns resolved txns according to resolvedTs
-// The returned map contains many txns grouped by tableID. for each table, the each commitTs of txn in txns slice is strictly increasing
+// The returned map contains many txns grouped by tableID.
+// for each table, the each commitTs of txn in txns slice is strictly increasing
 func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*model.SingleTableTxn {
 	if resolvedTs <= atomic.LoadUint64(&c.checkpointTs) {
 		return nil
