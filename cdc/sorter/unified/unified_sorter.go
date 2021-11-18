@@ -271,18 +271,6 @@ func (s *Sorter) Run(ctx context.Context) error {
 	return printError(errg.Wait())
 }
 
-// TryAddEntry implements the EventSorter interface
-func (s *Sorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) bool {
-	select {
-	case <-ctx.Done():
-	case <-s.closeCh:
-	case s.inputCh <- entry:
-		return true
-	default:
-	}
-	return false
-}
-
 // AddEntry implements the EventSorter interface
 func (s *Sorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 	select {
@@ -290,6 +278,24 @@ func (s *Sorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 		return
 	case <-s.closeCh:
 	case s.inputCh <- entry:
+	}
+}
+
+// TryAddEntry implements the EventSorter interface
+func (s *Sorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) (bool, error) {
+	// add two select to guarantee the done/close condition is checked first.
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case <-s.closeCh:
+		return false, cerror.ErrSorterClosed.GenWithStackByArgs()
+	default:
+	}
+	select {
+	case s.inputCh <- entry:
+		return true, nil
+	default:
+		return false, nil
 	}
 }
 

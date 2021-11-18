@@ -262,7 +262,7 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 			atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 		}
 		if n.isTableActorMode {
-			return n.sorter.TryAddEntry(ctx, msg.PolymorphicEvent), nil
+			return n.sorter.TryAddEntry(ctx, msg.PolymorphicEvent)
 		} else {
 			n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
 			return true, nil
