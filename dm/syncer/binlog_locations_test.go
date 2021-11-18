@@ -138,8 +138,8 @@ func (s *testSyncerSuite) generateExpectLocations(
 		// those not-update-position events only occur in first events in these tests
 		e := events[i-1]
 		if shouldUpdatePos(e) && e.Header.EventType != replication.ROTATE_EVENT {
-            expected[i].Position.Pos = e.Header.LogPos
-        }
+			expected[i].Position.Pos = e.Header.LogPos
+		}
 	}
 	return expected
 }

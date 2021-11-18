@@ -58,12 +58,14 @@ func (l *locationRecorder) reset(loc binlog.Location) {
 	l.txnEndLocation = loc
 }
 
+//nolint:unused
 func (l *locationRecorder) getCurEndLocation() binlog.Location {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.curEndLocation
 }
 
+//nolint:unused
 func (l *locationRecorder) setCurEndLocation(location binlog.Location) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -144,8 +146,8 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 			// But MariaDB will not write "BEGIN" query event, we simply hope user should not do that.
 			l.inDML = true
 		case "COMMIT":
-	        // for non-transactional engines like MyISAM, COMMIT is query event
-            l.inDML = false
+			// for non-transactional engines like MyISAM, COMMIT is query event
+			l.inDML = false
 		}
 
 		if l.inDML {
