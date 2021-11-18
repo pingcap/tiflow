@@ -109,18 +109,22 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	return p
 }
 
-// processorIgnoralbeError returns true if the error means the processor exits
+var processorIgnorableError = []*errors.Error{
+	cerror.ErrAdminStopProcessor,
+	cerror.ErrReactorFinished,
+	cerror.ErrRedoWriterStopped,
+}
+
+// isProcessorIgnorableError returns true if the error means the processor exits
 // normally, caused by changefeed pause, remove, etc.
-func processorIgnoralbeError(err error) bool {
-	ignoreableErrors := []*errors.Error{
-		cerror.ErrAdminStopProcessor,
-		cerror.ErrReactorFinished,
-		cerror.ErrRedoWriterStopped,
+func isProcessorIgnorableError(err error) bool {
+	if err == nil {
+		return true
 	}
 	if errors.Cause(err) == context.Canceled {
 		return true
 	}
-	for _, e := range ignoreableErrors {
+	for _, e := range processorIgnorableError {
 		if e.Equal(err) {
 			return true
 		}
@@ -142,7 +146,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err == nil {
 		return state, nil
 	}
-	if processorIgnoralbeError(err) {
+	if isProcessorIgnorableError(err) {
 		log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
@@ -328,7 +332,7 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 	default:
 		return nil
 	}
-	if err != nil && !processorIgnoralbeError(err) {
+	if !isProcessorIgnorableError(err) {
 		log.Error("error on running processor",
 			cdcContext.ZapFieldCapture(ctx),
 			cdcContext.ZapFieldChangefeed(ctx),
@@ -525,7 +529,7 @@ func (p *processor) sendError(err error) {
 	select {
 	case p.errCh <- err:
 	default:
-		if !processorIgnoralbeError(err) {
+		if !isProcessorIgnorableError(err) {
 			log.Error("processor receives redundant error", zap.Error(err))
 		}
 	}
