@@ -117,6 +117,7 @@ func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
 // flushSink will try to flush all rows commitTs before resolvedTs
 // if the action fails, it will return false.
 func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (ok bool, err error) {
+	ok = true
 	defer func() {
 		if err != nil {
 			n.status.Store(TableStatusStopped)
@@ -133,10 +134,10 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (ok 
 		resolvedTs = n.targetTs
 	}
 	if resolvedTs <= n.checkpointTs {
-		return true, nil
+		return ok, nil
 	}
 	if err := n.emitRow2Sink(ctx); err != nil {
-		return false, errors.Trace(err)
+		return !ok, errors.Trace(err)
 	}
 
 	ok, checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, resolvedTs)
