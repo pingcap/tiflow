@@ -58,30 +58,6 @@ func chkError(err error) {
     }
 }
 
-func JddmDDLClient_ByResolveTcp(host string,ddlInfos *vo.DDLInfos){
-
-
-	if tcpconn != nil {
-
-	}else{
-
-		//ResolveTCPAddr用于获取一个TCPAddr
-	    //net参数是"tcp4"、"tcp6"、"tcp"
-	    //addr表示域名或IP地址加端口号
-	    tcpaddr, err := net.ResolveTCPAddr("tcp", host);
-	    chkError(err);
-
-	    //DialTCP建立一个TCP连接
-	    //net参数是"tcp4"、"tcp6"、"tcp"
-	    //laddr表示本机地址，一般设为nil
-	    //raddr表示远程地址
-	    tempTcp, err2 := net.DialTCP("tcp", nil, tcpaddr)
-		tcpconn = tempTcp
-	    chkError(err2)
-	}
-
-}
-
 func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 
 
@@ -98,32 +74,6 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 		}
 	}
 
-	//serviceNumArr := publicUtils.IntTo2Bytes(serviceNum)
-	//tradCodeArr := publicUtils.IntTo2Bytes(113)
-	// 4-8bytes服务号和主次命令
-	//verifyArr := make([]byte,4)
-	/*verifyArr := make([]byte,4)
-	//serviceNumArr := make([]byte,4)
-
-	verifyArr[0] = 0x06
-	verifyArr[1] = 0xce
-	verifyArr[2] = 0x01
-	verifyArr[3] = 0x13
-
-	//serviceNumArr = intTo4Bytes(serviceNum)
-	//fmt.Printf(" %s \n",publicUtils.BytestoHex(verifyArr))
-
-    //defer conn.Close()
-    sendMsg :=" Connect Server Test  !";
-	clientSendArr := make([]byte,8+len(sendMsg))
-	lengthArr := publicUtils.IntegerToBytes(len(sendMsg));
-	//fmt.Printf(" %s \n",publicUtils.BytestoHex(lengthArr))
-	publicUtils.BlockByteArrCopy([]byte(lengthArr),0,clientSendArr,0,len(lengthArr))
-	publicUtils.BlockByteArrCopy([]byte(verifyArr),0,clientSendArr,4,len(verifyArr))
-	publicUtils.BlockByteArrCopy([]byte(sendMsg),0,clientSendArr,8,len(sendMsg))*/
-	//fmt.Printf(" SendByte[]Arr %s \n",publicUtils.BytestoHex(clientSendArr))
-
-	//_, err := conn.Write(createBytes_FromDdlInfoVo(ddlInfos))
 	_, err := ConnMap [host].Write(createBytes_FromDdlInfoVo(ddlInfos))
     if err != nil {
 		fmt.Println("Error dialing", err.Error())
@@ -135,9 +85,6 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 
 
 func JddmClient(host string, rowInfos []*vo.RowInfos){
-
-	/*fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
-	serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)*/
 
 	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",conn)
 
@@ -153,8 +100,6 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 			return
 		}
 	}
-
-
 
 	fmt.Println("rowInfos：：：：：：：：：：：：：：：：：：：：：：：：",rowInfos)
 
@@ -215,10 +160,6 @@ func createBytesFromRowInfo(rowInfos []*vo.RowInfos) []byte{
 		buffer.Write(tableNameArr)
 
 		for _,col2 := range rowInfo.ColumnList{
-			//fmt.Println("value:"+col2.ColumnValue+"::name::"+col2.ColumnName)
-			//fmt.Println（"%s",col.ColumnValue)
-			//allColumnArrByRow = append(allColumnArrByRow,columnInfoVoToByte(col2))
-			//colsArr = append(colsArr)
 			buffer.Write(columnInfoVoToByte(col2))
 		}
 
@@ -247,7 +188,6 @@ func createBytes_FromDdlInfoVo(ddlInfos *vo.DDLInfos) []byte{
 
 	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
 	sendBatchDDLArr :=new(bytes.Buffer)
-	//当前时间戳
 	t1 := time.Now().Unix()  //1564552562
 	fmt.Println(t1)
 	fmt.Println(ddlInfos.TableName+"::::"+ddlInfos.SchemaName)
@@ -256,7 +196,6 @@ func createBytes_FromDdlInfoVo(ddlInfos *vo.DDLInfos) []byte{
 	buffer.Write(publicUtils.LongToBytes(ddlInfos.ObjnNo))
 
 	//operTypeArr := make([]byte,4)
-	//operTypeArr[3]=byte(12)
 	buffer.Write(publicUtils.Int32ToBytes(ddlInfos.DDLType))
 	fmt.Printf(" ddl Type:%s\n",buffer.Bytes())
 	schemaNameArr := make([]byte,1+len(ddlInfos.SchemaName))
@@ -277,8 +216,6 @@ func createBytes_FromDdlInfoVo(ddlInfos *vo.DDLInfos) []byte{
 			buffer.Write(ddlColumnInfoVoToByte(preColInfo))
 		}
 	}else{
-		//preTableZeroArr := make([]byte,4)
-		//preTableZeroArr[3]=0x00
 		buffer.Write(make([]byte,4))
 	}
 
@@ -329,15 +266,12 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 	fmt.Printf(columnInfo.ColumnName," ColumnValue length %s \n",len(columnInfo.ColumnValue))
     columnInfoArr := make([]byte,thisColLen)
 
-
     //lengthArr := publicUtils.IntegerToBytes(thisColLen);
     columnNameArr := make([]byte,1+len(columnInfo.ColumnName))
     publicUtils.BlockByteArrCopy([]byte(columnInfo.ColumnName),0,columnNameArr,0,len(columnInfo.ColumnName))
 
     columnValueArr := columnInfo.ColumnValue
 
-    //Create byte[] Array
-    //publicUtils.BlockByteArrCopy([]byte(lengthArr),0,columnInfoArr,colPos,len(lengthArr))
     //colPos = colPos+len(lengthArr);
     if(columnInfo.IsPkFlag){
     	columnInfoArr[colPos]=0x31
@@ -367,16 +301,8 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 	//fmt.Printf(" columnInfoArr[]Arr %s \n",publicUtils.BytestoHex(columnInfoArr))
 
 	colPos = colPos+len(columnNameArr)
-
 	publicUtils.BlockByteArrCopy(publicUtils.Int32ToBytes(columnInfo.ColumnLen),0,columnInfoArr,colPos,4)
 	colPos = colPos+4
-
-	//fmt.Printf("column info:::::",columnInfo.ColumnName," length:",columnInfo.ColumnLen," value:",columnInfo.ColumnValue," isBinary",columnInfo.IsBinary)
-	//publicUtils.BlockByteArrCopy(publicUtils.Int32ToBytes(columnInfo.ColumnLen),0,columnInfoArr,colPos, int(columnInfo.ColumnLen))
-	//fmt.Printf(string(columnInfo.ColumnLen)," columnValueArr[] %s \n",publicUtils.Int32ToBytes(columnInfo.ColumnLen))
-
-	//colPos = colPos+4
-	//fmt.Printf(" columnValueArr[] %s \n",publicUtils.BytestoHex(columnValueArr))
 
 	publicUtils.BlockByteArrCopy(columnValueArr,0,columnInfoArr,colPos,len(columnValueArr))
     //fmt.Printf(" pos : %d  namArrLen : %s -> %d \n", colPos,columnInfo.ColumnValue,len(ColumnValueArr))
@@ -429,7 +355,6 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 	}
 
 	//defer conn.Close()
-	//=============================================
 	if ConnMap [host]!=nil {
 		ConnMap [host].SetWriteDeadline(time.Now().Add(timeout))
 		_, err := ConnMap [host].Write(createBytesFromResolvedTs(resolvedTs))
@@ -454,10 +379,9 @@ func JddmClientByCheckPoint(host string,resolvedTs uint64) (uint64, error){
 		fmt.Println("服务器read err=", err) //出错退出
 		return 0, nil
 	}
+	/**
 	_ = buf[:re]
-	//fmt.Print("\nread:::::::::::::::",tt)
-	//fmt.Print("\n")
-	_ = buf[:4]
+	_ = buf[:4] */
 	//fmt.Print("\n",publicUtils.BytestoHex(tt1))
 	result := buf[4:re]
 	commitTs := publicUtils.BytesToLong(result)
@@ -523,8 +447,6 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
 func createFlushBytesFromResolvedTs(resolvedTs uint64)  []byte{
 
-
-
 	verifyArr := []byte{0x06,0xce,0x01,0x15}
 
 	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
@@ -543,7 +465,6 @@ func createFlushBytesFromResolvedTs(resolvedTs uint64)  []byte{
 
 func createBytesFromResolvedTs(resolvedTs uint64)  []byte{
 
-
 	verifyArr := []byte{0x06,0xce,0x01,0x23}
 
 	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
@@ -551,7 +472,6 @@ func createBytesFromResolvedTs(resolvedTs uint64)  []byte{
 
 	//	buffer.Write(publicUtils.LongToBytes(rowInfo.StartTimer))
 	buffer.Write(publicUtils.LongToBytes(int64(resolvedTs)))
-
 
 	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()));
 	sendBatchRowsArr.Write(lengthArr)
