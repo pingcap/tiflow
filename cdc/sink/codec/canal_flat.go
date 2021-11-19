@@ -16,7 +16,9 @@ package codec
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -24,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
+	"github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
 )
 
@@ -73,6 +76,11 @@ type canalFlatMessageInterface interface {
 	getTikvTs() uint64
 	getSchema() *string
 	getTable() *string
+	getCommitTs() uint64
+	getQuery() string
+	getOld() map[string]interface{}
+	getData() map[string]interface{}
+	getMySQLType() map[string]string
 }
 
 // adapted from https://github.com/alibaba/canal/blob/master/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java
@@ -113,6 +121,27 @@ func (c *canalFlatMessage) getTable() *string {
 	return &c.Table
 }
 
+// for canalFlatMessage, we lost the commit-ts
+func (c *canalFlatMessage) getCommitTs() uint64 {
+	return 0
+}
+
+func (c *canalFlatMessage) getQuery() string {
+	return c.Query
+}
+
+func (c *canalFlatMessage) getOld() map[string]interface{} {
+	return c.Old[0]
+}
+
+func (c *canalFlatMessage) getData() map[string]interface{} {
+	return c.Data[0]
+}
+
+func (c *canalFlatMessage) getMySQLType() map[string]string {
+	return c.MySQLType
+}
+
 type tidbExtension struct {
 	CommitTs    uint64 `json:"commit-ts"`
 	WatermarkTs uint64 `json:"watermark-ts"`
@@ -137,6 +166,26 @@ func (c *canalFlatMessageWithTiDBExtension) getSchema() *string {
 
 func (c *canalFlatMessageWithTiDBExtension) getTable() *string {
 	return &c.Table
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getCommitTs() uint64 {
+	return c.Extensions.CommitTs
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getQuery() string {
+	return c.Query
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getOld() map[string]interface{} {
+	return c.Old[0]
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getData() map[string]interface{} {
+	return c.Data[0]
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getMySQLType() map[string]string {
+	return c.MySQLType
 }
 
 func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEvent) (canalFlatMessageInterface, error) {
@@ -361,4 +410,153 @@ func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 		c.enableTiDBExtension = a
 	}
 	return nil
+}
+
+// CanalFlatEventBatchDecoder decodes the byte into the original message.
+type CanalFlatEventBatchDecoder struct {
+	data                []byte
+	msg                 *MQMessage
+	enableTiDBExtension bool
+}
+
+func NewCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
+	return &CanalFlatEventBatchDecoder{
+		data:                data,
+		msg:                 nil,
+		enableTiDBExtension: enableTiDBExtension,
+	}
+}
+
+// HasNext implements the EventBatchDecoder interface
+func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
+	if len(b.data) == 0 {
+		return model.MqMessageTypeUnknown, false, nil
+	}
+	msg := &MQMessage{}
+	if err := json.Unmarshal(b.data, msg); err != nil {
+		return model.MqMessageTypeUnknown, false, err
+	}
+	b.msg = msg
+	b.data = nil
+	if b.msg.Type == model.MqMessageTypeUnknown {
+		return model.MqMessageTypeUnknown, false, nil
+	}
+	return b.msg.Type, true, nil
+}
+
+// NextRowChangedEvent implements the EventBatchDecoder interface
+// `HasNext` should be called before this.
+func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+	if b.msg == nil || b.msg.Type != model.MqMessageTypeRow {
+		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found row changed event message")
+	}
+
+	var data canalFlatMessageInterface = &canalFlatMessage{}
+	if b.enableTiDBExtension {
+		data = &canalFlatMessageWithTiDBExtension{canalFlatMessage: &canalFlatMessage{}, Extensions: &tidbExtension{}}
+	}
+
+	if err := json.Unmarshal(b.msg.Value, data); err != nil {
+		return nil, errors.Trace(err)
+	}
+	b.msg = nil
+	return canalFlatMessage2RowChangedEvent(data)
+}
+
+// NextDDLEvent implements the EventBatchDecoder interface
+// `HasNext` should be called before this.
+func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+	if b.msg == nil || b.msg.Type != model.MqMessageTypeDDL {
+		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found ddl event message")
+	}
+
+	var data canalFlatMessageInterface = &canalFlatMessage{}
+	if b.enableTiDBExtension {
+		data = &canalFlatMessageWithTiDBExtension{canalFlatMessage: &canalFlatMessage{}, Extensions: &tidbExtension{}}
+	}
+
+	if err := json.Unmarshal(b.msg.Value, data); err != nil {
+		return nil, errors.Trace(err)
+	}
+	b.msg = nil
+	return canalFlatMessage2DDLEvent(data), nil
+}
+
+// NextResolvedEvent implements the EventBatchDecoder interface
+// `HasNext` should be called before this.
+func (b *CanalFlatEventBatchDecoder) NextResolvedEvent() (uint64, error) {
+	if b.msg == nil || b.msg.Type != model.MqMessageTypeResolved {
+		return 0, cerrors.ErrCanalDecodeFailed.GenWithStack("not found resolved event message")
+	}
+
+	message := &canalFlatMessageWithTiDBExtension{
+		canalFlatMessage: &canalFlatMessage{},
+	}
+	if err := json.Unmarshal(b.msg.Value, message); err != nil {
+		return 0, errors.Trace(err)
+	}
+	b.msg = nil
+	return message.Extensions.WatermarkTs, nil
+}
+
+func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*model.RowChangedEvent, error) {
+	result := new(model.RowChangedEvent)
+	result.CommitTs = flatMessage.getCommitTs()
+	result.Table = &model.TableName{
+		Schema: *flatMessage.getSchema(),
+		Table:  *flatMessage.getTable(),
+	}
+
+	var err error
+	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(), flatMessage.getMySQLType())
+	if err != nil {
+		return nil, err
+	}
+	result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(), flatMessage.getMySQLType())
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType map[string]string) ([]*model.Column, error) {
+	result := make([]*model.Column, 0, len(cols))
+	for name, value := range cols {
+		typeStr, ok := mysqlType[name]
+		if !ok {
+			// this should not happen, else we have to check encoding for mysqlType.
+			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
+				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
+		}
+		tp := types.StrToType(typeStr)
+		if !ok {
+			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
+				"mysql type does not found, column: %+v, type: %+v", name, tp)
+		}
+		col := NewColumn(value, tp).ToSinkColumn(name)
+		result = append(result, col)
+	}
+	if len(result) == 0 {
+		return nil, nil
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return strings.Compare(result[i].Name, result[j].Name) > 0
+	})
+	return result, nil
+}
+
+func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEvent {
+	result := new(model.DDLEvent)
+	// we lost the startTs from kafka message
+	result.CommitTs = flatDDL.getCommitTs()
+
+	result.TableInfo = new(model.SimpleTableInfo)
+	result.TableInfo.Schema = *flatDDL.getSchema()
+	result.TableInfo.Table = *flatDDL.getTable()
+
+	// we lost DDL type from canal flat json format, only got the DDL SQL.
+	result.Query = flatDDL.getQuery()
+
+	return result
 }
