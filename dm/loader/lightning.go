@@ -80,8 +80,8 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 		cli:             cli,
 		core:            core,
 		lightningConfig: lightningCfg,
-		logger:          log.With(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
 		workerName:      workerName,
+		logger:          log.With(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
 	}
 	return loader
 }
@@ -173,7 +173,6 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 			}
 		}
 	})
-	l.logger.Info("end runLightning")
 	return err
 }
 
@@ -222,11 +221,6 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			TLS:              cfg.TiDB.TLS,
 		}
 		cfg.Checkpoint.DSN = param.ToDSN()
-		if l.cfg.To.Security != nil {
-			if registerErr := cfg.Security.RegisterMySQL(); registerErr != nil {
-				return terror.ErrConnRegistryTLSConfig.Delegate(registerErr)
-			}
-		}
 		cfg.TiDB.Vars = make(map[string]string)
 		if l.cfg.To.Session != nil {
 			for k, v := range l.cfg.To.Session {
@@ -241,6 +235,12 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		}
 		err = l.runLightning(ctx, cfg)
 		if err == nil {
+			// lightning will auto deregister tls when task done, so we need to register it again for removing checkpoint
+			if l.cfg.To.Security != nil {
+				if registerErr := l.lightningConfig.Security.RegisterMySQL(); registerErr != nil {
+					return terror.ErrConnRegistryTLSConfig.Delegate(registerErr)
+				}
+			}
 			err = lightning.CheckpointRemove(ctx, cfg, "all")
 		}
 		if err == nil {
@@ -303,11 +303,8 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		isCanceled = true
 	default:
 	}
+	pr <- pb.ProcessResult{IsCanceled: isCanceled, Errors: errs}
 	l.logger.Info("lightning load end", zap.Bool("IsCanceled", isCanceled))
-	pr <- pb.ProcessResult{
-		IsCanceled: isCanceled,
-		Errors:     errs,
-	}
 }
 
 func (l *LightningLoader) isClosed() bool {
@@ -349,7 +346,9 @@ func (l *LightningLoader) Resume(ctx context.Context, pr chan pb.ProcessResult) 
 		l.logger.Warn("try to resume, but already closed")
 		return
 	}
+	l.Lock()
 	l.core = lightning.New(l.lightningConfig)
+	l.Unlock()
 	// continue the processing
 	l.Process(ctx, pr)
 }
@@ -359,7 +358,8 @@ func (l *LightningLoader) Resume(ctx context.Context, pr chan pb.ProcessResult) 
 // now no config diff implemented, so simply re-init use new config
 // no binlog filter for loader need to update.
 func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
-	// update l.cfg
+	l.Lock()
+	defer l.Unlock()
 	l.cfg.BAList = cfg.BAList
 	l.cfg.RouteRules = cfg.RouteRules
 	l.cfg.ColumnMappingRules = cfg.ColumnMappingRules
