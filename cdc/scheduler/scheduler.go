@@ -545,7 +545,7 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 
 	for _, tableID := range adding {
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
-			s.logger.Panic("duplicate table tasks",
+			logger.Panic("duplicate table tasks",
 				zap.Int64("table-id", tableID),
 				zap.String("actual-capture-id", record.CaptureID))
 		}
@@ -553,7 +553,7 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 	}
 	for _, tableID := range running {
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
-			s.logger.Panic("duplicate table tasks",
+			logger.Panic("duplicate table tasks",
 				zap.Int64("table-id", tableID),
 				zap.String("actual-capture-id", record.CaptureID))
 		}
@@ -561,7 +561,7 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 	}
 	for _, tableID := range removing {
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
-			s.logger.Panic("duplicate table tasks",
+			logger.Panic("duplicate table tasks",
 				zap.Int64("table-id", tableID),
 				zap.String("actual-capture-id", record.CaptureID))
 		}
@@ -576,14 +576,13 @@ func (s *BaseScheduleDispatcher) OnAgentCheckpoint(captureID model.CaptureID, ch
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	zapInfo := func() zap.Option {
-		return zap.Fields(zap.String("capture-id", captureID),
-			zap.Uint64("checkpoint-ts", checkpointTs),
-			zap.Uint64("resolved-ts", resolvedTs))
-	}
+	logger := s.logger.With(zap.String("capture-id", captureID),
+		zap.Uint64("checkpoint-ts", checkpointTs),
+		zap.Uint64("resolved-ts", resolvedTs))
+
 	status, ok := s.captureStatus[captureID]
 	if !ok || status.SyncStatus != captureSyncFinished  {
-		s.logger.WithOptions(zapInfo()).Warn("received checkpoint from a capture not synced, ignore")
+		logger.Warn("received checkpoint from a capture not synced, ignore")
 		return
 	}
 
