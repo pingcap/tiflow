@@ -1,0 +1,25 @@
+---
+
+- name: create dm-master deploy directories
+  file:
+    path: '{{ item }}'
+    state: directory
+    mode: 0755
+    owner: '{{ deploy_user }}'
+    group: '{{ deploy_user }}'
+  become: true
+  with_items:
+    - "{{ dm_master_log_dir }}"
+    - "{{ dm_master_data_dir }}"
+
+- name: deploy dm-master binary
+  copy: src="{{ resources_dir }}/bin/dm-master" dest="{{ deploy_dir }}/bin/" mode=0755
+
+- name: create dm-master run script
+  template:
+    src: "run_{{ role_name }}.sh.j2"
+    dest: "{{ deploy_dir }}/scripts/run_{{ role_name }}.sh"
+    mode: "0755"
+    backup: yes
+
+- include_tasks: "systemd_deployment.yml"

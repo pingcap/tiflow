@@ -19,15 +19,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/backup"
+	backup "github.com/pingcap/kvproto/pkg/brpb"
 	"github.com/pingcap/log"
-	parsemodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/quotes"
+	"github.com/pingcap/tidb/br/pkg/storage"
+	parsemodel "github.com/pingcap/tidb/parser/model"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )

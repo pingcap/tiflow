@@ -6,6 +6,21 @@ error = '''
 invalid api parameter
 '''
 
+["CDC:ErrActorDuplicate"]
+error = '''
+duplicated actor, already in use
+'''
+
+["CDC:ErrActorNotFound"]
+error = '''
+actor not found
+'''
+
+["CDC:ErrActorStopped"]
+error = '''
+actor stopped
+'''
+
 ["CDC:ErrAdminStopProcessor"]
 error = '''
 stop processor by admin command
@@ -54,6 +69,11 @@ to envelope failed
 ["CDC:ErrAvroUnknownType"]
 error = '''
 unknown type for Avro: %v
+'''
+
+["CDC:ErrBufferLogTimeout"]
+error = '''
+send row changed events to log buffer timeout
 '''
 
 ["CDC:ErrBufferReachLimit"]
@@ -146,9 +166,24 @@ error = '''
 check dir writable failed
 '''
 
+["CDC:ErrClusterIDMismatch"]
+error = '''
+cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
+'''
+
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
+'''
+
+["CDC:ErrConsistentLevel"]
+error = '''
+consistent level (%s) not support
+'''
+
+["CDC:ErrConsistentStorage"]
+error = '''
+consistent storage (%s) not support
 '''
 
 ["CDC:ErrCraftCodecInvalidData"]
@@ -206,6 +241,11 @@ error = '''
 the etcd txn should be aborted and retried immediately
 '''
 
+["CDC:ErrEtcdTxnSizeExceed"]
+error = '''
+patch size of a single changefeed exceed etcd txn max size
+'''
+
 ["CDC:ErrEventFeedAborted"]
 error = '''
 single event feed aborted
@@ -239,6 +279,11 @@ file sink file operation
 ["CDC:ErrFileSinkMetaAlreadyExists"]
 error = '''
 file sink meta file already exists
+'''
+
+["CDC:ErrFileSizeExceed"]
+error = '''
+rawData size %d exceeds maximum file size %d
 '''
 
 ["CDC:ErrFilterRuleInvalid"]
@@ -291,9 +336,9 @@ error = '''
 get tikv grpc context failed
 '''
 
-["CDC:ErrIllegalUnifiedSorterParameter"]
+["CDC:ErrIllegalSorterParameter"]
 error = '''
-illegal parameter for unified sorter: %s
+illegal parameter for sorter: %s
 '''
 
 ["CDC:ErrIndexKeyTableNotFound"]
@@ -331,6 +376,11 @@ error = '''
 invalid record key - %q
 '''
 
+["CDC:ErrInvalidS3URI"]
+error = '''
+invalid s3 uri: %s
+'''
+
 ["CDC:ErrInvalidServerOption"]
 error = '''
 invalid server option
@@ -344,6 +394,11 @@ invalid task key: %s
 ["CDC:ErrJSONCodecInvalidData"]
 error = '''
 json codec invalid data
+'''
+
+["CDC:ErrJSONCodecRowTooLarge"]
+error = '''
+json codec single row too large
 '''
 
 ["CDC:ErrKVStorageBackoffFailed"]
@@ -416,6 +471,11 @@ error = '''
 owner lease timeout
 '''
 
+["CDC:ErrLevelDBSorterError"]
+error = '''
+leveldb error: %s
+'''
+
 ["CDC:ErrLoadTimezone"]
 error = '''
 load timezone
@@ -424,6 +484,11 @@ load timezone
 ["CDC:ErrLocateRegion"]
 error = '''
 locate region by id
+'''
+
+["CDC:ErrMailboxFull"]
+error = '''
+mailbox is full, please try again. Internal use only, report a bug if seen externally
 '''
 
 ["CDC:ErrMarshalFailed"]
@@ -463,7 +528,7 @@ MySQL connection error
 
 ["CDC:ErrMySQLInvalidConfig"]
 error = '''
-MySQL config invaldi
+MySQL config invalid
 '''
 
 ["CDC:ErrMySQLQueryError"]
@@ -571,6 +636,11 @@ error = '''
 etcd api call error
 '''
 
+["CDC:ErrPeerMessageIllegalMeta"]
+error = '''
+peer-to-peer message server received an RPC call with illegal metadata
+'''
+
 ["CDC:ErrPendingRegionCancel"]
 error = '''
 pending region cancelled due to stream disconnecting
@@ -588,7 +658,12 @@ prepare avro failed
 
 ["CDC:ErrPrewriteNotMatch"]
 error = '''
-prewrite not match, key: %b, start-ts: %d
+prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s
+'''
+
+["CDC:ErrProcessorDuplicateOperations"]
+error = '''
+table processor duplicate operation, table-id: %d
 '''
 
 ["CDC:ErrProcessorEtcdWatch"]
@@ -631,6 +706,36 @@ error = '''
 the reactor has done its job and should no longer be executed
 '''
 
+["CDC:ErrRedoConfigInvalid"]
+error = '''
+redo log config invalid
+'''
+
+["CDC:ErrRedoDownloadFailed"]
+error = '''
+redo log down load to local failed
+'''
+
+["CDC:ErrRedoFileOp"]
+error = '''
+redo file operation
+'''
+
+["CDC:ErrRedoMetaFileNotFound"]
+error = '''
+no redo meta file found in dir: %s
+'''
+
+["CDC:ErrRedoMetaInitialize"]
+error = '''
+initialize meta for redo log
+'''
+
+["CDC:ErrRedoWriterStopped"]
+error = '''
+redo log writer stopped
+'''
+
 ["CDC:ErrRegionWorkerExit"]
 error = '''
 region worker exited
@@ -659,6 +764,16 @@ s3 sink storage api
 ["CDC:ErrS3SinkWriteStorage"]
 error = '''
 write to storage
+'''
+
+["CDC:ErrS3StorageAPI"]
+error = '''
+s3 storage api
+'''
+
+["CDC:ErrS3StorageInitialize"]
+error = '''
+new s3 storage for redo log
 '''
 
 ["CDC:ErrScanLockFailed"]
@@ -718,7 +833,7 @@ sink uri invalid
 
 ["CDC:ErrSnapshotLostByGC"]
 error = '''
-fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than GC safepoint at %d
+fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
 ["CDC:ErrSnapshotSchemaExists"]
@@ -741,6 +856,16 @@ error = '''
 table %d not found in schema snapshot
 '''
 
+["CDC:ErrSorterClosed"]
+error = '''
+sorter is closed
+'''
+
+["CDC:ErrStartAStoppedLevelDBSystem"]
+error = '''
+start a stopped leveldb system
+'''
+
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
 fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
@@ -754,6 +879,11 @@ this api supports GET method only
 ["CDC:ErrSupportPostOnly"]
 error = '''
 this api supports POST method only
+'''
+
+["CDC:ErrTCPServerClosed"]
+error = '''
+The TCP server has been closed
 '''
 
 ["CDC:ErrTableIneligible"]
@@ -813,7 +943,7 @@ unified sorter IO error. Make sure your sort-dir is configured correctly by pass
 
 ["CDC:ErrUnknownKVEventType"]
 error = '''
-unknown kv event type: %v, entry: %v
+unknown kv optype: %s, entry: %v
 '''
 
 ["CDC:ErrUnknownMetaType"]
@@ -844,6 +974,11 @@ version is incompatible: %s
 ["CDC:ErrWaitHandleOperationTimeout"]
 error = '''
 waiting processor to handle the operation finished timeout
+'''
+
+["CDC:ErrWorkerPoolGracefulUnregisterTimedOut"]
+error = '''
+workerpool handle graceful unregister timed out
 '''
 
 ["CDC:ErrWorkerPoolHandleCancelled"]

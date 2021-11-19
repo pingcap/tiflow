@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	serverConfig "github.com/pingcap/ticdc/pkg/config"
@@ -66,8 +67,11 @@ type tablePipelineImpl struct {
 	markTableID int64
 	tableName   string // quoted schema and table, used in metircs only
 
-	sinkNode *sinkNode
-	cancel   context.CancelFunc
+	sorterNode *sorterNode
+	sinkNode   *sinkNode
+	cancel     context.CancelFunc
+
+	replConfig *serverConfig.ReplicaConfig
 }
 
 // TODO find a better name or avoid using an interface
@@ -81,7 +85,14 @@ type tableFlowController interface {
 
 // ResolvedTs returns the resolved ts in this table pipeline
 func (t *tablePipelineImpl) ResolvedTs() model.Ts {
-	return t.sinkNode.ResolvedTs()
+	// TODO: after TiCDC introduces p2p based resolved ts mechanism, TiCDC nodes
+	// will be able to cooperate replication status directly. Then we will add
+	// another replication barrier for consistent replication instead of reusing
+	// the global resolved-ts.
+	if redo.IsConsistentEnabled(t.replConfig.Consistent.Level) {
+		return t.sinkNode.ResolvedTs()
+	}
+	return t.sorterNode.ResolvedTs()
 }
 
 // CheckpointTs returns the checkpoint ts in this table pipeline
@@ -172,6 +183,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 		markTableID: replicaInfo.MarkTableID,
 		tableName:   tableName,
 		cancel:      cancel,
+		replConfig:  ctx.ChangefeedVars().Info.Config,
 	}
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
@@ -187,15 +199,21 @@ func NewTablePipeline(ctx cdcContext.Context,
 	if cyclicEnabled {
 		runnerSize++
 	}
+
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
+	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs, flowController, mounter)
+	sinkNode := newSinkNode(sink, replicaInfo.StartTs, targetTs, flowController)
+
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName))
-	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
+	p.AppendNode(ctx, "sorter", sorterNode)
 	p.AppendNode(ctx, "mounter", newMounterNode())
 	if cyclicEnabled {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
 	}
-	tablePipeline.sinkNode = newSinkNode(sink, replicaInfo.StartTs, targetTs, flowController)
-	p.AppendNode(ctx, "sink", tablePipeline.sinkNode)
+	p.AppendNode(ctx, "sink", sinkNode)
+
 	tablePipeline.p = p
+	tablePipeline.sorterNode = sorterNode
+	tablePipeline.sinkNode = sinkNode
 	return tablePipeline
 }

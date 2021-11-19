@@ -17,21 +17,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-func TestSuite(t *testing.T) {
-	check.TestingT(t)
-}
-
-type helperSuite struct{}
-
-var _ = check.Suite(&helperSuite{})
-
-func (s *helperSuite) TestWrapError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestWrapError(t *testing.T) {
+	t.Parallel()
 	var (
 		rfcError  = ErrDecodeFailed
 		err       = errors.New("test")
@@ -41,23 +32,22 @@ func (s *helperSuite) TestWrapError(c *check.C) {
 			expected string
 		}{
 			{nil, true, ""},
-			{err, false, "[CDC:ErrDecodeFailed]test"},
+			{err, false, "[CDC:ErrDecodeFailed]test: test"},
 		}
 	)
 	for _, tc := range testCases {
 		we := WrapError(rfcError, tc.err)
 		if tc.isNil {
-			c.Assert(we, check.IsNil)
+			require.Nil(t, we)
 		} else {
-			c.Assert(we, check.NotNil)
-			c.Assert(we.Error(), check.Equals, tc.expected)
+			require.NotNil(t, we)
+			require.Equal(t, we.Error(), tc.expected)
 		}
 	}
 }
 
-func (s *helperSuite) TestIsRetryableError(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestIsRetryableError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		err  error
@@ -71,6 +61,39 @@ func (s *helperSuite) TestIsRetryableError(c *check.C) {
 	}
 	for _, tt := range tests {
 		ret := IsRetryableError(tt.err)
-		c.Assert(ret, check.Equals, tt.want, check.Commentf("case:%s", tt.name))
+		require.Equal(t, ret, tt.want, "case:%s", tt.name)
 	}
+}
+
+func TestChangefeedFastFailError(t *testing.T) {
+	t.Parallel()
+	err := ErrGCTTLExceeded.FastGenByArgs()
+	rfcCode, _ := RFCCode(err)
+	require.Equal(t, true, ChangefeedFastFailError(err))
+	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+
+	err = ErrGCTTLExceeded.GenWithStack("aa")
+	rfcCode, _ = RFCCode(err)
+	require.Equal(t, true, ChangefeedFastFailError(err))
+	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+
+	err = ErrGCTTLExceeded.Wrap(errors.New("aa"))
+	rfcCode, _ = RFCCode(err)
+	require.Equal(t, true, ChangefeedFastFailError(err))
+	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+
+	err = ErrSnapshotLostByGC.FastGenByArgs()
+	rfcCode, _ = RFCCode(err)
+	require.Equal(t, true, ChangefeedFastFailError(err))
+	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+
+	err = ErrStartTsBeforeGC.FastGenByArgs()
+	rfcCode, _ = RFCCode(err)
+	require.Equal(t, true, ChangefeedFastFailError(err))
+	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+
+	err = ErrToTLSConfigFailed.FastGenByArgs()
+	rfcCode, _ = RFCCode(err)
+	require.Equal(t, false, ChangefeedFastFailError(err))
+	require.Equal(t, false, ChangefeedFastFailErrorCode(rfcCode))
 }

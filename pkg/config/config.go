@@ -16,6 +16,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -32,6 +33,12 @@ import (
 const (
 	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
 	DefaultSortDir = "/tmp/sorter"
+
+	// DefaultRedoDir is the sub directory path of data-dir.
+	DefaultRedoDir = "/tmp/redo"
+
+	// DebugConfigurationItem is the name of debug configurations
+	DebugConfigurationItem = "debug"
 )
 
 func init() {
@@ -58,21 +65,28 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Tp:          "table-number",
 		PollingTime: -1,
 	},
+	Consistent: &ConsistentConfig{
+		Level:             "none",
+		MaxLogSize:        64,
+		FlushIntervalInMs: 1000,
+		Storage:           "",
+	},
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	CaseSensitive    bool             `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue   bool             `toml:"enable-old-value" json:"enable-old-value"`
-	ForceReplicate   bool             `toml:"force-replicate" json:"force-replicate"`
-	CheckGCSafePoint bool             `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
-	Filter           *FilterConfig    `toml:"filter" json:"filter"`
-	Mounter          *MounterConfig   `toml:"mounter" json:"mounter"`
-	Sink             *SinkConfig      `toml:"sink" json:"sink"`
-	Cyclic           *CyclicConfig    `toml:"cyclic-replication" json:"cyclic-replication"`
-	Scheduler        *SchedulerConfig `toml:"scheduler" json:"scheduler"`
+	CaseSensitive    bool              `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue   bool              `toml:"enable-old-value" json:"enable-old-value"`
+	ForceReplicate   bool              `toml:"force-replicate" json:"force-replicate"`
+	CheckGCSafePoint bool              `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+	Filter           *FilterConfig     `toml:"filter" json:"filter"`
+	Mounter          *MounterConfig    `toml:"mounter" json:"mounter"`
+	Sink             *SinkConfig       `toml:"sink" json:"sink"`
+	Cyclic           *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
+	Scheduler        *SchedulerConfig  `toml:"scheduler" json:"scheduler"`
+	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -184,13 +198,35 @@ var defaultServerConfig = &ServerConfig{
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
 		NumWorkerPoolGoroutine: 16,
 		SortDir:                DefaultSortDir,
+
+		// Default leveldb sorter config
+		EnableLevelDB: false,
+		LevelDB: LevelDBConfig{
+			Count: 16,
+			// Following configs are optimized for write throughput.
+			// Users should not change them.
+			Concurrency:            256,
+			MaxOpenFiles:           10000,
+			BlockSize:              65536,
+			BlockCacheSize:         4294967296,
+			WriterBufferSize:       8388608,
+			Compression:            "snappy",
+			TargetFileSizeBase:     8388608,
+			CompactionL0Trigger:    160,
+			WriteL0SlowdownTrigger: math.MaxInt32,
+			WriteL0PauseTrigger:    math.MaxInt32,
+			CleanupSpeedLimit:      10000,
+		},
 	},
 	Security:            &SecurityConfig{},
-	PerTableMemoryQuota: 20 * 1024 * 1024, // 20MB
+	PerTableMemoryQuota: 10 * 1024 * 1024, // 10MB
 	KVClient: &KVClientConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
 		RegionScanLimit:  40,
+	},
+	Debug: &DebugConfig{
+		EnableTableActor: true,
 	},
 }
 
@@ -217,6 +253,7 @@ type ServerConfig struct {
 	Security            *SecurityConfig `toml:"security" json:"security"`
 	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
 	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
+	Debug               *DebugConfig    `toml:"debug" json:"debug"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
@@ -298,39 +335,22 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		}
 	}
 
+	defaultCfg := GetDefaultServerConfig()
 	if c.Sorter == nil {
-		c.Sorter = defaultServerConfig.Sorter
+		c.Sorter = defaultCfg.Sorter
 	}
 	c.Sorter.SortDir = DefaultSortDir
-
-	if c.Sorter.ChunkSizeLimit < 1*1024*1024 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
-	}
-	if c.Sorter.NumConcurrentWorker < 1 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-concurrent-worker should be at least 1")
-	}
-	if c.Sorter.NumWorkerPoolGoroutine > 4096 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at most 4096")
-	}
-	if c.Sorter.NumConcurrentWorker > c.Sorter.NumWorkerPoolGoroutine {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-concurrent-worker larger than num-workerpool-goroutine is useless")
-	}
-	if c.Sorter.NumWorkerPoolGoroutine < 1 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at least 1, larger than 8 is recommended")
-	}
-	if c.Sorter.MaxMemoryPressure < 0 || c.Sorter.MaxMemoryPressure > 100 {
-		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage")
+	err := c.Sorter.ValidateAndAdjust()
+	if err != nil {
+		return err
 	}
 
 	if c.PerTableMemoryQuota == 0 {
-		c.PerTableMemoryQuota = defaultServerConfig.PerTableMemoryQuota
-	}
-	if c.PerTableMemoryQuota < 6*1024*1024 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
+		c.PerTableMemoryQuota = defaultCfg.PerTableMemoryQuota
 	}
 
 	if c.KVClient == nil {
-		c.KVClient = defaultServerConfig.KVClient
+		c.KVClient = defaultCfg.KVClient
 	}
 	if c.KVClient.WorkerConcurrent <= 0 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")

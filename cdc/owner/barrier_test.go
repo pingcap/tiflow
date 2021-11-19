@@ -27,8 +27,7 @@ func Test(t *testing.T) { check.TestingT(t) }
 
 var _ = check.Suite(&barrierSuite{})
 
-type barrierSuite struct {
-}
+type barrierSuite struct{}
 
 func (s *barrierSuite) TestBarrier(c *check.C) {
 	defer testleak.AfterTest(c)()

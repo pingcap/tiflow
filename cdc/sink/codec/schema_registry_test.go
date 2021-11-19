@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -30,8 +30,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-type AvroSchemaRegistrySuite struct {
-}
+type AvroSchemaRegistrySuite struct{}
 
 var _ = check.Suite(&AvroSchemaRegistrySuite{})
 
@@ -63,7 +62,7 @@ func startHTTPInterceptForTestingRegistry(c *check.C) {
 			if err != nil {
 				return nil, err
 			}
-			reqBody, err := ioutil.ReadAll(req.Body)
+			reqBody, err := io.ReadAll(req.Body)
 			if err != nil {
 				return nil, err
 			}
@@ -144,7 +143,7 @@ func startHTTPInterceptForTestingRegistry(c *check.C) {
 	failCounter := 0
 	httpmock.RegisterResponder("POST", `=~^http://127.0.0.1:8081/may-fail`,
 		func(req *http.Request) (*http.Response, error) {
-			data, _ := ioutil.ReadAll(req.Body)
+			data, _ := io.ReadAll(req.Body)
 			c.Assert(len(data), check.Greater, 0)
 			c.Assert(int64(len(data)), check.Equals, req.ContentLength)
 			if failCounter < 3 {

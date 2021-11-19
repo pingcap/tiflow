@@ -210,37 +210,37 @@ enum EntryType{
 	ROWDATA					=		2;
 	TRANSACTIONEND			=		3;
 	/** 心跳类型，内部使用，外部暂不可见，可忽略 **/
-	HEARTBEAT				=		4;
+	ENTRYHEARTBEAT				=		4;
 	GTIDLOG                 =       5;
 }
 
 /** 事件类型 **/
 enum EventType {
 	EVENTTYPECOMPATIBLEPROTO2 = 0;
-    INSERT 		= 		1;
-    UPDATE 		= 		2;
-    DELETE 		= 		3;
-    CREATE		= 		4;
-    ALTER		= 		5;
-    ERASE		= 		6;
-    QUERY		=		7;
-    TRUNCATE	=		8;
-    RENAME 		= 		9;
-    /**CREATE INDEX**/
-    CINDEX		= 		10;
-    DINDEX 		= 		11;
-    GTID        =       12;
-    /** XA **/
-    XACOMMIT    =       13;
-    XAROLLBACK  =		14;
-    /** MASTER HEARTBEAT **/
-    MHEARTBEAT  =       15;
+	INSERT 		= 		1;
+	UPDATE 		= 		2;
+	DELETE 		= 		3;
+	CREATE		= 		4;
+	ALTER		= 		5;
+	ERASE		= 		6;
+	QUERY		=		7;
+	TRUNCATE	=		8;
+	RENAME 		= 		9;
+	/**CREATE INDEX**/
+	CINDEX		= 		10;
+	DINDEX 		= 		11;
+	GTID        =       12;
+	/** XA **/
+	XACOMMIT    =       13;
+	XAROLLBACK  =		14;
+	/** MASTER HEARTBEAT **/
+	MHEARTBEAT  =       15;
 }
 
 /**数据库类型**/
 enum Type {
 	TYPECOMPATIBLEPROTO2 = 0;
-    ORACLE		= 		1;
-    MYSQL		= 		2;
-    PGSQL		= 		3;
+	ORACLE		= 		1;
+	MYSQL		= 		2;
+	PGSQL		= 		3;
 }

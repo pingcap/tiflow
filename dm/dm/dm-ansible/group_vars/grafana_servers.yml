@@ -1,0 +1,4 @@
+---
+
+grafana_port: 3000
+grafana_data_dir: "{{ deploy_dir }}/data.grafana"

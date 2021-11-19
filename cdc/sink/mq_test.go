@@ -53,7 +53,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 
 	uriTemplate := "kafka://%s/kafka-test?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=4194304&partition-num=1" +
-		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=default"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr())
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
@@ -62,13 +62,21 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	c.Assert(err, check.IsNil)
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
+
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
+	}()
+
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
-	encoder := sink.newEncoder()
+	encoder, err := sink.encoderBuilder.Build(ctx)
+	c.Assert(err, check.IsNil)
+
 	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
-	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxKafkaMessageSize(), check.Equals, 4194304)
+	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageSize(), check.Equals, 4194304)
 
 	// mock kafka broker processes 1 row changed event
 	leader.Returns(prodSuccess)
@@ -147,7 +155,7 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	prodSuccess := new(sarama.ProduceResponse)
 	prodSuccess.AddTopicPartition(topic, 0, sarama.ErrNoError)
 
-	uriTemplate := "kafka://%s/kafka-test?kafka-version=0.9.0.0&auto-create-topic=false"
+	uriTemplate := "kafka://%s/kafka-test?kafka-version=0.9.0.0&auto-create-topic=false&protocol=default"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr())
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
@@ -159,6 +167,12 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	c.Assert(err, check.IsNil)
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
+
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
+	}()
+
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
@@ -213,8 +227,9 @@ func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
 	sink, err := newPulsarSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
-	encoder := sink.newEncoder()
+	encoder, err := sink.encoderBuilder.Build(ctx)
+	c.Assert(err, check.IsNil)
 	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
-	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxKafkaMessageSize(), check.Equals, 4194304)
+	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageSize(), check.Equals, 4194304)
 }

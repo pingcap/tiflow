@@ -45,19 +45,28 @@ type LimitRegionRouter interface {
 	Run(ctx context.Context) error
 }
 
+// srrMetrics keeps metrics of a Sized Region Router
 type srrMetrics struct {
+	capture    string
 	changefeed string
-	tokens     map[string]prometheus.Gauge
+	// mapping from id(TiKV store address) to token used
+	tokens map[string]prometheus.Gauge
+	// mapping from id(TiKV store address) to cached regions
+	cachedRegions map[string]prometheus.Gauge
 }
 
 func newSrrMetrics(ctx context.Context) *srrMetrics {
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeed := util.ChangefeedIDFromCtx(ctx)
 	return &srrMetrics{
-		changefeed: changefeed,
-		tokens:     make(map[string]prometheus.Gauge),
+		capture:       captureAddr,
+		changefeed:    changefeed,
+		tokens:        make(map[string]prometheus.Gauge),
+		cachedRegions: make(map[string]prometheus.Gauge),
 	}
 }
 
+// each changefeed on a capture maintains a sizedRegionRouter
 type sizedRegionRouter struct {
 	buffer    map[string][]singleRegionInfo
 	output    chan singleRegionInfo
@@ -93,33 +102,51 @@ func (r *sizedRegionRouter) AddRegion(sri singleRegionInfo) {
 		r.output <- sri
 	} else {
 		r.buffer[id] = append(r.buffer[id], sri)
+		if _, ok := r.metrics.cachedRegions[id]; !ok {
+			r.metrics.cachedRegions[id] = cachedRegionSize.WithLabelValues(id, r.metrics.changefeed, r.metrics.capture)
+			r.metrics.cachedRegions[id].Set(0)
+		}
+		r.metrics.cachedRegions[id].Inc()
 	}
 	r.lock.Unlock()
 }
 
+// Acquire implements LimitRegionRouter.Acquire
+// param: id is TiKV store address
 func (r *sizedRegionRouter) Acquire(id string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.tokens[id]++
 	if _, ok := r.metrics.tokens[id]; !ok {
-		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed)
+		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed, r.metrics.capture)
+		r.metrics.tokens[id].Set(0)
 	}
 	r.metrics.tokens[id].Inc()
 }
 
+// Release implements LimitRegionRouter.Release
+// param: id is TiKV store address
 func (r *sizedRegionRouter) Release(id string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.tokens[id]--
 	if _, ok := r.metrics.tokens[id]; !ok {
-		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed)
+		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed, r.metrics.capture)
+		r.metrics.tokens[id].Set(0)
 	}
 	r.metrics.tokens[id].Dec()
 }
 
 func (r *sizedRegionRouter) Run(ctx context.Context) error {
 	ticker := time.NewTicker(sizedRegionCheckInterval)
-	defer ticker.Stop()
+	defer func() {
+		ticker.Stop()
+		r.lock.Lock()
+		defer r.lock.Unlock()
+		for _, m := range r.metrics.cachedRegions {
+			m.Set(0)
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -128,7 +155,7 @@ func (r *sizedRegionRouter) Run(ctx context.Context) error {
 			r.lock.Lock()
 			for id, buf := range r.buffer {
 				available := r.sizeLimit - r.tokens[id]
-				// the tokens used could be more then size limit, since we have
+				// the tokens used could be more than size limit, since we have
 				// a sized channel as level1 cache
 				if available <= 0 {
 					continue
@@ -153,6 +180,7 @@ func (r *sizedRegionRouter) Run(ctx context.Context) error {
 					}
 				}
 				r.buffer[id] = r.buffer[id][available:]
+				r.metrics.cachedRegions[id].Sub(float64(available))
 			}
 			r.lock.Unlock()
 		}

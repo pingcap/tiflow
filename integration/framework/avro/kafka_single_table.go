@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
@@ -41,7 +41,7 @@ func (a *SingleTableTask) Name() string {
 // GetCDCProfile implements Task
 func (a *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 	return &framework.CDCProfile{
-		PDUri:   "http://upstream-pd:2379",
+		PDUri:   framework.UpstreamPD,
 		SinkURI: "kafka://kafka:9092/testdb_" + a.TableName + "?kafka-version=2.6.0&protocol=avro",
 		Opts:    map[string]string{"registry": "http://schema-registry:8081"},
 	}
@@ -116,7 +116,7 @@ func createConnector() error {
 
 	// not in [200, 300)
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		str, err := ioutil.ReadAll(resp.Body)
+		str, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return err
 		}

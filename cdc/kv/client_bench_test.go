@@ -30,8 +30,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/tidb/store/mockstore/mockcopr"
-	"github.com/tikv/client-go/v2/mockstore/mocktikv"
 	"github.com/tikv/client-go/v2/oracle"
+	"github.com/tikv/client-go/v2/testutils"
 	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
@@ -140,7 +140,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		}()
 	}
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
+	rpcClient, cluster, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
 	if err != nil {
 		b.Error(err)
 	}
@@ -253,7 +253,7 @@ func prepareBench(b *testing.B, regionNum int) (
 		server1.Stop()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
+	rpcClient, cluster, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
 	if err != nil {
 		b.Error(err)
 	}
@@ -311,8 +311,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	return requestIDs, wg, cancel, eventCh, mockSrvCh
 }
 
-func benchmarkSingleWorkerResolvedTs(b *testing.B, clientV2 bool) {
-	enableKVClientV2 = clientV2
+func benchmarkSingleWorkerResolvedTs(b *testing.B) {
 	log.SetLevel(zapcore.ErrorLevel)
 	tests := []struct {
 		name      string
@@ -393,25 +392,21 @@ func benchmarkSingleWorkerResolvedTs(b *testing.B, clientV2 bool) {
 	}
 }
 
-func benchmarkResolvedTsClientV2(b *testing.B) {
+func benchmarkResolvedTsClient(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	InitWorkerPool()
 	go func() {
 		RunWorkerPool(ctx) //nolint:errcheck
 	}()
-	benchmarkSingleWorkerResolvedTs(b, true /* clientV2 */)
+	benchmarkSingleWorkerResolvedTs(b)
 }
 
-func BenchmarkResolvedTsClientV1(b *testing.B) {
-	benchmarkSingleWorkerResolvedTs(b, false /* clientV1 */)
+func BenchmarkResolvedTsClient(b *testing.B) {
+	benchmarkResolvedTsClient(b)
 }
 
-func BenchmarkResolvedTsClientV2(b *testing.B) {
-	benchmarkResolvedTsClientV2(b)
-}
-
-func BenchmarkResolvedTsClientV2WorkerPool(b *testing.B) {
+func BenchmarkResolvedTsClientWorkerPool(b *testing.B) {
 	hwm := regionWorkerHighWatermark
 	lwm := regionWorkerLowWatermark
 	regionWorkerHighWatermark = 10000
@@ -420,11 +415,10 @@ func BenchmarkResolvedTsClientV2WorkerPool(b *testing.B) {
 		regionWorkerHighWatermark = hwm
 		regionWorkerLowWatermark = lwm
 	}()
-	benchmarkResolvedTsClientV2(b)
+	benchmarkResolvedTsClient(b)
 }
 
-func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
-	enableKVClientV2 = clientV2
+func benchmarkMultipleStoreResolvedTs(b *testing.B) {
 	log.SetLevel(zapcore.ErrorLevel)
 	tests := []struct {
 		name      string
@@ -515,25 +509,21 @@ func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
 	}
 }
 
-func benchmarkMultiStoreResolvedTsClientV2(b *testing.B) {
+func benchmarkMultiStoreResolvedTsClient(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	InitWorkerPool()
 	go func() {
 		RunWorkerPool(ctx) //nolint:errcheck
 	}()
-	benchmarkMultipleStoreResolvedTs(b, true /* clientV2 */)
+	benchmarkMultipleStoreResolvedTs(b)
 }
 
-func BenchmarkMultiStoreResolvedTsClientV1(b *testing.B) {
-	benchmarkMultipleStoreResolvedTs(b, false /* clientV1 */)
+func BenchmarkMultiStoreResolvedTsClient(b *testing.B) {
+	benchmarkMultiStoreResolvedTsClient(b)
 }
 
-func BenchmarkMultiStoreResolvedTsClientV2(b *testing.B) {
-	benchmarkMultiStoreResolvedTsClientV2(b)
-}
-
-func BenchmarkMultiStoreResolvedTsClientV2WorkerPool(b *testing.B) {
+func BenchmarkMultiStoreResolvedTsClientWorkerPool(b *testing.B) {
 	hwm := regionWorkerHighWatermark
 	lwm := regionWorkerLowWatermark
 	regionWorkerHighWatermark = 1000
@@ -542,5 +532,5 @@ func BenchmarkMultiStoreResolvedTsClientV2WorkerPool(b *testing.B) {
 		regionWorkerHighWatermark = hwm
 		regionWorkerLowWatermark = lwm
 	}()
-	benchmarkMultiStoreResolvedTsClientV2(b)
+	benchmarkMultiStoreResolvedTsClient(b)
 }

@@ -1,0 +1,15 @@
+source-id: mysql-replica-01
+flavor: ""
+enable-gtid: true
+enable-relay: true
+relay-binlog-name: ""
+relay-binlog-gtid: ""
+from:
+  host: 127.0.0.1
+  user: dm_tls_test
+  password: /Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=
+  port: 3306
+  security:
+    ssl-ca: "dir-placeholerca.pem"
+    ssl-cert: "dir-placeholerclient-cert.pem"
+    ssl-key: "dir-placeholerclient-key.pem"

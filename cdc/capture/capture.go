@@ -28,9 +28,11 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/cdc/processor"
+	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -56,17 +58,19 @@ type Capture struct {
 
 	pdClient   pd.Client
 	kvStorage  tidbkv.Storage
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 	grpcPool   kv.GrpcPool
+
+	tableActorSystem *system.System
 
 	cancel context.CancelFunc
 
 	newProcessorManager func() *processor.Manager
-	newOwner            func() *owner.Owner
+	newOwner            func(pd.Client) *owner.Owner
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient) *Capture {
+func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.CDCEtcdClient) *Capture {
 	return &Capture{
 		pdClient:   pdClient,
 		kvStorage:  kvStorage,
@@ -98,9 +102,22 @@ func (c *Capture) reset(ctx context.Context) error {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
 	c.session = sess
-	c.election = concurrency.NewElection(sess, kv.CaptureOwnerKey)
+	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
+	}
+	if c.tableActorSystem != nil {
+		err := c.tableActorSystem.Stop()
+		if err != nil {
+			log.Warn("stop table actor system failed", zap.Error(err))
+		}
+	}
+	if conf.Debug.EnableTableActor {
+		c.tableActorSystem = system.NewSystem()
+		err = c.tableActorSystem.Start(ctx)
+		if err != nil {
+			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
+		}
 	}
 	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
@@ -147,11 +164,12 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		PDClient:    c.pdClient,
-		KVStorage:   c.kvStorage,
-		CaptureInfo: c.info,
-		EtcdClient:  c.etcdClient,
-		GrpcPool:    c.grpcPool,
+		PDClient:         c.pdClient,
+		KVStorage:        c.kvStorage,
+		CaptureInfo:      c.info,
+		EtcdClient:       c.etcdClient,
+		GrpcPool:         c.grpcPool,
+		TableActorSystem: c.tableActorSystem,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -184,7 +202,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
-		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
+		processorErr = c.runEtcdWorker(ctx, c.processorManager, orchestrator.NewGlobalState(), processorFlushInterval)
 		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
 	go func() {
@@ -246,9 +264,9 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		}
 
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
-		owner := c.newOwner()
+		owner := c.newOwner(c.pdClient)
 		c.setOwner(owner)
-		err = c.runEtcdWorker(ctx, owner, model.NewGlobalState(), ownerFlushInterval)
+		err = c.runEtcdWorker(ctx, owner, orchestrator.NewGlobalState(), ownerFlushInterval)
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -265,11 +283,12 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 }
 
 func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Reactor, reactorState orchestrator.ReactorState, timerInterval time.Duration) error {
-	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, kv.EtcdKeyBase, reactor, reactorState)
+	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, etcd.EtcdKeyBase, reactor, reactorState)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if err := etcdWorker.Run(ctx, c.session, timerInterval); err != nil {
+	captureAddr := c.info.AdvertiseAddr
+	if err := etcdWorker.Run(ctx, c.session, timerInterval, captureAddr); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as
@@ -352,6 +371,13 @@ func (c *Capture) AsyncClose() {
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
 	}
+	if c.tableActorSystem != nil {
+		err := c.tableActorSystem.Stop()
+		if err != nil {
+			log.Warn("stop table actor system failed", zap.Error(err))
+		}
+		c.tableActorSystem = nil
+	}
 }
 
 // WriteDebugInfo writes the debug info into writer.
@@ -385,7 +411,7 @@ func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
 		return nil, err
 	}
 
-	ownerID, err := c.etcdClient.GetOwnerID(ctx, kv.CaptureOwnerKey)
+	ownerID, err := c.etcdClient.GetOwnerID(ctx, etcd.CaptureOwnerKey)
 	if err != nil {
 		return nil, err
 	}

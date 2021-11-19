@@ -83,7 +83,7 @@ type TaskPosition struct {
 	ResolvedTs uint64 `json:"resolved-ts"`
 	// The count of events were synchronized. This is updated by corresponding processor.
 	Count uint64 `json:"count"`
-	// Error code when error happens
+	// Error when error happens
 	Error *RunningError `json:"error"`
 }
 
@@ -104,6 +104,23 @@ func (tp *TaskPosition) Unmarshal(data []byte) error {
 func (tp *TaskPosition) String() string {
 	data, _ := tp.Marshal()
 	return data
+}
+
+// Clone returns a deep clone of TaskPosition
+func (tp *TaskPosition) Clone() *TaskPosition {
+	ret := &TaskPosition{
+		CheckPointTs: tp.CheckPointTs,
+		ResolvedTs:   tp.ResolvedTs,
+		Count:        tp.Count,
+	}
+	if tp.Error != nil {
+		ret.Error = &RunningError{
+			Addr:    tp.Error.Addr,
+			Code:    tp.Error.Code,
+			Message: tp.Error.Message,
+		}
+	}
+	return ret
 }
 
 // MoveTableStatus represents for the status of a MoveTableJob
@@ -142,7 +159,6 @@ const (
 
 // TableOperation records the current information of a table migration
 type TableOperation struct {
-	Done   bool   `json:"done"` // deprecated, will be removed in the next version
 	Delete bool   `json:"delete"`
 	Flag   uint64 `json:"flag,omitempty"`
 	// if the operation is a delete operation, BoundaryTs is checkpoint ts
@@ -153,15 +169,13 @@ type TableOperation struct {
 
 // TableProcessed returns whether the table has been processed by processor
 func (o *TableOperation) TableProcessed() bool {
-	// TODO: remove o.Done
-	return o.Status == OperProcessed || o.Status == OperFinished || o.Done
+	return o.Status == OperProcessed || o.Status == OperFinished
 }
 
 // TableApplied returns whether the table has finished the startup procedure.
 // Returns true if table has been processed by processor and resolved ts reaches global resolved ts.
 func (o *TableOperation) TableApplied() bool {
-	// TODO: remove o.Done
-	return o.Status == OperFinished || o.Done
+	return o.Status == OperFinished
 }
 
 // Clone returns a deep-clone of the struct

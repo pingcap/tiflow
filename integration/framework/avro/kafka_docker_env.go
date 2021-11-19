@@ -15,7 +15,7 @@ package avro
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"path"
 
@@ -27,11 +27,8 @@ import (
 )
 
 const (
-	kafkaHealthCheckURI     = "http://127.0.0.1:18083"
-	dockerComposeFilePath   = "/docker-compose-avro.yml"
-	controllerContainerName = "ticdc_controller_1"
-	// The upstream PD endpoint in docker-compose network.
-	upstreamPD = "http://upstream-pd:2379"
+	kafkaURI              = "http://127.0.0.1:18083/"
+	dockerComposeFilePath = framework.DockerComposeFilePathPrefix + "docker-compose-avro.yml"
 )
 
 // KafkaDockerEnv represents the docker-compose service defined in docker-compose-avro.yml
@@ -42,7 +39,7 @@ type KafkaDockerEnv struct {
 // NewKafkaDockerEnv creates a new KafkaDockerEnv
 func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 	healthChecker := func() error {
-		resp, err := http.Get(kafkaHealthCheckURI)
+		resp, err := http.Get(kafkaURI)
 		if err != nil {
 			return err
 		}
@@ -52,7 +49,7 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 		}
 		defer func() { _ = resp.Body.Close() }()
 
-		bytes, err := ioutil.ReadAll(resp.Body)
+		bytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return err
 		}
@@ -73,7 +70,7 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 		}
 
 		// Also check cdc cluster.
-		return framework.CdcHealthCheck(controllerContainerName, upstreamPD)
+		return framework.CdcHealthCheck(framework.ControllerContainerName, framework.UpstreamPD)
 	}
 
 	var file string
@@ -90,7 +87,7 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 	return &KafkaDockerEnv{DockerEnv: framework.DockerEnv{
 		DockerComposeOperator: framework.DockerComposeOperator{
 			FileName:      file,
-			Controller:    controllerContainerName,
+			Controller:    framework.ControllerContainerName,
 			HealthChecker: healthChecker,
 		},
 	}}
@@ -116,7 +113,8 @@ func (d *KafkaDockerEnv) Reset() {
 }
 
 func (d *KafkaDockerEnv) resetSchemaRegistry() error {
-	resp, err := http.Get("http://127.0.0.1:8081/subjects")
+	subjectsURL := "http://127.0.0.1:8081/subjects/"
+	resp, err := http.Get(subjectsURL)
 	if err != nil {
 		return err
 	}
@@ -125,7 +123,7 @@ func (d *KafkaDockerEnv) resetSchemaRegistry() error {
 	}
 	defer resp.Body.Close()
 
-	bytes, err := ioutil.ReadAll(resp.Body)
+	bytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -136,7 +134,7 @@ func (d *KafkaDockerEnv) resetSchemaRegistry() error {
 		return err
 	}
 	for _, sub := range subs {
-		url := "http://127.0.0.1:8081/subjects/" + sub
+		url := subjectsURL + sub
 		req, err := http.NewRequest(http.MethodDelete, url, nil)
 		if err != nil {
 			return err

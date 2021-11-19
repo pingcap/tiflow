@@ -19,11 +19,13 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/parser/model"
 	"go.uber.org/zap"
 )
+
+//go:generate msgp
 
 // MqMessageType is the type of message
 type MqMessageType int
@@ -183,10 +185,10 @@ func (b *ColumnFlagType) UnsetIsUnsigned() {
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema      string `toml:"db-name" json:"db-name"`
-	Table       string `toml:"tbl-name" json:"tbl-name"`
-	TableID     int64  `toml:"tbl-id" json:"tbl-id"`
-	IsPartition bool   `toml:"is-partition" json:"is-partition"`
+	Schema      string `toml:"db-name" json:"db-name" msg:"db-name"`
+	Table       string `toml:"tbl-name" json:"tbl-name" msg:"tbl-name"`
+	TableID     int64  `toml:"tbl-id" json:"tbl-id" msg:"tbl-id"`
+	IsPartition bool   `toml:"is-partition" json:"is-partition" msg:"is-partition"`
 }
 
 // String implements fmt.Stringer interface.
@@ -214,24 +216,53 @@ func (t *TableName) GetTableID() int64 {
 	return t.TableID
 }
 
+// RedoLogType is the type of log
+type RedoLogType int
+
+const (
+	// RedoLogTypeUnknown is unknown type of log
+	RedoLogTypeUnknown RedoLogType = iota
+	// RedoLogTypeRow is row type of log
+	RedoLogTypeRow
+	// RedoLogTypeDDL is ddl type of log
+	RedoLogTypeDDL
+)
+
+// RedoLog defines the persistent structure of redo log
+// since MsgPack do not support types that are defined in another package,
+// more info https://github.com/tinylib/msgp/issues/158, https://github.com/tinylib/msgp/issues/149
+// so define a RedoColumn, RedoDDLEvent instead of using the Column, DDLEvent
+type RedoLog struct {
+	RedoRow *RedoRowChangedEvent `msg:"row"`
+	RedoDDL *RedoDDLEvent        `msg:"ddl"`
+	Type    RedoLogType          `msg:"type"`
+}
+
+// RedoRowChangedEvent represents the DML event used in RedoLog
+type RedoRowChangedEvent struct {
+	Row        *RowChangedEvent `msg:"row"`
+	PreColumns []*RedoColumn    `msg:"pre-columns"`
+	Columns    []*RedoColumn    `msg:"columns"`
+}
+
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
-	StartTs  uint64 `json:"start-ts"`
-	CommitTs uint64 `json:"commit-ts"`
+	StartTs  uint64 `json:"start-ts" msg:"start-ts"`
+	CommitTs uint64 `json:"commit-ts" msg:"commit-ts"`
 
-	RowID int64 `json:"row-id"` // Deprecated. It is empty when the RowID comes from clustered index table.
+	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 
-	Table *TableName `json:"table"`
+	Table *TableName `json:"table" msg:"table"`
 
-	TableInfoVersion uint64 `json:"table-info-version,omitempty"`
+	TableInfoVersion uint64 `json:"table-info-version,omitempty" msg:"table-info-version"`
 
-	ReplicaID    uint64    `json:"replica-id"`
-	Columns      []*Column `json:"columns"`
-	PreColumns   []*Column `json:"pre-columns"`
-	IndexColumns [][]int   `json:"-"`
+	ReplicaID    uint64    `json:"replica-id" msg:"replica-id"`
+	Columns      []*Column `json:"columns" msg:"-"`
+	PreColumns   []*Column `json:"pre-columns" msg:"-"`
+	IndexColumns [][]int   `json:"-" msg:"index-columns"`
 
 	// approximate size of this event, calculate by tikv proto bytes size
-	ApproximateSize int64 `json:"-"`
+	ApproximateSize int64 `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event
@@ -287,10 +318,16 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 
 // Column represents a column value in row changed event
 type Column struct {
-	Name  string         `json:"name"`
-	Type  byte           `json:"type"`
-	Flag  ColumnFlagType `json:"flag"`
-	Value interface{}    `json:"value"`
+	Name  string         `json:"name" msg:"name"`
+	Type  byte           `json:"type" msg:"type"`
+	Flag  ColumnFlagType `json:"flag" msg:"-"`
+	Value interface{}    `json:"value" msg:"value"`
+}
+
+// RedoColumn stores Column change
+type RedoColumn struct {
+	Column *Column `msg:"column"`
+	Flag   uint64  `msg:"flag"`
 }
 
 // ColumnValueString returns the string representation of the column value
@@ -339,8 +376,8 @@ func ColumnValueString(c interface{}) string {
 
 // ColumnInfo represents the name and type information passed to the sink
 type ColumnInfo struct {
-	Name string
-	Type byte
+	Name string `msg:"name"`
+	Type byte   `msg:"type"`
 }
 
 // FromTiColumnInfo populates cdc's ColumnInfo from TiDB's model.ColumnInfo
@@ -352,22 +389,28 @@ func (c *ColumnInfo) FromTiColumnInfo(tiColumnInfo *model.ColumnInfo) {
 // SimpleTableInfo is the simplified table info passed to the sink
 type SimpleTableInfo struct {
 	// db name
-	Schema string
+	Schema string `msg:"schema"`
 	// table name
-	Table string
+	Table string `msg:"table"`
 	// table ID
-	TableID    int64
-	ColumnInfo []*ColumnInfo
+	TableID    int64         `msg:"table-id"`
+	ColumnInfo []*ColumnInfo `msg:"column-info"`
 }
 
-// DDLEvent represents a DDL event
+// DDLEvent stores DDL event
 type DDLEvent struct {
-	StartTs      uint64
-	CommitTs     uint64
-	TableInfo    *SimpleTableInfo
-	PreTableInfo *SimpleTableInfo
-	Query        string
-	Type         model.ActionType
+	StartTs      uint64           `msg:"start-ts"`
+	CommitTs     uint64           `msg:"commit-ts"`
+	TableInfo    *SimpleTableInfo `msg:"table-info"`
+	PreTableInfo *SimpleTableInfo `msg:"pre-table-info"`
+	Query        string           `msg:"query"`
+	Type         model.ActionType `msg:"-"`
+}
+
+// RedoDDLEvent represents DDL event used in redo log persistent
+type RedoDDLEvent struct {
+	DDL  *DDLEvent `msg:"ddl"`
+	Type byte      `msg:"type"`
 }
 
 // FromJob fills the values of DDLEvent from DDL job
@@ -412,6 +455,7 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 }
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
+//msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
 	// data fields of SingleTableTxn
 	Table     *TableName

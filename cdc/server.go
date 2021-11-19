@@ -26,9 +26,10 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/capture"
 	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -55,7 +56,7 @@ type Server struct {
 	capture      *capture.Capture
 	statusServer *http.Server
 	pdClient     pd.Client
-	etcdClient   *kv.CDCEtcdClient
+	etcdClient   *etcd.CDCEtcdClient
 	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
 }
@@ -135,7 +136,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
 
-	cdcEtcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
+	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)
 	s.etcdClient = &cdcEtcdClient
 
 	err = s.initDataDir(ctx)
@@ -146,12 +147,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	for _, pdEndpoint := range s.pdEndpoints {
-		err = version.CheckClusterVersion(ctx, s.pdClient, pdEndpoint, conf.Security, errorTiKVIncompatible)
-		if err == nil {
-			break
-		}
-	}
+	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints, conf.Security, errorTiKVIncompatible)
 	if err != nil {
 		return err
 	}
@@ -237,7 +233,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 	})
 
 	wg.Go(func() error {
-		return sorter.RunWorkerPool(cctx)
+		return unified.RunWorkerPool(cctx)
 	})
 
 	wg.Go(func() error {
@@ -290,18 +286,14 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		return nil
 	}
 
-	// data-dir will be decide by exist changefeed for backward compatibility
-	allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
+	// data-dir will be decided by exist changefeed for backward compatibility
+	allInfo, err := s.etcdClient.GetAllChangeFeedInfo(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	candidates := make([]string, 0, len(allStatus))
-	for id := range allStatus {
-		info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	candidates := make([]string, 0, len(allInfo))
+	for _, info := range allInfo {
 		if info.SortDir != "" {
 			candidates = append(candidates, info.SortDir)
 		}

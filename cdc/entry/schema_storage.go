@@ -22,12 +22,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/retry"
 	timeta "github.com/pingcap/tidb/meta"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -226,7 +226,8 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 
 	schemas := make(map[int64]*timodel.DBInfo, len(s.schemas))
 	for k, v := range s.schemas {
-		schemas[k] = v.Clone()
+		// DBInfo is readonly in TiCDC, shallow copy to reduce memory
+		schemas[k] = v.Copy()
 	}
 	clone.schemas = schemas
 
@@ -389,7 +390,7 @@ func (s *schemaSnapshot) createSchema(db *timodel.DBInfo) error {
 		return cerror.ErrSnapshotSchemaExists.GenWithStackByArgs(db.Name, db.ID)
 	}
 
-	s.schemas[db.ID] = db.Clone()
+	s.schemas[db.ID] = db.Copy()
 	s.schemaNameToID[db.Name.O] = db.ID
 	s.tableInSchema[db.ID] = []int64{}
 
@@ -402,7 +403,7 @@ func (s *schemaSnapshot) replaceSchema(db *timodel.DBInfo) error {
 	if !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("schema %s(%d) not found", db.Name, db.ID)
 	}
-	s.schemas[db.ID] = db.Clone()
+	s.schemas[db.ID] = db.Copy()
 	s.schemaNameToID[db.Name.O] = db.ID
 	return nil
 }
@@ -463,10 +464,12 @@ func (s *schemaSnapshot) updatePartition(tbl *model.TableInfo) error {
 	for _, partition := range newPi.Definitions {
 		// update table info.
 		if _, ok := s.partitionTable[partition.ID]; ok {
-			log.Debug("add table partition success", zap.String("name", tbl.Name.O), zap.Int64("tid", id), zap.Reflect("add partition id", partition.ID))
+			log.Debug("add table partition success",
+				zap.String("name", tbl.Name.O), zap.Int64("tid", id),
+				zap.Int64("add partition id", partition.ID))
 		}
 		s.partitionTable[partition.ID] = tbl
-		if !tbl.ExistTableUniqueColumn() {
+		if !tbl.IsEligible(s.explicitTables) {
 			s.ineligibleTableID[partition.ID] = struct{}{}
 		}
 		delete(oldIDs, partition.ID)
@@ -477,7 +480,9 @@ func (s *schemaSnapshot) updatePartition(tbl *model.TableInfo) error {
 		s.truncateTableID[pid] = struct{}{}
 		delete(s.partitionTable, pid)
 		delete(s.ineligibleTableID, pid)
-		log.Debug("drop table partition success", zap.String("name", tbl.Name.O), zap.Int64("tid", id), zap.Reflect("truncated partition id", pid))
+		log.Debug("drop table partition success",
+			zap.String("name", tbl.Name.O), zap.Int64("tid", id),
+			zap.Int64("truncated partition id", pid))
 	}
 
 	return nil
@@ -545,7 +550,7 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 	if err := s.FillSchemaName(job); err != nil {
 		return errors.Trace(err)
 	}
-	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
+	log.Info("handle DDL", zap.String("DDL", job.Query), zap.Stringer("job", job))
 	getWrapTableInfo := func(job *timodel.Job) *model.TableInfo {
 		return model.WrapTableInfo(job.SchemaID, job.SchemaName,
 			job.BinlogInfo.FinishedTS,
@@ -648,7 +653,7 @@ func (s *schemaSnapshot) Tables() map[model.TableID]*model.TableInfo {
 // SchemaStorage stores the schema information with multi-version
 type SchemaStorage interface {
 	// GetSnapshot returns the snapshot which of ts is specified
-	GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error)
+	GetSnapshot(ctx context.Context, ts uint64) (*SingleSchemaSnapshot, error)
 	// GetLastSnapshot returns the last snapshot
 	GetLastSnapshot() *schemaSnapshot
 	// HandleDDLJob creates a new snapshot in storage and handles the ddl job
@@ -657,8 +662,9 @@ type SchemaStorage interface {
 	AdvanceResolvedTs(ts uint64)
 	// ResolvedTs returns the resolved ts of the schema storage
 	ResolvedTs() uint64
-	// DoGC removes snaps which of ts less than this specified ts
-	DoGC(ts uint64)
+	// DoGC removes snaps that are no longer needed at the specified TS.
+	// It returns the TS from which the oldest maintained snapshot is valid.
+	DoGC(ts uint64) (lastSchemaTs uint64)
 }
 
 type schemaStorageImpl struct {
@@ -719,11 +725,15 @@ func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema
 	// The infinite retry here is a temporary solution to the `ErrSchemaStorageUnresolved` caused by
 	// DDL puller lagging too much.
 	startTime := time.Now()
+	logTime := startTime
 	err := retry.Do(ctx, func() error {
 		var err error
 		snap, err = s.getSnapshot(ts)
-		if time.Since(startTime) >= 5*time.Minute && isRetryable(err) {
-			log.Warn("GetSnapshot is taking too long, DDL puller stuck?", zap.Uint64("ts", ts))
+		now := time.Now()
+		if now.Sub(logTime) >= 30*time.Second && isRetryable(err) {
+			log.Warn("GetSnapshot is taking too long, DDL puller stuck?",
+				zap.Uint64("ts", ts), zap.Duration("duration", now.Sub(startTime)))
+			logTime = now
 		}
 		return err
 	}, retry.WithBackoffBaseDelay(10), retry.WithInfiniteTries(), retry.WithIsRetryableErr(isRetryable))
@@ -754,7 +764,8 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
 		if job.BinlogInfo.FinishedTS <= lastSnap.currentTs {
-			log.Debug("ignore foregone DDL job", zap.Reflect("job", job))
+			log.Info("ignore foregone DDL",
+				zap.Int64("jobID", job.ID), zap.String("DDL", job.Query))
 			return nil
 		}
 		snap = lastSnap.Clone()
@@ -787,7 +798,7 @@ func (s *schemaStorageImpl) ResolvedTs() uint64 {
 }
 
 // DoGC removes snaps which of ts less than this specified ts
-func (s *schemaStorageImpl) DoGC(ts uint64) {
+func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 	s.snapsMu.Lock()
 	defer s.snapsMu.Unlock()
 	var startIdx int
@@ -798,7 +809,7 @@ func (s *schemaStorageImpl) DoGC(ts uint64) {
 		startIdx = i
 	}
 	if startIdx == 0 {
-		return
+		return s.snaps[0].currentTs
 	}
 	if log.GetLevel() == zapcore.DebugLevel {
 		log.Debug("Do GC in schema storage")
@@ -806,9 +817,16 @@ func (s *schemaStorageImpl) DoGC(ts uint64) {
 			s.snaps[i].PrintStatus(log.Debug)
 		}
 	}
-	s.snaps = s.snaps[startIdx:]
-	atomic.StoreUint64(&s.gcTs, s.snaps[0].currentTs)
-	log.Info("finished gc in schema storage", zap.Uint64("gcTs", s.snaps[0].currentTs))
+
+	// copy the part of the slice that is needed instead of re-slicing it
+	// to maximize efficiency of Go runtime GC.
+	newSnaps := make([]*schemaSnapshot, len(s.snaps)-startIdx)
+	copy(newSnaps, s.snaps[startIdx:])
+	s.snaps = newSnaps
+
+	lastSchemaTs = s.snaps[0].currentTs
+	atomic.StoreUint64(&s.gcTs, lastSchemaTs)
+	return
 }
 
 // SkipJob skip the job should not be executed
@@ -818,7 +836,7 @@ func (s *schemaStorageImpl) DoGC(ts uint64) {
 // At state *done*, it will be always and only changed to *synced*.
 func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
-		log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
+		log.Info("discard DDL", zap.Int64("jobID", job.ID), zap.String("DDL", job.Query))
 		return true
 	}
 	return !job.IsSynced() && !job.IsDone()

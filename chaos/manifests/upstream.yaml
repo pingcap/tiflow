@@ -9,11 +9,11 @@ spec:
   timezone: UTC
   pvReclaimPolicy: Retain
   enableDynamicConfiguration: true
-  imagePullPolicy: IfNotPresent
+  imagePullPolicy: Always
   discovery: {}
   pd:
     baseImage: pingcap/pd
-    version: latest
+    version: nightly
     replicas: 1
     # if storageClassName is not set, the default Storage Class of the Kubernetes cluster will be used
     # storageClassName: local-storage
@@ -30,7 +30,7 @@ spec:
         mountPath: "/var/log/pdlog"
   tikv:
     baseImage: pingcap/tikv
-    version: latest
+    version: nightly
     replicas: 1
     # if storageClassName is not set, the default Storage Class of the Kubernetes cluster will be used
     # storageClassName: local-storage
@@ -52,7 +52,7 @@ spec:
         mountPath: "/var/log/kvlog"
   tidb:
     baseImage: pingcap/tidb
-    version: latest
+    version: nightly
     replicas: 1
     service:
       type: ClusterIP

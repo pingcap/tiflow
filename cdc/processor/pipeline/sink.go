@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
+	"go.uber.org/zap"
 )
 
 const (
@@ -150,11 +151,20 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 
 func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
 	if event == nil || event.Row == nil {
+		log.Warn("skip emit nil event", zap.Any("event", event))
 		return nil
 	}
 
 	colLen := len(event.Row.Columns)
 	preColLen := len(event.Row.PreColumns)
+	// Some transactions could generate empty row change event, such as
+	// begin; insert into t (id) values (1); delete from t where id=1; commit;
+	// Just ignore these row changed events
+	if colLen == 0 && preColLen == 0 {
+		log.Warn("skip emit empty row event", zap.Any("event", event))
+		return nil
+	}
+
 	config := ctx.ChangefeedVars().Info.Config
 
 	// This indicates that it is an update event,
@@ -250,7 +260,7 @@ func splitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 }
 
 // clear event buffer and row buffer.
-// Also, it unrefs data that are holded by buffers.
+// Also, it dereferences data that are held by buffers.
 func (n *sinkNode) clearBuffers() {
 	// Do not hog memory.
 	if cap(n.rowBuffer) > defaultSyncResolvedBatch {

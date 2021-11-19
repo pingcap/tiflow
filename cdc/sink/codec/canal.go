@@ -14,19 +14,20 @@
 package codec
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strconv"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
-	mm "github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
-	parser_types "github.com/pingcap/parser/types"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
+	mm "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	parser_types "github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -455,4 +456,22 @@ func NewCanalEventBatchEncoder() EventBatchEncoder {
 
 	encoder.resetPacket()
 	return encoder
+}
+
+type canalEventBatchEncoderBuilder struct {
+	opts map[string]string
+}
+
+// Build a `CanalEventBatchEncoder`
+func (b *canalEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+	encoder := NewCanalEventBatchEncoder()
+	if err := encoder.SetParams(b.opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	return encoder, nil
+}
+
+func newCanalEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
+	return &canalEventBatchEncoderBuilder{opts: opts}
 }

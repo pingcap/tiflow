@@ -14,36 +14,57 @@
 package pipeline
 
 import (
-	"github.com/pingcap/check"
+	"context"
+	"strings"
+	"testing"
+
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter/memory"
+	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
+	"github.com/pingcap/ticdc/pkg/leakutil"
 	"github.com/pingcap/ticdc/pkg/pipeline"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
-type sorterSuite struct{}
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(
+		m,
+		goleak.IgnoreTopFunction("github.com/pingcap/ticdc/cdc/sorter/unified.newBackEndPool.func1"),
+	)
+}
 
-var _ = check.Suite(&sorterSuite{})
-
-func (s *sorterSuite) TestUnifiedSorterFileLockConflict(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer sorter.UnifiedSorterCleanUp()
-
-	dir := c.MkDir()
+func TestUnifiedSorterFileLockConflict(t *testing.T) {
+	dir := t.TempDir()
 	captureAddr := "0.0.0.0:0"
 
 	// GlobalServerConfig overrides dir parameter in NewUnifiedSorter.
 	config.GetGlobalServerConfig().Sorter.SortDir = dir
-	_, err := sorter.NewUnifiedSorter(dir, "test-cf", "test", 0, captureAddr)
-	c.Assert(err, check.IsNil)
+	_, err := unified.NewUnifiedSorter(dir, "test-cf", "test", 0, captureAddr)
+	require.Nil(t, err)
 
-	sorter.ResetGlobalPoolWithoutCleanup()
+	unified.ResetGlobalPoolWithoutCleanup()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.Engine = model.SortUnified
 	ctx.ChangefeedVars().Info.SortDir = dir
 	sorter := sorterNode{}
 	err = sorter.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil))
-	c.Assert(err, check.ErrorMatches, ".*file lock conflict.*")
+	require.True(t, strings.Contains(err.Error(), "file lock conflict"))
+}
+
+func TestSorterResolvedTs(t *testing.T) {
+	t.Parallel()
+	sn := newSorterNode("tableName", 1, 1, nil, nil)
+	sn.sorter = memory.NewEntrySorter()
+	require.EqualValues(t, 1, sn.ResolvedTs())
+	nctx := pipeline.NewNodeContext(
+		cdcContext.NewContext(context.Background(), nil),
+		pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 2)),
+		nil,
+	)
+	err := sn.Receive(nctx)
+	require.Nil(t, err)
+	require.EqualValues(t, 2, sn.ResolvedTs())
 }

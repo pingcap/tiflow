@@ -16,7 +16,6 @@ package util
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -141,7 +140,7 @@ cert-path = "bb"
 key-path = "cc"
 cert-allowed-cn = ["dd","ee"]
 `, dataDir)
-	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
 
 	conf := config.GetDefaultServerConfig()
@@ -163,12 +162,52 @@ max-size = 200
 max-days = 1
 max-backups = 1
 `, dataDir)
-	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
 
 	conf := config.GetDefaultServerConfig()
 	err = StrictDecodeFile(configPath, "test", conf)
 	c.Assert(err, check.ErrorMatches, ".*contained unknown configuration options.*")
+}
+
+func (s *utilsSuite) TestAndWriteExampleReplicaTOML(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cfg := config.GetDefaultReplicaConfig()
+	err := StrictDecodeFile("changefeed.toml", "cdc", &cfg)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(cfg.CaseSensitive, check.IsTrue)
+	c.Assert(cfg.Filter, check.DeepEquals, &config.FilterConfig{
+		IgnoreTxnStartTs: []uint64{1, 2},
+		Rules:            []string{"*.*", "!test.*"},
+	})
+	c.Assert(cfg.Mounter, check.DeepEquals, &config.MounterConfig{
+		WorkerNum: 16,
+	})
+	c.Assert(cfg.Sink, check.DeepEquals, &config.SinkConfig{
+		DispatchRules: []*config.DispatchRule{
+			{Dispatcher: "ts", Matcher: []string{"test1.*", "test2.*"}},
+			{Dispatcher: "rowid", Matcher: []string{"test3.*", "test4.*"}},
+		},
+		Protocol: "default",
+	})
+	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
+		Enable:          false,
+		ReplicaID:       1,
+		FilterReplicaID: []uint64{2, 3},
+		SyncDDL:         true,
+	})
+}
+
+func (s *utilsSuite) TestAndWriteExampleServerTOML(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cfg := config.GetDefaultServerConfig()
+	err := StrictDecodeFile("ticdc.toml", "cdc", &cfg)
+	c.Assert(err, check.IsNil)
+	defcfg := config.GetDefaultServerConfig()
+	defcfg.AdvertiseAddr = "127.0.0.1:8300"
+	defcfg.LogFile = "/tmp/ticdc/ticdc.log"
+	c.Assert(cfg, check.DeepEquals, defcfg)
 }
 
 func (s *utilsSuite) TestJSONPrint(c *check.C) {
@@ -193,4 +232,41 @@ func (s *utilsSuite) TestJSONPrint(c *check.C) {
 }
 `
 	c.Assert(b.String(), check.Equals, output)
+}
+
+func (s *utilsSuite) TestIgnoreStrictCheckItem(c *check.C) {
+	defer testleak.AfterTest(c)()
+	dataDir := c.MkDir()
+	tmpDir := c.MkDir()
+	configPath := filepath.Join(tmpDir, "ticdc.toml")
+	configContent := fmt.Sprintf(`
+data-dir = "%+v"
+[unknown]
+max-size = 200
+max-days = 1
+max-backups = 1
+`, dataDir)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
+	c.Assert(err, check.IsNil)
+
+	conf := config.GetDefaultServerConfig()
+	err = StrictDecodeFile(configPath, "test", conf, "unknown")
+	c.Assert(err, check.IsNil)
+
+	configContent = fmt.Sprintf(`
+data-dir = "%+v"
+[unknown]
+max-size = 200
+max-days = 1
+max-backups = 1
+[unknown2]
+max-size = 200
+max-days = 1
+max-backups = 1
+`, dataDir)
+	err = os.WriteFile(configPath, []byte(configContent), 0o644)
+	c.Assert(err, check.IsNil)
+
+	err = StrictDecodeFile(configPath, "test", conf, "unknown")
+	c.Assert(err, check.ErrorMatches, ".*contained unknown configuration options: unknown2.*")
 }

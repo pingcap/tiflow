@@ -21,18 +21,17 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/codec"
 )
 
 var _ = check.Suite(&ddlPullerSuite{})
 
-type ddlPullerSuite struct {
-}
+type ddlPullerSuite struct{}
 
 type mockPuller struct {
 	c          *check.C

@@ -14,11 +14,14 @@
 package codec
 
 import (
+	"context"
+	"encoding/binary"
 	"strings"
 	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -63,9 +66,16 @@ type MQMessage struct {
 	Protocol Protocol            // protocol
 }
 
+// maximumRecordOverhead is used to calculate ProducerMessage's byteSize by sarama kafka client.
+// reference: https://github.com/Shopify/sarama/blob/66521126c71c522c15a36663ae9cddc2b024c799/async_producer.go#L233
+// for TiCDC, minimum supported kafka version is `0.11.0.2`, which will be treated as `version = 2` by sarama producer.
+const maximumRecordOverhead = 5*binary.MaxVarintLen32 + binary.MaxVarintLen64 + 1
+
 // Length returns the expected size of the Kafka message
+// We didn't append any `Headers` when send the message, so ignore the calculations related to it.
+// If `ProducerMessage` Headers fields used, this method should also adjust.
 func (m *MQMessage) Length() int {
-	return len(m.Key) + len(m.Value)
+	return len(m.Key) + len(m.Value) + maximumRecordOverhead
 }
 
 // PhysicalTime returns physical time part of Ts in time.Time
@@ -167,23 +177,27 @@ func (p *Protocol) FromString(protocol string) {
 	}
 }
 
-// NewEventBatchEncoder returns a function of creating an EventBatchEncoder
-func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
+type EncoderBuilder interface {
+	Build(ctx context.Context) (EventBatchEncoder, error)
+}
+
+// NewEventBatchEncoderBuilder returns an EncoderBuilder
+func NewEventBatchEncoderBuilder(p Protocol, credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
 	switch p {
 	case ProtocolDefault:
-		return NewJSONEventBatchEncoder
+		return newJSONEventBatchEncoderBuilder(opts), nil
 	case ProtocolCanal:
-		return NewCanalEventBatchEncoder
+		return newCanalEventBatchEncoderBuilder(opts), nil
 	case ProtocolAvro:
-		return NewAvroEventBatchEncoder
+		return newAvroEventBatchEncoderBuilder(credential, opts)
 	case ProtocolMaxwell:
-		return NewMaxwellEventBatchEncoder
+		return newMaxwellEventBatchEncoderBuilder(opts), nil
 	case ProtocolCanalJSON:
-		return NewCanalFlatEventBatchEncoder
+		return newCanalFlatEventBatchEncoderBuilder(opts), nil
 	case ProtocolCraft:
-		return NewCraftEventBatchEncoder
+		return newCraftEventBatchEncoderBuilder(opts), nil
 	default:
-		log.Warn("unknown codec protocol value of EventBatchEncoder", zap.Int("protocol_value", int(p)))
-		return NewJSONEventBatchEncoder
+		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Int("protocol_value", int(p)))
+		return newJSONEventBatchEncoderBuilder(opts), nil
 	}
 }

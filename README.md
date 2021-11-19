@@ -1,6 +1,6 @@
 # TiCDC
 
-[![Build Status](https://internal.pingcap.net/idc-jenkins/job/build_cdc_multi_branch/job/master/badge/icon)](https://internal.pingcap.net/idc-jenkins/job/build_cdc_multi_branch/job/master)
+[![Build Status](https://github.com/pingcap/ticdc/actions/workflows/check_and_build.yaml/badge.svg?branch=master)](https://github.com/pingcap/ticdc/actions/workflows/check_and_build.yaml?query=event%3Apush+branch%3Amaster)
 [![codecov](https://codecov.io/gh/pingcap/ticdc/branch/master/graph/badge.svg)](https://codecov.io/gh/pingcap/ticdc)
 [![Coverage Status](https://coveralls.io/repos/github/pingcap/ticdc/badge.svg)](https://coveralls.io/github/pingcap/ticdc)
 [![LICENSE](https://img.shields.io/github/license/pingcap/ticdc.svg)](https://github.com/pingcap/ticdc/blob/master/LICENSE)
@@ -51,10 +51,10 @@ For details, see [Deploy TiCDC](https://docs.pingcap.com/tidb/stable/deploy-ticd
 
 ```sh
 # Start TiDB cluster
-$ docker-compose -f docker-compose-mysql.yml up -d
+$ docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql.yml up -d
 
 # Attach to control container to run TiCDC
-$ docker exec -it ticdc_controller_1 sh
+$ docker exec -it ticdc_controller sh
 
 # Start to feed the changes on the upstream tidb, and sink to the downstream tidb
 $ ./cdc cli changefeed create --pd http://upstream-pd:2379 --sink-uri mysql://root@downstream-tidb:4000/

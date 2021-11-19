@@ -1,0 +1,461 @@
+syntax = "proto3";
+
+package pb;
+
+import "dmworker.proto"; // refine if needed
+import "google/api/annotations.proto";
+
+service Master {
+    rpc StartTask (StartTaskRequest) returns (StartTaskResponse) {
+        option (google.api.http) = { 
+            post: "/apis/v1alpha1/tasks"
+            body: "*"
+        };
+    }
+
+    rpc OperateTask (OperateTaskRequest) returns (OperateTaskResponse) {
+        option (google.api.http) = { 
+            put: "/apis/v1alpha1/tasks/{name}"
+            body: "*"
+        };
+    }
+    rpc UpdateTask (UpdateTaskRequest) returns (UpdateTaskResponse) {}
+
+    rpc QueryStatus (QueryStatusListRequest) returns (QueryStatusListResponse) {
+        option (google.api.http) = { 
+            get: "/apis/v1alpha1/status/{name}"
+        };
+    }
+
+    // show un-resolved DDL locks
+    rpc ShowDDLLocks (ShowDDLLocksRequest) returns (ShowDDLLocksResponse) {}
+    // used by dmctl to manually unlock DDL lock
+    rpc UnlockDDLLock (UnlockDDLLockRequest) returns (UnlockDDLLockResponse) {}
+
+    // OperateWorkerRelayTask requests some dm-workers to operate relay unit
+    rpc OperateWorkerRelayTask (OperateWorkerRelayRequest) returns (OperateWorkerRelayResponse) {}
+
+    // PurgeWorkerRelay purges relay log files for some dm-workers
+    rpc PurgeWorkerRelay(PurgeWorkerRelayRequest) returns (PurgeWorkerRelayResponse) {}
+
+    // CheckTask checks legality of task configuration
+    rpc CheckTask(CheckTaskRequest) returns (CheckTaskResponse) {}
+
+    // Operate an upstream MySQL source.
+    rpc OperateSource(OperateSourceRequest) returns (OperateSourceResponse) {
+        option (google.api.http) = {
+            put: "/apis/v1alpha1/sources"
+            body: "*"
+        };
+    }
+
+    // RegisterWorker register the dm-workers.
+    rpc RegisterWorker(RegisterWorkerRequest) returns(RegisterWorkerResponse) {}
+
+    // OfflineMember offline the dm cluster's members (master/worker).
+    rpc OfflineMember(OfflineMemberRequest) returns(OfflineMemberResponse) {
+        option (google.api.http) = {
+            delete: "/apis/v1alpha1/members/{type}/{name}"
+        };
+    }
+
+    // OperateLeader do some operate on master:
+    //   - evict leader: make the master resign if it is leader, and will not campaign the leader again
+    //   - cancel evict leader: the master can campaign leader again.
+    rpc OperateLeader(OperateLeaderRequest) returns(OperateLeaderResponse) {
+        option (google.api.http) = { 
+            put: "/apis/v1alpha1/leader/{op}"
+            body: "*"
+        };
+    }
+
+    // ListMember list member information
+    rpc ListMember(ListMemberRequest) returns(ListMemberResponse) {
+        option (google.api.http) = {
+            get: "/apis/v1alpha1/members"
+        };
+    }
+
+    rpc OperateSchema(OperateSchemaRequest) returns(OperateSchemaResponse) {
+        option (google.api.http) = {
+            put: "/apis/v1alpha1/schema"
+            body: "*"
+        };
+    }
+
+    rpc GetSubTaskCfg(GetSubTaskCfgRequest) returns(GetSubTaskCfgResponse) {
+        option (google.api.http) = {
+            get: "/apis/v1alpha1/subtasks/{name}"
+        };
+    }
+
+    // GetCfg get config
+    rpc GetCfg(GetCfgRequest) returns(GetCfgResponse) {
+        option (google.api.http) = {
+            get: "/apis/v1alpha1/tasks/{name}"
+        };
+    }
+
+    rpc HandleError(HandleErrorRequest) returns(HandleErrorResponse) {
+        option (google.api.http) = {
+            put: "/apis/v1alpha1/errors"
+            body: "*"
+        };
+    }
+
+    rpc GetMasterCfg(GetMasterCfgRequest) returns(GetMasterCfgResponse) {}
+
+    rpc TransferSource(TransferSourceRequest) returns(TransferSourceResponse) {}
+
+    rpc OperateRelay(OperateRelayRequest) returns(OperateRelayResponse) {}
+}
+
+message StartTaskRequest {
+    string task = 1; // task's configuration, yaml format
+    repeated string sources = 2; // mysql source need to do start task, empty for all sources defiend in the task config
+    bool removeMeta = 3; // whether to remove meta data for this task or not
+}
+
+message StartTaskResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated CommonWorkerResponse sources = 3;
+}
+
+message OperateTaskRequest {
+    TaskOp op = 1; // Stop / Pause / Resume
+    string name = 2; // task's name
+    repeated string sources = 3; // sources need to do operation, empty for matched sources in processing the task
+}
+
+message OperateTaskResponse {
+    TaskOp op = 1;
+    bool result = 2;
+    string msg = 3;
+    repeated CommonWorkerResponse sources = 4;
+}
+
+
+// UpdateTaskRequest used to update task after it has beed started
+// task: task's configuration, yaml format
+//       now, only support to update config for routes, filters, column-mappings, block-allow-list
+//       support update partial config for syncer, loader, etc later
+// sources need to do update, empty for all sources in processing the task
+message UpdateTaskRequest {
+    string task = 1;
+    repeated string sources = 2;
+}
+
+message UpdateTaskResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated CommonWorkerResponse sources = 3;
+}
+
+
+message QueryStatusListRequest {
+    string name = 1; // task's name, empty for all tasks
+    repeated string sources = 2; // sources need to query, empty for all sources
+}
+
+message QueryStatusListResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated QueryStatusResponse sources = 3;
+}
+
+// ShowDDLLocksRequest used to query DDL locks which are un-resolved
+// task: task's name, empty for all tasks
+// sources: source need to query, empty for all sources
+//          any DDL lock in which the source is synced or unsynced will return
+// if specify task and sources both, and sources not doing the task , it will return empty DDL locks
+message ShowDDLLocksRequest {
+    string task = 1;
+    repeated string sources = 2; // sources need to query, empty for all sources
+}
+
+// DDLLock represents a DDL lock info (I known the name confused with DDLLockInfo, any suggestion?)
+// it been sent from dm-master to dmctl
+// ID: DDL lock generated ID
+// task: lock's corresponding task name
+// mode: the shard DDL mode, `pessimistic` or `optimistic`.
+// owner: lock's owner, a dm-worker
+// DDL: DDL statement
+// synced: already synced dm-workers
+// unsynced: pending to sync dm-workers
+message DDLLock {
+    string ID = 1;
+    string task = 2;
+    string mode = 3;
+    string owner = 4;
+    repeated string DDLs = 5;
+    repeated string synced = 6;
+    repeated string unsynced = 7;
+}
+
+message ShowDDLLocksResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated DDLLock locks = 3; // all un-resolved DDL locks
+}
+
+// UnlockDDLLockRequest used to unlock (resolve) DDL lock manually
+// ID: DDL lock ID
+// replaceOwner: dm-worker used to replace the original DDL lock's owner
+// forceRemove: force to remove the DDL lock even fail to execute the DDL for the owner.
+message UnlockDDLLockRequest {
+    string ID = 1;
+    string replaceOwner = 2;
+    bool forceRemove = 3;
+}
+
+message UnlockDDLLockResponse {
+    bool result = 1;
+    string msg = 2;
+}
+
+// OperateWorkerRelayRequest represents a request for some dm-workers to operate relay unit
+message OperateWorkerRelayRequest {
+    RelayOp op = 1; // Stop / Pause / Resume
+    repeated string sources = 2;
+}
+
+message OperateWorkerRelayResponse {
+    RelayOp op = 1;
+    bool result = 2;
+    string msg = 3;
+    repeated CommonWorkerResponse sources = 4;
+}
+
+// PurgeWorkerRelayRequest represents a request to purge relay log files for some dm-workers
+// workers: dm-workers need to purge relay log files
+// inactive: whether purge inactive relay log files
+// time: whether purge relay log files before this time, the number of seconds elapsed since January 1, 1970 UTC
+// filename: whether purge relay log files before this filename
+// subDir: specify relay sub directory for @filename
+message PurgeWorkerRelayRequest {
+    repeated string sources = 1;
+    bool inactive = 2;
+    int64 time = 3;
+    string filename = 4;
+    string subDir = 5;
+}
+
+message PurgeWorkerRelayResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated CommonWorkerResponse sources = 3;
+}
+
+message CheckTaskRequest {
+    string task = 1; // task's configuration, yaml format
+    int64 errCnt = 2; // max error count to display
+    int64 warnCnt = 3; // max warn count to display
+}
+
+message CheckTaskResponse {
+    bool result = 1;
+    string msg = 2;
+}
+
+enum SourceOp {
+    InvalidSourceOp = 0;
+    StartSource = 1;
+    UpdateSource = 2;
+    StopSource = 3;
+    ShowSource = 4;
+}
+
+message OperateSourceRequest {
+    SourceOp op = 1;
+    repeated string config = 2;
+    repeated string sourceID = 3;
+}
+
+message OperateSourceResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated CommonWorkerResponse sources = 3;
+}
+
+message RegisterWorkerRequest {
+    string name = 1;
+    string address = 2;
+}
+
+message RegisterWorkerResponse {
+    bool result = 1;
+    string msg = 2;
+}
+
+message OfflineMemberRequest {
+    string type = 1;
+    string name = 2;
+}
+
+message OfflineMemberResponse {
+    bool result = 1;
+    string msg = 2;
+}
+
+enum LeaderOp {
+    InvalidLeaderOp = 0;
+    EvictLeaderOp = 1;
+    CancelEvictLeaderOp = 2;
+}
+
+message OperateLeaderRequest {
+    LeaderOp op = 1;
+}
+
+message OperateLeaderResponse {
+    bool result = 1;
+    string msg = 2;
+}
+
+message MasterInfo {
+    string name = 1;
+    uint64 memberID = 2;
+    bool alive = 3;
+    repeated string peerURLs = 4;
+    repeated string clientURLs = 5;
+}
+
+message WorkerInfo {
+    string name = 1;
+    string addr = 2;
+    string stage = 3;
+    string source = 4;
+}
+
+message ListLeaderMember {
+    string msg = 1;
+    string name = 2;
+    string addr = 3;
+}
+
+message ListMasterMember {
+    string msg = 1;
+    repeated MasterInfo masters = 2;
+}
+
+message ListWorkerMember {
+    string msg = 1;
+    repeated WorkerInfo workers = 2;
+}
+
+message Members {
+    oneof member {
+        ListLeaderMember leader = 1;
+        ListMasterMember master = 2;
+        ListWorkerMember worker = 3;
+    }
+}
+
+message ListMemberRequest {
+    bool leader = 1;
+    bool master = 2;
+    bool worker = 3;
+    repeated string names = 4;
+}
+
+message ListMemberResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated Members members = 3;
+}
+
+message OperateSchemaRequest {
+    SchemaOp op = 1; // operation type
+    string task = 2; // task name
+    repeated string sources = 3; // source ID list
+    string database = 4; // database name
+    string table = 5; // table name
+    string schema = 6; // schema content, a `CREATE TABLE` statement
+    bool flush = 7; // flush table info and checkpoint
+    bool sync = 8; // sync the table info to master
+}
+
+message OperateSchemaResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated CommonWorkerResponse sources = 3;
+}
+
+message GetSubTaskCfgRequest {
+    // the task name
+    string name = 1;
+}
+
+message GetSubTaskCfgResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated string cfgs = 3;
+}
+
+enum CfgType {
+    InvalidType = 0;
+    TaskType = 1;
+    MasterType = 2;
+    WorkerType = 3;
+    SourceType = 4;
+}
+
+message GetCfgRequest {
+    CfgType type = 1; // the config type
+    string name = 2; // the config name
+}
+
+message GetCfgResponse {
+    bool result = 1;
+    string msg = 2;
+    string cfg = 3;
+}
+
+message GetMasterCfgRequest {
+}
+
+message GetMasterCfgResponse {
+    string cfg = 1;
+}
+
+message HandleErrorRequest {
+    ErrorOp op = 1; // operation type
+    string task = 2; // the task name
+    repeated string sources = 3; // source ID list
+    string binlogPos = 4; // binlog-pos (that's file:pos format)
+    repeated string sqls = 5; // sqls (use for replace)
+}
+
+message HandleErrorResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated CommonWorkerResponse sources = 3;
+}
+
+message TransferSourceRequest {
+    string source = 1;
+    string worker = 2;
+}
+
+message TransferSourceResponse {
+    bool result = 1;
+    string msg = 2;
+}
+
+message OperateRelayRequest {
+    RelayOpV2 op = 1;
+    string source = 2;
+    repeated string worker = 3;
+}
+
+message OperateRelayResponse {
+    bool result = 1;
+    string msg = 2;
+}
+
+enum RelayOpV2 {
+    InvalidRelayOpV2 = 0;
+    StartRelayV2 = 1;
+    StopRelayV2 = 2;
+}

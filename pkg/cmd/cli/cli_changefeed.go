@@ -14,15 +14,62 @@
 package cli
 
 import (
+	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
+	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/spf13/cobra"
 )
 
+// changefeedOptions defines flags for the `cli changefeed` command.
+type changefeedOptions struct {
+	disableVersionCheck bool
+}
+
+// newChangefeedOptions creates new changefeedOptions for the `cli changefeed` command.
+func newChangefeedOptions() *changefeedOptions {
+	return &changefeedOptions{}
+}
+
+// addFlags receives a *cobra.Command reference and binds
+// flags related to template printing to it.
+func (o *changefeedOptions) addFlags(cmd *cobra.Command) {
+	if o == nil {
+		return
+	}
+
+	cmd.PersistentFlags().BoolVar(&o.disableVersionCheck, "disable-version-check", false, "Disable version check")
+	_ = cmd.PersistentFlags().MarkHidden("disable-version-check")
+}
+
+// run checks the TiCDC cluster version.
+func (o *changefeedOptions) run(f factory.Factory) error {
+	if o.disableVersionCheck {
+		return nil
+	}
+	ctx := cmdcontext.GetDefaultContext()
+	etcdClient, err := f.EtcdClient()
+	if err != nil {
+		return err
+	}
+
+	_, err = util.VerifyAndGetTiCDCClusterVersion(ctx, etcdClient)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // newCmdChangefeed creates the `cli changefeed` command.
 func newCmdChangefeed(f factory.Factory) *cobra.Command {
+	o := newChangefeedOptions()
+
 	cmds := &cobra.Command{
 		Use:   "changefeed",
 		Short: "Manage changefeed (changefeed is a replication task)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return o.run(f)
+		},
 	}
 
 	cmds.AddCommand(newCmdCreateChangefeed(f))
@@ -34,6 +81,8 @@ func newCmdChangefeed(f factory.Factory) *cobra.Command {
 	cmds.AddCommand(newCmdQueryChangefeed(f))
 	cmds.AddCommand(newCmdRemoveChangefeed(f))
 	cmds.AddCommand(newCmdResumeChangefeed(f))
+
+	o.addFlags(cmds)
 
 	return cmds
 }

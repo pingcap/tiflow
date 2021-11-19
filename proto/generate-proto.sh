@@ -9,3 +9,4 @@ echo "generate canal & craft benchmark protocol code..."
 protoc --gofast_out=./canal EntryProtocol.proto
 protoc --gofast_out=./canal CanalProtocol.proto
 protoc --gofast_out=./benchmark CraftBenchmark.proto
+protoc --gofast_out=plugins=grpc:./p2p CDCPeerToPeer.proto

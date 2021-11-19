@@ -34,14 +34,17 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// DDLPullerTableName is the fake table name for ddl puller.
+const DDLPullerTableName = "DDL_PULLER"
+
 const (
 	defaultPullerEventChanSize  = 128
 	defaultPullerOutputChanSize = 128
 )
 
-// Puller pull data from tikv and push changes into a buffer
+// Puller pull data from tikv and push changes into a buffer.
 type Puller interface {
-	// Run the puller, continually fetch event from TiKV and add event into buffer
+	// Run the puller, continually fetch event from TiKV and add event into buffer.
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
 	Output() <-chan *model.RawKVEntry
@@ -49,7 +52,6 @@ type Puller interface {
 }
 
 type pullerImpl struct {
-	pdCli          pd.Client
 	kvCli          kv.CDCKVClient
 	kvStorage      tikv.Storage
 	checkpointTs   uint64
@@ -86,7 +88,6 @@ func NewPuller(
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
 	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool)
 	p := &pullerImpl{
-		pdCli:          pdCli,
 		kvCli:          kvCli,
 		kvStorage:      tikvStorage,
 		checkpointTs:   checkpointTs,
@@ -98,10 +99,6 @@ func NewPuller(
 		enableOldValue: enableOldValue,
 	}
 	return p
-}
-
-func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
-	return p.outputCh
 }
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
@@ -162,7 +159,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			// be ignored since no late data is received and the guarantee of
 			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
-				log.Warn("The CRTs is fallen back in pulelr",
+				log.Warn("The CRTs is fallen back in puller",
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
@@ -237,6 +234,10 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 func (p *pullerImpl) GetResolvedTs() uint64 {
 	return atomic.LoadUint64(&p.resolvedTs)
+}
+
+func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
+	return p.outputCh
 }
 
 func (p *pullerImpl) IsInitialized() bool {

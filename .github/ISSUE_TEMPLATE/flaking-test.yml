@@ -1,0 +1,41 @@
+name: "\U0001F608 Flaking Test"
+description: Report flaky tests or jobs
+labels: ["component/test"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please only use this template for submitting reports about flaky tests or jobs (pass or fail with no underlying change in code) in DM/TiCDC CI.
+        Please link this report to https://github.com/pingcap/ticdc/issues/2246 as a subtask.
+  - type: textarea
+    id: jobs
+    attributes:
+      label: Which jobs are flaking?
+    validations:
+      required: true
+  - type: textarea
+    id: tests
+    attributes:
+      label: Which test(s) are flaking?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Jenkins logs or GitHub Actions link
+      value: |-
+             ```log
+             (paste logs here)
+             ```
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else we need to know
+      value: |-
+             - Does this test exist for other branches as well?
+
+             - Has there been a high frequency of failure lately?
+    validations:
+      required: false

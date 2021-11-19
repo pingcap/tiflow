@@ -21,11 +21,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/redo"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -34,17 +37,20 @@ import (
 
 type changefeed struct {
 	id    model.ChangeFeedID
-	state *model.ChangefeedReactorState
+	state *orchestrator.ChangefeedReactorState
 
 	scheduler        *scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	gcManager        GcManager
+	gcManager        gc.Manager
+	redoManager      redo.LogManager
 
 	schema      *schemaWrap4Owner
 	sink        AsyncSink
 	ddlPuller   DDLPuller
 	initialized bool
+	// isRemoved is true if the changefeed is removed
+	isRemoved bool
 
 	// only used for asyncExecDDL function
 	// ddlEventCache is not nil when the changefeed is executing a DDL event asynchronously
@@ -68,7 +74,7 @@ type changefeed struct {
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
+func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 	c := &changefeed{
 		id:               id,
 		scheduler:        newScheduler(),
@@ -86,7 +92,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, gcManager GcManager,
+	id model.ChangeFeedID, gcManager gc.Manager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
@@ -96,7 +102,7 @@ func newChangefeed4Test(
 	return c
 }
 
-func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
+func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		c.errCh <- errors.Trace(err)
 		return nil
@@ -110,36 +116,43 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		} else {
 			code = string(cerror.ErrOwnerUnknown.RFCCode())
 		}
-		c.feedStateManager.HandleError(&model.RunningError{
+		c.feedStateManager.handleError(&model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
 			Code:    code,
 			Message: err.Error(),
 		})
-		c.releaseResources()
+		c.releaseResources(ctx)
 	}
 }
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
 	state := c.state.Info.State
 	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
-		if err := c.gcManager.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
+		failpoint.Inject("InjectChangefeedFastFailError", func() error {
+			return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
+		})
+		if err := c.gcManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
 	return nil
 }
 
-func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
+func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	c.state = state
 	c.feedStateManager.Tick(state)
-	if !c.feedStateManager.ShouldRunning() {
-		c.releaseResources()
-		return nil
-	}
 
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	// check stale checkPointTs must be called before `feedStateManager.ShouldRunning()`
+	// to ensure an error or stopped changefeed also be checked
 	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
 		return errors.Trace(err)
+	}
+
+	if !c.feedStateManager.ShouldRunning() {
+		c.isRemoved = c.feedStateManager.ShouldRemoved()
+		c.releaseResources(ctx)
+		return nil
 	}
 
 	if !c.preflightCheck(captures) {
@@ -202,7 +215,19 @@ LOOP:
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
 	if c.state.Info.Config.CheckGCSafePoint {
-		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, checkpointTs)
+		// Check TiDB GC safepoint does not exceed the checkpoint.
+		//
+		// We update TTL to 10 minutes,
+		//  1. to delete the service GC safepoint effectively,
+		//  2. in case owner update TiCDC service GC safepoint fails.
+		//
+		// Also it unblocks TiDB GC, because the service GC safepoint is set to
+		// 1 hour TTL during creating changefeed.
+		//
+		// See more gc doc.
+		ensureTTL := int64(10 * 60)
+		err := gc.EnsureChangefeedStartTsSafety(
+			ctx, ctx.GlobalVars().PDClient, c.state.ID, ensureTTL, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -245,6 +270,14 @@ LOOP:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
+	stdCtx := util.PutChangefeedIDInCtx(cancelCtx, c.id)
+	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
+	redoManager, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
+	if err != nil {
+		return err
+	}
+	c.redoManager = redoManager
+
 	// init metrics
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
@@ -252,16 +285,22 @@ LOOP:
 	return nil
 }
 
-func (c *changefeed) releaseResources() {
+func (c *changefeed) releaseResources(ctx context.Context) {
 	if !c.initialized {
 		return
 	}
 	log.Info("close changefeed", zap.String("changefeed", c.state.ID),
-		zap.Stringer("info", c.state.Info))
+		zap.Stringer("info", c.state.Info), zap.Bool("isRemoved", c.isRemoved))
 	c.cancel()
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
+	if c.isRemoved && c.redoManager.Enabled() {
+		err := c.redoManager.Cleanup(ctx)
+		if err != nil {
+			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id), zap.Error(err))
+		}
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
@@ -404,6 +443,12 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		}
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
 		c.ddlEventCache = ddlEvent
+		if c.redoManager.Enabled() {
+			err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
+			if err != nil {
+				return false, err
+			}
+		}
 	}
 	if job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
 		log.Warn("ignore the DDL job of ineligible table", zap.Reflect("job", job))
@@ -459,6 +504,6 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 }
 
-func (c *changefeed) Close() {
-	c.releaseResources()
+func (c *changefeed) Close(ctx context.Context) {
+	c.releaseResources(ctx)
 }

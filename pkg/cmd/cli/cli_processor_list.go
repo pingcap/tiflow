@@ -14,16 +14,16 @@
 package cli
 
 import (
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/spf13/cobra"
 )
 
 // listProcessorOptions defines flags for the `cli processor list` command.
 type listProcessorOptions struct {
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 }
 
 // newListProcessorOptions creates new listProcessorOptions for the `cli processor list` command.
@@ -61,6 +61,7 @@ func newCmdListProcessor(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "list",
 		Short: "List all processors in TiCDC cluster",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {

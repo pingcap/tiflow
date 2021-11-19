@@ -14,17 +14,17 @@
 package cli
 
 import (
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 )
 
 // pauseChangefeedOptions defines flags for the `cli changefeed pause` command.
 type pauseChangefeedOptions struct {
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 
 	credential *security.Credential
 
@@ -76,6 +76,7 @@ func newCmdPauseChangefeed(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "pause",
 		Short: "Pause a replication task (changefeed)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {

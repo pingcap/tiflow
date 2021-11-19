@@ -44,7 +44,7 @@ type Sink interface {
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 
 	// FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
-	// TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
+	// TiCDC guarantees that all the Events whose commitTs is less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
 	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error)
 
 	// EmitCheckpointTs sends CheckpointTs to Sink
@@ -69,6 +69,7 @@ func init() {
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newBlackHoleSink(ctx, opts), nil
 	}
+
 	// register mysql sink
 	sinkIniterMap["mysql"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
@@ -104,21 +105,14 @@ func init() {
 		return cdclog.NewS3Sink(ctx, sinkURI, errCh)
 	}
 
-	sinkIniterMap["dsgsocket"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
-		return newDsgTestSink(ctx, opts), nil
-	}
-
 	sinkIniterMap["rowsocket"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newDsgSink(ctx, opts,sinkURI), nil
 	}
 }
 
-
-
-// NewSink creates a new sink with the sink-uri
-func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+// New creates a new sink with the sink-uri
+func New(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
@@ -128,4 +122,30 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 		return newSink(ctx, changefeedID, sinkURI, filter, config, opts, errCh)
 	}
 	return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
+}
+
+// Validate sink if given valid parameters.
+func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, opts map[string]string) error {
+	sinkFilter, err := filter.NewFilter(cfg)
+	if err != nil {
+		return err
+	}
+	errCh := make(chan error)
+	// TODO: find a better way to verify a sinkURI is valid
+	s, err := New(ctx, "sink-verify", sinkURI, sinkFilter, cfg, opts, errCh)
+	if err != nil {
+		return err
+	}
+	err = s.Close(ctx)
+	if err != nil {
+		return err
+	}
+	select {
+	case err = <-errCh:
+		if err != nil {
+			return err
+		}
+	default:
+	}
+	return nil
 }

@@ -15,9 +15,9 @@ package cli
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
 )
@@ -50,7 +50,7 @@ func (o *unsafeDeleteServiceGcSafepointOptions) complete(f factory.Factory) erro
 func (o *unsafeDeleteServiceGcSafepointOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
 
-	_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, owner.CDCServiceSafePointID, 0, 0)
+	err := gc.RemoveServiceGCSafepoint(ctx, o.pdClient, gc.CDCServiceSafePointID)
 	if err == nil {
 		cmd.Println("CDC service GC safepoint truncated in PD!")
 	}
@@ -65,6 +65,7 @@ func newCmdDeleteServiceGcSafepoint(f factory.Factory, commonOptions *unsafeComm
 	command := &cobra.Command{
 		Use:   "delete-service-gc-safepoint",
 		Short: "Delete CDC service GC safepoint in PD, confirm that you know what this command will do and use it at your own risk",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := commonOptions.confirmMetaDelete(cmd); err != nil {
 				return err

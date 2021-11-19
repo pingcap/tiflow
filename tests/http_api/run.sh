@@ -2,61 +2,113 @@
 
 set -e
 
-CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
+TLS_DIR=$(cd $CUR/../_certificates && pwd)
 
 function run() {
-    sudo pip install -U requests==2.26.0
+	# mysql and kafka are the same
+	if [ "$SINK_TYPE" == "kafka" ]; then
+		return
+	fi
 
-    rm -rf $WORK_DIR && mkdir -p $WORK_DIR
+	sudo pip install -U requests==2.26.0
 
-    start_tidb_cluster --workdir $WORK_DIR --multiple-upstream-pd true
+	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-    cd $WORK_DIR
+	start_tidb_cluster --workdir $WORK_DIR
+	start_tls_tidb_cluster --workdir $WORK_DIR --tlsdir $TLS_DIR
 
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-    # wait for cdc run
-    sleep 1
+	cd $WORK_DIR
 
-    TOPIC_NAME="ticdc-http-api-test-$RANDOM"
-    case $SINK_TYPE in
-        kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}";;
-        *) SINK_URI="mysql://normal:123456@127.0.0.1:3306/";;
-    esac
+	echo " \
+  [security]
+   ca-path = \"$TLS_DIR/ca.pem\"
+   cert-path = \"$TLS_DIR/server.pem\"
+   key-path = \"$TLS_DIR/server-key.pem\"
+   cert-allowed-cn = [\"fake_cn\"]
+  " >$WORK_DIR/server.toml
 
-    python $CUR/util/test_case.py check_health
-    python $CUR/util/test_case.py get_status
+	run_cdc_server \
+		--workdir $WORK_DIR \
+		--binary $CDC_BINARY \
+		--logsuffix "_${TEST_NAME}_tls1" \
+		--pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
+		--addr "127.0.0.1:8300" \
+		--config "$WORK_DIR/server.toml" \
+		--tlsdir "$TLS_DIR" \
+		--cert-allowed-cn "client" # The common name of client.pem
 
-    python $CUR/util/test_case.py create_changefeed "$SINK_URI"
+	sleep 2
 
-    run_sql "CREATE table test.simple(id int primary key, val int);"
-    run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
-    # wait for above sql done in the up source
-    sleep 1
+	run_cdc_server \
+		--workdir $WORK_DIR \
+		--binary $CDC_BINARY \
+		--logsuffix "_${TEST_NAME}_tls2" \
+		--pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
+		--addr "127.0.0.1:8301" \
+		--config "$WORK_DIR/server.toml" \
+		--tlsdir "$TLS_DIR" \
+		--cert-allowed-cn "client" # The common name of client.pem
 
-    sequential_cases=(
-    "list_changefeed"
-    "get_changefeed"
-    "pause_changefeed"
-    "update_changefeed"
-    "resume_changefeed"
-    "rebalance_table"
-    "move_table"
-    "get_processor"
-    "list_processor"
-    "set_log_level"
-    "remove_changefeed"
-    "resign_owner"
-    )
+	# wait for cdc run
+	sleep 2
 
-    for case in $sequential_cases; do {
-        python $CUR/util/test_case.py "$case";
-    } done;
+	SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
 
-    cleanup_process $CDC_BINARY
+	python $CUR/util/test_case.py check_health $TLS_DIR
+	python $CUR/util/test_case.py get_status $TLS_DIR
+
+	python $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
+	# wait for changefeed created
+	sleep 2
+
+	run_sql "CREATE table test.simple0(id int primary key, val int);"
+	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
+	run_sql "CREATE table test.simple1(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+		--ssl-ca=$TLS_DIR/ca.pem \
+		--ssl-cert=$TLS_DIR/server.pem \
+		--ssl-key=$TLS_DIR/server-key.pem
+	run_sql "CREATE table test.simple2(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+		--ssl-ca=$TLS_DIR/ca.pem \
+		--ssl-cert=$TLS_DIR/server.pem \
+		--ssl-key=$TLS_DIR/server-key.pem
+	run_sql "INSERT INTO test.simple1(id, val) VALUES (1, 1);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+		--ssl-ca=$TLS_DIR/ca.pem \
+		--ssl-cert=$TLS_DIR/server.pem \
+		--ssl-key=$TLS_DIR/server-key.pem
+	run_sql "INSERT INTO test.simple1(id, val) VALUES (2, 2);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+		--ssl-ca=$TLS_DIR/ca.pem \
+		--ssl-cert=$TLS_DIR/server.pem \
+		--ssl-key=$TLS_DIR/server-key.pem
+	# wait for above sql done in the up source
+	sleep 2
+
+	check_table_exists test.simple1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+
+	sequential_cases=(
+		"list_changefeed"
+		"get_changefeed"
+		"pause_changefeed"
+		"update_changefeed"
+		"resume_changefeed"
+		"rebalance_table"
+		"list_processor"
+		"get_processor"
+		"move_table"
+		"set_log_level"
+		"remove_changefeed"
+		"resign_owner"
+	)
+
+	for case in ${sequential_cases[@]}; do
+		python $CUR/util/test_case.py "$case" $TLS_DIR
+	done
+
+	cleanup_process $CDC_BINARY
 }
 
 trap stop_tidb_cluster EXIT

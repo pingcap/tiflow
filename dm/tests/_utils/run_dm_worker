@@ -1,0 +1,30 @@
+#!/bin/sh
+# parameter 1: work directory
+# parameter 2: worker-addr port
+# parameter 3: config file for DM-worker
+# parameter 4: binary version, previous or current, can be omitted
+
+set -eu
+
+workdir=$1
+port=$2
+conf=$3
+
+binary=$PWD/bin/dm-worker.test
+if [ "$#" -ge 4 ]; then
+	version=$4
+	binary=$PWD/bin/dm-worker.test.$version
+fi
+
+mkdir -p $workdir/relay_log $workdir/dumped_data $workdir/log $workdir/bin
+
+PWD=$(pwd)
+
+echo "[$(date)] <<<<<< START DM-WORKER on port $port, config: $conf >>>>>>"
+cd $workdir
+$binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.worker.$port.$(date +"%s").out" DEVEL \
+	--worker-addr=0.0.0.0:$port \
+	--advertise-addr=127.0.0.1:$port \
+	--log-file="$workdir/log/dm-worker.log" -L=debug --config="$conf" \
+	>>$workdir/log/stdout.log 2>&1 &
+cd $PWD

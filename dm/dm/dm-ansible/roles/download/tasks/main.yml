@@ -1,0 +1,90 @@
+---
+
+- name: Stop if ansible version is too low, make sure that the Ansible version is Ansible 2.5.0 or later, otherwise a compatibility issue occurs.
+  assert:
+    that:
+      - ansible_version.full is version('2.5.0', '>=')
+
+- name: detect outbound network
+  shell: >
+    warn=no
+    curl -s --connect-timeout 10 www.baidu.com 2>/dev/null >/dev/null; echo $?
+  changed_when: false
+  register: outbound_network_st
+
+- name: set outbound network fact
+  set_fact: has_outbound_network={{ outbound_network_st.stdout.strip() == '0' }}
+
+- fail:
+    msg: "The Control Machine must have access to the Internet in order to download TiDB and related packages."
+  when: not has_outbound_network
+
+- name: create downloads and resources directories
+  file: path="{{ item }}" state=directory mode=0755
+  with_items:
+  - "{{ downloads_dir }}"
+  - "{{ resources_dir }}"
+  - "{{ resources_dir }}/bin"
+
+- name: create packages.yml
+  template: src=packages.yml.j2 dest={{ playbook_dir }}/conf/packages.yml
+
+- include_vars: file={{ playbook_dir }}/conf/packages.yml
+
+- name: download DM binary
+  get_url:
+    url: "{{ item.url }}"
+    dest: "{{ downloads_dir }}/{{ item.name }}-{{ item.version }}.tar.gz"
+    checksum: "{{ item.checksum | default(omit) }}"
+    force: yes
+    validate_certs: no
+  register: get_url_result
+  until: "'OK' in get_url_result.msg or 'file already exists' in get_url_result.msg"
+  retries: 4
+  delay: "{{ retry_stagger | random + 3 }}"
+  with_items: "{{ dm_packages }}"
+  when: has_outbound_network
+
+- name: download monitoring modules binary
+  get_url:
+    url: "{{ item.url }}"
+    dest: "{{ downloads_dir }}/{{ item.name }}-{{ item.version }}.tar.gz"
+    checksum: "{{ item.checksum | default(omit) }}"
+    force: yes
+    validate_certs: no
+  register: get_url_result
+  until: "'OK' in get_url_result.msg or 'file already exists' in get_url_result.msg"
+  retries: 4
+  delay: "{{ retry_stagger | random + 3 }}"
+  with_items: "{{ monitoring_packages }}"
+  when: has_outbound_network
+
+- name: unarchive dm binary
+  shell: ls -1 {{ item.name }}-{{ item.version }}.tar.gz | xargs -n1 tar xzf
+  args:
+    chdir: "{{ downloads_dir }}"
+    warn: no
+  with_items: "{{ dm_packages }}"
+
+- name: unarchive monitoring modules binary
+  shell: ls -1 {{ item.name }}-{{ item.version }}.tar.gz | xargs -n1 tar xzf
+  args:
+    chdir: "{{ downloads_dir }}"
+    warn: no
+  with_items: "{{ monitoring_packages }}"
+
+- name: cp dm binary
+  shell: >
+    cp -v {{ downloads_dir }}/{{ item.name }}-{{ item.version}}*/bin/* "{{ resources_dir }}/bin/"
+  with_items: "{{ dm_packages }}"
+
+- name: cp monitoring modules binary
+  shell: >
+    cp -v {{ downloads_dir }}/{{ item }}-*/{{ item }} "{{ resources_dir }}/bin/{{ item }}"
+  with_items:
+    - alertmanager
+    - prometheus
+
+- name: clean up download dir
+  shell: >
+    cd "{{ downloads_dir }}" && find . -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} \;

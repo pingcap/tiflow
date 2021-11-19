@@ -34,7 +34,7 @@ const (
 	defaultErrChSize = 1024
 )
 
-// AsyncSink is a async sink design for owner
+// AsyncSink is an async sink design for owner
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
 type AsyncSink interface {
@@ -77,7 +77,7 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 		return nil, errors.Trace(err)
 	}
 	errCh := make(chan error, defaultErrChSize)
-	s, err := sink.NewSink(ctx, changefeedID, changefeedInfo.SinkURI, filter, changefeedInfo.Config, changefeedInfo.Opts, errCh)
+	s, err := sink.New(ctx, changefeedID, changefeedInfo.SinkURI, filter, changefeedInfo.Config, changefeedInfo.Opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

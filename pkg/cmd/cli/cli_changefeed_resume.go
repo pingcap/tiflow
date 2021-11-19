@@ -18,10 +18,10 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
@@ -29,7 +29,7 @@ import (
 
 // resumeChangefeedOptions defines flags for the `cli changefeed resume` command.
 type resumeChangefeedOptions struct {
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 	pdClient   pd.Client
 
 	credential *security.Credential
@@ -120,6 +120,7 @@ func newCmdResumeChangefeed(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "resume",
 		Short: "Resume a paused replication task (changefeed)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {

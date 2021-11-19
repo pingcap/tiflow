@@ -20,9 +20,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/types"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/util/rowcodec"
 )
@@ -143,8 +143,6 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 	return ti
 }
 
-// TODO(hi-rustin): After we don't need to subscribe index update,
-// findHandleIndex may be not necessary any more.
 func (ti *TableInfo) findHandleIndex() {
 	if ti.HandleIndexID == HandleIndexPKIsHandle {
 		// pk is handle

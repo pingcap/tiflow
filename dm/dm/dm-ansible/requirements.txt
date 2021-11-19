@@ -1,0 +1,3 @@
+ansible>=2.5.0,<2.7.0
+jinja2>=2.9.6
+jmespath>=0.9.0

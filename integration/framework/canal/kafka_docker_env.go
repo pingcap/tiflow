@@ -15,7 +15,7 @@ package canal
 
 import (
 	"database/sql"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/integralist/go-findroot/find"
@@ -26,10 +26,7 @@ import (
 )
 
 const (
-	dockerComposeFilePath   = "/docker-compose-canal.yml"
-	controllerContainerName = "ticdc_controller_1"
-	// The upstream PD endpoint in docker-compose network.
-	upstreamPD = "http://upstream-pd:2379"
+	dockerComposeFilePath = framework.DockerComposeFilePathPrefix + "docker-compose-canal.yml"
 )
 
 // KafkaDockerEnv represents the docker-compose service defined in docker-compose-canal.yml
@@ -50,7 +47,7 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 			return err
 		}
 		// Also check cdc cluster.
-		return framework.CdcHealthCheck(controllerContainerName, upstreamPD)
+		return framework.CdcHealthCheck(framework.ControllerContainerName, framework.UpstreamPD)
 	}
 	var file string
 	if dockerComposeFile == "" {
@@ -66,7 +63,7 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 	return &KafkaDockerEnv{DockerEnv: framework.DockerEnv{
 		DockerComposeOperator: framework.DockerComposeOperator{
 			FileName:      file,
-			Controller:    controllerContainerName,
+			Controller:    framework.ControllerContainerName,
 			HealthChecker: healthChecker,
 		},
 	}}
@@ -101,7 +98,7 @@ func checkCanalAdapterState() error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		str, err := ioutil.ReadAll(resp.Body)
+		str, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return err
 		}

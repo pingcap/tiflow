@@ -16,29 +16,24 @@ package entry
 import (
 	"context"
 	"strings"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	ticonfig "github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/util/testkit"
+	"github.com/pingcap/tidb/testkit"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
-type mountTxnsSuite struct{}
-
-var _ = check.Suite(&mountTxnsSuite{})
-
-func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMounterDisableOldValue(t *testing.T) {
 	testCases := []struct {
 		tableName      string
 		createTableDDL string
@@ -208,17 +203,17 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 		},
 	}}
 	for _, tc := range testCases {
-		testMounterDisableOldValue(c, tc)
+		testMounterDisableOldValue(t, tc)
 	}
 }
 
-func testMounterDisableOldValue(c *check.C, tc struct {
+func testMounterDisableOldValue(t *testing.T, tc struct {
 	tableName      string
 	createTableDDL string
 	values         [][]interface{}
 }) {
 	store, err := mockstore.NewMockStore()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer store.Close() //nolint:errcheck
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		// we can update the tidb config here
@@ -226,37 +221,37 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 	session.SetSchemaLease(0)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer domain.Close()
 	domain.SetStatsUpdating(true)
-	tk := testkit.NewTestKit(c, store)
+	tk := testkit.NewTestKit(t, store)
 	tk.MustExec("set @@tidb_enable_clustered_index=1;")
 	tk.MustExec("use test;")
 
 	tk.MustExec(tc.createTableDDL)
 
 	jobs, err := getAllHistoryDDLJob(store)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	scheamStorage, err := NewSchemaStorage(nil, 0, nil, false)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	for _, job := range jobs {
 		err := scheamStorage.HandleDDLJob(job)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 	tableInfo, ok := scheamStorage.GetLastSnapshot().GetTableByName("test", tc.tableName)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 	if tableInfo.IsCommonHandle {
 		// we can check this log to make sure if the clustered-index is enabled
 		log.Info("this table is enable the clustered index", zap.String("tableName", tableInfo.Name.L))
 	}
 
 	for _, params := range tc.values {
-		insertSQL := prepareInsertSQL(c, tableInfo, len(params))
+		insertSQL := prepareInsertSQL(t, tableInfo, len(params))
 		tk.MustExec(insertSQL, params...)
 	}
 
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
 	mounter := NewMounter(scheamStorage, 1, false).(*mounterImpl)
 	mounter.tz = time.Local
@@ -264,24 +259,24 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 
 	mountAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) int {
 		var rows int
-		walkTableSpanInStore(c, store, tableID, func(key []byte, value []byte) {
+		walkTableSpanInStore(t, store, tableID, func(key []byte, value []byte) {
 			rawKV := f(key, value)
 			row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 			if row == nil {
 				return
 			}
 			rows++
-			c.Assert(row.Table.Table, check.Equals, tc.tableName)
-			c.Assert(row.Table.Schema, check.Equals, "test")
+			require.Equal(t, row.Table.Table, tc.tableName)
+			require.Equal(t, row.Table.Schema, "test")
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
-				checkSQL, params := prepareCheckSQL(c, tc.tableName, row.Columns)
+				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.Columns)
 				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
 			if len(row.PreColumns) != 0 {
-				checkSQL, params := prepareCheckSQL(c, tc.tableName, row.PreColumns)
+				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.PreColumns)
 				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
@@ -310,7 +305,7 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 			CRTs:    ver.Ver,
 		}
 	})
-	c.Assert(rows, check.Equals, len(tc.values))
+	require.Equal(t, rows, len(tc.values))
 
 	rows = mountAndCheckRow(func(key []byte, value []byte) *model.RawKVEntry {
 		return &model.RawKVEntry{
@@ -321,41 +316,41 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 			CRTs:    ver.Ver,
 		}
 	})
-	c.Assert(rows, check.Equals, len(tc.values))
+	require.Equal(t, rows, len(tc.values))
 }
 
-func prepareInsertSQL(c *check.C, tableInfo *model.TableInfo, columnLens int) string {
+func prepareInsertSQL(t *testing.T, tableInfo *model.TableInfo, columnLens int) string {
 	var sb strings.Builder
 	_, err := sb.WriteString("INSERT INTO " + tableInfo.Name.O + "(")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	for i := 0; i < columnLens; i++ {
 		col := tableInfo.Columns[i]
 		if i != 0 {
 			_, err = sb.WriteString(", ")
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 		}
 		_, err = sb.WriteString(col.Name.O)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 	_, err = sb.WriteString(") VALUES (")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	for i := 0; i < columnLens; i++ {
 		if i != 0 {
 			_, err = sb.WriteString(", ")
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 		}
 		_, err = sb.WriteString("?")
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 	_, err = sb.WriteString(")")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	return sb.String()
 }
 
-func prepareCheckSQL(c *check.C, tableName string, cols []*model.Column) (string, []interface{}) {
+func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (string, []interface{}) {
 	var sb strings.Builder
 	_, err := sb.WriteString("SELECT count(1) FROM " + tableName + " WHERE ")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	params := make([]interface{}, 0, len(cols))
 	for i, col := range cols {
 		if col == nil {
@@ -363,11 +358,11 @@ func prepareCheckSQL(c *check.C, tableName string, cols []*model.Column) (string
 		}
 		if i != 0 {
 			_, err = sb.WriteString(" AND ")
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 		}
 		if col.Value == nil {
 			_, err = sb.WriteString(col.Name + " IS NULL")
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 			continue
 		}
 		params = append(params, col.Value)
@@ -376,22 +371,22 @@ func prepareCheckSQL(c *check.C, tableName string, cols []*model.Column) (string
 		} else {
 			_, err = sb.WriteString(col.Name + " = ?")
 		}
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 	return sb.String(), params
 }
 
-func walkTableSpanInStore(c *check.C, store tidbkv.Storage, tableID int64, f func(key []byte, value []byte)) {
+func walkTableSpanInStore(t *testing.T, store tidbkv.Storage, tableID int64, f func(key []byte, value []byte)) {
 	txn, err := store.Begin()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer txn.Rollback() //nolint:errcheck
 	tableSpan := regionspan.GetTableSpan(tableID)
 	kvIter, err := txn.Iter(tableSpan.Start, tableSpan.End)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer kvIter.Close()
 	for kvIter.Valid() {
 		f(kvIter.Key(), kvIter.Value())
 		err = kvIter.Next()
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 }

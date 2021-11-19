@@ -1,0 +1,11 @@
+source-id: mysql-replica-01
+flavor: ''
+enable-gtid: false
+enable-relay: false # in this case enable-relay will trigger a subtask reset, which fails the test
+relay-binlog-name: ''
+relay-binlog-gtid: ''
+from:
+  host: 127.0.0.1
+  user: root
+  password: /Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=
+  port: 3306

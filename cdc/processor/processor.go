@@ -30,7 +30,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -45,8 +47,6 @@ import (
 )
 
 const (
-	schemaStorageGCLag = time.Minute * 20
-
 	backoffBaseDelayInMs = 5
 	maxTries             = 3
 )
@@ -54,14 +54,18 @@ const (
 type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
-	changefeed   *model.ChangefeedReactorState
+	changefeed   *orchestrator.ChangefeedReactorState
 
 	tables map[model.TableID]tablepipeline.TablePipeline
 
 	schemaStorage entry.SchemaStorage
+	lastSchemaTs  model.Ts
+
 	filter        *filter.Filter
 	mounter       entry.Mounter
 	sinkManager   *sink.Manager
+	redoManager   redo.LogManager
+	lastRedoFlush time.Time
 
 	initialized bool
 	errCh       chan error
@@ -71,12 +75,13 @@ type processor struct {
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
 
-	metricResolvedTsGauge       prometheus.Gauge
-	metricResolvedTsLagGauge    prometheus.Gauge
-	metricCheckpointTsGauge     prometheus.Gauge
-	metricCheckpointTsLagGauge  prometheus.Gauge
-	metricSyncTableNumGauge     prometheus.Gauge
-	metricProcessorErrorCounter prometheus.Counter
+	metricResolvedTsGauge        prometheus.Gauge
+	metricResolvedTsLagGauge     prometheus.Gauge
+	metricCheckpointTsGauge      prometheus.Gauge
+	metricCheckpointTsLagGauge   prometheus.Gauge
+	metricSyncTableNumGauge      prometheus.Gauge
+	metricSchemaStorageGcTsGauge prometheus.Gauge
+	metricProcessorErrorCounter  prometheus.Counter
 }
 
 // newProcessor creates a new processor
@@ -84,37 +89,30 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	advertiseAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	p := &processor{
-		tables:       make(map[model.TableID]tablepipeline.TablePipeline),
-		errCh:        make(chan error, 1),
-		changefeedID: changefeedID,
-		captureInfo:  ctx.GlobalVars().CaptureInfo,
-		cancel:       func() {},
+		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
+		errCh:         make(chan error, 1),
+		changefeedID:  changefeedID,
+		captureInfo:   ctx.GlobalVars().CaptureInfo,
+		cancel:        func() {},
+		lastRedoFlush: time.Now(),
 
-		metricResolvedTsGauge:       resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricResolvedTsLagGauge:    resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsGauge:     checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsLagGauge:  checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricSyncTableNumGauge:     syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricProcessorErrorCounter: processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsGauge:        resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsLagGauge:     resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsGauge:      checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsLagGauge:   checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricSyncTableNumGauge:      syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricProcessorErrorCounter:  processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
+		metricSchemaStorageGcTsGauge: processorSchemaStorageGcTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
 	return p
 }
 
-func newProcessor4Test(ctx cdcContext.Context,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
-) *processor {
-	p := newProcessor(ctx)
-	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
-	p.createTablePipeline = createTablePipeline
-	return p
-}
-
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
-func (p *processor) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState) (orchestrator.ReactorState, error) {
+func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
 	p.changefeed = state
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
@@ -156,7 +154,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 }
 
-func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
+func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
 	p.changefeed = state
 	if !p.checkChangefeedNormal() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
@@ -176,10 +174,13 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	if err := p.checkTablesNum(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
+	if err := p.flushRedoLogMeta(ctx); err != nil {
+		return nil, err
+	}
 	p.handlePosition()
 	p.pushResolvedTs2Table()
 	p.handleWorkload()
-	p.doGCSchemaStorage()
+	p.doGCSchemaStorage(ctx)
 	return p.changefeed, nil
 }
 
@@ -224,6 +225,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	p.cancel = cancel
 
+	// We don't close this error channel, since it is only safe to close channel
+	// in sender, and this channel will be used in many modules including sink,
+	// redo log manager, etc. Let runtime GC to recycle it.
 	errCh := make(chan error, 16)
 	p.wg.Add(1)
 	go func() {
@@ -235,7 +239,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
-				close(errCh)
 				return
 			case err := <-errCh:
 				if err == nil {
@@ -258,6 +261,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 
 	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
+	stdCtx = util.PutCaptureAddrInCtx(stdCtx, p.captureInfo.AdvertiseAddr)
 
 	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
 	p.wg.Add(1)
@@ -281,12 +285,18 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
-	s, err := sink.NewSink(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
+	s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs)
+	captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
+	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}
+	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
+	if err != nil {
+		return err
+	}
 	p.initialized = true
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil
@@ -344,7 +354,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 					cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
 				patchOperation(tableID, func(operation *model.TableOperation) error {
 					operation.Status = model.OperFinished
-					operation.Done = true
 					return nil
 				})
 				continue
@@ -373,12 +382,9 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 				patchOperation(tableID, func(operation *model.TableOperation) error {
 					operation.BoundaryTs = table.CheckpointTs()
 					operation.Status = model.OperFinished
-					operation.Done = true
 					return nil
 				})
-				table.Cancel()
-				table.Wait()
-				delete(p.tables, tableID)
+				p.removeTable(table, tableID)
 				log.Debug("Operation done signal received",
 					cdcContext.ZapFieldChangefeed(ctx),
 					zap.Int64("tableID", tableID),
@@ -420,7 +426,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 				if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
 					patchOperation(tableID, func(operation *model.TableOperation) error {
 						operation.Status = model.OperFinished
-						operation.Done = true
 						return nil
 					})
 					log.Debug("Operation done signal received",
@@ -440,8 +445,10 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	kvStorage := ctx.GlobalVars().KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
+	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	ddlPuller := puller.NewPuller(
-		ctx,
+		stdCtx,
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
@@ -457,9 +464,9 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-		p.sendError(ddlPuller.Run(ctx))
+		p.sendError(ddlPuller.Run(stdCtx))
 	}()
-	ddlRawKVCh := puller.SortOutput(ctx, ddlPuller.Output())
+	ddlRawKVCh := memory.SortOutput(ctx, ddlPuller.Output())
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -545,9 +552,7 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 			// table will be removed by normal logic
 			continue
 		}
-		tablePipeline.Cancel()
-		tablePipeline.Wait()
-		delete(p.tables, tableID)
+		p.removeTable(tablePipeline, tableID)
 		log.Warn("the table was forcibly deleted", zap.Int64("tableID", tableID), zap.Any("taskStatus", taskStatus))
 	}
 	return nil
@@ -640,9 +645,7 @@ func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, repl
 	if table, ok := p.tables[tableID]; ok {
 		if table.Status() == tablepipeline.TableStatusStopped {
 			log.Warn("The same table exists but is stopped. Cancel it and continue.", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
-			table.Cancel()
-			table.Wait()
-			delete(p.tables, tableID)
+			p.removeTable(table, tableID)
 		} else {
 			log.Warn("Ignore existing table", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			return nil
@@ -715,7 +718,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		tableNameStr = tableName.QuoteString()
 	}
 
-	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
+	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs, p.redoManager)
 	table := tablepipeline.NewTablePipeline(
 		ctx,
 		p.mounter,
@@ -737,6 +740,10 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			zap.Any("replicaInfo", replicaInfo))
 	}()
 
+	if p.redoManager.Enabled() {
+		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
+	}
+
 	log.Info("Add table pipeline", zap.Int64("tableID", tableID),
 		cdcContext.ZapFieldChangefeed(ctx),
 		zap.String("name", table.Name()),
@@ -746,17 +753,54 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 	return table, nil
 }
 
+func (p *processor) removeTable(table tablepipeline.TablePipeline, tableID model.TableID) {
+	table.Cancel()
+	table.Wait()
+	delete(p.tables, tableID)
+	if p.redoManager.Enabled() {
+		p.redoManager.RemoveTable(tableID)
+	}
+}
+
 // doGCSchemaStorage trigger the schema storage GC
-func (p *processor) doGCSchemaStorage() {
+func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
 	if p.schemaStorage == nil {
 		// schemaStorage is nil only in test
 		return
 	}
-	// Delay GC to accommodate pullers starting from a startTs that's too small
-	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
-	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs).Add(-schemaStorageGCLag)
-	gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
-	p.schemaStorage.DoGC(gcTs)
+
+	if p.changefeed.Status == nil {
+		// This could happen if Etcd data is not complete.
+		return
+	}
+
+	// Please refer to `unmarshalAndMountRowChanged` in cdc/entry/mounter.go
+	// for why we need -1.
+	lastSchemaTs := p.schemaStorage.DoGC(p.changefeed.Status.CheckpointTs - 1)
+	if p.lastSchemaTs == lastSchemaTs {
+		return
+	}
+	p.lastSchemaTs = lastSchemaTs
+
+	log.Debug("finished gc in schema storage",
+		zap.Uint64("gcTs", lastSchemaTs),
+		cdcContext.ZapFieldChangefeed(ctx))
+	lastSchemaPhysicalTs := oracle.ExtractPhysical(lastSchemaTs)
+	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaPhysicalTs))
+}
+
+// flushRedoLogMeta flushes redo log meta, including resolved-ts and checkpoint-ts
+func (p *processor) flushRedoLogMeta(ctx context.Context) error {
+	if p.redoManager.Enabled() &&
+		time.Since(p.lastRedoFlush).Milliseconds() > p.changefeed.Info.Config.Consistent.FlushIntervalInMs {
+		st := p.changefeed.Status
+		err := p.redoManager.FlushResolvedAndCheckpointTs(ctx, st.ResolvedTs, st.CheckpointTs)
+		if err != nil {
+			return err
+		}
+		p.lastRedoFlush = time.Now()
+	}
+	return nil
 }
 
 func (p *processor) Close() error {
@@ -776,6 +820,7 @@ func (p *processor) Close() error {
 	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	if p.sinkManager != nil {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())

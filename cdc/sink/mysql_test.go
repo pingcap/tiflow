@@ -21,29 +21,24 @@ import (
 	"net"
 	"net/url"
 	"sort"
-	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/davecgh/go-spew/spew"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/infoschema"
-	"golang.org/x/sync/errgroup"
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 )
 
 type MySQLSinkSuite struct{}
@@ -63,299 +58,6 @@ func newMySQLSink4Test(ctx context.Context, c *check.C) *mysqlSink {
 		statistics: NewStatistics(ctx, "test", make(map[string]string)),
 		params:     params,
 	}
-}
-
-func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
-	defer testleak.AfterTest(c)()
-	testCases := []struct {
-		txns                     []*model.SingleTableTxn
-		expectedOutputRows       [][]*model.RowChangedEvent
-		exportedOutputReplicaIDs []uint64
-		maxTxnRow                int
-	}{
-		{
-			txns:      []*model.SingleTableTxn{},
-			maxTxnRow: 4,
-		}, {
-			txns: []*model.SingleTableTxn{
-				{
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
-					ReplicaID: 1,
-				},
-			},
-			expectedOutputRows:       [][]*model.RowChangedEvent{{{CommitTs: 1}}},
-			exportedOutputReplicaIDs: []uint64{1},
-			maxTxnRow:                2,
-		}, {
-			txns: []*model.SingleTableTxn{
-				{
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
-					ReplicaID: 1,
-				},
-			},
-			expectedOutputRows: [][]*model.RowChangedEvent{
-				{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
-			},
-			exportedOutputReplicaIDs: []uint64{1},
-			maxTxnRow:                2,
-		}, {
-			txns: []*model.SingleTableTxn{
-				{
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}},
-					ReplicaID: 1,
-				},
-				{
-					CommitTs:  2,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 2}},
-					ReplicaID: 1,
-				},
-				{
-					CommitTs:  3,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 3}, {CommitTs: 3}},
-					ReplicaID: 1,
-				},
-			},
-			expectedOutputRows: [][]*model.RowChangedEvent{
-				{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 2}},
-				{{CommitTs: 3}, {CommitTs: 3}},
-			},
-			exportedOutputReplicaIDs: []uint64{1, 1},
-			maxTxnRow:                4,
-		}, {
-			txns: []*model.SingleTableTxn{
-				{
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
-					ReplicaID: 1,
-				},
-				{
-					CommitTs:  2,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 2}},
-					ReplicaID: 2,
-				},
-				{
-					CommitTs:  3,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
-					ReplicaID: 3,
-				},
-			},
-			expectedOutputRows: [][]*model.RowChangedEvent{
-				{{CommitTs: 1}},
-				{{CommitTs: 2}},
-				{{CommitTs: 3}},
-			},
-			exportedOutputReplicaIDs: []uint64{1, 2, 3},
-			maxTxnRow:                4,
-		}, {
-			txns: []*model.SingleTableTxn{
-				{
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
-					ReplicaID: 1,
-				},
-				{
-					CommitTs:  2,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
-					ReplicaID: 1,
-				},
-				{
-					CommitTs:  3,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
-					ReplicaID: 1,
-				},
-				{
-					CommitTs:  4,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 4}},
-					ReplicaID: 1,
-				},
-			},
-			expectedOutputRows: [][]*model.RowChangedEvent{
-				{{CommitTs: 1}},
-				{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
-				{{CommitTs: 3}, {CommitTs: 4}},
-			},
-			exportedOutputReplicaIDs: []uint64{1, 1, 1},
-			maxTxnRow:                2,
-		},
-	}
-	ctx := context.Background()
-
-	notifier := new(notify.Notifier)
-	for i, tc := range testCases {
-		cctx, cancel := context.WithCancel(ctx)
-		var outputRows [][]*model.RowChangedEvent
-		var outputReplicaIDs []uint64
-		receiver, err := notifier.NewReceiver(-1)
-		c.Assert(err, check.IsNil)
-		w := newMySQLSinkWorker(tc.maxTxnRow, 1,
-			bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
-			receiver,
-			func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
-				outputRows = append(outputRows, events)
-				outputReplicaIDs = append(outputReplicaIDs, replicaID)
-				return nil
-			})
-		errg, cctx := errgroup.WithContext(cctx)
-		errg.Go(func() error {
-			return w.run(cctx)
-		})
-		for _, txn := range tc.txns {
-			w.appendTxn(cctx, txn)
-		}
-		var wg sync.WaitGroup
-		w.appendFinishTxn(&wg)
-		// ensure all txns are fetched from txn channel in sink worker
-		time.Sleep(time.Millisecond * 100)
-		notifier.Notify()
-		wg.Wait()
-		cancel()
-		c.Assert(errors.Cause(errg.Wait()), check.Equals, context.Canceled)
-		c.Assert(outputRows, check.DeepEquals, tc.expectedOutputRows,
-			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputRows), spew.Sdump(tc.expectedOutputRows)))
-		c.Assert(outputReplicaIDs, check.DeepEquals, tc.exportedOutputReplicaIDs,
-			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputReplicaIDs), spew.Sdump(tc.exportedOutputReplicaIDs)))
-	}
-}
-
-func (s MySQLSinkSuite) TestMySQLSinkWorkerExitWithError(c *check.C) {
-	defer testleak.AfterTest(c)()
-	txns1 := []*model.SingleTableTxn{
-		{
-			CommitTs: 1,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
-		},
-		{
-			CommitTs: 2,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
-		},
-		{
-			CommitTs: 3,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 3}},
-		},
-		{
-			CommitTs: 4,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 4}},
-		},
-	}
-	txns2 := []*model.SingleTableTxn{
-		{
-			CommitTs: 5,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
-		},
-		{
-			CommitTs: 6,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 6}},
-		},
-	}
-	maxTxnRow := 1
-	ctx := context.Background()
-
-	errExecFailed := errors.New("sink worker exec failed")
-	notifier := new(notify.Notifier)
-	cctx, cancel := context.WithCancel(ctx)
-	receiver, err := notifier.NewReceiver(-1)
-	c.Assert(err, check.IsNil)
-	w := newMySQLSinkWorker(maxTxnRow, 1, /*bucket*/
-		bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
-		receiver,
-		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
-			return errExecFailed
-		})
-	errg, cctx := errgroup.WithContext(cctx)
-	errg.Go(func() error {
-		return w.run(cctx)
-	})
-	// txn in txns1 will be sent to worker txnCh
-	for _, txn := range txns1 {
-		w.appendTxn(cctx, txn)
-	}
-
-	// simulate notify sink worker to flush existing txns
-	var wg sync.WaitGroup
-	w.appendFinishTxn(&wg)
-	time.Sleep(time.Millisecond * 100)
-	// txn in txn2 will be blocked since the worker has exited
-	for _, txn := range txns2 {
-		w.appendTxn(cctx, txn)
-	}
-	notifier.Notify()
-
-	// simulate sink shutdown and send closed singal to sink worker
-	w.closedCh <- struct{}{}
-	w.cleanup()
-
-	// the flush notification wait group should be done
-	wg.Wait()
-
-	cancel()
-	c.Assert(errg.Wait(), check.Equals, errExecFailed)
-}
-
-func (s MySQLSinkSuite) TestMySQLSinkWorkerExitCleanup(c *check.C) {
-	defer testleak.AfterTest(c)()
-	txns1 := []*model.SingleTableTxn{
-		{
-			CommitTs: 1,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
-		},
-		{
-			CommitTs: 2,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
-		},
-	}
-	txns2 := []*model.SingleTableTxn{
-		{
-			CommitTs: 5,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
-		},
-	}
-
-	maxTxnRow := 1
-	ctx := context.Background()
-
-	errExecFailed := errors.New("sink worker exec failed")
-	notifier := new(notify.Notifier)
-	cctx, cancel := context.WithCancel(ctx)
-	receiver, err := notifier.NewReceiver(-1)
-	c.Assert(err, check.IsNil)
-	w := newMySQLSinkWorker(maxTxnRow, 1, /*bucket*/
-		bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
-		receiver,
-		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
-			return errExecFailed
-		})
-	errg, cctx := errgroup.WithContext(cctx)
-	errg.Go(func() error {
-		err := w.run(cctx)
-		return err
-	})
-	for _, txn := range txns1 {
-		w.appendTxn(cctx, txn)
-	}
-
-	// sleep to let txns flushed by tick
-	time.Sleep(time.Millisecond * 100)
-
-	// simulate more txns are sent to txnCh after the sink worker run has exited
-	for _, txn := range txns2 {
-		w.appendTxn(cctx, txn)
-	}
-	var wg sync.WaitGroup
-	w.appendFinishTxn(&wg)
-	notifier.Notify()
-
-	// simulate sink shutdown and send closed singal to sink worker
-	w.closedCh <- struct{}{}
-	w.cleanup()
-
-	// the flush notification wait group should be done
-	wg.Wait()
-
-	cancel()
-	c.Assert(errg.Wait(), check.Equals, errExecFailed)
 }
 
 func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
@@ -737,206 +439,6 @@ func (s MySQLSinkSuite) TestReduceReplace(c *check.C) {
 	}
 }
 
-func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
-	defer testleak.AfterTest(c)()
-	param1 := defaultParams.Clone()
-	param2 := param1.Clone()
-	param2.changefeedID = "123"
-	param2.batchReplaceEnabled = false
-	param2.maxTxnRow = 1
-	c.Assert(param1, check.DeepEquals, &sinkParams{
-		workerCount:         defaultWorkerCount,
-		maxTxnRow:           defaultMaxTxnRow,
-		tidbTxnMode:         defaultTiDBTxnMode,
-		batchReplaceEnabled: defaultBatchReplaceEnabled,
-		batchReplaceSize:    defaultBatchReplaceSize,
-		readTimeout:         defaultReadTimeout,
-		writeTimeout:        defaultWriteTimeout,
-		dialTimeout:         defaultDialTimeout,
-		safeMode:            defaultSafeMode,
-	})
-	c.Assert(param2, check.DeepEquals, &sinkParams{
-		changefeedID:        "123",
-		workerCount:         defaultWorkerCount,
-		maxTxnRow:           1,
-		tidbTxnMode:         defaultTiDBTxnMode,
-		batchReplaceEnabled: false,
-		batchReplaceSize:    defaultBatchReplaceSize,
-		readTimeout:         defaultReadTimeout,
-		writeTimeout:        defaultWriteTimeout,
-		dialTimeout:         defaultDialTimeout,
-		safeMode:            defaultSafeMode,
-	})
-}
-
-func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	testDefaultParams := func() {
-		db, err := mockTestDB()
-		c.Assert(err, check.IsNil)
-		defer db.Close()
-
-		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
-		c.Assert(err, check.IsNil)
-		params := defaultParams.Clone()
-		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
-		c.Assert(err, check.IsNil)
-		expectedParams := []string{
-			"tidb_txn_mode=optimistic",
-			"readTimeout=2m",
-			"writeTimeout=2m",
-			"allow_auto_random_explicit_insert=1",
-		}
-		for _, param := range expectedParams {
-			c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
-		}
-		c.Assert(strings.Contains(dsnStr, "time_zone"), check.IsFalse)
-	}
-
-	testTimezoneParam := func() {
-		db, err := mockTestDB()
-		c.Assert(err, check.IsNil)
-		defer db.Close()
-
-		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
-		c.Assert(err, check.IsNil)
-		params := defaultParams.Clone()
-		params.timezone = `"UTC"`
-		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
-		c.Assert(err, check.IsNil)
-		c.Assert(strings.Contains(dsnStr, "time_zone=%22UTC%22"), check.IsTrue)
-	}
-
-	testTimeoutParams := func() {
-		db, err := mockTestDB()
-		c.Assert(err, check.IsNil)
-		defer db.Close()
-
-		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
-		c.Assert(err, check.IsNil)
-		uri, err := url.Parse("mysql://127.0.0.1:3306/?read-timeout=4m&write-timeout=5m&timeout=3m")
-		c.Assert(err, check.IsNil)
-		params, err := parseSinkURI(context.TODO(), uri, map[string]string{})
-		c.Assert(err, check.IsNil)
-		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
-		c.Assert(err, check.IsNil)
-		expectedParams := []string{
-			"readTimeout=4m",
-			"writeTimeout=5m",
-			"timeout=3m",
-		}
-		for _, param := range expectedParams {
-			c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
-		}
-	}
-
-	testDefaultParams()
-	testTimezoneParam()
-	testTimeoutParams()
-}
-
-func (s MySQLSinkSuite) TestParseSinkURI(c *check.C) {
-	defer testleak.AfterTest(c)()
-	expected := defaultParams.Clone()
-	expected.workerCount = 64
-	expected.maxTxnRow = 20
-	expected.batchReplaceEnabled = true
-	expected.batchReplaceSize = 50
-	expected.safeMode = true
-	expected.timezone = `"UTC"`
-	expected.changefeedID = "cf-id"
-	expected.captureAddr = "127.0.0.1:8300"
-	expected.tidbTxnMode = "pessimistic"
-	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
-		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=true" +
-		"&tidb-txn-mode=pessimistic"
-	opts := map[string]string{
-		OptChangefeedID: expected.changefeedID,
-		OptCaptureAddr:  expected.captureAddr,
-	}
-	uri, err := url.Parse(uriStr)
-	c.Assert(err, check.IsNil)
-	params, err := parseSinkURI(context.TODO(), uri, opts)
-	c.Assert(err, check.IsNil)
-	c.Assert(params, check.DeepEquals, expected)
-}
-
-func (s MySQLSinkSuite) TestParseSinkURITimezone(c *check.C) {
-	defer testleak.AfterTest(c)()
-	uris := []string{
-		"mysql://127.0.0.1:3306/?time-zone=Asia/Shanghai&worker-count=32",
-		"mysql://127.0.0.1:3306/?time-zone=&worker-count=32",
-		"mysql://127.0.0.1:3306/?worker-count=32",
-	}
-	expected := []string{
-		"\"Asia/Shanghai\"",
-		"",
-		"\"UTC\"",
-	}
-	ctx := context.TODO()
-	opts := map[string]string{}
-	for i, uriStr := range uris {
-		uri, err := url.Parse(uriStr)
-		c.Assert(err, check.IsNil)
-		params, err := parseSinkURI(ctx, uri, opts)
-		c.Assert(err, check.IsNil)
-		c.Assert(params.timezone, check.Equals, expected[i])
-	}
-}
-
-func (s MySQLSinkSuite) TestParseSinkURIBadQueryString(c *check.C) {
-	defer testleak.AfterTest(c)()
-	uris := []string{
-		"",
-		"postgre://127.0.0.1:3306",
-		"mysql://127.0.0.1:3306/?worker-count=not-number",
-		"mysql://127.0.0.1:3306/?max-txn-row=not-number",
-		"mysql://127.0.0.1:3306/?ssl-ca=only-ca-exists",
-		"mysql://127.0.0.1:3306/?batch-replace-enable=not-bool",
-		"mysql://127.0.0.1:3306/?batch-replace-enable=true&batch-replace-size=not-number",
-		"mysql://127.0.0.1:3306/?safe-mode=not-bool",
-	}
-	ctx := context.TODO()
-	opts := map[string]string{OptChangefeedID: "changefeed-01"}
-	var uri *url.URL
-	var err error
-	for _, uriStr := range uris {
-		if uriStr != "" {
-			uri, err = url.Parse(uriStr)
-			c.Assert(err, check.IsNil)
-		} else {
-			uri = nil
-		}
-		_, err = parseSinkURI(ctx, uri, opts)
-		c.Assert(err, check.NotNil)
-	}
-}
-
-func (s MySQLSinkSuite) TestCheckTiDBVariable(c *check.C) {
-	defer testleak.AfterTest(c)()
-	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
-	defer db.Close() //nolint:errcheck
-	columns := []string{"Variable_name", "Value"}
-
-	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
-	)
-	val, err := checkTiDBVariable(context.TODO(), db, "allow_auto_random_explicit_insert", "1")
-	c.Assert(err, check.IsNil)
-	c.Assert(val, check.Equals, "1")
-
-	mock.ExpectQuery("show session variables like 'no_exist_variable';").WillReturnError(sql.ErrNoRows)
-	val, err = checkTiDBVariable(context.TODO(), db, "no_exist_variable", "0")
-	c.Assert(err, check.IsNil)
-	c.Assert(val, check.Equals, "")
-
-	mock.ExpectQuery("show session variables like 'version';").WillReturnError(sql.ErrConnDone)
-	_, err = checkTiDBVariable(context.TODO(), db, "version", "5.7.25-TiDB-v4.0.0")
-	c.Assert(err, check.ErrorMatches, ".*"+sql.ErrConnDone.Error())
-}
-
 func mockTestDB() (*sql.DB, error) {
 	// mock for test db, which is used querying TiDB session variable
 	db, mock, err := sqlmock.New()
@@ -982,10 +484,10 @@ func (s MySQLSinkSuite) TestAdjustSQLMode(c *check.C) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	changefeed := "test-changefeed"
@@ -1107,10 +609,10 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDML(c *check.C) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1247,10 +749,10 @@ func (s MySQLSinkSuite) TestExecDMLRollbackErrDatabaseNotExists(c *check.C) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConnErrDatabaseNotExists
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConnErrDatabaseNotExists
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1315,10 +817,10 @@ func (s MySQLSinkSuite) TestExecDMLRollbackErrTableNotExists(c *check.C) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConnErrDatabaseNotExists
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConnErrDatabaseNotExists
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1385,10 +887,10 @@ func (s MySQLSinkSuite) TestExecDMLRollbackErrRetryable(c *check.C) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConnErrDatabaseNotExists
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConnErrDatabaseNotExists
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1440,10 +942,10 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDDL(c *check.C) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1493,6 +995,55 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
+func (s MySQLSinkSuite) TestNeedSwitchDB(c *check.C) {
+	defer testleak.AfterTest(c)()
+	testCases := []struct {
+		ddl        *model.DDLEvent
+		needSwitch bool
+	}{
+		{
+			&model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "",
+				},
+				Type: timodel.ActionCreateTable,
+			},
+			false,
+		},
+		{
+			&model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "golang",
+				},
+				Type: timodel.ActionCreateSchema,
+			},
+			false,
+		},
+		{
+			&model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "golang",
+				},
+				Type: timodel.ActionDropSchema,
+			},
+			false,
+		},
+		{
+			&model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "golang",
+				},
+				Type: timodel.ActionCreateTable,
+			},
+			true,
+		},
+	}
+
+	for _, tc := range testCases {
+		c.Assert(needSwitchDB(tc.ddl), check.Equals, tc.needSwitch)
+	}
+}
+
 func (s MySQLSinkSuite) TestNewMySQLSink(c *check.C) {
 	defer testleak.AfterTest(c)()
 
@@ -1513,20 +1064,63 @@ func (s MySQLSinkSuite) TestNewMySQLSink(c *check.C) {
 		c.Assert(err, check.IsNil)
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	c.Assert(err, check.IsNil)
 	rc := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(rc)
 	c.Assert(err, check.IsNil)
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	c.Assert(err, check.IsNil)
+	err = sink.Close(ctx)
+	c.Assert(err, check.IsNil)
+}
+
+func (s MySQLSinkSuite) TestMySQLSinkClose(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB()
+			c.Assert(err, check.IsNil)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		mock.ExpectClose()
+		c.Assert(err, check.IsNil)
+		return db, nil
+	}
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
+	defer func() {
+		GetDBConnImpl = backupGetDBConn
+	}()
+
+	ctx := context.Background()
+
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+
+	// test sink.Close will work correctly even if the ctx pass in has not been cancel
 	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
 	c.Assert(err, check.IsNil)
 	err = sink.Close(ctx)

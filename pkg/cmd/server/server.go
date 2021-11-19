@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/pingcap/ticdc/pkg/config"
@@ -120,6 +120,7 @@ func (o *options) run(cmd *cobra.Command) error {
 	}
 
 	util.LogHTTPProxies()
+	cdc.RecordGoRuntimeSettings()
 	server, err := cdc.NewServer(strings.Split(o.serverPdAddr, ","))
 	if err != nil {
 		return errors.Annotate(err, "new server")
@@ -130,7 +131,7 @@ func (o *options) run(cmd *cobra.Command) error {
 		return errors.Annotate(err, "run server")
 	}
 	server.Close()
-	sorter.UnifiedSorterCleanUp()
+	unified.CleanUp()
 	log.Info("cdc server exits successfully")
 
 	return nil
@@ -143,7 +144,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 	cfg := config.GetDefaultServerConfig()
 
 	if len(o.serverConfigFilePath) > 0 {
-		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", cfg); err != nil {
+		// strict decode config file, but ignore debug item
+		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", cfg, config.DebugConfigurationItem); err != nil {
 			return err
 		}
 
@@ -261,6 +263,7 @@ func NewCmdServer() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "server",
 		Short: "Start a TiCDC capture server",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(cmd)
 			if err != nil {

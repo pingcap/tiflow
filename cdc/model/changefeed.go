@@ -52,7 +52,7 @@ const (
 	StateFinished FeedState = "finished"
 )
 
-// ToInt return a int for each `FeedState`, only use this for metrics.
+// ToInt return an int for each `FeedState`, only use this for metrics.
 func (s FeedState) ToInt() int {
 	switch s {
 	case StateNormal:
@@ -248,6 +248,9 @@ func (info *ChangeFeedInfo) VerifyAndFix() error {
 	}
 	if info.Config.Scheduler == nil {
 		info.Config.Scheduler = defaultConfig.Scheduler
+	}
+	if info.Config.Consistent == nil {
+		info.Config.Consistent = defaultConfig.Consistent
 	}
 	return nil
 }

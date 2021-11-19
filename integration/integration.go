@@ -36,13 +36,13 @@ func testAvro() {
 	env.DockerComposeOperator.ExecEnv = []string{"CDC_TIME_ZONE=America/Los_Angeles"}
 	task := &avro.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
+		tests.NewAlterCase(task), // this case is slow, so put it last
 		tests.NewDateTimeCase(task),
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
 		tests.NewUnsignedCase(task),
 		tests.NewCompositePKeyCase(task),
-		tests.NewAlterCase(task), // this case is slow, so put it last
 	}
 
 	runTests(testCases, env)
@@ -68,6 +68,22 @@ func testCanalJSON() {
 	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
 	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
 	task := &canal.SingleTableTask{TableName: "test", UseJSON: true}
+	testCases := []framework.Task{
+		tests.NewSimpleCase(task),
+		tests.NewDeleteCase(task),
+		tests.NewManyTypesCase(task),
+		// tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
+		tests.NewCompositePKeyCase(task),
+		tests.NewAlterCase(task),
+	}
+
+	runTests(testCases, env)
+}
+
+func testCanalJSONWatermark() {
+	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
+	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
+	task := &canal.SingleTableTask{TableName: "test", UseJSON: true, EnableTiDBExtension: true}
 	testCases := []framework.Task{
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
@@ -133,6 +149,8 @@ func main() {
 		testCanal()
 	} else if *testProtocol == "canalJson" {
 		testCanalJSON()
+	} else if *testProtocol == "canalJson-extension" {
+		testCanalJSONWatermark()
 	} else if *testProtocol == "mysql" {
 		testMySQL()
 	} else if *testProtocol == "simple-mysql-checking-old-value" {

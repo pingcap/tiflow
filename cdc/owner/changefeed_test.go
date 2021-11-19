@@ -20,14 +20,15 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/ticdc/pkg/version"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
@@ -102,21 +103,22 @@ func (m *mockAsyncSink) Barrier(ctx context.Context) error {
 
 var _ = check.Suite(&changefeedSuite{})
 
-type changefeedSuite struct {
-}
+type changefeedSuite struct{}
 
-func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *model.ChangefeedReactorState,
+func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *orchestrator.ChangefeedReactorState,
 	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester) {
-	ctx.GlobalVars().PDClient = &mockPDClient{updateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-		return safePoint, nil
-	}}
-	gcManager := newGCManager()
+	ctx.GlobalVars().PDClient = &gc.MockPDClient{
+		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+			return safePoint, nil
+		},
+	}
+	gcManager := gc.NewManager(ctx.GlobalVars().PDClient)
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, gcManager, func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func(ctx cdcContext.Context) (AsyncSink, error) {
 		return &mockAsyncSink{}, nil
 	})
-	state := model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
@@ -164,7 +166,7 @@ func (s *changefeedSuite) TestInitialize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
@@ -179,7 +181,7 @@ func (s *changefeedSuite) TestHandleError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
@@ -224,7 +226,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	})
 
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 	tickThreeTime := func() {
 		cf.Tick(ctx, state, captures)
 		tester.MustApplyPatches()
@@ -296,7 +298,7 @@ func (s *changefeedSuite) TestSyncPoint(c *check.C) {
 	ctx.ChangefeedVars().Info.SyncPointEnabled = true
 	ctx.ChangefeedVars().Info.SyncPointInterval = 1 * time.Second
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -327,7 +329,7 @@ func (s *changefeedSuite) TestFinished(c *check.C) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.TargetTs = ctx.ChangefeedVars().Info.StartTs + 1000
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 
 	// pre check
 	cf.Tick(ctx, state, captures)

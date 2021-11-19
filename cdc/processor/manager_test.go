@@ -32,14 +32,26 @@ import (
 
 type managerSuite struct {
 	manager *Manager
-	state   *model.GlobalReactorState
+	state   *orchestrator.GlobalReactorState
 	tester  *orchestrator.ReactorStateTester
 }
 
 var _ = check.Suite(&managerSuite{})
 
+// NewManager4Test creates a new processor manager for test
+func NewManager4Test(
+	c *check.C,
+	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
+) *Manager {
+	m := NewManager()
+	m.newProcessor = func(ctx cdcContext.Context) *processor {
+		return newProcessor4Test(ctx, c, createTablePipeline)
+	}
+	return m
+}
+
 func (s *managerSuite) resetSuit(ctx cdcContext.Context, c *check.C) {
-	s.manager = NewManager4Test(func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+	s.manager = NewManager4Test(c, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 		return &mockTablePipeline{
 			tableID:      tableID,
 			name:         fmt.Sprintf("`test`.`table%d`", tableID),
@@ -48,7 +60,7 @@ func (s *managerSuite) resetSuit(ctx cdcContext.Context, c *check.C) {
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
 	})
-	s.state = model.NewGlobalState().(*model.GlobalReactorState)
+	s.state = orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
 	captureInfoBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	c.Assert(err, check.IsNil)
 	s.tester = orchestrator.NewReactorStateTester(c, s.state, map[string]string{
@@ -67,7 +79,7 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// an inactive changefeed
-	s.state.Changefeeds["test-changefeed"] = model.NewChangefeedReactorState("test-changefeed")
+	s.state.Changefeeds["test-changefeed"] = orchestrator.NewChangefeedReactorState("test-changefeed")
 	_, err = s.manager.Tick(ctx, s.state)
 	s.tester.MustApplyPatches()
 	c.Assert(err, check.IsNil)
@@ -124,7 +136,7 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// an active changefeed
-	s.state.Changefeeds["test-changefeed"] = model.NewChangefeedReactorState("test-changefeed")
+	s.state.Changefeeds["test-changefeed"] = orchestrator.NewChangefeedReactorState("test-changefeed")
 	s.state.Changefeeds["test-changefeed"].PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return &model.ChangeFeedInfo{
 			SinkURI:    "blackhole://",
@@ -178,7 +190,7 @@ func (s *managerSuite) TestClose(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// an active changefeed
-	s.state.Changefeeds["test-changefeed"] = model.NewChangefeedReactorState("test-changefeed")
+	s.state.Changefeeds["test-changefeed"] = orchestrator.NewChangefeedReactorState("test-changefeed")
 	s.state.Changefeeds["test-changefeed"].PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return &model.ChangeFeedInfo{
 			SinkURI:    "blackhole://",

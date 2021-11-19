@@ -70,7 +70,7 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 
 
 	for _, row := range rows {
-		log.Debug("dsgSocketSink: EmitRowChangedEvents", zap.Any("row", row))
+		log.Info("dsgSocketSink: EmitRowChangedEvents",zap.String("host",b.sinkURI.Host), zap.Any("row", row))
 	}
 
 	//fmt.Println(">>>>>>>>>>>>>>>>>>>>===================EmitRowChangedEvents===================================================================>>>>>>>>>>>>>>>>>>>")
@@ -224,7 +224,7 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 }
 
 func (b *dsgSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
-	log.Info("dsgSocketSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolvedTs))
+	log.Info("dsgSocketSink: FlushRowChangedEvents", zap.String("host", b.sinkURI.Host),zap.Uint64("resolvedTs", resolvedTs))
 
 	commitTs,err:=socket.JddmClientFlush(b.sinkURI.Host,resolvedTs)
 	//commitTs,err:=socket.JddmClientFlush("127.0.0.1:9889",resolvedTs)

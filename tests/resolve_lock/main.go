@@ -20,7 +20,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -31,9 +31,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/tests/util"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/tikv/client-go/v2/oracle"
@@ -148,7 +148,7 @@ func getTableID(dbAddr, dbName, table string) (int64, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -335,7 +335,7 @@ func randStr() string {
 	length := rand.Intn(128)
 	res := ""
 	for i := 0; i < length; i++ {
-		res += string('a' + rand.Intn(26))
+		res += fmt.Sprintf("a%d", rand.Intn(26))
 	}
 	return res
 }

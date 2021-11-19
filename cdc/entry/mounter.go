@@ -24,12 +24,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/kv"
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
@@ -116,6 +116,11 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	metricMountDuration := mountDuration.WithLabelValues(captureAddr, changefeedID)
+	metricTotalRows := totalRowsCountGauge.WithLabelValues(captureAddr, changefeedID)
+	defer func() {
+		mountDuration.DeleteLabelValues(captureAddr, changefeedID)
+		totalRowsCountGauge.DeleteLabelValues(captureAddr, changefeedID)
+	}()
 
 	for {
 		var pEvent *model.PolymorphicEvent
@@ -138,6 +143,7 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 		pEvent.RawKV.OldValue = nil
 		pEvent.PrepareFinished()
 		metricMountDuration.Observe(time.Since(startTime).Seconds())
+		metricTotalRows.Inc()
 	}
 }
 

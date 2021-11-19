@@ -28,42 +28,42 @@
 ProgName=$(basename $0)
 cd "$(dirname "$0")"
 sub_help() {
-    echo "Usage: $ProgName <subcommand> [options]\n"
-    echo "Subcommands:"
-    echo "    init    Create changefeed and Kafka Connector"
-    echo "    up      Bring up the containers"
-    echo "    down    Pause the containers"
-    echo ""
+	echo "Usage: $ProgName <subcommand> [options]\n"
+	echo "Subcommands:"
+	echo "    init    Create changefeed and Kafka Connector"
+	echo "    up      Bring up the containers"
+	echo "    down    Pause the containers"
+	echo ""
 }
 
 sub_init() {
-  sudo docker exec -it ticdc_controller_1 sh -c "
+	sudo docker exec -it ticdc_controller_1 sh -c "
   /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb_test?protocol=avro\" --opts \"registry=http://schema-registry:8081\"
   curl -X POST -H \"Content-Type: application/json\" -d @/config/jdbc-sink-connector.json http://kafka-connect-01:8083/connectors
   "
 }
 
 sub_up() {
-  sudo docker-compose -f ../docker-compose-avro.yml up --detach
+	sudo docker-compose -f ../deployments/ticdc/docker-compose/docker-compose-avro.yml up --detach
 }
 
 sub_down() {
-  sudo docker-compose -f ../docker-compose-avro.yml down
-  sudo rm -r ../docker/logs ../docker/data
+	sudo docker-compose -f ../deployments/ticdc/docker-compose/docker-compose-avro.yml down
+	sudo rm -r ../deployments/ticdc/docker-compose/logs ../deployments/ticdc/docker-compose/data
 }
 
 subcommand=$1
 case $subcommand in
-    "" | "-h" | "--help")
-        sub_help
-        ;;
-    *)
-        shift
-        sub_${subcommand} $@
-        if [ $? = 127 ]; then
-            echo "Error: '$subcommand' is not a known subcommand." >&2
-            echo "       Run '$ProgName --help' for a list of known subcommands." >&2
-            exit 1
-        fi
-        ;;
+"" | "-h" | "--help")
+	sub_help
+	;;
+*)
+	shift
+	sub_${subcommand} $@
+	if [ $? = 127 ]; then
+		echo "Error: '$subcommand' is not a known subcommand." >&2
+		echo "       Run '$ProgName --help' for a list of known subcommands." >&2
+		exit 1
+	fi
+	;;
 esac

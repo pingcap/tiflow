@@ -21,27 +21,27 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util/testkit"
-	"github.com/tikv/client-go/v2/mockstore/mocktikv"
+	"github.com/tikv/client-go/v2/testutils"
 	"go.uber.org/zap"
 )
 
 type mvccListener struct {
-	mocktikv.MVCCStore
+	testutils.MVCCStore
 	mu           sync.RWMutex
 	postPrewrite func(req *kvrpcpb.PrewriteRequest, result []error)
 	postCommit   func(keys [][]byte, startTs, commitTs uint64, result error)
 	postRollback func(keys [][]byte, startTs uint64, result error)
 }
 
-func newMVCCListener(store mocktikv.MVCCStore) *mvccListener {
+func newMVCCListener(store testutils.MVCCStore) *mvccListener {
 	return &mvccListener{
 		MVCCStore:    store,
 		postPrewrite: func(_ *kvrpcpb.PrewriteRequest, _ []error) {},
@@ -105,7 +105,7 @@ func (l *mvccListener) registerPostRollback(fn func(keys [][]byte, startTs uint6
 
 // MockPullerManager keeps track of transactions for mock pullers
 type MockPullerManager struct {
-	mvccStore mocktikv.MVCCStore
+	mvccStore testutils.MVCCStore
 	store     tidbkv.Storage
 	domain    *domain.Domain
 
@@ -197,7 +197,8 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	log.SetLevel(zap.FatalLevel)
 	defer log.SetLevel(logLevel)
 
-	mvccListener := newMVCCListener(mocktikv.MustNewMVCCStore())
+	rpcClient, _, _, _ := testutils.NewMockTiKV("", nil)
+	mvccListener := newMVCCListener(rpcClient.MvccStore)
 
 	m.mvccStore = mvccListener
 	store, err := mockstore.NewMockStore()

@@ -1,0 +1,4 @@
+---
+
+prometheus_port: 9090
+prometheus_storage_retention: "15d"

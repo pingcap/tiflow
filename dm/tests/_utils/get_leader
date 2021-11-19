@@ -1,0 +1,28 @@
+#!/bin/bash
+# tools to run get-leader command by dmctl and echo leader's name
+# parameter 1: work directory
+# parameter 2: master-addr port
+
+workdir=$1
+master_addr=$2
+
+PWD=$(pwd)
+binary=$PWD/bin/dmctl.test
+ts=$(date +"%s")
+dmctl_log=$workdir/dmctl.$ts.log
+pid=$$
+
+leader_name=""
+
+for ((k = 0; k < 30; k++)); do
+	leader_name=$($binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.dmctl.$ts.$pid.out" DEVEL --master-addr=$master_addr list-member --leader | grep name | gawk 'match($2,/"(.*)",/,a) {print a[1]}')
+	if [[ ! -z "$leader_name" ]]; then
+		echo $leader_name
+		break
+	fi
+	sleep 2
+done
+
+if [[ -z "$leader_name" ]]; then
+	exit 1
+fi
