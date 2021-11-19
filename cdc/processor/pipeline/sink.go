@@ -131,6 +131,10 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 		resolvedTs = n.targetTs
 	}
 	if resolvedTs <= n.checkpointTs {
+		// added for debugging data inconsistency
+		log.Info("resolvedTs <= checkpointTs",
+			zap.Uint64("resolved-ts", resolvedTs),
+			zap.Uint64("checkpoint-ts", n.checkpointTs))
 		return nil
 	}
 	if err := n.emitRow2Sink(ctx); err != nil {
@@ -139,6 +143,12 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, resolvedTs)
 	if err != nil {
 		return errors.Trace(err)
+	}
+	if checkpointTs > resolvedTs {
+		// added for debugging data inconsistency
+		log.Warn("checkpoint-ts too large",
+			zap.Uint64("checkpoint-ts", checkpointTs),
+			zap.Uint64("resolved-ts", resolvedTs))
 	}
 	if checkpointTs <= n.checkpointTs {
 		return nil
