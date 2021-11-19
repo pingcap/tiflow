@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# prepare-integration-test-binaries.sh will
-# * build the TiCDC fot integration test
+# download-integration-test-binaries.sh will
 # * download all the binaries you need for integration testing
 
 # Notice:
@@ -29,20 +28,8 @@ color-green() { # Green
 	echo -e "\x1B[1;32m${*}\x1B[0m"
 }
 
-color-yellow() { # Yellow
-	echo -e "\x1B[1;33m${*}\x1B[0m"
-}
-
 # Specify the download branch.
 branch=$1
-
-color-yellow "Clean up old binary files.."
-make -C .. clean
-color-green "Clean up SUCCESS"
-
-color-green "Build integration test TiCDC..."
-make -C .. integration_test_build kafka_consumer
-color-green "Build TiCDC SUCCESS"
 
 # PingCAP file server URL.
 file_server_url="http://fileserver.pingcap.net"
@@ -70,6 +57,7 @@ rm -rf third_bin
 
 mkdir -p third_bin
 mkdir -p tmp
+mkdir -p bin
 
 color-green "Download binaries..."
 curl "${tidb_download_url}" | tar xz -C tmp bin/tidb-server
@@ -91,9 +79,7 @@ chmod a+x third_bin/*
 
 # Copy it to the bin directory in the root directory.
 rm -rf tmp
-mv third_bin/* ../bin
+mv third_bin/* ./bin
 rm -rf third_bin
 
 color-green "Download SUCCESS"
-
-make -C .. check_third_party_binary
