@@ -231,6 +231,7 @@ clean:
 	go clean -i ./...
 	rm -rf *.out
 	rm -rf bin
+	rm -rf tools/bin
 
 dm: dm-master dm-worker dmctl dm-portal dm-syncer
 

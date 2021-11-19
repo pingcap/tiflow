@@ -12,7 +12,8 @@ RUN yum install -y \
 	make \
     curl \
     tar \
-    musl-dev
+    musl-dev \
+    psmisc
 
 RUN wget -i -c http://dev.mysql.com/get/mysql57-community-release-el7-10.noarch.rpm
 RUN yum install -y mysql57-community-release-el7-10.noarch.rpm

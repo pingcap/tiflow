@@ -4,7 +4,7 @@
 process=$1
 retry_count=20
 
-killall $process || true
+killall -q -w -s 9 $process || true
 
 counter=0
 while [ $counter -lt $retry_count ]; do
