@@ -188,42 +188,16 @@ func (s *BaseScheduleDispatcher) Tick(
 	toAdd, toRemove := s.findDiffTables(shouldReplicateTableSet)
 
 	for _, tableID := range toAdd {
-		// A user triggered move-table will have had the target recorded.
-		target, ok := s.moveTableManager.GetTargetByTableID(tableID)
-		isManualMove := ok
-		if !ok {
-			target, ok = s.balancer.FindTarget(s.tables, s.captures)
-			if !ok {
-				s.logger.Warn("no active capture")
-				return CheckpointCannotProceed, CheckpointCannotProceed, nil
-			}
-		}
-
-		ok, err = s.communicator.DispatchTable(ctx, s.changeFeedID, tableID, target, false)
+		ok, err := s.addTable(ctx, tableID)
 		if err != nil {
 			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
 		}
-
 		if !ok {
 			return CheckpointCannotProceed, CheckpointCannotProceed, nil
-		}
-		if isManualMove {
-			s.moveTableManager.MarkDone(tableID)
-		}
-
-		if ok := s.tables.AddTableRecord(&util.TableRecord{
-			TableID:   tableID,
-			CaptureID: target,
-			Status:    util.AddingTable,
-		}); !ok {
-			s.logger.Panic("duplicate table", zap.Int64("table-id", tableID))
 		}
 	}
 
 	for _, tableID := range toRemove {
-		if _, ok := shouldReplicateTableSet[tableID]; ok {
-			continue
-		}
 		record, ok := s.tables.GetTableRecord(tableID)
 		if !ok {
 			s.logger.Panic("table not found", zap.Int64("table-id", tableID))
@@ -233,18 +207,13 @@ func (s *BaseScheduleDispatcher) Tick(
 			continue
 		}
 
-		// need to delete table
-		captureID := record.CaptureID
-		ok, err := s.communicator.DispatchTable(ctx, s.changeFeedID, tableID, captureID, true)
+		ok, err := s.removeTable(ctx, tableID)
 		if err != nil {
 			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
 		}
 		if !ok {
 			return CheckpointCannotProceed, CheckpointCannotProceed, nil
 		}
-
-		record.Status = util.RemovingTable
-		s.tables.UpdateTableRecord(record)
 	}
 
 	checkAllTasksNormal := func() bool {
@@ -401,6 +370,66 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 	return
 }
 
+func (s *BaseScheduleDispatcher) addTable(
+	ctx context.Context,
+	tableID model.TableID,
+) (done bool, err error) {
+	// A user triggered move-table will have had the target recorded.
+	target, ok := s.moveTableManager.GetTargetByTableID(tableID)
+	isManualMove := ok
+	if !ok {
+		target, ok = s.balancer.FindTarget(s.tables, s.captures)
+		if !ok {
+			s.logger.Warn("no active capture")
+			return true, nil
+		}
+	}
+
+	ok, err = s.communicator.DispatchTable(ctx, s.changeFeedID, tableID, target, false)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+
+	if !ok {
+		return false, nil
+	}
+	if isManualMove {
+		s.moveTableManager.MarkDone(tableID)
+	}
+
+	if ok := s.tables.AddTableRecord(&util.TableRecord{
+		TableID:   tableID,
+		CaptureID: target,
+		Status:    util.AddingTable,
+	}); !ok {
+		s.logger.Panic("duplicate table", zap.Int64("table-id", tableID))
+	}
+	return true, nil
+}
+
+func (s *BaseScheduleDispatcher) removeTable(
+	ctx context.Context,
+	tableID model.TableID,
+) (done bool, err error) {
+	record, ok := s.tables.GetTableRecord(tableID)
+	if !ok {
+		s.logger.Panic("table not found", zap.Int64("table-id", tableID))
+	}
+	// need to delete table
+	captureID := record.CaptureID
+	ok, err = s.communicator.DispatchTable(ctx, s.changeFeedID, tableID, captureID, true)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if !ok {
+		return false, nil
+	}
+
+	record.Status = util.RemovingTable
+	s.tables.UpdateTableRecord(record)
+	return true, nil
+}
+
 // MoveTable implements the interface SchedulerDispatcher.
 func (s *BaseScheduleDispatcher) MoveTable(tableID model.TableID, target model.CaptureID) {
 	if !s.moveTableManager.Add(tableID, target) {
@@ -414,7 +443,7 @@ func (s *BaseScheduleDispatcher) MoveTable(tableID model.TableID, target model.C
 func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) (bool, error) {
 	removeAllDone, err := s.moveTableManager.DoRemove(ctx,
 		func(ctx context.Context, tableID model.TableID, target model.CaptureID) (removeTableResult, error) {
-			record, ok := s.tables.GetTableRecord(tableID)
+			_, ok := s.tables.GetTableRecord(tableID)
 			if !ok {
 				s.logger.Warn("table does not exist", zap.Int64("table-id", tableID))
 				return removeTableResultGiveUp, nil
@@ -427,17 +456,13 @@ func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) (bool,
 				return removeTableResultGiveUp, nil
 			}
 
-			// Removes the table from the current capture
-			ok, err := s.communicator.DispatchTable(ctx, s.changeFeedID, tableID, record.CaptureID, true)
+			ok, err := s.removeTable(ctx, tableID)
 			if err != nil {
 				return removeTableResultUnavailable, errors.Trace(err)
 			}
 			if !ok {
 				return removeTableResultUnavailable, nil
 			}
-
-			record.Status = util.RemovingTable
-			s.tables.UpdateTableRecord(record)
 			return removeTableResultOK, nil
 		},
 	)
@@ -482,9 +507,9 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(captureID model.C
 	defer s.mu.Unlock()
 
 	logger := s.logger.With(
-        zap.String("capture-id", captureID),
-        zap.Int64("table-id", tableID),
-    )
+		zap.String("capture-id", captureID),
+		zap.Int64("table-id", tableID),
+	)
 
 	if _, ok := s.captures[captureID]; !ok {
 		logger.Warn("stale message from dead processor, ignore")
@@ -581,7 +606,7 @@ func (s *BaseScheduleDispatcher) OnAgentCheckpoint(captureID model.CaptureID, ch
 		zap.Uint64("resolved-ts", resolvedTs))
 
 	status, ok := s.captureStatus[captureID]
-	if !ok || status.SyncStatus != captureSyncFinished  {
+	if !ok || status.SyncStatus != captureSyncFinished {
 		logger.Warn("received checkpoint from a capture not synced, ignore")
 		return
 	}
