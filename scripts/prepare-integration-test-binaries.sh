@@ -41,7 +41,7 @@ make -C .. clean
 color-green "Clean up SUCCESS"
 
 color-green "Build integration test TiCDC..."
-make -C .. integration_test_build
+make -C .. integration_test_build kafka_consumer
 color-green "Build TiCDC SUCCESS"
 
 # PingCAP file server URL.
@@ -74,7 +74,7 @@ mkdir -p tmp
 color-green "Download binaries..."
 curl "${tidb_download_url}" | tar xz -C tmp bin/tidb-server
 curl "${tikv_download_url}" | tar xz -C tmp bin/tikv-server
-curl "${pd_download_url}" | tar xz -C tmp bin/*
+curl "${pd_download_url}" | tar xz --wildcards -C tmp bin/*
 curl "${minio_download_url}" | tar xz -C tmp/bin minio
 mv tmp/bin/* third_bin
 
