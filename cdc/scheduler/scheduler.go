@@ -46,10 +46,9 @@ type ScheduleDispatcher interface {
 }
 
 // ScheduleDispatcherCommunicator is an interface for the BaseScheduleDispatcher to
-// send commands to Processors.
-// This interface is akin to a Virtual Method Table, in that the invoker of
-// BaseScheduleDispatcher should provide an implementation of ScheduleDispatcherCommunicator
-// to supply BaseScheduleDispatcher some methods to specify its behavior.
+// send commands to Processors. The owner of a BaseScheduleDispatcher should provide
+// an implementation of ScheduleDispatcherCommunicator to supply BaseScheduleDispatcher
+// some methods to specify its behavior.
 type ScheduleDispatcherCommunicator interface {
 	// DispatchTable should send a dispatch command to the Processor.
 	DispatchTable(ctx context.Context,
@@ -413,19 +412,19 @@ func (s *BaseScheduleDispatcher) MoveTable(tableID model.TableID, target model.C
 }
 
 func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) (bool, error) {
-	ok, err := s.moveTableManager.DoRemove(ctx,
+	removeAllDone, err := s.moveTableManager.DoRemove(ctx,
 		func(ctx context.Context, tableID model.TableID, target model.CaptureID) (removeTableResult, error) {
 			record, ok := s.tables.GetTableRecord(tableID)
 			if !ok {
-				s.logger.Warn("table to be moved does not exist", zap.Int64("table-id", tableID))
+				s.logger.Warn("table does not exist", zap.Int64("table-id", tableID))
 				return removeTableResultGiveUp, nil
 			}
 
 			if _, ok := s.captures[target]; !ok {
-				s.logger.Warn("move table target capture does not exist",
+				s.logger.Warn("move table target does not exist",
 					zap.Int64("table-id", tableID),
 					zap.String("target-capture", target))
-				return removeTableResultGiveUp, nil // continue to the next table
+				return removeTableResultGiveUp, nil
 			}
 
 			// Removes the table from the current capture
@@ -445,7 +444,7 @@ func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) (bool,
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	return ok, nil
+	return removeAllDone, nil
 }
 
 // Rebalance implements the interface ScheduleDispatcher.
@@ -482,34 +481,27 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(captureID model.C
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	logger := s.logger.With(
+        zap.String("capture-id", captureID),
+        zap.Int64("table-id", tableID),
+    )
+
 	if _, ok := s.captures[captureID]; !ok {
-		s.logger.Warn("stale message from dead processor, ignore",
-			zap.String("capture-id", captureID),
-			zap.Int64("tableID", tableID))
+		logger.Warn("stale message from dead processor, ignore")
 		return
 	}
 
 	record, ok := s.tables.GetTableRecord(tableID)
 	if !ok {
-		s.logger.Warn("response about a stale table, ignore",
-			zap.String("source", captureID),
-			zap.Int64("table-id", tableID))
-	}
-	if record == nil {
-		// unreachable, unless code is buggy.
-		log.Panic("unexpected nil table record", zap.Int64("table-id", tableID))
+		logger.Warn("response about a stale table, ignore")
 		return
 	}
 
 	if record.CaptureID != captureID {
-		s.logger.Panic("message from unexpected capture",
-			zap.String("expected", record.CaptureID),
-			zap.String("actual", captureID),
-			zap.Int64("tableID", tableID))
+		logger.Panic("message from unexpected capture",
+			zap.String("expected", record.CaptureID))
 	}
-	s.logger.Info("owner received dispatch finished",
-		zap.String("capture", captureID),
-		zap.Int64("table-id", tableID))
+	logger.Info("owner received dispatch finished")
 
 	switch record.Status {
 	case util.AddingTable:
@@ -517,12 +509,10 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(captureID model.C
 		s.tables.UpdateTableRecord(record)
 	case util.RemovingTable:
 		if !s.tables.RemoveTableRecord(tableID) {
-			s.logger.Panic("failed to remove table", zap.Int64("table-id", tableID))
+			logger.Panic("failed to remove table")
 		}
 	case util.RunningTable:
-		s.logger.Panic("response to invalid dispatch message",
-			zap.String("source", captureID),
-			zap.Int64("table-id", tableID))
+		logger.Panic("response to invalid dispatch message")
 	}
 }
 
@@ -531,14 +521,16 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// This function is called relatively rarely, only when
-	// a processor comes up. Printing Info log is good for
-	// debugging user issues.
-	s.logger.Info("scheduler received sync",
-		zap.String("capture-id", captureID),
-		zap.Any("running", running),
-		zap.Any("adding", adding),
-		zap.Any("removing", removing))
+	logger := s.logger.With(zap.String("capture-id", captureID))
+	logger.Info("scheduler received sync", zap.String("capture-id", captureID))
+
+	if ce := logger.Check(zap.DebugLevel, "OnAgentSyncTaskStatuses"); ce != nil {
+		// Print this information only in debug mode.
+		ce.Write(
+			zap.Any("running", running),
+			zap.Any("adding", adding),
+			zap.Any("removing", removing))
+	}
 
 	// Clear all tables previously run by the sender capture,
 	// because `Sync` tells the Owner to reset its state regarding
@@ -546,25 +538,16 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 	s.tables.RemoveTableRecordByCaptureID(captureID)
 
 	if _, ok := s.captureStatus[captureID]; !ok {
-		s.logger.Warn("received sync from a capture not previously tracked, ignore",
-			zap.Any("capture-status", s.captureStatus),
-			zap.Any("captures", s.captures))
+		logger.Warn("received sync from a capture not previously tracked, ignore",
+			zap.Any("capture-status", s.captureStatus))
 		return
 	}
 
-	// We should not expect duplicate table tasks, for the following reason:
-	// CASE 1) A processor restarts and tries to sync status, then the processor
-	// must not be replicating any table already, so there must not be a duplication.
-	// CASE 2) An owner just came up and required sync from all processors, then
-	// duplication is only possible if two running captures are writing to the same table
-	// and they both have valid Etcd sessions. This is impossible as long as Etcd is not
-	// malfunctioning.
 	for _, tableID := range adding {
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
 			s.logger.Panic("duplicate table tasks",
 				zap.Int64("table-id", tableID),
-				zap.String("capture-id-1", record.CaptureID),
-				zap.String("capture-id-2", captureID))
+				zap.String("actual-capture-id", record.CaptureID))
 		}
 		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: util.AddingTable})
 	}
@@ -572,8 +555,7 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
 			s.logger.Panic("duplicate table tasks",
 				zap.Int64("table-id", tableID),
-				zap.String("capture-id-1", record.CaptureID),
-				zap.String("capture-id-2", captureID))
+				zap.String("actual-capture-id", record.CaptureID))
 		}
 		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: util.RunningTable})
 	}
@@ -581,8 +563,7 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
 			s.logger.Panic("duplicate table tasks",
 				zap.Int64("table-id", tableID),
-				zap.String("capture-id-1", record.CaptureID),
-				zap.String("capture-id-2", captureID))
+				zap.String("actual-capture-id", record.CaptureID))
 		}
 		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: util.RemovingTable})
 	}
@@ -595,20 +576,14 @@ func (s *BaseScheduleDispatcher) OnAgentCheckpoint(captureID model.CaptureID, ch
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	status, ok := s.captureStatus[captureID]
-	if !ok {
-		s.logger.Info("received checkpoint from non-existing capture, ignore",
-			zap.String("capture-id", captureID),
+	zapInfo := func() zap.Option {
+		return zap.Fields(zap.String("capture-id", captureID),
 			zap.Uint64("checkpoint-ts", checkpointTs),
 			zap.Uint64("resolved-ts", resolvedTs))
-		return
 	}
-
-	if status.SyncStatus != captureSyncFinished {
-		s.logger.Warn("received checkpoint from a capture not synced, ignore",
-			zap.String("capture-id", captureID),
-			zap.Uint64("checkpoint-ts", checkpointTs),
-			zap.Uint64("resolved-ts", resolvedTs))
+	status, ok := s.captureStatus[captureID]
+	if !ok || status.SyncStatus != captureSyncFinished  {
+		s.logger.WithOptions(zapInfo()).Warn("received checkpoint from a capture not synced, ignore")
 		return
 	}
 

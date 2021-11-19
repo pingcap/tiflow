@@ -100,7 +100,6 @@ func TestDispatchTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "DispatchTable", mock.Anything)
 
 	dispatcher.OnAgentSyncTaskStatuses("capture-1", []model.TableID{}, []model.TableID{}, []model.TableID{})
 	dispatcher.OnAgentSyncTaskStatuses("capture-2", []model.TableID{}, []model.TableID{}, []model.TableID{})
@@ -127,7 +126,6 @@ func TestDispatchTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce", mock.Anything)
 	require.NotEqual(t, 0, len(communicator.addTableRecords["capture-1"]))
 	require.NotEqual(t, 0, len(communicator.addTableRecords["capture-2"]))
 	require.Equal(t, 0, len(communicator.removeTableRecords["capture-1"]))
@@ -143,8 +141,6 @@ func TestDispatchTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
-	communicator.AssertNotCalled(t, "DispatchTable")
 
 	for captureID, tables := range communicator.addTableRecords {
 		for _, tableID := range tables {
@@ -157,8 +153,6 @@ func TestDispatchTable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.Ts(1000), checkpointTs)
 	require.Equal(t, model.Ts(1000), resolvedTs)
-	communicator.AssertNotCalled(t, "Announce")
-	communicator.AssertNotCalled(t, "DispatchTable")
 
 	dispatcher.OnAgentCheckpoint("capture-1", 1100, 1400)
 	dispatcher.OnAgentCheckpoint("capture-2", 1200, 1300)
@@ -167,8 +161,6 @@ func TestDispatchTable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.Ts(1100), checkpointTs)
 	require.Equal(t, model.Ts(1300), resolvedTs)
-	communicator.AssertNotCalled(t, "Announce")
-	communicator.AssertNotCalled(t, "DispatchTable")
 }
 
 func TestSyncCaptures(t *testing.T) {
@@ -270,8 +262,6 @@ func TestRemoveTable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.Ts(1500), checkpointTs)
 	require.Equal(t, model.Ts(1500), resolvedTs)
-	communicator.AssertNotCalled(t, "Announce")
-	communicator.AssertNotCalled(t, "DispatchTable")
 
 	// Inject a dispatch table failure
 	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(3), "capture-1", true).
@@ -290,7 +280,6 @@ func TestRemoveTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
 
 	dispatcher.OnAgentFinishedTableOperation("capture-1", 3)
 	communicator.Reset()
@@ -298,8 +287,6 @@ func TestRemoveTable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.Ts(1500), checkpointTs)
 	require.Equal(t, model.Ts(1500), resolvedTs)
-	communicator.AssertNotCalled(t, "Announce")
-	communicator.AssertNotCalled(t, "DispatchTable")
 }
 
 func TestCaptureGone(t *testing.T) {
@@ -349,7 +336,6 @@ func TestCaptureGone(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
 }
 
 func TestCaptureRestarts(t *testing.T) {
@@ -392,7 +378,6 @@ func TestCaptureRestarts(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
 }
 
 func TestManualMoveTable(t *testing.T) {
@@ -435,7 +420,6 @@ func TestManualMoveTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
 
 	dispatcher.OnAgentFinishedTableOperation("capture-1", 1)
 	communicator.Reset()
@@ -454,8 +438,6 @@ func TestManualMoveTable(t *testing.T) {
 	require.Equal(t, model.Ts(1300), checkpointTs)
 	require.Equal(t, model.Ts(1550), resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
-	communicator.AssertNotCalled(t, "DispatchTable")
 
 	// Test moving a non-existent table
 	dispatcher.MoveTable(999, "capture-2")
@@ -527,7 +509,6 @@ func TestCaptureGoneWhileMovingTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
 
 	delete(mockCaptureInfos, "capture-2")
 	dispatcher.OnAgentFinishedTableOperation("capture-1", 1)
@@ -597,7 +578,6 @@ func TestManualRebalance(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
 
 	communicator.ExpectedCalls = nil
 	for captureID, tables := range communicator.removeTableRecords {
@@ -612,7 +592,6 @@ func TestManualRebalance(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
 }
 
 func TestRebalanceReentrant(t *testing.T) {
@@ -668,7 +647,6 @@ func TestRebalanceReentrant(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
 	communicator.AssertNumberOfCalls(t, "DispatchTable", 1)
-	communicator.AssertNotCalled(t, "Announce")
 
 	communicator.Reset()
 	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, true).
@@ -679,7 +657,6 @@ func TestRebalanceReentrant(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertNumberOfCalls(t, "DispatchTable", 2)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
 }
 
 func TestIgnoreEmptyCapture(t *testing.T) {
@@ -731,8 +708,6 @@ func TestIgnoreEmptyCapture(t *testing.T) {
 	require.Equal(t, model.Ts(1300), checkpointTs)
 	require.Equal(t, model.Ts(1550), resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "DispatchTable")
-	communicator.AssertNotCalled(t, "Announce")
 }
 
 func TestIgnoreDeadCapture(t *testing.T) {
@@ -767,8 +742,6 @@ func TestIgnoreDeadCapture(t *testing.T) {
 	require.Equal(t, model.Ts(1300), checkpointTs)
 	require.Equal(t, model.Ts(1550), resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "DispatchTable")
-	communicator.AssertNotCalled(t, "Announce")
 }
 
 func TestIgnoreUnsyncedCaptures(t *testing.T) {
@@ -842,7 +815,6 @@ func TestRebalanceWhileAddingTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
 
 	dispatcher.Rebalance()
 	communicator.Reset()
@@ -851,8 +823,6 @@ func TestRebalanceWhileAddingTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
-	communicator.AssertNotCalled(t, "DispatchTable")
 
 	dispatcher.OnAgentFinishedTableOperation("capture-2", model.TableID(7))
 	communicator.Reset()
@@ -864,7 +834,6 @@ func TestRebalanceWhileAddingTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertNumberOfCalls(t, "DispatchTable", 2)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
 }
 
 func TestManualMoveTableWhileAddingTable(t *testing.T) {
@@ -907,7 +876,6 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
 
 	dispatcher.OnAgentFinishedTableOperation("capture-2", 1)
 	communicator.Reset()
@@ -918,8 +886,6 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
-	communicator.AssertNotCalled(t, "DispatchTable")
 
 	dispatcher.OnAgentFinishedTableOperation("capture-2", 1)
 	communicator.Reset()
@@ -930,6 +896,4 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
-	communicator.AssertNotCalled(t, "Announce")
-	communicator.AssertNotCalled(t, "DispatchTable")
 }
