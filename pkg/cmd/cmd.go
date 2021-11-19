@@ -36,8 +36,8 @@ func NewCmd() *cobra.Command {
 func Run() {
 	cmd := NewCmd()
 
-	// Outputs cmd.Print to stderr.
-	cmd.SetOut(os.Stderr)
+	cmd.SetOut(os.Stdout)
+	cmd.SetErr(os.Stderr)
 
 	cmd.AddCommand(server.NewCmdServer())
 	cmd.AddCommand(cli.NewCmdCli())
@@ -45,7 +45,7 @@ func Run() {
 	cmd.AddCommand(redo.NewCmdRedo())
 
 	if err := cmd.Execute(); err != nil {
-		cmd.Println(err)
+		cmd.PrintErrln(err)
 		os.Exit(1)
 	}
 }
