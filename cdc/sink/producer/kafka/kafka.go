@@ -554,10 +554,6 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, protocol codec.Pr
 	return k, nil
 }
 
-func init() {
-	sarama.MaxRequestSize = 1024 * 1024 * 1024 // 1GB
-}
-
 var (
 	validClientID     = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
 	commonInvalidChar = regexp.MustCompile(`[\?:,"]`)
