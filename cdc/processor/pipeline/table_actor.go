@@ -143,6 +143,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 				t.stop(err)
 			}
 		case message.TypeStop:
+			go t.actorMessageHandler.HandleActorMessage(ctx, msgs[i])
 			t.stop(nil)
 			return false
 		}
@@ -307,7 +308,7 @@ func (t *tableActor) Cancel() {
 	// TODO(neil): pass context.
 	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
 		log.Warn("fails to send Stop message",
-			zap.Uint64("tableID", uint64(t.tableID)))
+			zap.Uint64("tableID", uint64(t.tableID)), zap.Error(err))
 	}
 }
 
