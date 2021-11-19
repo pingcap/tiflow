@@ -71,4 +71,4 @@ cd ../pb || exit 1
 sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
 sed -i.bak -E 's/import fmt \"fmt\"//g' *.pb.go
 rm -f *.bak
-goimports -w *.pb.go
+../tools/bin/goimports -w *.pb.go
