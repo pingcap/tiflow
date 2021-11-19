@@ -16,6 +16,7 @@ package kafka
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -583,6 +584,8 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
 	}
+	config.Version = version
+
 	var role string
 	if util.IsOwnerFromCtx(ctx) {
 		role = "owner"
@@ -591,20 +594,23 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	}
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-
 	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID, c.ClientID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	config.Version = version
+
+	// TiCDC would do some admin operation with kafka broker cluster, and could block the owner
+	// in an unstable network environment, we set timeout to 10s at most.
+	config.Admin.Retry.Max = math.MaxInt
+	config.Admin.Timeout = 10 * time.Second
+
 	// See: https://kafka.apache.org/documentation/#replication
 	// When one of the brokers in a Kafka cluster is down, the partition leaders
 	// in this broker is broken, Kafka will election a new partition leader and
 	// replication logs, this process will last from a few seconds to a few minutes.
 	// Kafka cluster will not provide a writing service in this process.
-	// Time out in one minute(120 * 500ms).
-	config.Metadata.Retry.Max = 120
-	config.Metadata.Retry.Backoff = 500 * time.Millisecond
+	config.Metadata.Retry.Max = math.MaxInt
+	config.Metadata.Timeout = 10 * time.Second
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
@@ -631,11 +637,6 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		log.Warn("Unsupported compression algorithm", zap.String("compression", c.Compression))
 		config.Producer.Compression = sarama.CompressionNone
 	}
-
-	// Time out in one minute(120 * 500ms).
-	config.Admin.Retry.Max = 120
-	config.Admin.Retry.Backoff = 500 * time.Millisecond
-	config.Admin.Timeout = 20 * time.Second
 
 	if c.Credential != nil && len(c.Credential.CAPath) != 0 {
 		config.Net.TLS.Enable = true
