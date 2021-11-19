@@ -609,6 +609,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// in this broker is broken, Kafka will election a new partition leader and
 	// replication logs, this process will last from a few seconds to a few minutes.
 	// Kafka cluster will not provide a writing service in this process.
+	// Time out in one minute
 	config.Metadata.Retry.Max = math.MaxInt
 	config.Metadata.Timeout = time.Minute
 
