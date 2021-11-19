@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"go.uber.org/zap"
 )
 
@@ -114,9 +115,11 @@ func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
 	return
 }
 
+// flushSink would return a ErrEmitRowFailedDue2Blocking error,
+// the caller should retry until it success, otherwise the event will lost
 func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err error) {
 	defer func() {
-		if err != nil {
+		if err != nil && cerror.ErrRedoLogBufferBlocking.NotEqual(err) {
 			n.status.Store(TableStatusStopped)
 			return
 		}
@@ -137,7 +140,9 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 		return errors.Trace(err)
 	}
 	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, resolvedTs)
-	if err != nil {
+	// we can ignore ErrFlushTsChanBlocking error because resolvedTs will continue
+	// to come
+	if err != nil && cerror.ErrFlushTsBlocking.NotEqual(err) {
 		return errors.Trace(err)
 	}
 	if checkpointTs <= n.checkpointTs {
@@ -149,6 +154,8 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 	return nil
 }
 
+// emitEvent would return a ErrEmitRowFailedDue2Blocking error,
+// the caller should retry until it success, otherwise the event will lost
 func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
 	if event == nil || event.Row == nil {
 		log.Warn("skip emit nil event", zap.Any("event", event))
@@ -315,17 +322,47 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(errors.New("processor sync resolved injected error"))
 			})
-			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
+
+			err := retry.Do(ctx, func() error {
+				err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs)
+				if err != nil {
+					return err
+				}
+				return nil
+			}, retry.WithBackoffBaseDelay(20),
+				retry.WithInfiniteTries(),
+				retry.WithIsRetryableErr(isRetryableError))
+			if err != nil {
 				return errors.Trace(err)
 			}
+
 			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
 			return nil
 		}
-		if err := n.emitEvent(ctx, event); err != nil {
+
+		err := retry.Do(ctx, func() error {
+			err := n.emitEvent(ctx, event)
+			if err != nil {
+				return err
+			}
+			return nil
+		}, retry.WithBackoffBaseDelay(20),
+			retry.WithInfiniteTries(),
+			retry.WithIsRetryableErr(isRetryableError))
+		if err != nil {
 			return errors.Trace(err)
 		}
 	case pipeline.MessageTypeTick:
-		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+		err := retry.Do(ctx, func() error {
+			err := n.flushSink(ctx, n.resolvedTs)
+			if err != nil {
+				return err
+			}
+			return nil
+		}, retry.WithBackoffBaseDelay(20),
+			retry.WithInfiniteTries(),
+			retry.WithIsRetryableErr(isRetryableError))
+		if err != nil {
 			return errors.Trace(err)
 		}
 	case pipeline.MessageTypeCommand:
@@ -334,7 +371,16 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 		}
 	case pipeline.MessageTypeBarrier:
 		n.barrierTs = msg.BarrierTs
-		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+		err := retry.Do(ctx, func() error {
+			err := n.flushSink(ctx, n.resolvedTs)
+			if err != nil {
+				return err
+			}
+			return nil
+		}, retry.WithBackoffBaseDelay(20),
+			retry.WithInfiniteTries(),
+			retry.WithIsRetryableErr(isRetryableError))
+		if err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -345,4 +391,14 @@ func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 	n.status.Store(TableStatusStopped)
 	n.flowController.Abort()
 	return n.sink.Close(ctx)
+}
+
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if cerror.ErrRedoLogBufferBlocking.Equal(err) {
+		return true
+	}
+	return false
 }

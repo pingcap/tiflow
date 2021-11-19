@@ -301,6 +301,11 @@ error = '''
 event is larger than the total memory quota, size: %d, quota: %d
 '''
 
+["CDC:ErrFlushTsBlocking"]
+error = '''
+flush ts is blocking, please try to send resolvedTs again if needed
+'''
+
 ["CDC:ErrGCTTLExceeded"]
 error = '''
 the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL
@@ -719,6 +724,11 @@ redo log down load to local failed
 ["CDC:ErrRedoFileOp"]
 error = '''
 redo file operation
+'''
+
+["CDC:ErrRedoLogBufferBlocking"]
+error = '''
+redo log buffer is blocking, please try to send rows again if needed
 '''
 
 ["CDC:ErrRedoMetaFileNotFound"]

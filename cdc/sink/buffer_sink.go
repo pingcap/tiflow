@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -151,6 +153,8 @@ func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint6
 	case <-ctx.Done():
 		return atomic.LoadUint64(&b.checkpointTs), ctx.Err()
 	case b.flushTsChan <- resolvedTs:
+		return atomic.LoadUint64(&b.checkpointTs), nil
+	default:
 	}
-	return atomic.LoadUint64(&b.checkpointTs), nil
+	return atomic.LoadUint64(&b.checkpointTs), cerror.ErrFlushTsBlocking.FastGenByArgs()
 }

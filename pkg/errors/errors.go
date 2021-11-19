@@ -120,6 +120,9 @@ var (
 	ErrOldValueNotEnabled        = errors.Normalize("old value is not enabled", errors.RFCCodeText("CDC:ErrOldValueNotEnabled"))
 	ErrSinkInvalidConfig         = errors.Normalize("sink config invalid", errors.RFCCodeText("CDC:ErrSinkInvalidConfig"))
 	ErrCraftCodecInvalidData     = errors.Normalize("craft codec invalid data", errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"))
+	// internal use only
+	ErrFlushTsBlocking       = errors.Normalize("flush ts is blocking, please try to send resolvedTs again if needed", errors.RFCCodeText("CDC:ErrFlushTsBlocking"))
+	ErrRedoLogBufferBlocking = errors.Normalize("redo log buffer is blocking, please try to send rows again if needed", errors.RFCCodeText("CDC:ErrRedoLogBufferBlocking"))
 
 	// utilities related errors
 	ErrToTLSConfigFailed         = errors.Normalize("generate tls config failed", errors.RFCCodeText("CDC:ErrToTLSConfigFailed"))

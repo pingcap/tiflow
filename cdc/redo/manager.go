@@ -51,9 +51,10 @@ const (
 )
 
 const (
-	// supposing to replicate 10k tables, each table has one cached changce averagely.
+	// supposing to replicate 10k tables, each table has one cached change averagely.
 	logBufferChanSize = 10000
-	logBufferTimeout  = time.Minute * 10
+	// supposing to replicate 10k tables, each table has one resolvedTs change averagely.
+	flushBufferChanSize = 10000
 )
 
 // IsValidConsistentLevel checks whether a give consistent level is valid
@@ -119,6 +120,12 @@ type cacheRows struct {
 	rows    []*model.RowChangedEvent
 }
 
+// resolvedEv represents a resolvedTs event
+type resolvedEv struct {
+	tableID    model.TableID
+	resolvedTs uint64
+}
+
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
 // redo log resolved ts. It implements LogManager interface.
 type ManagerImpl struct {
@@ -126,8 +133,9 @@ type ManagerImpl struct {
 	level       consistentLevelType
 	storageType consistentStorage
 
-	logBuffer chan cacheRows
-	writer    writer.RedoLogWriter
+	flushBuffer chan resolvedEv
+	logBuffer   chan cacheRows
+	writer      writer.RedoLogWriter
 
 	minResolvedTs uint64
 	tableIDs      []model.TableID
@@ -154,6 +162,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		storageType: consistentStorage(uri.Scheme),
 		rtsMap:      make(map[model.TableID]uint64),
 		logBuffer:   make(chan cacheRows, logBufferChanSize),
+		flushBuffer: make(chan resolvedEv, flushBufferChanSize),
 	}
 
 	switch m.storageType {
@@ -192,6 +201,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 
 	if opts.EnableBgRunner {
 		go m.bgUpdateResolvedTs(ctx, opts.ErrCh)
+		go m.bgFlushLog(ctx, opts.ErrCh)
 		go m.bgWriteLog(ctx, opts.ErrCh)
 	}
 	return m, nil
@@ -209,23 +219,15 @@ func (m *ManagerImpl) Enabled() bool {
 
 // EmitRowChangedEvents sends row changed events to a log buffer, the log buffer
 // will be consumed by a background goroutine, which converts row changed events
-// to redo logs and sends to log writer. Note this function is non-blocking if
-// the channel is not full, otherwise if the channel is always full after timeout,
-// error ErrBufferLogTimeout will be returned.
-// TODO: if the API is truly non-blocking, we should return an error immediately
-// when the log buffer channel is full.
+// to redo logs and sends to log writer.
 func (m *ManagerImpl) EmitRowChangedEvents(
 	ctx context.Context,
 	tableID model.TableID,
 	rows ...*model.RowChangedEvent,
 ) error {
-	timer := time.NewTimer(logBufferTimeout)
-	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		return nil
-	case <-timer.C:
-		return cerror.ErrBufferLogTimeout.GenWithStackByArgs()
+		return ctx.Err()
 	case m.logBuffer <- cacheRows{
 		tableID: tableID,
 		// Because the pipeline sink doesn't hold slice memory after calling
@@ -233,8 +235,10 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 		// in redo manager itself, which is the same behavior as sink manager.
 		rows: append(make([]*model.RowChangedEvent, 0, len(rows)), rows...),
 	}:
+		return nil
+	default:
 	}
-	return nil
+	return cerror.ErrRedoLogBufferBlocking.FastGenByArgs()
 }
 
 // FlushLog emits resolved ts of a single table
@@ -248,7 +252,18 @@ func (m *ManagerImpl) FlushLog(
 		return nil
 	}
 	defer atomic.StoreInt64(&m.flushing, 0)
-	return m.writer.FlushLog(ctx, tableID, resolvedTs)
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case m.flushBuffer <- resolvedEv{
+		tableID:    tableID,
+		resolvedTs: resolvedTs,
+	}:
+		return nil
+	default:
+	}
+	return cerror.ErrFlushTsBlocking.FastGenByArgs()
 }
 
 // EmitDDLEvent sends DDL event to redo log writer
@@ -372,6 +387,26 @@ func (m *ManagerImpl) bgWriteLog(ctx context.Context, errCh chan<- error) {
 				}
 				return
 			}
+		}
+	}
+}
+
+func (m *ManagerImpl) bgFlushLog(ctx context.Context, errCh chan<- error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-m.flushBuffer:
+			err := m.writer.FlushLog(ctx, event.tableID, event.resolvedTs)
+			if err != nil {
+				select {
+				case errCh <- err:
+				default:
+					log.Error("err channel is full", zap.Error(err))
+				}
+				return
+			}
+
 		}
 	}
 }
