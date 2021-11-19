@@ -82,6 +82,7 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 		cli:                   cli,
 		workerName:            workerName,
 		lightningGlobalConfig: lightningCfg,
+		core:                  lightning.New(lightningCfg),
 		logger:                log.With(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
 	}
 	return loader
@@ -161,10 +162,9 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 }
 
 func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) error {
-	l.Lock()
 	taskCtx, cancel := context.WithCancel(ctx)
+	l.Lock()
 	l.cancel = cancel
-	l.core = lightning.New(l.lightningGlobalConfig)
 	l.Unlock()
 	err := l.core.RunOnce(taskCtx, cfg, nil)
 	failpoint.Inject("LightningLoadDataSlowDown", nil)
@@ -342,9 +342,7 @@ func (l *LightningLoader) Pause() {
 	if l.cancel != nil {
 		l.cancel()
 	}
-	if l.core != nil {
-		l.core.Stop()
-	}
+	l.core.Stop()
 }
 
 // Resume resumes the paused process.
