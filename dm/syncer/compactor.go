@@ -14,6 +14,8 @@
 package syncer
 
 import (
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/failpoint"
@@ -165,6 +167,15 @@ func (c *compactor) compactJob(j *job) {
 	}
 
 	key := j.dml.identifyKey()
+
+	failpoint.Inject("DownstreamIdentifyKeyCheckInCompact", func(v failpoint.Value) {
+		value, err := strconv.Atoi(key)
+		upper := v.(int)
+		if err != nil || value > upper {
+			panic(fmt.Sprintf("downstream identifyKey check failed. key value %v should less than %v", value, upper))
+		}
+	})
+
 	prevPos, ok := tableKeyMap[key]
 	// if no such key in the buffer, add it
 	if !ok {
