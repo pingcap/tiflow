@@ -41,7 +41,7 @@ type GlobalVars struct {
 	CaptureInfo      *model.CaptureInfo
 	EtcdClient       *etcd.CDCEtcdClient
 	GrpcPool         kv.GrpcPool
-  RegionCache      *tikv.RegionCache
+	RegionCache      *tikv.RegionCache
 	TimeAcquirer     pdtime.TimeAcquirer
 	TableActorSystem *system.System
 }

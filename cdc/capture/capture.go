@@ -62,7 +62,7 @@ type Capture struct {
 	kvStorage    tidbkv.Storage
 	etcdClient   *etcd.CDCEtcdClient
 	grpcPool     kv.GrpcPool
-  regionCache *tikv.RegionCache
+	regionCache  *tikv.RegionCache
 	TimeAcquirer pdtime.TimeAcquirer
 
 	tableActorSystem *system.System
@@ -183,7 +183,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		CaptureInfo:      c.info,
 		EtcdClient:       c.etcdClient,
 		GrpcPool:         c.grpcPool,
-    RegionCache:      c.regionCache,
+		RegionCache:      c.regionCache,
 		TimeAcquirer:     c.TimeAcquirer,
 		TableActorSystem: c.tableActorSystem,
 	})
