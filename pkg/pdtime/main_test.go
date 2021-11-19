@@ -11,17 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package pdtime
 
 import (
-	"sort"
+	"testing"
 
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/leakutil"
 )
 
-// SortTableIDs sorts a slice of table IDs in ascending order.
-func SortTableIDs(tableIDs []model.TableID) {
-	sort.Slice(tableIDs, func(i, j int) bool {
-		return tableIDs[i] < tableIDs[j]
-	})
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }
