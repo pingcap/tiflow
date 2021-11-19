@@ -28,10 +28,10 @@ services:
     depends_on:
       - "zookeeper"
 
-  integration_test:
+  kafka_integration_test:
     build:
       context: ../../../
-      dockerfile: ./deployments/ticdc/docker/kafka-integration.Dockerfile
+      dockerfile: ./deployments/ticdc/docker/integration-test.Dockerfile
     depends_on:
       - "zookeeper"
       - "kafka"

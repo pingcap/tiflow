@@ -5,7 +5,6 @@ USER root
 WORKDIR /root/download
 
 COPY ./scripts/download-integration-test-binaries.sh .
-
 # Download all binaries into bin dir.
 RUN ./download-integration-test-binaries.sh master
 RUN ls ./bin
@@ -24,7 +23,7 @@ FROM centos:centos7
 USER root
 WORKDIR /root
 
-# Installing dependencies
+# Installing dependencies.
 RUN yum install -y \
 	git \
 	bash-completion \
@@ -36,6 +35,9 @@ RUN yum install -y \
     tar \
     musl-dev \
     psmisc
+RUN wget http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+RUN yum install -y epel-release-latest-7.noarch.rpm
+RUN yum --enablerepo=epel install -y s3cmd
 RUN wget -i -c http://dev.mysql.com/get/mysql57-community-release-el7-10.noarch.rpm
 RUN yum install -y mysql57-community-release-el7-10.noarch.rpm
 RUN yum install -y mysql-server
@@ -52,6 +54,6 @@ COPY . .
 # Clean bin dir and build TiCDC.
 # We always need to clean before we build, please don't adjust its order.
 RUN make clean
-RUN make integration_test_build kafka_consumer
+RUN make integration_test_build kafka_consumer cdc
 COPY --from=downloader /root/download/bin/* ./bin
 RUN make check_third_party_binary
