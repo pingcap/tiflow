@@ -13,7 +13,10 @@ function DM_001_CASE() {
 	# schema tracker could track per table without error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Duplicate column name 'new_col1'" 1
+		"\"result\": true" 2 \
+		"\"synced\": true" 1
+	# only downstream sees a duplicate error, but currently ignored by DM
+	check_log_contain_with_retry "Duplicate column name 'new_col1'" $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
 }
 
 function DM_001() {
@@ -239,7 +242,7 @@ function DM_RemoveLock_CASE() {
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column c double;"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column c double;"
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column c double;"
-	check_log_contain_with_retry "wait new ddl info putted into etcd" $WORK_DIR/master/log/dm-master.log
+	check_log_contain_with_retry "wait new ddl info putted into etcd in ${1}" $WORK_DIR/master/log/dm-master.log
 	check_metric_not_contains $MASTER_PORT "dm_master_shard_ddl_error" 3
 	run_sql_source1 "alter table ${shardddl1}.${tb1} drop column b;"
 

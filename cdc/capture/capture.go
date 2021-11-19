@@ -28,11 +28,13 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/cdc/processor"
+	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/tikv/client-go/v2/tikv"
@@ -56,11 +58,14 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	pdClient    pd.Client
-	kvStorage   tidbkv.Storage
-	etcdClient  *etcd.CDCEtcdClient
-	grpcPool    kv.GrpcPool
-	regionCache *tikv.RegionCache
+	pdClient     pd.Client
+	kvStorage    tidbkv.Storage
+	etcdClient   *etcd.CDCEtcdClient
+	grpcPool     kv.GrpcPool
+  regionCache *tikv.RegionCache
+	TimeAcquirer pdtime.TimeAcquirer
+
+	tableActorSystem *system.System
 
 	cancel context.CancelFunc
 
@@ -102,8 +107,27 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
+
+	if c.TimeAcquirer != nil {
+		c.TimeAcquirer.Stop()
+	}
+	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
+
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
+	}
+	if c.tableActorSystem != nil {
+		err := c.tableActorSystem.Stop()
+		if err != nil {
+			log.Warn("stop table actor system failed", zap.Error(err))
+		}
+	}
+	if conf.Debug.EnableTableActor {
+		c.tableActorSystem = system.NewSystem()
+		err = c.tableActorSystem.Start(ctx)
+		if err != nil {
+			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
+		}
 	}
 	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
 	if c.regionCache != nil {
@@ -154,12 +178,14 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		PDClient:    c.pdClient,
-		KVStorage:   c.kvStorage,
-		CaptureInfo: c.info,
-		EtcdClient:  c.etcdClient,
-		GrpcPool:    c.grpcPool,
-		RegionCache: c.regionCache,
+		PDClient:         c.pdClient,
+		KVStorage:        c.kvStorage,
+		CaptureInfo:      c.info,
+		EtcdClient:       c.etcdClient,
+		GrpcPool:         c.grpcPool,
+    RegionCache:      c.regionCache,
+		TimeAcquirer:     c.TimeAcquirer,
+		TableActorSystem: c.tableActorSystem,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -173,7 +199,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		cancel()
 	}()
 	wg := new(sync.WaitGroup)
-	wg.Add(3)
+	wg.Add(4)
 	var ownerErr, processorErr error
 	go func() {
 		defer wg.Done()
@@ -194,6 +220,10 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// so we should also stop the processor and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, orchestrator.NewGlobalState(), processorFlushInterval)
 		log.Info("the processor routine has exited", zap.Error(processorErr))
+	}()
+	go func() {
+		defer wg.Done()
+		c.TimeAcquirer.Run(ctx)
 	}()
 	go func() {
 		defer wg.Done()
@@ -277,7 +307,8 @@ func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Rea
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if err := etcdWorker.Run(ctx, c.session, timerInterval); err != nil {
+	captureAddr := c.info.AdvertiseAddr
+	if err := etcdWorker.Run(ctx, c.session, timerInterval, captureAddr); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as
@@ -362,6 +393,13 @@ func (c *Capture) AsyncClose() {
 	}
 	if c.regionCache != nil {
 		c.regionCache.Close()
+	}
+	if c.tableActorSystem != nil {
+		err := c.tableActorSystem.Stop()
+		if err != nil {
+			log.Warn("stop table actor system failed", zap.Error(err))
+		}
+		c.tableActorSystem = nil
 	}
 }
 

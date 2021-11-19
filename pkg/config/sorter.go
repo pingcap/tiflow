@@ -32,7 +32,7 @@ type SorterConfig struct {
 
 	// EnableLevelDB enables leveldb sorter.
 	//
-	// The default value is true.
+	// The default value is false.
 	// TODO: turn on after GA.
 	EnableLevelDB bool          `toml:"enable-leveldb-sorter" json:"enable-leveldb-sorter"`
 	LevelDB       LevelDBConfig `toml:"leveldb" json:"leveldb"`
@@ -40,14 +40,14 @@ type SorterConfig struct {
 
 // LevelDBConfig represents leveldb sorter config.
 type LevelDBConfig struct {
-	// LevelDBCount is the number of leveldb count.
+	// Count is the number of leveldb count.
 	//
 	// The default value is 16.
-	LevelDBCount int `toml:"leveldb-count" json:"leveldb-count"`
-	// LevelDBConcurrency is the maximum write and read concurrency.
+	Count int `toml:"count" json:"count"`
+	// Concurrency is the maximum write and read concurrency.
 	//
 	// The default value is 256.
-	LevelDBConcurrency int `toml:"leveldb-concurrency" json:"leveldb-concurrency"`
+	Concurrency int `toml:"concurrency" json:"concurrency"`
 	// MaxOpenFiles is the maximum number of open FD by leveldb sorter.
 	//
 	// The default value is 10000.
@@ -58,11 +58,11 @@ type LevelDBConfig struct {
 	BlockSize int `toml:"block-size" json:"block-size"`
 	// BlockCacheSize is the capacity of leveldb block cache.
 	//
-	// The default value is 0.
+	// The default value is 4294967296, 4GB.
 	BlockCacheSize int `toml:"block-cache-size" json:"block-cache-size"`
 	// WriterBufferSize is the size of memory table of leveldb.
 	//
-	// The default value is 8388608, 8MiB.
+	// The default value is 8388608, 8MB.
 	WriterBufferSize int `toml:"writer-buffer-size" json:"writer-buffer-size"`
 	// Compression is the compression algorithm that is used by leveldb.
 	// Valid values are "none" or "snappy".
@@ -71,7 +71,7 @@ type LevelDBConfig struct {
 	Compression string `toml:"compression" json:"compression"`
 	// TargetFileSizeBase limits size of leveldb sst file that compaction generates.
 	//
-	// The default value is 8388608, 8MiB.
+	// The default value is 8388608, 8MB.
 	TargetFileSizeBase int `toml:"target-file-size-base" json:"target-file-size-base"`
 	// CompactionL0Trigger defines number of leveldb sst file at level-0 that will
 	// trigger compaction.
@@ -115,10 +115,10 @@ func (c *SorterConfig) ValidateAndAdjust() error {
 		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage")
 	}
 	if c.LevelDB.Compression != "none" && c.LevelDB.Compression != "snappy" {
-		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.compression must be \"none\" or \"snappy\"")
+		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.leveldb.compression must be \"none\" or \"snappy\"")
 	}
 	if c.LevelDB.CleanupSpeedLimit <= 1 {
-		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.cleanup-speed-limit must be larger than 1")
+		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.leveldb.cleanup-speed-limit must be larger than 1")
 	}
 
 	return nil
