@@ -610,7 +610,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// replication logs, this process will last from a few seconds to a few minutes.
 	// Kafka cluster will not provide a writing service in this process.
 	config.Metadata.Retry.Max = math.MaxInt
-	config.Metadata.Timeout = 10 * time.Second
+	config.Metadata.Timeout = time.Minute
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
