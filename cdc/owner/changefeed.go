@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -184,7 +183,9 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		return errors.Trace(err)
 	}
 	if shouldUpdateState {
-		c.updateStatus(barrierTs)
+		pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		currentTs := oracle.GetPhysical(pdTime)
+		c.updateStatus(currentTs, barrierTs)
 	}
 	return nil
 }
@@ -464,7 +465,7 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	return done, nil
 }
 
-func (c *changefeed) updateStatus(barrierTs model.Ts) {
+func (c *changefeed) updateStatus(currentTs int64, barrierTs model.Ts) {
 	resolvedTs := barrierTs
 	for _, position := range c.state.TaskPositions {
 		if resolvedTs > position.ResolvedTs {
@@ -496,12 +497,10 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 		}
 		return status, changed, nil
 	})
-
 	phyTs := oracle.ExtractPhysical(checkpointTs)
+
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
-	// It is more accurate to get tso from PD, but in most cases since we have
-	// deployed NTP service, a little bias is acceptable here.
-	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyTs) / 1e3)
 }
 
 func (c *changefeed) Close(ctx context.Context) {

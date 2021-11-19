@@ -1,5 +1,5 @@
 ---
-name: load_task3
+name: load_task1
 task-mode: all
 is-sharding: false
 meta-schema: "dm_meta"
@@ -13,15 +13,24 @@ target-database:
   password: "/Q7B9DizNLLTTfiZHv9WoEAKamfpIUs="
 
 mysql-instances:
+  - source-id: "mysql-replica-01"
+    block-allow-list:  "instance"
+    mydumper-config-name: "global"
+    loader-config-name: "global"
+    syncer-config-name: "global"
+
   - source-id: "mysql-replica-02"
     block-allow-list:  "instance"
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
 
+tidb:
+  backend: "tidb"
+
 block-allow-list:
   instance:
-    do-dbs: ["load_task3"]
+    do-dbs: ["load_task1"]
 
 mydumpers:
   global:
