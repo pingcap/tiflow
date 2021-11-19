@@ -20,21 +20,27 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink/publicUtils"
 	"github.com/pingcap/ticdc/cdc/sink/socket"
 	"github.com/pingcap/ticdc/cdc/sink/vo"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	tifilter "github.com/pingcap/ticdc/pkg/filter"
 	"net/url"
-
-	//"net"
-	"sync/atomic"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
+	//"net"
+	"sync/atomic"
 )
 
 // newDsgTestSink creates a block hole sink
-func newDsgSink(ctx context.Context, opts map[string]string,sinkURI *url.URL) *dsgSink {
+
+
+
+func newDsgSink(ctx context.Context, opts map[string]string,sinkURI *url.URL,filter *tifilter.Filter,) *dsgSink {
+
 	return &dsgSink{
 		statistics: NewStatistics(ctx, "rowsocket", opts),
 		sinkURI:sinkURI,
+		filter:filter,
 	}
 }
 
@@ -44,6 +50,7 @@ type dsgSink struct {
 	accumulated     uint64
 	lastAccumulated uint64
 	sinkURI *url.URL
+	filter *tifilter.Filter
 }
 
 type RowJson struct {
@@ -226,6 +233,7 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 func (b *dsgSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	log.Info("dsgSocketSink: FlushRowChangedEvents", zap.String("host", b.sinkURI.Host),zap.Uint64("resolvedTs", resolvedTs))
 
+
 	commitTs,err:=socket.JddmClientFlush(b.sinkURI.Host,resolvedTs)
 	//commitTs,err:=socket.JddmClientFlush("127.0.0.1:9889",resolvedTs)
 	if err != nil {
@@ -268,7 +276,15 @@ func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 	//fmt.Println(">>>>>>>>>>>>>>>>>>>>===================EmitDDLEvent===================================================================>>>>>>>>>>>>>>>>>>>")
 
-
+	if b.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Type, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
+		log.Info(
+			"DDL event ignored",
+			zap.String("query", ddl.Query),
+			zap.Uint64("startTs", ddl.StartTs),
+			zap.Uint64("commitTs", ddl.CommitTs),
+		)
+		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
+	}
 
 	ddldata := new(vo.DDLInfos)
 
