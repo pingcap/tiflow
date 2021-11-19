@@ -250,7 +250,7 @@ func (b *dsgSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) 
 
 
 func (b *dsgSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	log.Info("dsgSocketSink: Checkpoint Event", zap.Uint64("ts", ts))
+	log.Info("dsgSocketSink: Checkpoint Event",zap.String("host", b.sinkURI.Host), zap.Uint64("ts", ts))
 
 	commitTs,err:=socket.JddmClientByCheckPoint(b.sinkURI.Host,ts)
 	//commitTs,err:=socket.JddmClientFlush("127.0.0.1:9889",resolvedTs)
@@ -264,7 +264,7 @@ func (b *dsgSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	log.Info("dsgSocketSink: DDL ",zap.String("ddl", b.sinkURI.Host), zap.Any("ddl", ddl))
+	log.Info("dsgSocketSink: DDL ",zap.String("host", b.sinkURI.Host), zap.Any("ddl", ddl))
 
 	//fmt.Println(">>>>>>>>>>>>>>>>>>>>===================EmitDDLEvent===================================================================>>>>>>>>>>>>>>>>>>>")
 
