@@ -597,7 +597,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 
 	// TiCDC would do some admin operation with kafka broker cluster, and could block the owner
 	// in an unstable network environment, we set timeout to 10s at most.
-	config.Admin.Retry.Max = math.MaxInt
+	config.Admin.Retry.Max = math.MaxInt32
 	config.Admin.Timeout = 10 * time.Second
 
 	// See: https://kafka.apache.org/documentation/#replication
@@ -606,7 +606,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// replication logs, this process will last from a few seconds to a few minutes.
 	// Kafka cluster will not provide a writing service in this process.
 	// Time out in one minute
-	config.Metadata.Retry.Max = math.MaxInt
+	config.Metadata.Retry.Max = math.MaxInt32
 	config.Metadata.Timeout = time.Minute
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
@@ -616,7 +616,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Producer.RequiredAcks = sarama.WaitForAll
 
 	// Time out in 30s.
-	config.Producer.Retry.Max = math.MaxInt
+	config.Producer.Retry.Max = math.MaxInt32
 	config.Producer.Timeout = 30 * time.Second
 
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
