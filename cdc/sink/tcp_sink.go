@@ -264,8 +264,8 @@ func (b *dsgSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	log.Info("dsgSocketSink: DDL Event", zap.Any("ddl", ddl))
-	log.Info("dsgSocketSink: DDL Host", zap.String("ddl", b.sinkURI.Host))
+	log.Info("dsgSocketSink: DDL ",zap.String("ddl", b.sinkURI.Host), zap.Any("ddl", ddl))
+
 	//fmt.Println(">>>>>>>>>>>>>>>>>>>>===================EmitDDLEvent===================================================================>>>>>>>>>>>>>>>>>>>")
 
 
