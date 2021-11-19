@@ -10810,7 +10810,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (changefeed)",
+          "expr": "sum (rate(ticdc_redo_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (changefeed)",
           "hide": false,
           "interval": "",
           "legendFormat": "total",
