@@ -1,1 +1,1 @@
-export * from '@douyinfe/semi-icons'
+export * from '@ant-design/icons'

@@ -1,1 +1,1 @@
-export * from '@douyinfe/semi-ui'
+export * from 'antd'

@@ -14,11 +14,11 @@ const routes: RouteObject[] = [
     children: [
       {
         index: true,
-        element: <div>TODO Dashboard</div>,
+        element: <div>TODO</div>,
       },
       {
         path: '/migration/task',
-        element: <div>TODO 任务列表</div>,
+        element: <div>TODO</div>,
       },
       {
         path: '/migration/source',
@@ -26,19 +26,23 @@ const routes: RouteObject[] = [
       },
       {
         path: '/migration/task-config',
-        element: <div>TODO 任务配置</div>,
+        element: <div>TODO</div>,
       },
       {
         path: '/migration/sync-detail',
-        element: <div>TODO 同步详情</div>,
+        element: <div>TODO</div>,
       },
       {
         path: '/cluster/member',
-        element: <div>TODO 成员列表</div>,
+        element: <div>TODO</div>,
       },
       {
         path: '/cluster/relay-log',
-        element: <div>TODO relay 日志</div>,
+        element: <div>TODO</div>,
+      },
+      {
+        path: '*',
+        element: <div>Page not found...</div>,
       },
     ],
   },

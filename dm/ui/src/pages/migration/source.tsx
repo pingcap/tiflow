@@ -1,49 +1,210 @@
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
+import { omit } from 'lodash'
+import { useTranslation } from 'react-i18next'
 
-import { Button, Modal, Space, Input, Col, Row } from '~/uikit'
 import {
-  IconPlus,
-  IconExport,
-  IconImport,
-  IconTickCircle,
-  IconSearch,
+  Button,
+  Modal,
+  Space,
+  Input,
+  Col,
+  Row,
+  message,
+  Table,
+  Badge,
+} from '~/uikit'
+import {
+  ImportOutlined,
+  ExportOutlined,
+  SearchOutlined,
+  ExclamationCircleOutlined,
+  PlusSquareOutlined,
 } from '~/uikit/icons'
-import CreateSource from '~/components/CreateSource'
+import CreateOrUpdateSource from '~/components/CreateOrUpdateSource'
+import {
+  useCreateSourceMutation,
+  useGetSourcesQuery,
+  useRemoveSourceMutation,
+} from '~/services'
+import type { Source } from '~/models/source'
+import { unimplemented } from '~/utils/unimplemented'
 
-const UpstreamList: React.FC = () => {
+const { confirm } = Modal
+
+const SourceList: React.FC = () => {
+  const [t] = useTranslation()
   const [showModal, setShowModal] = useState(false)
+  const [currentSource, setCurrentSource] = useState<Source | null>(null)
+  const [selectedSources, setSelectedSources] = useState<string[]>([])
+
+  const { data, isFetching } = useGetSourcesQuery({ with_status: false })
+  const [createSource] = useCreateSourceMutation()
+  const [removeSource] = useRemoveSourceMutation()
+
+  const handleCancel = useCallback(() => {
+    setShowModal(false)
+  }, [])
+
+  const handleConfirm = useCallback(
+    async (payload: Partial<Source>) => {
+      const data = omit(payload, ['relay', 'security'])
+      const key = 'createSource-' + Date.now()
+      message.loading({ content: t('saving'), key })
+      createSource(data)
+        .unwrap()
+        .then(() => {
+          message.success({ content: t('saved'), key, duration: 6 })
+          setShowModal(false)
+        })
+    },
+    [currentSource]
+  )
+
+  const handleRemoveSource = useCallback(async () => {
+    const key = 'removeSource-' + Date.now()
+
+    confirm({
+      title: (
+        <span>
+          {t('confirm to delete')}
+          <strong>{selectedSources.join(', ')}</strong>?
+        </span>
+      ),
+      icon: <ExclamationCircleOutlined />,
+      onOk() {
+        message.loading({ content: t('deleting'), key })
+        Promise.all(selectedSources.map(name => removeSource({ name }))).then(
+          () => {
+            message.success({ content: t('deleted'), key })
+            setSelectedSources([])
+          }
+        )
+      },
+    })
+  }, [selectedSources])
+
+  const dataSource = data?.data
+  const columns = [
+    {
+      title: t('name'),
+      dataIndex: 'source_name',
+    },
+    {
+      title: t('ip'),
+      dataIndex: 'host',
+    },
+    {
+      title: t('port'),
+      dataIndex: 'port',
+    },
+    {
+      title: t('user name'),
+      dataIndex: 'user',
+    },
+    {
+      title: t('enable gtid'),
+      dataIndex: 'enable_gtid',
+      render(enabled: boolean) {
+        return (
+          <Badge
+            status={enabled ? 'success' : 'default'}
+            text={enabled ? t('enabled') : t('disabled')}
+          />
+        )
+      },
+    },
+    {
+      title: t('operations'),
+      render(data: Source) {
+        return (
+          <Space>
+            <a
+              onClick={() => {
+                setCurrentSource(data)
+                setShowModal(true)
+              }}
+            >
+              {t('edit')}
+            </a>
+          </Space>
+        )
+      },
+    },
+  ]
+  const rowSelection = {
+    selectedRowKeys: selectedSources,
+    onChange: (selectedRowKeys: React.Key[], selectedRows: Source[]) => {
+      setSelectedSources(selectedRows.map(i => i.source_name))
+    },
+  }
+
+  useEffect(() => {
+    if (!showModal) {
+      setCurrentSource(null)
+    }
+  }, [showModal])
+
   return (
     <div>
-      <Row className="p-4" type="flex" justify="space-between">
+      <Row className="p-4" justify="space-between">
         <Col span={22}>
           <Space>
-            <Input suffix={<IconSearch />} placeholder="搜索" />
-            <Button icon={<IconExport />}>导出</Button>
-            <Button icon={<IconImport />}>导入</Button>
-            <Button icon={<IconTickCircle />}>应用</Button>
-            <Button>删除</Button>
+            <Input
+              suffix={<SearchOutlined />}
+              placeholder={t('search placeholder')}
+            />
+            <Button icon={<ExportOutlined />} onClick={unimplemented}>
+              {t('export')}
+            </Button>
+            <Button icon={<ImportOutlined />} onClick={unimplemented}>
+              {t('import')}
+            </Button>
+            {selectedSources.length > 0 && (
+              <Button onClick={handleRemoveSource} danger type="primary">
+                {t('delete')}
+              </Button>
+            )}
           </Space>
         </Col>
         <Col span={2}>
-          <Button onClick={() => setShowModal(true)} icon={<IconPlus />}>
-            新增
+          <Button
+            onClick={() => setShowModal(true)}
+            icon={<PlusSquareOutlined />}
+          >
+            {t('add')}
           </Button>
         </Col>
       </Row>
 
+      <Table
+        className="p-4"
+        dataSource={dataSource}
+        columns={columns}
+        loading={isFetching}
+        rowKey="source_name"
+        rowSelection={rowSelection}
+        pagination={{
+          total: data?.total,
+        }}
+      />
+
       <Modal
-        size="large"
-        title="新增上游"
+        title={currentSource ? t('edit source') : t('add new source')}
         visible={showModal}
-        onOk={() => {}}
-        onCancel={() => setShowModal(false)}
+        onCancel={handleCancel}
         centered
-        bodyStyle={{}}
+        footer={null}
+        maskClosable={false}
+        width={800}
       >
-        <CreateSource />
+        <CreateOrUpdateSource
+          onCancel={handleCancel}
+          onSubmit={handleConfirm}
+          currentSource={currentSource}
+        />
       </Modal>
     </div>
   )
 }
 
-export default UpstreamList
+export default SourceList

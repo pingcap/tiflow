@@ -1,74 +1,122 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 
-import { Nav } from '~/uikit'
-import { IconInherit, IconServer, IconLayers } from '~/uikit/icons'
+import { Menu } from '~/uikit'
+import {
+  DashboardOutlined,
+  ExportOutlined,
+  ClusterOutlined,
+} from '~/uikit/icons'
 
-const items = [
-  { itemKey: '/', text: 'Dashboard', icon: <IconServer /> },
-  {
-    itemKey: '/migration',
-    text: '数据迁移',
-    icon: <IconInherit />,
-    items: [
-      {
-        text: '任务列表',
-        itemKey: '/migration/task',
-      },
-      {
-        text: '上游配置',
-        itemKey: '/migration/source',
-      },
-      {
-        text: '任务配置',
-        itemKey: '/migration/task-config',
-      },
-      {
-        text: '同步详情',
-        itemKey: '/migration/sync-detail',
-      },
-    ],
-  },
-  {
-    itemKey: '/cluster',
-    text: '集群管理',
-    icon: <IconLayers />,
-    items: [
-      {
-        text: '成员列表',
-        itemKey: '/cluster/member',
-      },
-      {
-        text: 'relay 日志',
-        itemKey: '/cluster/relay-log',
-      },
-    ],
-  },
-]
+const { SubMenu } = Menu
 
-export default function SiderMenu() {
+const SiderMenu: React.FC<{
+  collapsed: boolean
+}> = ({ collapsed }) => {
+  const [t] = useTranslation()
   const navigate = useNavigate()
+  const loc = useLocation()
 
+  const items = [
+    { itemKey: '/', text: 'Dashboard', icon: <DashboardOutlined /> },
+    {
+      itemKey: '/migration',
+      text: t('migration'),
+      icon: <ExportOutlined />,
+      items: [
+        {
+          text: t('task list'),
+          itemKey: '/migration/task',
+        },
+        {
+          text: t('source list'),
+          itemKey: '/migration/source',
+        },
+        {
+          text: t('task config'),
+          itemKey: '/migration/task-config',
+        },
+        {
+          text: t('sync detail'),
+          itemKey: '/migration/sync-detail',
+        },
+      ],
+    },
+    {
+      itemKey: '/cluster',
+      text: t('cluster management'),
+      icon: <ClusterOutlined />,
+      items: [
+        {
+          text: t('member list'),
+          itemKey: '/cluster/member',
+        },
+        {
+          text: t('relay log'),
+          itemKey: '/cluster/relay-log',
+        },
+      ],
+    },
+  ]
   return (
-    <Nav
-      className="h-full"
-      items={items}
-      defaultOpenKeys={['/migration']}
-      onSelect={item => {
-        navigate(item.itemKey as string)
-      }}
-      header={{
-        logo: (
-          <img
-            src="https://internals.tidb.io/uploads/default/original/1X/4fde143c268ccde514d0c93e420b8a2304fc2033.png"
-            alt=""
-          />
-        ),
-        text: 'Data Sync Platform',
-      }}
-      footer={{
-        collapseButton: true,
-      }}
-    />
+    <div>
+      <div className="flex p-4 justify-center">
+        <img
+          src="https://internals.tidb.io/uploads/default/original/1X/4fde143c268ccde514d0c93e420b8a2304fc2033.png"
+          alt=""
+          className="h-[36px]"
+        />
+        {!collapsed && (
+          <h1 className="font-extrabold text-lg ml-2 leading-[36px]">
+            Data Sync Platform
+          </h1>
+        )}
+      </div>
+
+      <Menu
+        theme="light"
+        mode="inline"
+        defaultSelectedKeys={[loc.pathname]}
+        defaultOpenKeys={['/migration']}
+      >
+        {items.map(item => {
+          if (item.items) {
+            return (
+              <SubMenu
+                key={item.itemKey}
+                title={
+                  <span>
+                    {item.icon}
+                    <span>{item.text}</span>
+                  </span>
+                }
+              >
+                {item.items.map(subItem => (
+                  <Menu.Item
+                    key={subItem.itemKey}
+                    onClick={() => navigate(subItem.itemKey)}
+                  >
+                    {subItem.text}
+                  </Menu.Item>
+                ))}
+              </SubMenu>
+            )
+          } else {
+            return (
+              <Menu.Item
+                key={item.itemKey}
+                onClick={() => navigate(item.itemKey)}
+              >
+                {item.icon}
+                <span>{item.text}</span>
+              </Menu.Item>
+            )
+          }
+        })}
+      </Menu>
+    </div>
   )
 }
+
+export default SiderMenu

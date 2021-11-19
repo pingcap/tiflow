@@ -6,13 +6,16 @@ import {
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux'
 import { createLogger } from 'redux-logger'
 
-import { api } from '../services'
+import { api } from '~/services'
+import { message } from '~/uikit'
 
 const rtkQueryErrorLogger: Middleware = () => next => action => {
   if (isRejectedWithValue(action)) {
     console.error('RTKQ error caught: ', action)
-
     // insert your own error handler here
+    message.error({
+      content: action.payload?.data?.error_msg ?? 'Oops, somthing went wrong',
+    })
   }
 
   return next(action)

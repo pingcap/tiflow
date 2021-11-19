@@ -16,8 +16,8 @@
 
 ## Documentation
 
-* [Detailed documentation](https://docs.pingcap.com/tidb-data-migration/stable/)
-* [简体中文文档](https://docs.pingcap.com/zh/tidb-data-migration/stable/)
+- [Detailed documentation](https://docs.pingcap.com/tidb-data-migration/stable/)
+- [简体中文文档](https://docs.pingcap.com/zh/tidb-data-migration/stable/)
 
 ## Building
 
@@ -59,6 +59,24 @@ See the "Deploy" section in [our doc](https://docs.pingcap.com/tidb-data-migrati
 
 See the "Configuration" section in [our doc](https://docs.pingcap.com/tidb-data-migration/stable/config-overview)
 
+## Web UI
+
+The web UI is placed in `ui/` directory built with TypeScript and React.
+
+To start to develop it you will need Nodejs environment ready and yarn installed as package manager, following scripts will help you to get started:
+
+```bash
+# cd to ui/ directory
+
+yarn install # install dependencies
+
+yarn start # start the development server
+
+yarn build # build and output static files to `dist` directory
+```
+
+See `package.json` for more information.
+
 ## Roadmap
 
 Read the [Roadmap](roadmap.md).
@@ -80,11 +98,10 @@ DM is under the Apache 2.0 license. See the [LICENSE](./LICENSE) file for detail
 
 - TiDB blog
 
-    - [English](https://pingcap.com/blog/)
-    - [简体中文](https://pingcap.com/blog-cn/)
+  - [English](https://pingcap.com/blog/)
+  - [简体中文](https://pingcap.com/blog-cn/)
 
 - TiDB case studies
 
-    - [English](https://pingcap.com/case-studies/)
-    - [简体中文](https://pingcap.com/cases-cn/)
-
+  - [English](https://pingcap.com/case-studies/)
+  - [简体中文](https://pingcap.com/cases-cn/)
