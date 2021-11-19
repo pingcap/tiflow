@@ -375,6 +375,7 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 }
 
 // AsyncClose closes the capture by unregistering it from etcd
+// Note: this function should be reentrant
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
 	// Safety: Here we mainly want to stop the owner
@@ -393,6 +394,7 @@ func (c *Capture) AsyncClose() {
 	}
 	if c.regionCache != nil {
 		c.regionCache.Close()
+		c.regionCache = nil
 	}
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
