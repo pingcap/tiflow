@@ -144,6 +144,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 			}
 		case message.TypeStop:
 			go t.actorMessageHandler.HandleActorMessage(ctx, msgs[i])
+		case message.TypeStopPipeline:
 			t.stop(nil)
 			return false
 		}
@@ -306,7 +307,7 @@ func (t *tableActor) Name() string {
 // created by this table pipeline
 func (t *tableActor) Cancel() {
 	// TODO(neil): pass context.
-	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
+	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopPipelineMessage()); err != nil {
 		log.Warn("fails to send Stop message",
 			zap.Uint64("tableID", uint64(t.tableID)), zap.Error(err))
 	}

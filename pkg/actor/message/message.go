@@ -28,6 +28,7 @@ const (
 	TypeStop
 	TypeBarrier
 	TypeSorterTask
+	TypeStopPipeline
 	// Add a new type when adding a new message.
 )
 
@@ -55,6 +56,12 @@ func TickMessage() Message {
 func StopMessage() Message {
 	return Message{
 		Tp: TypeStop,
+	}
+}
+
+func StopPipelineMessage() Message {
+	return Message{
+		Tp: TypeStopPipeline,
 	}
 }
 
