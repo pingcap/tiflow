@@ -52,36 +52,37 @@ const (
 type LightningLoader struct {
 	sync.RWMutex
 
-	cfg             *config.SubTaskConfig
-	cli             *clientv3.Client
-	checkPoint      CheckPoint
-	checkPointList  *LightningCheckpointList
-	workerName      string
-	logger          log.Logger
-	core            *lightning.Lightning
-	toDB            *conn.BaseDB
-	toDBConns       []*DBConn
-	lightningConfig *lcfg.GlobalConfig
-	timeZone        string
+	timeZone              string
+	lightningGlobalConfig *lcfg.GlobalConfig
+	cfg                   *config.SubTaskConfig
 
+	checkPoint     CheckPoint
+	checkPointList *LightningCheckpointList
+
+	logger log.Logger
+	cli    *clientv3.Client
+	core   *lightning.Lightning
+	cancel context.CancelFunc // for per task context, which maybe different from lightning context
+
+	toDBConns []*DBConn
+	toDB      *conn.BaseDB
+
+	workerName     string
 	finish         atomic.Bool
 	closed         atomic.Bool
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
-	cancel         context.CancelFunc // for per task context, which maybe different from lightning context
 }
 
 // NewLightning creates a new Loader importing data with lightning.
 func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName string) *LightningLoader {
 	lightningCfg := makeGlobalConfig(cfg)
-	core := lightning.New(lightningCfg)
 	loader := &LightningLoader{
-		cfg:             cfg,
-		cli:             cli,
-		core:            core,
-		lightningConfig: lightningCfg,
-		workerName:      workerName,
-		logger:          log.With(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
+		cfg:                   cfg,
+		cli:                   cli,
+		workerName:            workerName,
+		lightningGlobalConfig: lightningCfg,
+		logger:                log.With(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
 	}
 	return loader
 }
@@ -99,12 +100,15 @@ func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg.TiDB.Port = cfg.To.Port
 	lightningCfg.TiDB.StatusPort = cfg.TiDB.StatusPort
 	lightningCfg.TiDB.PdAddr = cfg.TiDB.PdAddr
+	lightningCfg.TiDB.LogLevel = cfg.LogLevel
 	lightningCfg.TikvImporter.Backend = cfg.TiDB.Backend
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
 	if cfg.TiDB.Backend == lcfg.BackendLocal {
 		lightningCfg.TikvImporter.SortedKVDir = cfg.Dir
 	}
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
+	lightningCfg.App.Config.Level = cfg.LogLevel
+	lightningCfg.App.Config.File = cfg.LogFile
 	return lightningCfg
 }
 
@@ -160,6 +164,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	l.Lock()
 	taskCtx, cancel := context.WithCancel(ctx)
 	l.cancel = cancel
+	l.core = lightning.New(l.lightningGlobalConfig)
 	l.Unlock()
 	err := l.core.RunOnce(taskCtx, cfg, nil)
 	failpoint.Inject("LightningLoadDataSlowDown", nil)
@@ -204,7 +209,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			}
 		}
 		cfg := lcfg.NewConfig()
-		if err = cfg.LoadFromGlobal(l.lightningConfig); err != nil {
+		if err = cfg.LoadFromGlobal(l.lightningGlobalConfig); err != nil {
 			return err
 		}
 		cfg.Routes = l.cfg.RouteRules
@@ -237,7 +242,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		if err == nil {
 			// lightning will auto deregister tls when task done, so we need to register it again for removing checkpoint
 			if l.cfg.To.Security != nil {
-				if registerErr := l.lightningConfig.Security.RegisterMySQL(); registerErr != nil {
+				if registerErr := l.lightningGlobalConfig.Security.RegisterMySQL(); registerErr != nil {
 					return terror.ErrConnRegistryTLSConfig.Delegate(registerErr)
 				}
 			}
@@ -337,7 +342,9 @@ func (l *LightningLoader) Pause() {
 	if l.cancel != nil {
 		l.cancel()
 	}
-	l.core.Stop()
+	if l.core != nil {
+		l.core.Stop()
+	}
 }
 
 // Resume resumes the paused process.
@@ -347,7 +354,7 @@ func (l *LightningLoader) Resume(ctx context.Context, pr chan pb.ProcessResult) 
 		return
 	}
 	l.Lock()
-	l.core = lightning.New(l.lightningConfig)
+	l.core = lightning.New(l.lightningGlobalConfig)
 	l.Unlock()
 	// continue the processing
 	l.Process(ctx, pr)
