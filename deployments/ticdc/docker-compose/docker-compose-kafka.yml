@@ -38,5 +38,5 @@ services:
     command:
       - bash
       - -c
-      - tail -f /dev/null
+      - make integration_test_kafka CASE=kafka_messages
     network_mode: "container:kafka"
