@@ -1292,7 +1292,7 @@ func (t *testReaderSuite) TestwaitBinlogChanged(c *C) {
 		c.Assert(needSwitch, IsFalse)
 		c.Assert(reParse, IsFalse)
 		c.Assert(err, NotNil)
-		c.Assert(err, ErrorMatches, ".*file size of relay log.*become smaller.*")
+		c.Assert(terror.ErrRelayLogFileSizeSmaller.Equal(err), IsTrue)
 	}
 
 	// return changed file in meta
@@ -1379,7 +1379,7 @@ func (t *testReaderSuite) TestwaitBinlogChanged(c *C) {
 		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
 		c.Assert(needSwitch, IsFalse)
 		c.Assert(reParse, IsFalse)
-		c.Assert(err, ErrorMatches, ".*file size of relay log.*become smaller.*")
+		c.Assert(terror.ErrRelayLogFileSizeSmaller.Equal(err), IsTrue)
 	}
 
 	err1 = os.WriteFile(relayPaths[1], data, 0o600)
