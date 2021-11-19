@@ -31,7 +31,7 @@ services:
   integration_test:
     build:
       context: ../../../
-      dockerfile: ./deployments/ticdc/docker/integration.Dockerfile
+      dockerfile: ./deployments/ticdc/docker/kafka-integration.Dockerfile
     depends_on:
       - "zookeeper"
       - "kafka"
