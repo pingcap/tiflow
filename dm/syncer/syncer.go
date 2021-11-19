@@ -2847,6 +2847,10 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			continue
 		}
 		if db, table, ok := utils.GetTableFromDumpFilename(f); ok {
+			cols, _ := s.tableRouter.FetchExtendColumn(db, table, s.cfg.SourceID)
+			if len(cols) > 0 {
+				continue
+			}
 			tables = append(tables, dbutil.TableName(db, table))
 			tableFiles = append(tableFiles, [2]string{db, f})
 			continue
