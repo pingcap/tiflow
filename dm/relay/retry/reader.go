@@ -17,8 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/ticdc/dm/pkg/backoff"
 	"github.com/pingcap/ticdc/dm/pkg/retry"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
@@ -58,9 +56,6 @@ func NewReaderRetry(cfg ReaderRetryConfig) (*ReaderRetry, error) {
 
 // Check checks whether should retry for the error.
 func (rr *ReaderRetry) Check(ctx context.Context, err error) bool {
-	failpoint.Inject("RelayAllowRetry", func() {
-		failpoint.Return(true)
-	})
 	if !retry.IsConnectionError(err) {
 		return false
 	}

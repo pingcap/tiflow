@@ -14,7 +14,6 @@
 package streamer
 
 import (
-	"bytes"
 	"context"
 	"time"
 
@@ -67,12 +66,6 @@ func (s *LocalStreamer) GetEvent(ctx context.Context) (*replication.BinlogEvent,
 		heartbeatHeader := &replication.EventHeader{}
 		return event.GenHeartbeatEvent(heartbeatHeader), nil
 	case c := <-s.ch:
-		// special check for maybe truncated relay log
-		if c.Header.EventType == replication.IGNORABLE_EVENT {
-			if bytes.Equal(c.RawData, []byte(ErrorMaybeDuplicateEvent.Error())) {
-				return nil, ErrorMaybeDuplicateEvent
-			}
-		}
 		return c, nil
 	case s.err = <-s.ech:
 		return nil, s.err

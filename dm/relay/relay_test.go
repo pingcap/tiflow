@@ -448,7 +448,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		replication.ErrSyncClosed,
 		replication.ErrNeedSyncAgain,
 	} {
-		_, handleErr := r.handleEvents(context.Background(), reader2, transformer2, writer2)
+		handleErr := r.handleEvents(context.Background(), reader2, transformer2, writer2)
 		c.Assert(errors.Cause(handleErr), Equals, reader2.err)
 	}
 
@@ -458,7 +458,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// writer return error to force handleEvents return
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
-	_, err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
+	err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
 	c.Assert(errors.Cause(err), Equals, writer2.err)
 	// after handle rotate event, we save and flush the meta immediately
 	c.Assert(r.meta.Dirty(), Equals, false)
@@ -477,7 +477,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		lm := r.meta.(*LocalMeta)
 		backupUUID := lm.currentUUID
 		lm.currentUUID = "not exist"
-		_, err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
+		err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
 		c.Assert(os.IsNotExist(errors.Cause(err)), Equals, true)
 		lm.currentUUID = backupUUID
 	}
@@ -489,7 +489,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// writer return error
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
-	_, err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
+	err = r.handleEvents(context.Background(), reader2, transformer2, writer2)
 	c.Assert(errors.Cause(err), Equals, writer2.err)
 	c.Assert(r.meta.Dirty(), Equals, false)
 
@@ -497,7 +497,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	writer2.err = nil
-	_, err = r.handleEvents(ctx, reader2, transformer2, writer2) // returned when ctx timeout
+	err = r.handleEvents(ctx, reader2, transformer2, writer2) // returned when ctx timeout
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	// check written event
 	c.Assert(writer2.latestEvent, Equals, reader2.result.Event)
@@ -512,7 +512,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 
 	// write a QueryEvent with GTID sets
 	reader2.result.Event = queryEv
-	_, err = r.handleEvents(ctx2, reader2, transformer2, writer2)
+	err = r.handleEvents(ctx2, reader2, transformer2, writer2)
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	// check written event
 	c.Assert(writer2.latestEvent, Equals, reader2.result.Event)
@@ -531,7 +531,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	}
 	ctx4, cancel4 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel4()
-	_, err = r.handleEvents(ctx4, reader2, transformer2, writer2)
+	err = r.handleEvents(ctx4, reader2, transformer2, writer2)
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	select {
 	case <-ctx4.Done():
@@ -544,7 +544,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	writer2.result.Ignore = true
 	ctx5, cancel5 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel5()
-	_, err = r.handleEvents(ctx5, reader2, transformer2, writer2)
+	err = r.handleEvents(ctx5, reader2, transformer2, writer2)
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	select {
 	case <-ctx5.Done():
