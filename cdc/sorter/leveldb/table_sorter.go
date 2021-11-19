@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,9 +33,9 @@ import (
 
 const (
 	// Capacity of leveldb sorter input and output channels.
-	sorterInputCap, sorterOutputCap = 128, 128
+	sorterInputCap, sorterOutputCap = 64, 64
 	// Max size of received event batch.
-	batchReceiveEventSize = 64
+	batchReceiveEventSize = 32
 )
 
 var levelDBSorterIDAlloc uint32 = 0
@@ -108,6 +108,10 @@ func (ls *Sorter) waitInputOutput(
 	inputN := 0
 	kvEventCount, resolvedEventCount := 0, 0
 	appendInputEvent := func(ev *model.PolymorphicEvent) {
+		if ls.lastSentResolvedTs != 0 && ev.CRTs < ls.lastSentResolvedTs {
+			log.Panic("commit ts < resolved ts",
+				zap.Any("event", ev), zap.Uint64("regionID", ev.RegionID()))
+		}
 		if ev.RawKV.OpType == model.OpTypeResolved {
 			if maxResolvedTs < ev.CRTs {
 				maxResolvedTs = ev.CRTs
@@ -133,10 +137,6 @@ func (ls *Sorter) waitInputOutput(
 	select {
 	// Prefer receiving input events.
 	case ev := <-ls.inputCh:
-		if ls.lastSentResolvedTs != 0 && ev.CRTs < ls.lastSentResolvedTs {
-			log.Panic("commit ts < resolved ts",
-				zap.Any("event", ev), zap.Uint64("regionID", ev.RegionID()))
-		}
 		appendInputEvent(ev)
 	default:
 		select {
@@ -149,10 +149,6 @@ func (ls *Sorter) waitInputOutput(
 			outputBuf.shiftResolvedEvents(outputN)
 			return maxCommitTs, maxResolvedTs, 0, nil
 		case ev := <-ls.inputCh:
-			if ls.lastSentResolvedTs != 0 && ev.CRTs < ls.lastSentResolvedTs {
-				log.Panic("commit ts < resolved ts",
-					zap.Any("event", ev), zap.Uint64("regionID", ev.RegionID()))
-			}
 			appendInputEvent(ev)
 		}
 	}
@@ -162,10 +158,6 @@ BATCH:
 	for inputN < batchSize {
 		select {
 		case ev := <-ls.inputCh:
-			if ls.lastSentResolvedTs != 0 && ev.CRTs < ls.lastSentResolvedTs {
-				log.Panic("commit ts < resolved ts",
-					zap.Any("event", ev), zap.Uint64("regionID", ev.RegionID()))
-			}
 			appendInputEvent(ev)
 		default:
 			break BATCH
@@ -289,8 +281,8 @@ func (ls *Sorter) outputBufferedResolvedEvents(
 	}
 }
 
-// outputBufferedResolvedEvents nonblocking output resolved events and
-// resolved ts that are buffered in leveldb.
+// outputIterEvents nonblocking output resolved events that are buffered
+// in leveldb.
 // It appends outputted events's key to outputBuffer deleteKeys to delete them
 // later, and appends not-yet-send resolved events to outputBuffer resolvedEvents
 // to send them later.
@@ -396,8 +388,6 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// Length of buffered resolved events.
-	lenResolvedEvents, _ := state.outputBuf.len()
 	// The max commit ts of all received events.
 	if maxCommitTs > state.maxCommitTs {
 		state.maxCommitTs = maxCommitTs
@@ -409,6 +399,14 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 		state.maxResolvedTs = maxResolvedTs
 	} else {
 		maxResolvedTs = state.maxResolvedTs
+	}
+	// Length of buffered resolved events.
+	lenResolvedEvents, _ := state.outputBuf.len()
+	if n == 0 && lenResolvedEvents != 0 {
+		// No new received events, it means output channel is available.
+		// output resolved events as much as possible.
+		ls.outputBufferedResolvedEvents(state.outputBuf, true)
+		lenResolvedEvents, _ = state.outputBuf.len()
 	}
 	// New received events.
 	newEvents := state.eventsBuf[:n]
@@ -428,7 +426,7 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	//                                      maxCommitTs
 	needIter = needIter && state.exhaustedResolvedTs < maxCommitTs
 
-	// Write new events and delele sent keys.
+	// Write new events and delete sent keys.
 	iterCh, err := ls.asyncWrite(
 		ctx, newEvents, state.outputBuf.deleteKeys, needIter, maxResolvedTs)
 	if err != nil {
@@ -479,10 +477,12 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 // Run runs LevelDBSorter
 func (ls *Sorter) Run(ctx context.Context) error {
 	state := &pollState{
-		eventsBuf:     make([]*model.PolymorphicEvent, batchReceiveEventSize),
-		outputBuf:     newOutputBuffer(batchReceiveEventSize),
-		maxCommitTs:   uint64(0),
-		maxResolvedTs: uint64(0),
+		eventsBuf: make([]*model.PolymorphicEvent, batchReceiveEventSize),
+		outputBuf: newOutputBuffer(batchReceiveEventSize),
+
+		maxCommitTs:         uint64(0),
+		maxResolvedTs:       uint64(0),
+		exhaustedResolvedTs: uint64(0),
 	}
 	for {
 		err := ls.poll(ctx, state)
@@ -500,6 +500,23 @@ func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
 	select {
 	case <-ctx.Done():
 	case ls.inputCh <- event:
+	}
+}
+
+// TryAddEntry tries to add an RawKVEntry to the EntryGroup
+func (ls *Sorter) TryAddEntry(
+	ctx context.Context, event *model.PolymorphicEvent,
+) (bool, error) {
+	if atomic.LoadInt32(&ls.closed) != 0 {
+		return false, nil
+	}
+	select {
+	case <-ctx.Done():
+		return false, errors.Trace(ctx.Err())
+	case ls.inputCh <- event:
+		return true, nil
+	default:
+		return false, nil
 	}
 }
 

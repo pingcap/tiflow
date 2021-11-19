@@ -847,6 +847,35 @@ func TestPoll(t *testing.T) {
 			expectMaxResolvedTs: 3,
 			expectExhaustedRTs:  2,
 		},
+		// Batch output buffered resolved events
+		{
+			inputEvents: []*model.PolymorphicEvent{},
+			state: &pollState{
+				eventsBuf: make([]*model.PolymorphicEvent, 2),
+				outputBuf: &outputBuffer{
+					deleteKeys: make([]message.Key, 0, 2),
+					resolvedEvents: []*model.PolymorphicEvent{
+						model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
+						model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
+						model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
+					},
+					advisedCapacity: 2,
+				},
+			},
+			inputIter: func() *message.LimitedIterator { return nil },
+
+			expectEvents:     []*model.PolymorphicEvent{},
+			expectDeleteKeys: []message.Key{},
+			expectOutputs: []*model.PolymorphicEvent{
+				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
+				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
+				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
+				model.NewResolvedPolymorphicEvent(0, 4),
+			},
+			expectMaxCommitTs:   0,
+			expectMaxResolvedTs: 0,
+			expectExhaustedRTs:  0,
+		},
 	}
 
 	for i, cs := range cases {
@@ -903,4 +932,23 @@ func newIterator(
 			Sema:     sema,
 		}
 	}
+}
+
+func TestTryAddEntry(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	capacity := 1
+	ls, _ := newTestLeveldbSorter(ctx, capacity)
+
+	resolvedTs1 := model.NewResolvedPolymorphicEvent(0, 1)
+	sent, err := ls.TryAddEntry(ctx, resolvedTs1)
+	require.True(t, sent)
+	require.Nil(t, err)
+	require.EqualValues(t, resolvedTs1, <-ls.inputCh)
+
+	ls.inputCh = make(chan *model.PolymorphicEvent)
+	sent, err = ls.TryAddEntry(ctx, resolvedTs1)
+	require.False(t, sent)
+	require.Nil(t, err)
 }
