@@ -88,12 +88,16 @@ func (s *TableSet) UpdateTableRecord(record *TableRecord) (successful bool) {
 		return false
 	}
 
+	// If there is no need to modify the CaptureID, we simply
+	// update the record.
 	if record.CaptureID == oldRecord.CaptureID {
 		s.tableIDMap[record.TableID] = record.Clone()
 		s.captureIndex[record.CaptureID][record.TableID] = record.Clone()
 		return true
 	}
 
+	// If the CaptureID is changed, we do a proper RemoveTableRecord followed
+	// by AddTableRecord.
 	if record.CaptureID != oldRecord.CaptureID {
 		if ok := s.RemoveTableRecord(record.TableID); !ok {
 			panic("unreachable")
@@ -145,6 +149,8 @@ func (s *TableSet) RemoveTableRecordByCaptureID(captureID model.CaptureID) []*Ta
 	var ret []*TableRecord
 	for tableID, record := range captureIndexEntry {
 		delete(s.tableIDMap, tableID)
+		// Since the record has been removed,
+		// there is no need to clone it before returning.
 		ret = append(ret, record)
 	}
 	delete(s.captureIndex, captureID)
