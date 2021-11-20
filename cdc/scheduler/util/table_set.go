@@ -38,6 +38,9 @@ type TableRecord struct {
 	Status    TableStatus
 }
 
+// Clone returns a copy of the TableSet.
+// This method is future-proof in case we add
+// something not trivially copyable.
 func (r *TableRecord) Clone() *TableRecord {
 	return &TableRecord{
 		TableID:   r.TableID,
@@ -70,7 +73,8 @@ func (s *TableSet) AddTableRecord(record *TableRecord) (successful bool) {
 		// duplicate tableID
 		return false
 	}
-	s.tableIDMap[record.TableID] = record.Clone()
+	recordCloned := record.Clone()
+	s.tableIDMap[record.TableID] = recordCloned
 
 	captureIndexEntry := s.captureIndex[record.CaptureID]
 	if captureIndexEntry == nil {
@@ -78,7 +82,7 @@ func (s *TableSet) AddTableRecord(record *TableRecord) (successful bool) {
 		s.captureIndex[record.CaptureID] = captureIndexEntry
 	}
 
-	captureIndexEntry[record.TableID] = record.Clone()
+	captureIndexEntry[record.TableID] = recordCloned
 	return true
 }
 
@@ -94,8 +98,9 @@ func (s *TableSet) UpdateTableRecord(record *TableRecord) (successful bool) {
 	// If there is no need to modify the CaptureID, we simply
 	// update the record.
 	if record.CaptureID == oldRecord.CaptureID {
-		s.tableIDMap[record.TableID] = record.Clone()
-		s.captureIndex[record.CaptureID][record.TableID] = record.Clone()
+		recordCloned := record.Clone()
+		s.tableIDMap[record.TableID] = recordCloned
+		s.captureIndex[record.CaptureID][record.TableID] = recordCloned
 		return true
 	}
 
