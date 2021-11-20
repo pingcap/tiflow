@@ -14,7 +14,10 @@
 package util
 
 import (
+	"log"
+
 	"github.com/pingcap/ticdc/cdc/model"
+	"go.uber.org/zap"
 )
 
 // TableSet provides a data structure to store the tables' states for the
@@ -100,10 +103,10 @@ func (s *TableSet) UpdateTableRecord(record *TableRecord) (successful bool) {
 	// by AddTableRecord.
 	if record.CaptureID != oldRecord.CaptureID {
 		if ok := s.RemoveTableRecord(record.TableID); !ok {
-			panic("unreachable")
+			log.Panic("unreachable", zap.Any("record", record))
 		}
 		if ok := s.AddTableRecord(record); !ok {
-			panic("unreachable")
+			log.Panic("unreachable", zap.Any("record", record))
 		}
 	}
 	return true
@@ -129,7 +132,7 @@ func (s *TableSet) RemoveTableRecord(tableID model.TableID) bool {
 
 	captureIndexEntry, ok := s.captureIndex[record.CaptureID]
 	if !ok {
-		panic("unreachable")
+		log.Panic("unreachable", zap.Int64("table-id", tableID))
 	}
 	delete(captureIndexEntry, record.TableID)
 	if len(captureIndexEntry) == 0 {

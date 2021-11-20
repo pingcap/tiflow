@@ -25,14 +25,14 @@ func TestTableSetBasics(t *testing.T) {
 	ok := ts.AddTableRecord(&TableRecord{
 		TableID:   1,
 		CaptureID: "capture-1",
-		Status:    0,
+		Status:    AddingTable,
 	})
 	require.True(t, ok)
 
 	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   1,
 		CaptureID: "capture-2",
-		Status:    0,
+		Status:    AddingTable,
 	})
 	// Adding a duplicate table record should fail
 	require.False(t, ok)
@@ -42,7 +42,7 @@ func TestTableSetBasics(t *testing.T) {
 	require.Equal(t, &TableRecord{
 		TableID:   1,
 		CaptureID: "capture-1",
-		Status:    0,
+		Status:    AddingTable,
 	}, record)
 
 	ok = ts.RemoveTableRecord(1)
@@ -57,35 +57,35 @@ func TestTableSetCaptures(t *testing.T) {
 	ok := ts.AddTableRecord(&TableRecord{
 		TableID:   1,
 		CaptureID: "capture-1",
-		Status:    0,
+		Status:    AddingTable,
 	})
 	require.True(t, ok)
 
 	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   2,
 		CaptureID: "capture-1",
-		Status:    0,
+		Status:    AddingTable,
 	})
 	require.True(t, ok)
 
 	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   3,
 		CaptureID: "capture-2",
-		Status:    0,
+		Status:    AddingTable,
 	})
 	require.True(t, ok)
 
 	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   4,
 		CaptureID: "capture-2",
-		Status:    0,
+		Status:    AddingTable,
 	})
 	require.True(t, ok)
 
 	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   5,
 		CaptureID: "capture-3",
-		Status:    0,
+		Status:    AddingTable,
 	})
 	require.True(t, ok)
 
@@ -96,7 +96,7 @@ func TestTableSetCaptures(t *testing.T) {
 	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   6,
 		CaptureID: "capture-3",
-		Status:    0,
+		Status:    AddingTable,
 	})
 	require.True(t, ok)
 	require.Equal(t, 2, ts.CountTableByCaptureID("capture-3"))
@@ -123,24 +123,24 @@ func TestTableSetCaptures(t *testing.T) {
 			1: &TableRecord{
 				TableID:   1,
 				CaptureID: "capture-1",
-				Status:    0,
+				Status:    AddingTable,
 			},
 			2: &TableRecord{
 				TableID:   2,
 				CaptureID: "capture-1",
-				Status:    0,
+				Status:    AddingTable,
 			},
 		},
 		"capture-3": {
 			5: &TableRecord{
 				TableID:   5,
 				CaptureID: "capture-3",
-				Status:    0,
+				Status:    AddingTable,
 			},
 			6: &TableRecord{
 				TableID:   6,
 				CaptureID: "capture-3",
-				Status:    0,
+				Status:    AddingTable,
 			},
 		},
 	}, captureToTableMap)
@@ -150,12 +150,12 @@ func TestTableSetCaptures(t *testing.T) {
 	require.Contains(t, removed, &TableRecord{
 		TableID:   5,
 		CaptureID: "capture-3",
-		Status:    0,
+		Status:    AddingTable,
 	})
 	require.Contains(t, removed, &TableRecord{
 		TableID:   6,
 		CaptureID: "capture-3",
-		Status:    0,
+		Status:    AddingTable,
 	})
 
 	_, ok = ts.GetTableRecord(5)
@@ -168,12 +168,12 @@ func TestTableSetCaptures(t *testing.T) {
 		1: {
 			TableID:   1,
 			CaptureID: "capture-1",
-			Status:    0,
+			Status:    AddingTable,
 		},
 		2: {
 			TableID:   2,
 			CaptureID: "capture-1",
-			Status:    0,
+			Status:    AddingTable,
 		},
 	}, allTables)
 
@@ -191,41 +191,41 @@ func TestCountTableByStatus(t *testing.T) {
 	ok := ts.AddTableRecord(&TableRecord{
 		TableID:   1,
 		CaptureID: "capture-1",
-		Status:    1,
+		Status:    AddingTable,
 	})
 	require.True(t, ok)
 
 	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   2,
 		CaptureID: "capture-1",
-		Status:    2,
+		Status:    RunningTable,
 	})
 	require.True(t, ok)
 
 	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   3,
 		CaptureID: "capture-2",
-		Status:    3,
+		Status:    RemovingTable,
 	})
 	require.True(t, ok)
 
 	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   4,
 		CaptureID: "capture-2",
-		Status:    1,
+		Status:    AddingTable,
 	})
 	require.True(t, ok)
 
 	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   5,
 		CaptureID: "capture-3",
-		Status:    2,
+		Status:    RunningTable,
 	})
 	require.True(t, ok)
 
-	require.Equal(t, 2, ts.CountTableByStatus(1))
-	require.Equal(t, 2, ts.CountTableByStatus(2))
-	require.Equal(t, 1, ts.CountTableByStatus(3))
+	require.Equal(t, 2, ts.CountTableByStatus(AddingTable))
+	require.Equal(t, 2, ts.CountTableByStatus(RunningTable))
+	require.Equal(t, 1, ts.CountTableByStatus(RemovingTable))
 }
 
 func TestUpdateTableRecord(t *testing.T) {
@@ -233,38 +233,38 @@ func TestUpdateTableRecord(t *testing.T) {
 	ok := ts.AddTableRecord(&TableRecord{
 		TableID:   4,
 		CaptureID: "capture-2",
-		Status:    0,
+		Status:    AddingTable,
 	})
 	require.True(t, ok)
 
 	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   5,
 		CaptureID: "capture-3",
-		Status:    0,
+		Status:    AddingTable,
 	})
 	require.True(t, ok)
 
 	ok = ts.UpdateTableRecord(&TableRecord{
 		TableID:   5,
 		CaptureID: "capture-3",
-		Status:    1,
+		Status:    RunningTable,
 	})
 	require.True(t, ok)
 
 	rec, ok := ts.GetTableRecord(5)
 	require.True(t, ok)
-	require.Equal(t, TableStatus(1), rec.Status)
-	require.Equal(t, TableStatus(1), ts.GetAllTablesGroupedByCaptures()["capture-3"][5].Status)
+	require.Equal(t, RunningTable, rec.Status)
+	require.Equal(t, RunningTable, ts.GetAllTablesGroupedByCaptures()["capture-3"][5].Status)
 
 	ok = ts.UpdateTableRecord(&TableRecord{
 		TableID:   4,
 		CaptureID: "capture-3",
-		Status:    1,
+		Status:    RunningTable,
 	})
 	require.True(t, ok)
 	rec, ok = ts.GetTableRecord(4)
 	require.True(t, ok)
-	require.Equal(t, TableStatus(1), rec.Status)
+	require.Equal(t, RunningTable, rec.Status)
 	require.Equal(t, "capture-3", rec.CaptureID)
-	require.Equal(t, TableStatus(1), ts.GetAllTablesGroupedByCaptures()["capture-3"][4].Status)
+	require.Equal(t, RunningTable, ts.GetAllTablesGroupedByCaptures()["capture-3"][4].Status)
 }
