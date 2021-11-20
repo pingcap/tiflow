@@ -81,7 +81,7 @@ Improve documentation.
 The format can be described more formally as follows:
 
 ```
-<subsystem>[(ticdc|dm|both)]: <what changed>
+<subsystem>(ticdc|dm|both): <what changed>
 <BLANK LINE>
 <why this change was made>
 <BLANK LINE>
