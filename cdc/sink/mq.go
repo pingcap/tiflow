@@ -384,6 +384,26 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 	return nil
 }
 
+func newKafkaGoSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
+		return r == '/'
+	})
+	if topic == "" {
+		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
+	}
+
+	producer, err := kafka.NewYakProducer()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	sink, err := newMqSink(ctx, config.Credential, producer, filter, replicaConfig, opts, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sink, nil
+}
+
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
 	config := kafka.NewConfig()
 	if err := config.Initialize(sinkURI, replicaConfig, opts); err != nil {

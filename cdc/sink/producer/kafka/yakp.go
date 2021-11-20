@@ -22,6 +22,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/segmentio/kafka-go"
+	"go.uber.org/zap"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -51,8 +52,8 @@ type yakProducer struct {
 	closeCh chan struct{}
 	// atomic flag indicating whether the producer is closing
 	closing kafkaProducerClosingFlag
-	// producersReleased records whether asyncClient and syncClient have been closed properly
-	producersReleased bool
+	// released records whether asyncWriter and syncWriter have been closed properly
+	released bool
 }
 
 func newWriter(async bool) *kafka.Writer {
@@ -76,15 +77,15 @@ func newWriter(async bool) *kafka.Writer {
 	}
 }
 
-func NewYakProducer() *yakProducer {
+func NewYakProducer(topic string) (*yakProducer, error) {
 	return &yakProducer{
 		partitionNum: 0,
 		syncWriter:   nil,
 		asyncWriter:  nil,
-	}
+	}, nil
 }
 
-func (p *yakProducer) AysncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
+func (p *yakProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
 	p.clientLock.RLock()
 	defer p.clientLock.RUnlock()
 
@@ -209,4 +210,41 @@ func(p *yakProducer) allMessagesFlushed() bool {
 
 func (p *yakProducer) GetPartitionNum() int32 {
 	return p.partitionNum
+}
+
+// stop closes the closeCh to signal other routines to exit
+// It SHOULD NOT be called under `clientLock`.
+func (p *yakProducer) stop() {
+	if atomic.SwapInt32(&p.closing, kafkaProducerClosing) == kafkaProducerClosing {
+		return
+	}
+	close(p.closeCh)
+}
+
+
+func (p *yakProducer) Close() error {
+	p.stop()
+
+	p.clientLock.Lock()
+	defer p.clientLock.Unlock()
+
+	if p.released {
+		// We need to guard against double closing the clients,
+		// which could lead to panic.
+		return nil
+	}
+	p.released = true
+
+	// In fact close sarama sync client doesn't return any error.
+	// But close async client returns error if error channel is not empty, we
+	// don't populate this error to the upper caller, just add a log here.
+	err1 := p.syncWriter.Close()
+	err2 := p.asyncWriter.Close()
+	if err1 != nil {
+		log.Error("close sync client with error", zap.Error(err1))
+	}
+	if err2 != nil {
+		log.Error("close async client with error", zap.Error(err2))
+	}
+	return nil
 }
