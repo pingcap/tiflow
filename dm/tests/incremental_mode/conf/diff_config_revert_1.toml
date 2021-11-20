@@ -9,19 +9,12 @@ check-struct-only = false
 [task]
     output-dir = "/tmp/ticdc_dm_test/output"
 
-    source-instances = ["mysql1"]
+    source-instances = ["tidb0"]
 
-    target-instance = "tidb0"
+    target-instance = "mysql1"
 
-    target-check-tables = ["print_status.t?*"]
+    target-check-tables = ["incremental_mode.t?*"]
 
-    target-configs= ["config1"]
-
-[table-configs]
-[table-configs.config1]
-target-tables = ["print_status.t_1"]
-# currently ignore check float and timestamp field
-ignore-columns = ["c5", "c9", "c11", "c15"]
 
 [data-sources]
 [data-sources.mysql1]

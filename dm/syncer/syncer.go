@@ -1554,28 +1554,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		return nil
 	}
 
-	maybeSkipNRowsEvent := func(n int) error {
-		if s.cfg.EnableGTID && n > 0 {
-			for i := 0; i < n; {
-				e, err1 := s.getEvent(tctx, currentLocation)
-				if err1 != nil {
-					return err
-				}
-				if _, ok := e.Event.(*replication.RowsEvent); ok {
-					i++
-				}
-			}
-			log.L().Info("discard event already consumed", zap.Int("count", n),
-				zap.Any("cur_loc", currentLocation))
-		}
-		return nil
-	}
-
-	// eventIndex is the rows event index in this transaction, it's used to avoiding read duplicate event in gtid mode
-	eventIndex := 0
-	// the relay log file may be truncated(not end with an RotateEvent), in this situation, we may read some rows events
-	// and then read from the gtid again, so we force enter safe-mode for one more transaction to avoid failure due to
-	// conflict
 	for {
 		if s.execError.Load() != nil {
 			return nil
@@ -1617,14 +1595,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				err = errors.New("connect: connection refused")
 			}
 		})
-		failpoint.Inject("GetEventErrorInTxn", func(val failpoint.Value) {
-			if intVal, ok := val.(int); ok && intVal == eventIndex {
-				err = errors.New("failpoint triggered")
-				s.tctx.L().Warn("failed to get event", zap.Int("event_index", eventIndex),
-					zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
-					zap.Any("pos", e.Header.LogPos), log.ShortError(err))
-			}
-		})
 		switch {
 		case err == context.Canceled:
 			tctx.L().Info("binlog replication main routine quit(context canceled)!", zap.Stringer("last location", lastLocation))
@@ -1640,13 +1610,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				return err1
 			}
 			continue
-		case err == streamer.ErrorMaybeDuplicateEvent:
-			tctx.L().Warn("read binlog met a truncated file, need to open safe-mode until the next transaction")
-			err = maybeSkipNRowsEvent(eventIndex)
-			if err == nil {
-				continue
-			}
-			log.L().Warn("skip duplicate rows event failed", zap.Error(err))
 		}
 
 		if err != nil {
@@ -1657,15 +1620,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			if s.streamerController.CanRetry(err) {
-				// GlobalPoint is the last finished GTID
-				err = s.streamerController.ResetReplicationSyncer(tctx, s.checkpoint.GlobalPoint())
+				// lastLocation is the last finished GTID
+				err = s.streamerController.ResetReplicationSyncer(tctx, lastLocation)
 				if err != nil {
 					return err
 				}
 				log.L().Info("reset replication binlog puller", zap.Any("pos", s.checkpoint.GlobalPoint()))
-				if err = maybeSkipNRowsEvent(eventIndex); err != nil {
-					return err
-				}
 				continue
 			}
 
@@ -1817,15 +1777,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.RotateEvent:
 			err2 = s.handleRotateEvent(ev, ec)
 		case *replication.RowsEvent:
-			eventIndex++
 			metrics.BinlogEventRowHistogram.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID).Observe(float64(len(ev.Rows)))
 			err2 = s.handleRowsEvent(ev, ec)
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
 			err2 = s.handleQueryEvent(ev, ec, originSQL)
 		case *replication.XIDEvent:
-			// reset eventIndex and force safeMode flag here.
-			eventIndex = 0
 			if shardingReSync != nil {
 				shardingReSync.currLocation.Position.Pos = e.Header.LogPos
 				shardingReSync.currLocation.Suffix = currentLocation.Suffix
