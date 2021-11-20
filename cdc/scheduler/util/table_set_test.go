@@ -145,7 +145,19 @@ func TestTableSetCaptures(t *testing.T) {
 		},
 	}, captureToTableMap)
 
-	ts.RemoveTableRecordByCaptureID("capture-3")
+	removed := ts.RemoveTableRecordByCaptureID("capture-3")
+	require.Len(t, removed, 2)
+	require.Contains(t, removed, &TableRecord{
+		TableID:   5,
+		CaptureID: "capture-3",
+		Status:    0,
+	})
+	require.Contains(t, removed, &TableRecord{
+		TableID:   6,
+		CaptureID: "capture-3",
+		Status:    0,
+	})
+
 	_, ok = ts.GetTableRecord(5)
 	require.False(t, ok)
 	_, ok = ts.GetTableRecord(6)
@@ -214,4 +226,66 @@ func TestCountTableByStatus(t *testing.T) {
 	require.Equal(t, 2, ts.CountTableByStatus(1))
 	require.Equal(t, 2, ts.CountTableByStatus(2))
 	require.Equal(t, 1, ts.CountTableByStatus(3))
+}
+
+func TestUpdateTableRecord(t *testing.T) {
+	ts := NewTableSet()
+	ok := ts.AddTableRecord(&TableRecord{
+		TableID:   1,
+		CaptureID: "capture-1",
+		Status:    0,
+	})
+	require.True(t, ok)
+
+	ok = ts.AddTableRecord(&TableRecord{
+		TableID:   2,
+		CaptureID: "capture-1",
+		Status:    0,
+	})
+	require.True(t, ok)
+
+	ok = ts.AddTableRecord(&TableRecord{
+		TableID:   3,
+		CaptureID: "capture-2",
+		Status:    0,
+	})
+	require.True(t, ok)
+
+	ok = ts.AddTableRecord(&TableRecord{
+		TableID:   4,
+		CaptureID: "capture-2",
+		Status:    0,
+	})
+	require.True(t, ok)
+
+	ok = ts.AddTableRecord(&TableRecord{
+		TableID:   5,
+		CaptureID: "capture-3",
+		Status:    0,
+	})
+	require.True(t, ok)
+
+	ok = ts.UpdateTableRecord(&TableRecord{
+		TableID:   5,
+		CaptureID: "capture-3",
+		Status:    1,
+	})
+	require.True(t, ok)
+
+	rec, ok := ts.GetTableRecord(5)
+	require.True(t, ok)
+	require.Equal(t, TableStatus(1), rec.Status)
+	require.Equal(t, TableStatus(1), ts.GetAllTablesGroupedByCaptures()["capture-3"][5].Status)
+
+	ok = ts.UpdateTableRecord(&TableRecord{
+		TableID:   4,
+		CaptureID: "capture-3",
+		Status:    1,
+	})
+	require.True(t, ok)
+	rec, ok = ts.GetTableRecord(4)
+	require.True(t, ok)
+	require.Equal(t, TableStatus(1), rec.Status)
+	require.Equal(t, "capture-3", rec.CaptureID)
+	require.Equal(t, TableStatus(1), ts.GetAllTablesGroupedByCaptures()["capture-3"][4].Status)
 }
