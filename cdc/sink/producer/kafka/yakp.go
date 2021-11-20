@@ -77,12 +77,94 @@ func newWriter(async bool) *kafka.Writer {
 	}
 }
 
-func NewYakProducer(topic string) (*yakProducer, error) {
-	return &yakProducer{
-		partitionNum: 0,
-		syncWriter:   nil,
-		asyncWriter:  nil,
-	}, nil
+func NewYakProducer(ctx context.Context, topic string, protocol codec.Protocol, config *Config, errCh chan error) (*yakProducer, error) {
+	notifier := new(notify.Notifier)
+	flushedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+
+	p := &yakProducer{
+		topic: topic,
+		partitionNum: config.PartitionNum,
+
+		syncWriter: newWriter(false),
+		asyncWriter: newWriter(true),
+
+		partitionOffset: make([]struct {
+			flushed uint64
+			sent    uint64
+		}, config.PartitionNum),
+		flushedNotifier: notifier,
+		flushedReceiver: flushedReceiver,
+		closeCh:         make(chan struct{}),
+		failpointCh:     make(chan error, 1),
+		closing:         kafkaProducerRunning,
+	}
+
+	go func() {
+		if err := p.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+			select {
+			case <-ctx.Done():
+				return
+			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
+			}
+		}
+	}()
+
+	return p, nil
+}
+
+func (p *yakProducer) run(ctx context.Context) error {
+	defer func() {
+		p.flushedReceiver.Stop()
+		p.stop()
+	}()
+
+	for {
+		select {
+		case <- ctx.Done():
+			return ctx.Err()
+		case <- p.closeCh:
+			return nil
+		case err := <- p.failpointCh:
+			log.Warn("receive from failpoint chan", zap.Error(err))
+			return err
+		// todo: fetch producer commit information from the writer.
+		// update the flushed offset, also handle commit error.
+		default:
+
+		}
+	}
+
+	//for {
+	//	select {
+	//	case <-ctx.Done():
+	//		return ctx.Err()
+	//	case <-k.closeCh:
+	//		return nil
+	//	case err := <-k.failpointCh:
+	//		log.Warn("receive from failpoint chan", zap.Error(err))
+	//		return err
+	//	case msg := <-k.asyncClient.Successes():
+	//		if msg == nil || msg.Metadata == nil {
+	//			continue
+	//		}
+	//		flushedOffset := msg.Metadata.(uint64)
+	//		atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
+	//		k.flushedNotifier.Notify()
+	//	case err := <-k.asyncClient.Errors():
+	//		// We should not wrap a nil pointer if the pointer is of a subtype of `error`
+	//		// because Go would store the type info and the resulted `error` variable would not be nil,
+	//		// which will cause the pkg/error library to malfunction.
+	//		if err == nil {
+	//			return nil
+	//		}
+	//		return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
+	//	}
+	//}
 }
 
 func (p *yakProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
