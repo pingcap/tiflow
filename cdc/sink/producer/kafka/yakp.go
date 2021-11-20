@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -77,57 +78,110 @@ func newWriter(async bool) *kafka.Writer {
 	}
 }
 
-func getPartitionByTopic(conn *kafka.Conn, topic string) (int, error) {
-	partitions, err := conn.ReadPartitions(topic)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	return len(partitions), nil
+type topicMetadata struct {
+	maxMessageBytes int
+	partitionNum int32
 }
 
-func foreplay(ctx context.Context, topic string, protocol codec.Protocol, config *Config) error {
-	// 1. get topic information
-	// 2. create the topic if not exist and required
-	// 3. check partition number
-	conn, err := kafka.DialContext(ctx, "tcp", config.BrokerEndpoints[0])
+func fetchTopicMetadata(ctx context.Context, client kafka.Client, topic string) (*topicMetadata, error) {
+	resp, err := client.DescribeConfigs(ctx, &kafka.DescribeConfigsRequest{
+		Resources:            []kafka.DescribeConfigRequestResource{{
+			ResourceType: kafka.ResourceTypeTopic,
+			ResourceName: topic,
+			ConfigNames: []string{"max.message.bytes", "partitions"},
+		}},
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	result := new(topicMetadata)
+	for _, item := range resp.Resources {
+		if item.ResourceType == int8(kafka.ResourceTypeTopic) && item.ResourceName == "" {
+			for _, entry := range item.ConfigEntries {
+				if entry.ConfigName == "max.message.bytes" {
+					a, err := strconv.Atoi(entry.ConfigValue)
+					if err != nil {
+						return nil, errors.Trace(err)
+					}
+					result.maxMessageBytes = a
+				}
+				if entry.ConfigName == "partitions" {
+					a, err := strconv.Atoi(entry.ConfigValue)
+					if err != nil {
+						return nil, errors.Trace(err)
+					}
+					result.partitionNum = int32(a)
+				}
+			}
+		}
+	}
+	return result, nil
+}
+
+func (m *topicMetadata) fetchBrokerMessageMaxBytes(ctx context.Context, client kafka.Client) error {
+	if m.maxMessageBytes != 0 {
+		return nil
+	}
+
+	target := "message.max.bytes"
+	resp, err := client.DescribeConfigs(ctx, &kafka.DescribeConfigsRequest{
+		Resources: []kafka.DescribeConfigRequestResource{
+			{
+				ResourceType: kafka.ResourceTypeBroker,
+				ResourceName: "",
+				ConfigNames: []string{target},
+			},
+		},
+	})
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			log.Warn("close kafka conn failed", zap.Error(err))
-		}
-	}()
 
-	realPartitionNum, err := getPartitionByTopic(conn, topic)
+	if len(resp.Resources) == 0 || resp.Resources[0].ResourceName != target {
+		return errors.Trace(err)
+	}
+
+	a, err := strconv.Atoi(resp.Resources[0].ConfigEntries[0].ConfigValue)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	m.maxMessageBytes = a
+	return nil
+}
+
+
+func foreplay(ctx context.Context, topic string, protocol codec.Protocol, config *Config) error {
+	client := kafka.Client{
+		Addr:      kafka.TCP(config.BrokerEndpoints[0]),
+		Timeout:   10 * time.Second,
+	}
+
+	topicMeta, err := fetchTopicMetadata(ctx, client, topic)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
-	if realPartitionNum != 0 {
+	if topicMeta.partitionNum != 0 {
 		// make sure that topic's `max.message.bytes` is not less than given `max-message-bytes`
 		// else the producer will send message that too large to make topic reject, then changefeed would error.
 		// only the default `open protocol` and `craft protocol` use `max-message-bytes`, so check this for them.
 		if protocol == codec.ProtocolDefault || protocol == codec.ProtocolCraft {
-			topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-			}
-			if topicMaxMessageBytes < config.MaxMessageBytes {
+			if topicMeta.maxMessageBytes < config.MaxMessageBytes {
 				return cerror.ErrKafkaInvalidConfig.GenWithStack(
 					"topic already exist, and topic's max.message.bytes(%d) less than max-message-bytes(%d)."+
 						"Please make sure `max-message-bytes` not greater than topic `max.message.bytes`",
-					topicMaxMessageBytes, config.MaxMessageBytes)
+					topicMeta.maxMessageBytes, config.MaxMessageBytes)
 			}
 		}
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
 		if config.AutoCreate {
 			log.Warn("topic already exist, TiCDC will not create the topic",
-				zap.String("topic", topic), zap.Any("detail", info))
+				zap.String("topic", topic), zap.Any("detail", topicMeta))
 		}
 
-		if err := config.adjustPartitionNum(int32(realPartitionNum)); err != nil {
+		if err := config.adjustPartitionNum(topicMeta.partitionNum); err != nil {
 			return errors.Trace(err)
 		}
 
@@ -142,17 +196,16 @@ func foreplay(ctx context.Context, topic string, protocol codec.Protocol, config
 	// Kafka would create the topic with broker's `message.max.bytes`,
 	// we have to make sure it's not greater than `max-message-bytes` for the default open protocol & craft protocol.
 	if protocol == codec.ProtocolDefault || protocol == codec.ProtocolCraft {
-		brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
-		if err != nil {
+		if err := topicMeta.fetchBrokerMessageMaxBytes(ctx, client); err != nil {
 			log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 			return errors.Trace(err)
 		}
 
-		if brokerMessageMaxBytes < config.MaxMessageBytes {
+		if topicMeta.maxMessageBytes < config.MaxMessageBytes {
 			return cerror.ErrKafkaInvalidConfig.GenWithStack(
 				"broker's message.max.bytes(%d) less than max-message-bytes(%d)"+
 					"Please make sure `max-message-bytes` not greater than broker's `message.max.bytes`",
-				brokerMessageMaxBytes, config.MaxMessageBytes)
+				topicMeta.maxMessageBytes, config.MaxMessageBytes)
 		}
 	}
 
@@ -163,12 +216,23 @@ func foreplay(ctx context.Context, topic string, protocol codec.Protocol, config
 			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
 	}
 
-	if err := conn.CreateTopics(kafka.TopicConfig{
-		Topic:             topic,
-		NumPartitions:     int(config.PartitionNum),
-		ReplicationFactor: int(config.ReplicationFactor),
-	}); err != nil {
+	createTopicResp, err := client.CreateTopics(ctx, &kafka.CreateTopicsRequest{
+		Topics:       []kafka.TopicConfig{
+			{
+				Topic:             topic,
+				NumPartitions:     int(config.PartitionNum),
+				ReplicationFactor: int(config.ReplicationFactor),
+			},
+		},
+		ValidateOnly: false,
+	})
+	if err != nil {
 		return errors.Trace(err)
+	}
+	for _, err := range createTopicResp.Errors {
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	log.Info("TiCDC create the topic",
