@@ -132,39 +132,17 @@ func (p *yakProducer) run(ctx context.Context) error {
 		case err := <- p.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err))
 			return err
-		// todo: fetch producer commit information from the writer.
+		// todo: fetch producer commit information from the writer in a proper way.
 		// update the flushed offset, also handle commit error.
 		default:
-
+			var (
+				partition int
+				flushedOffset uint64
+			)
+			atomic.StoreUint64(&p.partitionOffset[partition].flushed, flushedOffset)
+			p.flushedNotifier.Notify()
 		}
 	}
-
-	//for {
-	//	select {
-	//	case <-ctx.Done():
-	//		return ctx.Err()
-	//	case <-k.closeCh:
-	//		return nil
-	//	case err := <-k.failpointCh:
-	//		log.Warn("receive from failpoint chan", zap.Error(err))
-	//		return err
-	//	case msg := <-k.asyncClient.Successes():
-	//		if msg == nil || msg.Metadata == nil {
-	//			continue
-	//		}
-	//		flushedOffset := msg.Metadata.(uint64)
-	//		atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
-	//		k.flushedNotifier.Notify()
-	//	case err := <-k.asyncClient.Errors():
-	//		// We should not wrap a nil pointer if the pointer is of a subtype of `error`
-	//		// because Go would store the type info and the resulted `error` variable would not be nil,
-	//		// which will cause the pkg/error library to malfunction.
-	//		if err == nil {
-	//			return nil
-	//		}
-	//		return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
-	//	}
-	//}
 }
 
 func (p *yakProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
@@ -198,14 +176,16 @@ func (p *yakProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMes
 	case <-p.closeCh:
 		return nil
 	default:
-		p.asyncWriter.WriteMessages(ctx, kafka.Message{
-			Topic:         p.topic,
-			Partition: int(partition),
-			Offset:        0,
-			HighWaterMark: 0,
-			Key:           message.Key,
-			Value:         message.Value,
-		})
+	}
+	if err := p.asyncWriter.WriteMessages(ctx, kafka.Message{
+		Topic:         p.topic,
+		Partition: int(partition),
+		Offset:        0,
+		HighWaterMark: 0,
+		Key:           message.Key,
+		Value:         message.Value,
+	}); err != nil {
+		return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
 	}
 	return nil
 }
@@ -230,9 +210,12 @@ func (p *yakProducer) SyncBroadcastMessage(ctx context.Context, message *codec.M
 	case <- p.closeCh:
 		return nil
 	default:
-		err := p.syncWriter.WriteMessages(ctx, messages...)
+	}
+	err := p.syncWriter.WriteMessages(ctx, messages...)
+	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
+	return nil
 }
 
 func (p *yakProducer) Flush(ctx context.Context) error {
@@ -319,13 +302,11 @@ func (p *yakProducer) Close() error {
 	// In fact close sarama sync client doesn't return any error.
 	// But close async client returns error if error channel is not empty, we
 	// don't populate this error to the upper caller, just add a log here.
-	err1 := p.syncWriter.Close()
-	err2 := p.asyncWriter.Close()
-	if err1 != nil {
-		log.Error("close sync client with error", zap.Error(err1))
+	if err := p.syncWriter.Close();err != nil {
+		log.Error("close sync client with error", zap.Error(err))
 	}
-	if err2 != nil {
-		log.Error("close async client with error", zap.Error(err2))
+	if err := p.asyncWriter.Close(); err != nil {
+		log.Error("close async client with error", zap.Error(err))
 	}
 	return nil
 }
