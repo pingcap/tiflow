@@ -22,7 +22,6 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/fatih/color v1.10.0
-	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/getkin/kin-openapi v0.80.0
 	github.com/gin-gonic/gin v1.7.4
 	github.com/go-mysql-org/go-mysql v1.1.3-0.20210705101833-83965e516929
@@ -62,6 +61,7 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
 	github.com/rakyll/statik v0.1.7
+	github.com/segmentio/kafka-go v0.4.23
 	github.com/shopspring/decimal v1.3.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.0.0

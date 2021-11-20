@@ -13,121 +13,200 @@
 
 package kafka
 
+import (
+	"context"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/segmentio/kafka-go"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
 type yakProducer struct {
-	partitionNum int
+	topic string
+	partitionNum int32
+
+	// clientLock is used to protect concurrent access of syncWriter and asyncWriter.
+	// Since we don't close these two clients (which have an input chan) from the
+	// sender routine, data race or send on closed chan could happen.
+	clientLock  sync.RWMutex
+	syncWriter *kafka.Writer
+	asyncWriter *kafka.Writer
+
+	partitionOffset []struct {
+		flushed uint64
+		sent    uint64
+	}
+
+	flushedNotifier *notify.Notifier
+	flushedReceiver *notify.Receiver
+
+	failpointCh chan error
+
+	closeCh chan struct{}
+	// atomic flag indicating whether the producer is closing
+	closing kafkaProducerClosingFlag
+	// producersReleased records whether asyncClient and syncClient have been closed properly
+	producersReleased bool
 }
 
-//func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
-//	k.clientLock.RLock()
-//	defer k.clientLock.RUnlock()
-//
-//	// Checks whether the producer is closing.
-//	// The atomic flag must be checked under `clientLock.RLock()`
-//	if atomic.LoadInt32(&k.closing) == kafkaProducerClosing {
-//		return nil
-//	}
-//
-//	msg := &sarama.ProducerMessage{
-//		Topic:     k.topic,
-//		Key:       sarama.ByteEncoder(message.Key),
-//		Value:     sarama.ByteEncoder(message.Value),
-//		Partition: partition,
-//	}
-//	msg.Metadata = atomic.AddUint64(&k.partitionOffset[partition].sent, 1)
-//
-//	failpoint.Inject("KafkaSinkAsyncSendError", func() {
-//		// simulate sending message to input channel successfully but flushing
-//		// message to Kafka meets error
-//		log.Info("failpoint error injected")
-//		k.failpointCh <- errors.New("kafka sink injected error")
-//		failpoint.Return(nil)
-//	})
-//
-//	failpoint.Inject("SinkFlushDMLPanic", func() {
-//		time.Sleep(time.Second)
-//		log.Panic("SinkFlushDMLPanic")
-//	})
-//
-//	select {
-//	case <-ctx.Done():
-//		return ctx.Err()
-//	case <-k.closeCh:
-//		return nil
-//	case k.asyncClient.Input() <- msg:
-//	}
-//	return nil
-//}
-//
-//func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
-//	k.clientLock.RLock()
-//	defer k.clientLock.RUnlock()
-//	msgs := make([]*sarama.ProducerMessage, k.partitionNum)
-//	for i := 0; i < int(k.partitionNum); i++ {
-//		msgs[i] = &sarama.ProducerMessage{
-//			Topic:     k.topic,
-//			Key:       sarama.ByteEncoder(message.Key),
-//			Value:     sarama.ByteEncoder(message.Value),
-//			Partition: int32(i),
-//		}
-//	}
-//	select {
-//	case <-ctx.Done():
-//		return ctx.Err()
-//	case <-k.closeCh:
-//		return nil
-//	default:
-//		err := k.syncClient.SendMessages(msgs)
-//		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
-//	}
-//}
-//
-//func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
-//	targetOffsets := make([]uint64, k.partitionNum)
-//	for i := 0; i < len(k.partitionOffset); i++ {
-//		targetOffsets[i] = atomic.LoadUint64(&k.partitionOffset[i].sent)
-//	}
-//
-//	noEventsToFLush := true
-//	for i, target := range targetOffsets {
-//		if target > atomic.LoadUint64(&k.partitionOffset[i].flushed) {
-//			noEventsToFLush = false
-//			break
-//		}
-//	}
-//	if noEventsToFLush {
-//		// no events to flush
-//		return nil
-//	}
-//
-//	// checkAllPartitionFlushed checks whether data in each partition is flushed
-//	checkAllPartitionFlushed := func() bool {
-//		for i, target := range targetOffsets {
-//			if target > atomic.LoadUint64(&k.partitionOffset[i].flushed) {
-//				return false
-//			}
-//		}
-//		return true
-//	}
-//
-//flushLoop:
-//	for {
-//		select {
-//		case <-ctx.Done():
-//			return ctx.Err()
-//		case <-k.closeCh:
-//			if checkAllPartitionFlushed() {
-//				return nil
-//			}
-//			return cerror.ErrKafkaFlushUnfinished.GenWithStackByArgs()
-//		case <-k.flushedReceiver.C:
-//			if !checkAllPartitionFlushed() {
-//				continue flushLoop
-//			}
-//			return nil
-//		}
-//	}
-//}
-//
-//func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
-//	return k.partitionNum
-//}
+func newWriter(async bool) *kafka.Writer {
+	return &kafka.Writer{
+		Addr:         nil,
+		Topic:        "",
+		Balancer:     nil,
+		MaxAttempts:  0,
+		BatchSize:    0,
+		BatchBytes:   0,
+		BatchTimeout: 0,
+		ReadTimeout:  0,
+		WriteTimeout: 0,
+		RequiredAcks: 0,
+		Async:        async,
+		Completion:   nil,
+		Compression:  0,
+		Logger:       nil,
+		ErrorLogger:  nil,
+		Transport:    nil,
+	}
+}
+
+func NewYakProducer() *yakProducer {
+	return &yakProducer{
+		partitionNum: 0,
+		syncWriter:   nil,
+		asyncWriter:  nil,
+	}
+}
+
+func (p *yakProducer) AysncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
+	p.clientLock.RLock()
+	defer p.clientLock.RUnlock()
+
+	// Checks whether the producer is closing.
+	// The atomic flag must be checked under `clientLock.RLock()`
+	if atomic.LoadInt32(&p.closing) == kafkaProducerClosing {
+		return nil
+	}
+
+	failpoint.Inject("KafkaSinkAsyncSendError", func() {
+		// simulate sending message to input channel successfully but flushing
+		// message to Kafka meets error
+		log.Info("failpoint error injected")
+		p.failpointCh <- errors.New("kafka sink injected error")
+		failpoint.Return(nil)
+	})
+
+	failpoint.Inject("SinkFlushDMLPanic", func() {
+		time.Sleep(time.Second)
+		log.Panic("SinkFlushDMLPanic")
+	})
+
+	atomic.AddUint64(&p.partitionOffset[partition].sent, 1)
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.closeCh:
+		return nil
+	default:
+		p.asyncWriter.WriteMessages(ctx, kafka.Message{
+			Topic:         p.topic,
+			Partition: int(partition),
+			Offset:        0,
+			HighWaterMark: 0,
+			Key:           message.Key,
+			Value:         message.Value,
+		})
+	}
+	return nil
+}
+
+func (p *yakProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
+	p.clientLock.RLock()
+	defer p.clientLock.Unlock()
+
+	messages := make([]kafka.Message, p.partitionNum)
+	for i := 0; i < int(p.partitionNum); i++ {
+		messages[i] = kafka.Message{
+			Topic:         p.topic,
+			Partition:     i,
+			Key:           message.Key,
+			Value:         message.Value,
+		}
+	}
+
+	select {
+	case <- ctx.Done():
+		return ctx.Err()
+	case <- p.closeCh:
+		return nil
+	default:
+		err := p.syncWriter.WriteMessages(ctx, messages...)
+		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+	}
+}
+
+func (p *yakProducer) Flush(ctx context.Context) error {
+	targetOffest := make([]uint64, p.partitionNum)
+	for i := 0; i < len(p.partitionOffset); i++ {
+		targetOffest[i] = atomic.LoadUint64(&p.partitionOffset[i].sent)
+	}
+
+	allFlushed := true
+	for i, target := range targetOffest {
+		// there is still some messages sent to kafka producer, but does not flushed to brokers yet.
+		if target > atomic.LoadUint64(&p.partitionOffset[i].flushed) {
+			allFlushed = false
+			break
+		}
+	}
+
+	if allFlushed {
+		return nil
+	}
+
+flushLoop:
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-p.closeCh:
+			if p.allMessagesFlushed() {
+				return nil
+			}
+			return cerror.ErrKafkaFlushUnfinished.GenWithStackByArgs()
+		case <-p.flushedReceiver.C:
+			if !p.allMessagesFlushed() {
+				continue flushLoop
+			}
+			return nil
+		}
+	}
+
+}
+
+func(p *yakProducer) allMessagesFlushed() bool {
+	targetOffset := make([]uint64, p.partitionNum)
+	for i := 0; i < int(p.partitionNum); i++ {
+		targetOffset[i] = atomic.LoadUint64(&p.partitionOffset[i].sent)
+	}
+
+	for i, target := range targetOffset {
+		// there is still some messages sent to kafka producer, but does not flushed to brokers yet.
+		if target > atomic.LoadUint64(&p.partitionOffset[i].flushed) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (p *yakProducer) GetPartitionNum() int32 {
+	return p.partitionNum
+}
