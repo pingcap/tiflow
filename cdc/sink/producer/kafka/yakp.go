@@ -221,7 +221,6 @@ func (p *yakProducer) stop() {
 	close(p.closeCh)
 }
 
-
 func (p *yakProducer) Close() error {
 	p.stop()
 

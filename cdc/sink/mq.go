@@ -392,12 +392,13 @@ func newKafkaGoSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	producer, err := kafka.NewYakProducer()
+	producer, err := kafka.NewYakProducer(topic)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	sink, err := newMqSink(ctx, config.Credential, producer, filter, replicaConfig, opts, errCh)
+	credential := &security.Credential{}
+	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
