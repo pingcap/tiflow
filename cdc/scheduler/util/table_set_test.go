@@ -231,27 +231,6 @@ func TestCountTableByStatus(t *testing.T) {
 func TestUpdateTableRecord(t *testing.T) {
 	ts := NewTableSet()
 	ok := ts.AddTableRecord(&TableRecord{
-		TableID:   1,
-		CaptureID: "capture-1",
-		Status:    0,
-	})
-	require.True(t, ok)
-
-	ok = ts.AddTableRecord(&TableRecord{
-		TableID:   2,
-		CaptureID: "capture-1",
-		Status:    0,
-	})
-	require.True(t, ok)
-
-	ok = ts.AddTableRecord(&TableRecord{
-		TableID:   3,
-		CaptureID: "capture-2",
-		Status:    0,
-	})
-	require.True(t, ok)
-
-	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   4,
 		CaptureID: "capture-2",
 		Status:    0,
