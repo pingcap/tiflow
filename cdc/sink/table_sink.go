@@ -57,6 +57,7 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 // is required to be no more than global resolvedTs, table barrierTs and table
 // redo log watermarkTs.
 func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+	// Log abnormal checkpoint that is large than resolved ts.
 	logAbnormalCheckpoint := func(ckpt uint64) {
 		if ckpt > resolvedTs {
 			log.L().WithOptions(zap.AddCallerSkip(1)).

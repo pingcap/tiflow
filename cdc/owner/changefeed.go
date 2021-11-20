@@ -391,10 +391,6 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		if !blocked {
 			return barrierTs, nil
 		}
-		log.Info("advance DDL barrier",
-			zap.Uint64("checkpointTs", c.state.Status.CheckpointTs),
-			zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
-			zap.Uint64("barrierTs", barrierTs))
 		done, err := c.asyncExecDDL(ctx, ddlJob)
 		if err != nil {
 			return 0, errors.Trace(err)
