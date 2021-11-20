@@ -180,6 +180,7 @@ func NewYakProducer(ctx context.Context, topic string, protocol codec.Protocol, 
 	// 3. check partition number
 
 
+
 	notifier := new(notify.Notifier)
 	flushedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
 	if err != nil {

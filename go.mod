@@ -101,7 +101,13 @@ require (
 replace (
 	// Fix CVE-2020-26160.
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt v3.2.1+incompatible
+
+	// since some TiCDC expected feature, such as custom partition is not support by official kafka-go yet,
+	// we have to use a customized version.
+	// Use official kafka-go once it become more mature.
+	github.com/segmentio/kafka-go v0.4.23 => github.com/3AceShowHand/kafka-go v0.4.24-0.20211120135932-0e7c57caa419
 	// cloud.google.com/go/storage will upgrade grpc to v1.40.0
 	// we need keep the replacement until go.etcd.io supports the higher version of grpc.
 	google.golang.org/grpc v1.40.0 => google.golang.org/grpc v1.29.1
+
 )
