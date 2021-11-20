@@ -119,9 +119,24 @@ func fetchTopicMetadata(ctx context.Context, client kafka.Client, topic string) 
 	return result, nil
 }
 
-func (m *topicMetadata) fetchBrokerMessageMaxBytes(ctx context.Context, client kafka.Client) error {
+func (m *topicMetadata) fetchBrokerMessageMaxBytes(ctx context.Context, client kafka.Client, endPoint string) error {
 	if m.maxMessageBytes != 0 {
 		return nil
+	}
+
+	conn, err := kafka.DialContext(ctx, "tcp", endPoint)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Warn("close conn failed", zap.Error(err))
+		}
+	}()
+
+	broker, err := conn.Controller()
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	target := "message.max.bytes"
@@ -129,7 +144,7 @@ func (m *topicMetadata) fetchBrokerMessageMaxBytes(ctx context.Context, client k
 		Resources: []kafka.DescribeConfigRequestResource{
 			{
 				ResourceType: kafka.ResourceTypeBroker,
-				ResourceName: "",
+				ResourceName: strconv.Itoa(broker.ID),
 				ConfigNames: []string{target},
 			},
 		},
@@ -149,7 +164,6 @@ func (m *topicMetadata) fetchBrokerMessageMaxBytes(ctx context.Context, client k
 	m.maxMessageBytes = a
 	return nil
 }
-
 
 func foreplay(ctx context.Context, topic string, protocol codec.Protocol, config *Config) error {
 	client := kafka.Client{
@@ -196,7 +210,7 @@ func foreplay(ctx context.Context, topic string, protocol codec.Protocol, config
 	// Kafka would create the topic with broker's `message.max.bytes`,
 	// we have to make sure it's not greater than `max-message-bytes` for the default open protocol & craft protocol.
 	if protocol == codec.ProtocolDefault || protocol == codec.ProtocolCraft {
-		if err := topicMeta.fetchBrokerMessageMaxBytes(ctx, client); err != nil {
+		if err := topicMeta.fetchBrokerMessageMaxBytes(ctx, client, config.BrokerEndpoints[0]); err != nil {
 			log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 			return errors.Trace(err)
 		}
