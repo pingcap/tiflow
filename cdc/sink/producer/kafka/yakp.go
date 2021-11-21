@@ -414,21 +414,7 @@ func (p *yakProducer) SyncBroadcastMessage(ctx context.Context, message *codec.M
 }
 
 func (p *yakProducer) Flush(ctx context.Context) error {
-	targetOffest := make([]uint64, p.partitionNum)
-	for i := 0; i < len(p.partitionOffset); i++ {
-		targetOffest[i] = atomic.LoadUint64(&p.partitionOffset[i].sent)
-	}
-
-	allFlushed := true
-	for i, target := range targetOffest {
-		// there is still some messages sent to kafka producer, but does not flushed to brokers yet.
-		if target > atomic.LoadUint64(&p.partitionOffset[i].flushed) {
-			allFlushed = false
-			break
-		}
-	}
-
-	if allFlushed {
+	if allFlushed := p.allMessagesFlushed(); allFlushed {
 		return nil
 	}
 
