@@ -14,6 +14,8 @@
 package syncer
 
 import (
+	"time"
+
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	. "github.com/pingcap/check"
@@ -24,81 +26,156 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
-var (
-	serverID    uint32 = 101
-	binlogFile         = "mysql-bin.000001"
-	binlogPos   uint32 = 123
-	flavor             = mysql.MySQLFlavor
-	prevGSetStr        = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"
-	lastGTIDStr        = "3ccc475b-2343-11e7-be21-6c0b84d59f30:14"
-)
+var _ = Suite(&testLocationSuite{})
 
-func (s *testSyncerSuite) generateDMLEvents(c *C) []*replication.BinlogEvent {
-	fakeRotate, err := utils.GenFakeRotateEvent(binlogFile, uint64(binlogPos), serverID)
+type testLocationSuite struct {
+	eventsGenerator *event.Generator
+
+	serverID    uint32
+	binlogFile string
+	nextBinlogFile string
+	binlogPos   uint32
+	flavor      string
+	prevGSetStr string
+	lastGTIDStr string
+	currGSetStr string
+
+	loc binlog.Location
+
+	prevGSet gtid.Set
+	lastGTID gtid.Set
+	currGSet gtid.Set
+}
+
+func (s *testLocationSuite) SetUpSuite(c *C) {
+	s.serverID = 101
+	s.binlogFile = "mysql-bin.000001"
+	s.nextBinlogFile = "mysql-bin.000002"
+	s.binlogPos = 123
+	s.flavor             = mysql.MySQLFlavor
+	s.prevGSetStr        = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"
+	s.lastGTIDStr        = "3ccc475b-2343-11e7-be21-6c0b84d59f30:14"
+	s.currGSetStr        = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"
+
+	var err error
+	s.prevGSet, err = gtid.ParserGTID(s.flavor, s.prevGSetStr)
 	c.Assert(err, IsNil)
-	events := []*replication.BinlogEvent{fakeRotate}
-
-	prevGSet, err := gtid.ParserGTID(flavor, prevGSetStr)
+	s.lastGTID, err = gtid.ParserGTID(s.flavor, s.lastGTIDStr)
+	c.Assert(err, IsNil)
+	s.currGSet, err = gtid.ParserGTID(s.flavor, s.currGSetStr)
 	c.Assert(err, IsNil)
 
-	events1, _, err := event.GenCommonFileHeader(flavor, serverID, prevGSet)
-	c.Assert(err, IsNil)
-	events = append(events, events1...)
+	s.loc = binlog.Location{
+		Position: mysql.Position{
+			Name: s.binlogFile,
+			Pos:  s.binlogPos,
+		},
+	}
+	prevGSet := s.prevGSet.Origin()
+	c.Assert(s.loc.SetGTID(prevGSet), IsNil)
+}
 
-	lastGTID, err := gtid.ParserGTID(flavor, lastGTIDStr)
-	c.Assert(err, IsNil)
+func (s *testLocationSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) []*replication.BinlogEvent {
+	events := make([]*replication.BinlogEvent, 0, 1024)
+	for _, e := range binlogEvents {
+		switch e.typ {
+		case DBCreate:
+			evs, _, err := s.eventsGenerator.GenCreateDatabaseEvents(e.args[0].(string))
+			c.Assert(err, IsNil)
+			events = append(events, evs...)
 
-	s.eventsGenerator, err = event.NewGenerator(flavor, serverID, binlogPos, lastGTID, prevGSet, 0)
-	c.Assert(err, IsNil)
-	events2 := s.generateEvents([]mockBinlogEvent{{Write, []interface{}{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(1)}}}}}, c)
-	events = append(events, events2...)
+		case Write:
+			dmlData := []*event.DMLData{
+				{
+					TableID:    e.args[0].(uint64),
+					Schema:     e.args[1].(string),
+					Table:      e.args[2].(string),
+					ColumnType: e.args[3].([]byte),
+					Rows:       e.args[4].([][]interface{}),
+				},
+			}
+			eventType := replication.WRITE_ROWS_EVENTv2
+			evs, _, err := s.eventsGenerator.GenDMLEvents(eventType, dmlData)
+			c.Assert(err, IsNil)
+			events = append(events, evs...)
 
-	// streamer will attach GTID to XID event, so we manually do it for our mock generator
-	last := len(events) - 1
-	c.Assert(events[last].Header.EventType, Equals, replication.XID_EVENT)
-	newGSet := prevGSet.Origin()
-	c.Assert(newGSet.Update(s.eventsGenerator.LatestGTID.String()), IsNil)
-	// check not shallow copy
-	c.Assert(newGSet.Equal(prevGSet.Origin()), IsFalse)
-	events[last].Event.(*replication.XIDEvent).GSet = newGSet
+		case DMLQuery:
+			dmlData := []*event.DMLData{
+				{
+					Schema: e.args[0].(string),
+					Query:  e.args[1].(string),
+				},
+			}
+			evs, _, err := s.eventsGenerator.GenDMLEvents(replication.UNKNOWN_EVENT, dmlData)
+			c.Assert(err, IsNil)
+			events = append(events, evs...)
+
+		case Headers:
+			filename := e.args[0].(string)
+			fakeRotate, err := utils.GenFakeRotateEvent(filename, uint64(s.binlogPos), s.serverID)
+			c.Assert(err, IsNil)
+			events = append(events, fakeRotate)
+
+			events1, _, err := event.GenCommonFileHeader(s.flavor, s.serverID, s.prevGSet)
+			c.Assert(err, IsNil)
+			events = append(events, events1...)
+
+		case Rotate:
+			nextFile := e.args[0].(string)
+			header := &replication.EventHeader{
+				Timestamp: uint32(time.Now().Unix()),
+				ServerID:  s.serverID,
+			}
+			e, err := event.GenRotateEvent(header, s.eventsGenerator.LatestPos, []byte(nextFile), 4)
+			c.Assert(err, IsNil)
+			events = append(events, e)
+		}
+	}
 	return events
 }
 
-func (s *testSyncerSuite) generateDDLEvents(c *C) []*replication.BinlogEvent {
-	fakeRotate, err := utils.GenFakeRotateEvent(binlogFile, uint64(binlogPos), serverID)
+// updateLastEventGSet increase the GTID set of last event.
+func (s *testLocationSuite) updateLastEventGSet(c *C, events []*replication.BinlogEvent) {
+	e := events[len(events)-1]
+	switch v := e.Event.(type) {
+	case *replication.XIDEvent:
+		v.GSet = s.currGSet.Origin()
+	case *replication.QueryEvent:
+		v.GSet = s.currGSet.Origin()
+	default:
+		c.Fatalf("last event is not expected, type %v", e.Header.EventType)
+	}
+}
+
+func (s *testLocationSuite) generateDMLEvents(c *C) []*replication.BinlogEvent {
+	var err error
+	s.eventsGenerator, err = event.NewGenerator(s.flavor, s.serverID, s.binlogPos, s.lastGTID, s.prevGSet, 0)
 	c.Assert(err, IsNil)
-	events := []*replication.BinlogEvent{fakeRotate}
+	events := s.generateEvents([]mockBinlogEvent{
+		{Headers, []interface{}{s.binlogFile}},
+		{Write, []interface{}{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(1)}}}},
+	}, c)
 
-	prevGSet, err := gtid.ParserGTID(flavor, prevGSetStr)
+	s.updateLastEventGSet(c, events)
+	return events
+}
+
+func (s *testLocationSuite) generateDDLEvents(c *C) []*replication.BinlogEvent {
+	var err error
+	s.eventsGenerator, err = event.NewGenerator(s.flavor, s.serverID, s.binlogPos, s.lastGTID, s.prevGSet, 0)
 	c.Assert(err, IsNil)
+	events := s.generateEvents([]mockBinlogEvent{
+		{Headers, []interface{}{s.binlogFile}},
+		{DBCreate, []interface{}{"foo1"}},
+	}, c)
 
-	events1, _, err := event.GenCommonFileHeader(flavor, serverID, prevGSet)
-	c.Assert(err, IsNil)
-	events = append(events, events1...)
-
-	lastGTID, err := gtid.ParserGTID(flavor, lastGTIDStr)
-	c.Assert(err, IsNil)
-
-	s.eventsGenerator, err = event.NewGenerator(flavor, serverID, binlogPos, lastGTID, prevGSet, 0)
-	c.Assert(err, IsNil)
-	events2 := s.generateEvents([]mockBinlogEvent{{DBCreate, []interface{}{"foo1"}}}, c)
-	events = append(events, events2...)
-
-	// streamer will attach GTID to Query event, so we manually do it for our mock generator
-	last := len(events) - 1
-	c.Assert(events[last].Header.EventType, Equals, replication.QUERY_EVENT)
-	newGSet := prevGSet.Origin()
-	c.Assert(newGSet.Update(s.eventsGenerator.LatestGTID.String()), IsNil)
-	// check not shallow copy
-	c.Assert(newGSet.Equal(prevGSet.Origin()), IsFalse)
-	events[last].Event.(*replication.QueryEvent).GSet = newGSet
-
+	s.updateLastEventGSet(c, events)
 	return events
 }
 
 // checkOneTxnEvents checks locationRecorder.update can correctly track binlog events of one transaction.
 // the first one of `expected` is the location to reset streamer, the last one is the last event of a transaction.
-func (s *testSyncerSuite) checkOneTxnEvents(c *C, events []*replication.BinlogEvent, expected []binlog.Location) {
+func (s *testLocationSuite) checkOneTxnEvents(c *C, events []*replication.BinlogEvent, expected []binlog.Location) {
 	r := &locationRecorder{}
 	r.reset(expected[0])
 	c.Assert(r.curStartLocation, DeepEquals, expected[0])
@@ -112,7 +189,7 @@ func (s *testSyncerSuite) checkOneTxnEvents(c *C, events []*replication.BinlogEv
 
 		if i == len(events)-1 {
 			switch e.Header.EventType {
-			case replication.XID_EVENT, replication.QUERY_EVENT:
+			case replication.XID_EVENT, replication.QUERY_EVENT, replication.ROTATE_EVENT:
 				c.Assert(r.txnEndLocation, DeepEquals, expected[i+1])
 			default:
 				c.Fatal("type of last event is not expect", e.Header.EventType)
@@ -123,7 +200,7 @@ func (s *testSyncerSuite) checkOneTxnEvents(c *C, events []*replication.BinlogEv
 	}
 }
 
-func (s *testSyncerSuite) generateExpectLocations(
+func (s *testLocationSuite) generateExpectLocations(
 	initLoc binlog.Location,
 	events []*replication.BinlogEvent,
 ) []binlog.Location {
@@ -144,46 +221,21 @@ func (s *testSyncerSuite) generateExpectLocations(
 	return expected
 }
 
-// nolint:dupl
-func (s *testSyncerSuite) TestDMLUpdateLocationsGTID(c *C) {
-	loc := binlog.Location{
-		Position: mysql.Position{
-			Name: binlogFile,
-			Pos:  binlogPos,
-		},
-	}
-	prevGSetWrapped, err := gtid.ParserGTID(flavor, prevGSetStr)
-	c.Assert(err, IsNil)
-	prevGSet := prevGSetWrapped.Origin()
-	err = loc.SetGTID(prevGSet)
-	c.Assert(err, IsNil)
-
+func (s *testLocationSuite) TestDMLUpdateLocationsGTID(c *C) {
 	events := s.generateDMLEvents(c)
 
 	// we have 8 events
 	c.Assert(events, HasLen, 8)
 
-	expected := s.generateExpectLocations(loc, events)
+	expected := s.generateExpectLocations(s.loc, events)
 
-	lastGTID, err := gtid.ParserGTID(flavor, lastGTIDStr)
-	c.Assert(err, IsNil)
-	nextGTID, err := event.GTIDIncrease(flavor, lastGTID)
-	c.Assert(err, IsNil)
-
-	newGSet := prevGSet.Clone()
-	c.Assert(newGSet.Update(nextGTID.String()), IsNil)
-	c.Assert(expected[8].SetGTID(newGSet), IsNil)
+	c.Assert(expected[8].SetGTID(s.currGSet.Origin()), IsNil)
 
 	s.checkOneTxnEvents(c, events, expected)
 }
 
-func (s *testSyncerSuite) TestDMLUpdateLocationsPos(c *C) {
-	loc := binlog.Location{
-		Position: mysql.Position{
-			Name: binlogFile,
-			Pos:  binlogPos,
-		},
-	}
+func (s *testLocationSuite) TestDMLUpdateLocationsPos(c *C) {
+	loc := s.loc
 	err := loc.SetGTID(nil)
 	c.Assert(err, IsNil)
 
@@ -194,9 +246,7 @@ func (s *testSyncerSuite) TestDMLUpdateLocationsPos(c *C) {
 	c.Assert(events[2].Header.EventType, Equals, replication.PREVIOUS_GTIDS_EVENT)
 	c.Assert(events[3].Header.EventType, Equals, replication.GTID_EVENT)
 	c.Assert(events[7].Header.EventType, Equals, replication.XID_EVENT)
-
 	events[7].Event.(*replication.XIDEvent).GSet = nil
-
 	events = append(events[:2], events[4:]...)
 
 	expected := s.generateExpectLocations(loc, events)
@@ -204,46 +254,21 @@ func (s *testSyncerSuite) TestDMLUpdateLocationsPos(c *C) {
 	s.checkOneTxnEvents(c, events, expected)
 }
 
-// nolint:dupl
-func (s *testSyncerSuite) TestDDLUpdateLocationsGTID(c *C) {
-	loc := binlog.Location{
-		Position: mysql.Position{
-			Name: binlogFile,
-			Pos:  binlogPos,
-		},
-	}
-	prevGSetWrapped, err := gtid.ParserGTID(flavor, prevGSetStr)
-	c.Assert(err, IsNil)
-	prevGSet := prevGSetWrapped.Origin()
-	err = loc.SetGTID(nil)
-	c.Assert(err, IsNil)
-
+func (s *testLocationSuite) TestDDLUpdateLocationsGTID(c *C) {
 	events := s.generateDDLEvents(c)
 
 	// we have 5 events
 	c.Assert(events, HasLen, 5)
 
-	expected := s.generateExpectLocations(loc, events)
+	expected := s.generateExpectLocations(s.loc, events)
 
-	lastGTID, err := gtid.ParserGTID(flavor, lastGTIDStr)
-	c.Assert(err, IsNil)
-	nextGTID, err := event.GTIDIncrease(flavor, lastGTID)
-	c.Assert(err, IsNil)
-
-	newGSet := prevGSet.Clone()
-	c.Assert(newGSet.Update(nextGTID.String()), IsNil)
-	c.Assert(expected[5].SetGTID(newGSet), IsNil)
+	c.Assert(expected[5].SetGTID(s.currGSet.Origin()), IsNil)
 
 	s.checkOneTxnEvents(c, events, expected)
 }
 
-func (s *testSyncerSuite) TestDDLUpdateLocationsPos(c *C) {
-	loc := binlog.Location{
-		Position: mysql.Position{
-			Name: binlogFile,
-			Pos:  binlogPos,
-		},
-	}
+func (s *testLocationSuite) TestDDLUpdateLocationsPos(c *C) {
+	loc := s.loc
 	err := loc.SetGTID(nil)
 	c.Assert(err, IsNil)
 
@@ -255,9 +280,7 @@ func (s *testSyncerSuite) TestDDLUpdateLocationsPos(c *C) {
 	c.Assert(events[2].Header.EventType, Equals, replication.PREVIOUS_GTIDS_EVENT)
 	c.Assert(events[3].Header.EventType, Equals, replication.GTID_EVENT)
 	c.Assert(events[4].Header.EventType, Equals, replication.QUERY_EVENT)
-
 	events[4].Event.(*replication.QueryEvent).GSet = nil
-
 	events = append(events[:2], events[4:]...)
 
 	// now we have 3 events, test about their 4 locations
@@ -266,68 +289,77 @@ func (s *testSyncerSuite) TestDDLUpdateLocationsPos(c *C) {
 	s.checkOneTxnEvents(c, events, expected)
 }
 
-func (s *testSyncerSuite) generateDMLQueryEvents(c *C) []*replication.BinlogEvent {
-	fakeRotate, err := utils.GenFakeRotateEvent(binlogFile, uint64(binlogPos), serverID)
+func (s *testLocationSuite) generateDMLQueryEvents(c *C) []*replication.BinlogEvent {
+	var err error
+	s.eventsGenerator, err = event.NewGenerator(s.flavor, s.serverID, s.binlogPos, s.lastGTID, s.prevGSet, 0)
 	c.Assert(err, IsNil)
-	events := []*replication.BinlogEvent{fakeRotate}
+	events := s.generateEvents([]mockBinlogEvent{
+		{Headers, []interface{}{s.binlogFile}},
+		{DMLQuery, []interface{}{"foo", "INSERT INTO v VALUES(1)"}},
+	}, c)
 
-	prevGSet, err := gtid.ParserGTID(flavor, prevGSetStr)
-	c.Assert(err, IsNil)
-
-	events1, _, err := event.GenCommonFileHeader(flavor, serverID, prevGSet)
-	c.Assert(err, IsNil)
-	events = append(events, events1...)
-
-	lastGTID, err := gtid.ParserGTID(flavor, lastGTIDStr)
-	c.Assert(err, IsNil)
-
-	s.eventsGenerator, err = event.NewGenerator(flavor, serverID, binlogPos, lastGTID, prevGSet, 0)
-	c.Assert(err, IsNil)
-	events2 := s.generateEvents([]mockBinlogEvent{{DMLQuery, []interface{}{"foo", "INSERT INTO v VALUES(1)"}}}, c)
-	events = append(events, events2...)
-
-	// streamer will attach GTID to XID event, so we manually do it for our mock generator
-	last := len(events) - 1
-	c.Assert(events[last].Header.EventType, Equals, replication.XID_EVENT)
-	newGSet := prevGSet.Origin()
-	c.Assert(newGSet.Update(s.eventsGenerator.LatestGTID.String()), IsNil)
-	// check not shallow copy
-	c.Assert(newGSet.Equal(prevGSet.Origin()), IsFalse)
-	events[last].Event.(*replication.XIDEvent).GSet = newGSet
+	s.updateLastEventGSet(c, events)
 	return events
 }
 
-// nolint:dupl
-func (s *testSyncerSuite) TestDMLQueryUpdateLocationsGTID(c *C) {
-	loc := binlog.Location{
-		Position: mysql.Position{
-			Name: binlogFile,
-			Pos:  binlogPos,
-		},
-	}
-	prevGSetWrapped, err := gtid.ParserGTID(flavor, prevGSetStr)
-	c.Assert(err, IsNil)
-	prevGSet := prevGSetWrapped.Origin()
-	err = loc.SetGTID(prevGSet)
-	c.Assert(err, IsNil)
-
+func (s *testLocationSuite) TestDMLQueryUpdateLocationsGTID(c *C) {
 	events := s.generateDMLQueryEvents(c)
 
 	// we have 7 events
 	c.Assert(events, HasLen, 7)
 
-	expected := s.generateExpectLocations(loc, events)
+	expected := s.generateExpectLocations(s.loc, events)
 
-	lastGTID, err := gtid.ParserGTID(flavor, lastGTIDStr)
-	c.Assert(err, IsNil)
-	nextGTID, err := event.GTIDIncrease(flavor, lastGTID)
-	c.Assert(err, IsNil)
-
-	newGSet := prevGSet.Clone()
-	c.Assert(newGSet.Update(nextGTID.String()), IsNil)
-	c.Assert(expected[7].SetGTID(newGSet), IsNil)
+	c.Assert(expected[7].SetGTID(s.currGSet.Origin()), IsNil)
 
 	s.checkOneTxnEvents(c, events, expected)
 }
 
-// TODO: test rotate and heartbeat
+func (s *testLocationSuite) generateRotateAndDMLEvents(c *C) []*replication.BinlogEvent {
+	var err error
+	s.eventsGenerator, err = event.NewGenerator(s.flavor, s.serverID, s.binlogPos, s.lastGTID, s.prevGSet, 0)
+	c.Assert(err, IsNil)
+	events := s.generateEvents([]mockBinlogEvent{
+		{Headers, []interface{}{s.binlogFile}},
+		{Rotate, []interface{}{s.nextBinlogFile}},
+		{Headers, []interface{}{s.nextBinlogFile}},
+		{Write, []interface{}{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(1)}}}},
+	}, c)
+
+	s.updateLastEventGSet(c, events)
+	return events
+}
+
+
+func (s *testLocationSuite) TestRotateEvent(c *C) {
+	events := s.generateRotateAndDMLEvents(c)
+
+	c.Assert(events, HasLen, 12)
+
+	nextLoc := s.loc
+	nextLoc.Position.Name = s.nextBinlogFile
+	expected := s.generateExpectLocations(nextLoc, events)
+
+	// reset events of first binlog file
+	expected[0].Position.Name = s.binlogFile
+	c.Assert(events[0].Header.EventType, Equals, replication.ROTATE_EVENT)
+	expected[1].Position.Name = s.binlogFile
+	c.Assert(events[1].Header.EventType, Equals, replication.FORMAT_DESCRIPTION_EVENT)
+	expected[2].Position.Name = s.binlogFile
+	c.Assert(events[2].Header.EventType, Equals, replication.PREVIOUS_GTIDS_EVENT)
+	expected[3].Position.Name = s.binlogFile
+	c.Assert(events[3].Header.EventType, Equals, replication.ROTATE_EVENT)
+	expected[4].Position.Pos = 4
+	c.Assert(events[4].Header.EventType, Equals, replication.ROTATE_EVENT)
+	expected[5].Position.Pos = 4
+	c.Assert(events[5].Header.EventType, Equals, replication.FORMAT_DESCRIPTION_EVENT)
+	expected[6].Position.Pos = 4
+	c.Assert(events[6].Header.EventType, Equals, replication.PREVIOUS_GTIDS_EVENT)
+	expected[7].Position.Pos = 4
+
+	c.Assert(expected[12].SetGTID(s.currGSet.Origin()), IsNil)
+
+	s.checkOneTxnEvents(c, events[:4], expected[:5])
+	s.checkOneTxnEvents(c, events[4:], expected[4:])
+
+}
