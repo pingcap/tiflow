@@ -240,6 +240,13 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 
 	resp := &ChangefeedResp{}
 	if cfInfo != nil {
+		// Notice: In the old owner we used this field to determine if the task was paused or not,
+		// we need to handle this field in the new owner.
+		// Otherwise, we will see that the old version of the task is paused and then upgraded,
+		// and the task is automatically resumed after the upgrade.
+		if cfInfo.AdminJobType.IsStopState() {
+			cfInfo.State = model.StateStopped
+		}
 		resp.FeedState = string(cfInfo.State)
 		resp.RunningError = cfInfo.Error
 	}
