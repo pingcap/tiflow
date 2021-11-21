@@ -41,8 +41,8 @@ type yakProducer struct {
 	asyncWriter *kafka.Writer
 
 	partitionOffset []struct {
-		flushed int64
-		sent    int64
+		flushed uint64
+		sent    uint64
 	}
 
 	flushedNotifier *notify.Notifier
@@ -275,8 +275,8 @@ func NewYakProducer(ctx context.Context, topic string, protocol codec.Protocol, 
 		asyncWriter: newWriter(true),
 
 		partitionOffset: make([]struct {
-			flushed int64
-			sent    int64
+			flushed uint64
+			sent    uint64
 		}, config.PartitionNum),
 		flushedNotifier: notifier,
 		flushedReceiver: flushedReceiver,
@@ -291,8 +291,8 @@ func NewYakProducer(ctx context.Context, topic string, protocol codec.Protocol, 
 			return
 		}
 		for _, msg := range messages {
-			if msg.HighWaterMark > atomic.LoadInt64(&p.partitionOffset[msg.Partition].flushed) {
-
+			if uint64(msg.Offset) > atomic.LoadUint64(&p.partitionOffset[msg.Partition].flushed) {
+				atomic.StoreUint64(&p.partitionOffset[msg.Partition].flushed, uint64(msg.Offset))
 			}
 		}
 	}
@@ -332,9 +332,9 @@ func (p *yakProducer) run(ctx context.Context) error {
 		default:
 			var (
 				partition int
-				flushedOffset int64
+				flushedOffset uint64
 			)
-			atomic.StoreInt64(&p.partitionOffset[partition].flushed, flushedOffset)
+			atomic.StoreUint64(&p.partitionOffset[partition].flushed, flushedOffset)
 			p.flushedNotifier.Notify()
 		}
 	}
@@ -363,7 +363,7 @@ func (p *yakProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMes
 		log.Panic("SinkFlushDMLPanic")
 	})
 
-	atomic.AddInt64(&p.partitionOffset[partition].sent, 1)
+	atomic.AddUint64(&p.partitionOffset[partition].sent, 1)
 
 	select {
 	case <-ctx.Done():
@@ -414,15 +414,15 @@ func (p *yakProducer) SyncBroadcastMessage(ctx context.Context, message *codec.M
 }
 
 func (p *yakProducer) Flush(ctx context.Context) error {
-	targetOffest := make([]int64, p.partitionNum)
+	targetOffest := make([]uint64, p.partitionNum)
 	for i := 0; i < len(p.partitionOffset); i++ {
-		targetOffest[i] = atomic.LoadInt64(&p.partitionOffset[i].sent)
+		targetOffest[i] = atomic.LoadUint64(&p.partitionOffset[i].sent)
 	}
 
 	allFlushed := true
 	for i, target := range targetOffest {
 		// there is still some messages sent to kafka producer, but does not flushed to brokers yet.
-		if target > atomic.LoadInt64(&p.partitionOffset[i].flushed) {
+		if target > atomic.LoadUint64(&p.partitionOffset[i].flushed) {
 			allFlushed = false
 			break
 		}
@@ -452,14 +452,14 @@ flushLoop:
 }
 
 func(p *yakProducer) allMessagesFlushed() bool {
-	targetOffset := make([]int64, p.partitionNum)
+	targetOffset := make([]uint64, p.partitionNum)
 	for i := 0; i < int(p.partitionNum); i++ {
-		targetOffset[i] = atomic.LoadInt64(&p.partitionOffset[i].sent)
+		targetOffset[i] = atomic.LoadUint64(&p.partitionOffset[i].sent)
 	}
 
 	for i, target := range targetOffset {
 		// there is still some messages sent to kafka producer, but does not flushed to brokers yet.
-		if target > atomic.LoadInt64(&p.partitionOffset[i].flushed) {
+		if target > atomic.LoadUint64(&p.partitionOffset[i].flushed) {
 			return false
 		}
 	}
