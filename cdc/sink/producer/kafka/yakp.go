@@ -449,7 +449,6 @@ flushLoop:
 			return nil
 		}
 	}
-
 }
 
 func(p *yakProducer) allMessagesFlushed() bool {
