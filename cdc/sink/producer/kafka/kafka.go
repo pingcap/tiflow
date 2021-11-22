@@ -599,6 +599,10 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// in an unstable network environment, the default `Timeout` is 3s, just keep retry.
 	config.Admin.Retry.Max = math.MaxInt32
 
+	config.Net.DialTimeout = 5 * time.Second
+	config.Net.WriteTimeout = 5 * time.Second
+	config.Net.ReadTimeout = 5 * time.Second
+
 	// See: https://kafka.apache.org/documentation/#replication
 	// When one of the brokers in a Kafka cluster is down, the partition leaders
 	// in this broker is broken, Kafka will election a new partition leader and
