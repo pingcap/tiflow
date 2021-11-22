@@ -3,6 +3,7 @@ package benchmark
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/model"
@@ -10,6 +11,7 @@ import (
 	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 // Master implements the master of benchmark workload.
@@ -30,6 +32,34 @@ type Master struct {
 	runningTasks map[model.TaskID]*Task
 
 	scheduleWaitingTasks chan scheduleGroup
+	// rate limit for rescheduling when error happens
+	scheduleRateLimit *rate.Limiter
+}
+
+// New creates a master instance
+func New(
+	parentCtx context.Context,
+	config *Config,
+	job *model.Job,
+	resourceMgr cluster.ResourceMgr,
+	client cluster.ExecutorClient,
+) *Master {
+	ctx, cancel := context.WithCancel(parentCtx)
+	return &Master{
+		ctx:             ctx,
+		cancel:          cancel,
+		Config:          config,
+		job:             job,
+		resourceManager: resourceMgr,
+		client:          client,
+
+		offExecutors:         make(chan model.ExecutorID, 100),
+		scheduleWaitingTasks: make(chan scheduleGroup, 1024),
+		scheduleRateLimit:    rate.NewLimiter(rate.Every(time.Second), 1),
+
+		execTasks:    make(map[model.ExecutorID][]*model.Task),
+		runningTasks: make(map[model.TaskID]*Task),
+	}
 }
 
 func (m *Master) Cancel() {
@@ -226,10 +256,24 @@ func (m *Master) monitorSchedulingTasks() {
 			// cancel it
 			//}
 
-			log.L().Logger.Info("begin to reschedule task group")
+			log.L().Logger.Info("begin to reschedule task group", zap.Any("group", group))
 			if err := m.reScheduleTask(group); err != nil {
 				log.L().Logger.Error("cant reschedule task", zap.Error(err))
-				// FIXME: this will cause deadlock problem
+
+				// Use a global rate limit for task rescheduling
+				delay := m.scheduleRateLimit.Reserve().Delay()
+				if delay != 0 {
+					log.L().Logger.Warn("reschedule task rate limit", zap.Duration("delay", delay))
+					timer := time.NewTimer(delay)
+					select {
+					case <-m.ctx.Done():
+						timer.Stop()
+						return
+					case <-timer.C:
+						timer.Stop()
+					}
+				}
+				// FIXME: this could cause deadlock problem if scheduleWaitingTasks channel is full
 				m.scheduleWaitingTasks <- group
 			}
 		case <-m.ctx.Done():

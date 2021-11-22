@@ -14,6 +14,7 @@ require (
 	go.uber.org/goleak v1.1.11-0.20210813005559-691160354723
 	go.uber.org/zap v1.19.1
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/grpc v1.40.0
 )
 

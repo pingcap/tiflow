@@ -85,19 +85,7 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 	}
 	job.Tasks = append(job.Tasks, hashTasks...)
 	job.Tasks = append(job.Tasks, sinkTasks...)
-	master := &Master{
-		Config:          config,
-		job:             job,
-		resourceManager: resourceMgr,
-		client:          client,
-
-		offExecutors:         make(chan model.ExecutorID, 100),
-		scheduleWaitingTasks: make(chan scheduleGroup, 1024),
-
-		execTasks:    make(map[model.ExecutorID][]*model.Task),
-		runningTasks: make(map[model.TaskID]*Task),
-	}
-	master.ctx, master.cancel = context.WithCancel(context.Background())
+	master := New(context.Background(), config, job, resourceMgr, client)
 	return master, nil
 }
 

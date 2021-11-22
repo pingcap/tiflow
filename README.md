@@ -66,7 +66,7 @@ change the `worker-addr` field in toml, and start another executor.
 #### submit a job
 
 ```[shell]
-./bin/master-client submit-job --master-addr 127.0.0.1:10240 --config ./cmd/master-client/benchmark-example.toml
+./bin/master-client submit-job --master-addr 127.0.0.1:10240 --config ./cmd/master-client/bench-example.toml
 ```
 
 #### kill an executor
