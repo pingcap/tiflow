@@ -116,7 +116,7 @@ if [[ "$restart" == "true" ]]; then
 			$tls \
 			$certcn \
 			$addr \
-			$pd_addr &
+			$pd_addr &>>$workdir/stdout$logsuffix.log
 		if [ $? -eq 143 ]; then
 			break
 		fi
@@ -132,7 +132,7 @@ else
 		$tls \
 		$certcn \
 		$addr \
-		$pd_addr &
+		$pd_addr &>>$workdir/stdout$log_suffix.log &
 fi
 
 # Make sure cdc is ready to serve
