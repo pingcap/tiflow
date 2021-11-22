@@ -230,7 +230,6 @@ else
 	go tool cover -func="$(TEST_DIR)/unit_cov.out"
 endif
 
-
 data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
 
