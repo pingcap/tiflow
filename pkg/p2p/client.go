@@ -1,0 +1,492 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package p2p
+
+import (
+	"context"
+	"io"
+	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/pingcap/ticdc/pkg/version"
+
+	"github.com/pingcap/ticdc/pkg/p2p/util"
+
+	"github.com/edwingeng/deque"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/proto/p2p"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
+	gRPCPeer "google.golang.org/grpc/peer"
+)
+
+// MessageClientConfig is used to configure MessageClient
+type MessageClientConfig struct {
+	// The size of the sending channel used to buffer
+	// messages before they go to gRPC.
+	SendChannelSize int
+	// The maximum duration for which messages wait to be batched.
+	BatchSendInterval time.Duration
+	// The maximum size of a batch.
+	MaxBatchBytes int
+	// The limit of the rate at which the connection to the server is retried.
+	RetryRateLimitPerSecond float64
+	// The dial timeout for the gRPC client
+	DialTimeout time.Duration
+	// The advertised address of this node. Used for logging and monitoring purposes.
+	AdvertisedAddr string
+}
+
+// MessageClient is a client used to send peer messages.
+// `Run` must be running before sending any message.
+type MessageClient struct {
+	sendCh chan *p2p.MessageEntry
+
+	topicMu sync.RWMutex
+	topics  map[string]*topicEntry
+
+	senderID NodeID
+
+	closeCh  chan struct{}
+	isClosed int32
+
+	config *MessageClientConfig // read only
+}
+
+type clientStream = p2p.CDCPeerToPeer_SendMessageClient
+
+type topicEntry struct {
+	sentMessageMu sync.Mutex
+	sentMessages  deque.Deque
+
+	nextSeq int64
+	ack     int64
+
+	// debug only
+	lastSent Seq
+}
+
+// NewMessageClient creates a new MessageClient
+// senderID is an identifier for the local node.
+func NewMessageClient(senderID NodeID, config *MessageClientConfig) *MessageClient {
+	return &MessageClient{
+		sendCh:   make(chan *p2p.MessageEntry, config.SendChannelSize),
+		topics:   make(map[string]*topicEntry),
+		senderID: senderID,
+		closeCh:  make(chan struct{}),
+		config:   config,
+	}
+}
+
+// Run launches background goroutines for MessageClient to work.
+func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverID NodeID, credential *security.Credential) (ret error) {
+	defer func() {
+		atomic.StoreInt32(&c.isClosed, 1)
+		close(c.closeCh)
+
+		log.Info("peer message client exited",
+			zap.String("addr", addr),
+			zap.String("capture-id", receiverID),
+			zap.Error(ret))
+	}()
+
+	metricsClientCount := clientCount.With(prometheus.Labels{
+		"to": addr,
+	})
+	metricsClientCount.Inc()
+	defer metricsClientCount.Dec()
+
+	securityOption, err := credential.ToGRPCDialOption()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	rl := rate.NewLimiter(rate.Limit(c.config.RetryRateLimitPerSecond), 1)
+	epoch := int64(0)
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		default:
+		}
+
+		if err := rl.Wait(ctx); err != nil {
+			return errors.Trace(err)
+		}
+
+		conn, err := grpc.Dial(
+			addr,
+			securityOption,
+			grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
+				return net.DialTimeout(network, s, c.config.DialTimeout)
+			}),
+			// We do not need a unary interceptor since we are not making any unary calls.
+			grpc.WithStreamInterceptor(grpcClientMetrics.StreamClientInterceptor()))
+		if err != nil {
+			log.Warn("gRPC dial error, retrying", zap.Error(err))
+			continue
+		}
+
+		grpcClient := p2p.NewCDCPeerToPeerClient(conn)
+
+		epoch++
+		streamMeta := &p2p.StreamMeta{
+			SenderId:             c.senderID,
+			ReceiverId:           receiverID,
+			Epoch:                epoch,
+			ClientVersion:        version.ReleaseSemver(),
+			SenderAdvertisedAddr: c.config.AdvertisedAddr,
+		}
+
+		cancelCtx, cancelStream := context.WithCancel(ctx)
+		clientStream, err := grpcClient.SendMessage(cancelCtx)
+		if err != nil {
+			cancelStream()
+			_ = conn.Close()
+			log.Warn("establish stream to peer failed, retrying", zap.Error(err))
+			continue
+		}
+
+		err = clientStream.Send(&p2p.MessagePacket{Meta: streamMeta})
+		if err != nil {
+			cancelStream()
+			_ = conn.Close()
+			log.Warn("sending stream meta failed, retrying", zap.Error(err))
+			continue
+		}
+
+		if err := c.run(ctx, clientStream, cancelStream); err != nil {
+			cancelStream()
+			_ = conn.Close()
+			if cerrors.ErrPeerMessageClientPermanentFail.Equal(err) {
+				return errors.Trace(err)
+			}
+			log.Warn("peer message client detected error, restarting", zap.Error(err))
+			continue
+		}
+		panic("unreachable")
+	}
+}
+
+func (c *MessageClient) run(ctx context.Context, stream clientStream, cancel func()) error {
+	errg, ctx := errgroup.WithContext(ctx)
+
+	errg.Go(func() error {
+		defer cancel()
+		return c.runTx(ctx, stream)
+	})
+
+	errg.Go(func() error {
+		defer cancel()
+		return c.runRx(ctx, stream)
+	})
+
+	return errors.Trace(errg.Wait())
+}
+
+func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
+	if err := c.retrySending(ctx, stream); err != nil {
+		return errors.Trace(err)
+	}
+
+	peerAddr := "unknown"
+	peer, ok := gRPCPeer.FromContext(stream.Context())
+	if ok {
+		peerAddr = peer.Addr.String()
+	}
+	metricsClientMessageCount := clientMessageCount.With(prometheus.Labels{
+		"to": peerAddr,
+	})
+
+	ticker := time.NewTicker(c.config.BatchSendInterval)
+	defer ticker.Stop()
+
+	batchSender := newBatchSender(
+		128,
+		c.config.MaxBatchBytes,
+		func(packet *p2p.MessagePacket) error {
+			failpoint.Inject("ClientInjectStreamFailure", func() {
+				log.Info("ClientInjectStreamFailure failpoint triggered")
+				failpoint.Return(io.EOF)
+			})
+
+			if err := stream.Send(packet); err != nil {
+				return errors.Trace(err)
+			}
+			return nil
+		},
+	)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case msg, ok := <-c.sendCh:
+			if !ok {
+				// sendCh has been closed
+				return nil
+			}
+
+			c.topicMu.RLock()
+			tpk, ok := c.topics[msg.Topic]
+			c.topicMu.RUnlock()
+			if !ok {
+				// This line should never be reachable unless there is a bug in this file.
+				log.Panic("topic not found. Report a bug", zap.String("topic", msg.Topic))
+			}
+
+			// We want to assert that `msg.Sequence` is continuous within a topic.
+			if old := atomic.SwapInt64(&tpk.lastSent, msg.Sequence); old != 0 && msg.Sequence != old+1 {
+				log.Panic("unexpected seq of message",
+					zap.String("topic", msg.Topic),
+					zap.Int64("seq", msg.Sequence))
+			}
+
+			tpk.sentMessageMu.Lock()
+			tpk.sentMessages.PushBack(msg)
+			tpk.sentMessageMu.Unlock()
+
+			metricsClientMessageCount.Inc()
+
+			if err := batchSender.Push(msg); err != nil {
+				return errors.Trace(err)
+			}
+		case <-ticker.C:
+			if err := batchSender.ForceSend(); err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+}
+
+// retrySending retries sending messages when the gRPC stream is re-established.
+func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) error {
+	topicsCloned := make(map[string]*topicEntry)
+	c.topicMu.RLock()
+	for k, v := range c.topics {
+		topicsCloned[k] = v
+	}
+	c.topicMu.RUnlock()
+
+	for _, tpk := range topicsCloned {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		default:
+		}
+
+		var entries []*p2p.MessageEntry
+		tpk.sentMessageMu.Lock()
+		for i := 0; i < tpk.sentMessages.Len(); i++ {
+			msg := tpk.sentMessages.Peek(i).(*p2p.MessageEntry)
+			log.Debug("retry sending msg",
+				zap.String("topic", msg.Topic),
+				zap.Int64("seq", msg.Sequence))
+			entries = append(entries, &p2p.MessageEntry{
+				Topic:    msg.Topic,
+				Content:  msg.Content,
+				Sequence: msg.Sequence,
+			})
+		}
+
+		if err := stream.Send(&p2p.MessagePacket{
+			Entries: entries,
+		}); err != nil {
+			tpk.sentMessageMu.Unlock()
+			return errors.Trace(err)
+		}
+
+		tpk.sentMessageMu.Unlock()
+	}
+
+	return nil
+}
+
+func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
+	peerAddr := "unknown"
+	peer, ok := gRPCPeer.FromContext(stream.Context())
+	if ok {
+		peerAddr = peer.Addr.String()
+	}
+	metricsClientAckCount := clientAckCount.With(prometheus.Labels{
+		"from": peerAddr,
+	})
+
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		default:
+		}
+
+		resp, err := stream.Recv()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		switch resp.GetExitReason() {
+		case p2p.ExitReason_NONE:
+			break
+		case p2p.ExitReason_CAPTURE_ID_MISMATCH:
+			return cerrors.ErrPeerMessageClientPermanentFail.GenWithStackByArgs(resp.GetErrorMessage())
+		default:
+			return cerrors.ErrPeerMessageServerClosed.GenWithStackByArgs(resp.GetErrorMessage())
+		}
+
+		metricsClientAckCount.Inc()
+
+		for _, ack := range resp.GetAck() {
+			c.topicMu.RLock()
+			tpk, ok := c.topics[ack.GetTopic()]
+			c.topicMu.RUnlock()
+			if !ok {
+				log.Panic("Received ACK for unknown topic", zap.String("topic", ack.GetTopic()))
+			}
+
+			atomic.StoreInt64(&tpk.ack, ack.GetLastSeq())
+			tpk.sentMessageMu.Lock()
+			for !tpk.sentMessages.Empty() && tpk.sentMessages.Front().(*p2p.MessageEntry).Sequence <= ack.GetLastSeq() {
+				tpk.sentMessages.PopFront()
+			}
+			tpk.sentMessageMu.Unlock()
+		}
+	}
+}
+
+// SendMessage sends a message. It will block if the client is not ready to
+// accept the message for now. Once the function returns without an error,
+// the client will try its best to send the message, until `Run` is canceled.
+func (c *MessageClient) SendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
+	return c.sendMessage(ctx, topic, value, false)
+}
+
+// TrySendMessage tries to send a message. It will return ErrPeerMessageSendTryAgain
+// if the client is not ready to accept the message.
+func (c *MessageClient) TrySendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
+	return c.sendMessage(ctx, topic, value, true)
+}
+
+func (c *MessageClient) sendMessage(ctx context.Context, topic Topic, value interface{}, nonblocking bool) (seq Seq, ret error) {
+	if atomic.LoadInt32(&c.isClosed) == 1 {
+		return 0, cerrors.ErrPeerMessageClientClosed.GenWithStackByArgs()
+	}
+
+	c.topicMu.RLock()
+	tpk, ok := c.topics[topic]
+	c.topicMu.RUnlock()
+
+	if !ok {
+		tpk = &topicEntry{
+			sentMessages: deque.NewDeque(),
+			nextSeq:      1,
+		}
+		c.topicMu.Lock()
+		c.topics[topic] = tpk
+		c.topicMu.Unlock()
+	}
+
+	nextSeq := atomic.LoadInt64(&tpk.nextSeq)
+
+	data, err := marshalMessage(value)
+	if err != nil {
+		return 0, cerrors.WrapError(cerrors.ErrPeerMessageEncodeError, err)
+	}
+
+	msg := &p2p.MessageEntry{
+		Topic:    topic,
+		Content:  data,
+		Sequence: nextSeq,
+	}
+
+	if nonblocking {
+		select {
+		case <-ctx.Done():
+			return 0, errors.Trace(ctx.Err())
+		case c.sendCh <- msg:
+		default:
+			return 0, cerrors.ErrPeerMessageSendTryAgain.GenWithStackByArgs()
+		}
+	} else {
+		// blocking
+		select {
+		case <-ctx.Done():
+			return 0, errors.Trace(ctx.Err())
+		case <-c.closeCh:
+			return 0, cerrors.ErrPeerMessageClientClosed.GenWithStackByArgs()
+		case c.sendCh <- msg:
+		}
+	}
+
+	atomic.AddInt64(&tpk.nextSeq, 1)
+	return nextSeq, nil
+}
+
+// CurrentAck returns (s, true) if all messages with sequence less than or
+// equal to s have been processed by the receiver. It returns (0, false) if
+// no message for `topic` has been sent.
+func (c *MessageClient) CurrentAck(topic Topic) (Seq, bool) {
+	c.topicMu.RLock()
+	defer c.topicMu.RUnlock()
+
+	tpk, ok := c.topics[topic]
+	if !ok {
+		return 0, false
+	}
+
+	return atomic.LoadInt64(&tpk.ack), true
+}
+
+type batchSenderState struct {
+	*p2p.MessagePacket
+	byteCount int
+}
+
+func newBatchSender(batchSize int, maxBytes int, sendFn func(packet *p2p.MessagePacket) error) *util.BatchSender {
+	return &util.BatchSender{
+		Init: func() util.State {
+			return &batchSenderState{
+				MessagePacket: &p2p.MessagePacket{},
+				byteCount:     0,
+			}
+		},
+		Append: func(stateI util.State, itemI util.Item) util.State {
+			state := stateI.(*batchSenderState)
+			item := itemI.(*p2p.MessageEntry)
+			state.Entries = append(state.Entries, item)
+			state.byteCount += len(item.Topic) + len(item.Content)
+			return state
+		},
+		SendFn: func(state util.State) error {
+			return sendFn(state.(*batchSenderState).MessagePacket)
+		},
+		Cond: func(stateI util.State) bool {
+			state := stateI.(*batchSenderState)
+			if state.byteCount >= maxBytes {
+				return true
+			}
+			if len(state.Entries) >= batchSize {
+				return true
+			}
+			return false
+		},
+	}
+}
