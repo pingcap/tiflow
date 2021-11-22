@@ -16,6 +16,7 @@ package errors
 import (
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/pingcap/errors"
+	cdc_errors "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // ToPBError translates go error to pb error.
@@ -23,7 +24,7 @@ func ToPBError(err error) *pb.Error {
 	if err == nil {
 		return nil
 	}
-	e, ok := err.(*errors.Error)
+	rfcCode, ok := cdc_errors.RFCCode(err)
 	if !ok {
 		return &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
@@ -31,7 +32,7 @@ func ToPBError(err error) *pb.Error {
 		}
 	}
 	pbErr := &pb.Error{}
-	switch e.RFCCode() {
+	switch rfcCode {
 	case ErrUnknownExecutorID.RFCCode():
 		pbErr.Code = pb.ErrorCode_UnknownExecutor
 	case ErrTombstoneExecutor.RFCCode():
@@ -45,7 +46,7 @@ func ToPBError(err error) *pb.Error {
 	default:
 		pbErr.Code = pb.ErrorCode_UnknownError
 	}
-	pbErr.Message = e.GetMsg()
+	pbErr.Message = err.Error()
 	return pbErr
 }
 
@@ -57,5 +58,5 @@ func Wrap(rfcError *errors.Error, err error, args ...interface{}) error {
 	if err == nil {
 		return nil
 	}
-	return rfcError.Wrap(err).GenWithStackByCause(args...)
+	return rfcError.Wrap(err).GenWithStackByArgs(args...)
 }

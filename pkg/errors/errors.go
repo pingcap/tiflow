@@ -24,7 +24,7 @@ var (
 	ErrTombstoneExecutor        = errors.Normalize("executor %d has been dead", errors.RFCCodeText("DFLOW:ErrTombstoneExecutor"))
 	ErrSubJobFailed             = errors.Normalize("executor %d job %d", errors.RFCCodeText("DFLOW:ErrSubJobFailed"))
 	ErrClusterResourceNotEnough = errors.Normalize("cluster resource is not enough, please scale out the cluster", errors.RFCCodeText("DFLOW:ErrClusterResourceNotEnough"))
-	ErrBuildJobFailed           = errors.Normalize("", errors.RFCCodeText("DFLOW:ErrBuildJobFailed"))
+	ErrBuildJobFailed           = errors.Normalize("build job failed", errors.RFCCodeText("DFLOW:ErrBuildJobFailed"))
 
 	ErrExecutorDupRegister = errors.Normalize("executor %d has been registered", errors.RFCCodeText("DFLOW:ErrExecutorDupRegister"))
 	ErrGrpcBuildConn       = errors.Normalize("dial grpc connection to %s failed", errors.RFCCodeText("DFLOW:ErrGrpcBuildConn"))
