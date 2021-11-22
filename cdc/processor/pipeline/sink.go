@@ -323,12 +323,11 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(errors.New("processor sync resolved injected error"))
 			})
-			err := n.retryFlushSink(ctx)
+			err := n.retryFlushSink(ctx, event.CRTs)
 			if err != nil {
 				return errors.Trace(err)
 			}
-
-			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
+			atomic.StoreUint64(&n.resolvedTs, event.CRTs)
 			return nil
 		}
 		start := time.Now()
@@ -347,7 +346,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 		}
 
 	case pipeline.MessageTypeTick:
-		err := n.retryFlushSink(ctx)
+		err := n.retryFlushSink(ctx, n.resolvedTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -358,7 +357,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 		}
 	case pipeline.MessageTypeBarrier:
 		n.barrierTs = msg.BarrierTs
-		err := n.retryFlushSink(ctx)
+		err := n.retryFlushSink(ctx, n.resolvedTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -372,12 +371,12 @@ func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 	return n.sink.Close(ctx)
 }
 
-func (n *sinkNode) retryFlushSink(ctx pipeline.NodeContext) error {
+func (n *sinkNode) retryFlushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) error {
 	start := time.Now()
 	err := retry.Do(ctx, func() error {
 		// when flushSink return a ErrRedoLogBufferBlocking error
 		// retry until success
-		err := n.flushSink(ctx, n.resolvedTs)
+		err := n.flushSink(ctx, resolvedTs)
 		cost := time.Since(start)
 		if cost >= 10*time.Second {
 			log.Warn("redo log buffer blocking too long", zap.Float64("blocking time(s)", cost.Seconds()))
