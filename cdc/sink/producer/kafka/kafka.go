@@ -595,11 +595,10 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		return nil, errors.Trace(err)
 	}
 
-	// For admin related operation, such as `CreateTopic`, use the default Admin configuration.
+	// TiCDC would do some admin operation, such as `CreateTopic`, use the default Admin configuration.
 
-	// TiCDC would do some admin operation with kafka broker cluster, and could block the owner
-	// in an unstable network environment, the default `Timeout` is 3s, just keep retry.
-
+	// The default Net Timeout is 30 seconds, which is quite long.
+	// For operation that cannot get response in 3 ~ 5 seconds, it seems unlikely be responded in 30 seconds.
 	config.Net.DialTimeout = 5 * time.Second
 	config.Net.WriteTimeout = 5 * time.Second
 	config.Net.ReadTimeout = 5 * time.Second
