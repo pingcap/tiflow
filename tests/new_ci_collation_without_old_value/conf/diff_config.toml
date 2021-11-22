@@ -1,26 +1,29 @@
 # diff Configuration.
 
-log-level = "info"
-chunk-size = 10
 check-thread-count = 4
-sample-percent = 100
-use-checksum = true
-fix-sql-file = "fix.sql"
 
-# tables need to check.
-[[check-tables]]
-    schema = "new_ci_collation_without_old_value_test"
-    tables = ["~.*"]
+export-fix-sql = true
 
-[[source-db]]
-    host = "127.0.0.1"
-    port = 4000
-    user = "root"
-    password = ""
-    instance-id = "source-1"
+check-struct-only = false
 
-[target-db]
-    host = "127.0.0.1"
-    port = 3306
-    user = "root"
-    password = ""
+[task]
+output-dir = "/tmp/ticdc_dm_test/output"
+
+source-instances = ["mysql1"]
+
+target-instance = "tidb0"
+
+target-check-tables = ["new_ci_collation_without_old_value_test.?*"]
+
+[data-sources]
+[data-sources.mysql1]
+host = "127.0.0.1"
+port = 4000
+user = "root"
+password = ""
+
+[data-sources.tidb0]
+host = "127.0.0.1"
+port = 3306
+user = "root"
+password = ""

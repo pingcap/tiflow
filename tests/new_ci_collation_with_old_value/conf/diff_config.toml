@@ -13,7 +13,7 @@ check-struct-only = false
 
     target-instance = "tidb0"
 
-    target-check-tables = ["new_ci_collation_test.?*"]
+    target-check-tables = ["new_ci_collation_with_old_value_test.?*"]
 
 [data-sources]
 [data-sources.mysql1]
