@@ -617,7 +617,6 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
-
 	config.Producer.Retry.Max = 5
 
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
