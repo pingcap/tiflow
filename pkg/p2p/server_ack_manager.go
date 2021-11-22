@@ -22,13 +22,19 @@ import "sync"
 //
 // For a given (sender, topic) pair, messages are handled in order. In the case
 // of a retry after failure, we need to know the latest progress so that the client
-// can retry from that message. This is what we need ACKS for.
+// can retry from that message. This is what we need Acks for.
 
-// ackManager is used to track the progress of ACKS.
+// ackManager is used to track the progress of Acks.
 // It is thread-safe to use.
 type ackManager struct {
 	peers sync.Map
 }
+
+const (
+	// initAck is the initial value of an Ack.
+	// It is a placeholder for unknown progress.
+	initAck = Seq(0)
+)
 
 type peerAckList struct {
 	mu   sync.RWMutex
@@ -44,7 +50,7 @@ func newAckManager() *ackManager {
 func (m *ackManager) Get(senderID NodeID, topic Topic) Seq {
 	rawAcks, ok := m.peers.Load(senderID)
 	if !ok {
-		return 0
+		return initAck
 	}
 
 	ackList := rawAcks.(*peerAckList)
@@ -61,6 +67,8 @@ func (m *ackManager) Set(senderID NodeID, topic Topic, newSeq Seq) {
 		newAcks := &peerAckList{
 			acks: make(map[Topic]Seq),
 		}
+		// LoadOrStore will load the existing value if another thread
+		// has just inserted the value for our key.
 		rawAcks, _ = m.peers.LoadOrStore(senderID, newAcks)
 	}
 

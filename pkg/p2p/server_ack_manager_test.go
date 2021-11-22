@@ -21,23 +21,25 @@ import (
 )
 
 func TestAckManagerGetSet(t *testing.T) {
+	t.Parallel()
+
 	am := newAckManager()
 	ack := am.Get("node-1", "topic-1")
-	require.Equal(t, Seq(0), ack)
+	require.Equal(t, initAck, ack)
 
 	am.Set("node-1", "topic-1", Seq(5))
 	ack = am.Get("node-1", "topic-1")
 	require.Equal(t, Seq(5), ack)
 
 	ack = am.Get("node-1", "topic-2")
-	require.Equal(t, Seq(0), ack)
+	require.Equal(t, initAck, ack)
 
 	am.Set("node-1", "topic-2", Seq(7))
 	ack = am.Get("node-1", "topic-2")
 	require.Equal(t, Seq(7), ack)
 
 	ack = am.Get("node-2", "topic-1")
-	require.Equal(t, Seq(0), ack)
+	require.Equal(t, initAck, ack)
 
 	am.Set("node-2", "topic-1", Seq(8))
 	ack = am.Get("node-2", "topic-1")
@@ -49,6 +51,8 @@ func TestAckManagerGetSet(t *testing.T) {
 }
 
 func TestAckManagerRange(t *testing.T) {
+	t.Parallel()
+
 	am := newAckManager()
 
 	expected := make(map[Topic]Seq)
@@ -67,6 +71,8 @@ func TestAckManagerRange(t *testing.T) {
 }
 
 func TestAckManagerRangeTerminate(t *testing.T) {
+	t.Parallel()
+
 	am := newAckManager()
 
 	for i := 1; i <= 100; i++ {
@@ -82,6 +88,8 @@ func TestAckManagerRangeTerminate(t *testing.T) {
 }
 
 func TestAckManagerRangeNotExists(t *testing.T) {
+	t.Parallel()
+
 	am := newAckManager()
 
 	for i := 1; i <= 100; i++ {
@@ -95,6 +103,8 @@ func TestAckManagerRangeNotExists(t *testing.T) {
 }
 
 func TestAckManagerRemove(t *testing.T) {
+	t.Parallel()
+
 	am := newAckManager()
 	for i := 1; i <= 10; i++ {
 		for j := 1; j <= 10; j++ {
@@ -111,10 +121,10 @@ func TestAckManagerRemove(t *testing.T) {
 	am.RemoveTopic("topic-3")
 
 	ack = am.Get("node-2", "topic-3")
-	require.Equal(t, Seq(0), ack)
+	require.Equal(t, initAck, ack)
 
 	ack = am.Get("node-3", "topic-3")
-	require.Equal(t, Seq(0), ack)
+	require.Equal(t, initAck, ack)
 
 	ack = am.Get("node-2", "topic-2")
 	require.Equal(t, Seq(4), ack)
@@ -125,5 +135,5 @@ func TestAckManagerRemove(t *testing.T) {
 	am.RemoveNode("node-2")
 
 	ack = am.Get("node-2", "topic-2")
-	require.Equal(t, Seq(0), ack)
+	require.Equal(t, initAck, ack)
 }
