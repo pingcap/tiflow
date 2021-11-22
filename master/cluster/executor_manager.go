@@ -14,8 +14,10 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ ExecutorClient = &ExecutorManager{}
-var _ ResourceMgr = &ExecutorManager{}
+var (
+	_ ExecutorClient = &ExecutorManager{}
+	_ ResourceMgr    = &ExecutorManager{}
+)
 
 // ExecutorManager holds all the executors info, including liveness, status, resource usage.
 type ExecutorManager struct {

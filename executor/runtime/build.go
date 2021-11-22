@@ -39,6 +39,7 @@ func newSinkOp(cfg *model.TableSinkOp) operator {
 		},
 	}
 }
+
 func (s *Runtime) connectTasks(sender, receiver *taskContainer) {
 	ch := &Channel{
 		innerChan: make(chan *Record, 1024),

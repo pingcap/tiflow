@@ -1,4 +1,3 @@
 package executor
 
-type JobManager struct {
-}
+type JobManager struct{}

@@ -25,7 +25,7 @@ type Server struct {
 	etcd *embed.Etcd
 
 	etcdClient *clientv3.Client
-	//election *election.Election
+	// election *election.Election
 
 	// sched scheduler
 	executorManager *cluster.ExecutorManager
@@ -129,7 +129,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 
 	// start leader election
 	// TODO: Consider election. And Notify workers when leader changes.
-	//s.election, err = election.NewElection(ctx, )
+	// s.election, err = election.NewElection(ctx, )
 
 	// start keep alive
 	s.executorManager.Start(ctx)

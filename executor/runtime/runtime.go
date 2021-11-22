@@ -53,7 +53,7 @@ func (s *Runtime) ShowStats(sec int) {
 }
 
 func (s *Runtime) Run(ctx context.Context) {
-	//log.Printf("scheduler running")
+	// log.Printf("scheduler running")
 	for {
 		select {
 		case <-ctx.Done():
@@ -68,7 +68,7 @@ func (s *Runtime) Run(ctx context.Context) {
 		status := t.Poll()
 		if status == Blocked {
 			if t.tryBlock() {
-				//log.Printf("task %d blocked success", t.id)
+				// log.Printf("task %d blocked success", t.id)
 				continue
 			}
 		}

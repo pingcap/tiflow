@@ -8,8 +8,10 @@ import (
 	"github.com/hanfei1991/microcosom/pkg/errors"
 )
 
-var ExecutorKeyAdapter KeyAdapter = keyHexEncoderDecoder("data-flow/executor")
-var JobKeyAdapter KeyAdapter = keyHexEncoderDecoder("data-flow/job")
+var (
+	ExecutorKeyAdapter KeyAdapter = keyHexEncoderDecoder("data-flow/executor")
+	JobKeyAdapter      KeyAdapter = keyHexEncoderDecoder("data-flow/job")
+)
 
 type KeyAdapter interface {
 	Encode(keys ...string) string

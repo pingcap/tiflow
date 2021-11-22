@@ -27,7 +27,7 @@ type fileWriter struct {
 }
 
 func (f *fileWriter) prepare() error {
-	file, err := os.OpenFile(f.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	file, err := os.OpenFile(f.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o777)
 	f.fd = file
 	return err
 }
@@ -37,8 +37,8 @@ func (f *fileWriter) write(ctx *taskContext, r *Record) {
 	str := []byte(r.toString())
 	//	f.mu.Lock()
 	//	defer f.mu.Unlock()
-	//ctx.stats[f.tid].recordCnt ++
-	//ctx.stats[f.tid].totalLag += r.end.Sub(r.start)
+	// ctx.stats[f.tid].recordCnt ++
+	// ctx.stats[f.tid].totalLag += r.end.Sub(r.start)
 	_, err := f.fd.Write(str)
 	if err != nil {
 		panic(err)
@@ -123,8 +123,7 @@ func (o *opReceive) next(ctx *taskContext, _ []*Record) ([][]*Record, bool) {
 	}
 }
 
-type opHash struct {
-}
+type opHash struct{}
 
 func (o *opHash) prepare() error { return nil }
 
@@ -147,7 +146,7 @@ func (o *opSink) next(ctx *taskContext, records []*Record) ([][]*Record, bool) {
 	if len(records) == 0 {
 		return nil, true
 	}
-	//ctx.ioPool.Go(context.Background(), func() {
+	// ctx.ioPool.Go(context.Background(), func() {
 	for _, r := range records {
 		o.writer.write(ctx, r)
 	}

@@ -69,7 +69,6 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start grpc server
 
 	rootLis, err := net.Listen("tcp", s.cfg.WorkerAddr)
-
 	if err != nil {
 		return err
 	}

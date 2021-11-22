@@ -87,17 +87,17 @@ func (t *taskContainer) tryAwake() bool {
 	for {
 		//		log.Printf("try wake task %d", t.id)
 		if atomic.CompareAndSwapInt32(&t.status, int32(Blocked), int32(Waking)) {
-			//log.Printf("wake task %d successful", t.id)
+			// log.Printf("wake task %d successful", t.id)
 			return true
 		}
 
 		if atomic.CompareAndSwapInt32(&t.status, int32(Runnable), int32(Waking)) {
-			//log.Printf("task %d runnable", t.id)
+			// log.Printf("task %d runnable", t.id)
 			return false
 		}
 
 		if atomic.LoadInt32(&t.status) == int32(Waking) {
-			//log.Printf("task %d waking", t.id)
+			// log.Printf("task %d waking", t.id)
 			return false
 		}
 	}
@@ -143,7 +143,7 @@ func (t *taskContainer) Poll() TaskStatus {
 	t.cache, blocked = t.op.next(t.ctx, r)
 
 	if t.tryFlush() {
-		//log.Printf("task %d flush blocked", t.id)
+		// log.Printf("task %d flush blocked", t.id)
 		return Blocked
 	}
 	if blocked {

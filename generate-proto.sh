@@ -11,19 +11,19 @@ echo "using GOPATH=$GOPATH"
 TOOLS_BIN_DIR=$(pwd)/tools/bin
 
 case "$(uname)" in
-    MINGW*)
-        EXE=.exe
-        ;;
-    *)
-        EXE=
-        ;;
+MINGW*)
+	EXE=.exe
+	;;
+*)
+	EXE=
+	;;
 esac
 
 # use `protoc-gen-gogofaster` rather than `protoc-gen-go`.
 GOGO_FASTER=$TOOLS_BIN_DIR/protoc-gen-gogofaster$EXE
 if [ ! -f ${GOGO_FASTER} ]; then
-    echo "${GOGO_FASTER} does not exist, please run 'make tools_setup' first"
-    exit 1
+	echo "${GOGO_FASTER} does not exist, please run 'make tools_setup' first"
+	exit 1
 fi
 
 # get and construct the path to gogo/protobuf.
@@ -31,8 +31,8 @@ GO111MODULE=on go get -d github.com/gogo/protobuf
 GOGO_MOD=$(GO111MODULE=on go list -m github.com/gogo/protobuf)
 GOGO_PATH=$GOPATH/pkg/mod/${GOGO_MOD// /@}
 if [ ! -d ${GOGO_PATH} ]; then
-    echo "${GOGO_PATH} does not exist, please ensure 'github.com/gogo/protobuf' is in go.mod"
-    exit 1
+	echo "${GOGO_PATH} does not exist, please ensure 'github.com/gogo/protobuf' is in go.mod"
+	exit 1
 fi
 
 # we need `grpc-gateway` to generate HTTP API from gRPC API.

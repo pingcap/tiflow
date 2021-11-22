@@ -2,8 +2,10 @@ package model
 
 import "github.com/hanfei1991/microcosom/pb"
 
-type JobID int32
-type TaskID int32
+type (
+	JobID  int32
+	TaskID int32
+)
 
 type Job struct {
 	ID    JobID
