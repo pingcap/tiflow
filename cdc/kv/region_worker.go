@@ -784,9 +784,8 @@ func (w *regionWorker) evictAllRegions() error {
 			}
 			state.markStopped()
 			w.delRegionState(state.sri.verID.GetID())
-			singleRegionInfo := state.sri.partialClone()
-			if state.lastResolvedTs > singleRegionInfo.ts {
-				singleRegionInfo.ts = state.lastResolvedTs
+			if state.lastResolvedTs > state.sri.ts {
+				state.sri.ts = state.lastResolvedTs
 			}
 			revokeToken := !state.initialized
 			state.lock.Unlock()
@@ -794,7 +793,7 @@ func (w *regionWorker) evictAllRegions() error {
 			// region worker exits, we must use the parent context to prevent
 			// regionErrorInfo loss.
 			err = w.session.onRegionFail(w.parentCtx, regionErrorInfo{
-				singleRegionInfo: singleRegionInfo,
+				singleRegionInfo: state.sri,
 				err:              cerror.ErrEventFeedAborted.FastGenByArgs(),
 			}, revokeToken)
 			return err == nil

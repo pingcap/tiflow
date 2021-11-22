@@ -50,6 +50,7 @@ import (
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 )
 
 func Test(t *testing.T) {
@@ -294,7 +295,18 @@ func newMockServiceSpecificAddr(
 	lis, err := lc.Listen(ctx, "tcp", listenAddr)
 	c.Assert(err, check.IsNil)
 	addr = lis.Addr().String()
-	grpcServer = grpc.NewServer()
+	kaep := keepalive.EnforcementPolicy{
+		MinTime:             60 * time.Second,
+		PermitWithoutStream: true,
+	}
+	var kasp = keepalive.ServerParameters{
+		MaxConnectionIdle:     60 * time.Second, // If a client is idle for 15 seconds, send a GOAWAY
+		MaxConnectionAge:      60 * time.Second, // If any connection is alive for more than 30 seconds, send a GOAWAY
+		MaxConnectionAgeGrace: 5 * time.Second,  // Allow 5 seconds for pending RPCs to complete before forcibly closing connections
+		Time:                  5 * time.Second,  // Ping the client if it is idle for 5 seconds to ensure the connection is still active
+		Timeout:               1 * time.Second,  // Wait 1 second for the ping ack before assuming the connection is dead
+	}
+	grpcServer = grpc.NewServer(grpc.KeepaliveEnforcementPolicy(kaep), grpc.KeepaliveParams(kasp))
 	cdcpb.RegisterChangeDataServer(grpcServer, srv)
 	wg.Add(1)
 	go func() {
@@ -1740,7 +1752,8 @@ func (s *clientSuite) TestIncompatibleTiKV(c *check.C) {
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	// NOTICE: eventCh may block the main logic of EventFeed
+	eventCh := make(chan model.RegionFeedEvent, 128)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2119,7 +2132,6 @@ func (s *clientSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Chan
 		ch1 <- event
 	}
 	clientWg.Wait()
-
 	cancel()
 }
 
@@ -2601,23 +2613,6 @@ func (s *clientSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	}
 
 	cancel()
-}
-
-func (s *clientSuite) TestSingleRegionInfoClone(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
-	sri := newSingleRegionInfo(
-		tikv.RegionVerID{},
-		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-		1000, &tikv.RPCContext{})
-	sri2 := sri.partialClone()
-	sri2.ts = 2000
-	sri2.span.End[0] = 'b'
-	c.Assert(sri.ts, check.Equals, uint64(1000))
-	c.Assert(sri.span.String(), check.Equals, "[61, 63)")
-	c.Assert(sri2.ts, check.Equals, uint64(2000))
-	c.Assert(sri2.span.String(), check.Equals, "[61, 62)")
-	c.Assert(sri2.rpcCtx, check.DeepEquals, &tikv.RPCContext{})
 }
 
 // TestResolveLockNoCandidate tests the resolved ts manager can work normally
