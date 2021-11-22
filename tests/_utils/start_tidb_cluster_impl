@@ -17,7 +17,7 @@ random_file_name=
 randomGenSocketsConf() {
 	random_str=$(date '+%s%N')
 	if [ "$(uname)" == "Darwin" ]; then
-		random_str=$(cat /dev/random | LC_CTYPE=C tr -dc "a-zA-Z0-9-?" | head -c 10)
+		random_str=$(cat /dev/random | LC_CTYPE=C tr -dc "a-zA-Z0-9" | head -c 10)
 	fi
 	random_file_name="$OUT_DIR/tidb-config-$random_str.toml"
 
