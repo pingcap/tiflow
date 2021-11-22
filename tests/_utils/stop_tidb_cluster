@@ -4,8 +4,8 @@
 # noise in cdc logs.
 
 PKILL="killall -q -w -s 9 "
-if [ "$(uname)" == "Darwin" ];then
-   	PKILL="pkill -9 "
+if [ "$(uname)" == "Darwin" ]; then
+	PKILL="pkill -9 "
 fi
 
 ${PKILL} cdc.test || true
