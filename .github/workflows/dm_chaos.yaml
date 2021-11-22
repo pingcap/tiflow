@@ -1,15 +1,8 @@
 name: DM Chaos
 
-# Controls when the action will run. Triggers the workflow on pull request
-# events but only for the master and release-2.0 branch
 on:
-  pull_request:
-    branches:
-      - master
-    paths:
-      - "dm/**"
   schedule:
-    - cron: "0,30 17-22 * * *" # run at minute 0 and 30 every hour from 01:00 ~ 06:00 UTC+8
+    - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:

@@ -9,7 +9,7 @@ service Worker {
     // PurgeRelay purges relay log files for this dm-worker
     rpc PurgeRelay (PurgeRelayRequest) returns (CommonWorkerResponse) {}
 
-    // Operate (get/set/remove) schema for a specified upstream table.
+    // Operate (get/set/remove) schema for a specified table in tracker.
     // a `set`/`remove` operation should be an one-time operation (only take effect once),
     // so we use a gRPC method rather than a etcd operation now (no persistent operation state).
     rpc OperateSchema(OperateWorkerSchemaRequest) returns(CommonWorkerResponse) {}
@@ -37,7 +37,7 @@ message QueryStatusRequest {
 
 message CommonWorkerResponse {
     bool result = 1;
-    string msg = 2; // when result is true, msg is empty
+    string msg = 2; // when result is true, msg is empty, except for operate schema
     string source = 3; // source ID, set by dm-master
     string worker = 4; // worker name, set by dm-worker config
 }
@@ -316,6 +316,8 @@ enum SchemaOp {
     GetSchema = 1;
     SetSchema = 2;
     RemoveSchema = 3;
+    ListSchema = 4;
+    ListTable = 5;
 }
 
 message OperateWorkerSchemaRequest {

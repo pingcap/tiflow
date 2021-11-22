@@ -44,6 +44,19 @@ function test_source() {
 	# get source list success
 	openapi_source_check "list_source_success" 1
 
+	# get source list with status
+	openapi_source_check "list_source_with_status_success" 1 1
+
+	# transfer source
+	openapi_source_check "transfer_source_success" "mysql-01" "worker2"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s mysql-01" \
+		"\"worker\": \"worker2\"" 1
+
+	init_noshard_data # init table in database openapi for test get schema and table
+	# test get source schemas and tables
+	openapi_source_check "get_source_schemas_and_tables_success" "mysql-01" "openapi" "t1"
+
 	# delete source success
 	openapi_source_check "delete_source_success" "mysql-01"
 
@@ -66,10 +79,7 @@ function test_relay() {
 	openapi_source_check "create_source1_success"
 
 	# we need make sure that source is bounded by worker1 because we will start relay on worker1
-	# todo: use openapi to transfer source
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"transfer-source mysql-01 worker1" \
-		"\"result\": true" 1
+	openapi_source_check "transfer_source_success" "mysql-01" "worker1"
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s mysql-01" \
@@ -81,7 +91,6 @@ function test_relay() {
 
 	# start relay success
 	openapi_source_check "start_relay_success" "mysql-01" "worker1"
-
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s mysql-01" \
 		"\"worker\": \"worker1\"" 1 \
@@ -93,6 +102,21 @@ function test_relay() {
 	# get source status success
 	openapi_source_check "get_source_status_success" "mysql-01"
 	openapi_source_check "get_source_status_success_with_relay" "mysql-01"
+
+	# pause relay success
+	openapi_source_check "pause_relay_success" "mysql-01"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s mysql-01" \
+		"\"worker\": \"worker1\"" 1 \
+		"\"stage\": \"Paused\"" 1
+
+	# resume relay success
+	openapi_source_check "resume_relay_success" "mysql-01"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s mysql-01" \
+		"\"worker\": \"worker1\"" 1 \
+		"\"stage\": \"Running\"" 1 \
+		"\"relayCatchUpMaster\": true" 1
 
 	# stop relay failed: not pass worker name
 	openapi_source_check "stop_relay_failed" "mysql-01" "no-worker"
@@ -108,6 +132,7 @@ function test_relay() {
 	openapi_source_check "get_source_status_success_no_relay" "mysql-01"
 
 	openapi_source_check "start_relay_success_with_two_worker" "mysql-01" "worker1" "worker2"
+	openapi_source_check "list_source_with_status_success" 1 2               # source 1 status_list will have two items
 	openapi_source_check "get_source_status_success" "mysql-01" 2            # have two source status
 	openapi_source_check "get_source_status_success_with_relay" "mysql-01" 0 # check worker1 relay status
 	openapi_source_check "get_source_status_success_with_relay" "mysql-01" 1 # check worker2 relay status
@@ -124,8 +149,6 @@ function test_relay() {
 	# delete source success
 	openapi_source_check "delete_source_success" "mysql-01"
 
-	# TODO add transfer-source test when openapi support this
-
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: RELAY SUCCESS"
 
 }
@@ -140,14 +163,14 @@ function test_shard_task() {
 	openapi_source_check "create_source1_success"
 	openapi_source_check "list_source_success" 1
 	# get source status success
-	# openapi_source_check "get_source_status_success" "mysql-01"
+	openapi_source_check "get_source_status_success" "mysql-01"
 
 	# create source succesfully
 	openapi_source_check "create_source2_success"
 	# get source list success
 	openapi_source_check "list_source_success" 2
 	# get source status success
-	# openapi_source_check "get_source_status_success" "mysql-02"
+	openapi_source_check "get_source_status_success" "mysql-02"
 
 	# start task success: not vaild task create request
 	openapi_task_check "start_task_failed"
@@ -166,7 +189,7 @@ function test_shard_task() {
 	run_sql_source1 "DELETE FROM openapi.t;"
 	run_sql_tidb_with_retry "select count(1) from openapi.t;" "count(1): 2"
 
-	# test binlog event filter, this ddl will ignored in source-2
+	# test binlog event filter, this ddl will be ignored in source-2
 	run_sql "alter table openapi.t add column aaa int;" $MYSQL_PORT2 $MYSQL_PASSWORD2
 	# ddl will be ignored, so no ddl locks and the task will work normally.
 	run_sql "INSERT INTO openapi.t(i,j) VALUES (5, 5);" $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -174,6 +197,9 @@ function test_shard_task() {
 
 	# get task status failed
 	openapi_task_check "get_task_status_failed" "not a task name"
+
+	# get illegal char task_status failed
+	openapi_task_check get_illegal_char_task_status_failed
 
 	# get task status success
 	openapi_task_check "get_task_status_success" "$task_name" 2
@@ -208,15 +234,17 @@ function test_noshard_task() {
 	# create source succesfully
 	openapi_source_check "create_source1_success"
 	openapi_source_check "list_source_success" 1
+
 	# get source status success
-	# openapi_source_check "get_source_status_success" "mysql-01"
+	openapi_source_check "get_source_status_success" "mysql-01"
 
 	# create source succesfully
 	openapi_source_check "create_source2_success"
 	# get source list success
 	openapi_source_check "list_source_success" 2
+
 	# get source status success
-	# openapi_source_check "get_source_status_success" "mysql-02"
+	openapi_source_check "get_source_status_success" "mysql-02"
 
 	# start task success: not vaild task create request
 	openapi_task_check "start_task_failed"
@@ -237,13 +265,28 @@ function test_noshard_task() {
 	# get task status success
 	openapi_task_check "get_task_status_success" "$task_name" 2
 
+	# delte source with force
+	openapi_source_check "delete_source_with_force_success" "mysql-01"
+
+	# after delete source-1, there is only one subtask status
+	openapi_task_check "get_task_status_success" "$task_name" 1
+
 	# get task list
 	openapi_task_check "get_task_list" 1
+
+	# pause task first for operate schema
+	openapi_task_check "pause_task_success" "$task_name" "mysql-02"
+
+	# opreate schema
+	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-02" "openapi" "t2"
+
+	# resume task
+	openapi_task_check "resume_task_success" "$task_name" "mysql-02"
+
 	# stop task success
 	openapi_task_check "stop_task_success" "$task_name"
 
 	# delete source success
-	openapi_source_check "delete_source_success" "mysql-01"
 	openapi_source_check "delete_source_success" "mysql-02"
 	openapi_source_check "list_source_success" 0
 	run_sql_tidb "DROP DATABASE if exists openapi;"
@@ -290,7 +333,6 @@ function run() {
 
 	test_shard_task
 	test_noshard_task
-
 	test_cluster
 }
 

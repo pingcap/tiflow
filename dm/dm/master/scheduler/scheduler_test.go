@@ -119,7 +119,6 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	sourceCfg1, err := config.LoadFromFile(sourceSampleFile)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
-	sourceCfg1.EnableRelay = true
 	sourceCfg2 := *sourceCfg1
 	sourceCfg2.SourceID = sourceID2
 
@@ -1086,7 +1085,7 @@ func (t *testScheduler) TestLastBound(c *C) {
 	c.Assert(bounded, IsFalse)
 
 	// after worker3 become offline, source2 should be bounded to worker2
-	s.updateStatusForUnbound(sourceID2)
+	s.updateStatusToUnbound(sourceID2)
 	_, ok := s.bounds[sourceID2]
 	c.Assert(ok, IsFalse)
 	worker3.ToOffline()
@@ -1225,7 +1224,7 @@ func (t *testScheduler) TestTransferSource(c *C) {
 	c.Assert(worker1.Stage(), Equals, WorkerFree)
 }
 
-func (t *testScheduler) TestStartStopSource(c *C) {
+func (t *testScheduler) TestStartStopRelay(c *C) {
 	defer clearTestInfoOperation(c)
 
 	var (
@@ -1331,6 +1330,27 @@ func (t *testScheduler) TestStartStopSource(c *C) {
 	workers, err = s.GetRelayWorkers(sourceID1)
 	c.Assert(err, IsNil)
 	c.Assert(workers, HasLen, 0)
+
+	// can't bind source to a worker which has different relay
+	// currently source1 -> worker1, source2 -> worker2
+	c.Assert(s.bounds[sourceID1].baseInfo.Name, Equals, workerName1)
+	c.Assert(s.bounds[sourceID2].baseInfo.Name, Equals, workerName2)
+
+	s.updateStatusToUnbound(sourceID2)
+	c.Assert(worker2.Stage(), Equals, WorkerRelay)
+	c.Assert(s.StopRelay(sourceID2, []string{workerName2}), IsNil)
+	c.Assert(worker2.Stage(), Equals, WorkerFree)
+
+	c.Assert(s.StartRelay(sourceID1, []string{workerName2}), IsNil)
+	c.Assert(worker2.Stage(), Equals, WorkerRelay)
+	c.Assert(worker2.RelaySourceID(), Equals, sourceID1)
+
+	worker3.ToOffline()
+	worker4.ToOffline()
+
+	bound, err := s.tryBoundForSource(sourceID2)
+	c.Assert(err, IsNil)
+	c.Assert(bound, IsFalse)
 }
 
 func checkAllWorkersClosed(c *C, s *Scheduler, closed bool) {
@@ -1521,6 +1541,10 @@ func (t *testScheduler) TestTransferWorkerAndSource(c *C) {
 	c.Assert(s.bounds[sourceID2], DeepEquals, worker1)
 	c.Assert(s.bounds[sourceID3], DeepEquals, worker4)
 	c.Assert(s.bounds[sourceID4], DeepEquals, worker3)
+
+	c.Assert(worker1.StartRelay(sourceID2), IsNil)
+	err := s.transferWorkerAndSource(workerName1, sourceID2, workerName2, sourceID1)
+	c.Assert(terror.ErrSchedulerBoundDiffWithStartedRelay.Equal(err), IsTrue)
 }
 
 func (t *testScheduler) TestWatchLoadTask(c *C) {
@@ -1628,4 +1652,62 @@ func (t *testScheduler) TestWatchLoadTask(c *C) {
 
 	cancel1()
 	wg.Wait()
+}
+
+func (t *testScheduler) TestWorkerHasDiffRelayAndBound(c *C) {
+	defer clearTestInfoOperation(c)
+
+	var (
+		logger      = log.L()
+		s           = NewScheduler(&logger, config.Security{})
+		sourceID1   = "mysql-replica-1"
+		sourceID2   = "mysql-replica-2"
+		workerName1 = "dm-worker-1"
+		keepAlive   = int64(3)
+	)
+
+	workerInfo := ha.WorkerInfo{Name: workerName1}
+	bound := ha.SourceBound{
+		Source: sourceID1,
+		Worker: workerName1,
+	}
+
+	sourceCfg, err := config.LoadFromFile("../source.yaml")
+	c.Assert(err, IsNil)
+	sourceCfg.Checker.BackoffMax = config.Duration{Duration: 5 * time.Second}
+
+	// prepare etcd data
+	s.etcdCli = etcdTestCli
+	sourceCfg.SourceID = sourceID1
+	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
+	c.Assert(err, IsNil)
+	sourceCfg.SourceID = sourceID2
+	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
+	c.Assert(err, IsNil)
+	_, err = ha.PutRelayConfig(etcdTestCli, sourceID2, workerName1)
+	c.Assert(err, IsNil)
+	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo)
+	c.Assert(err, IsNil)
+	_, err = ha.PutSourceBound(etcdTestCli, bound)
+	c.Assert(err, IsNil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	//nolint:errcheck
+	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
+
+	// bootstrap
+	c.Assert(s.recoverSources(etcdTestCli), IsNil)
+	c.Assert(s.recoverRelayConfigs(etcdTestCli), IsNil)
+	_, err = s.recoverWorkersBounds(etcdTestCli)
+	c.Assert(err, IsNil)
+
+	// check
+	c.Assert(s.relayWorkers[sourceID2], HasLen, 1)
+	_, ok := s.relayWorkers[sourceID2][workerName1]
+	c.Assert(ok, IsTrue)
+	worker := s.workers[workerName1]
+	c.Assert(worker.Stage(), Equals, WorkerRelay)
+	c.Assert(worker.RelaySourceID(), Equals, sourceID2)
+	_, ok = s.unbounds[sourceID1]
+	c.Assert(ok, IsTrue)
 }

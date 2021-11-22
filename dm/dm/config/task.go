@@ -71,8 +71,6 @@ var (
 	defaultBatch                   = 100
 	defaultQueueSize               = 1024 // do not give too large default value to avoid OOM
 	defaultCheckpointFlushInterval = 30   // in seconds
-	// force use UTC time_zone.
-	defaultTimeZone = "+00:00"
 
 	// TargetDBConfig.
 	defaultSessionCfg = []struct {
@@ -238,6 +236,9 @@ type SyncerConfig struct {
 	QueueSize   int    `yaml:"queue-size" toml:"queue-size" json:"queue-size"`
 	// checkpoint flush interval in seconds.
 	CheckpointFlushInterval int `yaml:"checkpoint-flush-interval" toml:"checkpoint-flush-interval" json:"checkpoint-flush-interval"`
+	// TODO: add this two new config items for openapi.
+	Compact      bool `yaml:"compact" toml:"compact" json:"compact"`
+	MultipleRows bool `yaml:"multiple-rows" toml:"multiple-rows" json:"multiple-rows"`
 
 	// deprecated
 	MaxRetry int `yaml:"max-retry" toml:"max-retry" json:"max-retry"`
@@ -293,9 +294,8 @@ type TaskConfig struct {
 	// deprecated
 	HeartbeatUpdateInterval int `yaml:"heartbeat-update-interval" toml:"heartbeat-update-interval" json:"heartbeat-update-interval"`
 	// deprecated
-	HeartbeatReportInterval int `yaml:"heartbeat-report-interval" toml:"heartbeat-report-interval" json:"heartbeat-report-interval"`
-	// deprecated
-	Timezone string `yaml:"timezone" toml:"timezone" json:"timezone"`
+	HeartbeatReportInterval int    `yaml:"heartbeat-report-interval" toml:"heartbeat-report-interval" json:"heartbeat-report-interval"`
+	Timezone                string `yaml:"timezone" toml:"timezone" json:"timezone"`
 
 	// handle schema/table name mode, and only for schema/table name
 	// if case insensitive, we would convert schema/table name to lower case
@@ -693,9 +693,11 @@ func (c *TaskConfig) adjust() error {
 		sort.Strings(unusedConfigs)
 		return terror.ErrConfigGlobalConfigsUnused.Generate(unusedConfigs)
 	}
+	// we postpone default time_zone init in each unit so we won't change the config value in task/sub_task config
 	if c.Timezone != "" {
-		log.L().Warn("`timezone` is deprecated and useless anymore, please remove it.")
-		c.Timezone = ""
+		if _, err := utils.ParseTimeZone(c.Timezone); err != nil {
+			return err
+		}
 	}
 	if c.RemoveMeta {
 		log.L().Warn("`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead")
@@ -757,29 +759,25 @@ func AdjustTargetDBSessionCfg(dbConfig *DBConfig, version *semver.Version) {
 			lowerMap[cfg.key] = cfg.val
 		}
 	}
-	// force set time zone to UTC
-	if tz, ok := lowerMap["time_zone"]; ok {
-		log.L().Warn("session variable 'time_zone' is overwritten with UTC timezone.",
-			zap.String("time_zone", tz))
-	}
-	lowerMap["time_zone"] = defaultTimeZone
 	dbConfig.Session = lowerMap
 }
 
-// AdjustTargetDBTimeZone force adjust session `time_zone` to UTC.
-func AdjustTargetDBTimeZone(config *DBConfig) {
-	for k := range config.Session {
+// AdjustDBTimeZone force adjust session `time_zone`.
+func AdjustDBTimeZone(config *DBConfig, timeZone string) {
+	for k, v := range config.Session {
 		if strings.ToLower(k) == "time_zone" {
-			log.L().Warn("session variable 'time_zone' is overwritten by default UTC timezone.",
-				zap.String("time_zone", config.Session[k]))
-			config.Session[k] = defaultTimeZone
+			if v != timeZone {
+				log.L().Warn("session variable 'time_zone' is overwritten by task config's timezone",
+					zap.String("time_zone", config.Session[k]))
+				config.Session[k] = timeZone
+			}
 			return
 		}
 	}
 	if config.Session == nil {
 		config.Session = make(map[string]string, 1)
 	}
-	config.Session["time_zone"] = defaultTimeZone
+	config.Session["time_zone"] = timeZone
 }
 
 var defaultParser = parser.New()
@@ -857,34 +855,78 @@ func NewMySQLInstancesForDowngrade(mysqlInstances []*MySQLInstance) []*MySQLInst
 	return mysqlInstancesForDowngrade
 }
 
+// SyncerConfigForDowngrade is the base configuration for syncer in v2.0.
+// This config is used for downgrade(config export) from a higher dmctl version.
+// When we add any new config item into SyncerConfig, we should update it also.
+type SyncerConfigForDowngrade struct {
+	MetaFile                string `yaml:"meta-file"`
+	WorkerCount             int    `yaml:"worker-count"`
+	Batch                   int    `yaml:"batch"`
+	QueueSize               int    `yaml:"queue-size"`
+	CheckpointFlushInterval int    `yaml:"checkpoint-flush-interval"`
+	MaxRetry                int    `yaml:"max-retry"`
+	AutoFixGTID             bool   `yaml:"auto-fix-gtid"`
+	EnableGTID              bool   `yaml:"enable-gtid"`
+	DisableCausality        bool   `yaml:"disable-detect"`
+	SafeMode                bool   `yaml:"safe-mode"`
+	EnableANSIQuotes        bool   `yaml:"enable-ansi-quotes"`
+
+	Compact      bool `yaml:"compact,omitempty"`
+	MultipleRows bool `yaml:"multipleRows,omitempty"`
+}
+
+// NewSyncerConfigsForDowngrade converts SyncerConfig to SyncerConfigForDowngrade.
+func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[string]*SyncerConfigForDowngrade {
+	syncerConfigsForDowngrade := make(map[string]*SyncerConfigForDowngrade, len(syncerConfigs))
+	for configName, syncerConfig := range syncerConfigs {
+		newSyncerConfig := &SyncerConfigForDowngrade{
+			MetaFile:                syncerConfig.MetaFile,
+			WorkerCount:             syncerConfig.WorkerCount,
+			Batch:                   syncerConfig.Batch,
+			QueueSize:               syncerConfig.QueueSize,
+			CheckpointFlushInterval: syncerConfig.CheckpointFlushInterval,
+			MaxRetry:                syncerConfig.MaxRetry,
+			AutoFixGTID:             syncerConfig.AutoFixGTID,
+			EnableGTID:              syncerConfig.EnableGTID,
+			DisableCausality:        syncerConfig.DisableCausality,
+			SafeMode:                syncerConfig.SafeMode,
+			EnableANSIQuotes:        syncerConfig.EnableANSIQuotes,
+			Compact:                 syncerConfig.Compact,
+			MultipleRows:            syncerConfig.MultipleRows,
+		}
+		syncerConfigsForDowngrade[configName] = newSyncerConfig
+	}
+	return syncerConfigsForDowngrade
+}
+
 // TaskConfigForDowngrade is the base configuration for task in v2.0.
 // This config is used for downgrade(config export) from a higher dmctl version.
 // When we add any new config item into SourceConfig, we should update it also.
 type TaskConfigForDowngrade struct {
-	Name                    string                         `yaml:"name"`
-	TaskMode                string                         `yaml:"task-mode"`
-	IsSharding              bool                           `yaml:"is-sharding"`
-	ShardMode               string                         `yaml:"shard-mode"`
-	IgnoreCheckingItems     []string                       `yaml:"ignore-checking-items"`
-	MetaSchema              string                         `yaml:"meta-schema"`
-	EnableHeartbeat         bool                           `yaml:"enable-heartbeat"`
-	HeartbeatUpdateInterval int                            `yaml:"heartbeat-update-interval"`
-	HeartbeatReportInterval int                            `yaml:"heartbeat-report-interval"`
-	Timezone                string                         `yaml:"timezone"`
-	CaseSensitive           bool                           `yaml:"case-sensitive"`
-	TargetDB                *DBConfig                      `yaml:"target-database"`
-	OnlineDDLScheme         string                         `yaml:"online-ddl-scheme"`
-	Routes                  map[string]*router.TableRule   `yaml:"routes"`
-	Filters                 map[string]*bf.BinlogEventRule `yaml:"filters"`
-	ColumnMappings          map[string]*column.Rule        `yaml:"column-mappings"`
-	BWList                  map[string]*filter.Rules       `yaml:"black-white-list"`
-	BAList                  map[string]*filter.Rules       `yaml:"block-allow-list"`
-	Mydumpers               map[string]*MydumperConfig     `yaml:"mydumpers"`
-	Loaders                 map[string]*LoaderConfig       `yaml:"loaders"`
-	Syncers                 map[string]*SyncerConfig       `yaml:"syncers"`
-	CleanDumpFile           bool                           `yaml:"clean-dump-file"`
-	EnableANSIQuotes        bool                           `yaml:"ansi-quotes"`
-	RemoveMeta              bool                           `yaml:"remove-meta"`
+	Name                    string                               `yaml:"name"`
+	TaskMode                string                               `yaml:"task-mode"`
+	IsSharding              bool                                 `yaml:"is-sharding"`
+	ShardMode               string                               `yaml:"shard-mode"`
+	IgnoreCheckingItems     []string                             `yaml:"ignore-checking-items"`
+	MetaSchema              string                               `yaml:"meta-schema"`
+	EnableHeartbeat         bool                                 `yaml:"enable-heartbeat"`
+	HeartbeatUpdateInterval int                                  `yaml:"heartbeat-update-interval"`
+	HeartbeatReportInterval int                                  `yaml:"heartbeat-report-interval"`
+	Timezone                string                               `yaml:"timezone"`
+	CaseSensitive           bool                                 `yaml:"case-sensitive"`
+	TargetDB                *DBConfig                            `yaml:"target-database"`
+	OnlineDDLScheme         string                               `yaml:"online-ddl-scheme"`
+	Routes                  map[string]*router.TableRule         `yaml:"routes"`
+	Filters                 map[string]*bf.BinlogEventRule       `yaml:"filters"`
+	ColumnMappings          map[string]*column.Rule              `yaml:"column-mappings"`
+	BWList                  map[string]*filter.Rules             `yaml:"black-white-list"`
+	BAList                  map[string]*filter.Rules             `yaml:"block-allow-list"`
+	Mydumpers               map[string]*MydumperConfig           `yaml:"mydumpers"`
+	Loaders                 map[string]*LoaderConfig             `yaml:"loaders"`
+	Syncers                 map[string]*SyncerConfigForDowngrade `yaml:"syncers"`
+	CleanDumpFile           bool                                 `yaml:"clean-dump-file"`
+	EnableANSIQuotes        bool                                 `yaml:"ansi-quotes"`
+	RemoveMeta              bool                                 `yaml:"remove-meta"`
 	// new config item
 	MySQLInstances   []*MySQLInstanceForDowngrade `yaml:"mysql-instances"`
 	ExprFilter       map[string]*ExpressionFilter `yaml:"expression-filter,omitempty"`
@@ -916,7 +958,7 @@ func NewTaskConfigForDowngrade(taskConfig *TaskConfig) *TaskConfigForDowngrade {
 		BAList:                  taskConfig.BAList,
 		Mydumpers:               taskConfig.Mydumpers,
 		Loaders:                 taskConfig.Loaders,
-		Syncers:                 taskConfig.Syncers,
+		Syncers:                 NewSyncerConfigsForDowngrade(taskConfig.Syncers),
 		CleanDumpFile:           taskConfig.CleanDumpFile,
 		EnableANSIQuotes:        taskConfig.EnableANSIQuotes,
 		RemoveMeta:              taskConfig.RemoveMeta,
@@ -932,11 +974,6 @@ func NewTaskConfigForDowngrade(taskConfig *TaskConfig) *TaskConfigForDowngrade {
 // If any default value for new config item is not empty(0 or false or nil),
 // we should change it to empty.
 func (c *TaskConfigForDowngrade) omitDefaultVals() {
-	if len(c.TargetDB.Session) > 0 {
-		if timeZone, ok := c.TargetDB.Session["time_zone"]; ok && timeZone == defaultTimeZone {
-			delete(c.TargetDB.Session, "time_zone")
-		}
-	}
 	if len(c.ShadowTableRules) == 1 && c.ShadowTableRules[0] == DefaultShadowTableRules {
 		c.ShadowTableRules = nil
 	}

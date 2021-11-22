@@ -17,6 +17,8 @@ import (
 	"container/list"
 	"context"
 	"runtime"
+	"runtime/pprof"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -55,7 +57,7 @@ func (p *proc) batchReceiveMsgs(batchMsg []message.Message) int {
 	n := 0
 	max := len(batchMsg)
 	for i := 0; i < max; i++ {
-		msg, ok := p.mb.tryReceive()
+		msg, ok := p.mb.Receive()
 		if !ok {
 			// Stop receive if there is no more messages.
 			break
@@ -111,8 +113,8 @@ func (rd *ready) enqueueLocked(p *proc, force bool) error {
 	if p.isClosed() {
 		// Drop all remaining messages.
 		counter := 0
-		_, ok := p.mb.tryReceive()
-		for ; ok; _, ok = p.mb.tryReceive() {
+		_, ok := p.mb.Receive()
+		for ; ok; _, ok = p.mb.Receive() {
 			counter++
 		}
 		rd.metricDropMessage.Add(float64(counter))
@@ -177,7 +179,8 @@ type Router struct {
 	procs sync.Map
 }
 
-func newRouter(name string) *Router {
+// NewRouter returns a new router.
+func NewRouter(name string) *Router {
 	r := &Router{
 		rd: &ready{},
 	}
@@ -323,7 +326,12 @@ func (b *SystemBuilder) handleFatal(
 
 // Build builds a system and a router.
 func (b *SystemBuilder) Build() (*System, *Router) {
-	router := newRouter(b.name)
+	router := NewRouter(b.name)
+	metricWorkingDurations := make([]prometheus.Counter, b.numWorker)
+	for i := range metricWorkingDurations {
+		metricWorkingDurations[i] =
+			workingDuration.WithLabelValues(b.name, strconv.Itoa(i))
+	}
 	return &System{
 		name:                 b.name,
 		numWorker:            b.numWorker,
@@ -335,12 +343,12 @@ func (b *SystemBuilder) Build() (*System, *Router) {
 
 		fatalHandler: b.fatalHandler,
 
-		metricTotalWorkers:    totalWorkers.WithLabelValues(b.name),
-		metricWorkingWorkers:  workingWorkers.WithLabelValues(b.name),
-		metricWorkingDuration: workingDuration.WithLabelValues(b.name),
-		metricPollDuration:    pollActorDuration.WithLabelValues(b.name),
-		metricProcBatch:       batchSizeHistogram.WithLabelValues(b.name, "proc"),
-		metricMsgBatch:        batchSizeHistogram.WithLabelValues(b.name, "msg"),
+		metricTotalWorkers:     totalWorkers.WithLabelValues(b.name),
+		metricWorkingWorkers:   workingWorkers.WithLabelValues(b.name),
+		metricWorkingDurations: metricWorkingDurations,
+		metricPollDuration:     pollActorDuration.WithLabelValues(b.name),
+		metricProcBatch:        batchSizeHistogram.WithLabelValues(b.name, "proc"),
+		metricMsgBatch:         batchSizeHistogram.WithLabelValues(b.name, "msg"),
 	}, router
 }
 
@@ -359,12 +367,12 @@ type System struct {
 	fatalHandler func(string, ID)
 
 	// Metrics
-	metricTotalWorkers    prometheus.Gauge
-	metricWorkingWorkers  prometheus.Gauge
-	metricWorkingDuration prometheus.Counter
-	metricPollDuration    prometheus.Observer
-	metricProcBatch       prometheus.Observer
-	metricMsgBatch        prometheus.Observer
+	metricTotalWorkers     prometheus.Gauge
+	metricWorkingWorkers   prometheus.Gauge
+	metricWorkingDurations []prometheus.Counter
+	metricPollDuration     prometheus.Observer
+	metricProcBatch        prometheus.Observer
+	metricMsgBatch         prometheus.Observer
 }
 
 // Start the system. Cancelling the context to stop the system.
@@ -375,8 +383,13 @@ func (s *System) Start(ctx context.Context) {
 
 	s.metricTotalWorkers.Add(float64(s.numWorker))
 	for i := 0; i < s.numWorker; i++ {
+		id := i
 		s.wg.Go(func() error {
-			s.poll(ctx)
+			defer pprof.SetGoroutineLabels(ctx)
+			pctx := pprof.WithLabels(ctx, pprof.Labels("actor", s.name))
+			pprof.SetGoroutineLabels(pctx)
+
+			s.poll(pctx, id)
 			return nil
 		})
 	}
@@ -404,7 +417,7 @@ func (s *System) Spawn(mb Mailbox, actor Actor) error {
 const slowReceiveThreshold = time.Second
 
 // The main poll of actor system.
-func (s *System) poll(ctx context.Context) {
+func (s *System) poll(ctx context.Context, id int) {
 	batchPBuf := make([]*proc, s.actorBatchSize)
 	batchMsgBuf := make([]message.Message, s.msgBatchSizePerActor)
 	rd := s.rd
@@ -427,7 +440,7 @@ func (s *System) poll(ctx context.Context) {
 				break
 			}
 			// Recording metrics.
-			s.metricWorkingDuration.Add(time.Since(startTime).Seconds())
+			s.metricWorkingDurations[id].Add(time.Since(startTime).Seconds())
 			s.metricWorkingWorkers.Dec()
 			// Park the poll until it is awakened.
 			rd.cond.Wait()

@@ -79,9 +79,14 @@ func newTask(ctx context.Context, cli pb.MasterClient, taskFile string, schema s
 		sourceConns = make([]*dbConn, 0, len(taskCfg.MySQLInstances))
 		res         = make(results, 0, len(taskCfg.MySQLInstances))
 	)
-	for i := range taskCfg.MySQLInstances { // only use necessary part of sources.
+	for i, m := range taskCfg.MySQLInstances { // only use necessary part of sources.
+		// reset Syncer, otherwise will report ERROR 20017
+		if len(m.SyncerConfigName) > 0 && m.Syncer != nil {
+			m.Syncer = nil
+		}
+
 		cfg := sourcesCfg[i]
-		db, err2 := conn.DefaultDBProvider.Apply(cfg)
+		db, err2 := conn.DefaultDBProvider.Apply(&cfg)
 		if err2 != nil {
 			return nil, err2
 		}
@@ -105,7 +110,7 @@ func newTask(ctx context.Context, cli pb.MasterClient, taskFile string, schema s
 		res = append(res, singleResult{})
 	}
 
-	targetDB, err := conn.DefaultDBProvider.Apply(targetCfg)
+	targetDB, err := conn.DefaultDBProvider.Apply(&targetCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +275,7 @@ func (t *task) genFullData() error {
 
 // createTask does `start-task` operation.
 func (t *task) createTask() error {
-	t.logger.Info("starting the task")
+	t.logger.Info("starting the task", zap.String("task cfg", t.taskCfg.String()))
 	resp, err := t.cli.StartTask(t.ctx, &pb.StartTaskRequest{
 		Task: t.taskCfg.String(),
 	})

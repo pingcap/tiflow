@@ -241,6 +241,11 @@ error = '''
 the etcd txn should be aborted and retried immediately
 '''
 
+["CDC:ErrEtcdTxnSizeExceed"]
+error = '''
+patch size of a single changefeed exceed etcd txn max size
+'''
+
 ["CDC:ErrEventFeedAborted"]
 error = '''
 single event feed aborted
@@ -331,9 +336,9 @@ error = '''
 get tikv grpc context failed
 '''
 
-["CDC:ErrIllegalUnifiedSorterParameter"]
+["CDC:ErrIllegalSorterParameter"]
 error = '''
-illegal parameter for unified sorter: %s
+illegal parameter for sorter: %s
 '''
 
 ["CDC:ErrIndexKeyTableNotFound"]
@@ -464,6 +469,11 @@ owner lease expired
 ["CDC:ErrLeaseTimeout"]
 error = '''
 owner lease timeout
+'''
+
+["CDC:ErrLevelDBSorterError"]
+error = '''
+leveldb error: %s
 '''
 
 ["CDC:ErrLoadTimezone"]
@@ -626,6 +636,11 @@ error = '''
 etcd api call error
 '''
 
+["CDC:ErrPeerMessageIllegalMeta"]
+error = '''
+peer-to-peer message server received an RPC call with illegal metadata
+'''
+
 ["CDC:ErrPendingRegionCancel"]
 error = '''
 pending region cancelled due to stream disconnecting
@@ -644,6 +659,11 @@ prepare avro failed
 ["CDC:ErrPrewriteNotMatch"]
 error = '''
 prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s
+'''
+
+["CDC:ErrProcessorDuplicateOperations"]
+error = '''
+table processor duplicate operation, table-id: %d
 '''
 
 ["CDC:ErrProcessorEtcdWatch"]
@@ -834,6 +854,16 @@ table %s.%s already exists
 ["CDC:ErrSnapshotTableNotFound"]
 error = '''
 table %d not found in schema snapshot
+'''
+
+["CDC:ErrSorterClosed"]
+error = '''
+sorter is closed
+'''
+
+["CDC:ErrStartAStoppedLevelDBSystem"]
+error = '''
+start a stopped leveldb system
 '''
 
 ["CDC:ErrStartTsBeforeGC"]

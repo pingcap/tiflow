@@ -60,7 +60,9 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		return nil
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
-			log.Info("remote capture offline", zap.String("capture-id", k.CaptureID))
+			log.Info("remote capture offline",
+				zap.String("capture-id", k.CaptureID),
+				zap.Any("info", s.Captures[k.CaptureID]))
 			delete(s.Captures, k.CaptureID)
 			return nil
 		}
@@ -100,6 +102,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 }
 
 // GetPatches implements the ReactorState interface
+// Every []DataPatch slice in [][]DataPatch slice is the patches of a ChangefeedReactorState
 func (s *GlobalReactorState) GetPatches() [][]DataPatch {
 	pendingPatches := s.pendingPatches
 	for _, changefeedState := range s.Changefeeds {

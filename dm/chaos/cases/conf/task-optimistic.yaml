@@ -20,20 +20,25 @@ mysql-instances:
     black-white-list:  "instance"
     mydumper-thread: 4
     loader-thread: 16
-    syncer-thread: 16
+    syncer-config-name: "global"
   -
     source-id: "replica-02"
     black-white-list:  "instance"
     mydumper-thread: 4
     loader-thread: 16
-    syncer-thread: 16
+    syncer-config-name: "global"
   -
     source-id: "replica-03"
     black-white-list:  "instance"
     mydumper-thread: 4
     loader-thread: 16
-    syncer-thread: 16
+    syncer-config-name: "global"
 
 black-white-list:
   instance:
     do-dbs: ["db_optimistic"]
+
+syncers:
+  global:
+    compact: true
+    multiple-rows: true

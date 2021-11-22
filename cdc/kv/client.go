@@ -286,12 +286,7 @@ type CDCKVClient interface {
 }
 
 // NewCDCKVClient is the constructor of CDC KV client
-var NewCDCKVClient func(
-	ctx context.Context,
-	pd pd.Client,
-	kvStorage tikv.Storage,
-	grpcPool GrpcPool,
-) CDCKVClient = NewCDCClient
+var NewCDCKVClient = NewCDCClient
 
 // CDCClient to get events from TiKV
 type CDCClient struct {

@@ -24,10 +24,7 @@ import (
 )
 
 const (
-	dockerComposeFilePath   = "/docker-compose-mysql.yml"
-	controllerContainerName = "ticdc_controller_1"
-	// The upstream PD endpoint in docker-compose network.
-	upstreamPD = "http://upstream-pd:2379"
+	dockerComposeFilePath = framework.DockerComposeFilePathPrefix + "docker-compose-mysql.yml"
 )
 
 // DockerEnv represents the docker-compose service defined in docker-compose-canal.yml
@@ -45,7 +42,7 @@ func NewDockerEnv(dockerComposeFile string) *DockerEnv {
 			return err
 		}
 		// Also check cdc cluster.
-		return framework.CdcHealthCheck(controllerContainerName, upstreamPD)
+		return framework.CdcHealthCheck(framework.ControllerContainerName, framework.UpstreamPD)
 	}
 	var file string
 	if dockerComposeFile == "" {
@@ -61,7 +58,7 @@ func NewDockerEnv(dockerComposeFile string) *DockerEnv {
 	return &DockerEnv{DockerEnv: framework.DockerEnv{
 		DockerComposeOperator: framework.DockerComposeOperator{
 			FileName:      file,
-			Controller:    controllerContainerName,
+			Controller:    framework.ControllerContainerName,
 			HealthChecker: healthChecker,
 		},
 	}}

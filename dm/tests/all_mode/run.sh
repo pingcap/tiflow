@@ -9,6 +9,7 @@ API_VERSION="v1alpha1"
 ILLEGAL_CHAR_NAME='t-Ë!s`t'
 
 function test_session_config() {
+	echo "[$(date)] <<<<<< start test_session_config >>>>>>"
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
@@ -58,9 +59,12 @@ function test_session_config() {
 
 	cleanup_data all_mode
 	cleanup_process
+	echo "[$(date)] <<<<<< finish test_session_config >>>>>>"
+
 }
 
 function test_query_timeout() {
+	echo "[$(date)] <<<<<< start test_query_timeout >>>>>>"
 	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/BlockSyncStatus=return(\"5s\")"
 
 	cp $cur/conf/dm-master.toml $WORK_DIR/dm-master.toml
@@ -82,6 +86,7 @@ function test_query_timeout() {
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+	sed -i "s/enable-relay: true/enable-relay: false/g" $WORK_DIR/source1.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -105,7 +110,8 @@ function test_query_timeout() {
 	# start DM task only
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/dm-task.yaml
-	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta"
 	check_metric $WORKER1_PORT "dm_worker_task_state{source_id=\"mysql-replica-01\",task=\"$ILLEGAL_CHAR_NAME\",worker=\"worker1\"}" 10 1 3
 
 	# `query-status` timeout
@@ -140,9 +146,11 @@ function test_query_timeout() {
 	cleanup_process
 
 	export GO_FAILPOINTS=''
+	echo "[$(date)] <<<<<< finish test_query_timeout >>>>>>"
 }
 
 function test_stop_task_before_checkpoint() {
+	echo "[$(date)] <<<<<< start test_stop_task_before_checkpoint >>>>>>"
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
@@ -204,9 +212,11 @@ function test_stop_task_before_checkpoint() {
 	cleanup_process
 
 	export GO_FAILPOINTS=''
+	echo "[$(date)] <<<<<< finish test_stop_task_before_checkpoint >>>>>>"
 }
 
 function test_fail_job_between_event() {
+	echo "[$(date)] <<<<<< start test_fail_job_between_event >>>>>>"
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
@@ -262,9 +272,11 @@ function test_fail_job_between_event() {
 	cleanup_process
 
 	export GO_FAILPOINTS=''
+	echo "[$(date)] <<<<<< finish test_fail_job_between_event >>>>>>"
 }
 
 function test_expression_filter() {
+	echo "[$(date)] <<<<<< start test_expression_filter >>>>>>"
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
@@ -305,6 +317,7 @@ function test_expression_filter() {
 
 	cleanup_data all_mode
 	cleanup_process
+	echo "[$(date)] <<<<<< finish test_expression_filter >>>>>>"
 }
 
 function run() {
@@ -322,6 +335,12 @@ function run() {
 		"github.com/pingcap/ticdc/dm/relay/NewUpstreamServer=return(true)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
+
+	# manually create target table with two extra field
+	run_sql_tidb "drop database if exists all_mode;"
+	run_sql_tidb "create database all_mode;"
+	run_sql_tidb "drop table if exists all_mode.no_diff;"
+	run_sql_tidb "create table all_mode.no_diff(id int NOT NULL PRIMARY KEY, dt datetime NOT NULL DEFAULT CURRENT_TIMESTAMP, ts timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP);"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
@@ -362,9 +381,21 @@ function run() {
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	run_sql_tidb "set time_zone = '+04:00';SELECT count(*) from all_mode.no_diff where dt = ts;"
+	check_contains "count(*): 3"
+
 	# check default session config
 	check_log_contain_with_retry '\\"tidb_txn_mode\\":\\"optimistic\\"' $WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry '\\"tidb_txn_mode\\":\\"optimistic\\"' $WORK_DIR/worker2/log/dm-worker.log
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"pause-task $ILLEGAL_CHAR_NAME" \
+		"\"result\": true" 3
+	echo 'create table all_mode.no_diff(id int NOT NULL PRIMARY KEY);' >${WORK_DIR}/schema.sql
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-schema set -s mysql-replica-01 $ILLEGAL_CHAR_NAME -d all_mode -t no_diff ${WORK_DIR}/schema.sql" \
+		"\"result\": true" 2
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" "resume-task $ILLEGAL_CHAR_NAME" "\"result\": true" 3
 
 	# restart dm-worker1
 	pkill -hup -f dm-worker1.toml 2>/dev/null || true
@@ -414,6 +445,10 @@ function run() {
 	run_sql_file $cur/data/db1.increment0.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	# check compatibility after incremental sync
+	run_sql_tidb "set time_zone = '+04:00';SELECT count(*) from all_mode.no_diff where dt = ts;"
+	check_contains "count(*): 4"
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-relay -s mysql-replica-01" \

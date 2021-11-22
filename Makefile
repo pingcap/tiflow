@@ -120,6 +120,16 @@ unit_test: check_failpoint_ctl
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
+unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov tools/bin/gocov-xml
+	mkdir -p "$(TEST_DIR)"
+	$(FAILPOINT_ENABLE)
+	@export log_level=error;\
+	CGO_ENABLED=1 tools/bin/gotestsum --junitfile cdc-junit-report.xml -- -v -timeout 5m -p $(P) --race \
+	-covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES_WITHOUT_DM) \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
+	tools/bin/gocov convert "$(TEST_DIR)/cov.unit.out" | tools/bin/gocov-xml > cdc-coverage.xml
+	$(FAILPOINT_DISABLE)
+
 leak_test: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -265,6 +275,16 @@ dm_unit_test: check_failpoint_ctl
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
+dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov tools/bin/gocov-xml
+	mkdir -p $(DM_TEST_DIR)
+	$(FAILPOINT_ENABLE)
+	@export log_level=error; \
+	CGO_ENABLED=1 tools/bin/gotestsum --junitfile dm-junit-report.xml -- -v -timeout 5m -p $(P) --race \
+	-covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(DM_PACKAGES) \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
+	tools/bin/gocov convert "$(DM_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > dm-coverage.xml
+	$(FAILPOINT_DISABLE)
+
 dm_integration_test_build: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
@@ -286,6 +306,24 @@ dm_integration_test_build: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh
 
+dm_integration_test_build_worker: check_failpoint_ctl
+	$(FAILPOINT_ENABLE)
+	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
+		-coverpkg=github.com/pingcap/ticdc/dm/... \
+		-o bin/dm-worker.test github.com/pingcap/ticdc/dm/cmd/dm-worker \
+		|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+	./dm/tests/prepare_tools.sh
+
+dm_integration_test_build_master: check_failpoint_ctl
+	$(FAILPOINT_ENABLE)
+	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
+		-coverpkg=github.com/pingcap/ticdc/dm/... \
+		-o bin/dm-master.test github.com/pingcap/ticdc/dm/cmd/dm-master \
+		|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+	./dm/tests/prepare_tools.sh
+
 install_test_python_dep:
 	@echo "install python requirments for test"
 	pip install --user -q -r ./dm/tests/requirements.txt
@@ -299,7 +337,7 @@ dm_integration_test: check_third_party_binary_for_dm install_test_python_dep
 	@which bin/dm-master.test
 	@which bin/dm-worker.test
 	@which bin/dm-syncer.test
-	ln -srf bin dm/
+	cd dm && ln -sf ../bin .
 	cd dm && ./tests/run.sh $(CASE)
 
 dm_compatibility_test: check_third_party_binary_for_dm
@@ -307,6 +345,7 @@ dm_compatibility_test: check_third_party_binary_for_dm
 	@which bin/dm-worker.test.current
 	@which bin/dm-master.test.previous
 	@which bin/dm-worker.test.previous
+	cd dm && ln -sf ../bin .
 	cd dm && ./tests/compatibility_run.sh ${CASE}
 
 dm_coverage: tools/bin/gocovmerge tools/bin/goveralls
@@ -323,49 +362,49 @@ else
 endif
 
 tools/bin/failpoint-ctl: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/failpoint-ctl github.com/pingcap/failpoint/failpoint-ctl
+	cd tools/check && $(GO) build -mod=mod -o ../bin/failpoint-ctl github.com/pingcap/failpoint/failpoint-ctl
 
 tools/bin/gocovmerge: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gocovmerge github.com/zhouqiang-cl/gocovmerge
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gocovmerge github.com/zhouqiang-cl/gocovmerge
 
 tools/bin/goveralls: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/goveralls github.com/mattn/goveralls
+	cd tools/check && $(GO) build -mod=mod -o ../bin/goveralls github.com/mattn/goveralls
 
 tools/bin/golangci-lint: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
+	cd tools/check && $(GO) build  -mod=mod -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 
 tools/bin/mockgen: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/mockgen github.com/golang/mock/mockgen
+	cd tools/check && $(GO) build -mod=mod -o ../bin/mockgen github.com/golang/mock/mockgen
 
 tools/bin/protoc-gen-gogofaster: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/protoc-gen-gogofaster github.com/gogo/protobuf/protoc-gen-gogofaster
+	cd tools/check && $(GO) build -mod=mod -o ../bin/protoc-gen-gogofaster github.com/gogo/protobuf/protoc-gen-gogofaster
 
 tools/bin/protoc-gen-grpc-gateway: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/protoc-gen-grpc-gateway github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
+	cd tools/check && $(GO) build -mod=mod -o ../bin/protoc-gen-grpc-gateway github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 
 tools/bin/statik: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/statik github.com/rakyll/statik
+	cd tools/check && $(GO) build -mod=mod -o ../bin/statik github.com/rakyll/statik
 
 tools/bin/gofumports: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gofumports mvdan.cc/gofumpt/gofumports
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gofumports mvdan.cc/gofumpt/gofumports
 
 tools/bin/shfmt: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/shfmt mvdan.cc/sh/v3/cmd/shfmt
+	cd tools/check && $(GO) build -mod=mod -o ../bin/shfmt mvdan.cc/sh/v3/cmd/shfmt
 
 tools/bin/oapi-codegen: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/oapi-codegen github.com/deepmap/oapi-codegen/cmd/oapi-codegen
+	cd tools/check && $(GO) build -mod=mod -o ../bin/oapi-codegen github.com/deepmap/oapi-codegen/cmd/oapi-codegen
 
 tools/bin/gocov: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gocov  github.com/axw/gocov/gocov
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gocov  github.com/axw/gocov/gocov
 
 tools/bin/gocov-xml: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gocov-xml github.com/AlekSi/gocov-xml
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gocov-xml github.com/AlekSi/gocov-xml
 
-tools/bin/go-junit-report: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/go-junit-report github.com/jstemmer/go-junit-report
+tools/bin/gotestsum: tools/check/go.mod
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gotestsum gotest.tools/gotestsum
 
 tools/bin/errdoc-gen: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
+	cd tools/check && $(GO) build -mod=mod -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
 
 check_failpoint_ctl: tools/bin/failpoint-ctl
 

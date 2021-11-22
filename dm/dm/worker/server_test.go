@@ -38,9 +38,9 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/ha"
 	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/relay"
 )
 
 // do not forget to update this path if the file removed/renamed.
@@ -121,7 +121,7 @@ func (t *testServer) TestServer(c *C) {
 		cfg.UseRelay = false
 		return NewRealSubTask(cfg, etcdClient, worker)
 	}
-	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, notifier streamer.EventNotifier) []unit.Unit {
+	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, relay relay.Process) []unit.Unit {
 		mockDumper := NewMockUnit(pb.UnitType_Dump)
 		mockLoader := NewMockUnit(pb.UnitType_Load)
 		mockSync := NewMockUnit(pb.UnitType_Sync)
@@ -551,7 +551,9 @@ func (t *testServer) testSubTaskRecover(c *C, s *Server, dir string) {
 
 func (t *testServer) testStopWorkerWhenLostConnect(c *C, s *Server, etcd *embed.Etcd) {
 	etcd.Close()
-	time.Sleep(retryConnectSleepTime + time.Duration(defaultKeepAliveTTL+3)*time.Second)
+	c.Assert(utils.WaitSomething(int(defaultKeepAliveTTL+3), time.Second, func() bool {
+		return s.getWorker(true) == nil
+	}), IsTrue)
 	c.Assert(s.getWorker(true), IsNil)
 }
 

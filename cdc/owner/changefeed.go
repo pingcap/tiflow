@@ -16,12 +16,12 @@ package owner
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/redo"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
@@ -42,11 +42,14 @@ type changefeed struct {
 	barriers         *barriers
 	feedStateManager *feedStateManager
 	gcManager        gc.Manager
+	redoManager      redo.LogManager
 
 	schema      *schemaWrap4Owner
 	sink        AsyncSink
 	ddlPuller   DDLPuller
 	initialized bool
+	// isRemoved is true if the changefeed is removed
+	isRemoved bool
 
 	// only used for asyncExecDDL function
 	// ddlEventCache is not nil when the changefeed is executing a DDL event asynchronously
@@ -117,7 +120,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 			Code:    code,
 			Message: err.Error(),
 		})
-		c.releaseResources()
+		c.releaseResources(ctx)
 	}
 }
 
@@ -146,7 +149,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	}
 
 	if !c.feedStateManager.ShouldRunning() {
-		c.releaseResources()
+		c.isRemoved = c.feedStateManager.ShouldRemoved()
+		c.releaseResources(ctx)
 		return nil
 	}
 
@@ -179,7 +183,9 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		return errors.Trace(err)
 	}
 	if shouldUpdateState {
-		c.updateStatus(barrierTs)
+		pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		currentTs := oracle.GetPhysical(pdTime)
+		c.updateStatus(currentTs, barrierTs)
 	}
 	return nil
 }
@@ -265,6 +271,14 @@ LOOP:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
+	stdCtx := util.PutChangefeedIDInCtx(cancelCtx, c.id)
+	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
+	redoManager, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
+	if err != nil {
+		return err
+	}
+	c.redoManager = redoManager
+
 	// init metrics
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
@@ -272,16 +286,22 @@ LOOP:
 	return nil
 }
 
-func (c *changefeed) releaseResources() {
+func (c *changefeed) releaseResources(ctx context.Context) {
 	if !c.initialized {
 		return
 	}
 	log.Info("close changefeed", zap.String("changefeed", c.state.ID),
-		zap.Stringer("info", c.state.Info))
+		zap.Stringer("info", c.state.Info), zap.Bool("isRemoved", c.isRemoved))
 	c.cancel()
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
+	if c.isRemoved && c.redoManager.Enabled() {
+		err := c.redoManager.Cleanup(ctx)
+		if err != nil {
+			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id), zap.Error(err))
+		}
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
@@ -424,6 +444,12 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		}
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
 		c.ddlEventCache = ddlEvent
+		if c.redoManager.Enabled() {
+			err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
+			if err != nil {
+				return false, err
+			}
+		}
 	}
 	if job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
 		log.Warn("ignore the DDL job of ineligible table", zap.Reflect("job", job))
@@ -439,7 +465,7 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	return done, nil
 }
 
-func (c *changefeed) updateStatus(barrierTs model.Ts) {
+func (c *changefeed) updateStatus(currentTs int64, barrierTs model.Ts) {
 	resolvedTs := barrierTs
 	for _, position := range c.state.TaskPositions {
 		if resolvedTs > position.ResolvedTs {
@@ -471,14 +497,12 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 		}
 		return status, changed, nil
 	})
-
 	phyTs := oracle.ExtractPhysical(checkpointTs)
+
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
-	// It is more accurate to get tso from PD, but in most cases since we have
-	// deployed NTP service, a little bias is acceptable here.
-	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyTs) / 1e3)
 }
 
-func (c *changefeed) Close() {
-	c.releaseResources()
+func (c *changefeed) Close(ctx context.Context) {
+	c.releaseResources(ctx)
 }

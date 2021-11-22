@@ -29,13 +29,25 @@ func TestConsistentConfig(t *testing.T) {
 		level string
 		valid bool
 	}{
-		{"normal", true},
+		{"none", true},
 		{"eventual", true},
-		{"NORMAL", false},
+		{"NONE", false},
 		{"", false},
 	}
 	for _, lc := range levelCases {
 		require.Equal(t, lc.valid, IsValidConsistentLevel(lc.level))
+	}
+
+	levelEnableCases := []struct {
+		level      string
+		consistent bool
+	}{
+		{"invalid-level", false},
+		{"none", false},
+		{"eventual", true},
+	}
+	for _, lc := range levelEnableCases {
+		require.Equal(t, lc.consistent, IsConsistentEnabled(lc.level))
 	}
 
 	storageCases := []struct {
@@ -43,10 +55,10 @@ func TestConsistentConfig(t *testing.T) {
 		valid   bool
 	}{
 		{"local", true},
+		{"nfs", true},
 		{"s3", true},
 		{"blackhole", true},
 		{"Local", false},
-		{"nfs", false},
 		{"", false},
 	}
 	for _, sc := range storageCases {
@@ -58,6 +70,7 @@ func TestConsistentConfig(t *testing.T) {
 		s3Enabled bool
 	}{
 		{"local", false},
+		{"nfs", false},
 		{"s3", true},
 		{"blackhole", false},
 	}
@@ -81,7 +94,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 
 	cfg := &config.ConsistentConfig{
 		Level:   string(consistentLevelEventual),
-		Storage: string(consistentStorageBlackhole),
+		Storage: "blackhole://",
 	}
 	errCh := make(chan error, 1)
 	opts := &ManagerOptions{
@@ -169,7 +182,7 @@ func TestLogManagerInOwner(t *testing.T) {
 
 	cfg := &config.ConsistentConfig{
 		Level:   string(consistentLevelEventual),
-		Storage: string(consistentStorageBlackhole),
+		Storage: "blackhole://",
 	}
 	opts := &ManagerOptions{
 		EnableBgRunner: false,
@@ -179,5 +192,8 @@ func TestLogManagerInOwner(t *testing.T) {
 
 	ddl := &model.DDLEvent{StartTs: 100, CommitTs: 120, Query: "CREATE TABLE `TEST.T1`"}
 	err = logMgr.EmitDDLEvent(ctx, ddl)
+	require.Nil(t, err)
+
+	err = logMgr.writer.DeleteAllLogs(ctx)
 	require.Nil(t, err)
 }

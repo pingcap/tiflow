@@ -28,7 +28,7 @@ import (
 
 // InitS3storage init a storage used for s3,
 // s3URI should be like s3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-func InitS3storage(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
+var InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
 	if len(uri.Host) == 0 {
 		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, errors.Errorf("please specify the bucket for s3 in %v", uri))
 	}

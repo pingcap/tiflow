@@ -27,12 +27,13 @@ import (
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/retry"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/relay"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
 
@@ -46,16 +47,16 @@ var minErrorRetryInterval = 1 * time.Minute
 // For other implementations who implement StreamerProducer and Streamer can easily take place of Syncer.streamProducer
 // For test is easy to mock.
 type StreamerProducer interface {
-	generateStreamer(location binlog.Location) (streamer.Streamer, error)
+	generateStreamer(location binlog.Location) (reader.Streamer, error)
 }
 
 // Read local relay log.
 type localBinlogReader struct {
-	reader     *streamer.BinlogReader
+	reader     *relay.BinlogReader
 	EnableGTID bool
 }
 
-func (l *localBinlogReader) generateStreamer(location binlog.Location) (streamer.Streamer, error) {
+func (l *localBinlogReader) generateStreamer(location binlog.Location) (reader.Streamer, error) {
 	if l.EnableGTID {
 		return l.reader.StartSyncByGTID(location.GetGTID().Origin().Clone())
 	}
@@ -70,7 +71,7 @@ type remoteBinlogReader struct {
 	EnableGTID bool
 }
 
-func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (streamer.Streamer, error) {
+func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (reader.Streamer, error) {
 	defer func() {
 		lastSlaveConnectionID := r.reader.LastConnectionID()
 		r.tctx.L().Info("last slave connection", zap.Uint32("connection ID", lastSlaveConnectionID))
@@ -106,7 +107,7 @@ type StreamerController struct {
 	localBinlogDir string
 	timezone       *time.Location
 
-	streamer         streamer.Streamer
+	streamer         reader.Streamer
 	streamerProducer StreamerProducer
 
 	// meetError means meeting error when get binlog event
@@ -121,19 +122,20 @@ type StreamerController struct {
 
 	// whether the server id is updated
 	serverIDUpdated bool
-	notifier        streamer.EventNotifier
+	relay           relay.Process
 }
 
 // NewStreamerController creates a new streamer controller.
-func NewStreamerController(notifier streamer.EventNotifier,
+func NewStreamerController(
 	syncCfg replication.BinlogSyncerConfig,
 	enableGTID bool,
 	fromDB *dbconn.UpStreamConn,
-	binlogType BinlogType,
 	localBinlogDir string,
 	timezone *time.Location,
+	relay relay.Process,
 ) *StreamerController {
 	var strategy retryStrategy = alwaysRetryStrategy{}
+	binlogType := toBinlogType(relay)
 	if binlogType != LocalBinlog {
 		strategy = &maxIntervalRetryStrategy{
 			interval: minErrorRetryInterval,
@@ -155,7 +157,7 @@ func NewStreamerController(notifier streamer.EventNotifier,
 		timezone:          timezone,
 		fromDB:            fromDB,
 		closed:            true,
-		notifier:          notifier,
+		relay:             relay,
 	}
 
 	return streamerController
@@ -177,7 +179,7 @@ func (c *StreamerController) Start(tctx *tcontext.Context, location binlog.Locat
 		err = c.updateServerIDAndResetReplication(tctx, location)
 	}
 	if err != nil {
-		c.close(tctx)
+		c.close()
 		return err
 	}
 
@@ -199,10 +201,8 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	if c.streamerProducer != nil {
 		switch t := c.streamerProducer.(type) {
 		case *remoteBinlogReader:
-			err2 := c.closeBinlogSyncer(tctx, t.reader)
-			if err2 != nil {
-				tctx.L().Warn("fail to close remote binlog reader", zap.Error(err))
-			}
+			// unclosed conn bug already fixed in go-mysql, https://github.com/go-mysql-org/go-mysql/pull/411
+			t.reader.Close()
 		case *localBinlogReader:
 			// check the uuid before close
 			ctx, cancel := context.WithTimeout(tctx.Ctx, utils.DefaultDBTimeout)
@@ -234,7 +234,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	if c.currentBinlogType == RemoteBinlog {
 		c.streamerProducer = &remoteBinlogReader{replication.NewBinlogSyncer(c.syncCfg), tctx, c.syncCfg.Flavor, c.enableGTID}
 	} else {
-		c.streamerProducer = &localBinlogReader{streamer.NewBinlogReader(c.notifier, tctx.L(), &streamer.BinlogReaderConfig{RelayDir: c.localBinlogDir, Timezone: c.timezone, Flavor: c.syncCfg.Flavor}), c.enableGTID}
+		c.streamerProducer = &localBinlogReader{c.relay.NewReader(tctx.L(), &relay.BinlogReaderConfig{RelayDir: c.localBinlogDir, Timezone: c.timezone, Flavor: c.syncCfg.Flavor}), c.enableGTID}
 	}
 
 	c.streamer, err = c.streamerProducer.generateStreamer(location)
@@ -338,36 +338,14 @@ func (c *StreamerController) ReopenWithRetry(tctx *tcontext.Context, location bi
 	return err
 }
 
-func (c *StreamerController) closeBinlogSyncer(logtctx *tcontext.Context, binlogSyncer *replication.BinlogSyncer) error {
-	if binlogSyncer == nil {
-		return nil
-	}
-
-	lastSlaveConnectionID := binlogSyncer.LastConnectionID()
-	defer binlogSyncer.Close()
-	if lastSlaveConnectionID > 0 {
-		// try to KILL the conn in default timeout, but it's not a big problem even failed.
-		ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultDBTimeout)
-		defer cancel()
-		err := c.fromDB.KillConn(ctx, lastSlaveConnectionID)
-		if err != nil {
-			logtctx.L().Error("fail to kill last connection", zap.Uint32("connection ID", lastSlaveConnectionID), log.ShortError(err))
-			if !utils.IsNoSuchThreadError(err) {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 // Close closes streamer.
 func (c *StreamerController) Close(tctx *tcontext.Context) {
 	c.Lock()
-	c.close(tctx)
+	c.close()
 	c.Unlock()
 }
 
-func (c *StreamerController) close(tctx *tcontext.Context) {
+func (c *StreamerController) close() {
 	if c.closed {
 		return
 	}
@@ -376,10 +354,7 @@ func (c *StreamerController) close(tctx *tcontext.Context) {
 		switch r := c.streamerProducer.(type) {
 		case *remoteBinlogReader:
 			// process remote binlog reader
-			err := c.closeBinlogSyncer(tctx, r.reader)
-			if err != nil {
-				tctx.L().Warn("fail to close remote binlog reader", zap.Error(err))
-			}
+			r.reader.Close()
 		case *localBinlogReader:
 			// process local binlog reader
 			r.reader.Close()

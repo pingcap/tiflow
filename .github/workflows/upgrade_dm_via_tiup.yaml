@@ -1,13 +1,9 @@
 name: Upgrade DM via TiUP
 
 on:
-  pull_request:
-    branches:
-      - master
-    paths:
-      - "dm/**"
   schedule:
-    - cron: "3 22 * * *" # run at minute 06:03 UTC+8
+    - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
+
   workflow_dispatch:
     inputs: # TODO: use these inputs
       fromVer:
