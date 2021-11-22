@@ -44,11 +44,13 @@ definitions:
   model.ChangefeedCommonInfo:
     properties:
       checkpoint_time:
-        type: string
+        $ref: '#/definitions/model.JSONTime'
+        type: object
       checkpoint_tso:
         type: integer
       error:
         $ref: '#/definitions/model.RunningError'
+        type: object
       id:
         type: string
       state:
@@ -78,6 +80,7 @@ definitions:
         type: integer
       sink_config:
         $ref: '#/definitions/config.SinkConfig'
+        type: object
       sink_uri:
         type: string
       start_ts:
@@ -92,15 +95,18 @@ definitions:
   model.ChangefeedDetail:
     properties:
       checkpoint_time:
-        type: string
+        $ref: '#/definitions/model.JSONTime'
+        type: object
       checkpoint_tso:
         type: integer
       create_time:
-        type: string
+        $ref: '#/definitions/model.JSONTime'
+        type: object
       creator_version:
         type: string
       error:
         $ref: '#/definitions/model.RunningError'
+        type: object
       error_history:
         items:
           type: integer
@@ -129,6 +135,8 @@ definitions:
       error_msg:
         type: string
     type: object
+  model.JSONTime:
+    $ref: '#/definitions/time.Time'
   model.ProcessorCommonInfo:
     properties:
       capture_id:
@@ -144,6 +152,7 @@ definitions:
       error:
         $ref: '#/definitions/model.RunningError'
         description: Error code when error happens
+        type: object
       resolved_ts:
         description: The event that satisfies CommitTs <= ResolvedTs can be synchronized.
         type: integer
@@ -192,6 +201,7 @@ definitions:
 info:
   contact: {}
   description: This is a docs of TiCDC OpenAPI.
+  license: {}
   title: TiCDC OpenAPI
   version: "1.0"
 paths:
@@ -211,10 +221,6 @@ paths:
             type: array
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: List captures
@@ -260,14 +266,9 @@ paths:
       produces:
       - application/json
       responses:
-        "202":
-          description: ""
+        "202": {}
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: Create changefeed
@@ -287,14 +288,9 @@ paths:
       produces:
       - application/json
       responses:
-        "202":
-          description: ""
+        "202": {}
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: Remove a changefeed
@@ -319,10 +315,6 @@ paths:
             $ref: '#/definitions/model.ChangefeedDetail'
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: Get changefeed
@@ -373,14 +365,9 @@ paths:
       produces:
       - application/json
       responses:
-        "202":
-          description: ""
+        "202": {}
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: Update a changefeed
@@ -400,14 +387,9 @@ paths:
       produces:
       - application/json
       responses:
-        "202":
-          description: ""
+        "202": {}
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: Pause a changefeed
@@ -427,14 +409,9 @@ paths:
       produces:
       - application/json
       responses:
-        "202":
-          description: ""
+        "202": {}
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: Resume a changefeed
@@ -466,14 +443,9 @@ paths:
       produces:
       - application/json
       responses:
-        "202":
-          description: ""
+        "202": {}
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: move table
@@ -493,14 +465,9 @@ paths:
       produces:
       - application/json
       responses:
-        "202":
-          description: ""
+        "202": {}
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: rebalance tables
@@ -514,8 +481,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: ""
+        "200": {}
         "500":
           description: Internal Server Error
           schema:
@@ -538,8 +504,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: ""
+        "200": {}
         "400":
           description: Bad Request
           schema:
@@ -555,14 +520,9 @@ paths:
       produces:
       - application/json
       responses:
-        "202":
-          description: ""
+        "202": {}
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: notify the owner to resign
@@ -586,10 +546,6 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/model.HTTPError'
       summary: List processors
       tags:
       - processor
@@ -609,10 +565,6 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/model.HTTPError'
       summary: Get processor detail information
       tags:
       - processor
@@ -630,10 +582,6 @@ paths:
             $ref: '#/definitions/model.ServerStatus'
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/model.HTTPError'
-        "500":
-          description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: Get server status
