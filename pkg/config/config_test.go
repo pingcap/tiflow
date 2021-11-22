@@ -35,6 +35,12 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
+	conf.Sink.ColumnSelectors = []*ColumnSelector{
+		{
+			Matcher: []string{"1.1"},
+			Columns: []string{"a", "b"},
+		},
+	}
 	b, err := conf.Marshal()
 	require.Nil(t, err)
 	require.Equal(t, testCfgTestReplicaConfigMarshal1, mustIdentJSON(t, b))
