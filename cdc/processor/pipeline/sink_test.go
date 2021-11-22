@@ -610,10 +610,6 @@ func (s *outputSuite) TestTryHandleDataMessage(c *check.C) {
 	event.SetUpFinishedChan()
 	dataMsg := pipeline.PolymorphicEventMessage(event)
 	ok, err = node.TryHandleDataMessage(ctx, dataMsg)
-	c.Assert(ok, check.IsFalse)
-	c.Assert(err, check.IsNil)
-	event.PrepareFinished()
-	ok, err = node.TryHandleDataMessage(ctx, dataMsg)
 	c.Assert(ok, check.IsTrue)
 	c.Assert(err, check.IsNil)
 }
