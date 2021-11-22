@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/hanfei1991/microcosom/master"
-	"github.com/hanfei1991/microcosom/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )

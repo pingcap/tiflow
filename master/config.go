@@ -23,11 +23,10 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
-
-	"github.com/hanfei1991/microcosom/pkg/log"
-	"github.com/hanfei1991/microcosom/pkg/terror"
 )
 
 const (

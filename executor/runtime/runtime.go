@@ -3,9 +3,9 @@ package runtime
 import (
 	"context"
 	"log"
+	"sync"
 
 	"github.com/hanfei1991/microcosom/pkg/workerpool"
-	"sync"
 )
 
 type queue struct {

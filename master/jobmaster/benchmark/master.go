@@ -7,8 +7,8 @@ import (
 	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
-	"github.com/hanfei1991/microcosom/pkg/log"
 	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 )
 
@@ -17,7 +17,7 @@ type Master struct {
 	*Config
 	job *model.Job
 
-	ctx context.Context
+	ctx    context.Context
 	cancel func()
 
 	resourceManager cluster.ResourceMgr

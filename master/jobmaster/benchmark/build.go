@@ -11,7 +11,7 @@ import (
 )
 
 // BuildBenchmarkJobMaster for benchmark workload.
-func BuildBenchmarkJobMaster( rawConfig string, idAllocator *autoid.Allocator, resourceMgr cluster.ResourceMgr, client cluster.ExecutorClient) (*Master, error) {
+func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, resourceMgr cluster.ResourceMgr, client cluster.ExecutorClient) (*Master, error) {
 	config, err := configFromJson(rawConfig)
 	if err != nil {
 		return nil, err

@@ -17,7 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/hanfei1991/microcosom/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
 // Context is used to in dm to record some context field like
