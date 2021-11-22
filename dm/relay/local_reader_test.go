@@ -1346,7 +1346,7 @@ func (t *testReaderSuite) TestwaitBinlogChanged(c *C) {
 		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
 		c.Assert(needSwitch, IsFalse)
 		c.Assert(reParse, IsFalse)
-		c.Assert(err, ErrorMatches, ".*invalid uuid.*")
+		c.Assert(terror.ErrRelayParseUUIDSuffix.Equal(err), IsTrue)
 	}
 
 	t.writeUUIDs(c, relayDir, []string{"xxx.000001", "xxx.000002"})
@@ -1364,7 +1364,7 @@ func (t *testReaderSuite) TestwaitBinlogChanged(c *C) {
 		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
 		c.Assert(needSwitch, IsFalse)
 		c.Assert(reParse, IsFalse)
-		c.Assert(err, ErrorMatches, ".*no such file or directory*")
+		c.Assert(terror.ErrGetRelayLogStat.Equal(err), IsTrue)
 	}
 
 	err1 = os.WriteFile(relayPaths[1], nil, 0o600)
@@ -1479,7 +1479,7 @@ func (t *testReaderSuite) TestGetSwitchPath(c *C) {
 		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
 		switchPath, err := r.getSwitchPath()
 		c.Assert(switchPath, IsNil)
-		c.Assert(err, ErrorMatches, ".*not valid.*")
+		c.Assert(terror.ErrRelayParseUUIDSuffix.Equal(err), IsTrue)
 	}
 
 	UUIDs = UUIDs[:len(UUIDs)-1] // remove the invalid UUID
