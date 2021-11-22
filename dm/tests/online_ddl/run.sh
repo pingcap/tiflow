@@ -40,10 +40,6 @@ function run() {
 
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
-
 	# imitate a DM task is started during the running of online DDL tool
 	# *_ignore will be skipped by block-allow-list
 	run_sql_source1 "create table online_ddl.gho_ignore (c int); create table online_ddl._gho_ignore_gho (c int);"
@@ -115,10 +111,6 @@ function run() {
 
 	run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $cur/conf/dm-worker3.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER3_PORT
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID2 worker3" \
-		"\"result\": true" 1
 
 	echo "wait and check task running"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

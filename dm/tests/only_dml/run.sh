@@ -69,14 +69,6 @@ function run() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-	# start relay
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
-
 	# check dm-workers metrics unit: relay file index must be 1.
 	check_metric $WORKER1_PORT "dm_relay_binlog_file" 3 0 2
 	check_metric $WORKER2_PORT "dm_relay_binlog_file" 3 0 2

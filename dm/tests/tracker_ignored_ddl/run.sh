@@ -17,10 +17,6 @@ function run() {
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID1" \
-		"\"result\": true" 1
-
 	# start DM task only
 	dmctl_start_task_standalone $cur/conf/dm-task.yaml
 	# use sync_diff_inspector to check full dump loader
