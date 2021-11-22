@@ -10,6 +10,8 @@ tb="t"
 yb="y"
 
 function run() {
+	# table `y` has extend and generate column
+	# table `t` has extend and different instance
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
