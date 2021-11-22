@@ -30,6 +30,7 @@ var mockStreamMeta = &proto.StreamMeta{
 }
 
 func TestStreamHandleSend(t *testing.T) {
+	t.Parallel()
 	// We use a blocking channel to make the test case deterministic.
 	sendCh := make(chan proto.SendMessageResponse)
 	h := newStreamHandle(mockStreamMeta, sendCh)
@@ -57,6 +58,7 @@ func TestStreamHandleSend(t *testing.T) {
 }
 
 func TestStreamHandleCloseWhileSending(t *testing.T) {
+	t.Parallel()
 	// We use a blocking channel to make the test case deterministic.
 	sendCh := make(chan proto.SendMessageResponse)
 	h := newStreamHandle(mockStreamMeta, sendCh)
@@ -82,11 +84,11 @@ func TestStreamHandleCloseWhileSending(t *testing.T) {
 }
 
 func TestStreamHandleCloseWhileNotSending(t *testing.T) {
+	t.Parallel()
 	// We use a blocking channel to make the test case deterministic.
 	sendCh := make(chan proto.SendMessageResponse)
 	h := newStreamHandle(mockStreamMeta, sendCh)
 
-	time.Sleep(100 * time.Millisecond)
 	h.Close()
 
 	// Tests double close.
@@ -95,6 +97,7 @@ func TestStreamHandleCloseWhileNotSending(t *testing.T) {
 }
 
 func TestGetStreamMeta(t *testing.T) {
+	t.Parallel()
 	h := newStreamHandle(mockStreamMeta, nil)
 	require.Equal(t, mockStreamMeta, h.GetStreamMeta())
 }
