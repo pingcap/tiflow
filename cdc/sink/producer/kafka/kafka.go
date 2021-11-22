@@ -615,8 +615,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Producer.RequiredAcks = sarama.WaitForAll
 
 	// Time out in 30s.
-	config.Producer.Retry.Max = math.MaxInt32
-	config.Producer.Timeout = 30 * time.Second
+	config.Producer.Retry.Max = 5
 
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
 	case "none":
