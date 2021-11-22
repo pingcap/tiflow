@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
@@ -118,7 +118,7 @@ type Server struct {
 
 	closed atomic.Bool
 
-	echo *echo.Echo // injected in `InitOpenAPIHandles`
+	openapiHandles *gin.Engine // injected in `InitOpenAPIHandles`
 }
 
 // NewServer creates a new Server.
@@ -194,7 +194,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		if initOpenAPIErr := s.InitOpenAPIHandles(); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
-		userHandles["/api/v1/"] = s.echo
+		userHandles["/api/v1/"] = s.openapiHandles
 	}
 
 	// gRPC API server
