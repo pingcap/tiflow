@@ -1092,8 +1092,7 @@ func (s *Server) getStatusFromWorkers(
 	// when taskName is empty we need list all task even the worker that handle this task is not running.
 	if taskName == "" {
 		for taskName, sourceM := range s.scheduler.GetSubTaskCfgs() {
-			msg := fmt.Sprintf("can't find task: %s from dm-worker, please use dmctl list-member to check if worker is offline.", taskName)
-			log.L().Warn(msg)
+			msg := fmt.Sprintf("can't find task %s from dm-worker, please use dmctl list-member to check if worker is offline.", taskName)
 			// only add use specified source related to this task
 			if specifiedSource {
 				for _, needDisplayedSource := range sources {
