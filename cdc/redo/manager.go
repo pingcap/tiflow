@@ -52,8 +52,10 @@ const (
 
 const (
 	// supposing to replicate 10k tables, each table has one cached change averagely.
+	// approximate 156.25KB
 	logBufferChanSize = 10000
 	// supposing to replicate 10k tables, each table has one resolvedTs change averagely.
+	// approximate 156.25KB
 	flushBufferChanSize = 10000
 )
 
@@ -120,10 +122,10 @@ type cacheRows struct {
 	rows    []*model.RowChangedEvent
 }
 
-// resolvedEv represents a resolvedTs event
-type resolvedEv struct {
+// resolvedEvent represents a resolvedTs event
+type resolvedEvent struct {
 	tableID    model.TableID
-	resolvedTs uint64
+	resolvedTs model.Ts
 }
 
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
@@ -133,7 +135,7 @@ type ManagerImpl struct {
 	level       consistentLevelType
 	storageType consistentStorage
 
-	flushBuffer chan resolvedEv
+	flushBuffer chan resolvedEvent
 	logBuffer   chan cacheRows
 	writer      writer.RedoLogWriter
 
@@ -161,8 +163,8 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		level:       consistentLevelType(cfg.Level),
 		storageType: consistentStorage(uri.Scheme),
 		rtsMap:      make(map[model.TableID]uint64),
-		logBuffer:   make(chan cacheRows, logBufferChanSize),
-		flushBuffer: make(chan resolvedEv, flushBufferChanSize),
+		logBuffer:   make(chan cacheRows, logBufferChanSize),       /* approximate 0.228MB */
+		flushBuffer: make(chan resolvedEvent, flushBufferChanSize), /* approximate 0.152MB */
 	}
 
 	switch m.storageType {
@@ -256,7 +258,7 @@ func (m *ManagerImpl) FlushLog(
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case m.flushBuffer <- resolvedEv{
+	case m.flushBuffer <- resolvedEvent{
 		tableID:    tableID,
 		resolvedTs: resolvedTs,
 	}:
@@ -360,7 +362,7 @@ func (m *ManagerImpl) bgUpdateResolvedTs(ctx context.Context, errCh chan<- error
 				select {
 				case errCh <- err:
 				default:
-					log.Error("err channel is full", zap.Error(err))
+					log.Error("redo log manager err channel is full", zap.Error(err))
 				}
 				return
 			}
@@ -383,7 +385,7 @@ func (m *ManagerImpl) bgWriteLog(ctx context.Context, errCh chan<- error) {
 				select {
 				case errCh <- err:
 				default:
-					log.Error("err channel is full", zap.Error(err))
+					log.Error("redo log manager err channel is full", zap.Error(err))
 				}
 				return
 			}
@@ -402,7 +404,7 @@ func (m *ManagerImpl) bgFlushLog(ctx context.Context, errCh chan<- error) {
 				select {
 				case errCh <- err:
 				default:
-					log.Error("err channel is full", zap.Error(err))
+					log.Error("redo log manager err channel is full", zap.Error(err))
 				}
 				return
 			}

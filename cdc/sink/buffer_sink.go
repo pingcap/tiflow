@@ -20,11 +20,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
@@ -156,5 +155,8 @@ func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint6
 		return atomic.LoadUint64(&b.checkpointTs), nil
 	default:
 	}
+	// since n.checkpoints is refreshed asynchronously in a background goroutine,
+	// we return a n.checkpoints every time FlushRowChangedEvents be called
+	// the caller will always check the returned checkpointTs
 	return atomic.LoadUint64(&b.checkpointTs), cerror.ErrFlushTsBlocking.FastGenByArgs()
 }

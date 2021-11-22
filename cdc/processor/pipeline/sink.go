@@ -115,7 +115,7 @@ func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
 	return
 }
 
-// flushSink would return a ErrEmitRowFailedDue2Blocking error,
+// when flushSink return a ErrRedoLogBufferBlocking error
 // the caller should retry until it success, otherwise the event will lost
 func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err error) {
 	defer func() {
@@ -140,11 +140,12 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 		return errors.Trace(err)
 	}
 	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, resolvedTs)
-	// we can ignore ErrFlushTsChanBlocking error because resolvedTs will continue
+	// we can ignore ErrFlushTsBlocking error because resolvedTs will continue
 	// to come
 	if err != nil && cerror.ErrFlushTsBlocking.NotEqual(err) {
 		return errors.Trace(err)
 	}
+
 	if checkpointTs <= n.checkpointTs {
 		return nil
 	}
@@ -154,7 +155,7 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 	return nil
 }
 
-// emitEvent would return a ErrEmitRowFailedDue2Blocking error,
+// emitEvent would return a ErrRedoLogBufferBlocking error,
 // the caller should retry until it success, otherwise the event will lost
 func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
 	if event == nil || event.Row == nil {
@@ -322,16 +323,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(errors.New("processor sync resolved injected error"))
 			})
-
-			err := retry.Do(ctx, func() error {
-				err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs)
-				if err != nil {
-					return err
-				}
-				return nil
-			}, retry.WithBackoffBaseDelay(20),
-				retry.WithInfiniteTries(),
-				retry.WithIsRetryableErr(isRetryableError))
+			err := n.retryFlushSink(ctx)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -339,47 +331,34 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
 			return nil
 		}
-
+		start := time.Now()
 		err := retry.Do(ctx, func() error {
 			err := n.emitEvent(ctx, event)
-			if err != nil {
-				return err
+			cost := time.Since(start)
+			if cost >= 10*time.Second {
+				log.Warn("redo log buffer blocking too long", zap.Float64("blocking time(s)", cost.Seconds()))
 			}
-			return nil
+			return err
 		}, retry.WithBackoffBaseDelay(20),
 			retry.WithInfiniteTries(),
 			retry.WithIsRetryableErr(isRetryableError))
 		if err != nil {
 			return errors.Trace(err)
 		}
+
 	case pipeline.MessageTypeTick:
-		err := retry.Do(ctx, func() error {
-			err := n.flushSink(ctx, n.resolvedTs)
-			if err != nil {
-				return err
-			}
-			return nil
-		}, retry.WithBackoffBaseDelay(20),
-			retry.WithInfiniteTries(),
-			retry.WithIsRetryableErr(isRetryableError))
+		err := n.retryFlushSink(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
+
 	case pipeline.MessageTypeCommand:
 		if msg.Command.Tp == pipeline.CommandTypeStop {
 			return n.stop(ctx)
 		}
 	case pipeline.MessageTypeBarrier:
 		n.barrierTs = msg.BarrierTs
-		err := retry.Do(ctx, func() error {
-			err := n.flushSink(ctx, n.resolvedTs)
-			if err != nil {
-				return err
-			}
-			return nil
-		}, retry.WithBackoffBaseDelay(20),
-			retry.WithInfiniteTries(),
-			retry.WithIsRetryableErr(isRetryableError))
+		err := n.retryFlushSink(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -393,12 +372,26 @@ func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 	return n.sink.Close(ctx)
 }
 
+func (n *sinkNode) retryFlushSink(ctx pipeline.NodeContext) error {
+	start := time.Now()
+	err := retry.Do(ctx, func() error {
+		// when flushSink return a ErrRedoLogBufferBlocking error
+		// retry until success
+		err := n.flushSink(ctx, n.resolvedTs)
+		cost := time.Since(start)
+		if cost >= 10*time.Second {
+			log.Warn("redo log buffer blocking too long", zap.Float64("blocking time(s)", cost.Seconds()))
+		}
+		return err
+	}, retry.WithBackoffBaseDelay(20),
+		retry.WithInfiniteTries(),
+		retry.WithIsRetryableErr(isRetryableError))
+	return err
+}
+
 func isRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if cerror.ErrRedoLogBufferBlocking.Equal(err) {
-		return true
-	}
-	return false
+	return cerror.ErrRedoLogBufferBlocking.Equal(err)
 }
