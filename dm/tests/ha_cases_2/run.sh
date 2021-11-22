@@ -85,7 +85,7 @@ function test_kill_worker_in_sync() {
 	# start-relay halfway
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker3" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	echo "kill dm-worker2"
 	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
