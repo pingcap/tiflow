@@ -1209,6 +1209,7 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 		if !ok2 {
 			return nil
 		}
+		// TODO: remove orphan relay stage
 		_, err = ha.PutSourceBound(s.etcdCli, w.Bound())
 		return err
 	} else if sourceCfg.EnableRelay {

@@ -325,10 +325,10 @@ function run() {
 	# update_task_success_single_worker $TASK_CONF $SOURCE_ID1
 	# update_task_success $TASK_CONF
 
-  start_relay_without_worker_name_success
-  start_relay_with_worker_name_fail
-  stop_relay_with_worker_name_fail
-  stop_relay_with_worker_name_success
+	start_relay_without_worker_name_success
+	start_relay_with_worker_name_fail
+	stop_relay_with_worker_name_fail
+	stop_relay_with_worker_name_success
 
 	start_relay_success
 
