@@ -38,7 +38,8 @@ const (
 type ExecutorStatus int32
 
 const (
-	Running ExecutorStatus = iota
+	Initing ExecutorStatus = iota
+	Running
 	Disconnected
 	Tombstone
 	Busy

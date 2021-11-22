@@ -663,6 +663,7 @@ const (
 	codeDFSubJobSubmitError
 	codeDFClusterResourceNotEnough
 	codeDFBuildJobFailed
+	codeDFHeartbeatFault
 )
 
 // Error instances.
@@ -1291,8 +1292,9 @@ var (
 
 	// This happens when a unknown executor send requests to master.
 	ErrUnknownExecutorID        = New(codeDFUnknownExecutor, ClassNotSet, ScopeInternal, LevelMedium, "cannot find executor ID", "")
-	ErrTombstoneExecutor        = New(codeDFTombstoneExecutor, ClassNotSet, ScopeInternal, LevelLow, "", "")
-	ErrSubJobFailed             = New(codeDFSubJobSubmitError, ClassNotSet, ScopeNotSet, LevelMedium, "", "")
-	ErrClusterResourceNotEnough = New(codeDFClusterResourceNotEnough, ClassNotSet, ScopeNotSet, LevelMedium, "", "please scale out the cluster")
-	ErrBuildJobFailed           = New(codeDFBuildJobFailed, ClassNotSet, ScopeNotSet, LevelMedium, "", "")
+	ErrTombstoneExecutor        = New(codeDFTombstoneExecutor, ClassNotSet, ScopeInternal, LevelLow, "executor has been remove", "")
+	ErrSubJobFailed             = New(codeDFSubJobSubmitError, ClassNotSet, ScopeNotSet, LevelMedium, "submit sub job failed", "")
+	ErrClusterResourceNotEnough = New(codeDFClusterResourceNotEnough, ClassNotSet, ScopeNotSet, LevelMedium, "resource not enough", "please scale out the cluster")
+	ErrBuildJobFailed           = New(codeDFBuildJobFailed, ClassNotSet, ScopeNotSet, LevelMedium, "build job failed", "")
+	ErrHeartbeat                = New(codeDFHeartbeatFault, ClassNotSet, ScopeNotSet, LevelHigh, "heartbeat meet error. Server will quit.", "")
 )

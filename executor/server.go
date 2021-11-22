@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/hanfei1991/microcosom/executor/runtime"
@@ -96,7 +97,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}()
 
 	// Register myself
-	s.cli, err = NewMasterClient(ctx, s.cfg)
+	s.cli, err = NewMasterClient(ctx, getJoinURLs(s.cfg.Join))
 	if err != nil {
 		return err
 	}
@@ -106,7 +107,7 @@ func (s *Server) Start(ctx context.Context) error {
 		Capability: 100,
 	}
 
-	resp, err := s.cli.RegisterExecutor(ctx, registerReq)
+	resp, err := s.cli.RegisterExecutor(ctx, registerReq, s.cfg.RPCTimeout)
 	if err != nil {
 		return err
 	}
@@ -114,7 +115,8 @@ func (s *Server) Start(ctx context.Context) error {
 	log.L().Logger.Info("register successful", zap.Int32("id", int32(s.ID)))
 
 	// Start Heartbeat
-	ticker := time.NewTicker(time.Duration(s.cfg.KeepAliveInterval) * time.Millisecond)
+	ticker := time.NewTicker(s.cfg.KeepAliveInterval)
+	s.lastHearbeatTime = time.Now()
 	for {
 		select {
 		case <-ctx.Done():
@@ -122,18 +124,22 @@ func (s *Server) Start(ctx context.Context) error {
 		case <-exitCh:
 			return nil
 		case t := <-ticker.C:
+			if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
+				return errors.New("heartbeat timeout")
+			}
 			req := &pb.HeartbeatRequest{
 				ExecutorId: int32(s.ID),
 				Status:     int32(model.Running),
 				Timestamp:  uint64(t.Unix()),
-				Ttl:        uint64(s.cfg.KeepAliveTTL),
+				// We set longer ttl for master, which is "ttl + rpc timeout", to avoid that
+				// executor actually wait for a timeout when ttl is nearly up.
+				Ttl: uint64(s.cfg.KeepAliveTTL.Milliseconds() + s.cfg.RPCTimeout.Milliseconds()),
 			}
-			// FIXME: set timeout.
-			resp, err := s.cli.SendHeartbeat(ctx, req)
+			resp, err := s.cli.SendHeartbeat(ctx, req, s.cfg.RPCTimeout)
 			if err != nil {
 				log.L().Error("heartbeat meet error", zap.Error(err))
-				if s.lastHearbeatTime.Add(time.Duration(s.cfg.KeepAliveTTL) * time.Millisecond).Before(time.Now()) {
-					return err
+				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
+					return terror.ErrHeartbeat.Generatef("rpc error %s", err.Error())
 				}
 				continue
 			}
@@ -141,12 +147,22 @@ func (s *Server) Start(ctx context.Context) error {
 				log.L().Error("heartbeat meet error")
 				switch resp.Err.Code {
 				case pb.ErrorCode_UnknownExecutor, pb.ErrorCode_TombstoneExecutor:
-					return errors.New(resp.Err.Message)
+					return terror.ErrHeartbeat.Generatef("logic error %s", resp.Err.Message)
 				}
 				continue
 			}
+			// We aim to keep lastHbTime of executor consistant with lastHbTime of Master. 
+			// If we set the heartbeat time of executor to the start time of rpc, it will 
+			// be a little bit earlier than the heartbeat time of master, which is safe. 
+			// In contrast, if we set it to the end time of rpc, it might be a little bit 
+			// later than master's, which might cause that master wait for less time than executor. 
+			// This gap is unsafe.
 			s.lastHearbeatTime = t
 			log.L().Info("heartbeat success")
 		}
 	}
+}
+
+func getJoinURLs(addrs string) []string {
+	return strings.Split(addrs, ",")
 }

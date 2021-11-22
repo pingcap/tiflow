@@ -24,17 +24,21 @@ type ExecutorManager struct {
 	executors   map[model.ExecutorID]*Executor
 	offExecutor chan model.ExecutorID
 
-	idAllocator *autoid.Allocator
+	idAllocator       *autoid.Allocator
+	initHeartbeatTTL  time.Duration
+	keepAliveInterval time.Duration
 
 	// TODO: complete ha store.
 	haStore ha.HAStore
 }
 
-func NewExecutorManager(offExec chan model.ExecutorID) *ExecutorManager {
+func NewExecutorManager(offExec chan model.ExecutorID, initHeartbeatTTL, keepAliveInterval time.Duration) *ExecutorManager {
 	return &ExecutorManager{
-		executors:   make(map[model.ExecutorID]*Executor),
-		idAllocator: autoid.NewAllocator(),
-		offExecutor: offExec,
+		executors:         make(map[model.ExecutorID]*Executor),
+		idAllocator:       autoid.NewAllocator(),
+		offExecutor:       offExec,
+		initHeartbeatTTL:  initHeartbeatTTL,
+		keepAliveInterval: keepAliveInterval,
 	}
 }
 
@@ -78,8 +82,9 @@ func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Heartbe
 		err := terror.ErrTombstoneExecutor.Generatef("executor %d has been dead", req.ExecutorId)
 		return &pb.HeartbeatResponse{Err: terror.ToPBError(err)}, nil
 	}
-	exec.lastUpdateTime = time.Unix(int64(req.Timestamp), 0)
+	exec.lastUpdateTime = time.Now()
 	exec.heartbeatTTL = time.Duration(req.Ttl) * time.Millisecond
+	exec.Status = model.ExecutorStatus(req.Status)
 	usage := ResourceUsage(req.ResourceUsage)
 	exec.resource.Used = usage
 	resp := &pb.HeartbeatResponse{}
@@ -108,13 +113,16 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 			ID:       info.ID,
 			Capacity: ResourceUsage(info.Capability),
 		},
-		Status: model.Running,
+		lastUpdateTime: time.Now(),
+		heartbeatTTL:   e.initHeartbeatTTL,
+		Status:         model.Initing,
 	}
 	var err error
 	exec.client, err = newExecutorClient(info.Addr)
 	if err != nil {
 		return nil, err
 	}
+
 	// Persistant
 	//value, err := info.ToJSON()
 	//if err != nil {
@@ -154,7 +162,7 @@ func (e *Executor) checkAlive() bool {
 	if e.Status == model.Tombstone {
 		return false
 	}
-	if !e.lastUpdateTime.IsZero() && e.lastUpdateTime.Add(e.heartbeatTTL).Before(time.Now()) {
+	if e.lastUpdateTime.Add(e.heartbeatTTL).Before(time.Now()) {
 		e.Status = model.Tombstone
 		return false
 	}

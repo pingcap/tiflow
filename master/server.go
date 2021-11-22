@@ -38,7 +38,7 @@ type Server struct {
 // NewServer creates a new master-server.
 func NewServer(cfg *Config) (*Server, error) {
 	executorNotifier := make(chan model.ExecutorID, 100)
-	executorManager := cluster.NewExecutorManager(executorNotifier)
+	executorManager := cluster.NewExecutorManager(executorNotifier, cfg.KeepAliveTTL, cfg.KeepAliveInterval)
 	jobManager := jobmaster.NewJobManager(executorManager, executorManager, executorNotifier)
 	server := &Server{
 		cfg:             cfg,

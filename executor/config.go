@@ -20,10 +20,10 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/failpoint"
-
 	"github.com/hanfei1991/microcosom/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 )
@@ -32,20 +32,10 @@ import (
 var SampleConfigFile string
 
 var (
-	defaultKeepAliveTTL      = int64(60)      // 1 minute
-	defaultRelayKeepAliveTTL = int64(60 * 30) // 30 minutes
+	defaultKeepAliveTTL      = "20s"
+	defaultKeepAliveInterval = "500ms"
+	defaultRPCTimeout        = "3s"
 )
-
-func init() {
-	failpoint.Inject("defaultKeepAliveTTL", func(val failpoint.Value) {
-		i := val.(int)
-		defaultKeepAliveTTL = int64(i)
-	})
-	failpoint.Inject("defaultRelayKeepAliveTTL", func(val failpoint.Value) {
-		i := val.(int)
-		defaultRelayKeepAliveTTL = int64(i)
-	})
-}
 
 // NewConfig creates a new base config for worker.
 func NewConfig() *Config {
@@ -65,7 +55,7 @@ func NewConfig() *Config {
 	// NOTE: add `advertise-addr` for dm-master if needed.
 	fs.StringVar(&cfg.Join, "join", "", `join to an existing cluster (usage: dm-master cluster's "${master-addr}")`)
 	fs.StringVar(&cfg.Name, "name", "", "human-readable name for DM-worker member")
-	fs.Int64Var(&cfg.KeepAliveTTL, "keepalive-ttl", defaultKeepAliveTTL, "dm-worker's TTL for keepalive with etcd (in seconds)")
+	fs.StringVar(&cfg.KeepAliveTTLStr, "keepalive-ttl", defaultKeepAliveTTL, "dm-worker's TTL for keepalive with etcd (in seconds)")
 
 	return cfg
 }
@@ -85,9 +75,15 @@ type Config struct {
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
 	ConfigFile string `toml:"config-file" json:"config-file"`
+
 	// TODO: in the future dm-workers should share a same ttl from dm-master
-	KeepAliveTTL      int64 `toml:"keepalive-ttl" json:"keepalive-ttl"`
-	KeepAliveInterval int64 `toml:"keepalive-interval" json:"keepalive-interval"`
+	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
+	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`
+	RPCTimeoutStr        string `toml:"rpc-timeout" json:"rpc-timeout"`
+
+	KeepAliveTTL      time.Duration `toml:"-" json:"-"`
+	KeepAliveInterval time.Duration `toml:"-" json:"-"`
+	RPCTimeout        time.Duration `toml:"-" json:"-"`
 
 	printVersion      bool
 	printSampleConfig bool
@@ -151,6 +147,29 @@ func (c *Config) Parse(arguments []string) error {
 		return terror.ErrWorkerInvalidFlag.Generate(c.flagSet.Arg(0))
 	}
 
+	if c.KeepAliveIntervalStr == "" {
+		c.KeepAliveIntervalStr = defaultKeepAliveInterval
+	}
+	c.KeepAliveInterval, err = time.ParseDuration(c.KeepAliveIntervalStr)
+	if err != nil {
+		return err
+	}
+
+	if c.KeepAliveTTLStr == "" {
+		c.KeepAliveTTLStr = defaultKeepAliveTTL
+	}
+	c.KeepAliveTTL, err = time.ParseDuration(c.KeepAliveTTLStr)
+	if err != nil {
+		return err
+	}
+
+	if c.RPCTimeoutStr == "" {
+		c.RPCTimeoutStr = defaultRPCTimeout
+	}
+	c.RPCTimeout, err = time.ParseDuration(c.RPCTimeoutStr)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -3,7 +3,7 @@ package executor
 import (
 	"context"
 	"errors"
-	"strings"
+	"time"
 
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/pingcap/ticdc/dm/pkg/log"
@@ -12,23 +12,16 @@ import (
 )
 
 type MasterClient struct {
-	cfg *Config
-
 	urls   []string
 	leader string
 	conn   *grpc.ClientConn
 	client pb.MasterClient
 }
 
-func getJoinURLs(addrs string) []string {
-	return strings.Split(addrs, ",")
-}
-
-func NewMasterClient(ctx context.Context, cfg *Config) (*MasterClient, error) {
+func NewMasterClient(ctx context.Context, join []string) (*MasterClient, error) {
 	client := &MasterClient{
-		cfg: cfg,
+		urls: join,
 	}
-	client.urls = getJoinURLs(cfg.Join)
 	client.leader = client.urls[0]
 	log.L().Logger.Info("dialing master", zap.String("leader", client.leader))
 	var err error
@@ -40,10 +33,16 @@ func NewMasterClient(ctx context.Context, cfg *Config) (*MasterClient, error) {
 	return client, nil
 }
 
-func (c *MasterClient) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	return c.client.Heartbeat(ctx, req)
+// SendHeartbeat to master-server.
+func (c *MasterClient) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest, timeout time.Duration) (*pb.HeartbeatResponse, error) {
+	ctx1, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return c.client.Heartbeat(ctx1, req)
 }
 
-func (c *MasterClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (resp *pb.RegisterExecutorResponse, err error) {
-	return c.client.RegisterExecutor(ctx, req)
+// RegisterExecutor to master-server.
+func (c *MasterClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, timeout time.Duration) (resp *pb.RegisterExecutorResponse, err error) {
+	ctx1, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return c.client.RegisterExecutor(ctx1, req)
 }

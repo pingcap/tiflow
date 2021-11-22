@@ -1,4 +1,4 @@
 join = "127.0.0.1:10240"
 worker-addr = "127.0.0.1:10241"
-keepalive-ttl = 10000
-keepalive-interval = 1000
+keepalive-ttl = "10s"
+keepalive-interval = "500ms"

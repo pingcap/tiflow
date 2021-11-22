@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/hanfei1991/microcosom/pkg/terror"
@@ -30,7 +31,10 @@ import (
 )
 
 const (
-	defaultRPCTimeout              = "30s"
+	defaultKeepAliveTTL      = "20s"
+	defaultKeepAliveInterval = "500ms"
+	defaultRPCTimeout        = "3s"
+
 	defaultNamePrefix              = "dm-master"
 	defaultDataDirPrefix           = "default"
 	defaultPeerUrls                = "http://127.0.0.1:8291"
@@ -100,6 +104,14 @@ type Config struct {
 	InitialClusterState string `toml:"initial-cluster-state" json:"initial-cluster-state"`
 	Join                string `toml:"join" json:"join"`
 
+	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
+	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`
+	RPCTimeoutStr        string `toml:"rpc-timeout" json:"rpc-timeout"`
+
+	KeepAliveTTL      time.Duration `toml:"-" json:"-"`
+	KeepAliveInterval time.Duration `toml:"-" json:"-"`
+	RPCTimeout        time.Duration `toml:"-" json:"-"`
+
 	printVersion      bool
 	printSampleConfig bool
 }
@@ -163,11 +175,10 @@ func (c *Config) Parse(arguments []string) error {
 	if len(c.flagSet.Args()) != 0 {
 		return terror.ErrMasterConfigInvalidFlag.Generate(c.flagSet.Arg(0))
 	}
-	c.adjust()
-	return nil
+	return c.adjust()
 }
 
-func (c *Config) adjust() {
+func (c *Config) adjust() (err error) {
 	if c.PeerUrls == "" {
 		c.PeerUrls = defaultPeerUrls
 	}
@@ -188,6 +199,31 @@ func (c *Config) adjust() {
 	if c.InitialClusterState == "" {
 		c.InitialClusterState = defaultInitialClusterState
 	}
+
+	if c.KeepAliveIntervalStr == "" {
+		c.KeepAliveIntervalStr = defaultKeepAliveInterval
+	}
+	c.KeepAliveInterval, err = time.ParseDuration(c.KeepAliveIntervalStr)
+	if err != nil {
+		return err
+	}
+
+	if c.KeepAliveTTLStr == "" {
+		c.KeepAliveTTLStr = defaultKeepAliveTTL
+	}
+	c.KeepAliveTTL, err = time.ParseDuration(c.KeepAliveTTLStr)
+	if err != nil {
+		return err
+	}
+
+	if c.RPCTimeoutStr == "" {
+		c.RPCTimeoutStr = defaultRPCTimeout
+	}
+	c.RPCTimeout, err = time.ParseDuration(c.RPCTimeoutStr)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // configFromFile loads config from file.

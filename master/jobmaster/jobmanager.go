@@ -77,6 +77,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 		resp.Err = terror.ToPBError(err)
 		return resp
 	}
+	log.L().Logger.Info("finished dispatch job")
 	j.jobMasters[jobMaster.ID()] = jobMaster
 
 	resp.JobId = int32(jobMaster.ID())
