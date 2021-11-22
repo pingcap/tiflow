@@ -21,6 +21,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var _ ScheduleDispatcherCommunicator = (*mockScheduleDispatcherCommunicator)(nil)
+
 type mockScheduleDispatcherCommunicator struct {
 	mock.Mock
 	addTableRecords    map[model.CaptureID][]model.TableID

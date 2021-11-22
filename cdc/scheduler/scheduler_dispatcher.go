@@ -18,6 +18,12 @@ import (
 	"github.com/pingcap/ticdc/pkg/context"
 )
 
+const (
+	// CheckpointCannotProceed is a placeholder indicating that the
+	// Owner should not advance the global checkpoint TS just yet.
+	CheckpointCannotProceed = model.Ts(0)
+)
+
 // ScheduleDispatcher is an interface for a table scheduler used in Owner.
 type ScheduleDispatcher interface {
 	// Tick is called periodically to update the SchedulerDispatcher on the latest state of replication.
@@ -56,9 +62,3 @@ type ScheduleDispatcherCommunicator interface {
 		changeFeedID model.ChangeFeedID,
 		captureID model.CaptureID) (done bool, err error)
 }
-
-const (
-	// CheckpointCannotProceed is a placeholder indicating that the
-	// Owner should not advance the global checkpoint TS just yet.
-	CheckpointCannotProceed = model.Ts(0)
-)
