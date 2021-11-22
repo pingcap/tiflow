@@ -1493,7 +1493,7 @@ func extractWorkerError(result *pb.ProcessResult) error {
 //     * start: related relay status is running
 //     * stop: related relay status can't be found in worker's result
 //   OperateWorkerRelay:
-//     * pause: `related relay status is paused
+//     * pause: related relay status is paused
 //     * resume: related relay status is running
 // returns OK, error message of QueryStatusResponse, raw QueryStatusResponse, error that not from QueryStatusResponse.
 func (s *Server) waitOperationOk(
@@ -1662,10 +1662,7 @@ func (s *Server) waitOperationOk(
 					if err2 := extractWorkerError(relayStatus.Result); err2 != nil {
 						msg = err2.Error()
 					}
-					ok := false
-					if relayStatus.Stage == expect {
-						ok = true
-					}
+					ok := relayStatus.Stage == expect
 
 					if ok || msg != "" {
 						return ok, msg, queryResp, nil
