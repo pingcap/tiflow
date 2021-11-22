@@ -76,12 +76,10 @@ function usage_and_arg_test() {
 	echo "start_relay_empty_arg"
 	start_relay_empty_arg
 	start_relay_wrong_arg
-	start_relay_without_worker
 
 	echo "stop_relay_empty_arg"
 	stop_relay_empty_arg
 	stop_relay_wrong_arg
-	stop_relay_without_worker
 }
 
 function recover_max_binlog_size() {
@@ -255,7 +253,9 @@ function run() {
 	transfer_source_invalid $SOURCE_ID1 worker2
 
 	start_relay_success
-	start_relay_fail
+	start_relay_diff_worker_fail
+	start_relay_without_worker_name_fail
+	stop_relay_without_worker_name_fail
 
 	echo "pause_relay_success"
 	pause_relay_success
@@ -324,6 +324,11 @@ function run() {
 	# update_task_worker_not_found $TASK_CONF 127.0.0.1:9999
 	# update_task_success_single_worker $TASK_CONF $SOURCE_ID1
 	# update_task_success $TASK_CONF
+
+  start_relay_without_worker_name_success
+  start_relay_with_worker_name_fail
+  stop_relay_with_worker_name_fail
+  stop_relay_with_worker_name_success
 
 	start_relay_success
 

@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/ha"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // Scheduler schedules tasks for DM-worker instances, including:
@@ -59,6 +60,25 @@ import (
 //   - remove source request from user.
 // TODO: try to handle the return `err` of etcd operations,
 //   because may put into etcd, but the response to the etcd client interrupted.
+// Relay scheduling:
+// - scheduled by source
+//   DM-worker will enable relay according to its bound source, in current implementation, it will read `enable-relay`
+//   of source config and decide whether to enable relay.
+//   turn on `enable-relay`:
+//   - use `enable-relay: true` when create source
+//   - `start-relay -s source` to dynamically change `enable-relay`
+//   turn off `enable-relay`:
+//   - use `enable-relay: false` when create source
+//   - `stop-relay -s source` to dynamically change `enable-relay`
+//   - found conflict schedule type with (source, worker) when scheduler bootstrap
+// - scheduled by (source, worker)
+//   DM-worker will check if relay is assigned to it no matter it's bound or not. In current implementation, it will
+//   read UpstreamRelayWorkerKeyAdapter in etcd.
+//   add UpstreamRelayWorkerKeyAdapter:
+//   - use `start-relay -s source -w worker`
+//   remove UpstreamRelayWorkerKeyAdapter:
+//   - use `stop-relay -s source -w worker`
+//   - remove worker by `offline-member`
 type Scheduler struct {
 	mu sync.RWMutex
 
@@ -1061,7 +1081,7 @@ func (s *Scheduler) StartRelay(source string, workers []string) error {
 	// quick path for `start-relay` without worker name
 	if len(workers) == 0 {
 		if len(startedWorkers) != 0 {
-			return terror.ErrSchedulerStartRelayOnSpecified.Generate(startedWorkers)
+			return terror.ErrSchedulerStartRelayOnSpecified.Generate(utils.SetToSlice(startedWorkers))
 		}
 		// update enable-relay in source config
 		sourceCfg.EnableRelay = true
@@ -1175,7 +1195,7 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 	if len(workers) == 0 {
 		startedWorker := s.relayWorkers[source]
 		if len(startedWorker) != 0 {
-			return terror.ErrSchedulerStopRelayOnSpecified.Generate(startedWorker)
+			return terror.ErrSchedulerStopRelayOnSpecified.Generate(utils.SetToSlice(startedWorker))
 		}
 		// update enable-relay in source config
 		sourceCfg.EnableRelay = false

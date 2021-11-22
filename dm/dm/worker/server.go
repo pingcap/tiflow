@@ -679,13 +679,15 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 	}
 
 	if sourceCfg.EnableRelay {
+		log.L().Info("will start relay by `enable-relay` in source config")
 		w.startedRelayBySourceCfg = true
 		if err2 := w.EnableRelay(); err2 != nil {
 			log.L().Error("found a `enable-relay: true` source, but failed to enable relay for DM worker",
 				zap.Error(err2))
 			return err2
 		}
-	} else {
+	} else if w.startedRelayBySourceCfg {
+		log.L().Info("will disable relay by `enable-relay` in source config")
 		w.DisableRelay()
 	}
 
