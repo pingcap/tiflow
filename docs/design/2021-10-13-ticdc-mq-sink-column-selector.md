@@ -48,7 +48,7 @@ dispatchers = [
 protocol = "default"
 
 column-selectors = [
-  { matcher = ['test1.*', 'test2.*'], columns = ["Column selector expression"] },
+    {matcher = ['test1.*', 'test2.*'], columns = ["Column selector expression"]},
     {matcher = ['test1.*', 'test2.*'], columns = ["Column selector expression"]},
 ]
 ```
