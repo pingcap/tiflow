@@ -596,9 +596,8 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	}
 
 	// TiCDC would do some admin operation with kafka broker cluster, and could block the owner
-	// in an unstable network environment, we set timeout to 10s at most.
+	// in an unstable network environment, the default `Timeout` is 3s, just keep retry.
 	config.Admin.Retry.Max = math.MaxInt32
-	config.Admin.Timeout = 10 * time.Second
 
 	// See: https://kafka.apache.org/documentation/#replication
 	// When one of the brokers in a Kafka cluster is down, the partition leaders
