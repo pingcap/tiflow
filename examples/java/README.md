@@ -37,7 +37,7 @@ Prerequisites for building:
 
 ```
 git clone git@github.com:pingcap/ticdc.git
-cd ticdc/demo/java
+cd ticdc/examples/java
 mvn install
 ```
 

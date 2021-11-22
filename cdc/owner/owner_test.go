@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/pingcap/check"
@@ -79,6 +80,7 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
+
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
@@ -361,4 +363,79 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 		c.Fatal("timeout")
 	case <-ch:
 	}
+}
+
+// make sure handleJobs works well even if there is two different
+// version of captures in the cluster
+func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(false)
+	owner, state, tester := createOwner4Test(ctx, c)
+	statusProvider := owner.StatusProvider()
+	// work well
+	changefeedID := "test-changefeed"
+	changefeedInfo := &model.ChangeFeedInfo{
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+	}
+	changefeedStr, err := changefeedInfo.Marshal()
+	c.Assert(err, check.IsNil)
+	cdcKey := etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+
+	// add an non-consistent version capture
+	captureInfo := &model.CaptureInfo{
+		ID:            "capture-id-owner-test",
+		AdvertiseAddr: "127.0.0.1:0000",
+		Version:       " v0.0.1-test-only",
+	}
+	cdcKey = etcd.CDCKey{
+		Tp:        etcd.CDCKeyTypeCapture,
+		CaptureID: captureInfo.ID,
+	}
+	v, err := captureInfo.Marshal()
+	c.Assert(err, check.IsNil)
+	tester.MustUpdate(cdcKey.String(), v)
+
+	// try to add another changefeed
+	changefeedID1 := "test-changefeed1"
+	changefeedInfo1 := &model.ChangeFeedInfo{
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+	}
+	changefeedStr1, err := changefeedInfo1.Marshal()
+	c.Assert(err, check.IsNil)
+	cdcKey = etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr1))
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	// make sure this changefeed add failed, which means that owner are return
+	// in clusterVersionConsistent check
+	c.Assert(owner.changefeeds[changefeedID1], check.IsNil)
+
+	// make sure statusProvider works well
+	ctx1, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		infos, err := statusProvider.GetAllChangeFeedInfo(ctx1)
+		c.Assert(err, check.IsNil)
+		c.Assert(infos[changefeedID], check.NotNil)
+		c.Assert(infos[changefeedID1], check.IsNil)
+		wg.Done()
+	}()
+	_, err = owner.Tick(ctx, state)
+	c.Assert(err, check.IsNil)
 }
