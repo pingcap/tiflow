@@ -174,7 +174,7 @@ fmt: tools/bin/gofumports tools/bin/shfmt
 
 apidoc:
 	@echo "generate ticdc OpenAPI docs"
-	./scripts/gen-httpapi-docs.sh
+	./tools/gen-httpapi-docs.sh
 
 errdoc: tools/bin/errdoc-gen
 	@echo "generate errors.toml"
