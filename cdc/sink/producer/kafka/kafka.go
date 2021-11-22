@@ -595,13 +595,17 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		return nil, errors.Trace(err)
 	}
 
-	// TiCDC would do some admin operation, such as `CreateTopic`, use the default Admin configuration.
-
-	// The default Net Timeout is 30 seconds, which is quite long.
-	// For operation that cannot get response in 3 ~ 5 seconds, it seems unlikely be responded in 30 seconds.
+	// The default Net Timeout is 30 seconds, which would make the owner block a long period of time in
+	// a bad network environment. For operation that cannot get response in 3 ~ 5 seconds, it seems unlikely
+	// to be responded in 30 seconds. Since all time cost operation is based on network, so the network
+	// related Timeout can be seemed as the lower bound for all other kind of Timeout.
 	config.Net.DialTimeout = 5 * time.Second
 	config.Net.WriteTimeout = 5 * time.Second
 	config.Net.ReadTimeout = 5 * time.Second
+
+	// TiCDC would do some admin operation, such as `CreateTopic`.
+	// Theoretically, At most, should cost about 25s.
+	config.Admin.Timeout = 5 * time.Second
 
 	// See: https://kafka.apache.org/documentation/#replication
 	// When one of the brokers in a Kafka cluster is down, the partition leaders
