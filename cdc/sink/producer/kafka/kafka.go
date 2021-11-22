@@ -82,6 +82,9 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 			return err
 		}
 		c.PartitionNum = int32(a)
+		if c.PartitionNum <= 0 {
+			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
+		}
 	}
 
 	s = sinkURI.Query().Get("replication-factor")
