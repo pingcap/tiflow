@@ -632,3 +632,31 @@ func GetTableCreateSQL(ctx context.Context, conn *sql.Conn, tableID string) (sql
 	}
 	return createStr, nil
 }
+
+// GetTableCollation gets table collation info by 'SHOW TABLE STATUS'.
+// See. https://dev.mysql.com/doc/refman/5.7/en/show-table-status.html
+func GetTableCollation(ctx context.Context, db *sql.DB, schema string, table string) (info string, err error) {
+	querySQL := fmt.Sprintf("SHOW TABLE STATUS from %s like '%s'", schema, table)
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+	defer conn.Close()
+	row := conn.QueryRowContext(ctx, querySQL)
+	// SHOW TABLE STATUS has 18 columns and Collation is 15.
+	colSize := 18
+	collationIndex := 14
+	values := make([][]byte, colSize)
+	scans := make([]interface{}, colSize)
+	for i := range values {
+		scans[i] = &values[i]
+	}
+	err = row.Scan(scans...)
+	if err != nil {
+		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+	if collation := values[collationIndex]; len(collation) != 0 {
+		return string(collation), nil
+	}
+	return "", nil
+}

@@ -31,11 +31,13 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 	onlineddl "github.com/pingcap/ticdc/dm/syncer/online-ddl-tools"
 )
 
@@ -635,6 +637,60 @@ func (s *testDDLSuite) TestClearOnlineDDL(c *C) {
 
 	c.Assert(syncer.clearOnlineDDL(tctx, targetTable), IsNil)
 	c.Assert(mock.toFinish, HasLen, 0)
+}
+
+func (s *testDDLSuite) TestAdjustTableCollation(c *C) {
+	// duplicate with pkg/parser
+	sqls := []string{
+		"create table `test`.`t1` (id int) CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+		"create table `test`.`t1` like `test`.`t2`",
+		"create table `test`.`t1` (id int) CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci as select id from `test`.`t2`",
+		"create table `test`.`t1` (id int primary key) CHARSET=utf8mb4",
+		"create table `test`.`t1` (id int)",
+	}
+
+	expectedSQLs := []string{
+		"create table `test`.`t1` (id int) CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+		"create table `test`.`t1` like `test`.`t2`",
+		"create table `test`.`t1` (id int) CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci as select id from `test`.`t2`",
+		"CREATE TABLE `test`.`t` (`id` INT PRIMARY KEY) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+	}
+
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
+	syncer := NewSyncer(&config.SubTaskConfig{}, nil, nil)
+	syncer.tctx = tctx
+
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	defer db.Close()
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
+	p := parser.New()
+	schemaName := "test"
+	tableName := "t"
+	tab := &filter.Table{
+		Schema: "test",
+		Name:   "t",
+	}
+	for i, sql := range sqls {
+		ddlInfo := &ddlInfo{
+			originDDL:    sql,
+			routedDDL:    sql,
+			sourceTables: []*filter.Table{tab},
+			targetTables: []*filter.Table{tab},
+		}
+		stmt, err := p.ParseOneStmt(sql, "", "")
+		c.Assert(err, IsNil)
+		c.Assert(stmt, NotNil)
+		ddlInfo.originStmt = stmt
+		if i > 2 {
+			mock.ExpectQuery(fmt.Sprintf("SHOW TABLE STATUS from %s like '%s'", schemaName, tableName)).WillReturnRows(
+				sqlmock.NewRows([]string{"Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length", "Max_data_length", "Index_length", "Data_free", "Auto_increment", "Create_time", "Update_time", "Check_time", "Collation", "Checksum", "Create_options", "Comment"}).
+					AddRow("t", "InnoDB", 10, "Dynamic", 0, 0, 16384, 0, 16384, 0, "NULL", "2021-11-22 08:43:50", "NULL", "NULL", "utf8mb4_general_ci", "NULL", "", ""))
+		}
+		syncer.adjustTableCollation(ddlInfo)
+		c.Assert(ddlInfo.routedDDL, Equals, expectedSQLs[i])
+	}
 }
 
 type mockOnlinePlugin struct {
