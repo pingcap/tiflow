@@ -22,7 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
-	br "github.com/pingcap/ticdc/dm/pkg/binlog/reader"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
@@ -67,7 +67,7 @@ type upstreamReader struct {
 	mu    sync.RWMutex
 	stage common.Stage
 
-	in  br.Reader // the underlying reader used to read binlog events.
+	in  reader.Reader // the underlying reader used to read binlog events.
 	out chan *replication.BinlogEvent
 
 	logger log.Logger
@@ -77,7 +77,7 @@ type upstreamReader struct {
 func NewUpstreamReader(cfg *RConfig) Reader {
 	return &upstreamReader{
 		cfg:    cfg,
-		in:     br.NewTCPReader(cfg.SyncConfig),
+		in:     reader.NewTCPReader(cfg.SyncConfig),
 		out:    make(chan *replication.BinlogEvent),
 		logger: log.With(zap.String("component", "relay reader")),
 	}
