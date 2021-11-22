@@ -30,7 +30,7 @@ type ExecutorManager struct {
 	keepAliveInterval time.Duration
 
 	// TODO: complete ha store.
-	haStore ha.HAStore
+	haStore ha.HAStore // nolint:structcheck,unused
 }
 
 func NewExecutorManager(offExec chan model.ExecutorID, initHeartbeatTTL, keepAliveInterval time.Duration) *ExecutorManager {

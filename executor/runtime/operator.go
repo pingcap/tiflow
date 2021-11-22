@@ -5,22 +5,16 @@ import (
 	"errors"
 	"hash/crc32"
 	"os"
-
-	//"io/fs"
-	//"io/ioutil"
-	"sync"
 	"time"
 
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/workerpool"
 	"github.com/pingcap/ticdc/dm/pkg/log"
-
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
 type fileWriter struct {
-	mu       sync.Mutex
 	filePath string
 	fd       *os.File
 	tid      int32
@@ -32,11 +26,9 @@ func (f *fileWriter) prepare() error {
 	return err
 }
 
-func (f *fileWriter) write(ctx *taskContext, r *Record) {
+func (f *fileWriter) write(_ *taskContext, r *Record) {
 	r.end = time.Now()
 	str := []byte(r.toString())
-	//	f.mu.Lock()
-	//	defer f.mu.Unlock()
 	// ctx.stats[f.tid].recordCnt ++
 	// ctx.stats[f.tid].totalLag += r.end.Sub(r.start)
 	_, err := f.fd.Write(str)
@@ -51,9 +43,8 @@ type tableStats struct {
 }
 
 type taskContext struct {
-	ioPool   workerpool.AsyncPool
-	tableCnt int32
-	stats    []tableStats
+	ioPool workerpool.AsyncPool
+	stats  []tableStats
 }
 
 type operator interface {
@@ -118,9 +109,8 @@ func (o *opReceive) next(ctx *taskContext, _ []*Record) ([][]*Record, bool) {
 	}
 	if i == 0 {
 		return nil, false
-	} else {
-		return o.cache, false
 	}
+	return o.cache, false
 }
 
 type opHash struct{}

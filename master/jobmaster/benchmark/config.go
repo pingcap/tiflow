@@ -10,19 +10,19 @@ import (
 
 func NewConfig() *Config {
 	cfg := &Config{}
-	cfg.FlagSet = flag.NewFlagSet("microcosom", flag.ContinueOnError)
-	fs := cfg.FlagSet
+	cfg.flagSet = flag.NewFlagSet("microcosom", flag.ContinueOnError)
+	fs := cfg.flagSet
 
 	fs.StringVar(&cfg.configFile, "config", "", "Config file")
 	return cfg
 }
 
 type Config struct {
-	*flag.FlagSet `json:"-"`
+	flagSet *flag.FlagSet `json:"-"`
 
-	TableNum int      `toml: "table-cnt" json: "table-cnt"`
-	Servers  []string `toml: "servers"   json: "server-addrs"`
-	Timeout  int      `toml: "timeout"   json: "timeout"`
+	TableNum int      `toml:"table-num" json:"table-num"`
+	Servers  []string `toml:"servers"   json:"servers"`
+	Timeout  int      `toml:"timeout"   json:"timeout"`
 
 	configFile string `json:"-"`
 }
@@ -33,7 +33,7 @@ func (c *Config) configFromFile(path string) error {
 	return errors.Trace(err)
 }
 
-func configFromJson(j string) (*Config, error) {
+func configFromJSON(j string) (*Config, error) {
 	c := NewConfig()
 	err := json.Unmarshal([]byte(j), c)
 	return c, err
@@ -42,7 +42,7 @@ func configFromJson(j string) (*Config, error) {
 // Parse parses flag definitions from the argument list.
 func (c *Config) Parse(arguments []string) error {
 	// Parse first to get config file.
-	err := c.FlagSet.Parse(arguments)
+	err := c.flagSet.Parse(arguments)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -58,13 +58,13 @@ func (c *Config) Parse(arguments []string) error {
 	}
 
 	// Parse again to replace with command line options.
-	err = c.FlagSet.Parse(arguments)
+	err = c.flagSet.Parse(arguments)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	if len(c.FlagSet.Args()) != 0 {
-		return errors.Errorf("'%s' is an invalid flag", c.FlagSet.Arg(0))
+	if len(c.flagSet.Args()) != 0 {
+		return errors.Errorf("'%s' is an invalid flag", c.flagSet.Arg(0))
 	}
 
 	return nil

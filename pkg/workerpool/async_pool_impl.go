@@ -22,11 +22,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	backoffBaseDelayInMs = 1
-	maxTries             = 25
-)
-
 type defaultAsyncPoolImpl struct {
 	workers      []*asyncWorker
 	nextWorkerID int32

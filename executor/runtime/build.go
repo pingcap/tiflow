@@ -2,10 +2,9 @@ package runtime
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 
 	"github.com/hanfei1991/microcosom/model"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 )
@@ -92,7 +91,7 @@ func (s *Runtime) SubmitTasks(tasks []*model.Task) error {
 			if ok {
 				s.connectTasks(t, dst)
 			} else {
-				return errors.New(fmt.Sprintf("cannot find task %d", tid))
+				return errors.ErrTaskNotFound.GenWithStackByArgs(tid)
 			}
 		}
 		err := t.prepare()

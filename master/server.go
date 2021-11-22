@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/master/jobmaster"
@@ -113,7 +112,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	//}
 
 	// generate grpcServer
-	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, nil, time.Minute)
+	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, nil, etcdStartTimeout)
 	if err != nil {
 		return
 	}

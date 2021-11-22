@@ -192,10 +192,8 @@ func (m *Master) reScheduleTask(group scheduleGroup) error {
 	if !success {
 		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
 	}
-	if err := m.dispatch(m.ctx, tasks); err != nil {
-		return err
-	}
-	return nil
+	err := m.dispatch(m.ctx, tasks)
+	return err
 }
 
 func (m *Master) scheduleJobImpl(ctx context.Context) error {
@@ -209,10 +207,8 @@ func (m *Master) scheduleJobImpl(ctx context.Context) error {
 	}
 
 	m.start() // go
-	if err := m.dispatch(ctx, tasks); err != nil {
-		return err
-	}
-	return nil
+	err := m.dispatch(ctx, tasks)
+	return err
 }
 
 // DispatchJob implements JobMaster interface.

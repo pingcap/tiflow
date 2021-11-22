@@ -56,8 +56,8 @@ type JobInfo struct {
 //
 //}
 
-func (i ExecutorInfo) ToJSON() (string, error) {
-	data, err := json.Marshal(i)
+func (e *ExecutorInfo) ToJSON() (string, error) {
+	data, err := json.Marshal(e)
 	if err != nil {
 		return "", err
 	}

@@ -35,15 +35,8 @@ const (
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"
 
-	defaultNamePrefix              = "dm-master"
-	defaultDataDirPrefix           = "default"
-	defaultPeerUrls                = "http://127.0.0.1:8291"
-	defaultInitialClusterState     = embed.ClusterStateFlagNew
-	defaultAutoCompactionMode      = "periodic"
-	defaultAutoCompactionRetention = "1h"
-	defaultMaxTxnOps               = 2048
-	defaultQuotaBackendBytes       = 2 * 1024 * 1024 * 1024 // 2GB
-	quotaBackendBytesLowerBound    = 500 * 1024 * 1024      // 500MB
+	defaultPeerUrls            = "http://127.0.0.1:8291"
+	defaultInitialClusterState = embed.ClusterStateFlagNew
 )
 
 var (

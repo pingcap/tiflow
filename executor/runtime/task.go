@@ -148,7 +148,6 @@ func (t *taskContainer) Poll() TaskStatus {
 	}
 	if blocked {
 		return Blocked
-	} else {
-		return Runnable
 	}
+	return Runnable
 }
