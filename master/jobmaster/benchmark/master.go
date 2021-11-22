@@ -7,7 +7,7 @@ import (
 	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
-	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 )
@@ -96,7 +96,7 @@ func (m *Master) dispatch(ctx context.Context, tasks []*Task) error {
 		}
 		respPb := resp.Resp.(*pb.SubmitBatchTasksResponse)
 		if respPb.Err != nil {
-			return terror.ErrSubJobFailed.Generatef("executor %id job %d", execID, m.ID())
+			return errors.ErrSubJobFailed.GenWithStackByArgs(execID, m.ID())
 		}
 	}
 
@@ -152,7 +152,7 @@ func (m *Master) allocateTasksWithNaiveStrategy(snapshot *cluster.ResourceSnapsh
 func (m *Master) reScheduleTask(group scheduleGroup) error {
 	snapshot := m.resourceManager.GetResourceSnapshot()
 	if len(snapshot.Executors) == 0 {
-		return terror.ErrClusterResourceNotEnough
+		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
 	}
 	taskInfos := make([]*model.Task, 0, len(group))
 	for _, t := range group {
@@ -160,7 +160,7 @@ func (m *Master) reScheduleTask(group scheduleGroup) error {
 	}
 	success, tasks := m.allocateTasksWithNaiveStrategy(snapshot, taskInfos)
 	if !success {
-		return terror.ErrClusterResourceNotEnough
+		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
 	}
 	if err := m.dispatch(m.ctx, tasks); err != nil {
 		return err
@@ -171,11 +171,11 @@ func (m *Master) reScheduleTask(group scheduleGroup) error {
 func (m *Master) scheduleJobImpl(ctx context.Context) error {
 	snapshot := m.resourceManager.GetResourceSnapshot()
 	if len(snapshot.Executors) == 0 {
-		return terror.ErrClusterResourceNotEnough
+		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
 	}
 	success, tasks := m.allocateTasksWithNaiveStrategy(snapshot, m.job.Tasks)
 	if !success {
-		return terror.ErrClusterResourceNotEnough
+		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
 	}
 
 	m.start() // go

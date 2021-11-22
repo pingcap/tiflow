@@ -5,7 +5,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 )
 
 var ExecutorKeyAdapter KeyAdapter = keyHexEncoderDecoder("data-flow/executor")
@@ -42,7 +42,7 @@ func (s keyHexEncoderDecoder) Decode(key string) ([]string, error) {
 	for i, k := range v {
 		dec, err := hex.DecodeString(k)
 		if err != nil {
-			return nil, terror.ErrDecodeEtcdKeyFail.Generate(err.Error())
+			return nil, errors.Wrap(errors.ErrDecodeEtcdKeyFail, err, k)
 		}
 		v[i] = string(dec)
 	}

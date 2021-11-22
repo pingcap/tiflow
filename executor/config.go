@@ -15,7 +15,6 @@ package executor
 
 import (
 	"bytes"
-	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -23,7 +22,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
@@ -120,7 +119,7 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse first to get config file.
 	err := c.flagSet.Parse(arguments)
 	if err != nil {
-		return terror.ErrWorkerParseFlagSet.Delegate(err)
+		return errors.Wrap(errors.ErrExecutorConfigParseFlagSet, err)
 	}
 
 	if c.printSampleConfig {
@@ -139,11 +138,11 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse again to replace with command line options.
 	err = c.flagSet.Parse(arguments)
 	if err != nil {
-		return terror.ErrWorkerParseFlagSet.Delegate(err)
+		return errors.Wrap(errors.ErrExecutorConfigParseFlagSet, err)
 	}
 
 	if len(c.flagSet.Args()) != 0 {
-		return terror.ErrWorkerInvalidFlag.Generate(c.flagSet.Arg(0))
+		return errors.ErrExecutorConfigInvalidFlag.GenWithStackByArgs(c.flagSet.Arg(0))
 	}
 
 	if c.KeepAliveIntervalStr == "" {
@@ -176,7 +175,7 @@ func (c *Config) Parse(arguments []string) error {
 func (c *Config) configFromFile(path string) error {
 	metaData, err := toml.DecodeFile(path, c)
 	if err != nil {
-		return terror.ErrWorkerDecodeConfigFromFile.Delegate(err)
+		return errors.Wrap(errors.ErrExecutorDecodeConfigFile, err)
 	}
 	undecoded := metaData.Undecoded()
 	if len(undecoded) > 0 && err == nil {
@@ -184,7 +183,7 @@ func (c *Config) configFromFile(path string) error {
 		for _, item := range undecoded {
 			undecodedItems = append(undecodedItems, item.String())
 		}
-		return terror.ErrWorkerUndecodedItemFromFile.Generate(strings.Join(undecodedItems, ","))
+		return errors.ErrExecutorConfigUnknownItem.GenWithStackByArgs(strings.Join(undecodedItems, ","))
 	}
 	return nil
 }

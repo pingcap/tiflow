@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
@@ -141,7 +141,7 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse first to get config file.
 	err := c.flagSet.Parse(arguments)
 	if err != nil {
-		return terror.ErrMasterConfigParseFlagSet.Delegate(err)
+		return errors.Wrap(errors.ErrMasterConfigParseFlagSet, err)
 	}
 
 	if c.printSampleConfig {
@@ -169,11 +169,11 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse again to replace with command line options.
 	err = c.flagSet.Parse(arguments)
 	if err != nil {
-		return terror.ErrMasterConfigParseFlagSet.Delegate(err)
+		return errors.Wrap(errors.ErrMasterConfigParseFlagSet, err)
 	}
 
 	if len(c.flagSet.Args()) != 0 {
-		return terror.ErrMasterConfigInvalidFlag.Generate(c.flagSet.Arg(0))
+		return errors.ErrMasterConfigInvalidFlag.GenWithStackByArgs(c.flagSet.Arg(0))
 	}
 	return c.adjust()
 }
@@ -230,7 +230,7 @@ func (c *Config) adjust() (err error) {
 func (c *Config) configFromFile(path string) error {
 	metaData, err := toml.DecodeFile(path, c)
 	if err != nil {
-		return terror.ErrMasterConfigTomlTransform.Delegate(err)
+		return errors.Wrap(errors.ErrMasterDecodeConfigFile, err)
 	}
 	undecoded := metaData.Undecoded()
 	if len(undecoded) > 0 {
@@ -238,7 +238,7 @@ func (c *Config) configFromFile(path string) error {
 		for _, item := range undecoded {
 			undecodedItems = append(undecodedItems, item.String())
 		}
-		return terror.ErrMasterConfigUnknownItem.Generate(strings.Join(undecodedItems, ","))
+		return errors.ErrMasterConfigUnknownItem.GenWithStackByArgs(strings.Join(undecodedItems, ","))
 	}
 	return nil
 }
@@ -253,28 +253,28 @@ func (c *Config) genEmbedEtcdConfig(cfg *embed.Config) (*embed.Config, error) {
 	var err error
 	cfg.LCUrls, err = parseURLs(c.MasterAddr)
 	if err != nil {
-		return nil, terror.ErrMasterGenEmbedEtcdConfigFail.Delegate(err, "invalid master-addr")
+		return nil, errors.Wrap(errors.ErrMasterGenEmbedEtcdConfigFail, err, "invalid master-addr")
 	}
 	cfg.ACUrls, err = parseURLs(c.AdvertiseAddr)
 	if err != nil {
-		return nil, terror.ErrMasterGenEmbedEtcdConfigFail.Delegate(err, "invalid advertise-addr")
+		return nil, errors.Wrap(errors.ErrMasterGenEmbedEtcdConfigFail, err, "invalid advertise-addr")
 	}
 
 	cfg.LPUrls, err = parseURLs(c.PeerUrls)
 	if err != nil {
-		return nil, terror.ErrMasterGenEmbedEtcdConfigFail.Delegate(err, "invalid peer-urls")
+		return nil, errors.Wrap(errors.ErrMasterGenEmbedEtcdConfigFail, err, "invalid peer-urls")
 	}
 
 	cfg.APUrls, err = parseURLs(c.AdvertisePeerUrls)
 	if err != nil {
-		return nil, terror.ErrMasterGenEmbedEtcdConfigFail.Delegate(err, "invalid advertise-peer-urls")
+		return nil, errors.Wrap(errors.ErrMasterGenEmbedEtcdConfigFail, err, "invalid advertise-peer-urls")
 	}
 
 	cfg.InitialCluster = c.InitialCluster
 	cfg.ClusterState = c.InitialClusterState
 	err = cfg.Validate() // verify & trigger the builder
 	if err != nil {
-		return nil, terror.ErrMasterGenEmbedEtcdConfigFail.AnnotateDelegate(err, "fail to validate embed etcd config")
+		return nil, errors.Wrap(errors.ErrMasterGenEmbedEtcdConfigFail, err, "fail to validate embed etcd config")
 	}
 
 	return cfg, nil
@@ -298,7 +298,7 @@ func parseURLs(s string) ([]url.URL, error) {
 		}
 		u, err := url.Parse(item)
 		if err != nil {
-			return nil, terror.ErrMasterParseURLFail.Delegate(err, item)
+			return nil, errors.Wrap(errors.ErrMasterParseURLFail, err, item)
 		}
 		if strings.Index(u.Host, ":") == 0 {
 			u.Host = "0.0.0.0" + u.Host

@@ -5,7 +5,7 @@ import (
 
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
-	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -40,7 +40,7 @@ func (c *executorClient) send(ctx context.Context, req *ExecutorRequest) (*Execu
 func newExecutorClient(addr string) (*executorClient, error) {
 	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
-		return nil, terror.ErrDBBadConn.Generatef("cannot build conn with %s", addr)
+		return nil, errors.ErrGrpcBuildConn.GenWithStackByArgs(addr)
 	}
 	return &executorClient{
 		conn:   conn,

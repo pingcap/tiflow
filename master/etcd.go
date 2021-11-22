@@ -18,10 +18,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"go.etcd.io/etcd/embed"
 	"google.golang.org/grpc"
-
-	"github.com/hanfei1991/microcosom/pkg/terror"
 )
 
 const (
@@ -45,7 +44,7 @@ func startEtcd(etcdCfg *embed.Config,
 
 	e, err := embed.StartEtcd(etcdCfg)
 	if err != nil {
-		return nil, terror.ErrMasterStartEmbedEtcdFail.Delegate(err)
+		return nil, errors.Wrap(errors.ErrMasterStartEmbedEtcdFail, err)
 	}
 
 	select {

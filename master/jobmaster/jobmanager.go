@@ -9,7 +9,7 @@ import (
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/autoid"
-	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 )
@@ -61,12 +61,12 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 		info.Type = model.JobBenchmark
 		jobMaster, err = benchmark.BuildBenchmarkJobMaster(info.Config, j.idAllocater, j.resourceMgr, j.executorClient)
 		if err != nil {
-			resp.Err = terror.ToPBError(err)
+			resp.Err = errors.ToPBError(err)
 			return resp
 		}
 	default:
-		err = terror.ErrBuildJobFailed.Generatef("unknown job type")
-		resp.Err = terror.ToPBError(err)
+		err = errors.ErrBuildJobFailed.GenWithStack("unknown job type", req.Tp)
+		resp.Err = errors.ToPBError(err)
 		return resp
 	}
 	log.L().Logger.Info("finished build job")
@@ -74,7 +74,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 	defer j.mu.Unlock()
 	err = jobMaster.DispatchJob(ctx)
 	if err != nil {
-		resp.Err = terror.ToPBError(err)
+		resp.Err = errors.ToPBError(err)
 		return resp
 	}
 	log.L().Logger.Info("finished dispatch job")

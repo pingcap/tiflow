@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"errors"
 	"net"
 	"strings"
 	"time"
@@ -10,7 +9,7 @@ import (
 	"github.com/hanfei1991/microcosom/executor/runtime"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
-	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -56,7 +55,7 @@ func (s *Server) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksR
 	err := s.sch.SubmitTasks(tasks)
 	if err != nil {
 		log.L().Logger.Error("submit subjob error", zap.Error(err))
-		resp.Err = terror.ToPBError(err)
+		resp.Err = errors.ToPBError(err)
 	}
 	return resp, nil
 }
@@ -125,7 +124,7 @@ func (s *Server) Start(ctx context.Context) error {
 			return nil
 		case t := <-ticker.C:
 			if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-				return errors.New("heartbeat timeout")
+				return errors.ErrHeartbeat.GenWithStack("heartbeat timeout")
 			}
 			req := &pb.HeartbeatRequest{
 				ExecutorId: int32(s.ID),
@@ -139,7 +138,7 @@ func (s *Server) Start(ctx context.Context) error {
 			if err != nil {
 				log.L().Error("heartbeat meet error", zap.Error(err))
 				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-					return terror.ErrHeartbeat.Generatef("rpc error %s", err.Error())
+					return errors.Wrap(errors.ErrHeartbeat, err, "rpc")
 				}
 				continue
 			}
@@ -147,15 +146,15 @@ func (s *Server) Start(ctx context.Context) error {
 				log.L().Error("heartbeat meet error")
 				switch resp.Err.Code {
 				case pb.ErrorCode_UnknownExecutor, pb.ErrorCode_TombstoneExecutor:
-					return terror.ErrHeartbeat.Generatef("logic error %s", resp.Err.Message)
+					return errors.ErrHeartbeat.GenWithStack("logic error: %s", resp.Err.GetMessage())
 				}
 				continue
 			}
-			// We aim to keep lastHbTime of executor consistant with lastHbTime of Master. 
-			// If we set the heartbeat time of executor to the start time of rpc, it will 
-			// be a little bit earlier than the heartbeat time of master, which is safe. 
-			// In contrast, if we set it to the end time of rpc, it might be a little bit 
-			// later than master's, which might cause that master wait for less time than executor. 
+			// We aim to keep lastHbTime of executor consistant with lastHbTime of Master.
+			// If we set the heartbeat time of executor to the start time of rpc, it will
+			// be a little bit earlier than the heartbeat time of master, which is safe.
+			// In contrast, if we set it to the end time of rpc, it might be a little bit
+			// later than master's, which might cause that master wait for less time than executor.
 			// This gap is unsafe.
 			s.lastHearbeatTime = t
 			log.L().Info("heartbeat success")

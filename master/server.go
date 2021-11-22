@@ -9,7 +9,7 @@ import (
 	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/master/jobmaster"
 	"github.com/hanfei1991/microcosom/model"
-	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.etcd.io/etcd/clientv3"
@@ -66,7 +66,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	if err != nil {
 		log.L().Logger.Error("add executor failed", zap.Error(err))
 		return &pb.RegisterExecutorResponse{
-			Err: terror.ToPBError(err),
+			Err: errors.ToPBError(err),
 		}, nil
 	}
 	return &pb.RegisterExecutorResponse{

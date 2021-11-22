@@ -8,9 +8,8 @@ import (
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/autoid"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/hanfei1991/microcosom/pkg/ha"
-	"github.com/hanfei1991/microcosom/pkg/terror"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 )
@@ -49,7 +48,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 	exec, ok := e.executors[id]
 	if !ok {
 		// This executor has been removed
-		return terror.ErrUnknownExecutorID.Generatef("executor id is %d", id)
+		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
 	}
 	delete(e.executors, id)
 	//err := e.haStore.Del(exec.EtcdKey())
@@ -70,8 +69,8 @@ func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Heartbe
 	// executor not exists
 	if !ok {
 		e.mu.Unlock()
-		err := terror.ErrUnknownExecutorID.Generatef("executor id is %d", req.ExecutorId)
-		return &pb.HeartbeatResponse{Err: terror.ToPBError(err)}, nil
+		err := errors.ErrUnknownExecutorID.FastGenByArgs(req.ExecutorId)
+		return &pb.HeartbeatResponse{Err: errors.ToPBError(err)}, nil
 	}
 	e.mu.Unlock()
 
@@ -79,8 +78,8 @@ func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Heartbe
 	exec.mu.Lock()
 	defer exec.mu.Unlock()
 	if exec.Status == model.Tombstone {
-		err := terror.ErrTombstoneExecutor.Generatef("executor %d has been dead", req.ExecutorId)
-		return &pb.HeartbeatResponse{Err: terror.ToPBError(err)}, nil
+		err := errors.ErrTombstoneExecutor.FastGenByArgs(req.ExecutorId)
+		return &pb.HeartbeatResponse{Err: errors.ToPBError(err)}, nil
 	}
 	exec.lastUpdateTime = time.Now()
 	exec.heartbeatTTL = time.Duration(req.Ttl) * time.Millisecond
@@ -102,7 +101,7 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 	}
 	if _, ok := e.executors[info.ID]; ok {
 		e.mu.Unlock()
-		return nil, errors.Errorf("Executor has been registered")
+		return nil, errors.ErrExecutorDupRegister.GenWithStackByArgs()
 	}
 	e.mu.Unlock()
 
@@ -209,7 +208,7 @@ func (e *ExecutorManager) Send(ctx context.Context, id model.ExecutorID, req *Ex
 	exec, ok := e.executors[id]
 	if !ok {
 		e.mu.Unlock()
-		return nil, errors.New("No such executor")
+		return nil, errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
 	}
 	e.mu.Unlock()
 	resp, err := exec.client.send(ctx, req)
