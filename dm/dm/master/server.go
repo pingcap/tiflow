@@ -1655,9 +1655,11 @@ func (s *Server) waitOperationOk(
 			case *pb.OperateRelayRequest:
 				// including the situation that source status is nil and relay status is nil
 				relayStatus := queryResp.GetSourceStatus().GetRelayStatus()
-				if expect == pb.Stage_Stopped && relayStatus == nil {
-					return true, "", queryResp, nil
-				} else if relayStatus != nil {
+				if relayStatus == nil {
+					if expect == pb.Stage_Stopped {
+						return true, "", queryResp, nil
+					}
+				} else {
 					msg := ""
 					if err2 := extractWorkerError(relayStatus.Result); err2 != nil {
 						msg = err2.Error()
@@ -2274,6 +2276,7 @@ func (s *Server) OperateRelay(ctx context.Context, req *pb.OperateRelayRequest) 
 	resp2.Result = true
 	// TODO: now we make sure req.Source isn't empty and len(req.Worker)>=1 in dmctl,
 	// we need refactor the logic here if this behavior changed in the future
+	// TODO: if len(req.Worker)==0 for a quick path, we must adjust req.Worker here
 	var workerToCheck []string
 	for _, worker := range req.Worker {
 		w := s.scheduler.GetWorkerByName(worker)
