@@ -343,7 +343,7 @@ func (r *BinlogReader) parseRelay(ctx context.Context, s *LocalStreamer, pos mys
 
 func (r *BinlogReader) getSwitchPath() (*SwitchPath, error) {
 	// reload uuid
-	uuids, err := utils.ParseUUIDIndex(path.Join(r.cfg.RelayDir, utils.UUIDIndexFilename))
+	uuids, err := utils.ParseUUIDIndex(r.indexPath)
 	if err != nil {
 		return nil, err
 	}
