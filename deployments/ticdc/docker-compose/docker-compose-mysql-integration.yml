@@ -12,4 +12,3 @@ services:
       - bash
       - -c
       - make integration_test_mysql CASE=cdclog_s3
-    network_mode: "container:kafka"
