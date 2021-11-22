@@ -16,13 +16,17 @@ package model
 import (
 	"context"
 	"sync"
-	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-func TestPolymorphicEvent(t *testing.T) {
-	t.Parallel()
+type mounterSuite struct{}
+
+var _ = check.Suite(&mounterSuite{})
+
+func (s *mounterSuite) TestPolymorphicEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
 	raw := &RawKVEntry{
 		StartTs:  99,
 		CRTs:     100,
@@ -35,23 +39,23 @@ func TestPolymorphicEvent(t *testing.T) {
 	}
 
 	polyEvent := NewPolymorphicEvent(raw)
-	require.Equal(t, raw, polyEvent.RawKV)
-	require.Equal(t, raw.CRTs, polyEvent.CRTs)
-	require.Equal(t, raw.StartTs, polyEvent.StartTs)
-	require.Equal(t, raw.RegionID, polyEvent.RegionID())
+	c.Assert(polyEvent.RawKV, check.DeepEquals, raw)
+	c.Assert(polyEvent.CRTs, check.Equals, raw.CRTs)
+	c.Assert(polyEvent.StartTs, check.Equals, raw.StartTs)
+	c.Assert(polyEvent.RegionID(), check.Equals, raw.RegionID)
 
 	rawResolved := &RawKVEntry{CRTs: resolved.CRTs, OpType: OpTypeResolved}
 	polyEvent = NewPolymorphicEvent(resolved)
-	require.Equal(t, rawResolved, polyEvent.RawKV)
-	require.Equal(t, resolved.CRTs, polyEvent.CRTs)
-	require.Equal(t, uint64(0), polyEvent.StartTs)
+	c.Assert(polyEvent.RawKV, check.DeepEquals, rawResolved)
+	c.Assert(polyEvent.CRTs, check.Equals, resolved.CRTs)
+	c.Assert(polyEvent.StartTs, check.Equals, uint64(0))
 }
 
-func TestPolymorphicEventPrepare(t *testing.T) {
-	t.Parallel()
+func (s *mounterSuite) TestPolymorphicEventPrepare(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	polyEvent := NewPolymorphicEvent(&RawKVEntry{OpType: OpTypeResolved})
-	require.Nil(t, polyEvent.WaitPrepare(ctx))
+	c.Assert(polyEvent.WaitPrepare(ctx), check.IsNil)
 
 	polyEvent = NewPolymorphicEvent(&RawKVEntry{OpType: OpTypePut})
 	polyEvent.SetUpFinishedChan()
@@ -60,8 +64,7 @@ func TestPolymorphicEventPrepare(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := polyEvent.WaitPrepare(ctx)
-		require.Nil(t, err)
-		require.True(t, polyEvent.IsPrepared())
+		c.Assert(err, check.IsNil)
 	}()
 	polyEvent.PrepareFinished()
 	wg.Wait()
@@ -71,6 +74,5 @@ func TestPolymorphicEventPrepare(t *testing.T) {
 	polyEvent.SetUpFinishedChan()
 	cancel()
 	err := polyEvent.WaitPrepare(cctx)
-	require.Equal(t, context.Canceled, err)
-	require.False(t, polyEvent.IsPrepared())
+	c.Assert(err, check.Equals, context.Canceled)
 }

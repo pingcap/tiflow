@@ -331,9 +331,6 @@ func (n *sinkNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Messag
 	if n.status == TableStatusStopped {
 		return false, cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	}
-	if n.isTableActorMode && msg.Tp == pipeline.MessageTypePolymorphicEvent && msg.PolymorphicEvent.RawKV.OpType != model.OpTypeResolved && !msg.PolymorphicEvent.IsPrepared() {
-		return false, nil
-	}
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent

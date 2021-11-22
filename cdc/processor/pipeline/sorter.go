@@ -220,6 +220,22 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 						return nil
 					case n.mounter.Input() <- msg:
 					}
+					err = msg.WaitPrepare(ctx)
+					if err != nil {
+						if cerror.ErrFlowControllerAborted.Equal(err) {
+							log.Info("flow control cancelled for table",
+								zap.Int64("tableID", n.tableID),
+								zap.String("tableName", n.tableName))
+						} else {
+							if n.isTableActorMode {
+								log.Error("sorter stopped", zap.Error(err))
+								_ = tableActorRouter.SendB(stdCtx, n.tableActorID, message.StopMessage())
+							} else {
+								ctx.(pipeline.NodeContext).Throw(err)
+							}
+						}
+						return nil
+					}
 				} else {
 					// handle OpTypeResolved
 					if msg.CRTs < lastSentResolvedTs {
