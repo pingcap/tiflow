@@ -279,7 +279,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 //   - when DM-worker Server.Start
 //   - when DM-worker Server watches a UpstreamRelayWorkerKeyAdapter change
 //   - when DM-worker Server fails watching and recovers from a snapshot
-func (w *SourceWorker) EnableRelay() (err error) {
+func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 	w.l.Info("enter EnableRelay")
 	w.Lock()
 	defer w.Unlock()
@@ -287,6 +287,8 @@ func (w *SourceWorker) EnableRelay() (err error) {
 		w.l.Warn("already enabled relay")
 		return nil
 	}
+
+	w.startedRelayBySourceCfg = startBySourceCfg
 
 	var sourceCfg *config.SourceConfig
 	failpoint.Inject("MockGetSourceCfgFromETCD", func(_ failpoint.Value) {
@@ -389,6 +391,8 @@ func (w *SourceWorker) DisableRelay() {
 	w.l.Info("enter DisableRelay")
 	w.Lock()
 	defer w.Unlock()
+
+	w.startedRelayBySourceCfg = false
 	if !w.relayEnabled.CAS(true, false) {
 		w.l.Warn("already disabled relay")
 		return
