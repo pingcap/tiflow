@@ -19,8 +19,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-// SorterTableIDs sorts a slice of table IDs in ascending order.
-func SorterTableIDs(tableIDs []model.TableID) {
+// SortTableIDs sorts a slice of table IDs in ascending order.
+func SortTableIDs(tableIDs []model.TableID) {
 	sort.Slice(tableIDs, func(i, j int) bool {
 		return tableIDs[i] < tableIDs[j]
 	})

@@ -60,7 +60,9 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		return nil
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
-			log.Info("remote capture offline", zap.String("capture-id", k.CaptureID))
+			log.Info("remote capture offline",
+				zap.String("capture-id", k.CaptureID),
+				zap.Any("info", s.Captures[k.CaptureID]))
 			delete(s.Captures, k.CaptureID)
 			return nil
 		}
