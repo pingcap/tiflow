@@ -25,7 +25,7 @@ require (
 	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/getkin/kin-openapi v0.80.0
 	github.com/gin-gonic/gin v1.7.4
-	github.com/go-mysql-org/go-mysql v1.1.3-0.20210705101833-83965e516929
+	github.com/go-mysql-org/go-mysql v1.1.3-0.20211111092245-d7f36836d6b7
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/protobuf v1.3.2

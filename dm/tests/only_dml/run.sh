@@ -72,10 +72,10 @@ function run() {
 	# start relay
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	# check dm-workers metrics unit: relay file index must be 1.
 	check_metric $WORKER1_PORT "dm_relay_binlog_file" 3 0 2
