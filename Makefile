@@ -172,8 +172,12 @@ fmt: tools/bin/gofumports tools/bin/shfmt
 	@echo "run shfmt"
 	tools/bin/shfmt -d -w .
 
+apidoc:
+	@echo "generate ticdc OpenAPI docs"
+	./scripts/gen-httpapi-docs.sh
+
 errdoc: tools/bin/errdoc-gen
-	@echo "generator errors.toml"
+	@echo "generate errors.toml"
 	# check-errdoc will skip DM directory.
 	./tools/check/check-errdoc.sh
 

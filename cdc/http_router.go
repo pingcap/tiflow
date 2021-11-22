@@ -32,8 +32,11 @@ import (
 	_ "github.com/pingcap/ticdc/api"
 )
 
+// @title TiCDC OpenAPI
+// @version 1.0
+// @description This is a docs of TiCDC OpenAPI.
+// @BasePath /api/v1
 // newRouter create a router for OpenAPI
-
 func newRouter(captureHandler capture.HTTPHandler) *gin.Engine {
 	// discard gin log output
 	gin.DefaultWriter = io.Discard
@@ -46,7 +49,7 @@ func newRouter(captureHandler capture.HTTPHandler) *gin.Engine {
 	router.Use(errorHandleMiddleware())
 
 	// OpenAPI online docs
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	router.GET("/api/v1/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// common API
 	router.GET("/api/v1/status", captureHandler.ServerStatus)
