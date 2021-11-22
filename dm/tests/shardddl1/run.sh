@@ -647,12 +647,7 @@ function DM_COMPACT_USE_DOWNSTREAM_SCHEMA() {
 	# This goal is check whether it use downstream schema in compator.
 	# if use downstream schema, key will be 'b' with value less than 20.
 	# If use upstream schema, key will be 'a' with value greater than 100.
-	inject_points=(
-		"github.com/pingcap/ticdc/dm/syncer/SkipFlushCompactor=return()"
-		"github.com/pingcap/ticdc/dm/syncer/DownstreamIdentifyKeyCheckInCompact=return(20)"
-		"github.com/pingcap/ticdc/dm/syncer/SafeModeInitPhaseSeconds=return(5)"
-	)
-	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/SkipFlushCompactor=return();github.com/pingcap/ticdc/dm/syncer/DownstreamIdentifyKeyCheckInCompact=return(20)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
