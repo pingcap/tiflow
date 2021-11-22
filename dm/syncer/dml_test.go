@@ -19,6 +19,7 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/ticdc/dm/pkg/schema"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tiddl "github.com/pingcap/tidb/ddl"
@@ -213,7 +214,7 @@ func (s *testSyncerSuite) TestGenMultipleKeys(c *C) {
 			keys:   []string{"17.a.table"},
 		},
 	}
-
+	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
 	for i, tc := range testCases {
 		schemaStr := tc.schema
 		assert := func(obtained interface{}, checker Checker, args ...interface{}) {
@@ -224,7 +225,7 @@ func (s *testSyncerSuite) TestGenMultipleKeys(c *C) {
 		assert(err, IsNil)
 		dti := schema.GetDownStreamTi(ti, ti)
 		assert(dti, NotNil)
-		keys := genMultipleKeys(dti, ti, tc.values, "table")
+		keys := genMultipleKeys(sessCtx, dti, ti, tc.values, "table")
 		assert(keys, DeepEquals, tc.keys)
 	}
 }
@@ -579,7 +580,7 @@ func (s *testSyncerSuite) TestTruncateIndexValues(c *C) {
 			preValues: []interface{}{int64(10), "123"},
 		},
 	}
-
+	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
 	for i, tc := range testCases {
 		schemaStr := tc.schema
 		assert := func(obtained interface{}, checker Checker, args ...interface{}) {
@@ -596,7 +597,7 @@ func (s *testSyncerSuite) TestTruncateIndexValues(c *C) {
 			cols = append(cols, ti.Columns[column.Offset])
 			values = append(values, tc.values[column.Offset])
 		}
-		realPreValue := truncateIndexValues(dti.AvailableUKIndexList[0], cols, values)
+		realPreValue := truncateIndexValues(sessCtx, dti.AvailableUKIndexList[0], cols, values)
 		assert(realPreValue, DeepEquals, tc.preValues)
 	}
 }
