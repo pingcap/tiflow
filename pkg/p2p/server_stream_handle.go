@@ -28,6 +28,8 @@ import (
 // Since Go is not friendly with the receiver closing a channel, we need this
 // auxiliary data structure to make the stream cancellation more graceful.
 type streamHandle struct {
+	// mu protects sendCh. We should take the shared lock
+	// when sending and the exclusive lock when closing it.
 	mu     sync.RWMutex
 	sendCh chan<- p2p.SendMessageResponse
 
@@ -48,10 +50,15 @@ func newStreamHandle(meta *p2p.StreamMeta, sendCh chan<- p2p.SendMessageResponse
 }
 
 // Send sends a message to the stream.
+// If called after Close, an error will be returned.
 func (s *streamHandle) Send(ctx context.Context, response p2p.SendMessageResponse) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	// We need to read from isClosed while holding the lock.
+	// Otherwise, we risk the sendCh being closed after we have checked
+	// isClosed to be false. If this happens, we will try to send
+	// to a closed channel, which will panic.
 	if s.isClosed.Load() {
 		return cerror.ErrPeerMessageInternalSenderClosed.GenWithStackByArgs()
 	}
