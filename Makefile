@@ -174,7 +174,7 @@ fmt: tools/bin/gofumports tools/bin/shfmt
 
 apidoc:
 	@echo "generate ticdc OpenAPI docs"
-	./tools/gen-httpapi-docs.sh
+	@./tools/check/check-httpapi-docs.sh
 
 errdoc: tools/bin/errdoc-gen
 	@echo "generate errors.toml"
@@ -213,7 +213,7 @@ check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
-check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts
+check: check-copyright fmt check-static tidy terror_check errdoc apidoc check-leaktest-added check-merge-conflicts
 
 coverage: tools/bin/gocovmerge tools/bin/goveralls
 	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
