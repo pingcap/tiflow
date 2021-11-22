@@ -534,7 +534,15 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 	if lcfg.To.Session == nil {
 		lcfg.To.Session = make(map[string]string)
 	}
-	lcfg.To.Session["time_zone"] = "+00:00"
+	timeZone := l.cfg.Timezone
+	if len(timeZone) == 0 {
+		var err1 error
+		timeZone, err1 = conn.FetchTimeZoneSetting(ctx, &lcfg.To)
+		if err1 != nil {
+			return err1
+		}
+	}
+	lcfg.To.Session["time_zone"] = timeZone
 
 	hasSQLMode := false
 	for k := range l.cfg.To.Session {
@@ -554,7 +562,7 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 
 	l.logger.Info("loader's sql_mode is", zap.String("sqlmode", lcfg.To.Session["sql_mode"]))
 
-	l.toDB, l.toDBConns, err = createConns(tctx, lcfg, l.cfg.PoolSize)
+	l.toDB, l.toDBConns, err = createConns(tctx, lcfg, lcfg.Name, lcfg.SourceID, l.cfg.PoolSize)
 	if err != nil {
 		return err
 	}
@@ -861,7 +869,7 @@ func (l *Loader) resetDBs(ctx context.Context) error {
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config
 // no binlog filter for loader need to update.
-func (l *Loader) Update(cfg *config.SubTaskConfig) error {
+func (l *Loader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	var (
 		err              error
 		oldBaList        *filter.Filter
@@ -1320,7 +1328,8 @@ func (q *jobQueue) startConsumers(handler func(ctx context.Context, job *restore
 							}
 						}(baseConn)
 						session = &DBConn{
-							cfg:      job.loader.cfg,
+							name:     job.loader.cfg.Name,
+							sourceID: job.loader.cfg.SourceID,
 							baseConn: baseConn,
 							resetBaseConnFn: func(*tcontext.Context, *conn.BaseConn) (*conn.BaseConn, error) {
 								return nil, terror.ErrDBBadConn.Generate("bad connection error restoreData")

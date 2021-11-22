@@ -55,7 +55,6 @@ func main() {
 		common.PrintLinesf("init logger error %s", terror.Message(err))
 		os.Exit(2)
 	}
-	lightningLog.SetAppLogger(log.L().Logger)
 
 	utils.LogHTTPProxies(true)
 
@@ -65,6 +64,8 @@ func main() {
 	lg, r, _ := globalLog.InitLogger(conf)
 	lg = lg.With(zap.String("component", "ddl tracker"))
 	globalLog.ReplaceGlobals(lg, r)
+	lightningLogger := lg.With(zap.String("component", "lightning"))
+	lightningLog.SetAppLogger(lightningLogger)
 
 	utils.PrintInfo("dm-worker", func() {
 		log.L().Info("", zap.Stringer("dm-worker config", cfg))
