@@ -719,11 +719,10 @@ function DM_MULTIPLE_ROWS_CASE() {
 }
 
 function DM_MULTIPLE_ROWS() {
-
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/BlockExecuteSQLs=return(1)'
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/BlockExecuteSQLs=return(1);github.com/pingcap/ticdc/dm/syncer/SafeModeInitPhaseSeconds=return(5)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
