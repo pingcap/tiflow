@@ -605,6 +605,13 @@ const (
 	codeSchemaTrackerRestoreStmtFail
 	codeSchemaTrackerCannotDropTable
 	codeSchemaTrackerInit
+	codeSchemaTrackerMarshalJSON
+	codeSchemaTrackerUnMarshalJSON
+	codeSchemaTrackerUnSchemaNotExist
+	codeSchemaTrackerCannotSetDownstreamSQLMode
+	codeSchemaTrackerCannotInitDownstreamParser
+	codeSchemaTrackerCannotMockDownstreamTable
+	codeSchemaTrackerCannotFetchDownstreamCreateTableStmt
 )
 
 // HA scheduler.
@@ -1224,6 +1231,9 @@ var (
 	ErrSchemaTrackerCannotSerialize    = New(codeSchemaTrackerCannotSerialize, ClassSchemaTracker, ScopeInternal, LevelHigh, "failed to serialize table info for `%s`.`%s`", "")
 	ErrSchemaTrackerCannotGetTable     = New(codeSchemaTrackerCannotGetTable, ClassSchemaTracker, ScopeInternal, LevelHigh, "cannot get table info for %v from schema tracker", "")
 	ErrSchemaTrackerCannotExecDDL      = New(codeSchemaTrackerCannotExecDDL, ClassSchemaTracker, ScopeInternal, LevelHigh, "cannot track DDL: %s", "")
+	ErrSchemaTrackerMarshalJSON        = New(codeSchemaTrackerMarshalJSON, ClassSchemaTracker, ScopeDownstream, LevelHigh, "can not marshal struct maybe `%v` is unable to serialize", "")
+	ErrSchemaTrackerUnMarshalJSON      = New(codeSchemaTrackerUnMarshalJSON, ClassSchemaTracker, ScopeDownstream, LevelHigh, "can not unmarshal json maybe `%s` is not proper JSON", "")
+	ErrSchemaTrackerUnSchemaNotExist   = New(codeSchemaTrackerUnSchemaNotExist, ClassSchemaTracker, ScopeDownstream, LevelHigh, "can not find `%s` in tracker", "")
 
 	ErrSchemaTrackerCannotFetchDownstreamTable = New(
 		codeSchemaTrackerCannotFetchDownstreamTable, ClassSchemaTracker, ScopeDownstream, LevelMedium,
@@ -1237,7 +1247,15 @@ var (
 		"fail to restore the statement", "")
 	ErrSchemaTrackerCannotDropTable = New(codeSchemaTrackerCannotDropTable, ClassSchemaTracker, ScopeInternal, LevelHigh,
 		"failed to drop table for %v in schema tracker", "")
-	ErrSchemaTrackerInit = New(codeSchemaTrackerInit, ClassSchemaTracker, ScopeInternal, LevelHigh, "failed to create schema tracker", "")
+	ErrSchemaTrackerInit                       = New(codeSchemaTrackerInit, ClassSchemaTracker, ScopeInternal, LevelHigh, "failed to create schema tracker", "")
+	ErrSchemaTrackerCannotSetDownstreamSQLMode = New(codeSchemaTrackerCannotSetDownstreamSQLMode, ClassSchemaTracker, ScopeInternal, LevelHigh,
+		"failed to set default downstream sql_mode %v in schema tracker", "")
+	ErrSchemaTrackerCannotInitDownstreamParser = New(codeSchemaTrackerCannotInitDownstreamParser, ClassSchemaTracker, ScopeInternal, LevelHigh,
+		"failed to init downstream parser by sql_mode %v in schema tracker", "")
+	ErrSchemaTrackerCannotMockDownstreamTable = New(codeSchemaTrackerCannotMockDownstreamTable, ClassSchemaTracker, ScopeInternal, LevelHigh,
+		"failed to mock downstream table by create table statement %v in schema tracker", "")
+	ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt = New(codeSchemaTrackerCannotFetchDownstreamCreateTableStmt, ClassSchemaTracker, ScopeInternal, LevelHigh,
+		"failed to fetch downstream table %v by show create table statement in schema tracker", "")
 
 	// HA scheduler.
 	ErrSchedulerNotStarted                = New(codeSchedulerNotStarted, ClassScheduler, ScopeInternal, LevelHigh, "the scheduler has not started", "")
@@ -1266,7 +1284,7 @@ var (
 	ErrSchedulerLatchInUse                = New(codeSchedulerLatchInUse, ClassScheduler, ScopeInternal, LevelLow, "when %s, resource %s is in use by other client", "Please try again later")
 	ErrSchedulerSourceCfgUpdate           = New(codeSchedulerSourceCfgUpdate, ClassScheduler, ScopeInternal, LevelLow, "source can only update relay-log related parts for now", "")
 	ErrSchedulerWrongWorkerInput          = New(codeSchedulerWrongWorkerInput, ClassScheduler, ScopeInternal, LevelMedium, "require DM master to modify worker [%s] with source [%s], but currently the worker is bound to source [%s]", "")
-	ErrSchedulerCantTransferToRelayWorker = New(codeSchedulerCantTransferToRelayWorker, ClassScheduler, ScopeInternal, LevelMedium, "require DM worker to be bound to source [%s], but it has been started relay for source [%s]", "")
+	ErrSchedulerBoundDiffWithStartedRelay = New(codeSchedulerCantTransferToRelayWorker, ClassScheduler, ScopeInternal, LevelMedium, "require DM worker [%s] to be bound to source [%s], but it has been started relay for source [%s]", "If you intend to bind the source with worker, you can stop-relay for current source.")
 
 	// dmctl.
 	ErrCtlGRPCCreateConn = New(codeCtlGRPCCreateConn, ClassDMCtl, ScopeInternal, LevelHigh, "can not create grpc connection", "Please check your network connection.")

@@ -32,9 +32,11 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)
-	msg, err := encoder.newFlatMessageForDML(testCaseUpdate)
+	message, err := encoder.newFlatMessageForDML(testCaseUpdate)
 	c.Assert(err, check.IsNil)
 
+	msg, ok := message.(*canalFlatMessage)
+	c.Assert(ok, check.IsTrue)
 	c.Assert(msg.EventType, check.Equals, "UPDATE")
 	c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(testCaseUpdate.CommitTs))
 	c.Assert(msg.tikvTs, check.Equals, testCaseUpdate.CommitTs)
@@ -42,39 +44,136 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	c.Assert(msg.Table, check.Equals, "person")
 	c.Assert(msg.IsDDL, check.IsFalse)
 	c.Assert(msg.SQLType, check.DeepEquals, map[string]int32{
-		"id":      int32(JavaSQLTypeBIGINT),
-		"name":    int32(JavaSQLTypeVARCHAR),
-		"tiny":    int32(JavaSQLTypeSMALLINT),
-		"comment": int32(JavaSQLTypeVARCHAR),
-		"blob":    int32(JavaSQLTypeBLOB),
+		"id":           int32(JavaSQLTypeBIGINT),
+		"name":         int32(JavaSQLTypeVARCHAR),
+		"tiny":         int32(JavaSQLTypeSMALLINT),
+		"comment":      int32(JavaSQLTypeVARCHAR),
+		"blob":         int32(JavaSQLTypeBLOB),
+		"binaryString": int32(JavaSQLTypeCHAR),
+		"binaryBlob":   int32(JavaSQLTypeVARCHAR),
 	})
 	c.Assert(msg.MySQLType, check.DeepEquals, map[string]string{
-		"id":      "int",
-		"name":    "varchar",
-		"tiny":    "tinyint",
-		"comment": "text",
-		"blob":    "blob",
+		"id":           "int",
+		"name":         "varchar",
+		"tiny":         "tinyint",
+		"comment":      "text",
+		"blob":         "blob",
+		"binaryString": "binary",
+		"binaryBlob":   "varbinary",
 	})
 	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
 	c.Assert(err, check.IsNil)
 	c.Assert(msg.Data, check.DeepEquals, []map[string]interface{}{
 		{
-			"id":      "1",
-			"name":    "Bob",
-			"tiny":    "255",
-			"comment": "测试",
-			"blob":    string(encodedBytes),
+			"id":           "1",
+			"name":         "Bob",
+			"tiny":         "255",
+			"comment":      "测试",
+			"blob":         string(encodedBytes),
+			"binaryString": "Chengdu International Airport",
+			"binaryBlob":   "你好，世界",
 		},
 	})
 	c.Assert(msg.Old, check.DeepEquals, []map[string]interface{}{
 		{
-			"id":      "1",
-			"name":    "Alice",
-			"tiny":    "255",
-			"comment": "测试",
-			"blob":    string(encodedBytes),
+			"id":           "1",
+			"name":         "Alice",
+			"tiny":         "255",
+			"comment":      "测试",
+			"blob":         string(encodedBytes),
+			"binaryString": "Chengdu International Airport",
+			"binaryBlob":   "你好，世界",
 		},
 	})
+
+	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
+	c.Assert(encoder, check.NotNil)
+	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
+	c.Assert(err, check.IsNil)
+
+	withExtension, ok := message.(*canalFlatMessageWithTiDBExtension)
+	c.Assert(ok, check.IsTrue)
+
+	c.Assert(withExtension.Extensions, check.NotNil)
+	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseUpdate.CommitTs)
+}
+
+func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
+	c.Assert(err, check.IsNil)
+	expected := map[string]interface{}{
+		"id":           "1",
+		"name":         "Bob",
+		"tiny":         "255",
+		"comment":      "测试",
+		"blob":         string(encodedBytes),
+		"binaryString": "Chengdu International Airport",
+		"binaryBlob":   "你好，世界",
+	}
+
+	for _, encodeEnable := range []bool{false, true} {
+		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
+		c.Assert(encoder, check.NotNil)
+
+		result, err := encoder.AppendRowChangedEvent(testCaseUpdate)
+		c.Assert(err, check.IsNil)
+		c.Assert(result, check.Equals, EncoderNoOperation)
+
+		result, err = encoder.AppendResolvedEvent(417318403368288260)
+		c.Assert(err, check.IsNil)
+		c.Assert(result, check.Equals, EncoderNeedAsyncWrite)
+
+		mqMessages := encoder.Build()
+		c.Assert(len(mqMessages), check.Equals, 1)
+
+		rawBytes, err := json.Marshal(mqMessages[0])
+		c.Assert(err, check.IsNil)
+
+		for _, decodeEnable := range []bool{false, true} {
+			decoder := NewCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
+
+			ty, hasNext, err := decoder.HasNext()
+			c.Assert(err, check.IsNil)
+			c.Assert(hasNext, check.IsTrue)
+			c.Assert(ty, check.Equals, model.MqMessageTypeRow)
+
+			consumed, err := decoder.NextRowChangedEvent()
+			c.Assert(err, check.IsNil)
+
+			c.Assert(consumed.Table, check.DeepEquals, testCaseUpdate.Table)
+			if encodeEnable && decodeEnable {
+				c.Assert(consumed.CommitTs, check.Equals, testCaseUpdate.CommitTs)
+			} else {
+				c.Assert(consumed.CommitTs, check.Equals, uint64(0))
+			}
+
+			for _, col := range consumed.Columns {
+				value, ok := expected[col.Name]
+				c.Assert(ok, check.IsTrue)
+
+				if val, ok := col.Value.([]byte); ok {
+					c.Assert(string(val), check.Equals, value)
+				} else {
+					c.Assert(col.Value, check.Equals, value)
+				}
+
+				for _, item := range testCaseUpdate.Columns {
+					if item.Name == col.Name {
+						c.Assert(col.Type, check.Equals, item.Type)
+					}
+				}
+			}
+
+			_, hasNext, _ = decoder.HasNext()
+			c.Assert(hasNext, check.IsFalse)
+
+			consumed, err = decoder.NextRowChangedEvent()
+			c.Assert(err, check.NotNil)
+			c.Assert(consumed, check.IsNil)
+		}
+	}
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
@@ -82,9 +181,11 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)
 
-	msg := encoder.newFlatMessageForDDL(testCaseDdl)
-	c.Assert(msg, check.NotNil)
+	message := encoder.newFlatMessageForDDL(testCaseDdl)
+	c.Assert(message, check.NotNil)
 
+	msg, ok := message.(*canalFlatMessage)
+	c.Assert(ok, check.IsTrue)
 	c.Assert(msg.tikvTs, check.Equals, testCaseDdl.CommitTs)
 	c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(testCaseDdl.CommitTs))
 	c.Assert(msg.IsDDL, check.IsTrue)
@@ -92,6 +193,63 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	c.Assert(msg.Table, check.Equals, "person")
 	c.Assert(msg.Query, check.Equals, testCaseDdl.Query)
 	c.Assert(msg.EventType, check.Equals, "CREATE")
+
+	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
+	c.Assert(encoder, check.NotNil)
+
+	message = encoder.newFlatMessageForDDL(testCaseDdl)
+	c.Assert(message, check.NotNil)
+
+	withExtension, ok := message.(*canalFlatMessageWithTiDBExtension)
+	c.Assert(ok, check.IsTrue)
+
+	c.Assert(withExtension.Extensions, check.NotNil)
+	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseDdl.CommitTs)
+}
+
+func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C) {
+	defer testleak.AfterTest(c)()
+	for _, encodeEnable := range []bool{false, true} {
+		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
+		c.Assert(encoder, check.NotNil)
+
+		result, err := encoder.EncodeDDLEvent(testCaseDdl)
+		c.Assert(err, check.IsNil)
+		c.Assert(result, check.NotNil)
+
+		rawBytes, err := json.Marshal(result)
+		c.Assert(err, check.IsNil)
+
+		for _, decodeEnable := range []bool{false, true} {
+			decoder := NewCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
+
+			ty, hasNext, err := decoder.HasNext()
+			c.Assert(err, check.IsNil)
+			c.Assert(hasNext, check.IsTrue)
+			c.Assert(ty, check.Equals, model.MqMessageTypeDDL)
+
+			consumed, err := decoder.NextDDLEvent()
+			c.Assert(err, check.IsNil)
+
+			if encodeEnable && decodeEnable {
+				c.Assert(consumed.CommitTs, check.Equals, testCaseDdl.CommitTs)
+			} else {
+				c.Assert(consumed.CommitTs, check.Equals, uint64(0))
+			}
+
+			c.Assert(consumed.TableInfo, check.DeepEquals, testCaseDdl.TableInfo)
+			c.Assert(consumed.Query, check.Equals, testCaseDdl.Query)
+
+			ty, hasNext, err = decoder.HasNext()
+			c.Assert(err, check.IsNil)
+			c.Assert(hasNext, check.IsFalse)
+			c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
+
+			consumed, err = decoder.NextDDLEvent()
+			c.Assert(err, check.NotNil)
+			c.Assert(consumed, check.IsNil)
+		}
+	}
 }
 
 func (s *canalFlatSuite) TestBatching(c *check.C) {
@@ -138,6 +296,47 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 	c.Assert(encoder.resolvedBuf, check.HasLen, 0)
 }
 
+func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
+	var watermark uint64 = 2333
+	for _, enable := range []bool{false, true} {
+		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: enable}
+		c.Assert(encoder, check.NotNil)
+
+		msg, err := encoder.EncodeCheckpointEvent(watermark)
+		c.Assert(err, check.IsNil)
+		if enable {
+			c.Assert(msg, check.NotNil)
+		} else {
+			c.Assert(msg, check.IsNil)
+		}
+
+		rawBytes, err := json.Marshal(msg)
+		c.Assert(err, check.IsNil)
+		c.Assert(rawBytes, check.NotNil)
+
+		decoder := NewCanalFlatEventBatchDecoder(rawBytes, enable)
+
+		ty, hasNext, err := decoder.HasNext()
+		c.Assert(err, check.IsNil)
+		if enable {
+			c.Assert(hasNext, check.IsTrue)
+			c.Assert(ty, check.Equals, model.MqMessageTypeResolved)
+			consumed, err := decoder.NextResolvedEvent()
+			c.Assert(err, check.IsNil)
+			c.Assert(consumed, check.Equals, watermark)
+		} else {
+			c.Assert(hasNext, check.IsFalse)
+			c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
+		}
+
+		ty, hasNext, err = decoder.HasNext()
+		c.Assert(err, check.IsNil)
+		c.Assert(hasNext, check.IsFalse)
+		c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
+	}
+}
+
 var testCaseUpdate = &model.RowChangedEvent{
 	CommitTs: 417318403368288260,
 	Table: &model.TableName{
@@ -150,6 +349,8 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
 		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
+		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
 	},
 	PreColumns: []*model.Column{
 		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
@@ -157,6 +358,8 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
 		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
+		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
 	},
 }
 

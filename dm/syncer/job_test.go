@@ -17,6 +17,8 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/util/mock"
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
@@ -87,13 +89,25 @@ func (t *testJobSuite) TestJob(c *C) {
 	se := mock.NewContext()
 	ti, err := createTableInfo(p, se, 0, schema)
 	c.Assert(err, IsNil)
+	tiIndex := &model.IndexInfo{
+		Table:   ti.Name,
+		Unique:  true,
+		Primary: true,
+		State:   model.StatePublic,
+		Tp:      model.IndexTypeBtree,
+		Columns: []*model.IndexColumn{{
+			Name:   ti.Columns[0].Name,
+			Offset: ti.Columns[0].Offset,
+			Length: types.UnspecifiedLength,
+		}},
+	}
 
 	testCases := []struct {
 		job    *job
 		jobStr string
 	}{
 		{
-			newDMLJob(insert, table, table, newDML(insert, true, "targetTable", table, nil, []interface{}{2, 2}, nil, []interface{}{2, 2}, ti.Columns, ti), ec),
+			newDMLJob(insert, table, table, newDML(insert, true, "targetTable", table, nil, []interface{}{2, 2}, nil, []interface{}{2, 2}, ti.Columns, ti, tiIndex, nil), ec),
 			"tp: insert, dml: [safemode: true, targetTableID: targetTable, op: insert, columns: [id col1], oldValues: [], values: [2 2]], ddls: [], last_location: position: (, 4), gtid-set: , start_location: position: (, 4), gtid-set: , current_location: position: (, 4), gtid-set: ",
 		}, {
 			newDDLJob(qec),

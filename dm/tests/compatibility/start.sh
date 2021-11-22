@@ -66,7 +66,7 @@ function run() {
 		"resume-task test" \
 		"\"result\": true" 3
 
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Running\"" 3
 

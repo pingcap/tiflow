@@ -16,6 +16,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -34,7 +35,10 @@ const (
 	DefaultSortDir = "/tmp/sorter"
 
 	// DefaultRedoDir is the sub directory path of data-dir.
-	DefaultRedoDir = "/redo"
+	DefaultRedoDir = "/tmp/redo"
+
+	// DebugConfigurationItem is the name of debug configurations
+	DebugConfigurationItem = "debug"
 )
 
 func init() {
@@ -62,11 +66,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 		PollingTime: -1,
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "normal",
+		Level:             "none",
 		MaxLogSize:        64,
 		FlushIntervalInMs: 1000,
-		Storage:           "local",
-		S3URI:             "",
+		Storage:           "",
 	},
 }
 
@@ -195,6 +198,25 @@ var defaultServerConfig = &ServerConfig{
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
 		NumWorkerPoolGoroutine: 16,
 		SortDir:                DefaultSortDir,
+
+		// Default leveldb sorter config
+		EnableLevelDB: false,
+		LevelDB: LevelDBConfig{
+			Count: 16,
+			// Following configs are optimized for write throughput.
+			// Users should not change them.
+			Concurrency:            256,
+			MaxOpenFiles:           10000,
+			BlockSize:              65536,
+			BlockCacheSize:         4294967296,
+			WriterBufferSize:       8388608,
+			Compression:            "snappy",
+			TargetFileSizeBase:     8388608,
+			CompactionL0Trigger:    160,
+			WriteL0SlowdownTrigger: math.MaxInt32,
+			WriteL0PauseTrigger:    math.MaxInt32,
+			CleanupSpeedLimit:      10000,
+		},
 	},
 	Security:            &SecurityConfig{},
 	PerTableMemoryQuota: 10 * 1024 * 1024, // 10MB
@@ -202,6 +224,9 @@ var defaultServerConfig = &ServerConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
 		RegionScanLimit:  40,
+	},
+	Debug: &DebugConfig{
+		EnableTableActor: true,
 	},
 }
 
@@ -228,6 +253,7 @@ type ServerConfig struct {
 	Security            *SecurityConfig `toml:"security" json:"security"`
 	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
 	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
+	Debug               *DebugConfig    `toml:"debug" json:"debug"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig

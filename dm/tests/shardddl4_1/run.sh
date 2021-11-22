@@ -428,11 +428,12 @@ function DM_142 {
          run_sql_source2 \"create table ${shardddl1}.${tb2} (id int primary key) partition by range(id)(partition p0 values less than (100));\"" \
 		"clean_table" "pessimistic"
 
-	run_case 142 "double-source-optimistic" \
-		"run_sql_source1 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id)(partition p0 values less than (100));\"; \
-         run_sql_source2 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id)(partition p0 values less than (100));\"; \
-         run_sql_source2 \"create table ${shardddl1}.${tb2} (id int primary key) partition by range(id)(partition p0 values less than (100));\"" \
-		"clean_table" "optimistic"
+	# Note: not support optimistic partition yet
+	#run_case 142 "double-source-optimistic" \
+	#	"run_sql_source1 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id)(partition p0 values less than (100));\"; \
+	#     run_sql_source2 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id)(partition p0 values less than (100));\"; \
+	#     run_sql_source2 \"create table ${shardddl1}.${tb2} (id int primary key) partition by range(id)(partition p0 values less than (100));\"" \
+	#	"clean_table" "optimistic"
 }
 
 function DM_143_CASE {
@@ -690,7 +691,7 @@ function DM_150_CASE {
 		# ddl: "modify column a varchar(10)" is passed in optimistic mode and will be executed downstream.
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'"stage": "Running"' 2
+			'"stage": "Running"' 3
 	fi
 
 }

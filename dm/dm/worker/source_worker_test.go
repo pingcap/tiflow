@@ -32,8 +32,8 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	"github.com/pingcap/ticdc/dm/pkg/ha"
 	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/relay"
 )
 
 var emptyWorkerStatusInfoJSONLength = 25
@@ -104,7 +104,7 @@ func (t *testServer) testWorker(c *C) {
 	c.Assert(task, NotNil)
 	c.Assert(task.Result().String(), Matches, ".*worker already closed.*")
 
-	err = w.UpdateSubTask(&config.SubTaskConfig{
+	err = w.UpdateSubTask(context.Background(), &config.SubTaskConfig{
 		Name: "testStartTask",
 	})
 	c.Assert(err, ErrorMatches, ".*worker already closed.*")
@@ -196,6 +196,7 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 	c.Assert(subtaskCfg.DecodeFile("./subtask.toml", true), IsNil)
 	c.Assert(err, IsNil)
 	subtaskCfg.Mode = "full"
+	subtaskCfg.Timezone = "UTC"
 	c.Assert(s.getWorker(true).StartSubTask(&subtaskCfg, pb.Stage_Running, true), IsNil)
 
 	// check task in paused state
@@ -242,7 +243,7 @@ var _ = Suite(&testWorkerFunctionalities{})
 func (t *testWorkerFunctionalities) SetUpSuite(c *C) {
 	NewRelayHolder = NewDummyRelayHolder
 	NewSubTask = NewRealSubTask
-	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, notifier streamer.EventNotifier) []unit.Unit {
+	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, relay relay.Process) []unit.Unit {
 		atomic.AddInt32(&t.createUnitCount, 1)
 		mockDumper := NewMockUnit(pb.UnitType_Dump)
 		mockLoader := NewMockUnit(pb.UnitType_Load)
@@ -417,7 +418,7 @@ func (t *testWorkerEtcdCompact) SetUpSuite(c *C) {
 		cfg.UseRelay = false
 		return NewRealSubTask(cfg, etcdClient, worker)
 	}
-	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, notifier streamer.EventNotifier) []unit.Unit {
+	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, relay relay.Process) []unit.Unit {
 		mockDumper := NewMockUnit(pb.UnitType_Dump)
 		mockLoader := NewMockUnit(pb.UnitType_Load)
 		mockSync := NewMockUnit(pb.UnitType_Sync)

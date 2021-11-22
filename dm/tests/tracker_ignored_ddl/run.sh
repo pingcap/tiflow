@@ -42,7 +42,7 @@ function run() {
 	sleep 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 1
+		"\"stage\": \"Running\"" 2
 
 	run_sql_tidb "select count(1) from $TEST_NAME.t1;"
 	check_contains "count(1): 2"

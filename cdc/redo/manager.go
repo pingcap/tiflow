@@ -16,7 +16,6 @@ package redo
 import (
 	"context"
 	"math"
-	"net/url"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -29,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"go.uber.org/zap"
 )
 
@@ -37,7 +37,7 @@ var updateRtsInterval = time.Second
 type consistentLevelType string
 
 const (
-	consistentLevelNormal   consistentLevelType = "normal"
+	consistentLevelNone     consistentLevelType = "none"
 	consistentLevelEventual consistentLevelType = "eventual"
 )
 
@@ -45,6 +45,7 @@ type consistentStorage string
 
 const (
 	consistentStorageLocal     consistentStorage = "local"
+	consistentStorageNFS       consistentStorage = "nfs"
 	consistentStorageS3        consistentStorage = "s3"
 	consistentStorageBlackhole consistentStorage = "blackhole"
 )
@@ -58,7 +59,7 @@ const (
 // IsValidConsistentLevel checks whether a give consistent level is valid
 func IsValidConsistentLevel(level string) bool {
 	switch consistentLevelType(level) {
-	case consistentLevelNormal, consistentLevelEventual:
+	case consistentLevelNone, consistentLevelEventual:
 		return true
 	default:
 		return false
@@ -68,11 +69,17 @@ func IsValidConsistentLevel(level string) bool {
 // IsValidConsistentStorage checks whether a give consistent storage is valid
 func IsValidConsistentStorage(storage string) bool {
 	switch consistentStorage(storage) {
-	case consistentStorageLocal, consistentStorageS3, consistentStorageBlackhole:
+	case consistentStorageLocal, consistentStorageNFS,
+		consistentStorageS3, consistentStorageBlackhole:
 		return true
 	default:
 		return false
 	}
+}
+
+// IsConsistentEnabled returns whether the consistent feature is enabled
+func IsConsistentEnabled(level string) bool {
+	return IsValidConsistentLevel(level) && consistentLevelType(level) != consistentLevelNone
 }
 
 // IsS3StorageEnabled returns whether s3 storage is enabled
@@ -95,6 +102,9 @@ type LogManager interface {
 	// EmitDDLEvent and FlushResolvedAndCheckpointTs are called from owner only
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	FlushResolvedAndCheckpointTs(ctx context.Context, resolvedTs, checkpointTs uint64) (err error)
+
+	// Cleanup removes all redo logs
+	Cleanup(ctx context.Context) error
 }
 
 // ManagerOptions defines options for redo log manager
@@ -112,9 +122,9 @@ type cacheRows struct {
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
 // redo log resolved ts. It implements LogManager interface.
 type ManagerImpl struct {
-	enabled bool
-	level   consistentLevelType
-	storage consistentStorage
+	enabled     bool
+	level       consistentLevelType
+	storageType consistentStorage
 
 	logBuffer chan cacheRows
 	writer    writer.RedoLogWriter
@@ -131,23 +141,34 @@ type ManagerImpl struct {
 // NewManager creates a new Manager
 func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *ManagerOptions) (*ManagerImpl, error) {
 	// return a disabled Manager if no consistent config or normal consistent level
-	if cfg == nil || consistentLevelType(cfg.Level) == consistentLevelNormal {
+	if cfg == nil || consistentLevelType(cfg.Level) == consistentLevelNone {
 		return &ManagerImpl{enabled: false}, nil
 	}
-	m := &ManagerImpl{
-		enabled:   true,
-		level:     consistentLevelType(cfg.Level),
-		storage:   consistentStorage(cfg.Storage),
-		rtsMap:    make(map[model.TableID]uint64),
-		logBuffer: make(chan cacheRows, logBufferChanSize),
+	uri, err := storage.ParseRawURL(cfg.Storage)
+	if err != nil {
+		return nil, err
 	}
-	switch m.storage {
+	m := &ManagerImpl{
+		enabled:     true,
+		level:       consistentLevelType(cfg.Level),
+		storageType: consistentStorage(uri.Scheme),
+		rtsMap:      make(map[model.TableID]uint64),
+		logBuffer:   make(chan cacheRows, logBufferChanSize),
+	}
+
+	switch m.storageType {
 	case consistentStorageBlackhole:
 		m.writer = writer.NewBlackHoleWriter()
-	case consistentStorageLocal, consistentStorageS3:
+	case consistentStorageLocal, consistentStorageNFS, consistentStorageS3:
 		globalConf := config.GetGlobalServerConfig()
 		changeFeedID := util.ChangefeedIDFromCtx(ctx)
+		// We use a temporary dir to storage redo logs before flushing to other backends, such as S3
 		redoDir := filepath.Join(globalConf.DataDir, config.DefaultRedoDir, changeFeedID)
+		if m.storageType == consistentStorageLocal || m.storageType == consistentStorageNFS {
+			// When using local or nfs as backend, store redo logs to redoDir directly.
+			redoDir = uri.Path
+		}
+
 		writerCfg := &writer.LogWriterConfig{
 			Dir:               redoDir,
 			CaptureID:         util.CaptureAddrFromCtx(ctx),
@@ -155,14 +176,10 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 			CreateTime:        time.Now(),
 			MaxLogSize:        cfg.MaxLogSize,
 			FlushIntervalInMs: cfg.FlushIntervalInMs,
-			S3Storage:         cfg.Storage == string(consistentStorageS3),
+			S3Storage:         m.storageType == consistentStorageS3,
 		}
 		if writerCfg.S3Storage {
-			s3URI, err := url.Parse(cfg.S3URI)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrInvalidS3URI, err)
-			}
-			writerCfg.S3URI = *s3URI
+			writerCfg.S3URI = *uri
 		}
 		writer, err := writer.NewLogWriter(ctx, writerCfg)
 		if err != nil {
@@ -170,8 +187,9 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		}
 		m.writer = writer
 	default:
-		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storage)
+		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storageType)
 	}
+
 	if opts.EnableBgRunner {
 		go m.bgUpdateResolvedTs(ctx, opts.ErrCh)
 		go m.bgWriteLog(ctx, opts.ErrCh)
@@ -190,11 +208,11 @@ func (m *ManagerImpl) Enabled() bool {
 }
 
 // EmitRowChangedEvents sends row changed events to a log buffer, the log buffer
-// will be consumed by a background goroutine, which converts row chagned events
+// will be consumed by a background goroutine, which converts row changed events
 // to redo logs and sends to log writer. Note this function is non-blocking if
 // the channel is not full, otherwise if the channel is always full after timeout,
 // error ErrBufferLogTimeout will be returned.
-// TODO: if the API is truly non-blocking, we should return an error immediatel
+// TODO: if the API is truly non-blocking, we should return an error immediately
 // when the log buffer channel is full.
 func (m *ManagerImpl) EmitRowChangedEvents(
 	ctx context.Context,
@@ -210,7 +228,10 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 		return cerror.ErrBufferLogTimeout.GenWithStackByArgs()
 	case m.logBuffer <- cacheRows{
 		tableID: tableID,
-		rows:    rows,
+		// Because the pipeline sink doesn't hold slice memory after calling
+		// EmitRowChangedEvents, we copy to a new slice to manage memory
+		// in redo manager itself, which is the same behavior as sink manager.
+		rows: append(make([]*model.RowChangedEvent, 0, len(rows)), rows...),
 	}:
 	}
 	return nil
@@ -284,10 +305,14 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 	} else {
 		log.Warn("remove a table not maintained in redo log manager", zap.Int64("table-id", tableID))
 	}
-	// TODO: send remove table command to redo log writer
 }
 
-// updatertsMap reads rtsMap from redo log writer and calculate the minimum
+// Cleanup removes all redo logs of this manager, it is called when changefeed is removed
+func (m *ManagerImpl) Cleanup(ctx context.Context) error {
+	return m.writer.DeleteAllLogs(ctx)
+}
+
+// updateTableResolvedTs reads rtsMap from redo log writer and calculate the minimum
 // resolved ts of all maintaining tables.
 func (m *ManagerImpl) updateTableResolvedTs(ctx context.Context) error {
 	m.rtsMapMu.Lock()

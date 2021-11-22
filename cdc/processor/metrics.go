@@ -60,6 +60,13 @@ var (
 			Name:      "exit_with_error_count",
 			Help:      "counter for processor exits with error",
 		}, []string{"changefeed", "capture"})
+	processorSchemaStorageGcTsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "schema_storage_gc_ts",
+			Help:      "the TS of the currently maintained oldest snapshot in SchemaStorage",
+		}, []string{"changefeed", "capture"})
 )
 
 // InitMetrics registers all metrics used in processor
@@ -70,4 +77,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(checkpointTsLagGauge)
 	registry.MustRegister(syncTableNumGauge)
 	registry.MustRegister(processorErrorCounter)
+	registry.MustRegister(processorSchemaStorageGcTsGauge)
 }

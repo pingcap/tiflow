@@ -113,8 +113,10 @@ function run() {
 	check_metric $WORKER1_PORT 'dm_syncer_binlog_event_row_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 0 99999
 	check_metric $WORKER2_PORT 'dm_syncer_binlog_event_row_sum{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 0 99999
 
-	check_metric $WORKER1_PORT 'dm_syncer_replication_transaction_batch_count' 5 0 99999
-	check_metric $WORKER2_PORT 'dm_syncer_replication_transaction_batch_count' 5 0 99999
+	check_metric $WORKER1_PORT 'dm_syncer_replication_transaction_batch_count.*type="rows"' 5 0 99999
+	check_metric $WORKER1_PORT 'dm_syncer_replication_transaction_batch_count.*type="statements"' 5 0 99999
+	check_metric $WORKER2_PORT 'dm_syncer_replication_transaction_batch_count.*type="rows"' 5 0 99999
+	check_metric $WORKER2_PORT 'dm_syncer_replication_transaction_batch_count.*type="statements"' 5 0 99999
 
 	# restart dm worker
 	kill_dm_worker

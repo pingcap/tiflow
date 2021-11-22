@@ -391,6 +391,49 @@ func GetServerUnixTS(ctx context.Context, db *sql.DB) (int64, error) {
 	return ts, err
 }
 
+// GetSchemaList gets db schema list with `SHOW DATABASES`.
+func GetSchemaList(ctx context.Context, db *sql.DB) ([]string, error) {
+	schemaList := []string{}
+	rows, err := db.QueryContext(ctx, "SHOW DATABASES")
+	if err != nil {
+		return schemaList, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+	if rows.Err() != nil {
+		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var schema string
+		if scanErr := rows.Scan(&schema); scanErr != nil {
+			return nil, terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
+		}
+		schemaList = append(schemaList, schema)
+	}
+	return schemaList, err
+}
+
+// GetTableList gets db schema list with `SHOW TABLES FROM`.
+func GetTableList(ctx context.Context, db *sql.DB, schemaName string) ([]string, error) {
+	tableList := []string{}
+	sql := "SHOW TABLES FROM " + schemaName
+	rows, err := db.QueryContext(ctx, sql)
+	if err != nil {
+		return tableList, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+	if rows.Err() != nil {
+		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var table string
+		if scanErr := rows.Scan(&table); scanErr != nil {
+			return nil, terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
+		}
+		tableList = append(tableList, table)
+	}
+	return tableList, err
+}
+
 // GetMariaDBUUID gets equivalent `server_uuid` for MariaDB
 // `gtid_domain_id` joined `server_id` with domainServerIDSeparator.
 func GetMariaDBUUID(ctx context.Context, db *sql.DB) (string, error) {
@@ -576,4 +619,16 @@ func GetSQLModeStrBySQLMode(sqlMode tmysql.SQLMode) string {
 		}
 	}
 	return strings.Join(sqlModeStr, ",")
+}
+
+// GetTableCreateSQL gets table create sql by 'show create table schema.table'.
+func GetTableCreateSQL(ctx context.Context, conn *sql.Conn, tableID string) (sql string, err error) {
+	querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tableID)
+	var table, createStr string
+	row := conn.QueryRowContext(ctx, querySQL)
+	err = row.Scan(&table, &createStr)
+	if err != nil {
+		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+	return createStr, nil
 }

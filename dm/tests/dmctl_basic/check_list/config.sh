@@ -103,8 +103,7 @@ function config_to_file() {
 		"\"msg\": \"\"" 2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source create $WORK_DIR/get_source1.yaml" \
-		"\"result\": true" 2 \
-		"Please use \`start-relay\`" 1
+		"\"result\": true" 2
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source stop mysql-replica-02" \

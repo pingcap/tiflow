@@ -13,7 +13,10 @@ function DM_001_CASE() {
 	# schema tracker could track per table without error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Duplicate column name 'new_col1'" 1
+		"\"result\": true" 2 \
+		"\"synced\": true" 1
+	# only downstream sees a duplicate error, but currently ignored by DM
+	check_log_contain_with_retry "Duplicate column name 'new_col1'" $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
 }
 
 function DM_001() {
@@ -239,7 +242,7 @@ function DM_RemoveLock_CASE() {
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column c double;"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column c double;"
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column c double;"
-	check_log_contain_with_retry "wait new ddl info putted into etcd" $WORK_DIR/master/log/dm-master.log
+	check_log_contain_with_retry "wait new ddl info putted into etcd in ${1}" $WORK_DIR/master/log/dm-master.log
 	check_metric_not_contains $MASTER_PORT "dm_master_shard_ddl_error" 3
 	run_sql_source1 "alter table ${shardddl1}.${tb1} drop column b;"
 
@@ -573,6 +576,148 @@ function DM_COLUMN_INDEX() {
 		"clean_table" "optimistic"
 }
 
+function DM_COMPACT_CASE() {
+	END=100
+	for i in $(seq 1 $END); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values($i,$i)"
+		run_sql_source1 "update ${shardddl1}.${tb1} set c=1 where a=$i"
+		run_sql_source1 "update ${shardddl1}.${tb1} set c=c+1 where a=$i"
+		run_sql_source1 "update ${shardddl1}.${tb1} set b=b+1 where a=$i"
+		run_sql_source1 "update ${shardddl1}.${tb1} set a=a+100 where a=$i"
+		run_sql_source1 "delete from ${shardddl1}.${tb1} where a=$((i + 100))"
+		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values($i,$i)"
+	done
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
+	compactCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "finish to compact" | wc -l)
+	if [[ "$compactCnt" -le 100 ]]; then
+		echo "compact $compactCnt dmls which is less than 100"
+		exit 1
+	fi
+}
+
+function DM_COMPACT() {
+	# mock downstream has a high latency and upstream has a high workload
+	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/BlockExecuteSQLs=return(1)'
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	run_case COMPACT "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique, c int);\"" \
+		"clean_table" ""
+}
+
+function DM_COMPACT_USE_DOWNSTREAM_SCHEMA_CASE() {
+	END=10
+	# As this kind of sql is no use, like "update tb1 set c=1 where a=100" which is behind of "insert into tb1(a,b,c) values(100,1,1)"
+	# We should avoid this kind of sql to make sure the count of dmls
+	for i in $(seq 0 $END); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b,c) values($((i + 100)),$i,$i)"
+		run_sql_source1 "update ${shardddl1}.${tb1} set c=20 where a=$((i + 100))"
+		run_sql_source1 "update ${shardddl1}.${tb1} set c=c+1 where a=$((i + 100))"
+		# Use downstream uk 'b' as key and this sql which modifiies 'b' will be splited to two job(delete+insert)
+		run_sql_source1 "update ${shardddl1}.${tb1} set b=b+1 where a=$((i + 100))"
+		run_sql_source1 "update ${shardddl1}.${tb1} set a=a+100 where a=$((i + 100))"
+		run_sql_source1 "delete from ${shardddl1}.${tb1} where a=$((i + 200))"
+		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b,c) values($((i + 100)),$i,$i)"
+	done
+	run_sql_tidb_with_retry_times "select count(1) from ${shardddl}.${tb};" "count(1): 11" 30
+	run_sql_tidb "create table ${shardddl}.${tb}_temp (a int primary key auto_increment, b int unique not null, c int) auto_increment = 100; 
+		insert into ${shardddl}.${tb}_temp (a, b, c) select a, b, c from ${shardddl}.${tb}; 
+		drop table ${shardddl}.${tb}; rename table ${shardddl}.${tb}_temp to ${shardddl}.${tb};"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
+	compactCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "finish to compact" | wc -l)
+	# As compact is affected by "j.tp == flush", the check count of compact use "-le 50"
+	if [[ "$compactCnt" -le 50 ]]; then
+		echo "compact $compactCnt dmls which is less than 50"
+		exit 1
+	fi
+}
+
+function DM_COMPACT_USE_DOWNSTREAM_SCHEMA() {
+	# downstream pk/uk/column is diffrent with upstream, compact use downstream schema.
+	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+	# DownstreamIdentifyKeyCheckInCompact=return(20) will check whether the key value in compact is less than 20, if false, it will be panic.
+	# This goal is check whether it use downstream schema in compator.
+	# if use downstream schema, key will be 'b' with value less than 20.
+	# If use upstream schema, key will be 'a' with value greater than 100.
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/SkipFlushCompactor=return();github.com/pingcap/ticdc/dm/syncer/DownstreamIdentifyKeyCheckInCompact=return(20)'
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	run_case COMPACT_USE_DOWNSTREAM_SCHEMA "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique not null, c int);\"; 
+		run_sql_tidb \"drop database if exists ${shardddl}; create database ${shardddl}; create table ${shardddl}.${tb} (a int, b int unique not null, c int, d int primary key auto_increment) auto_increment = 100;\"" \
+		"clean_table" ""
+}
+
+function DM_MULTIPLE_ROWS_CASE() {
+	END=100
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values($i,$i),($((i + 1)),$((i + 1))),($((i + 2)),$((i + 2))),($((i + 3)),$((i + 3))),($((i + 4)),$((i + 4))),\
+		($((i + 5)),$((i + 5))),($((i + 6)),$((i + 6))),($((i + 7)),$((i + 7))),($((i + 8)),$((i + 8))),($((i + 9)),$((i + 9)))"
+	done
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "update ${shardddl1}.${tb1} set c=1 where a>=$i and a<$((i + 10))"
+	done
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "update ${shardddl1}.${tb1} set b = 0 - b where a>=$i and a<$((i + 10))"
+	done
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "update ${shardddl1}.${tb1} set a = 0 - a where a>=$i and a<$((i + 10))"
+	done
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "delete from ${shardddl1}.${tb1} where a<=$((0 - i)) and a>$((-10 - i))"
+	done
+
+	# insert new values, otherwise there may not be any data in downstream in middle stage and check_sync_diff return true immediately
+	for i in $(seq 100 110 $END); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values($i,$i),($((i + 1)),$((i + 1))),($((i + 2)),$((i + 2))),($((i + 3)),$((i + 3))),($((i + 4)),$((i + 4))),\
+		($((i + 5)),$((i + 5))),($((i + 6)),$((i + 6))),($((i + 7)),$((i + 7))),($((i + 8)),$((i + 8))),($((i + 9)),$((i + 9)))"
+	done
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
+	insertMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '"original op"=insert' | wc -l)
+	updateMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '"original op"=update' | wc -l)
+	deleteMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '"original op"=delete' | wc -l)
+	if [[ "$insertMergeCnt" -le 5 || "$updateMergeCnt" -le 5 || "$deleteMergeCnt" -le 5 ]]; then
+		echo "merge dmls less than 5, insertMergeCnt: $insertMergeCnt, updateMergeCnt: $updateMergeCnt, deleteMergeCnt: $deleteMergeCnt"
+		exit 1
+	fi
+}
+
+function DM_MULTIPLE_ROWS() {
+
+	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/BlockExecuteSQLs=return(1)'
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	run_case MULTIPLE_ROWS "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique, c int);\"" \
+		"clean_table" ""
+
+	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+	export GO_FAILPOINTS=''
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+}
+
 function DM_CAUSALITY_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,2)"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(2,3)"
@@ -590,11 +735,43 @@ function DM_CAUSALITY() {
 		"clean_table" ""
 }
 
+function DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA_CASE() {
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,2)"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(2,3)"
+	run_sql_source1 "update ${shardddl1}.${tb1} set a=3, b=4 where b=3"
+	run_sql_source1 "delete from ${shardddl1}.${tb1} where a=1"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,3)"
+
+	run_sql_tidb_with_retry_times "select count(1) from ${shardddl}.${tb} where a =1 and b=3;" "count(1): 1" 30
+	run_sql_tidb "create table ${shardddl}.${tb}_temp (a int primary key, b int unique); 
+		insert into ${shardddl}.${tb}_temp (a, b) select a, b from ${shardddl}.${tb};
+		drop table ${shardddl}.${tb}; rename table ${shardddl}.${tb}_temp to ${shardddl}.${tb};"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	causalityCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "meet causality key, will generate a conflict job to flush all sqls" | wc -l)
+	if [[ "$causalityCnt" -ne 0 ]]; then
+		echo "causalityCnt is $causalityCnt, but it should be 0"
+		exit 1
+	fi
+}
+
+function DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA() {
+	# downstream pk/uk/column is diffrent with upstream, causality use downstream schema.
+	run_case CAUSALITY_USE_DOWNSTREAM_SCHEMA "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique);\"; 
+		run_sql_tidb \"drop database if exists ${shardddl}; create database ${shardddl}; create table ${shardddl}.${tb} (a int, b int unique, c int primary key auto_increment) auto_increment = 100;\"" \
+		"clean_table" ""
+}
+
 function run() {
 	init_cluster
 	init_database
 
+	DM_COMPACT
+	DM_COMPACT_USE_DOWNSTREAM_SCHEMA
+	DM_MULTIPLE_ROWS
 	DM_CAUSALITY
+	DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA
 	DM_UpdateBARule
 	DM_RENAME_TABLE
 	DM_RENAME_COLUMN_OPTIMISTIC
@@ -608,6 +785,7 @@ function run() {
 		DM_${i}
 		sleep 1
 	done
+
 }
 
 cleanup_data $shardddl
