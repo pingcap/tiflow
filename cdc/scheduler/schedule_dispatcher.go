@@ -261,12 +261,10 @@ func (s *BaseScheduleDispatcher) Tick(
 		if err != nil {
 			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
 		}
-		if ok {
-			// Rebalance has finished, so we set needRebalance to false.
-			s.needRebalance = false
-		} else {
+		if !ok {
 			return CheckpointCannotProceed, CheckpointCannotProceed, nil
 		}
+		s.needRebalance = false
 	}
 	if !checkAllTasksNormal() {
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
