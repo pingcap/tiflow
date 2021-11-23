@@ -105,7 +105,10 @@ func (s *Server) GetDocHTML(c *gin.Context) {
 		return
 	}
 	c.Writer.WriteHeader(http.StatusOK)
-	c.Writer.Write([]byte(html))
+	_, err = c.Writer.Write([]byte(html))
+	if err != nil {
+		_ = c.Error(err)
+	}
 }
 
 // DMAPIGetClusterMasterList get cluster master node list url is:(GET /api/v1/cluster/masters).
