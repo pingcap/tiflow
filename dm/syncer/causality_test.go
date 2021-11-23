@@ -94,7 +94,8 @@ func (s *testSyncerSuite) TestCasuality(c *C) {
 			Name:     "task",
 			SourceID: "source",
 		},
-		tctx: tcontext.Background().WithLogger(log.L()),
+		tctx:    tcontext.Background().WithLogger(log.L()),
+		sessCtx: utils.NewSessionCtx(map[string]string{"time_zone": "UTC"}),
 	}
 	causalityCh := causalityWrap(jobCh, syncer)
 	testCases := []struct {
@@ -164,7 +165,8 @@ func (s *testSyncerSuite) TestCasualityWithPrefixIndex(c *C) {
 			Name:     "task",
 			SourceID: "source",
 		},
-		tctx: tcontext.Background().WithLogger(log.L()),
+		tctx:    tcontext.Background().WithLogger(log.L()),
+		sessCtx: utils.NewSessionCtx(map[string]string{"time_zone": "UTC"}),
 	}
 	causalityCh := causalityWrap(jobCh, syncer)
 	testCases := []struct {
