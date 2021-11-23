@@ -73,13 +73,9 @@ func NewConfig() *Config {
 
 // Initialize the kafka configuration
 func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
-<<<<<<< HEAD
-	s := sinkURI.Query().Get("partition-num")
-=======
 	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
->>>>>>> 6a64873d4 (cdc/sink: adjust kafka initialization logic (#3192))
 	if s != "" {
 		a, err := strconv.Atoi(s)
 		if err != nil {
@@ -446,18 +442,20 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 
 	// when try to create the topic, we don't know how to set the `max.message.bytes` for the topic.
 	// Kafka would create the topic with broker's `message.max.bytes`,
-	// we have to make sure it's not greater than `max-message-bytes`
-	brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
-	if err != nil {
-		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
-		return errors.Trace(err)
-	}
+	// we have to make sure it's not greater than `max-message-bytes` for the default open protocol.
+	if protocol == codec.ProtocolDefault || protocol == codec.ProtocolCraft {
+		brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
+		if err != nil {
+			log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
+			return errors.Trace(err)
+		}
 
-	if brokerMessageMaxBytes < config.MaxMessageBytes {
-		return cerror.ErrKafkaInvalidConfig.GenWithStack(
-			"broker's message.max.bytes(%d) less than max-message-bytes(%d)"+
-				"Please make sure `max-message-bytes` not greater than broker's `message.max.bytes`",
-			brokerMessageMaxBytes, config.MaxMessageBytes)
+		if brokerMessageMaxBytes < config.MaxMessageBytes {
+			return cerror.ErrKafkaInvalidConfig.GenWithStack(
+				"broker's message.max.bytes(%d) less than max-message-bytes(%d)"+
+					"Please make sure `max-message-bytes` not greater than broker's `message.max.bytes`",
+				brokerMessageMaxBytes, config.MaxMessageBytes)
+		}
 	}
 
 	// topic not created yet, and user does not specify the `partition-num` in the sink uri.
@@ -492,16 +490,8 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, protocol codec.Pr
 	if err != nil {
 		return nil, err
 	}
-<<<<<<< HEAD
-	if config.PartitionNum < 0 {
-		return nil, cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(config.PartitionNum)
-	}
-	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
-	if err != nil {
-=======
 
 	if err := topicPreProcess(topic, protocol, config, cfg); err != nil {
->>>>>>> 6a64873d4 (cdc/sink: adjust kafka initialization logic (#3192))
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
