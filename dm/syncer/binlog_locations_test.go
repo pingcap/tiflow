@@ -31,14 +31,14 @@ var _ = Suite(&testLocationSuite{})
 type testLocationSuite struct {
 	eventsGenerator *event.Generator
 
-	serverID    uint32
-	binlogFile string
+	serverID       uint32
+	binlogFile     string
 	nextBinlogFile string
-	binlogPos   uint32
-	flavor      string
-	prevGSetStr string
-	lastGTIDStr string
-	currGSetStr string
+	binlogPos      uint32
+	flavor         string
+	prevGSetStr    string
+	lastGTIDStr    string
+	currGSetStr    string
 
 	loc binlog.Location
 
@@ -52,10 +52,10 @@ func (s *testLocationSuite) SetUpSuite(c *C) {
 	s.binlogFile = "mysql-bin.000001"
 	s.nextBinlogFile = "mysql-bin.000002"
 	s.binlogPos = 123
-	s.flavor             = mysql.MySQLFlavor
-	s.prevGSetStr        = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"
-	s.lastGTIDStr        = "3ccc475b-2343-11e7-be21-6c0b84d59f30:14"
-	s.currGSetStr        = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"
+	s.flavor = mysql.MySQLFlavor
+	s.prevGSetStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"
+	s.lastGTIDStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:14"
+	s.currGSetStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"
 
 	var err error
 	s.prevGSet, err = gtid.ParserGTID(s.flavor, s.prevGSetStr)
@@ -330,7 +330,6 @@ func (s *testLocationSuite) generateRotateAndDMLEvents(c *C) []*replication.Binl
 	return events
 }
 
-
 func (s *testLocationSuite) TestRotateEvent(c *C) {
 	events := s.generateRotateAndDMLEvents(c)
 
@@ -361,5 +360,4 @@ func (s *testLocationSuite) TestRotateEvent(c *C) {
 
 	s.checkOneTxnEvents(c, events[:4], expected[:5])
 	s.checkOneTxnEvents(c, events[4:], expected[4:])
-
 }

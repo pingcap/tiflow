@@ -3340,7 +3340,7 @@ func (s *Syncer) getEvent(tctx *tcontext.Context, startLocation binlog.Location)
 	}
 
 	e, err := s.streamerController.GetEvent(tctx)
-	if err != nil {
+	if err == nil {
 		s.locations.update(e)
 		// TODO: observe integration test
 		s.tctx.L().Debug("location refactor", zap.Stringer("locations", s.locations))
