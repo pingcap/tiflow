@@ -22,6 +22,12 @@ function clear_gc_worker_safepoint() {
 	ETCDCTL_API=3 etcdctl --endpoints=$pd_addr del /pd/$pd_cluster_id/gc/safe_point/service/ticdc
 }
 
+function clear_gc_worker_safepoint() {
+	pd_addr=$1
+	pd_cluster_id=$2
+	ETCDCTL_API=3 etcdctl --endpoints=$pd_addr del /pd/$pd_cluster_id/gc/safe_point/service/ticdc
+}
+
 function check_safepoint_cleared() {
 	pd_addr=$1
 	pd_cluster_id=$2
