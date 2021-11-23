@@ -89,12 +89,12 @@ func (s *Server) InitOpenAPIHandles() error {
 
 // GetDocJSON url is:(GET /api/v1/dm.json).
 func (s *Server) GetDocJSON(c *gin.Context) {
-	swaggerJSON, err := openapi.GetSwaggerJSON()
+	swagger, err := openapi.GetSwagger()
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(200, swaggerJSON)
+	c.JSON(http.StatusOK, swagger)
 }
 
 // GetDocHTML url is:(GET /api/v1/docs).
@@ -104,7 +104,11 @@ func (s *Server) GetDocHTML(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.String(http.StatusOK, "text/html; charset=utf-8", html)
+	c.Writer.WriteHeader(http.StatusOK)
+	_, err = c.Writer.Write([]byte(html))
+	if err != nil {
+		_ = c.Error(err)
+	}
 }
 
 // DMAPIGetClusterMasterList get cluster master node list url is:(GET /api/v1/cluster/masters).
