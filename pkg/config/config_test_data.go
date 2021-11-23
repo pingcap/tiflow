@@ -142,7 +142,18 @@ const (
   },
   "sink": {
     "dispatchers": null,
-    "protocol": "default"
+    "protocol": "default",
+    "column-selectors": [
+      {
+        "matcher": [
+          "1.1"
+        ],
+        "columns": [
+          "a",
+          "b"
+        ]
+      }
+    ]
   },
   "cyclic-replication": {
     "enable": false,
@@ -179,7 +190,18 @@ const (
   },
   "sink": {
     "dispatchers": null,
-    "protocol": "default"
+    "protocol": "default",
+    "column-selectors": [
+      {
+        "matcher": [
+          "1.1"
+        ],
+        "columns": [
+          "a",
+          "b"
+        ]
+      }
+    ]
   },
   "cyclic-replication": {
     "enable": false,
