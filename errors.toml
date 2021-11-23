@@ -636,9 +636,34 @@ error = '''
 etcd api call error
 '''
 
+["CDC:ErrPeerMessageClientClosed"]
+error = '''
+peer-to-peer message client has been closed
+'''
+
+["CDC:ErrPeerMessageClientPermanentFail"]
+error = '''
+peer-to-peer message client has failed permanently, no need to reconnect: %s
+'''
+
+["CDC:ErrPeerMessageEncodeError"]
+error = '''
+failed to encode peer-to-peer message
+'''
+
 ["CDC:ErrPeerMessageIllegalMeta"]
 error = '''
 peer-to-peer message server received an RPC call with illegal metadata
+'''
+
+["CDC:ErrPeerMessageSendTryAgain"]
+error = '''
+peer-to-peer message client has too many pending messages to send, try again later
+'''
+
+["CDC:ErrPeerMessageServerClosed"]
+error = '''
+peer-to-peer message server has closed connection: %s.
 '''
 
 ["CDC:ErrPendingRegionCancel"]
