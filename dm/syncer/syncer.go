@@ -278,6 +278,7 @@ func (s *Syncer) newJobChans() {
 	chanSize := calculateChanSize(s.cfg.QueueSize, s.cfg.WorkerCount, s.cfg.Compact)
 	s.dmlJobCh = make(chan *job, chanSize)
 	s.ddlJobCh = make(chan *job, s.cfg.QueueSize)
+	s.flushCpWorker.input = make(chan *flushCpTask, 16)
 	s.jobsClosed.Store(false)
 }
 
@@ -289,6 +290,7 @@ func (s *Syncer) closeJobChans() {
 	}
 	close(s.dmlJobCh)
 	close(s.ddlJobCh)
+	close(s.flushCpWorker.input)
 	s.jobsClosed.Store(true)
 }
 
@@ -417,7 +419,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		}
 	}
 	s.flushCpWorker = &checkpointFlushWorker{
-		input:        make(chan *flushCpTask, 16),
+		input:        nil, // will be created in s.reset()
 		cp:           s.checkpoint,
 		execError:    &s.execError,
 		afterFlushFn: s.afterFlushCheckpoint,
@@ -1118,20 +1120,21 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 		}
 
 		err = w.cp.FlushPointsExcept(ctx, task.snapshotInfo.id, task.exceptTables, task.shardMetaSQLs, task.shardMetaArgs)
-		if task.syncFlushErrCh != nil {
-			task.syncFlushErrCh <- err
-		}
 		if err != nil {
-			ctx.L().Warn("flush checkpoint snapshot failed, ignore this error", zap.Any("snapshot", task), zap.Error(err))
+			ctx.L().Warn("flush checkpoint snapshot failed, ignore this error", zap.Any("flushCpTask", task), zap.Error(err))
+			if task.syncFlushErrCh != nil {
+				task.syncFlushErrCh <- err
+			}
 			continue
 		}
 		ctx.L().Info("flushed checkpoint", zap.Int("snapshot_id", task.snapshotInfo.id),
 			zap.Stringer("pos", task.snapshotInfo.globalPos))
 		if err = w.afterFlushFn(task); err != nil {
-			if task.syncFlushErrCh != nil {
-				task.syncFlushErrCh <- err
-			}
 			ctx.L().Warn("flush post process failed", zap.Error(err))
+		}
+
+		if task.syncFlushErrCh != nil {
+			task.syncFlushErrCh <- err
 		}
 	}
 }
@@ -1409,8 +1412,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}()
 
 	go func() {
-		// close flush checkpoint worker after all jobs are done.
-		defer s.flushCpWorker.Close()
 		<-ctx.Done()
 		select {
 		case <-runCtx.Done():
