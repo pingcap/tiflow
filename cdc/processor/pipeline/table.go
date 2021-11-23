@@ -100,8 +100,7 @@ func (t *tablePipelineImpl) UpdateBarrierTs(ts model.Ts) {
 // AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
 func (t *tablePipelineImpl) AsyncStop(targetTs model.Ts) bool {
 	err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
-		Tp:        pipeline.CommandTypeStopAtTs,
-		StoppedTs: targetTs,
+		Tp: pipeline.CommandTypeStop,
 	}))
 	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
 	if err != nil {
@@ -191,6 +190,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
+	p.AppendNode(ctx, "mounter", newMounterNode())
 	if cyclicEnabled {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
 	}

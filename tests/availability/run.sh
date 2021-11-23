@@ -14,20 +14,20 @@ export DOWN_TIDB_HOST
 export DOWN_TIDB_PORT
 
 function prepare() {
-    rm -rf $WORK_DIR && mkdir -p $WORK_DIR
+	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-    start_tidb_cluster --workdir $WORK_DIR
+	start_tidb_cluster --workdir $WORK_DIR
 
-    cd $WORK_DIR
+	cd $WORK_DIR
 
-    # record tso before we create tables to skip the system table DDLs
-    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
+	# record tso before we create tables to skip the system table DDLs
+	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
-    run_sql "CREATE table test.availability1(id int primary key, val int);"
-    run_sql "CREATE table test.availability2(id int primary key, val int);"
-    run_sql "CREATE table test.availability3(id int primary key, val int);"
+	run_sql "CREATE table test.availability1(id int primary key, val int);"
+	run_sql "CREATE table test.availability2(id int primary key, val int);"
+	run_sql "CREATE table test.availability3(id int primary key, val int);"
 
-    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
 }
 
 trap stop_tidb_cluster EXIT

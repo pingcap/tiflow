@@ -13,5 +13,5 @@ pwd=$pwd
 
 echo "[$(date)] <<<<<< START kafka consumer in $TEST_NAME case >>>>>>"
 cd $workdir
-cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri mysql://root@127.0.0.1:3306/ >> $workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
+cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri mysql://root@127.0.0.1:3306/ >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
 cd $pwd

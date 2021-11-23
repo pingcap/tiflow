@@ -31,14 +31,13 @@ import (
 
 var _ = check.Suite(&ownerSuite{})
 
-type ownerSuite struct {
-}
+type ownerSuite struct{}
 
 type mockGcManager struct {
 	GcManager
 }
 
-func (m *mockGcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
+func (m *mockGcManager) checkStaleCheckpointTs(ctx cdcContext.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts) error {
 	return cerror.ErrGCTTLExceeded.GenWithStackByArgs()
 }
 

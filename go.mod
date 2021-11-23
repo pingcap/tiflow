@@ -16,6 +16,7 @@ require (
 	github.com/fatih/color v1.10.0
 	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
+	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang/protobuf v1.3.4
 	github.com/golang/snappy v0.0.2 // indirect
 	github.com/google/btree v1.0.0
@@ -27,7 +28,6 @@ require (
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/klauspost/compress v1.11.1 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
-	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-runewidth v0.0.10 // indirect
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/philhofer/fwd v1.0.0 // indirect
@@ -67,3 +67,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
+
+// Fix CVE-2020-26160.
+replace github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt v3.2.1+incompatible

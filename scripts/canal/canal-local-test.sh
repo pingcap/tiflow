@@ -35,71 +35,70 @@ TOPIC_NAME=${DB_NAME}
 cd "$(dirname "$0")"
 
 prepare_db() {
-  echo "Verifying Upstream TiDB is started..."
-  i=0
-  while ! mysql -uroot -h${UPSTREAM_DB_HOST} -P${UPSTREAM_DB_PORT}  -e 'select * from mysql.tidb;'; do
-      i=$((i + 1))
-      if [ "$i" -gt 60 ]; then
-          echo 'Failed to start upstream TiDB'
-          exit 2
-      fi
-      sleep 2
-  done
+	echo "Verifying Upstream TiDB is started..."
+	i=0
+	while ! mysql -uroot -h${UPSTREAM_DB_HOST} -P${UPSTREAM_DB_PORT} -e 'select * from mysql.tidb;'; do
+		i=$((i + 1))
+		if [ "$i" -gt 60 ]; then
+			echo 'Failed to start upstream TiDB'
+			exit 2
+		fi
+		sleep 2
+	done
 
-  echo "Verifying Downstream TiDB is started..."
-  i=0
-  while ! mysql -uroot -h${DOWNSTREAM_DB_HOST} -P${DOWNSTREAM_DB_PORT}  -e 'select * from mysql.tidb;'; do
-      i=$((i + 1))
-      if [ "$i" -gt 60 ]; then
-          echo 'Failed to start downstream TiDB'
-          exit 1
-      fi
-      sleep 2
-  done
-  sql="drop database if exists ${DB_NAME}; create database ${DB_NAME};"
-  echo "[$(date)] Executing SQL: ${sql}"
-  mysql -uroot -h ${UPSTREAM_DB_HOST} -P ${UPSTREAM_DB_PORT}  -E -e "${sql}"
-  mysql -uroot -h ${DOWNSTREAM_DB_HOST} -P ${DOWNSTREAM_DB_PORT}  -E -e "${sql}"
+	echo "Verifying Downstream TiDB is started..."
+	i=0
+	while ! mysql -uroot -h${DOWNSTREAM_DB_HOST} -P${DOWNSTREAM_DB_PORT} -e 'select * from mysql.tidb;'; do
+		i=$((i + 1))
+		if [ "$i" -gt 60 ]; then
+			echo 'Failed to start downstream TiDB'
+			exit 1
+		fi
+		sleep 2
+	done
+	sql="drop database if exists ${DB_NAME}; create database ${DB_NAME};"
+	echo "[$(date)] Executing SQL: ${sql}"
+	mysql -uroot -h ${UPSTREAM_DB_HOST} -P ${UPSTREAM_DB_PORT} -E -e "${sql}"
+	mysql -uroot -h ${DOWNSTREAM_DB_HOST} -P ${DOWNSTREAM_DB_PORT} -E -e "${sql}"
 }
 
-
 sub_help() {
-    echo "Usage: $ProgName <subcommand> [options]\n"
-    echo "Subcommands:"
-    echo "    init    Prepare database and Create changefeed"
-    echo "    up      Bring up the containers"
-    echo "    down    Pause the containers"
-    echo ""
+	echo "Usage: $ProgName <subcommand> [options]\n"
+	echo "Subcommands:"
+	echo "    init    Prepare database and Create changefeed"
+	echo "    up      Bring up the containers"
+	echo "    down    Pause the containers"
+	echo ""
 }
 
 sub_init() {
-  prepare_db
-  sudo docker exec -it ticdc_controller_1 sh -c "
+	prepare_db
+	sudo docker exec -it ticdc_controller_1 sh -c "
   /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb\" --config=\"/config/canal-test-config.toml\" --opts \"force-handle-key-pkey=true, support-txn=true\"
   "
 }
 
 sub_up() {
-  sudo docker-compose -f ../../docker-compose-canal.yml up -d
+	sudo docker-compose -f ../../docker-compose-canal.yml up -d
 }
 
 sub_down() {
-  sudo docker-compose -f ../../docker-compose-canal.yml down
-  sudo rm -r ../../docker/logs ../../docker/data
+	sudo docker-compose -f ../../docker-compose-canal.yml down
+	sudo rm -r ../../docker/logs ../../docker/data
 }
 
 subcommand=$1
 case $subcommand in
-    "" | "-h" | "--help")
-        sub_help
-        ;;
-    *)
-        shift
-        sub_${subcommand} '$@'
-        if [ $? = 127 ]; then
-            echo "Error: '$subcommand' is not a known subcommand." >&2
-            echo "       Run '$ProgName --help' for a list of known subcommands." >&2
-            exit 1
-        fi
-        ;;
+"" | "-h" | "--help")
+	sub_help
+	;;
+*)
+	shift
+	sub_${subcommand} '$@'
+	if [ $? = 127 ]; then
+		echo "Error: '$subcommand' is not a known subcommand." >&2
+		echo "       Run '$ProgName --help' for a list of known subcommands." >&2
+		exit 1
+	fi
+	;;
 esac

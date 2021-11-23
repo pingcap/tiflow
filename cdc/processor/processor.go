@@ -224,6 +224,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	p.cancel = cancel
 
+	// We don't close this error channel, since it is only safe to close channel
+	// in sender, and this channel will be used in many modules including sink,
+	// redo log manager, etc. Let runtime GC to recycle it.
 	errCh := make(chan error, 16)
 	p.wg.Add(1)
 	go func() {
@@ -235,7 +238,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
-				close(errCh)
 				return
 			case err := <-errCh:
 				if err == nil {
@@ -286,7 +288,8 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs)
+	captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
 	p.initialized = true
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil
@@ -440,8 +443,10 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	kvStorage := ctx.GlobalVars().KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
+	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	ddlPuller := puller.NewPuller(
-		ctx,
+		stdCtx,
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
@@ -457,7 +462,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-		p.sendError(ddlPuller.Run(ctx))
+		p.sendError(ddlPuller.Run(stdCtx))
 	}()
 	ddlRawKVCh := puller.SortOutput(ctx, ddlPuller.Output())
 	p.wg.Add(1)

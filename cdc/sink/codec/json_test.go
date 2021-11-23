@@ -226,8 +226,8 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	encoder := NewJSONEventBatchEncoder().(*JSONEventBatchEncoder)
 	err := encoder.SetParams(map[string]string{})
 	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, 16)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, 64*1024*1024)
+	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
+	c.Assert(encoder.maxKafkaMessageSize, check.Equals, DefaultMaxMessageBytes)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
@@ -237,12 +237,12 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, 16)
+	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
 	c.Assert(encoder.maxKafkaMessageSize, check.Equals, math.MaxInt32)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, 16)
+	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
 	c.Assert(encoder.maxKafkaMessageSize, check.Equals, math.MaxUint32)
 
 	err = encoder.SetParams(map[string]string{"max-batch-size": "0"})
@@ -254,25 +254,43 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxInt32)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, 64*1024*1024)
+	c.Assert(encoder.maxKafkaMessageSize, check.Equals, DefaultMaxMessageBytes)
 
 	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxUint32)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, 64*1024*1024)
+	c.Assert(encoder.maxKafkaMessageSize, check.Equals, DefaultMaxMessageBytes)
 }
 
 func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := NewJSONEventBatchEncoder()
-	err := encoder.SetParams(map[string]string{"max-message-bytes": "256"})
-	c.Check(err, check.IsNil)
 
+	// the size of `testEvent` is 87
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
+
+	// for a single message, the overhead is 36(maximumRecordOverhead) + 8(versionHea) = 44, just can hold it.
+	a := strconv.Itoa(87 + 44)
+	err := encoder.SetParams(map[string]string{"max-message-bytes": a})
+	c.Check(err, check.IsNil)
+	r, err := encoder.AppendRowChangedEvent(testEvent)
+	c.Check(err, check.IsNil)
+	c.Check(r, check.Equals, EncoderNoOperation)
+
+	a = strconv.Itoa(87 + 43)
+	err = encoder.SetParams(map[string]string{"max-message-bytes": a})
+	c.Assert(err, check.IsNil)
+	r, err = encoder.AppendRowChangedEvent(testEvent)
+	c.Check(err, check.NotNil)
+	c.Check(r, check.Equals, EncoderNoOperation)
+
+	// make sure each batch's `Length` not greater than `max-message-bytes`
+	err = encoder.SetParams(map[string]string{"max-message-bytes": "256"})
+	c.Check(err, check.IsNil)
 
 	for i := 0; i < 10000; i++ {
 		r, err := encoder.AppendRowChangedEvent(testEvent)
@@ -328,28 +346,6 @@ func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	c.Check(sum, check.Equals, 10000)
 }
 
-func (s *batchSuite) TestEmptyMessage(c *check.C) {
-	defer testleak.AfterTest(c)()
-	encoder := NewJSONEventBatchEncoder()
-	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
-	c.Check(err, check.IsNil)
-
-	emptyEvent := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{},
-	}
-
-	for i := 0; i < 10000; i++ {
-		r, err := encoder.AppendRowChangedEvent(emptyEvent)
-		c.Check(r, check.Equals, EncoderNoOperation)
-		c.Check(err, check.IsNil)
-	}
-
-	messages := encoder.Build()
-	c.Assert(messages, check.HasLen, 0)
-}
-
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
 	s.testBatchCodec(c, func() EventBatchEncoder {
@@ -385,6 +381,28 @@ func (s *columnSuite) TestFormatCol(c *check.C) {
 	err = row2.Decode(rowEncode)
 	c.Assert(err, check.IsNil)
 	c.Assert(row2, check.DeepEquals, row)
+}
+
+func (s *columnSuite) TestNonBinaryStringCol(c *check.C) {
+	defer testleak.AfterTest(c)()
+	col := &model.Column{
+		Name:  "test",
+		Type:  mysql.TypeString,
+		Value: "value",
+	}
+	jsonCol := column{}
+	jsonCol.FromSinkColumn(col)
+	row := &mqMessageRow{Update: map[string]column{"test": jsonCol}}
+	rowEncode, err := row.Encode()
+	c.Assert(err, check.IsNil)
+	row2 := new(mqMessageRow)
+	err = row2.Decode(rowEncode)
+	c.Assert(err, check.IsNil)
+	c.Assert(row2, check.DeepEquals, row)
+	jsonCol2 := row2.Update["test"]
+	col2 := jsonCol2.ToSinkColumn("test")
+	col2.Value = string(col2.Value.([]byte))
+	c.Assert(col2, check.DeepEquals, col)
 }
 
 func (s *columnSuite) TestVarBinaryCol(c *check.C) {

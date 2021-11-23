@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -106,6 +107,20 @@ func (s *mockSink) Reset() {
 	s.received = s.received[:0]
 }
 
+type mockCloseControlSink struct {
+	mockSink
+	closeCh chan interface{}
+}
+
+func (s *mockCloseControlSink) Close(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.closeCh:
+		return nil
+	}
+}
+
 type outputSuite struct{}
 
 var _ = check.Suite(&outputSuite{})
@@ -160,7 +175,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	c.Assert(node.Status(), check.Equals, TableStatusRunning)
 
 	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStopAtTs, StoppedTs: 6}), nil))
+		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}), nil))
 	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
 	c.Assert(node.Status(), check.Equals, TableStatusStopped)
 
@@ -183,7 +198,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	c.Assert(node.Status(), check.Equals, TableStatusRunning)
 
 	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStopAtTs, StoppedTs: 6}), nil))
+		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}), nil))
 	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
 	c.Assert(node.Status(), check.Equals, TableStatusStopped)
 
@@ -192,6 +207,44 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
 	c.Assert(node.Status(), check.Equals, TableStatusStopped)
 	c.Assert(node.CheckpointTs(), check.Equals, uint64(7))
+}
+
+// TestStopStatus tests the table status of a pipeline is not set to stopped
+// until the underlying sink is closed
+func (s *outputSuite) TestStopStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID: "changefeed-id-test-status",
+		Info: &model.ChangeFeedInfo{
+			StartTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now())),
+			Config:  config.GetDefaultReplicaConfig(),
+		},
+	})
+
+	closeCh := make(chan interface{}, 1)
+	node := newSinkNode(&mockCloseControlSink{mockSink: mockSink{}, closeCh: closeCh}, 0, 100, &mockFlowController{})
+	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
+	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
+	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
+		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil)), check.IsNil)
+	c.Assert(node.Status(), check.Equals, TableStatusRunning)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// This will block until sink Close returns
+		err := node.Receive(pipeline.MockNodeContext4Test(ctx,
+			pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}), nil))
+		c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
+		c.Assert(node.Status(), check.Equals, TableStatusStopped)
+	}()
+	// wait to ensure stop message is sent to the sink node
+	time.Sleep(time.Millisecond * 50)
+	c.Assert(node.Status(), check.Equals, TableStatusRunning)
+	closeCh <- struct{}{}
+	wg.Wait()
 }
 
 func (s *outputSuite) TestManyTs(c *check.C) {
@@ -210,11 +263,43 @@ func (s *outputSuite) TestManyTs(c *check.C) {
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
 	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{CommitTs: 1}}), nil)), check.IsNil)
+		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
+			CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{
+				CommitTs: 1,
+				Columns: []*model.Column{
+					{
+						Name:  "col1",
+						Flag:  model.BinaryFlag,
+						Value: "col1-value-updated",
+					},
+					{
+						Name:  "col2",
+						Flag:  model.HandleKeyFlag,
+						Value: "col2-value",
+					},
+				},
+			},
+		}), nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
 	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{CommitTs: 2}}), nil)), check.IsNil)
+		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
+			CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{
+				CommitTs: 2,
+				Columns: []*model.Column{
+					{
+						Name:  "col1",
+						Flag:  model.BinaryFlag,
+						Value: "col1-value-updated",
+					},
+					{
+						Name:  "col2",
+						Flag:  model.HandleKeyFlag,
+						Value: "col2-value",
+					},
+				},
+			},
+		}), nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
 	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
@@ -230,8 +315,40 @@ func (s *outputSuite) TestManyTs(c *check.C) {
 		resolvedTs model.Ts
 		row        *model.RowChangedEvent
 	}{
-		{row: &model.RowChangedEvent{CommitTs: 1}},
-		{row: &model.RowChangedEvent{CommitTs: 2}},
+		{
+			row: &model.RowChangedEvent{
+				CommitTs: 1,
+				Columns: []*model.Column{
+					{
+						Name:  "col1",
+						Flag:  model.BinaryFlag,
+						Value: "col1-value-updated",
+					},
+					{
+						Name:  "col2",
+						Flag:  model.HandleKeyFlag,
+						Value: "col2-value",
+					},
+				},
+			},
+		},
+		{
+			row: &model.RowChangedEvent{
+				CommitTs: 2,
+				Columns: []*model.Column{
+					{
+						Name:  "col1",
+						Flag:  model.BinaryFlag,
+						Value: "col1-value-updated",
+					},
+					{
+						Name:  "col2",
+						Flag:  model.HandleKeyFlag,
+						Value: "col2-value",
+					},
+				},
+			},
+		},
 		{resolvedTs: 1},
 	})
 	sink.Reset()
@@ -249,6 +366,26 @@ func (s *outputSuite) TestManyTs(c *check.C) {
 	sink.Reset()
 	c.Assert(node.ResolvedTs(), check.Equals, uint64(2))
 	c.Assert(node.CheckpointTs(), check.Equals, uint64(2))
+}
+
+func (s *outputSuite) TestIgnoreEmptyRowChangeEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID: "changefeed-id-test-ignore-empty-row-change-event",
+		Info: &model.ChangeFeedInfo{
+			StartTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now())),
+			Config:  config.GetDefaultReplicaConfig(),
+		},
+	})
+	sink := &mockSink{}
+	node := newSinkNode(sink, 0, 10, &mockFlowController{})
+	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
+
+	// empty row, no Columns and PreColumns.
+	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
+		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{CommitTs: 1}}), nil)), check.IsNil)
+	c.Assert(node.eventBuffer, check.HasLen, 0)
 }
 
 func (s *outputSuite) TestSplitUpdateEventWhenEnableOldValue(c *check.C) {
