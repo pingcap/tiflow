@@ -350,15 +350,8 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
 	_, err := NewKafkaSaramaProducer(ctx, topic, codec.ProtocolDefault, config, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
-<<<<<<< HEAD
 
-	config.Version = "0.8.2.0"
-	config.PartitionNum = int32(-1)
-	_, err = NewKafkaSaramaProducer(ctx, "127.0.0.1:1111", "topic", config, errCh)
-	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
-=======
 	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
->>>>>>> 6a64873d4 (cdc/sink: adjust kafka initialization logic (#3192))
 }
 
 func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
