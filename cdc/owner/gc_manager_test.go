@@ -117,7 +117,7 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	mockPDClient.updateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 		c.Assert(serviceID, check.Equals, cdcServiceSafePointID)
 		c.Assert(ttl, check.Equals, gcManager.gcTTL)
-		c.Assert(safePoint, check.Equals, uint64(20))
+		c.Assert(safePoint, check.Equals, uint64(19))
 		return 0, nil
 	}
 	err = gcManager.updateGCSafePoint(ctx, state)
