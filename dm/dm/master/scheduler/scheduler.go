@@ -1554,7 +1554,7 @@ func (s *Scheduler) recoverRelayConfigs(cli *clientv3.Client) error {
 	}
 
 	for source, workers := range relayWorkers {
-        sourceCfg, ok := s.sourceCfgs[source]
+		sourceCfg, ok := s.sourceCfgs[source]
 		if !ok {
 			s.logger.Warn("found a not existing source by relay config", zap.String("source", source))
 			continue
@@ -1563,11 +1563,11 @@ func (s *Scheduler) recoverRelayConfigs(cli *clientv3.Client) error {
 			// current etcd max-txn-op is 2048
 			_, err2 := ha.DeleteRelayConfig(cli, utils.SetToSlice(workers)...)
 			if err2 != nil {
-                return err2
-            }
+				return err2
+			}
 			delete(relayWorkers, source)
 		}
-    }
+	}
 
 	s.relayWorkers = relayWorkers
 	return nil
