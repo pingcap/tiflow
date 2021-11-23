@@ -51,6 +51,7 @@ func TestStreamHandleSend(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	wg.Wait()
 	cancel()
 	err = h.Send(ctx, proto.SendMessageResponse{})
 	require.Error(t, err, "should have been cancelled")
@@ -78,6 +79,7 @@ func TestStreamHandleCloseWhileSending(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	h.Close()
 
+	wg.Wait()
 	// Tests double close.
 	// Should not panic.
 	h.Close()
