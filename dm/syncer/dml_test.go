@@ -579,6 +579,12 @@ func (s *testSyncerSuite) TestTruncateIndexValues(c *C) {
 			values:    []interface{}{10, "1234"},
 			preValues: []interface{}{int64(10), "123"},
 		},
+		{
+			// value is nil
+			schema:    `create table t1(a int, b text, unique key c2(a, b(3)))`,
+			values:    []interface{}{10, nil},
+			preValues: []interface{}{int64(10), nil},
+		},
 	}
 	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
 	for i, tc := range testCases {
@@ -597,7 +603,7 @@ func (s *testSyncerSuite) TestTruncateIndexValues(c *C) {
 			cols = append(cols, ti.Columns[column.Offset])
 			values = append(values, tc.values[column.Offset])
 		}
-		realPreValue := truncateIndexValues(sessCtx, dti.AvailableUKIndexList[0], cols, values)
+		realPreValue := truncateIndexValues(sessCtx, ti, dti.AvailableUKIndexList[0], cols, values)
 		assert(realPreValue, DeepEquals, tc.preValues)
 	}
 }

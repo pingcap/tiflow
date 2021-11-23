@@ -687,21 +687,16 @@ func genKeyList(table string, columns []*model.ColumnInfo, dataSeq []interface{}
 }
 
 // truncateIndexValues truncate prefix index from data.
-func truncateIndexValues(ctx sessionctx.Context, indexColumns *model.IndexInfo, tiColumns []*model.ColumnInfo, data []interface{}) []interface{} {
+func truncateIndexValues(ctx sessionctx.Context, ti *model.TableInfo, indexColumns *model.IndexInfo, tiColumns []*model.ColumnInfo, data []interface{}) []interface{} {
 	values := make([]interface{}, 0, len(indexColumns.Columns))
 	datums, err := utils.AdjustBinaryProtocolForDatum(ctx, data, tiColumns)
 	if err != nil {
 		log.L().Warn("adjust binary protocol for datum error", zap.Error(err))
 		return data
 	}
-	for i, iColumn := range indexColumns.Columns {
-		tcolumn := tiColumns[i]
-		if data[i] != nil {
-			tablecodec.TruncateIndexValue(&datums[i], iColumn, tcolumn)
-			values = append(values, datums[i].GetValue())
-		} else {
-			values = append(values, data[i])
-		}
+	tablecodec.TruncateIndexValues(ti, indexColumns, datums)
+	for _, datum := range datums {
+		values = append(values, datum.GetValue())
 	}
 	return values
 }
@@ -714,7 +709,7 @@ func genMultipleKeys(ctx sessionctx.Context, downstreamTableInfo *schema.Downstr
 	for _, indexCols := range downstreamTableInfo.AvailableUKIndexList {
 		cols, vals := getColumnData(ti.Columns, indexCols, value)
 		// handle prefix index
-		truncVals := truncateIndexValues(ctx, indexCols, cols, vals)
+		truncVals := truncateIndexValues(ctx, ti, indexCols, cols, vals)
 		key := genKeyList(table, cols, truncVals)
 		if len(key) > 0 { // ignore `null` value.
 			multipleKeys = append(multipleKeys, key)
