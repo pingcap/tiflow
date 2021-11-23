@@ -56,6 +56,9 @@ var (
 
 	downstreamURIStr string
 
+	protocol            string
+	enableTiDBExtension bool
+
 	logPath       string
 	logLevel      string
 	timezone      string
@@ -73,6 +76,8 @@ func init() {
 	flag.StringVar(&ca, "ca", "", "CA certificate path for Kafka SSL connection")
 	flag.StringVar(&cert, "cert", "", "Certificate path for Kafka SSL connection")
 	flag.StringVar(&key, "key", "", "Private key path for Kafka SSL connection")
+	flag.StringVar(&protocol, "protocol", "canal-json", "message encoding protocol")
+	flag.BoolVar(&enableTiDBExtension, "enable-tidb-extension", false, "canal-json with tidb extension")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
@@ -313,7 +318,7 @@ type Consumer struct {
 
 	globalResolvedTs uint64
 
-	protocol codec.Protocol
+	protocol            config.Protocol
 	enableTiDBExtension bool
 }
 
@@ -334,6 +339,13 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		tableIDs: make(map[string]int64),
 	}
 	c.sinks = make([]*partitionSink, kafkaPartitionNum)
+
+	c.protocol.FromString(protocol)
+	c.enableTiDBExtension = enableTiDBExtension
+	if c.enableTiDBExtension && c.protocol != config.ProtocolCanalJSON {
+		log.Panic("TiDB extension should only work with Canal-JSON protocol")
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
 	opts := map[string]string{}
@@ -394,11 +406,11 @@ ClaimMessages:
 			err     error
 		)
 		switch c.protocol {
-		case codec.ProtocolDefault:
+		case config.ProtocolDefault:
 			decoder, err = codec.NewJSONEventBatchDecoder(message.Key, message.Value)
-		case codec.ProtocolCraft:
+		case config.ProtocolCraft:
 			decoder, err = codec.NewCraftEventBatchDecoder(message.Value)
-		case codec.ProtocolCanalJSON:
+		case config.ProtocolCanalJSON:
 			decoder = codec.NewCanalFlatEventBatchDecoder(message.Value, c.enableTiDBExtension)
 		default:
 			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
