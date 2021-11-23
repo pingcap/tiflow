@@ -15,10 +15,10 @@ function stop_relay_wrong_arg() {
 function stop_relay_success() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 }
 
 function stop_relay_with_worker_name_success() {
@@ -43,4 +43,13 @@ function stop_relay_without_worker_name_fail() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-relay -s $SOURCE_ID1" \
 		"can't \`stop-relay\` without worker name now" 1
+}
+
+function stop_relay_on_offline_worker() {
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-relay -s $SOURCE_ID2 worker2" \
+		"\"result\": true" 2 \
+		"\"msg\": \"source relay is operated but the bounded worker is offline\"" 1 \
+		"\"source\": \"$SOURCE_ID2\"" 1 \
+		"\"worker\": \"worker2\"" 1
 }
