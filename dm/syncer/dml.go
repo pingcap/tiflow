@@ -26,14 +26,15 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/tablecodec"
-	ttypes "github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/schema"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // this type is used to generate DML SQL, opType is used to mark type in binlog.
@@ -614,15 +615,15 @@ func (dml *DML) updateIdentify() bool {
 // identifyKeys gens keys by unique not null value.
 // This is used for causality.
 // PK or (UK + NOT NULL) or (UK + NULL + NOT NULL VALUE).
-func (dml *DML) identifyKeys() []string {
+func (dml *DML) identifyKeys(ctx sessionctx.Context) []string {
 	var keys []string
 	// for UPDATE statement
 	if dml.originOldValues != nil {
-		keys = append(keys, genMultipleKeys(dml.downstreamTableInfo, dml.sourceTableInfo, dml.originOldValues, dml.targetTableID)...)
+		keys = append(keys, genMultipleKeys(ctx, dml.downstreamTableInfo, dml.sourceTableInfo, dml.originOldValues, dml.targetTableID)...)
 	}
 
 	if dml.originValues != nil {
-		keys = append(keys, genMultipleKeys(dml.downstreamTableInfo, dml.sourceTableInfo, dml.originValues, dml.targetTableID)...)
+		keys = append(keys, genMultipleKeys(ctx, dml.downstreamTableInfo, dml.sourceTableInfo, dml.originValues, dml.targetTableID)...)
 	}
 	return keys
 }
@@ -702,30 +703,29 @@ func genKeyList(table string, columns []*model.ColumnInfo, dataSeq []interface{}
 }
 
 // truncateIndexValues truncate prefix index from data.
-func truncateIndexValues(indexColumns *model.IndexInfo, tiColumns []*model.ColumnInfo, data []interface{}) []interface{} {
+func truncateIndexValues(ctx sessionctx.Context, ti *model.TableInfo, indexColumns *model.IndexInfo, tiColumns []*model.ColumnInfo, data []interface{}) []interface{} {
 	values := make([]interface{}, 0, len(indexColumns.Columns))
-	for i, iColumn := range indexColumns.Columns {
-		tcolumn := tiColumns[i]
-		if data[i] != nil {
-			datum := ttypes.NewDatum(data[i])
-			tablecodec.TruncateIndexValue(&datum, iColumn, tcolumn)
-			values = append(values, datum.GetValue())
-		} else {
-			values = append(values, data[i])
-		}
+	datums, err := utils.AdjustBinaryProtocolForDatum(ctx, data, tiColumns)
+	if err != nil {
+		log.L().Warn("adjust binary protocol for datum error", zap.Error(err))
+		return data
+	}
+	tablecodec.TruncateIndexValues(ti, indexColumns, datums)
+	for _, datum := range datums {
+		values = append(values, datum.GetValue())
 	}
 	return values
 }
 
 // genMultipleKeys gens keys with UNIQUE NOT NULL value.
 // if not UNIQUE NOT NULL value, use table name instead.
-func genMultipleKeys(downstreamTableInfo *schema.DownstreamTableInfo, ti *model.TableInfo, value []interface{}, table string) []string {
+func genMultipleKeys(ctx sessionctx.Context, downstreamTableInfo *schema.DownstreamTableInfo, ti *model.TableInfo, value []interface{}, table string) []string {
 	multipleKeys := make([]string, 0, len(downstreamTableInfo.AvailableUKIndexList))
 
 	for _, indexCols := range downstreamTableInfo.AvailableUKIndexList {
 		cols, vals := getColumnData(ti.Columns, indexCols, value)
 		// handle prefix index
-		truncVals := truncateIndexValues(indexCols, cols, vals)
+		truncVals := truncateIndexValues(ctx, ti, indexCols, cols, vals)
 		key := genKeyList(table, cols, truncVals)
 		if len(key) > 0 { // ignore `null` value.
 			multipleKeys = append(multipleKeys, key)
