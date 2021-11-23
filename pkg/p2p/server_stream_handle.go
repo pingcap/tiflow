@@ -30,6 +30,9 @@ import (
 type streamHandle struct {
 	// mu protects sendCh. We should take the shared lock
 	// when sending and the exclusive lock when closing it.
+	// We consider Read to be anything except closing the channel,
+	// and close is Write in this definition.
+	// This definition provides an elegant solution for lock protecting Go channels.
 	mu     sync.RWMutex
 	sendCh chan<- p2p.SendMessageResponse
 
