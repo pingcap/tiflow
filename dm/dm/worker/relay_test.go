@@ -47,6 +47,10 @@ type DummyRelay struct {
 	reloadErr     error
 }
 
+func (d *DummyRelay) IsActive(uuid, filename string) (bool, int64) {
+	return false, 0
+}
+
 func (d *DummyRelay) NewReader(logger log.Logger, cfg *relay.BinlogReaderConfig) *relay.BinlogReader {
 	return nil
 }
