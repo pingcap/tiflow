@@ -37,6 +37,8 @@ const (
 	posUUIDSuffixSeparator = "|"
 	// MinUUIDSuffix is same as relay.MinUUIDSuffix.
 	MinUUIDSuffix = 1
+	// FileHeaderLen is the length of binlog file header.
+	FileHeaderLen = 4
 )
 
 // MinPosition is the min binlog position.
