@@ -94,7 +94,7 @@ func NewLevelDBSorter(
 //   3) number of received new events,
 //   4) error.
 //
-// If input is available, it batch receives new events.
+// If input is available, it batches newly received events.
 // If output available, it sends a resolved ts event and returns.
 func (ls *Sorter) waitInputOutput(
 	ctx context.Context,
@@ -256,7 +256,7 @@ func (ls *Sorter) outputBufferedResolvedEvents(
 	hasRemainEvents := false
 	// Index of remaining output events
 	remainIdx := 0
-	// Commit ts of the last outputed events.
+	// Commit ts of the last outputted events.
 	lastCommitTs := uint64(0)
 	for idx := range buffer.resolvedEvents {
 		event := buffer.resolvedEvents[idx]
@@ -300,7 +300,6 @@ func (ls *Sorter) outputIterEvents(
 	// The commit ts of buffered resolved events.
 	lastCommitTs := uint64(0)
 	iterHasNext := iter.Next()
-SEEK_SEND:
 	for ; iterHasNext; iterHasNext = iter.Next() {
 		event := new(model.PolymorphicEvent)
 		_, err := ls.serde.Unmarshal(event, iter.Value())
@@ -327,7 +326,7 @@ SEEK_SEND:
 		lenResolvedEvents, _ = buffer.len()
 		if lenResolvedEvents > 0 {
 			// Output blocked, break and free iterator.
-			break SEEK_SEND
+			break
 		}
 
 		// Append new events to the buffer.
