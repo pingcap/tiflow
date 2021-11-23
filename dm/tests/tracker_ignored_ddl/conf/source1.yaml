@@ -1,7 +1,7 @@
 source-id: mysql-replica-01
 flavor: ''
 enable-gtid: true
-enable-relay: false
+enable-relay: true
 relay-binlog-name: ''
 relay-binlog-gtid: ''
 from:
