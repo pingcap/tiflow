@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/dm/dm/unit"
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 	pkgstreamer "github.com/pingcap/ticdc/dm/pkg/streamer"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 	"github.com/pingcap/ticdc/dm/relay"
@@ -44,6 +45,14 @@ type DummyRelay struct {
 	processResult pb.ProcessResult
 	errorInfo     *pb.RelayError
 	reloadErr     error
+}
+
+func (d *DummyRelay) IsActive(uuid, filename string) (bool, int64) {
+	return false, 0
+}
+
+func (d *DummyRelay) NewReader(logger log.Logger, cfg *relay.BinlogReaderConfig) *relay.BinlogReader {
+	return nil
 }
 
 func (d *DummyRelay) RegisterListener(el relay.Listener) {

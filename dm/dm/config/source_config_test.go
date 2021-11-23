@@ -115,6 +115,7 @@ func (t *testConfig) TestConfig(c *C) {
 
 	clone6, err := ParseYaml(clone4yaml)
 	c.Assert(err, IsNil)
+	clone6.From.Session = nil
 	c.Assert(clone6, DeepEquals, clone4)
 
 	// test invalid config
@@ -252,14 +253,6 @@ func (t *testConfig) TestSourceConfigForDowngrade(c *C) {
 	cfgForClone := &SourceConfigForDowngrade{}
 	Clone(cfgForClone, cfg)
 	c.Assert(cfgForDowngrade, DeepEquals, cfgForClone)
-
-	cfg.EnableRelay = true
-	content, err := cfg.Yaml()
-	c.Assert(err, IsNil)
-	c.Assert(strings.Contains(content, "enable-relay"), IsTrue)
-	downgrade, err := cfg.YamlForDowngrade()
-	c.Assert(err, IsNil)
-	c.Assert(strings.Contains(downgrade, "enable-relay"), IsFalse)
 }
 
 func subtestFlavor(c *C, cfg *SourceConfig, sqlInfo, expectedFlavor, expectedError string) {

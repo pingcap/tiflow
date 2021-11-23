@@ -15,21 +15,16 @@ package relay
 
 import (
 	"context"
-	"testing"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 
-	br "github.com/pingcap/ticdc/dm/pkg/binlog/reader"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 )
 
 var _ = check.Suite(&testRemoteReaderSuite{})
-
-func TestRemoteReaderSuite(t *testing.T) {
-	check.TestingT(t)
-}
 
 type testRemoteReaderSuite struct{}
 
@@ -61,7 +56,7 @@ func (t *testRemoteReaderSuite) testInterfaceWithReader(c *check.C, r Reader, ca
 	// replace underlying reader with a mock reader for testing
 	concreteR := r.(*upstreamReader)
 	c.Assert(concreteR, check.NotNil)
-	mockR := br.NewMockReader()
+	mockR := reader.NewMockReader()
 	concreteR.in = mockR
 
 	// start reader
@@ -73,7 +68,7 @@ func (t *testRemoteReaderSuite) testInterfaceWithReader(c *check.C, r Reader, ca
 	// getEvent by pushing event to mock reader
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	concreteMR := mockR.(*br.MockReader)
+	concreteMR := mockR.(*reader.MockReader)
 	go func() {
 		for _, cs := range cases {
 			c.Assert(concreteMR.PushEvent(ctx, cs), check.IsNil)
@@ -114,13 +109,12 @@ func (t *testRemoteReaderSuite) TestGetEventWithError(c *check.C) {
 	// replace underlying reader with a mock reader for testing
 	concreteR := r.(*upstreamReader)
 	c.Assert(concreteR, check.NotNil)
-	mockR := br.NewMockReader()
+	mockR := reader.NewMockReader()
 	concreteR.in = mockR
 
 	errOther := errors.New("other error")
 	in := []error{
 		context.Canceled,
-		context.DeadlineExceeded, // retried without return
 		errOther,
 	}
 	expected := []error{
@@ -134,7 +128,7 @@ func (t *testRemoteReaderSuite) TestGetEventWithError(c *check.C) {
 	// getEvent by pushing event to mock reader
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	concreteMR := mockR.(*br.MockReader)
+	concreteMR := mockR.(*reader.MockReader)
 	go func() {
 		for _, cs := range in {
 			c.Assert(concreteMR.PushError(ctx, cs), check.IsNil)

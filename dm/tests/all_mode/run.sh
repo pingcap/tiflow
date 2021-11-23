@@ -86,6 +86,7 @@ function test_query_timeout() {
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+	sed -i "s/enable-relay: true/enable-relay: false/g" $WORK_DIR/source1.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -335,6 +336,12 @@ function run() {
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
+	# manually create target table with two extra field
+	run_sql_tidb "drop database if exists all_mode;"
+	run_sql_tidb "create database all_mode;"
+	run_sql_tidb "drop table if exists all_mode.no_diff;"
+	run_sql_tidb "create table all_mode.no_diff(id int NOT NULL PRIMARY KEY, dt datetime NOT NULL DEFAULT CURRENT_TIMESTAMP, ts timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP);"
+
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
@@ -357,7 +364,7 @@ function run() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
@@ -374,9 +381,21 @@ function run() {
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	run_sql_tidb "set time_zone = '+04:00';SELECT count(*) from all_mode.no_diff where dt = ts;"
+	check_contains "count(*): 3"
+
 	# check default session config
 	check_log_contain_with_retry '\\"tidb_txn_mode\\":\\"optimistic\\"' $WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry '\\"tidb_txn_mode\\":\\"optimistic\\"' $WORK_DIR/worker2/log/dm-worker.log
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"pause-task $ILLEGAL_CHAR_NAME" \
+		"\"result\": true" 3
+	echo 'create table all_mode.no_diff(id int NOT NULL PRIMARY KEY);' >${WORK_DIR}/schema.sql
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-schema set -s mysql-replica-01 $ILLEGAL_CHAR_NAME -d all_mode -t no_diff ${WORK_DIR}/schema.sql" \
+		"\"result\": true" 2
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" "resume-task $ILLEGAL_CHAR_NAME" "\"result\": true" 3
 
 	# restart dm-worker1
 	pkill -hup -f dm-worker1.toml 2>/dev/null || true
@@ -426,6 +445,10 @@ function run() {
 	run_sql_file $cur/data/db1.increment0.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	# check compatibility after incremental sync
+	run_sql_tidb "set time_zone = '+04:00';SELECT count(*) from all_mode.no_diff where dt = ts;"
+	check_contains "count(*): 4"
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-relay -s mysql-replica-01" \

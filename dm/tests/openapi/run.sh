@@ -163,14 +163,14 @@ function test_shard_task() {
 	openapi_source_check "create_source1_success"
 	openapi_source_check "list_source_success" 1
 	# get source status success
-	# openapi_source_check "get_source_status_success" "mysql-01"
+	openapi_source_check "get_source_status_success" "mysql-01"
 
 	# create source succesfully
 	openapi_source_check "create_source2_success"
 	# get source list success
 	openapi_source_check "list_source_success" 2
 	# get source status success
-	# openapi_source_check "get_source_status_success" "mysql-02"
+	openapi_source_check "get_source_status_success" "mysql-02"
 
 	# start task success: not vaild task create request
 	openapi_task_check "start_task_failed"

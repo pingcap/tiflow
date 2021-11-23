@@ -189,6 +189,10 @@ func (s *utilsSuite) TestAndWriteExampleReplicaTOML(c *check.C) {
 			{Dispatcher: "ts", Matcher: []string{"test1.*", "test2.*"}},
 			{Dispatcher: "rowid", Matcher: []string{"test3.*", "test4.*"}},
 		},
+		ColumnSelectors: []*config.ColumnSelector{
+			{Matcher: []string{"test1.*", "test2.*"}, Columns: []string{"column1", "column2"}},
+			{Matcher: []string{"test3.*", "test4.*"}, Columns: []string{"!a", "column3"}},
+		},
 		Protocol: "default",
 	})
 	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
@@ -232,4 +236,41 @@ func (s *utilsSuite) TestJSONPrint(c *check.C) {
 }
 `
 	c.Assert(b.String(), check.Equals, output)
+}
+
+func (s *utilsSuite) TestIgnoreStrictCheckItem(c *check.C) {
+	defer testleak.AfterTest(c)()
+	dataDir := c.MkDir()
+	tmpDir := c.MkDir()
+	configPath := filepath.Join(tmpDir, "ticdc.toml")
+	configContent := fmt.Sprintf(`
+data-dir = "%+v"
+[unknown]
+max-size = 200
+max-days = 1
+max-backups = 1
+`, dataDir)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
+	c.Assert(err, check.IsNil)
+
+	conf := config.GetDefaultServerConfig()
+	err = StrictDecodeFile(configPath, "test", conf, "unknown")
+	c.Assert(err, check.IsNil)
+
+	configContent = fmt.Sprintf(`
+data-dir = "%+v"
+[unknown]
+max-size = 200
+max-days = 1
+max-backups = 1
+[unknown2]
+max-size = 200
+max-days = 1
+max-backups = 1
+`, dataDir)
+	err = os.WriteFile(configPath, []byte(configContent), 0o644)
+	c.Assert(err, check.IsNil)
+
+	err = StrictDecodeFile(configPath, "test", conf, "unknown")
+	c.Assert(err, check.ErrorMatches, ".*contained unknown configuration options: unknown2.*")
 }

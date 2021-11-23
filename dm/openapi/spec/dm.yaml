@@ -1,7 +1,7 @@
 openapi: "3.0.0"
 info:
   title: DM OpenAPI DOC
-  version: "2.1.0"
+  version: "5.3.0"
 externalDocs:
   description: "DM OpenAPI DOC"
   url: "https://docs.pingcap.com/zh/tidb-data-migration/stable"

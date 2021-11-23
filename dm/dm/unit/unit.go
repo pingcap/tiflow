@@ -54,7 +54,7 @@ type Unit interface {
 	// Resume resumes the paused process and its returning must send a result to pr channel.
 	Resume(ctx context.Context, pr chan pb.ProcessResult)
 	// Update updates the configuration
-	Update(cfg *config.SubTaskConfig) error
+	Update(ctx context.Context, cfg *config.SubTaskConfig) error
 
 	// Status returns the unit's current status. The result may need calculation with source status, like estimated time
 	// to catch up. If sourceStatus is nil, the calculation should be skipped.

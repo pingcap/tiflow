@@ -641,6 +641,11 @@ error = '''
 peer-to-peer message server received an RPC call with illegal metadata
 '''
 
+["CDC:ErrPeerMessageInternalSenderClosed"]
+error = '''
+peer-to-peer message server tries to send to a closed stream. Internal only.
+'''
+
 ["CDC:ErrPendingRegionCancel"]
 error = '''
 pending region cancelled due to stream disconnecting
@@ -659,6 +664,11 @@ prepare avro failed
 ["CDC:ErrPrewriteNotMatch"]
 error = '''
 prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s
+'''
+
+["CDC:ErrProcessorDuplicateOperations"]
+error = '''
+table processor duplicate operation, table-id: %d
 '''
 
 ["CDC:ErrProcessorEtcdWatch"]
@@ -849,6 +859,16 @@ table %s.%s already exists
 ["CDC:ErrSnapshotTableNotFound"]
 error = '''
 table %d not found in schema snapshot
+'''
+
+["CDC:ErrSorterClosed"]
+error = '''
+sorter is closed
+'''
+
+["CDC:ErrStartAStoppedLevelDBSystem"]
+error = '''
+start a stopped leveldb system
 '''
 
 ["CDC:ErrStartTsBeforeGC"]

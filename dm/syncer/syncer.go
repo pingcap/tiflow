@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/sessionctx"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -133,7 +134,6 @@ type Syncer struct {
 
 	binlogType         BinlogType
 	streamerController *StreamerController
-	enableRelay        bool
 
 	wg    sync.WaitGroup // counts goroutines
 	jobWg sync.WaitGroup // counts ddl/flush job in-flight in s.dmlJobCh and s.ddlJobCh
@@ -161,6 +161,7 @@ type Syncer struct {
 	columnMapping   *cm.Mapping
 	baList          *filter.Filter
 	exprFilterGroup *ExprFilterGroup
+	sessCtx         sessionctx.Context
 
 	closed atomic.Bool
 
@@ -225,11 +226,11 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
-	notifier relay.EventNotifier
+	relay relay.Process
 }
 
 // NewSyncer creates a new Syncer.
-func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier relay.EventNotifier) *Syncer {
+func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay relay.Process) *Syncer {
 	logger := log.With(zap.String("task", cfg.Name), zap.String("unit", "binlog replication"))
 	syncer := &Syncer{
 		pessimist: shardddl.NewPessimist(&logger, etcdClient, cfg.Name, cfg.SourceID),
@@ -246,14 +247,12 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier 
 	syncer.lastCount.Store(0)
 	syncer.count.Store(0)
 	syncer.done = nil
-	syncer.setTimezone()
 	syncer.addJobFunc = syncer.addJob
-	syncer.enableRelay = cfg.UseRelay
 	syncer.cli = etcdClient
 
 	syncer.checkpoint = NewRemoteCheckPoint(syncer.tctx, cfg, syncer.checkpointID())
 
-	syncer.binlogType = toBinlogType(cfg.UseRelay)
+	syncer.binlogType = toBinlogType(relay)
 	syncer.errOperatorHolder = operator.NewHolder(&logger)
 	syncer.readerHub = streamer.GetReaderHub()
 
@@ -267,7 +266,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier 
 		syncer.workerJobTSArray[i] = atomic.NewInt64(0)
 	}
 	syncer.lastCheckpointFlushedTime = time.Time{}
-	syncer.notifier = notifier
+	syncer.relay = relay
 	return syncer
 }
 
@@ -307,6 +306,9 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
+	if err = s.setTimezone(ctx); err != nil {
+		return
+	}
 
 	err = s.setSyncCfg()
 	if err != nil {
@@ -324,7 +326,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
-	s.streamerController = NewStreamerController(s.notifier, s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.binlogType, s.cfg.RelayDir, s.timezone)
+	s.streamerController = NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
 
 	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
 	if err != nil {
@@ -336,7 +338,11 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSyncerUnitGenBinlogEventFilter.Delegate(err)
 	}
 
-	s.exprFilterGroup = NewExprFilterGroup(s.cfg.ExprFilter)
+	vars := map[string]string{
+		"time_zone": s.timezone.String(),
+	}
+	s.sessCtx = utils.NewSessionCtx(vars)
+	s.exprFilterGroup = NewExprFilterGroup(s.sessCtx, s.cfg.ExprFilter)
 
 	if len(s.cfg.ColumnMappingRules) > 0 {
 		s.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
@@ -919,7 +925,11 @@ func (s *Syncer) addJob(job *job) error {
 		s.tctx.L().Info("All jobs is completed before syncer close, the coming job will be reject", zap.Any("job", job))
 		return nil
 	}
-	switch job.tp {
+
+	// avoid job.type data race with compactor.run()
+	// simply copy the opType for performance, though copy a new job in compactor is better
+	tp := job.tp
+	switch tp {
 	case xid:
 		s.waitXIDJob.CAS(int64(waiting), int64(waitComplete))
 		s.saveGlobalPoint(job.location)
@@ -971,7 +981,7 @@ func (s *Syncer) addJob(job *job) error {
 		return nil
 	}
 
-	switch job.tp {
+	switch tp {
 	case ddl:
 		failpoint.Inject("ExitAfterDDLBeforeFlush", func() {
 			s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ExitAfterDDLBeforeFlush"))
@@ -1008,7 +1018,7 @@ func (s *Syncer) addJob(job *job) error {
 		}
 	}
 
-	if needFlush || job.tp == ddl {
+	if needFlush || tp == ddl {
 		// interrupted after save checkpoint and before flush checkpoint.
 		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
 			err := handleFlushCheckpointStage(4, val.(int), "before flush checkpoint")
@@ -2030,12 +2040,18 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
-	rows, err := s.mappingDML(sourceTable, tableInfo, ev.Rows)
+	originRows, err := s.mappingDML(sourceTable, tableInfo, ev.Rows)
 	if err != nil {
 		return err
 	}
 	if err2 := checkLogColumns(ev.SkippedColumns); err2 != nil {
 		return err2
+	}
+
+	extRows := generateExtendColumn(originRows, s.tableRouter, sourceTable, s.cfg.SourceID)
+	rows := originRows
+	if extRows != nil {
+		rows = extRows
 	}
 
 	prunedColumns, prunedRows, err := pruneGeneratedColumnDML(tableInfo, rows)
@@ -2051,10 +2067,11 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	param := &genDMLParam{
 		targetTableID:   utils.GenTableID(targetTable),
 		data:            prunedRows,
-		originalData:    rows,
+		originalData:    originRows,
 		columns:         prunedColumns,
 		sourceTableInfo: tableInfo,
 		sourceTable:     sourceTable,
+		extendData:      extRows,
 	}
 
 	switch ec.header.EventType {
@@ -2157,6 +2174,23 @@ func (qec *queryEventContext) String() string {
 	}
 	return fmt.Sprintf("{schema: %s, originSQL: %s, startLocation: %s, currentLocation: %s, lastLocation: %s, re-sync: %s, needHandleDDLs: %s, trackInfos: %s}",
 		qec.ddlSchema, qec.originSQL, startLocation, currentLocation, lastLocation, shardingReSync, needHandleDDLs, strings.Join(trackInfos, ","))
+}
+
+// generateExtendColumn generate extended columns by extractor.
+func generateExtendColumn(data [][]interface{}, r *router.Table, table *filter.Table, sourceID string) [][]interface{} {
+	extendCol, extendVal := r.FetchExtendColumn(table.Schema, table.Name, sourceID)
+	if len(extendCol) == 0 {
+		return nil
+	}
+
+	rows := make([][]interface{}, len(data))
+	for i := range data {
+		rows[i] = data[i]
+		for _, v := range extendVal {
+			rows[i] = append(rows[i], v)
+		}
+	}
+	return rows
 }
 
 func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
@@ -2813,6 +2847,10 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			continue
 		}
 		if db, table, ok := utils.GetTableFromDumpFilename(f); ok {
+			cols, _ := s.tableRouter.FetchExtendColumn(db, table, s.cfg.SourceID)
+			if len(cols) > 0 {
+				continue
+			}
 			tables = append(tables, dbutil.TableName(db, table))
 			tableFiles = append(tableFiles, [2]string{db, f})
 			continue
@@ -2869,7 +2907,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	var err error
 	dbCfg := s.cfg.From
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	s.fromDB, err = dbconn.NewUpStreamConn(dbCfg)
+	s.fromDB, err = dbconn.NewUpStreamConn(&dbCfg)
 	if err != nil {
 		return err
 	}
@@ -2912,7 +2950,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 		SetReadTimeout(maxDMLConnectionTimeout).
 		SetMaxIdleConns(s.cfg.WorkerCount)
 
-	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, dbCfg, s.cfg.WorkerCount)
+	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, s.cfg.WorkerCount)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB) // release resources acquired before return with error
 		return err
@@ -2922,7 +2960,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDDLConnectionTimeout)
 
 	var ddlDBConns []*dbconn.DBConn
-	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, dbCfg, 2)
+	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 2)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB)
 		dbconn.CloseBaseDB(s.tctx, s.toDB)
@@ -3078,7 +3116,7 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 // Update implements Unit.Update
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config.
-func (s *Syncer) Update(cfg *config.SubTaskConfig) error {
+func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		_, tables := s.sgk.UnresolvedTables()
 		if len(tables) > 0 {
@@ -3166,8 +3204,9 @@ func (s *Syncer) Update(cfg *config.SubTaskConfig) error {
 	s.cfg.ColumnMappingRules = cfg.ColumnMappingRules
 
 	// update timezone
-	s.setTimezone()
-
+	if s.timezone == nil {
+		return s.setTimezone(ctx)
+	}
 	return nil
 }
 
@@ -3198,7 +3237,7 @@ func (s *Syncer) UpdateFromConfig(cfg *config.SubTaskConfig) error {
 
 	var err error
 	s.cfg.From.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	s.fromDB, err = dbconn.NewUpStreamConn(s.cfg.From)
+	s.fromDB, err = dbconn.NewUpStreamConn(&s.cfg.From)
 	if err != nil {
 		s.tctx.L().Error("fail to create baseConn connection", log.ShortError(err))
 		return err
@@ -3215,9 +3254,22 @@ func (s *Syncer) UpdateFromConfig(cfg *config.SubTaskConfig) error {
 	return nil
 }
 
-func (s *Syncer) setTimezone() {
-	s.tctx.L().Info("use timezone", log.WrapStringerField("location", time.UTC))
-	s.timezone = time.UTC
+func (s *Syncer) setTimezone(ctx context.Context) error {
+	tz := s.cfg.Timezone
+	var err error
+	if len(tz) == 0 {
+		tz, err = conn.FetchTimeZoneSetting(ctx, &s.cfg.To)
+		if err != nil {
+			return err
+		}
+	}
+	loc, err := utils.ParseTimeZone(tz)
+	if err != nil {
+		return err
+	}
+	s.tctx.L().Info("use timezone", zap.String("location", loc.String()))
+	s.timezone = loc
+	return nil
 }
 
 func (s *Syncer) setSyncCfg() error {
@@ -3317,7 +3369,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 		return false, nil
 	}
 	// set enableGTID to false for new streamerController
-	streamerController := NewStreamerController(s.notifier, s.syncCfg, false, s.fromDB, s.binlogType, s.cfg.RelayDir, s.timezone)
+	streamerController := NewStreamerController(s.syncCfg, false, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
 
 	endPos := binlog.AdjustPosition(location.Position)
 	startPos := mysql.Position{

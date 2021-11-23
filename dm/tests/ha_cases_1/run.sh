@@ -80,7 +80,7 @@ function test_kill_and_isolate_worker() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	echo "kill dm-worker2"
 	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
@@ -101,7 +101,7 @@ function test_kill_and_isolate_worker() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker3 worker4" \
-		"\"result\": true" 1
+		"\"result\": true" 3
 
 	echo "restart dm-worker3"
 	ps aux | grep dm-worker3 | awk '{print $2}' | xargs kill || true

@@ -35,3 +35,11 @@ func TestPrint(t *testing.T) {
 	require.Equal(t, "uid: 1, tableID: 2, startTs: 0, CRTs: 3",
 		Key(encoding.EncodeTsKey(1, 2, 3)).String())
 }
+
+func TestNewCleanupTask(t *testing.T) {
+	t.Parallel()
+	task := NewCleanupTask(1, 2)
+	require.True(t, task.Cleanup)
+	require.EqualValues(t, 1, task.UID)
+	require.EqualValues(t, 2, task.TableID)
+}

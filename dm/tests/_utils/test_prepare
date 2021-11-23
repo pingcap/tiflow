@@ -10,6 +10,13 @@ function cleanup_data() {
     run_sql "drop database if exists dm_meta" $TIDB_PORT $TIDB_PASSWORD
 }
 
+function cleanup_data_upstream() {
+    for target_db in "$@"; do
+        run_sql "drop database if exists \`${target_db}\`" $MYSQL_PORT1 $MYSQL_PASSWORD1
+        run_sql "drop database if exists \`${target_db}\`" $MYSQL_PORT2 $MYSQL_PASSWORD2
+    done
+}
+
 function cleanup_process() {
     dm_master_num=$(ps aux >temp && grep "dm-master.test" temp | wc -l && rm temp)
     echo "$dm_master_num dm-master alive"
@@ -212,6 +219,27 @@ function run_sql_tidb() {
 function run_sql_tidb_with_retry() {
     rc=0
     for ((k=1; k<11; k++)); do
+        run_sql_tidb "$1"
+        if grep -Fq "$2" "$TEST_DIR/sql_res.$TEST_NAME.txt"; then
+            rc=1
+            break
+        fi
+        echo "run tidb sql failed $k-th time, retry later"
+        sleep 2
+    done
+    if [[ $rc = 0 ]]; then
+        echo "TEST FAILED: OUTPUT DOES NOT CONTAIN '$2'"
+        echo "____________________________________"
+        cat "$TEST_DIR/sql_res.$TEST_NAME.txt"
+        echo "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+        exit 1
+    fi
+}
+
+# shortcut for run tidb sql and check result with retry
+function run_sql_tidb_with_retry_times() {
+    rc=0
+    for ((k=1; k<$3; k++)); do
         run_sql_tidb "$1"
         if grep -Fq "$2" "$TEST_DIR/sql_res.$TEST_NAME.txt"; then
             rc=1
