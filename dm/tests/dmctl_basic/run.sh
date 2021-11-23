@@ -254,6 +254,18 @@ function run() {
 	transfer_source_valid $SOURCE_ID1 worker1 # transfer to self
 	transfer_source_invalid $SOURCE_ID1 worker2
 
+	# test for start relay
+	echo "kill worker2"
+	ps aux | grep worker2 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER2_PORT 20
+
+	stop_relay_on_offline_worker
+	start_relay_on_offline_worker
+
+	echo "restart worker2"
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $dm_worker2_conf
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
 	start_relay_success
 	start_relay_fail
 

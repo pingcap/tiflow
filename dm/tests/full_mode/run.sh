@@ -39,7 +39,7 @@ function fail_acquire_global_lock() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i '/heartbeat-report-interval/i\ignore-checking-items: ["dump_privilege"]' $WORK_DIR/dm-task.yaml
