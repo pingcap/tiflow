@@ -16,7 +16,6 @@ package kafka
 import (
 	"context"
 	"fmt"
-	"math"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -613,7 +612,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// replication logs, this process will last from a few seconds to a few minutes.
 	// Kafka cluster will not provide a writing service in this process.
 	// Time out in one minute
-	config.Metadata.Retry.Max = math.MaxInt32
+	config.Metadata.Retry.Max = 50
 	config.Metadata.Timeout = 10 * time.Second
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
