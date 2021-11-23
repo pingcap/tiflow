@@ -149,6 +149,8 @@ const (
 func (s *BaseScheduleDispatcher) Tick(
 	ctx context.Context,
 	checkpointTs model.Ts,
+	// currentTables are tables that SHOULD be running given the current checkpoint-ts.
+	// It is maintained by the caller of this function.
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, resolvedTs model.Ts, err error) {
@@ -187,6 +189,11 @@ func (s *BaseScheduleDispatcher) Tick(
 		shouldReplicateTableSet[tableID] = struct{}{}
 	}
 
+	// findDiffTables compares the tables that should be running and
+	// the tables that are actually running.
+	// Note: Tables that are being added and removed are considered
+	// "running" for the purpose of comparison, and we do not interrupt
+	// these operations.
 	toAdd, toRemove := s.findDiffTables(shouldReplicateTableSet)
 
 	for _, tableID := range toAdd {
@@ -227,6 +234,7 @@ func (s *BaseScheduleDispatcher) Tick(
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
+	// handleMoveTableJobs tries to execute user-specified manual move table jobs.
 	ok, err := s.handleMoveTableJobs(ctx)
 	if err != nil {
 		return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
