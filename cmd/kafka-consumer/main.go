@@ -312,6 +312,9 @@ type Consumer struct {
 	fakeTableIDGenerator *fakeTableIDGenerator
 
 	globalResolvedTs uint64
+
+	protocol codec.Protocol
+	enableTiDBExtension bool
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -386,14 +389,27 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 ClaimMessages:
 	for message := range claim.Messages() {
 		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
-		batchDecoder, err := codec.NewJSONEventBatchDecoder(message.Key, message.Value)
+		var (
+			decoder codec.EventBatchDecoder
+			err     error
+		)
+		switch c.protocol {
+		case codec.ProtocolDefault:
+			decoder, err = codec.NewJSONEventBatchDecoder(message.Key, message.Value)
+		case codec.ProtocolCraft:
+			decoder, err = codec.NewCraftEventBatchDecoder(message.Value)
+		case codec.ProtocolCanalJSON:
+			decoder = codec.NewCanalFlatEventBatchDecoder(message.Value, c.enableTiDBExtension)
+		default:
+			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
+		}
 		if err != nil {
 			return errors.Trace(err)
 		}
 
 		counter := 0
 		for {
-			tp, hasNext, err := batchDecoder.HasNext()
+			tp, hasNext, err := decoder.HasNext()
 			if err != nil {
 				log.Fatal("decode message key failed", zap.Error(err))
 			}
@@ -410,13 +426,13 @@ ClaimMessages:
 
 			switch tp {
 			case model.MqMessageTypeDDL:
-				ddl, err := batchDecoder.NextDDLEvent()
+				ddl, err := decoder.NextDDLEvent()
 				if err != nil {
 					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				c.appendDDL(ddl)
 			case model.MqMessageTypeRow:
-				row, err := batchDecoder.NextRowChangedEvent()
+				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
 					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
 				}
@@ -447,7 +463,7 @@ ClaimMessages:
 					sink.tablesMap.Store(row.Table.TableID, row.CommitTs)
 				}
 			case model.MqMessageTypeResolved:
-				ts, err := batchDecoder.NextResolvedEvent()
+				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
 					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
 				}
