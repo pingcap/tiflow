@@ -81,9 +81,11 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 		default:
 			continue
 		}
-		checkpointTs := cfState.Info.GetCheckpointTs(cfState.Status)
-		if minCheckpointTs > checkpointTs {
-			minCheckpointTs = checkpointTs
+		// When the changefeed starts up, CDC will do a snapshot read at (checkpoint-ts - 1) from TiKV,
+		// so (checkpoint - 1) should be an upper bound for the GC safepoint.
+		gcSafepointUpperBound := cfState.Info.GetCheckpointTs(cfState.Status) - 1
+		if minCheckpointTs > gcSafepointUpperBound {
+			minCheckpointTs = gcSafepointUpperBound
 		}
 	}
 	m.lastUpdatedTime = time.Now()
