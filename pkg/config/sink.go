@@ -15,12 +15,18 @@ package config
 
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
-	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers"`
-	Protocol      string          `toml:"protocol" json:"protocol"`
+	DispatchRules   []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
+	Protocol        string            `toml:"protocol" json:"protocol"`
+	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
 }
 
 // DispatchRule represents partition rule for a table
 type DispatchRule struct {
 	Matcher    []string `toml:"matcher" json:"matcher"`
 	Dispatcher string   `toml:"dispatcher" json:"dispatcher"`
+}
+
+type ColumnSelector struct {
+	Matcher []string `toml:"matcher" json:"matcher"`
+	Columns []string `toml:"columns" json:"columns"`
 }
