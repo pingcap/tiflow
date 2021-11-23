@@ -404,8 +404,10 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 	failpoint.Inject("SkipTopicAutoCreate", func() {
 		failpoint.Return(nil)
 	})
+	start := time.Now()
 	admin, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
 	if err != nil {
+		log.Info("NewClusterAdmin failed", zap.Duration("elapsed", time.Since(start)))
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	defer func() {
@@ -414,8 +416,10 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 		}
 	}()
 
+	start = time.Now()
 	topics, err := admin.ListTopics()
 	if err != nil {
+		log.Info("ListTopics failed", zap.Duration("elapsed", time.Since(start)))
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -426,8 +430,10 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 		// else the producer will send message that too large to make topic reject, then changefeed would error.
 		// only the default `open protocol` and `craft protocol` use `max-message-bytes`, so check this for them.
 		if protocol == codec.ProtocolDefault || protocol == codec.ProtocolCraft {
+			start = time.Now()
 			topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
 			if err != nil {
+				log.Info("getTopicMaxMessageBytes failed", zap.Duration("elapsed", time.Since(start)))
 				return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 			}
 			if topicMaxMessageBytes < config.MaxMessageBytes {
@@ -459,9 +465,11 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 	// Kafka would create the topic with broker's `message.max.bytes`,
 	// we have to make sure it's not greater than `max-message-bytes` for the default open protocol & craft protocol.
 	if protocol == codec.ProtocolDefault || protocol == codec.ProtocolCraft {
+		start = time.Now()
 		brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
 		if err != nil {
-			log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
+			log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration",
+				zap.Duration("elapsed", time.Since(start)))
 			return errors.Trace(err)
 		}
 
@@ -480,12 +488,14 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
 	}
 
+	start = time.Now()
 	err = admin.CreateTopic(topic, &sarama.TopicDetail{
 		NumPartitions:     config.PartitionNum,
 		ReplicationFactor: config.ReplicationFactor,
 	}, false)
 	// TODO identify the cause of "Topic with this name already exists"
 	if err != nil && !strings.Contains(err.Error(), "already exists") {
+		log.Info("CreateTopic failed", zap.Duration("elapsed", time.Since(start)))
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -506,7 +516,9 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, protocol codec.Pr
 		return nil, err
 	}
 
+	start := time.Now()
 	if err := topicPreProcess(topic, protocol, config, cfg); err != nil {
+		log.Info("topicPreProcess failed", zap.Duration("elapsed", time.Since(start)))
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 

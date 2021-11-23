@@ -119,7 +119,6 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	leader.Returns(metadataResponse)
 	leader.Returns(metadataResponse)
-
 	prodSuccess := new(sarama.ProduceResponse)
 	prodSuccess.AddTopicPartition(topic, 0, sarama.ErrNoError)
 	prodSuccess.AddTopicPartition(topic, 1, sarama.ErrNoError)
