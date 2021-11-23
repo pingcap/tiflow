@@ -2323,7 +2323,10 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 			return err2
 		}
 		// adjust 'Collation' base on upstream
-		s.adjustTableCollation(ddlInfo)
+		err2 = s.adjustTableCollation(ddlInfo)
+		if err2 != nil {
+			return err2
+		}
 		sourceTable := ddlInfo.sourceTables[0]
 		targetTable := ddlInfo.targetTables[0]
 		if len(ddlInfo.routedDDL) == 0 {

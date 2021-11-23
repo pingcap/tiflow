@@ -684,9 +684,8 @@ func (s *testDDLSuite) TestAdjustTableCollation(c *C) {
 		c.Assert(stmt, NotNil)
 		ddlInfo.originStmt = stmt
 		if i > 2 {
-			mock.ExpectQuery(fmt.Sprintf("SHOW TABLE STATUS from %s like '%s'", schemaName, tableName)).WillReturnRows(
-				sqlmock.NewRows([]string{"Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length", "Max_data_length", "Index_length", "Data_free", "Auto_increment", "Create_time", "Update_time", "Check_time", "Collation", "Checksum", "Create_options", "Comment"}).
-					AddRow("t", "InnoDB", 10, "Dynamic", 0, 0, 16384, 0, 16384, 0, "NULL", "2021-11-22 08:43:50", "NULL", "NULL", "utf8mb4_general_ci", "NULL", "", ""))
+			mock.ExpectQuery(fmt.Sprintf("SELECT TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'", schemaName, tableName)).WillReturnRows(
+				sqlmock.NewRows([]string{"TABLE_COLLATION"}).AddRow("utf8mb4_general_ci"))
 		}
 		syncer.adjustTableCollation(ddlInfo)
 		c.Assert(ddlInfo.routedDDL, Equals, expectedSQLs[i])

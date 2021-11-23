@@ -192,31 +192,27 @@ func (s *Syncer) clearOnlineDDL(tctx *tcontext.Context, targetTable *filter.Tabl
 	return nil
 }
 
-func (s *Syncer) adjustTableCollation(ddlInfo *ddlInfo) {
+func (s *Syncer) adjustTableCollation(ddlInfo *ddlInfo) error {
 	if createStmt, ok := ddlInfo.originStmt.(*ast.CreateTableStmt); ok {
 		// create table like old table has no table_options
 		// See https://dev.mysql.com/doc/refman/5.7/en/create-table.html
 		if createStmt.ReferTable != nil {
-			fmt.Printf("RefTable")
-			return
+			return nil
 		}
 		for _, tableOption := range createStmt.Options {
-			fmt.Printf("Collation == %v \n", tableOption)
 			// already have 'Collation'
 			if tableOption.Tp == ast.TableOptionCollate {
-				return
+				return nil
 			}
 		}
 		sourceTable := ddlInfo.sourceTables[0]
 		collationInfo, err := utils.GetTableCollation(s.tctx.Ctx, s.fromDB.BaseDB.DB, sourceTable.Schema, sourceTable.Name)
 		if err != nil {
-			fmt.Printf("err == %v \n", err)
-			s.tctx.L().Warn("get source table collation info failed.", zap.Stringer("table", sourceTable), zap.Error(err))
-			return
+			s.tctx.L().Error("get source table collation info failed.", zap.Stringer("table", sourceTable), zap.Error(err))
+			return err
 		}
-		fmt.Printf("GetTableCollation == %v \n", collationInfo)
 		if collationInfo == "" {
-			return
+			return nil
 		}
 		// add collation
 		if createStmt.Options == nil {
@@ -225,14 +221,14 @@ func (s *Syncer) adjustTableCollation(ddlInfo *ddlInfo) {
 		createStmt.Options = append(createStmt.Options, &ast.TableOption{Tp: ast.TableOptionCollate, StrValue: collationInfo})
 		routedDDL, err := parserpkg.RenameDDLTable(createStmt, ddlInfo.targetTables)
 		if err != nil {
-			fmt.Printf("err == %v \n", err)
 			s.tctx.L().Warn("Regenerate ddl failed after add Collation.", zap.Stringer("table", sourceTable), zap.String("Collation", collationInfo), zap.Error(err))
-			return
+			return nil
 		}
 		if routedDDL != "" {
 			ddlInfo.routedDDL = routedDDL
 		}
 	}
+	return nil
 }
 
 type ddlInfo struct {
