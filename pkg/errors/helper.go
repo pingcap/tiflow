@@ -14,7 +14,7 @@
 package errors
 
 import (
-	"github.com/hanfei1991/microcosom/pb"
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pingcap/errors"
 	cdc_errors "github.com/pingcap/ticdc/pkg/errors"
 )

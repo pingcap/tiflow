@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/hanfei1991/microcosom/pb"
-	"github.com/hanfei1991/microcosom/pkg/workerpool"
+	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/workerpool"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

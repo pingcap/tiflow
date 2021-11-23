@@ -4,12 +4,12 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hanfei1991/microcosom/master/cluster"
-	"github.com/hanfei1991/microcosom/master/jobmaster/benchmark"
-	"github.com/hanfei1991/microcosom/model"
-	"github.com/hanfei1991/microcosom/pb"
-	"github.com/hanfei1991/microcosom/pkg/autoid"
-	"github.com/hanfei1991/microcosom/pkg/errors"
+	"github.com/hanfei1991/microcosm/master/cluster"
+	"github.com/hanfei1991/microcosm/master/jobmaster/benchmark"
+	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/autoid"
+	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 )

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/hanfei1991/microcosom/master/cluster"
-	"github.com/hanfei1991/microcosom/model"
-	"github.com/hanfei1991/microcosom/pkg/autoid"
+	"github.com/hanfei1991/microcosm/master/cluster"
+	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/autoid"
 )
 
 // BuildBenchmarkJobMaster for benchmark workload.

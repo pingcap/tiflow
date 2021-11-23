@@ -10,7 +10,7 @@ import (
 
 func NewConfig() *Config {
 	cfg := &Config{}
-	cfg.flagSet = flag.NewFlagSet("microcosom", flag.ContinueOnError)
+	cfg.flagSet = flag.NewFlagSet("microcosm", flag.ContinueOnError)
 	fs := cfg.flagSet
 
 	fs.StringVar(&cfg.configFile, "config", "", "Config file")

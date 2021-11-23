@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hanfei1991/microcosom/model"
+	"github.com/hanfei1991/microcosm/model"
 )
 
 type TaskStatus int32

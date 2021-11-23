@@ -5,7 +5,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/hanfei1991/microcosom/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/errors"
 )
 
 var (

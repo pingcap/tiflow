@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/hanfei1991/microcosom/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"

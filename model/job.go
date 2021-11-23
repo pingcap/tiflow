@@ -1,6 +1,6 @@
 package model
 
-import "github.com/hanfei1991/microcosom/pb"
+import "github.com/hanfei1991/microcosm/pb"
 
 type (
 	JobID  int32

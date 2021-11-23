@@ -1,4 +1,4 @@
-module github.com/hanfei1991/microcosom
+module github.com/hanfei1991/microcosm
 
 go 1.16
 

@@ -17,7 +17,7 @@ import (
 	std_errors "errors"
 	"testing"
 
-	"github.com/hanfei1991/microcosom/pb"
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/require"
 )

@@ -3,7 +3,7 @@ package jobmaster
 import (
 	"context"
 
-	"github.com/hanfei1991/microcosom/model"
+	"github.com/hanfei1991/microcosm/model"
 )
 
 // JobMaster maintains and manages the submitted job.

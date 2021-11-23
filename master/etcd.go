@@ -17,7 +17,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hanfei1991/microcosom/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/errors"
 	"go.etcd.io/etcd/embed"
 	"google.golang.org/grpc"
 )

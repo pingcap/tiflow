@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/hanfei1991/microcosom/pb"
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

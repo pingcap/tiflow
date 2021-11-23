@@ -16,7 +16,7 @@ package errors
 import (
 	"testing"
 
-	"github.com/hanfei1991/microcosom/pkg/leakutil"
+	"github.com/hanfei1991/microcosm/pkg/leakutil"
 )
 
 func TestMain(m *testing.M) {

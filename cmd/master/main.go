@@ -8,7 +8,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/hanfei1991/microcosom/master"
+	"github.com/hanfei1991/microcosm/master"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"

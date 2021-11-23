@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/hanfei1991/microcosom/master/jobmaster/benchmark"
-	"github.com/hanfei1991/microcosom/pb"
+	"github.com/hanfei1991/microcosm/master/jobmaster/benchmark"
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
