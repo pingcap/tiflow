@@ -66,7 +66,7 @@ type asyncSinkImpl struct {
 	wg     sync.WaitGroup
 	errCh  chan error
 
-	initialized int32
+	initialized chan struct{}
 }
 
 func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
@@ -94,9 +94,8 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 			asyncSink.errCh <- err
 			return
 		}
-		if atomic.CompareAndSwapInt32(&asyncSink.initialized, 0, 1) {
-			asyncSink.sink = s
-		}
+		asyncSink.sink = s
+		close(asyncSink.initialized)
 	}()
 
 	if changefeedInfo.SyncPointEnabled {
@@ -113,7 +112,22 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 	return asyncSink, nil
 }
 
+func (s *asyncSinkImpl) waitSinkInitialized(ctx cdcContext.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case err := <-s.errCh:
+			ctx.Throw(err)
+			return
+		case <-s.initialized:
+			return
+		}
+	}
+}
+
 func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
+	s.waitSinkInitialized(ctx)
 	defer s.wg.Done()
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
@@ -132,18 +146,11 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 				continue
 			}
 			lastCheckpointTs = checkpointTs
-			if atomic.LoadInt32(&s.initialized) == 1 {
-				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs); err != nil {
-					ctx.Throw(errors.Trace(err))
-					return
-				}
+			if err := s.sink.EmitCheckpointTs(ctx, checkpointTs); err != nil {
+				ctx.Throw(errors.Trace(err))
+				return
 			}
 		case ddl := <-s.ddlCh:
-			// we cannot handle DDL before the sink initialized, but we still didn't know when it will work.
-			// this is not a working solution.
-			for atomic.LoadInt32(&s.initialized) == 0 {
-				continue
-			}
 			err := s.sink.EmitDDLEvent(ctx, ddl)
 			failpoint.Inject("InjectChangefeedDDLError", func() {
 				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
