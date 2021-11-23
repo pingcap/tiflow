@@ -1,4 +1,3 @@
-
 # 指定配置文件中涉及的库名、表名是否为大小写敏感的
 # 该配置会同时影响 filter 和 sink 相关配置，默认为 true
 
@@ -28,8 +27,14 @@ worker-num = 16
 # For MQ Sinks, you can configure event distribution rules through dispatchers
 # Dispatchers support default, ts, rowid and table
 dispatchers = [
-	{matcher = ['test1.*', 'test2.*'], dispatcher = "ts"},
-	{matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
+    { matcher = ['test1.*', 'test2.*'], dispatcher = "ts" },
+    { matcher = ['test3.*', 'test4.*'], dispatcher = "rowid" },
+]
+# 对于 MQ 类的 Sink，可以通过 column-selectors 配置 column 选择器
+# For MQ Sinks, you can configure column selector rules through column-selectors
+column-selectors = [
+    { matcher = ['test1.*', 'test2.*'], columns = ["column1", "column2"] },
+    { matcher = ['test3.*', 'test4.*'], columns = ["!a", "column3"] },
 ]
 # 对于 MQ 类的 Sink，可以指定消息的协议格式
 # 协议目前支持 default, canal, avro 和 maxwell 四种，default 为 ticdc-open-protocol
@@ -46,7 +51,7 @@ enable = false
 replica-id = 1
 # 需要过滤掉的复制 ID
 # The replica ID should be ignored
-filter-replica-ids = [2,3]
+filter-replica-ids = [2, 3]
 # 是否同步 DDL
 # Whether to replicate DDL
 sync-ddl = true
