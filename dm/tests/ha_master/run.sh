@@ -322,7 +322,7 @@ function run() {
 		grep 'source' | awk -F: '{print $2}' | cut -d'"' -f 2)
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $worker1bound worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	echo "start DM task"
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
