@@ -272,7 +272,7 @@ function ensure_start_relay() {
 		if [[ "$PRE_VER" == "v2.0.2" ]] || [[ "$PRE_VER" == "v2.0.3" ]] || [[ "$PRE_VER" == "v2.0.4" ]] || [[ "$PRE_VER" == "v2.0.5" ]] || [[ "$PRE_VER" == "v2.0.6" ]]; then
 			run_dmctl_with_retry $CUR_VER "start-relay -s mysql-replica-01 $worker" "\"result\": true" 1
 		else
-		  run_dmctl_with_retry $CUR_VER "start-relay -s mysql-replica-01 $worker" "\"result\": true" 2
+			run_dmctl_with_retry $CUR_VER "start-relay -s mysql-replica-01 $worker" "\"result\": true" 2
 		fi
 	fi
 }
