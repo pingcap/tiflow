@@ -66,6 +66,10 @@ type tablePoint struct {
 	ti       *model.TableInfo
 }
 
+func (b *tablePoint) String() string {
+	return fmt.Sprintf("location(%v), tableInfo(ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t)", b.location, b.ti.ID, b.ti.Name, len(b.ti.Columns), len(b.ti.Indices), b.ti.PKIsHandle)
+}
+
 type binlogPoint struct {
 	sync.RWMutex
 
@@ -371,7 +375,7 @@ func (cp *RemoteCheckPoint) Snapshot() SnapshotInfo {
 	}
 
 	// if there is no change just return an empty snapshot
-	if len(tableCheckPoints) == 0 && (cp.globalPoint == nil || !cp.globalPoint.outOfDate()) && !cp.globalPointSaveTime.IsZero() && !cp.needFlushSafeModeExitPoint {
+	if len(tableCheckPoints) == 0 && !cp.globalPoint.outOfDate() && !cp.globalPointSaveTime.IsZero() && !cp.needFlushSafeModeExitPoint {
 		return SnapshotInfo{
 			id: 0,
 		}
@@ -590,7 +594,7 @@ func (cp *RemoteCheckPoint) SaveGlobalPoint(location binlog.Location) {
 // FlushPointsExcept implements CheckPoint.FlushSnapshotPointsExcept.
 func (cp *RemoteCheckPoint) FlushPointsExcept(
 	tctx *tcontext.Context,
-	snapshot int,
+	snapshotID int,
 	exceptTables []*filter.Table,
 	extraSQLs []string,
 	extraArgs [][]interface{},
@@ -598,8 +602,8 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	cp.Lock()
 	defer cp.Unlock()
 
-	if len(cp.snapshots) == 0 || cp.snapshots[0].id != snapshot {
-		cp.logCtx.Logger.DPanic("snapshot not found", zap.Int("id", snapshot))
+	if len(cp.snapshots) == 0 || cp.snapshots[0].id != snapshotID {
+		cp.logCtx.Logger.DPanic("snapshot not found", zap.Int("id", snapshotID))
 	}
 	snapshotCp := cp.snapshots[0]
 	cp.snapshots = cp.snapshots[1:]
@@ -619,7 +623,7 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	sqls := make([]string, 0, 100)
 	args := make([][]interface{}, 0, 100)
 
-	if (snapshotCp.globalPoint != nil && cp.globalPoint.outOfDateBy(snapshotCp.globalPoint.location)) || snapshotCp.globalPointSaveTime.IsZero() || snapshotCp.needFlushSafeModeExitPoint {
+	if cp.globalPoint.outOfDateBy(snapshotCp.globalPoint.location) || cp.globalPointSaveTime.IsZero() || snapshotCp.needFlushSafeModeExitPoint {
 		locationG := snapshotCp.globalPoint.location
 		sqlG, argG := cp.genUpdateSQL(globalCpSchema, globalCpTable, locationG, cp.safeModeExitPoint, nil, true)
 		sqls = append(sqls, sqlG)
