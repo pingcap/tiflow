@@ -294,7 +294,7 @@ func main() {
 	}()
 
 	<-consumer.ready // Await till the consumer has been set up
-	log.Info("TiCDC open protocol consumer up and running!...")
+	log.Info("TiCDC consumer up and running!...")
 
 	sigterm := make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
