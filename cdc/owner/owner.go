@@ -47,6 +47,10 @@ const (
 	ownerJobTypeQuery
 )
 
+// versionInconsistentLogRate represents the rate of log output when there are
+// captures version is different with the owner version in the cluster
+const versionInconsistentLogRate = 1
+
 type ownerJob struct {
 	tp           ownerJobType
 	changefeedID model.ChangeFeedID
@@ -78,7 +82,7 @@ type Owner struct {
 
 	ownerJobQueueMu sync.Mutex
 	ownerJobQueue   []*ownerJob
-
+	// logLimiter controls cluster version check log output rate
 	logLimiter   *rate.Limiter
 	lastTickTime time.Time
 	closed       int32
@@ -93,7 +97,7 @@ func NewOwner(pdClient pd.Client) *Owner {
 		gcManager:     gc.NewManager(pdClient),
 		lastTickTime:  time.Now(),
 		newChangefeed: newChangefeed,
-		logLimiter:    rate.NewLimiter(1, 1),
+		logLimiter:    rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 	}
 }
 
