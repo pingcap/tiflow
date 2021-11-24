@@ -359,6 +359,11 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 	if len(c.resolvedBuf) == 0 {
 		return nil
 	}
+	key, err := json.Marshal(model.MqMessageTypeRow)
+	if err != nil {
+		log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
+		return nil
+	}
 	ret := make([]*MQMessage, len(c.resolvedBuf))
 	for i, msg := range c.resolvedBuf {
 		value, err := json.Marshal(msg)
