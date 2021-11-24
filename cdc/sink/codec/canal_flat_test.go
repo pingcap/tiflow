@@ -15,7 +15,7 @@ package codec
 
 import (
 	"encoding/json"
-	"github.com/Shopify/sarama"
+
 	"github.com/pingcap/check"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -170,11 +170,8 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 		mqMessages := encoder.Build()
 		c.Assert(len(mqMessages), check.Equals, 1)
 
-		rawBytes, err := json.Marshal(mqMessages[0])
-		c.Assert(err, check.IsNil)
-
 		for _, decodeEnable := range []bool{false, true} {
-			decoder := NewCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
+			decoder := NewCanalFlatEventBatchDecoder(mqMessages[0].Key, mqMessages[0].Value, decodeEnable)
 
 			ty, hasNext, err := decoder.HasNext()
 			c.Assert(err, check.IsNil)
@@ -254,11 +251,8 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C
 		c.Assert(err, check.IsNil)
 		c.Assert(result, check.NotNil)
 
-		rawBytes, err := json.Marshal(result)
-		c.Assert(err, check.IsNil)
-
 		for _, decodeEnable := range []bool{false, true} {
-			decoder := NewCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
+			decoder := NewCanalFlatEventBatchDecoder(result.Key, result.Value, decodeEnable)
 
 			ty, hasNext, err := decoder.HasNext()
 			c.Assert(err, check.IsNil)
@@ -348,16 +342,7 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 			c.Assert(msg, check.IsNil)
 		}
 
-		consumerMessage := &sarama.ConsumerMessage{
-			Key: msg.Key,
-			Value: msg.Value,
-		}
-
-		rawBytes, err := json.Marshal(consumerMessage)
-		c.Assert(err, check.IsNil)
-		c.Assert(rawBytes, check.NotNil)
-
-		decoder := NewCanalFlatEventBatchDecoder(rawBytes, enable)
+		decoder := NewCanalFlatEventBatchDecoder(msg.Key, msg.Value, enable)
 
 		ty, hasNext, err := decoder.HasNext()
 		c.Assert(err, check.IsNil)
