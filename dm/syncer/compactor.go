@@ -195,6 +195,8 @@ func (c *compactor) compactJob(j *job) {
 			j.dml.oldValues = nil
 			j.dml.originOldValues = nil
 			j.dml.op = insert
+			// DELETE + INSERT + UPDATE => INSERT with safemode
+			j.dml.safeMode = prevJob.dml.safeMode
 		} else if prevJob.tp == update {
 			// UPDATE + UPDATE => UPDATE
 			j.dml.oldValues = prevJob.dml.oldValues
