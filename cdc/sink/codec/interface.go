@@ -57,13 +57,14 @@ type EventBatchEncoder interface {
 
 // MQMessage represents an MQ message to the mqSink
 type MQMessage struct {
-	Key      []byte
-	Value    []byte
-	Ts       uint64              // reserved for possible output sorting
-	Schema   *string             // schema
-	Table    *string             // table
-	Type     model.MqMessageType // type
-	Protocol Protocol            // protocol
+	Key       []byte
+	Value     []byte
+	Ts        uint64              // reserved for possible output sorting
+	Schema    *string             // schema
+	Table     *string             // table
+	Type      model.MqMessageType // type
+	Protocol  Protocol            // protocol
+	RowsCount int                 // rows in one MQ Message
 }
 
 // maximumRecordOverhead is used to calculate ProducerMessage's byteSize by sarama kafka client.
@@ -95,13 +96,14 @@ func newResolvedMQMessage(proto Protocol, key, value []byte, ts uint64) *MQMessa
 // It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
 func NewMQMessage(proto Protocol, key []byte, value []byte, ts uint64, ty model.MqMessageType, schema, table *string) *MQMessage {
 	ret := &MQMessage{
-		Key:      nil,
-		Value:    nil,
-		Ts:       ts,
-		Schema:   schema,
-		Table:    table,
-		Type:     ty,
-		Protocol: proto,
+		Key:       nil,
+		Value:     nil,
+		Ts:        ts,
+		Schema:    schema,
+		Table:     table,
+		Type:      ty,
+		Protocol:  proto,
+		RowsCount: 0,
 	}
 
 	if key != nil {
