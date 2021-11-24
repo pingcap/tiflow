@@ -288,8 +288,13 @@ func (s *testSyncerSuite) TestGenSQL(c *C) {
 			[][]interface{}{{1, 2, 3, "haha"}},
 		},
 		{
+<<<<<<< HEAD
 			newDML(insert, true, "`targetSchema`.`targetTable`", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti),
 			[]string{"INSERT INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)"},
+=======
+			newDML(insert, true, "`targetSchema`.`targetTable`", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
+			[]string{"REPLACE INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
+>>>>>>> 76e701dcc (compactor: fix duplicate entry in safemode (#3432))
 			[][]interface{}{{1, 2, 3, "haha"}},
 		},
 		{
@@ -303,8 +308,13 @@ func (s *testSyncerSuite) TestGenSQL(c *C) {
 			[][]interface{}{{4, 5, 6, "hihi", 1}},
 		},
 		{
+<<<<<<< HEAD
 			newDML(update, true, "`targetSchema`.`targetTable`", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti),
 			[]string{"DELETE FROM `targetSchema`.`targetTable` WHERE `id` = ? LIMIT 1", "INSERT INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)"},
+=======
+			newDML(update, true, "`targetSchema`.`targetTable`", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
+			[]string{"DELETE FROM `targetSchema`.`targetTable` WHERE `id` = ? LIMIT 1", "REPLACE INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
+>>>>>>> 76e701dcc (compactor: fix duplicate entry in safemode (#3432))
 			[][]interface{}{{1}, {4, 5, 6, "hihi"}},
 		},
 	}
@@ -347,6 +357,7 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 
 	dmls := []*DML{
 		// insert
+<<<<<<< HEAD
 		newDML(insert, true, targetTableID1, sourceTable11, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti11.Columns, ti11),
 		newDML(insert, true, targetTableID1, sourceTable11, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti11.Columns, ti11),
 		newDML(insert, true, targetTableID1, sourceTable12, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti12.Columns, ti12),
@@ -354,6 +365,15 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 		newDML(update, true, targetTableID1, sourceTable11, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, ti11.Columns, ti11),
 		newDML(update, true, targetTableID1, sourceTable11, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, ti11.Columns, ti11),
 		newDML(update, true, targetTableID1, sourceTable12, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, ti12.Columns, ti12),
+=======
+		newDML(insert, true, targetTableID1, sourceTable11, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti11.Columns, ti11, ti11Index, downTi11),
+		newDML(insert, true, targetTableID1, sourceTable11, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti11.Columns, ti11, ti11Index, downTi11),
+		newDML(insert, true, targetTableID1, sourceTable12, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti12.Columns, ti12, ti12Index, downTi12),
+		// update no index but safemode
+		newDML(update, true, targetTableID1, sourceTable11, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, ti11.Columns, ti11, ti11Index, downTi11),
+		newDML(update, true, targetTableID1, sourceTable11, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, ti11.Columns, ti11, ti11Index, downTi11),
+		newDML(update, true, targetTableID1, sourceTable12, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, ti12.Columns, ti12, ti12Index, downTi12),
+>>>>>>> 76e701dcc (compactor: fix duplicate entry in safemode (#3432))
 		// update uk
 		newDML(update, true, targetTableID1, sourceTable11, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, ti11.Columns, ti11),
 		newDML(update, true, targetTableID1, sourceTable11, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, ti11.Columns, ti11),
@@ -398,17 +418,29 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 
 	expectQueries := []string{
 		// table1
-		"INSERT INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?),(?,?,?),(?,?,?),(?,?,?),(?,?,?),(?,?,?),(?,?,?),(?,?,?),(?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`name`=VALUES(`name`)",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?),(?,?,?),(?,?,?)",
 		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
-		"INSERT INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`name`=VALUES(`name`)",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
 		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
-		"INSERT INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`name`=VALUES(`name`)",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
 		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
-		"INSERT INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`name`=VALUES(`name`)",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
+		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
+		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
+		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
+		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
+		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
+		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
 		"DELETE FROM `db1`.`tb1` WHERE (`id`) IN ((?),(?),(?))",
 
 		// table2
-		"INSERT INTO `db2`.`tb2` (`id`,`col2`,`name`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)",
+		"REPLACE INTO `db2`.`tb2` (`id`,`col2`,`name`) VALUES (?,?,?)",
 		"INSERT INTO `db2`.`tb2` (`id`,`col2`,`name`) VALUES (?,?,?)",
 		"INSERT INTO `db2`.`tb2` (`id`,`col3`,`name`) VALUES (?,?,?)",
 		"INSERT INTO `db2`.`tb2` (`id`,`col2`,`name`) VALUES (?,?,?),(?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)",
@@ -426,7 +458,19 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 
 	expectArgs := [][]interface{}{
 		// table1
-		{1, 1, "a", 2, 2, "b", 3, 3, "c", 1, 1, "aa", 2, 2, "bb", 3, 3, "cc", 1, 4, "aa", 2, 5, "bb", 3, 6, "cc"},
+		{1, 1, "a", 2, 2, "b", 3, 3, "c"},
+		{1},
+		{1, 1, "aa"},
+		{2},
+		{2, 2, "bb"},
+		{3},
+		{3, 3, "cc"},
+		{1},
+		{1, 4, "aa"},
+		{2},
+		{2, 5, "bb"},
+		{3},
+		{3, 6, "cc"},
 		{1},
 		{4, 4, "aa"},
 		{2},
