@@ -17,19 +17,17 @@ import (
 	"context"
 	"encoding/binary"
 	"hash/fnv"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/sorter"
 	lsorter "github.com/pingcap/ticdc/cdc/sorter/leveldb"
+	"github.com/pingcap/ticdc/cdc/sorter/leveldb/db"
 	"github.com/pingcap/ticdc/pkg/actor"
 	"github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/syndtr/goleveldb/leveldb"
 	"go.uber.org/zap"
 )
 
@@ -47,7 +45,7 @@ const (
 
 // System manages leveldb sorter resource.
 type System struct {
-	dbs         []*leveldb.DB
+	dbs         []db.DB
 	dbSystem    *actor.System
 	dbRouter    *actor.Router
 	cleanSystem *actor.System
@@ -129,13 +127,13 @@ func (s *System) Start(ctx context.Context) error {
 	dbCount := s.cfg.LevelDB.Count
 	for id := 0; id < dbCount; id++ {
 		// Open leveldb.
-		db, err := lsorter.OpenDB(ctx, id, s.cfg)
+		db, err := db.OpenDB(ctx, id, s.cfg)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		s.dbs = append(s.dbs, db)
 		// Create and spawn leveldb actor.
-		dbac, dbmb, err := lsorter.NewLevelDBActor(
+		dbac, dbmb, err := lsorter.NewDBActor(
 			ctx, id, db, s.cfg, s.closedWg, captureAddr)
 		if err != nil {
 			return errors.Trace(err)
@@ -221,37 +219,9 @@ func (s *System) Stop() error {
 	return nil
 }
 
-func collectMetrics(dbs []*leveldb.DB, captureAddr string) {
+func collectMetrics(dbs []db.DB, captureAddr string) {
 	for i := range dbs {
 		db := dbs[i]
-		stats := leveldb.DBStats{}
-		err := db.Stats(&stats)
-		if err != nil {
-			log.Panic("leveldb error", zap.Error(err), zap.Int("db", i))
-		}
-		id := strconv.Itoa(i)
-		sorter.OnDiskDataSizeGauge.
-			WithLabelValues(captureAddr, id).Set(float64(stats.LevelSizes.Sum()))
-		sorter.InMemoryDataSizeGauge.
-			WithLabelValues(captureAddr, id).Set(float64(stats.BlockCacheSize))
-		sorter.OpenFileCountGauge.
-			WithLabelValues(captureAddr, id).Set(float64(stats.OpenedTablesCount))
-		sorterDBSnapshotGauge.
-			WithLabelValues(captureAddr, id).Set(float64(stats.AliveSnapshots))
-		sorterDBIteratorGauge.
-			WithLabelValues(captureAddr, id).Set(float64(stats.AliveIterators))
-		sorterDBReadBytes.
-			WithLabelValues(captureAddr, id).Set(float64(stats.IORead))
-		sorterDBWriteBytes.
-			WithLabelValues(captureAddr, id).Set(float64(stats.IOWrite))
-		sorterDBWriteDelayCount.
-			WithLabelValues(captureAddr, id).Set(float64(stats.WriteDelayCount))
-		sorterDBWriteDelayDuration.
-			WithLabelValues(captureAddr, id).Set(stats.WriteDelayDuration.Seconds())
-		metricLevelCount := sorterDBLevelCount.
-			MustCurryWith(map[string]string{"capture": captureAddr, "id": id})
-		for level, count := range stats.LevelTablesCounts {
-			metricLevelCount.WithLabelValues(strconv.Itoa(level)).Set(float64(count))
-		}
+		db.CollectMetrics(captureAddr, i)
 	}
 }

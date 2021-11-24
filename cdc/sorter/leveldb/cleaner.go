@@ -21,12 +21,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/sorter/encoding"
+	"github.com/pingcap/ticdc/cdc/sorter/leveldb/db"
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
 	"github.com/pingcap/ticdc/pkg/actor"
 	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/syndtr/goleveldb/leveldb"
-	lutil "github.com/syndtr/goleveldb/leveldb/util"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -34,7 +33,7 @@ import (
 // CleanerActor is an actor that can clean up table data asynchronously.
 type CleanerActor struct {
 	id       actor.ID
-	db       *leveldb.DB
+	db       db.DB
 	wbSize   int
 	closedWg *sync.WaitGroup
 
@@ -46,7 +45,7 @@ var _ actor.Actor = (*CleanerActor)(nil)
 
 // NewCleanerActor returns a cleaner actor.
 func NewCleanerActor(
-	id int, db *leveldb.DB, router *actor.Router,
+	id int, db db.DB, router *actor.Router,
 	cfg *config.SorterConfig, wg *sync.WaitGroup,
 ) (*CleanerActor, actor.Mailbox, error) {
 	wg.Add(1)
@@ -79,7 +78,7 @@ func (clean *CleanerActor) Poll(ctx context.Context, tasks []actormsg.Message) b
 
 	reschedulePos := -1
 	rescheduleDelay := time.Duration(0)
-	var batch leveldb.Batch
+	batch := clean.db.Batch(0)
 TASKS:
 	for pos := range tasks {
 		var task message.Task
@@ -99,11 +98,13 @@ TASKS:
 
 		start := encoding.EncodeTsKey(task.UID, task.TableID, 0)
 		limit := encoding.EncodeTsKey(task.UID, task.TableID+1, 0)
-		iterRange := &lutil.Range{
-			Start: start,
-			Limit: limit,
+		snap, err := clean.db.Snapshot()
+		if err != nil {
+			log.Panic("get snapshot failed",
+				zap.Error(err), zap.Uint64("id", uint64(clean.id)))
+			return false
 		}
-		iter := clean.db.NewIterator(iterRange, nil)
+		iter := snap.Iterator(start, limit)
 
 		// Force writes the first batch if the task is rescheduled (rate limited).
 		force := task.CleanupRatelimited
@@ -113,28 +114,48 @@ TASKS:
 
 			// TODO it's similar to LevelActor.maybeWrite,
 			//      they should be unified.
-			if batch.Len() >= clean.wbSize {
-				delay, err := clean.writeRateLimited(&batch, force)
+			if int(batch.Count()) >= clean.wbSize {
+				delay, err := clean.writeRateLimited(batch, force)
 				if err != nil {
-					log.Panic("leveldb error", zap.Error(err))
+					log.Panic("db error",
+						zap.Error(err), zap.Uint64("id", uint64(clean.id)))
 				}
 				if delay != 0 {
 					// Rate limited, break and reschedule tasks.
 					// After the delay, this batch can be write forcibly.
 					reschedulePos = pos
 					rescheduleDelay = delay
-					iter.Release()
+					err := iter.Release()
+					if err != nil {
+						log.Panic("db error",
+							zap.Error(err), zap.Uint64("id", uint64(clean.id)))
+					}
+					err = snap.Release()
+					if err != nil {
+						log.Panic("db error",
+							zap.Error(err), zap.Uint64("id", uint64(clean.id)))
+					}
 					break TASKS
 				}
 				force = false
 			}
 		}
-		// Release iterator in time.
-		iter.Release()
-		// Ignore rate limit and force write remaining kv.
-		_, err := clean.writeRateLimited(&batch, true)
+		// Release iterator and snapshot in time.
+		err = iter.Release()
 		if err != nil {
-			log.Panic("leveldb error", zap.Error(err))
+			log.Panic("db error",
+				zap.Error(err), zap.Uint64("id", uint64(clean.id)))
+		}
+		err = snap.Release()
+		if err != nil {
+			log.Panic("db error",
+				zap.Error(err), zap.Uint64("id", uint64(clean.id)))
+		}
+		// Ignore rate limit and force write remaining kv.
+		_, err = clean.writeRateLimited(batch, true)
+		if err != nil {
+			log.Panic("db error",
+				zap.Error(err), zap.Uint64("id", uint64(clean.id)))
 		}
 	}
 
@@ -153,9 +174,9 @@ func (clean *CleanerActor) close(err error) {
 }
 
 func (clean *CleanerActor) writeRateLimited(
-	batch *leveldb.Batch, force bool,
+	batch db.Batch, force bool,
 ) (time.Duration, error) {
-	count := batch.Len()
+	count := int(batch.Count())
 	// Skip rate limiter, if force write.
 	if !force {
 		reservation := clean.limiter.ReserveN(time.Now(), count)
@@ -172,7 +193,7 @@ func (clean *CleanerActor) writeRateLimited(
 			}
 		}
 	}
-	err := clean.db.Write(batch, nil)
+	err := batch.Commit()
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
