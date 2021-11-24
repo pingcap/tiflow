@@ -61,5 +61,5 @@ function query_status_with_offline_worker() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status" \
 		"\"result\": false" 2 \
-		"\"worker\": \"unknown-offline-worker\"" 2
+		"\"worker\": \"source not bound\"" 2
 }
