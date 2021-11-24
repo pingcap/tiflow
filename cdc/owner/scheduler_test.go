@@ -156,7 +156,7 @@ func (s *schedulerSuite) TestScheduleOneCapture(c *check.C) {
 	})
 	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
 
-	// table 3 is missing by shouldBeRunning, because the table was trying to move to a invalid capture
+	// table 3 is missing by expected, because the table was trying to move to a invalid capture
 	// and the move will failed, the table 3 will be add in next tick
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{3, 4, 5}, s.captures)
 	c.Assert(err, check.IsNil)
