@@ -156,21 +156,12 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-<<<<<<< HEAD
-		PDClient:    c.pdClient,
-		KVStorage:   c.kvStorage,
-		CaptureInfo: c.info,
-		EtcdClient:  c.etcdClient,
-		GrpcPool:    c.grpcPool,
-=======
-		PDClient:         c.pdClient,
-		KVStorage:        c.kvStorage,
-		CaptureInfo:      c.info,
-		EtcdClient:       c.etcdClient,
-		GrpcPool:         c.grpcPool,
-		TimeAcquirer:     c.TimeAcquirer,
-		TableActorSystem: c.tableActorSystem,
->>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013))
+		PDClient:     c.pdClient,
+		KVStorage:    c.kvStorage,
+		CaptureInfo:  c.info,
+		EtcdClient:   c.etcdClient,
+		GrpcPool:     c.grpcPool,
+		TimeAcquirer: c.TimeAcquirer,
 	})
 	err := c.register(ctx)
 	if err != nil {

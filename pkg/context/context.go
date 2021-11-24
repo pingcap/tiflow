@@ -34,21 +34,12 @@ import (
 // the lifecycle of vars in the GlobalVars should be aligned with the ticdc server process.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
-<<<<<<< HEAD
-	PDClient    pd.Client
-	KVStorage   tidbkv.Storage
-	CaptureInfo *model.CaptureInfo
-	EtcdClient  *etcd.CDCEtcdClient
-	GrpcPool    kv.GrpcPool
-=======
-	PDClient         pd.Client
-	KVStorage        tidbkv.Storage
-	CaptureInfo      *model.CaptureInfo
-	EtcdClient       *etcd.CDCEtcdClient
-	GrpcPool         kv.GrpcPool
-	TimeAcquirer     pdtime.TimeAcquirer
-	TableActorSystem *system.System
->>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013))
+	PDClient     pd.Client
+	KVStorage    tidbkv.Storage
+	CaptureInfo  *model.CaptureInfo
+	EtcdClient   *etcd.CDCEtcdClient
+	GrpcPool     kv.GrpcPool
+	TimeAcquirer pdtime.TimeAcquirer
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline
