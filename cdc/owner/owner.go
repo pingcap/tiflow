@@ -128,7 +128,6 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	o.handleJobs()
 
 	if !o.clusterVersionConsistent(state.Captures) {
-		// sleep one second to avoid printing too much log
 		return state, nil
 	}
 	// Owner should update GC safepoint before initializing changefeed, so
