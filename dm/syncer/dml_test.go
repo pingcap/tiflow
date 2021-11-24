@@ -19,6 +19,7 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/ticdc/dm/pkg/schema"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tiddl "github.com/pingcap/tidb/ddl"
@@ -213,7 +214,7 @@ func (s *testSyncerSuite) TestGenMultipleKeys(c *C) {
 			keys:   []string{"17.a.table"},
 		},
 	}
-
+	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
 	for i, tc := range testCases {
 		schemaStr := tc.schema
 		assert := func(obtained interface{}, checker Checker, args ...interface{}) {
@@ -224,7 +225,7 @@ func (s *testSyncerSuite) TestGenMultipleKeys(c *C) {
 		assert(err, IsNil)
 		dti := schema.GetDownStreamTi(ti, ti)
 		assert(dti, NotNil)
-		keys := genMultipleKeys(dti, ti, tc.values, "table")
+		keys := genMultipleKeys(sessCtx, dti, ti, tc.values, "table")
 		assert(keys, DeepEquals, tc.keys)
 	}
 }
@@ -317,7 +318,7 @@ func (s *testSyncerSuite) TestGenSQL(c *C) {
 		},
 		{
 			newDML(insert, true, "`targetSchema`.`targetTable`", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
-			[]string{"INSERT INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)"},
+			[]string{"REPLACE INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
 			[][]interface{}{{1, 2, 3, "haha"}},
 		},
 		{
@@ -332,7 +333,7 @@ func (s *testSyncerSuite) TestGenSQL(c *C) {
 		},
 		{
 			newDML(update, true, "`targetSchema`.`targetTable`", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
-			[]string{"DELETE FROM `targetSchema`.`targetTable` WHERE `id` = ? LIMIT 1", "INSERT INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)"},
+			[]string{"DELETE FROM `targetSchema`.`targetTable` WHERE `id` = ? LIMIT 1", "REPLACE INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
 			[][]interface{}{{1}, {4, 5, 6, "hihi"}},
 		},
 	}
@@ -438,7 +439,7 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 		newDML(insert, true, targetTableID1, sourceTable11, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti11.Columns, ti11, ti11Index, downTi11),
 		newDML(insert, true, targetTableID1, sourceTable11, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti11.Columns, ti11, ti11Index, downTi11),
 		newDML(insert, true, targetTableID1, sourceTable12, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti12.Columns, ti12, ti12Index, downTi12),
-		// update no index
+		// update no index but safemode
 		newDML(update, true, targetTableID1, sourceTable11, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, ti11.Columns, ti11, ti11Index, downTi11),
 		newDML(update, true, targetTableID1, sourceTable11, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, ti11.Columns, ti11, ti11Index, downTi11),
 		newDML(update, true, targetTableID1, sourceTable12, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, ti12.Columns, ti12, ti12Index, downTi12),
@@ -486,17 +487,29 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 
 	expectQueries := []string{
 		// table1
-		"INSERT INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?),(?,?,?),(?,?,?),(?,?,?),(?,?,?),(?,?,?),(?,?,?),(?,?,?),(?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`name`=VALUES(`name`)",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?),(?,?,?),(?,?,?)",
 		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
-		"INSERT INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`name`=VALUES(`name`)",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
 		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
-		"INSERT INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`name`=VALUES(`name`)",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
 		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
-		"INSERT INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`name`=VALUES(`name`)",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
+		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
+		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
+		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
+		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
+		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
+		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
+		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
 		"DELETE FROM `db1`.`tb1` WHERE (`id`) IN ((?),(?),(?))",
 
 		// table2
-		"INSERT INTO `db2`.`tb2` (`id`,`col2`,`name`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)",
+		"REPLACE INTO `db2`.`tb2` (`id`,`col2`,`name`) VALUES (?,?,?)",
 		"INSERT INTO `db2`.`tb2` (`id`,`col2`,`name`) VALUES (?,?,?)",
 		"INSERT INTO `db2`.`tb2` (`id`,`col3`,`name`) VALUES (?,?,?)",
 		"INSERT INTO `db2`.`tb2` (`id`,`col2`,`name`) VALUES (?,?,?),(?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)",
@@ -514,7 +527,19 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 
 	expectArgs := [][]interface{}{
 		// table1
-		{1, 1, "a", 2, 2, "b", 3, 3, "c", 1, 1, "aa", 2, 2, "bb", 3, 3, "cc", 1, 4, "aa", 2, 5, "bb", 3, 6, "cc"},
+		{1, 1, "a", 2, 2, "b", 3, 3, "c"},
+		{1},
+		{1, 1, "aa"},
+		{2},
+		{2, 2, "bb"},
+		{3},
+		{3, 3, "cc"},
+		{1},
+		{1, 4, "aa"},
+		{2},
+		{2, 5, "bb"},
+		{3},
+		{3, 6, "cc"},
 		{1},
 		{4, 4, "aa"},
 		{2},
@@ -578,8 +603,14 @@ func (s *testSyncerSuite) TestTruncateIndexValues(c *C) {
 			values:    []interface{}{10, "1234"},
 			preValues: []interface{}{int64(10), "123"},
 		},
+		{
+			// value is nil
+			schema:    `create table t1(a int, b text, unique key c2(a, b(3)))`,
+			values:    []interface{}{10, nil},
+			preValues: []interface{}{int64(10), nil},
+		},
 	}
-
+	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
 	for i, tc := range testCases {
 		schemaStr := tc.schema
 		assert := func(obtained interface{}, checker Checker, args ...interface{}) {
@@ -596,7 +627,7 @@ func (s *testSyncerSuite) TestTruncateIndexValues(c *C) {
 			cols = append(cols, ti.Columns[column.Offset])
 			values = append(values, tc.values[column.Offset])
 		}
-		realPreValue := truncateIndexValues(dti.AvailableUKIndexList[0], cols, values)
+		realPreValue := truncateIndexValues(sessCtx, ti, dti.AvailableUKIndexList[0], cols, values)
 		assert(realPreValue, DeepEquals, tc.preValues)
 	}
 }
