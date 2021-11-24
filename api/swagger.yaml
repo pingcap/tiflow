@@ -1,5 +1,16 @@
 basePath: /api/v1
 definitions:
+  config.ColumnSelector:
+    properties:
+      columns:
+        items:
+          type: string
+        type: array
+      matcher:
+        items:
+          type: string
+        type: array
+    type: object
   config.DispatchRule:
     properties:
       dispatcher:
@@ -11,6 +22,10 @@ definitions:
     type: object
   config.SinkConfig:
     properties:
+      column-selectors:
+        items:
+          $ref: '#/definitions/config.ColumnSelector'
+        type: array
       dispatchers:
         items:
           $ref: '#/definitions/config.DispatchRule'

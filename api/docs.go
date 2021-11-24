@@ -702,6 +702,23 @@ var doc = `{
         }
     },
     "definitions": {
+        "config.ColumnSelector": {
+            "type": "object",
+            "properties": {
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "matcher": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "config.DispatchRule": {
             "type": "object",
             "properties": {
@@ -719,6 +736,12 @@ var doc = `{
         "config.SinkConfig": {
             "type": "object",
             "properties": {
+                "column-selectors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/config.ColumnSelector"
+                    }
+                },
                 "dispatchers": {
                     "type": "array",
                     "items": {
