@@ -433,6 +433,8 @@ func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error
 	if t == model.MqMessageTypeUnknown {
 		return model.MqMessageTypeUnknown, false, nil
 	}
+	b.ty = t
+	b.key = nil
 	return t, true, nil
 }
 
@@ -451,6 +453,8 @@ func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEve
 	if err := json.Unmarshal(b.value, data); err != nil {
 		return nil, errors.Trace(err)
 	}
+	b.ty = model.MqMessageTypeUnknown
+	b.value = nil
 	return canalFlatMessage2RowChangedEvent(data)
 }
 
@@ -469,6 +473,8 @@ func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if err := json.Unmarshal(b.value, data); err != nil {
 		return nil, errors.Trace(err)
 	}
+	b.ty = model.MqMessageTypeUnknown
+	b.value = nil
 	return canalFlatMessage2DDLEvent(data), nil
 }
 
@@ -485,6 +491,8 @@ func (b *CanalFlatEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	if err := json.Unmarshal(b.value, message); err != nil {
 		return 0, errors.Trace(err)
 	}
+	b.ty = model.MqMessageTypeUnknown
+	b.value = nil
 	return message.Extensions.WatermarkTs, nil
 }
 

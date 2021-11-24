@@ -336,26 +336,22 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 
 		msg, err := encoder.EncodeCheckpointEvent(watermark)
 		c.Assert(err, check.IsNil)
-		if enable {
-			c.Assert(msg, check.NotNil)
-		} else {
+		if !enable {
 			c.Assert(msg, check.IsNil)
+			continue
 		}
 
+		c.Assert(msg, check.NotNil)
 		decoder := NewCanalFlatEventBatchDecoder(msg.Key, msg.Value, enable)
 
 		ty, hasNext, err := decoder.HasNext()
 		c.Assert(err, check.IsNil)
-		if enable {
-			c.Assert(hasNext, check.IsTrue)
-			c.Assert(ty, check.Equals, model.MqMessageTypeResolved)
-			consumed, err := decoder.NextResolvedEvent()
-			c.Assert(err, check.IsNil)
-			c.Assert(consumed, check.Equals, watermark)
-		} else {
-			c.Assert(hasNext, check.IsFalse)
-			c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
-		}
+		c.Assert(hasNext, check.IsTrue)
+		c.Assert(ty, check.Equals, model.MqMessageTypeResolved)
+
+		consumed, err := decoder.NextResolvedEvent()
+		c.Assert(err, check.IsNil)
+		c.Assert(consumed, check.Equals, watermark)
 
 		ty, hasNext, err = decoder.HasNext()
 		c.Assert(err, check.IsNil)
