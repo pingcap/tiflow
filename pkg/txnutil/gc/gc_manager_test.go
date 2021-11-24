@@ -18,14 +18,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/pdtime"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-	"github.com/tikv/client-go/v2/oracle"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 func Test(t *testing.T) {
@@ -42,7 +41,7 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	gcManager := NewManager(mockPDClient).(*gcManager)
 	ctx := cdcContext.NewBackendContext4Test(true)
 
-	startTs := oracle.GoTimeToTS(time.Now())
+	startTs := oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0)
 	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 		c.Assert(safePoint, check.Equals, startTs)
 		c.Assert(ttl, check.Equals, gcManager.gcTTL)
@@ -109,7 +108,7 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 
-	err = gcManager.CheckStaleCheckpointTs(cCtx, "cfID", oracle.GoTimeToTS(time.Now()))
+	err = gcManager.CheckStaleCheckpointTs(cCtx, "cfID", oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0))
 	c.Assert(err, check.IsNil)
 
 	gcManager.isTiCDCBlockGC = false
