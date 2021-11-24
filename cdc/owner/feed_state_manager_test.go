@@ -345,5 +345,4 @@ func (s *feedStateManagerSuite) TestIsStopped(c *check.C) {
 	for _, tc := range testCases {
 		c.Assert(isStopped(tc.state), check.Equals, tc.expected)
 	}
-
 }
