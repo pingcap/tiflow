@@ -59,7 +59,11 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) {
 		m.shouldBeRemoved = true
 		return
 	}
-	if isStopped(m.state) {
+	shouldBeRunning, s, needsPatch := shouldRunning(m.state.Info)
+	if needsPatch {
+		m.patchState(s)
+	}
+	if !shouldBeRunning {
 		m.shouldBeRunning = false
 		return
 	}
@@ -140,7 +144,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		checkpointTs := m.state.Info.GetCheckpointTs(m.state.Status)
 		log.Info("the changefeed is removed", zap.String("changefeed-id", m.state.ID), zap.Uint64("checkpoint-ts", checkpointTs))
 	case model.AdminResume:
-		if !isStopped(m.state) {
+		if !m.state.Info.State.Resumable() {
 			log.Warn("can not resume the changefeed in the current state", zap.String("changefeedID", m.state.ID),
 				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 			return
@@ -305,16 +309,43 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	}
 }
 
-// isStopped returns whether the current changefeed state is stopped or not.
-func isStopped(state *orchestrator.ChangefeedReactorState) bool {
-	switch state.Info.State {
-	case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished:
-		return true
+// shouldRunning returns whether the current changefeed should run.
+// It will also handle compatibility issues for upgrading from an old owner to new owner.
+func shouldRunning(info *model.ChangeFeedInfo) (bool, model.FeedState, bool) {
+	switch info.State {
+	case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished, model.StateRemoved:
+		return false, info.State, false
+	case model.StateNormal:
+		return true, info.State, false
+	default:
+		// Notice: In the old owner we used AdminJobType field to determine if the task was paused or not,
+		// we need to handle this field in the new owner.
+		// Otherwise, we will see that the old version of the task is paused and then upgraded,
+		// and the task is automatically resumed after the upgrade.
+		state := model.StateNormal
+		shouldRunning := true
+		switch info.AdminJobType {
+		// This corresponds to the case of failure or error.
+		case model.AdminNone, model.AdminResume:
+			if info.Error != nil {
+				if cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
+					state = model.StateFailed
+					shouldRunning = false
+				} else {
+					state = model.StateError
+					shouldRunning = false
+				}
+			}
+		case model.AdminStop:
+			state = model.StateStopped
+			shouldRunning = false
+		case model.AdminFinish:
+			state = model.StateFinished
+			shouldRunning = false
+		case model.AdminRemove:
+			state = model.StateRemoved
+			shouldRunning = false
+		}
+		return shouldRunning, state, true
 	}
-
-	// Notice: In the old owner we used this field to determine if the task was paused or not,
-	// we need to handle this field in the new owner.
-	// Otherwise, we will see that the old version of the task is paused and then upgraded,
-	// and the task is automatically resumed after the upgrade.
-	return state.Info.AdminJobType.IsStopState()
 }

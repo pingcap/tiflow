@@ -18,6 +18,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
@@ -254,96 +255,168 @@ func (s *feedStateManagerSuite) TestChangefeedStatusNotExist(c *check.C) {
 	c.Assert(state.Exist(), check.IsFalse)
 }
 
-func (s *feedStateManagerSuite) TestIsStopped(c *check.C) {
+func (s *feedStateManagerSuite) TestShouldRunning(c *check.C) {
 	defer testleak.AfterTest(c)()
 	testCases := []struct {
-		state    *orchestrator.ChangefeedReactorState
-		expected bool
+		info                    *model.ChangeFeedInfo
+		expectedShouldBeRunning bool
+		expectedState           model.FeedState
+		expectedNeedsPatch      bool
 	}{
 		{
-			state: &orchestrator.ChangefeedReactorState{
-				Info: &model.ChangeFeedInfo{
-					AdminJobType: model.AdminResume,
-					State:        model.StateNormal,
-				},
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminResume,
+				State:        model.StateNormal,
+				Error:        nil,
 			},
-			expected: false,
+			expectedShouldBeRunning: true,
+			expectedState:           model.StateNormal,
+			expectedNeedsPatch:      false,
 		},
 		{
-			state: &orchestrator.ChangefeedReactorState{
-				Info: &model.ChangeFeedInfo{
-					AdminJobType: model.AdminResume,
-					State:        model.StateRemoved,
-				},
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminNone,
+				State:        model.StateFailed,
+				Error:        nil,
 			},
-			expected: false,
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateFailed,
+			expectedNeedsPatch:      false,
 		},
 		{
-			state: &orchestrator.ChangefeedReactorState{
-				Info: &model.ChangeFeedInfo{
-					AdminJobType: model.AdminResume,
-					State:        model.StateError,
-				},
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminNone,
+				State:        model.StateError,
+				Error:        nil,
 			},
-			expected: true,
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateError,
+			expectedNeedsPatch:      false,
 		},
 		{
-			state: &orchestrator.ChangefeedReactorState{
-				Info: &model.ChangeFeedInfo{
-					AdminJobType: model.AdminResume,
-					State:        model.StateFailed,
-				},
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminStop,
+				State:        model.StateStopped,
+				Error:        nil,
 			},
-			expected: true,
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateStopped,
+			expectedNeedsPatch:      false,
 		},
 		{
-			state: &orchestrator.ChangefeedReactorState{
-				Info: &model.ChangeFeedInfo{
-					AdminJobType: model.AdminResume,
-					State:        model.StateStopped,
-				},
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminRemove,
+				State:        model.StateRemoved,
+				Error:        nil,
 			},
-			expected: true,
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateRemoved,
+			expectedNeedsPatch:      false,
 		},
 		{
-			state: &orchestrator.ChangefeedReactorState{
-				Info: &model.ChangeFeedInfo{
-					AdminJobType: model.AdminResume,
-					State:        model.StateFinished,
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminNone,
+				State:        "",
+				Error: &model.RunningError{
+					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
 				},
 			},
-			expected: true,
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateFailed,
+			expectedNeedsPatch:      true,
 		},
 		{
-			state: &orchestrator.ChangefeedReactorState{
-				Info: &model.ChangeFeedInfo{
-					AdminJobType: model.AdminStop,
-					State:        model.StateNormal,
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminResume,
+				State:        "",
+				Error: &model.RunningError{
+					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
 				},
 			},
-			expected: true,
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateFailed,
+			expectedNeedsPatch:      true,
 		},
 		{
-			state: &orchestrator.ChangefeedReactorState{
-				Info: &model.ChangeFeedInfo{
-					AdminJobType: model.AdminRemove,
-					State:        model.StateNormal,
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminNone,
+				State:        "",
+				Error: &model.RunningError{
+					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
-			expected: true,
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateError,
+			expectedNeedsPatch:      true,
 		},
 		{
-			state: &orchestrator.ChangefeedReactorState{
-				Info: &model.ChangeFeedInfo{
-					AdminJobType: model.AdminFinish,
-					State:        model.StateNormal,
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminResume,
+				State:        "",
+				Error: &model.RunningError{
+					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
-			expected: true,
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateError,
+			expectedNeedsPatch:      true,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminStop,
+				State:        "",
+				Error:        nil,
+			},
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateStopped,
+			expectedNeedsPatch:      true,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminFinish,
+				State:        "",
+				Error:        nil,
+			},
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateFinished,
+			expectedNeedsPatch:      true,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminRemove,
+				State:        "",
+				Error:        nil,
+			},
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateRemoved,
+			expectedNeedsPatch:      true,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminNone,
+				State:        "",
+				Error:        nil,
+			},
+			expectedShouldBeRunning: true,
+			expectedState:           model.StateNormal,
+			expectedNeedsPatch:      true,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminResume,
+				State:        "",
+				Error:        nil,
+			},
+			expectedShouldBeRunning: true,
+			expectedState:           model.StateNormal,
+			expectedNeedsPatch:      true,
 		},
 	}
 
 	for _, tc := range testCases {
-		c.Assert(isStopped(tc.state), check.Equals, tc.expected)
+		shouldBeRunning, state, needsPatch := shouldRunning(tc.info)
+		c.Assert(shouldBeRunning, check.Equals, tc.expectedShouldBeRunning)
+		c.Assert(state, check.Equals, tc.expectedState)
+		c.Assert(needsPatch, check.Equals, tc.expectedNeedsPatch)
 	}
 }

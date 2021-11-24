@@ -72,6 +72,16 @@ func (s FeedState) ToInt() int {
 	return -1
 }
 
+// Resumable specifies whether the current state of the changefeed can be resumed.
+func (s FeedState) Resumable() bool {
+	switch s {
+	case StateFailed, StateError, StateStopped, StateFinished:
+		return true
+	default:
+		return false
+	}
+}
+
 // IsNeeded return true if the given feedState matches the listState.
 func (s FeedState) IsNeeded(need string) bool {
 	if need == "all" {
