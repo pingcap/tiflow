@@ -128,7 +128,7 @@ unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov 
 	-covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES_WITHOUT_DM) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	tools/bin/gocov convert "$(TEST_DIR)/cov.unit.out" | tools/bin/gocov-xml > cdc-coverage.xml \
-	@bash <(curl -s https://codecov.io/bash) -f $(TEST_DIR)/unit_cov.out -t $(CODECOV_TOKEN)
+	@bash <(curl -s https://codecov.io/bash) -F ticdc -f $(TEST_DIR)/unit_cov.out -t $(CODECOV_TOKEN)
 	$(FAILPOINT_DISABLE)
 
 leak_test: check_failpoint_ctl
@@ -288,7 +288,8 @@ dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/goc
 	CGO_ENABLED=1 tools/bin/gotestsum --junitfile dm-junit-report.xml -- -v -timeout 5m -p $(P) --race \
 	-covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(DM_PACKAGES) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
-	tools/bin/gocov convert "$(DM_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > dm-coverage.xml
+	tools/bin/gocov convert "$(DM_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > dm-coverage.xml \
+	@bash <(curl -s https://codecov.io/bash) -F DM -f $(DM_TEST_DIR)/unit_test.out -t $(CODECOV_TOKEN)
 	$(FAILPOINT_DISABLE)
 
 dm_integration_test_build: check_failpoint_ctl
