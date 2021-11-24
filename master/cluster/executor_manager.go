@@ -66,7 +66,8 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 	if test.GlobalTestFlag {
 		e.testContext.NotifyExecutorChange(&test.ExecutorChangeEvent{
 			Tp:   test.Delete,
-			Time: time.Now()})
+			Time: time.Now(),
+		})
 	}
 	return exec.close()
 }

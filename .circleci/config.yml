@@ -1,0 +1,23 @@
+version: 2
+jobs:
+        build:
+                docker:
+                        - image: circleci/golang:1.16
+
+                steps:
+                        - checkout
+                        - run:
+                                name: Do check
+                                command: make check
+                        - run:
+                                name: Build
+                                command: make
+                        - run:
+                                name: Run ut
+                                command: make unit_test
+
+workflows:
+        version: 2
+        build-workflow:
+                jobs:
+                        - build

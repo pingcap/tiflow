@@ -35,7 +35,7 @@ func (c *MasterClient) init(ctx context.Context) error {
 	return nil
 }
 
-func (c *MasterClient) initForTest(ctx context.Context) error {
+func (c *MasterClient) initForTest(_ context.Context) error {
 	log.L().Logger.Info("dialing master", zap.String("leader", c.leader))
 	conn, err := mock.Dial(c.leader)
 	if err != nil {

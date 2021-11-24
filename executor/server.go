@@ -83,6 +83,9 @@ func (s *Server) Stop() {
 
 func (s *Server) startForTest(ctx context.Context) (err error) {
 	s.mockSrv, err = mock.NewExecutorServer(s.cfg.WorkerAddr, s)
+	if err != nil {
+		return err
+	}
 	exitCh := make(chan struct{}, 1)
 
 	s.sch = runtime.NewRuntime()

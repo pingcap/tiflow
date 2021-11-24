@@ -13,10 +13,13 @@ import (
 )
 
 func TestT(t *testing.T) {
-	log.InitLogger(&log.Config{
+	err := log.InitLogger(&log.Config{
 		Level:  "debug",
 		Format: "text",
 	})
+	if err != nil {
+		panic(err)
+	}
 
 	test.GlobalTestFlag = true
 	TestingT(t)
