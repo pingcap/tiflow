@@ -17,6 +17,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -38,7 +40,7 @@ type changefeed struct {
 	scheduler        *scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	gcManager        GcManager
+	gcManager        gc.Manager
 
 	schema      *schemaWrap4Owner
 	sink        AsyncSink
@@ -67,7 +69,7 @@ type changefeed struct {
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
+func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 	c := &changefeed{
 		id:               id,
 		scheduler:        newScheduler(),
@@ -85,7 +87,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, gcManager GcManager,
+	id model.ChangeFeedID, gcManager gc.Manager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
@@ -124,7 +126,7 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 		failpoint.Inject("InjectChangefeedFastFailError", func() error {
 			return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
 		})
-		if err := c.gcManager.checkStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
+		if err := c.gcManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -205,7 +207,8 @@ LOOP:
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
-	failpoint.Inject("NewChangefeedRetryError", func() {
+	failpoint.Inject("NewChangefeedRetryErro"+
+		"r", func() {
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
 	if c.state.Info.Config.CheckGCSafePoint {
