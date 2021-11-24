@@ -241,6 +241,21 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseDDL.CommitTs)
 }
 
+func (s *canalFlatSuite) TestDecodeDDL(c *check.C) {
+	key := []byte("2")
+	value := []byte("{\"id\":0,\"database\":\"gc_safepoint\",\"table\":\"\",\"pkNames\":null,\"isDdl\":true,\"type\":\"QUERY\",\"es\":1637741897347,\"ts\":1637741901899,\"sql\":\"CREATE DATABASE gc_safepoint\",\"sqlType\":null,\"mysqlType\":null,\"data\":null,\"old\":null,\"_tidb\":{\"commit-ts\":429324211938131976,\"watermark-ts\":0}}")
+
+	decoder := NewCanalFlatEventBatchDecoder(key, value, true)
+	ty, hasNext, err := decoder.HasNext()
+	c.Assert(err, check.IsNil)
+	c.Assert(hasNext, check.IsTrue)
+	c.Assert(ty, check.Equals, model.MqMessageTypeDDL)
+
+	consumed, err := decoder.NextDDLEvent()
+	c.Assert(err, check.IsNil)
+	c.Assert(consumed, check.NotNil)
+}
+
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C) {
 	defer testleak.AfterTest(c)()
 	for _, encodeEnable := range []bool{false, true} {
