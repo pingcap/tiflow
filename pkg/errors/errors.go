@@ -248,6 +248,7 @@ var (
 	ErrConflictingFileLocks            = errors.Normalize("file lock conflict: %s", errors.RFCCodeText("ErrConflictingFileLocks"))
 	ErrSortDirLockError                = errors.Normalize("error encountered when locking sort-dir", errors.RFCCodeText("ErrSortDirLockError"))
 	ErrLevelDBSorterError              = errors.Normalize("leveldb error: %s", errors.RFCCodeText("CDC:ErrLevelDBSorterError"))
+	ErrSorterClosed                    = errors.Normalize("sorter is closed", errors.RFCCodeText("CDC:ErrSorterClosed"))
 
 	// processor errors
 	ErrTableProcessorStoppedSafely  = errors.Normalize("table processor stopped safely", errors.RFCCodeText("CDC:ErrTableProcessorStoppedSafely"))
@@ -269,5 +270,6 @@ var (
 	ErrTCPServerClosed = errors.Normalize("The TCP server has been closed", errors.RFCCodeText("CDC:ErrTCPServerClosed"))
 
 	// p2p error
-	ErrPeerMessageIllegalMeta = errors.Normalize("peer-to-peer message server received an RPC call with illegal metadata", errors.RFCCodeText("CDC:ErrPeerMessageIllegalMeta"))
+	ErrPeerMessageIllegalMeta          = errors.Normalize("peer-to-peer message server received an RPC call with illegal metadata", errors.RFCCodeText("CDC:ErrPeerMessageIllegalMeta"))
+	ErrPeerMessageInternalSenderClosed = errors.Normalize("peer-to-peer message server tries to send to a closed stream. Internal only.", errors.RFCCodeText("CDC:ErrPeerMessageInternalSenderClosed"))
 )

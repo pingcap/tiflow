@@ -256,9 +256,9 @@ func (a *BaseAgent) sendSync(ctx context.Context) (bool, error) {
 
 	// We are sorting these so that there content can be predictable in tests.
 	// TODO try to find a better way.
-	util.SorterTableIDs(running)
-	util.SorterTableIDs(adding)
-	util.SorterTableIDs(removing)
+	util.SortTableIDs(running)
+	util.SortTableIDs(adding)
+	util.SortTableIDs(removing)
 	done, err := a.communicator.SyncTaskStatuses(ctx, running, adding, removing)
 	if err != nil {
 		return false, errors.Trace(err)

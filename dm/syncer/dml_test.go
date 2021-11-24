@@ -19,6 +19,7 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/ticdc/dm/pkg/schema"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tiddl "github.com/pingcap/tidb/ddl"
@@ -213,7 +214,7 @@ func (s *testSyncerSuite) TestGenMultipleKeys(c *C) {
 			keys:   []string{"17.a.table"},
 		},
 	}
-
+	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
 	for i, tc := range testCases {
 		schemaStr := tc.schema
 		assert := func(obtained interface{}, checker Checker, args ...interface{}) {
@@ -224,7 +225,7 @@ func (s *testSyncerSuite) TestGenMultipleKeys(c *C) {
 		assert(err, IsNil)
 		dti := schema.GetDownStreamTi(ti, ti)
 		assert(dti, NotNil)
-		keys := genMultipleKeys(dti, ti, tc.values, "table")
+		keys := genMultipleKeys(sessCtx, dti, ti, tc.values, "table")
 		assert(keys, DeepEquals, tc.keys)
 	}
 }
@@ -543,4 +544,66 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 	queries, args := genDMLsWithSameOp(dmls)
 	c.Assert(queries, DeepEquals, expectQueries)
 	c.Assert(args, DeepEquals, expectArgs)
+}
+
+func (s *testSyncerSuite) TestTruncateIndexValues(c *C) {
+	p := parser.New()
+	se := mock.NewContext()
+
+	testCases := []struct {
+		schema    string
+		values    []interface{}
+		preValues []interface{}
+	}{
+		{
+			// test not prefix key
+			schema:    `create table t1(a int, b varchar(20), unique key b(b))`,
+			values:    []interface{}{10, "1234"},
+			preValues: []interface{}{"1234"},
+		},
+		{
+			// test not string key
+			schema:    `create table t1(a int, b text, unique key a(a))`,
+			values:    []interface{}{10, "1234"},
+			preValues: []interface{}{int64(10)},
+		},
+		{
+			// test keys
+			schema:    `create table t1(a int, b text, unique key b(b(3)))`,
+			values:    []interface{}{10, "1234"},
+			preValues: []interface{}{"123"},
+		},
+		{
+			// test multi keys
+			schema:    `create table t1(a int, b text, unique key c2(a, b(3)))`,
+			values:    []interface{}{10, "1234"},
+			preValues: []interface{}{int64(10), "123"},
+		},
+		{
+			// value is nil
+			schema:    `create table t1(a int, b text, unique key c2(a, b(3)))`,
+			values:    []interface{}{10, nil},
+			preValues: []interface{}{int64(10), nil},
+		},
+	}
+	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+	for i, tc := range testCases {
+		schemaStr := tc.schema
+		assert := func(obtained interface{}, checker Checker, args ...interface{}) {
+			c.Assert(obtained, checker, append(args, Commentf("test case schema: %s", schemaStr))...)
+		}
+		ti, err := createTableInfo(p, se, int64(i+1), tc.schema)
+		assert(err, IsNil)
+		dti := schema.GetDownStreamTi(ti, ti)
+		assert(dti, NotNil)
+		assert(dti.AvailableUKIndexList, NotNil)
+		cols := make([]*model.ColumnInfo, 0, len(dti.AvailableUKIndexList[0].Columns))
+		values := make([]interface{}, 0, len(dti.AvailableUKIndexList[0].Columns))
+		for _, column := range dti.AvailableUKIndexList[0].Columns {
+			cols = append(cols, ti.Columns[column.Offset])
+			values = append(values, tc.values[column.Offset])
+		}
+		realPreValue := truncateIndexValues(sessCtx, ti, dti.AvailableUKIndexList[0], cols, values)
+		assert(realPreValue, DeepEquals, tc.preValues)
+	}
 }
