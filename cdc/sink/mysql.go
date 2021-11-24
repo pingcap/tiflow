@@ -295,7 +295,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
-	shouldSwitchDB := needSwitchDB(ddl)
+	// shouldSwitchDB := needSwitchDB(ddl)
 
 	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
 		select {
@@ -311,15 +311,15 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 			return err
 		}
 
-		if shouldSwitchDB {
-			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.Schema)+";")
-			if err != nil {
-				if rbErr := tx.Rollback(); rbErr != nil {
-					log.Error("Failed to rollback", zap.Error(err))
-				}
-				return err
-			}
-		}
+		//if shouldSwitchDB {
+		//	_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.Schema)+";")
+		//	if err != nil {
+		//		if rbErr := tx.Rollback(); rbErr != nil {
+		//			log.Error("Failed to rollback", zap.Error(err))
+		//		}
+		//		return err
+		//	}
+		//}
 
 		if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
