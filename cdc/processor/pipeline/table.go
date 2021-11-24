@@ -81,21 +81,6 @@ type tableFlowController interface {
 
 // ResolvedTs returns the resolved ts in this table pipeline
 func (t *tablePipelineImpl) ResolvedTs() model.Ts {
-<<<<<<< HEAD
-=======
-	// TODO: after TiCDC introduces p2p based resolved ts mechanism, TiCDC nodes
-	// will be able to cooperate replication status directly. Then we will add
-	// another replication barrier for consistent replication instead of reusing
-	// the global resolved-ts.
-
-	// Always report resolved ts from sink for resolving #3503.
-	// TODO uncomment the following lines.
-	// if redo.IsConsistentEnabled(t.replConfig.Consistent.Level) {
-	// 	return t.sinkNode.ResolvedTs()
-	// }
-	// return t.sorterNode.ResolvedTs()
-
->>>>>>> 20626babf (processor,sink(cdc): let sink report resolved ts and do not skip buffer sink flush (#3540))
 	return t.sinkNode.ResolvedTs()
 }
 
