@@ -405,40 +405,41 @@ func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 
 // CanalFlatEventBatchDecoder decodes the byte into the original message.
 type CanalFlatEventBatchDecoder struct {
-	data                []byte
-	msg                 *MQMessage
+	key                 []byte
+	value               []byte
+	ty                  model.MqMessageType
 	enableTiDBExtension bool
 }
 
-func NewCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
+func NewCanalFlatEventBatchDecoder(key, value []byte, enableTiDBExtension bool) EventBatchDecoder {
 	return &CanalFlatEventBatchDecoder{
-		data:                data,
-		msg:                 nil,
+		key:                 key,
+		value:               value,
+		ty:                  model.MqMessageTypeUnknown,
 		enableTiDBExtension: enableTiDBExtension,
 	}
 }
 
 // HasNext implements the EventBatchDecoder interface
 func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
-	if len(b.data) == 0 {
+	if len(b.key) == 0 {
 		return model.MqMessageTypeUnknown, false, nil
 	}
-	msg := &MQMessage{}
-	if err := json.Unmarshal(b.data, msg); err != nil {
+
+	var t model.MqMessageType
+	if err := json.Unmarshal(b.key, t); err != nil {
 		return model.MqMessageTypeUnknown, false, err
 	}
-	b.msg = msg
-	b.data = nil
-	if b.msg.Type == model.MqMessageTypeUnknown {
+	if t == model.MqMessageTypeUnknown {
 		return model.MqMessageTypeUnknown, false, nil
 	}
-	return b.msg.Type, true, nil
+	return t, true, nil
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
-	if b.msg == nil || b.msg.Type != model.MqMessageTypeRow {
+	if b.ty != model.MqMessageTypeRow {
 		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found row changed event message")
 	}
 
@@ -447,10 +448,9 @@ func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEve
 		data = &canalFlatMessageWithTiDBExtension{canalFlatMessage: &canalFlatMessage{}, Extensions: &tidbExtension{}}
 	}
 
-	if err := json.Unmarshal(b.msg.Value, data); err != nil {
+	if err := json.Unmarshal(b.value, data); err != nil {
 		return nil, errors.Trace(err)
 	}
-	b.msg = nil
 	return canalFlatMessage2RowChangedEvent(data)
 }
 

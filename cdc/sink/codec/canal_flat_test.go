@@ -333,15 +333,6 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 	c.Assert(encoder.resolvedBuf, check.HasLen, 0)
 }
 
-//func (s *canalFlatSuite) TestDecodeCheckpointEvent(c *check.C) {
-//	bytes := `{"id":0,"database":"","table":"","pkNames":null,"isDdl":false,"type":"TIDB_WATERMARK","es":1637722879270,"ts":1637722881225,"sql":"","sqlType":null,"mysqlType":null,"data":null,"old":null,"_tidb":{"commit-ts":0,"watermark-ts":429319226463354882}}`
-//	decoder := NewCanalFlatEventBatchDecoder([]byte(bytes), true)
-//	tp, hasNext, err := decoder.HasNext()
-//	c.Assert(err, check.IsNil)
-//	c.Assert(hasNext, check.IsTrue)
-//	c.Assert(tp, check.Equals, model.MqMessageTypeResolved)
-//}
-
 func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 	defer testleak.AfterTest(c)()
 	var watermark uint64 = 2333
