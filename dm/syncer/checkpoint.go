@@ -338,6 +338,8 @@ func NewRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id s
 		points:      make(map[string]map[string]*binlogPoint),
 		globalPoint: newBinlogPoint(binlog.NewLocation(cfg.Flavor), binlog.NewLocation(cfg.Flavor), nil, nil, cfg.EnableGTID),
 		logCtx:      tcontext.Background().WithLogger(tctx.L().WithFields(zap.String("component", "remote checkpoint"))),
+		snapshots:   make([]*remoteCheckpointSnapshot, 0),
+		snapshotSeq: 0,
 	}
 
 	return cp
@@ -379,6 +381,8 @@ func (cp *RemoteCheckPoint) Snapshot() SnapshotInfo {
 		}
 	}
 
+	cp.globalPointCheckOrSaveTime = time.Now()
+
 	snapshot := &remoteCheckpointSnapshot{
 		id:                         id,
 		globalPointSaveTime:        cp.globalPointCheckOrSaveTime,
@@ -393,7 +397,6 @@ func (cp *RemoteCheckPoint) Snapshot() SnapshotInfo {
 	snapshot.globalPoint = globalLocation
 
 	cp.snapshots = append(cp.snapshots, snapshot)
-	cp.globalPointCheckOrSaveTime = time.Now()
 	return SnapshotInfo{
 		id:        id,
 		globalPos: snapshot.globalPoint.location,
@@ -445,6 +448,7 @@ func (cp *RemoteCheckPoint) Clear(tctx *tcontext.Context) error {
 	cp.globalPoint = newBinlogPoint(binlog.NewLocation(cp.cfg.Flavor), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
 	cp.globalPointCheckOrSaveTime = time.Time{}
 	cp.points = make(map[string]map[string]*binlogPoint)
+	cp.snapshots = make([]*remoteCheckpointSnapshot, 0)
 	cp.safeModeExitPoint = nil
 
 	return nil

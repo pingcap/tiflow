@@ -1508,6 +1508,13 @@ func (s *Syncer) setupMockCheckpoint(c *C, checkPointDBConn *sql.Conn, checkPoin
 
 	// mock syncer.checkpoint.Init() function
 	s.checkpoint.(*RemoteCheckPoint).dbConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(checkPointDBConn, &retry.FiniteRetryStrategy{})}
+	// mock syncer.flushCpWorker init
+	s.flushCpWorker = &checkpointFlushWorker{
+		input:        nil,
+		cp:           s.checkpoint,
+		execError:    &s.execError,
+		afterFlushFn: s.afterFlushCheckpoint,
+	}
 	c.Assert(s.checkpoint.(*RemoteCheckPoint).prepare(tcontext.Background()), IsNil)
 }
 

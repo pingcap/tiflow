@@ -271,9 +271,9 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	s.cfg.Dir = dir
 	c.Assert(cp.LoadMeta(), IsNil)
 
-	// should not flush because there is no change and snapshot id is 0.
+	// should flush because checkpoint hasn't been updated before (cp.globalPointCheckOrSaveTime.IsZero() == true).
 	snapshot := cp.Snapshot()
-	c.Assert(snapshot.id, Equals, 0)
+	c.Assert(snapshot.id, Equals, 3)
 
 	s.mock.ExpectQuery(loadCheckPointSQL).WillReturnRows(sqlmock.NewRows(nil))
 	err = cp.Load(tctx)
