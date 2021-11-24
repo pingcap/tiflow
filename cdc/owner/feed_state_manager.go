@@ -61,6 +61,10 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) {
 		m.shouldBeRunning = false
 		return
 	}
+	if m.state.Info.AdminJobType.IsStopState() {
+		m.shouldBeRunning = false
+		return
+	}
 	errs := m.errorsReportedByProcessors()
 	m.handleError(errs...)
 }
@@ -140,9 +144,11 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		switch m.state.Info.State {
 		case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished:
 		default:
-			log.Warn("can not resume the changefeed in the current state", zap.String("changefeedID", m.state.ID),
-				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
-			return
+			if !m.state.Info.AdminJobType.IsStopState() {
+				log.Warn("can not resume the changefeed in the current state", zap.String("changefeedID", m.state.ID),
+					zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
+				return
+			}
 		}
 		m.shouldBeRunning = true
 		jobsPending = true
