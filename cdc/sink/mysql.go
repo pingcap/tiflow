@@ -329,6 +329,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 
 		if shouldSwitchDB {
 			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.Schema)+";")
+			log.Info("execute use", zap.Any("ddl.TableInfo.Schema", ddl.TableInfo))
 			if err != nil {
 				if rbErr := tx.Rollback(); rbErr != nil {
 					log.Error("Failed to rollback", zap.Error(err))
@@ -338,6 +339,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		}
 
 		if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
+			log.Info("execute ddl query", zap.Any("ddl", ddl))
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(err))
 			}
@@ -706,6 +708,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		// we do not count mark table rows in rowCount.
 	}
 	dmls.rowCount = rowCount
+	log.Info("debug bit", zap.Any("rows", rows), zap.Any("dmls", dmls))
 	return dmls
 }
 
