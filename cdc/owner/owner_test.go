@@ -438,7 +438,8 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 		done <- struct{}{}
 	}()
 
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
 workloop:
 	for {
 		select {
@@ -451,7 +452,6 @@ workloop:
 			break workloop
 		}
 	}
-	ticker.Stop()
 	c.Assert(errIn, check.IsNil)
 	c.Assert(infos[cf1], check.NotNil)
 	c.Assert(infos[cf2], check.IsNil)
