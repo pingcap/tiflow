@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 )

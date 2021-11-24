@@ -18,12 +18,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/pdtime"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
