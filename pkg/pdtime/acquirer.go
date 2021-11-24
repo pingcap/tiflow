@@ -21,13 +21,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/tikv/client-go/v2/oracle"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
 const pdTimeUpdateInterval = 200 * time.Millisecond
 
+// TimeAcquirer cache time get from PD periodically
 type TimeAcquirer interface {
 	// Run run the TimeAcquirer
 	Run(ctx context.Context)
@@ -37,7 +38,7 @@ type TimeAcquirer interface {
 	Stop()
 }
 
-// TimeAcquirerImpl cache time get from PD periodically and cache it
+// TimeAcquirerImpl cache time get from PD periodically
 type TimeAcquirerImpl struct {
 	pdClient  pd.Client
 	timeCache time.Time
@@ -72,6 +73,7 @@ func (c *TimeAcquirerImpl) Run(ctx context.Context) {
 					return err
 				}
 				c.mu.Lock()
+
 				c.timeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
 				c.err = nil
 				c.mu.Unlock()
@@ -97,22 +99,28 @@ func (c *TimeAcquirerImpl) CurrentTimeFromCached() (time.Time, error) {
 	return cacheTime, errors.Trace(err)
 }
 
+// Stop stop TimeAcquirer
 func (c *TimeAcquirerImpl) Stop() {
 	c.cancel()
 }
 
+// TimeAcquirer4Test only for test
 type TimeAcquirer4Test struct{}
 
+// NewTimeAcquirer4Test return a TimeAcquirer for test
 func NewTimeAcquirer4Test() TimeAcquirer {
 	return &TimeAcquirer4Test{}
 }
 
+// CurrentTimeFromCached return current time
 func (c *TimeAcquirer4Test) CurrentTimeFromCached() (time.Time, error) {
 	return time.Now(), nil
 }
 
+// Run implements TimeAcquirer
 func (c *TimeAcquirer4Test) Run(ctx context.Context) {
 }
 
+// Stop implements TimeAcquirer
 func (c *TimeAcquirer4Test) Stop() {
 }
