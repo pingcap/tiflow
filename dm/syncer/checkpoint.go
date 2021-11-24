@@ -631,12 +631,12 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 		args = append(args, argG)
 	}
 
-	type binlogPointSp struct {
-		pos   *binlogPoint
-		spLoc tablePoint
+	type tableCpSnapshotTuple struct {
+		tableCp         *binlogPoint // current table checkpoint location
+		snapshotTableCP tablePoint   // table checkpoint snapshot location
 	}
 
-	points := make([]*binlogPointSp, 0, 100)
+	points := make([]*tableCpSnapshotTuple, 0, 100)
 
 	for schema, mSchema := range snapshotCp.points {
 		schemaCp := cp.points[schema]
@@ -657,9 +657,9 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 				sqls = append(sqls, sql2)
 				args = append(args, arg)
 
-				points = append(points, &binlogPointSp{
-					pos:   tableCP,
-					spLoc: point,
+				points = append(points, &tableCpSnapshotTuple{
+					tableCp:         tableCP,
+					snapshotTableCP: point,
 				})
 			}
 		}
@@ -679,7 +679,7 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 
 	cp.globalPoint.flushBy(*snapshotCp.globalPoint)
 	for _, point := range points {
-		point.pos.flushBy(point.spLoc)
+		point.tableCp.flushBy(point.snapshotTableCP)
 	}
 
 	cp.globalPointCheckOrSaveTime = time.Now()
