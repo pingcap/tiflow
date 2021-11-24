@@ -577,7 +577,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 			resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 			if resolvedTs < globalResolvedTs {
 				globalResolvedTs = resolvedTs
-				log.Info("Consumer update globalResolvedTs", zap.Uint64("globalResolvedTs", globalResolvedTs))
 			}
 			return nil
 		})
