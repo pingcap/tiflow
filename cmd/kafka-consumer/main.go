@@ -164,6 +164,8 @@ func init() {
 
 		enableTiDBExtension = b
 	}
+	log.Info("Starting a new TiCDC consumer", zap.Any("protocol", protocol),
+		zap.Bool("enable-tidb-extension", enableTiDBExtension))
 }
 
 func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
@@ -240,8 +242,6 @@ func newSaramaConfig() (*sarama.Config, error) {
 }
 
 func main() {
-	log.Info("Starting a new TiCDC open protocol consumer")
-
 	/**
 	 * Construct a new Sarama configuration.
 	 * The Kafka cluster version has to be defined before the consumer/producer is initialized.
