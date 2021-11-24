@@ -44,6 +44,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	c.Assert(msg.Table, check.Equals, "person")
 	c.Assert(msg.IsDDL, check.IsFalse)
 	c.Assert(msg.SQLType, check.DeepEquals, map[string]int32{
+		"bit":          int32(JavaSQLTypeBIT),
 		"id":           int32(JavaSQLTypeBIGINT),
 		"name":         int32(JavaSQLTypeVARCHAR),
 		"tiny":         int32(JavaSQLTypeSMALLINT),
@@ -53,6 +54,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 		"binaryBlob":   int32(JavaSQLTypeVARCHAR),
 	})
 	c.Assert(msg.MySQLType, check.DeepEquals, map[string]string{
+		"bit":          "bit",
 		"id":           "int",
 		"name":         "varchar",
 		"tiny":         "tinyint",
@@ -65,6 +67,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(msg.Data, check.DeepEquals, []map[string]interface{}{
 		{
+			"bit":          "1000001",
 			"id":           "1",
 			"name":         "Bob",
 			"tiny":         "255",
@@ -76,6 +79,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	})
 	c.Assert(msg.Old, check.DeepEquals, []map[string]interface{}{
 		{
+			"bit":          "1000001",
 			"id":           "1",
 			"name":         "Alice",
 			"tiny":         "255",
@@ -104,6 +108,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
 	c.Assert(err, check.IsNil)
 	expected := map[string]interface{}{
+		"bit":          "1000001",
 		"id":           "1",
 		"name":         "Bob",
 		"tiny":         "255",
@@ -344,6 +349,7 @@ var testCaseUpdate = &model.RowChangedEvent{
 		Table:  "person",
 	},
 	Columns: []*model.Column{
+		{Name: "bit", Type: mysql.TypeBit, Flag: model.BinaryFlag, Value: []byte("1000001")},
 		{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 		{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
 		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
@@ -353,6 +359,7 @@ var testCaseUpdate = &model.RowChangedEvent{
 		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
 	},
 	PreColumns: []*model.Column{
+		{Name: "bit", Type: mysql.TypeBit, Flag: model.BinaryFlag, Value: []byte("1000001")},
 		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
 		{Name: "name", Type: mysql.TypeVarchar, Value: "Alice"},
 		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
