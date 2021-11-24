@@ -370,6 +370,7 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
+
 	statusProvider := owner.StatusProvider()
 	// work well
 	cf1 := "test-changefeed"
@@ -443,13 +444,13 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 WorkLoop:
 	for {
 		select {
+		case <-done:
+			break WorkLoop
 		case <-ctx1.Done():
 			c.Fatal(ctx1.Err())
 		case <-ticker.C:
 			_, err = owner.Tick(ctx, state)
 			c.Assert(err, check.IsNil)
-		case <-done:
-			break WorkLoop
 		}
 	}
 	c.Assert(errIn, check.IsNil)

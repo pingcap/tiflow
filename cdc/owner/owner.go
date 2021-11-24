@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 type ownerJobType int
@@ -78,9 +79,9 @@ type Owner struct {
 	ownerJobQueueMu sync.Mutex
 	ownerJobQueue   []*ownerJob
 
+	logLimiter   *rate.Limiter
 	lastTickTime time.Time
-
-	closed int32
+	closed       int32
 
 	newChangefeed func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed
 }
@@ -92,6 +93,7 @@ func NewOwner(pdClient pd.Client) *Owner {
 		gcManager:     gc.NewManager(pdClient),
 		lastTickTime:  time.Now(),
 		newChangefeed: newChangefeed,
+		logLimiter:    rate.NewLimiter(1, 1),
 	}
 }
 
@@ -127,7 +129,6 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 
 	if !o.clusterVersionConsistent(state.Captures) {
 		// sleep one second to avoid printing too much log
-		time.Sleep(1 * time.Second)
 		return state, nil
 	}
 	// Owner should update GC safepoint before initializing changefeed, so
@@ -280,7 +281,9 @@ func (o *Owner) clusterVersionConsistent(captures map[model.CaptureID]*model.Cap
 	myVersion := version.ReleaseVersion
 	for _, capture := range captures {
 		if myVersion != capture.Version {
-			log.Warn("the capture version is different with the owner", zap.Reflect("capture", capture), zap.String("my-version", myVersion))
+			if o.logLimiter.Allow() {
+				log.Warn("the capture version is different with the owner", zap.Reflect("capture", capture), zap.String("my-version", myVersion))
+			}
 			return false
 		}
 	}
