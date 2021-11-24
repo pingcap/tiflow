@@ -585,6 +585,9 @@ func (c *Consumer) Run(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		todoDDL := c.getFrontDDL()
+		if todoDDL != nil {
+			log.Info("todoDDL", zap.Uint64("globalResolvedTs", globalResolvedTs), zap.Uint64("ddl CommitTs", todoDDL.CommitTs))
+		}
 		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
 			// flush DMLs
 			err := c.forEachSink(func(sink *partitionSink) error {
