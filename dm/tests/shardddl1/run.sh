@@ -600,7 +600,7 @@ function DM_COMPACT() {
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/BlockExecuteSQLs=return(1)'
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/BlockExecuteSQLs=return(1);github.com/pingcap/ticdc/dm/syncer/SafeModeInitPhaseSeconds=return(5)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
@@ -678,27 +678,51 @@ function DM_MULTIPLE_ROWS_CASE() {
 		run_sql_source1 "delete from ${shardddl1}.${tb1} where a<=$((0 - i)) and a>$((-10 - i))"
 	done
 
-	# insert new values, otherwise there may not be any data in downstream in middle stage and check_sync_diff return true immediately
-	for i in $(seq 100 110 $END); do
+	# wait safemode exit
+	check_log_contain_with_retry "disable safe-mode after task initialization finished" $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
+
+	# insert again without safmode
+	for i in $(seq 1 10 $END); do
 		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values($i,$i),($((i + 1)),$((i + 1))),($((i + 2)),$((i + 2))),($((i + 3)),$((i + 3))),($((i + 4)),$((i + 4))),\
 		($((i + 5)),$((i + 5))),($((i + 6)),$((i + 6))),($((i + 7)),$((i + 7))),($((i + 8)),$((i + 8))),($((i + 9)),$((i + 9)))"
 	done
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "update ${shardddl1}.${tb1} set c=1 where a>=$i and a<$((i + 10))"
+	done
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "update ${shardddl1}.${tb1} set b = 0 - b where a>=$i and a<$((i + 10))"
+	done
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "update ${shardddl1}.${tb1} set a = 0 - a where a>=$i and a<$((i + 10))"
+	done
+	for i in $(seq 1 10 $END); do
+		run_sql_source1 "delete from ${shardddl1}.${tb1} where a<=$((0 - i)) and a>$((-10 - i))"
+	done
+
+	# insert new values, otherwise there may not be any data in downstream in middle stage and check_sync_diff return true immediately
+	for i in $(seq 101 10 200); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values($i,$i),($((i + 1)),$((i + 1))),($((i + 2)),$((i + 2))),($((i + 3)),$((i + 3))),($((i + 4)),$((i + 4))),\
+		($((i + 5)),$((i + 5))),($((i + 6)),$((i + 6))),($((i + 7)),$((i + 7))),($((i + 8)),$((i + 8))),($((i + 9)),$((i + 9)))"
+	done
+
+	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb} where a>100 and a<=200;" "count(1): 100"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
-	insertMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '"original op"=insert' | wc -l)
-	updateMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '"original op"=update' | wc -l)
-	deleteMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '"original op"=delete' | wc -l)
-	if [[ "$insertMergeCnt" -le 5 || "$updateMergeCnt" -le 5 || "$deleteMergeCnt" -le 5 ]]; then
-		echo "merge dmls less than 5, insertMergeCnt: $insertMergeCnt, updateMergeCnt: $updateMergeCnt, deleteMergeCnt: $deleteMergeCnt"
+	insertMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=insert\]' | wc -l)
+	replaceMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=replace\]' | wc -l)
+	updateMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op="insert on duplicate update"\]' | wc -l)
+	deleteMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=delete\]' | wc -l)
+	echo $insertMergeCnt $replaceMergeCnt $updateMergeCnt $deleteMergeCnt
+	if [[ "$insertMergeCnt" -le 5 || "$updateMergeCnt" -le 5 || "$deleteMergeCnt" -le 5 || "$replaceMergeCnt" -le 5 ]]; then
+		echo "merge dmls less than 5, insertMergeCnt: $insertMergeCnt, replaceMergeCnt: $replaceMergeCnt, updateMergeCnt: $updateMergeCnt, deleteMergeCnt: $deleteMergeCnt"
 		exit 1
 	fi
 }
 
 function DM_MULTIPLE_ROWS() {
-
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/BlockExecuteSQLs=return(1)'
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/BlockExecuteSQLs=return(1);github.com/pingcap/ticdc/dm/syncer/SafeModeInitPhaseSeconds=return(5)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
