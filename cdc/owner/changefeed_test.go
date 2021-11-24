@@ -205,7 +205,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
 	// Creates a table, which will be deleted at the start-ts of the changefeed.
-	// It is shouldBeRunning that the changefeed DOES NOT replicate this table.
+	// It is expected that the changefeed DOES NOT replicate this table.
 	helper.DDL2Job("create database test0")
 	job := helper.DDL2Job("create table test0.table0(id int primary key)")
 	startTs := job.BinlogInfo.FinishedTS + 1000
