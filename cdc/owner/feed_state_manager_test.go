@@ -255,6 +255,7 @@ func (s *feedStateManagerSuite) TestChangefeedStatusNotExist(c *check.C) {
 }
 
 func (s *feedStateManagerSuite) TestIsStopped(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		state    *orchestrator.ChangefeedReactorState
 		expected bool
