@@ -54,16 +54,15 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) {
 		return
 	}
 
-	if m.state.Info.State == model.StateRemoved {
-		m.shouldBeRunning = false
-		m.shouldBeRemoved = true
-		return
-	}
 	shouldBeRunning, s, needsPatch := shouldRunning(m.state.Info)
+	// When upgrading from an old owner to new owner, the state is not set.
 	if needsPatch {
 		m.patchState(s)
 	}
 	if !shouldBeRunning {
+		if s == model.StateRemoved {
+			m.shouldBeRemoved = true
+		}
 		m.shouldBeRunning = false
 		return
 	}
