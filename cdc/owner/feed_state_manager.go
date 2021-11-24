@@ -316,9 +316,5 @@ func isStopped(state *orchestrator.ChangefeedReactorState) bool {
 	// we need to handle this field in the new owner.
 	// Otherwise, we will see that the old version of the task is paused and then upgraded,
 	// and the task is automatically resumed after the upgrade.
-	if state.Info.AdminJobType.IsStopState() {
-		return true
-	}
-
-	return false
+	return state.Info.AdminJobType.IsStopState()
 }
