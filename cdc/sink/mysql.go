@@ -568,7 +568,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 
 			for i, query := range dmls.sqls {
 				args := dmls.values[i]
-				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+				log.Info("exec row", zap.String("sql", query), zap.Any("args", args))
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
 						log.Warn("failed to rollback txn", zap.Error(err))
@@ -708,7 +708,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		// we do not count mark table rows in rowCount.
 	}
 	dmls.rowCount = rowCount
-	log.Info("debug bit", zap.Any("rows", rows), zap.Any("dmls", dmls))
 	return dmls
 }
 
