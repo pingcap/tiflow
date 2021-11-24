@@ -55,7 +55,7 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 			return safePoint, nil
 		},
 	}
-	cf := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
+	owner := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func(ctx cdcContext.Context) (AsyncSink, error) {
 		return &mockAsyncSink{}, nil
@@ -73,7 +73,7 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 	captureBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	c.Assert(err, check.IsNil)
 	tester.MustUpdate(cdcKey.String(), captureBytes)
-	return cf, state, tester
+	return owner, state, tester
 }
 
 func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
@@ -373,22 +373,24 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 	owner, state, tester := createOwner4Test(ctx, c)
 	statusProvider := owner.StatusProvider()
 	// work well
-	changefeedID := "test-changefeed"
-	changefeedInfo := &model.ChangeFeedInfo{
+	cf1 := "test-changefeed"
+	cfInfo1 := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
 		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
 	}
-	changefeedStr, err := changefeedInfo.Marshal()
+	changefeedStr, err := cfInfo1.Marshal()
 	c.Assert(err, check.IsNil)
 	cdcKey := etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
-		ChangefeedID: changefeedID,
+		ChangefeedID: cf1,
 	}
 	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
 	c.Assert(err, check.IsNil)
-	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+
+	c.Assert(owner.changefeeds, check.HasKey, cf1)
 
 	// add an non-consistent version capture
 	captureInfo := &model.CaptureInfo{
@@ -405,16 +407,17 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 	tester.MustUpdate(cdcKey.String(), v)
 
 	// try to add another changefeed
-	changefeedID1 := "test-changefeed1"
-	changefeedInfo1 := &model.ChangeFeedInfo{
+	cf2 := "test-changefeed1"
+	cfInfo2 := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
 		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
 	}
-	changefeedStr1, err := changefeedInfo1.Marshal()
+	changefeedStr1, err := cfInfo2.Marshal()
 	c.Assert(err, check.IsNil)
 	cdcKey = etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
-		ChangefeedID: changefeedID,
+		ChangefeedID: cf2,
 	}
 	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr1))
 	_, err = owner.Tick(ctx, state)
@@ -422,20 +425,27 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 	c.Assert(err, check.IsNil)
 	// make sure this changefeed add failed, which means that owner are return
 	// in clusterVersionConsistent check
-	c.Assert(owner.changefeeds[changefeedID1], check.IsNil)
+	c.Assert(owner.changefeeds[cf2], check.IsNil)
 
 	// make sure statusProvider works well
 	ctx1, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
-	wg := sync.WaitGroup{}
+
+	var errIn error
+	var infos map[model.ChangeFeedID]*model.ChangeFeedInfo
+	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		infos, err := statusProvider.GetAllChangeFeedInfo(ctx1)
-		c.Assert(err, check.IsNil)
-		c.Assert(infos[changefeedID], check.NotNil)
-		c.Assert(infos[changefeedID1], check.IsNil)
+		infos, errIn = statusProvider.GetAllChangeFeedInfo(ctx1)
 		wg.Done()
 	}()
+
+	time.Sleep(1 * time.Second)
 	_, err = owner.Tick(ctx, state)
 	c.Assert(err, check.IsNil)
+
+	wg.Wait()
+	c.Assert(errIn, check.IsNil)
+	c.Assert(infos[cf1], check.NotNil)
+	c.Assert(infos[cf2], check.IsNil)
 }
