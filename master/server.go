@@ -8,6 +8,8 @@ import (
 	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/master/jobmaster"
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/test"
+	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
 	"github.com/pingcap/ticdc/dm/pkg/log"
@@ -30,14 +32,16 @@ type Server struct {
 	executorManager *cluster.ExecutorManager
 	jobManager      *jobmaster.JobManager
 	//
-
 	cfg *Config
+
+	// mocked server for test
+	mockGrpcServer mock.GrpcServer
 }
 
 // NewServer creates a new master-server.
-func NewServer(cfg *Config) (*Server, error) {
+func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	executorNotifier := make(chan model.ExecutorID, 100)
-	executorManager := cluster.NewExecutorManager(executorNotifier, cfg.KeepAliveTTL, cfg.KeepAliveInterval)
+	executorManager := cluster.NewExecutorManager(executorNotifier, cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
 	jobManager := jobmaster.NewJobManager(executorManager, executorManager, executorNotifier)
 	server := &Server{
 		cfg:             cfg,
@@ -78,8 +82,33 @@ func (s *Server) DeleteExecutor() {
 	// To implement
 }
 
+func (s *Server) startForTest(ctx context.Context) (err error) {
+	// TODO: implement mock-etcd and leader election
+
+	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.MasterAddr, s)
+	if err != nil {
+		return err
+	}
+
+	s.executorManager.Start(ctx)
+	s.jobManager.Start(ctx)
+
+	return nil
+}
+
+// Stop and clean resources.
+// TODO: implement stop gracefully.
+func (s *Server) Stop() {
+	if s.mockGrpcServer != nil {
+		s.mockGrpcServer.Stop()
+	}
+}
+
 // Start the master-server.
 func (s *Server) Start(ctx context.Context) (err error) {
+	if test.GlobalTestFlag {
+		return s.startForTest(ctx)
+	}
 	etcdCfg := genEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
 	// prepare to join an existing etcd cluster.
 	//err = prepareJoinEtcd(s.cfg)

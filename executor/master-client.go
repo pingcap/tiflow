@@ -2,10 +2,12 @@ package executor
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/test"
+	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -14,8 +16,34 @@ import (
 type MasterClient struct {
 	urls   []string
 	leader string
-	conn   *grpc.ClientConn
+	conn   closeable
 	client pb.MasterClient
+}
+
+type closeable interface {
+	Close() error
+}
+
+func (c *MasterClient) init(ctx context.Context) error {
+	log.L().Logger.Info("dialing master", zap.String("leader", c.leader))
+	conn, err := grpc.DialContext(ctx, c.leader, grpc.WithInsecure(), grpc.WithBlock())
+	if err != nil {
+		return errors.ErrGrpcBuildConn.GenWithStackByArgs(c.leader)
+	}
+	c.client = pb.NewMasterClient(conn)
+	c.conn = conn
+	return nil
+}
+
+func (c *MasterClient) initForTest(ctx context.Context) error {
+	log.L().Logger.Info("dialing master", zap.String("leader", c.leader))
+	conn, err := mock.Dial(c.leader)
+	if err != nil {
+		return errors.ErrGrpcBuildConn.GenWithStackByArgs(c.leader)
+	}
+	c.client = mock.NewMasterClient(conn)
+	c.conn = conn
+	return nil
 }
 
 func NewMasterClient(ctx context.Context, join []string) (*MasterClient, error) {
@@ -23,14 +51,13 @@ func NewMasterClient(ctx context.Context, join []string) (*MasterClient, error) 
 		urls: join,
 	}
 	client.leader = client.urls[0]
-	log.L().Logger.Info("dialing master", zap.String("leader", client.leader))
 	var err error
-	client.conn, err = grpc.DialContext(ctx, client.leader, grpc.WithInsecure(), grpc.WithBlock())
-	if err != nil {
-		return nil, errors.New("cannot build conn")
+	if test.GlobalTestFlag {
+		err = client.initForTest(ctx)
+	} else {
+		err = client.init(ctx)
 	}
-	client.client = pb.NewMasterClient(client.conn)
-	return client, nil
+	return client, err
 }
 
 // SendHeartbeat to master-server.

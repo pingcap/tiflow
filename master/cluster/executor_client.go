@@ -6,6 +6,8 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/test"
+	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -15,8 +17,12 @@ type ExecutorClient interface {
 	Send(context.Context, model.ExecutorID, *ExecutorRequest) (*ExecutorResponse, error)
 }
 
+type closeable interface {
+	Close() error
+}
+
 type executorClient struct {
-	conn   *grpc.ClientConn
+	conn   closeable
 	client pb.ExecutorClient
 }
 
@@ -37,7 +43,21 @@ func (c *executorClient) send(ctx context.Context, req *ExecutorRequest) (*Execu
 	return resp, err
 }
 
+func newExecutorClientForTest(addr string) (*executorClient, error) {
+	conn, err := mock.Dial(addr)
+	if err != nil {
+		return nil, errors.ErrGrpcBuildConn.GenWithStackByArgs(addr)
+	}
+	return &executorClient{
+		conn:   conn,
+		client: mock.NewExecutorClient(conn),
+	}, nil
+}
+
 func newExecutorClient(addr string) (*executorClient, error) {
+	if test.GlobalTestFlag {
+		return newExecutorClientForTest(addr)
+	}
 	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		return nil, errors.ErrGrpcBuildConn.GenWithStackByArgs(addr)

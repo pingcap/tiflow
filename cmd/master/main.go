@@ -42,7 +42,7 @@ func main() {
 
 	// 3. start server
 	ctx, cancel := context.WithCancel(context.Background())
-	server, err := master.NewServer(cfg)
+	server, err := master.NewServer(cfg, nil)
 	if err != nil {
 		log.L().Error("fail to start dm-master", zap.Error(err))
 		os.Exit(2)
