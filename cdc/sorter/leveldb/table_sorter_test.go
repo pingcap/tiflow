@@ -710,7 +710,8 @@ func TestOutputIterEvents(t *testing.T) {
 			Iterator: db.NewIterator(&irange, nil),
 			Sema:     sema,
 		}
-		exhaustedRTs := ls.outputIterEvents(iter, buf, cs.maxResolvedTs)
+		exhaustedRTs, err := ls.outputIterEvents(iter, buf, cs.maxResolvedTs)
+		require.Nil(t, err, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectExhaustedRTs, exhaustedRTs, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectDeleteKeys, buf.deleteKeys, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectEvents, buf.resolvedEvents, "case #%d, %v", i, cs)

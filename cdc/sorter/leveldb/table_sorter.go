@@ -289,7 +289,7 @@ func (ls *Sorter) outputBufferedResolvedEvents(
 // outputBuffer must be empty.
 func (ls *Sorter) outputIterEvents(
 	iter message.LimitedIterator, buffer *outputBuffer, maxResolvedTs uint64,
-) uint64 {
+) (uint64, error) {
 	lenResolvedEvents, lenDeleteKeys := buffer.len()
 	if lenDeleteKeys > 0 || lenResolvedEvents > 0 {
 		log.Panic("buffer is not empty",
@@ -304,8 +304,7 @@ func (ls *Sorter) outputIterEvents(
 		event := new(model.PolymorphicEvent)
 		_, err := ls.serde.Unmarshal(event, iter.Value())
 		if err != nil {
-			log.Panic("unmarshal fails",
-				zap.ByteString("key", iter.Key()), zap.Error(err))
+			return 0, errors.Trace(err)
 		}
 		if lastCommitTs > event.CRTs || lastCommitTs > maxResolvedTs {
 			log.Panic("event commit ts is less than previous event or larger than resolved ts",
@@ -348,7 +347,7 @@ func (ls *Sorter) outputIterEvents(
 
 	// Skip output resolved ts if there is any buffered resolved event.
 	if lenResolvedEvents != 0 {
-		return 0
+		return 0, nil
 	}
 
 	if !iterHasNext && maxResolvedTs != 0 {
@@ -356,7 +355,7 @@ func (ls *Sorter) outputIterEvents(
 		// resolved ts), output max resolved ts and return an exhausted
 		// resolved ts.
 		ls.outputResolvedTs(maxResolvedTs)
-		return maxResolvedTs
+		return maxResolvedTs, nil
 	}
 	if lastCommitTs != 0 {
 		// All buffered resolved events are outputted,
@@ -364,7 +363,7 @@ func (ls *Sorter) outputIterEvents(
 		ls.outputResolvedTs(lastCommitTs)
 	}
 
-	return 0
+	return 0, nil
 }
 
 type pollState struct {
@@ -464,8 +463,11 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	}
 
 	// Read and send resolved events from iterator.
-	exhaustedResolvedTs :=
+	exhaustedResolvedTs, err :=
 		ls.outputIterEvents(iter, state.outputBuf, maxResolvedTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	if exhaustedResolvedTs > state.exhaustedResolvedTs {
 		state.exhaustedResolvedTs = exhaustedResolvedTs
 	}
