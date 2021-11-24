@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/pingcap/check"
@@ -433,18 +432,26 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 
 	var errIn error
 	var infos map[model.ChangeFeedID]*model.ChangeFeedInfo
-	var wg sync.WaitGroup
-	wg.Add(1)
+	done := make(chan struct{})
 	go func() {
 		infos, errIn = statusProvider.GetAllChangeFeedInfo(ctx1)
-		wg.Done()
+		done <- struct{}{}
 	}()
 
-	time.Sleep(1 * time.Second)
-	_, err = owner.Tick(ctx, state)
-	c.Assert(err, check.IsNil)
-
-	wg.Wait()
+	ticker := time.NewTicker(100 * time.Millisecond)
+workloop:
+	for {
+		select {
+		case <-ctx1.Done():
+			break workloop
+		case <-ticker.C:
+			_, err = owner.Tick(ctx, state)
+			c.Assert(err, check.IsNil)
+		case <-done:
+			break workloop
+		}
+	}
+	ticker.Stop()
 	c.Assert(errIn, check.IsNil)
 	c.Assert(infos[cf1], check.NotNil)
 	c.Assert(infos[cf2], check.IsNil)
