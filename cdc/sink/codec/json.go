@@ -461,6 +461,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		message.Ts = e.CommitTs
 		message.Schema = &e.Table.Schema
 		message.Table = &e.Table.Table
+		message.RowsCount++
 
 		if message.Length() > d.maxMessageSize {
 			// `len(d.messageBuf) == 1` is implied
