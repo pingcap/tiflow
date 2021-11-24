@@ -75,6 +75,8 @@ type BinlogReader struct {
 	relay    Process
 
 	currentUUID string // current UUID(with suffix)
+
+	lastFileGracefulEnd bool
 }
 
 // newBinlogReader creates a new BinlogReader.
@@ -98,6 +100,7 @@ func newBinlogReader(logger log.Logger, cfg *BinlogReaderConfig, relay Process) 
 		tctx:      newtctx,
 		notifyCh:  make(chan interface{}, 1),
 		relay:     relay,
+		lastFileGracefulEnd: true,
 	}
 	binlogReader.relay.RegisterListener(binlogReader)
 	return binlogReader
@@ -300,7 +303,7 @@ type SwitchPath struct {
 	nextBinlogName string
 }
 
-// parseRelay parses relay root directory, it support master-slave switch (switching to next sub directory).
+// parseRelay parses relay root directory, it supports master-slave switch (switching to next sub directory).
 func (r *BinlogReader) parseRelay(ctx context.Context, s *LocalStreamer, pos mysql.Position) error {
 	currentUUID, _, realPos, err := binlog.ExtractPos(pos, r.uuids)
 	if err != nil {
@@ -338,6 +341,16 @@ func (r *BinlogReader) parseRelay(ctx context.Context, s *LocalStreamer, pos mys
 		realPos.Name = switchPath.nextBinlogName
 		realPos.Pos = binlog.FileHeaderLen // start from pos 4 for next sub directory / file
 		r.tctx.L().Info("switching to next ready sub directory", zap.String("next uuid", r.currentUUID), zap.Stringer("position", pos))
+
+		// when switching sub directory, last binlog file may contain unfinished transaction, so we send a notification.
+		if !r.lastFileGracefulEnd {
+			s.ch <- &replication.BinlogEvent{
+				RawData: []byte(ErrorMaybeDuplicateEvent.Error()),
+				Header: &replication.EventHeader{
+					EventType: replication.IGNORABLE_EVENT,
+				},
+			}
+		}
 	}
 }
 
@@ -486,7 +499,6 @@ func (r *BinlogReader) parseFileAsPossible(ctx context.Context, s *LocalStreamer
 }
 
 // parseFile parses single relay log file from specified offset
-// TODO: move all stateful variables into a class, such as r.fileParser.
 func (r *BinlogReader) parseFile(
 	ctx context.Context,
 	s *LocalStreamer,
@@ -499,6 +511,7 @@ func (r *BinlogReader) parseFile(
 	}
 
 	offset := state.latestPos
+	r.lastFileGracefulEnd = false
 
 	onEventFunc := func(e *replication.BinlogEvent) error {
 		if ce := r.tctx.L().Check(zap.DebugLevel, ""); ce != nil {
@@ -520,6 +533,7 @@ func (r *BinlogReader) parseFile(
 			if e.Header.Timestamp != 0 && e.Header.LogPos != 0 {
 				// not fake rotate event, update file pos
 				state.latestPos = int64(e.Header.LogPos)
+				r.lastFileGracefulEnd = true
 			} else {
 				r.tctx.L().Debug("skip fake rotate event", zap.Reflect("header", e.Header))
 			}
@@ -627,15 +641,6 @@ func (r *BinlogReader) parseFile(
 	if err != nil {
 		if state.possibleLast && isIgnorableParseError(err) {
 			r.tctx.L().Warn("fail to parse relay log file, meet some ignorable error", zap.String("file", state.fullPath), zap.Int64("offset", offset), zap.Error(err))
-			// the file is truncated, we send a mock event with `IGNORABLE_EVENT` to notify the the consumer
-			// TODO: should add a integration test for this
-			e := &replication.BinlogEvent{
-				RawData: []byte(ErrorMaybeDuplicateEvent.Error()),
-				Header: &replication.EventHeader{
-					EventType: replication.IGNORABLE_EVENT,
-				},
-			}
-			s.ch <- e
 		} else {
 			r.tctx.L().Error("parse relay log file", zap.String("file", state.fullPath), zap.Int64("offset", offset), zap.Error(err))
 			return false, false, terror.ErrParserParseRelayLog.Delegate(err, state.fullPath)
