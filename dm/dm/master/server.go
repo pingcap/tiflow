@@ -1069,43 +1069,63 @@ func (s *Server) getStatusFromWorkers(
 	wg.Wait()
 	s.fillUnsyncedStatus(workerResps)
 
-	getSubTaskStatusCountInResp := func(taskName string) int {
-		cnt := 0
+	// when taskName is empty we need list all task even the worker that handle this task is not running.
+	// see more here https://github.com/pingcap/ticdc/issues/3348
+	if taskName == "" {
+		// sourceName -> resp
+		fakeWorkerRespM := make(map[string]*pb.QueryStatusResponse)
+		existWorkerRespM := make(map[string]*pb.QueryStatusResponse)
 		for _, resp := range workerResps {
-			for _, status := range resp.SubTaskStatus {
-				if status.Name == taskName {
-					cnt += 1
+			existWorkerRespM[resp.SourceStatus.Source] = resp
+		}
+
+		findNeedInResp := func(sourceName, taskName string) bool {
+			if _, ok := existWorkerRespM[sourceName]; ok {
+				// if we found the source resp, it must have the subtask of this task
+				return true
+			}
+			if fake, ok := fakeWorkerRespM[sourceName]; ok {
+				for _, status := range fake.SubTaskStatus {
+					if status.Name == taskName {
+						return true
+					}
 				}
 			}
+			return false
 		}
-		return cnt
-	}
-	appendFakeResp := func(taskName, sourceName, msg string, cnt int) {
-		for i := 0; i < cnt; i++ {
-			setWorkerResp(&pb.QueryStatusResponse{
-				Result: false, Msg: msg, SubTaskStatus: []*pb.SubTaskStatus{{Name: taskName}},
-				SourceStatus: &pb.SourceStatus{Source: sourceName, Worker: "unknown-offline-worker"},
-			})
-		}
-	}
 
-	// when taskName is empty we need list all task even the worker that handle this task is not running.
-	if taskName == "" {
+		setOrAppendFakeResp := func(sourceName, taskName string) {
+			if _, ok := fakeWorkerRespM[sourceName]; !ok {
+				fakeWorkerRespM[sourceName] = &pb.QueryStatusResponse{
+					Result:        false,
+					SubTaskStatus: []*pb.SubTaskStatus{},
+					SourceStatus:  &pb.SourceStatus{Source: sourceName, Worker: "source not bound"},
+					Msg:           fmt.Sprintf("can't find task=%s from dm-worker for source=%s, please use dmctl list-member to check if worker is offline.", taskName, sourceName),
+				}
+			}
+			fakeWorkerRespM[sourceName].SubTaskStatus = append(fakeWorkerRespM[sourceName].SubTaskStatus, &pb.SubTaskStatus{Name: taskName})
+		}
+
 		for taskName, sourceM := range s.scheduler.GetSubTaskCfgs() {
-			msg := fmt.Sprintf("can't find task %s from dm-worker, please use dmctl list-member to check if worker is offline.", taskName)
 			// only add use specified source related to this task
 			if specifiedSource {
 				for _, needDisplayedSource := range sources {
-					if _, ok := sourceM[needDisplayedSource]; ok {
-						appendFakeResp(taskName, needDisplayedSource, msg, len(sourceM)-getSubTaskStatusCountInResp(taskName))
+					if _, ok := sourceM[needDisplayedSource]; ok && !findNeedInResp(needDisplayedSource, taskName) {
+						setOrAppendFakeResp(needDisplayedSource, taskName)
 					}
 				}
 			} else {
 				// make fake response for every source related to this task
-				for source := range sourceM {
-					appendFakeResp(taskName, source, msg, len(sourceM)-getSubTaskStatusCountInResp(taskName))
+				for sourceName := range sourceM {
+					if !findNeedInResp(sourceName, taskName) {
+						setOrAppendFakeResp(sourceName, taskName)
+					}
 				}
 			}
+		}
+
+		for _, fake := range fakeWorkerRespM {
+			setWorkerResp(fake)
 		}
 	}
 	return workerResps
