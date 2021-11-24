@@ -861,10 +861,6 @@ func (s *Syncer) updateReplicationLagMetric() {
 	}
 }
 
-func (s *Syncer) checkFlush() bool {
-	return s.checkpoint.CheckGlobalPoint()
-}
-
 func (s *Syncer) saveTablePoint(table *filter.Table, location binlog.Location) {
 	ti, err := s.schemaTracker.GetTableInfo(table)
 	if err != nil && table.Name != "" {
@@ -1038,7 +1034,7 @@ func (s *Syncer) addJob(job *job) error {
 	}
 
 	// Periodically create checkpoint snapshot and async flush checkpoint snapshot
-	if s.checkFlush() {
+	if s.checkpoint.CheckGlobalPoint() && s.checkpoint.CheckLastSnapshotCreationTime() {
 		s.jobWg.Add(1)
 		jobSeq := s.getSeq()
 		j := newAsyncFlushJob(s.cfg.WorkerCount, jobSeq)
