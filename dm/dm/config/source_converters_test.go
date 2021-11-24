@@ -33,7 +33,6 @@ func (t *testConfig) TestConverterWithSourceAndOpenAPISource(c *check.C) {
 	c.Assert(sourceCfg1.String(), check.Equals, sourceCfg2.String())
 
 	// 2. test user create source from openapi, after convert to source config then convert back to openapi.Source
-
 	openapiSource1, err := fixtures.GenOpenAPISourceForTest()
 	c.Assert(err, check.IsNil)
 	openapiSource2 := SourceCfgToOpenAPISource(OpenAPISourceToSourceCfg(openapiSource1))

@@ -19,11 +19,10 @@ import (
 
 // SourceCfgToOpenAPISource converter SourceConfig to openapi.Source.
 func SourceCfgToOpenAPISource(cfg *SourceConfig) openapi.Source {
-	// PM's requirement, we always return obfuscated password to user
 	source := openapi.Source{
 		EnableGtid: cfg.EnableGTID,
 		Host:       cfg.From.Host,
-		Password:   "******",
+		Password:   "******", // PM's requirement, we always return obfuscated password to user
 		Port:       cfg.From.Port,
 		SourceName: cfg.SourceID,
 		User:       cfg.From.User,
