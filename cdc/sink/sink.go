@@ -97,6 +97,12 @@ func init() {
 	sinkIniterMap["mysql+ssl"] = sinkIniterMap["mysql"]
 	sinkIniterMap["tidb+ssl"] = sinkIniterMap["mysql"]
 
+	// simple-mysql is used for kafka consumer test only.
+	sinkIniterMap["simple-mysql"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+		return newSimpleMySQLSink(ctx, sinkURI, config)
+	}
+
 	// register kafka sink
 	sinkIniterMap["kafka"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
