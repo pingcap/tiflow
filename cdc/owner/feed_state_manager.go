@@ -305,7 +305,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	}
 }
 
-// isStopped returns whether the current changefeed is stopped or not.
+// isStopped returns whether the current changefeed state is stopped or not.
 func isStopped(state *orchestrator.ChangefeedReactorState) bool {
 	switch state.Info.State {
 	case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished:
