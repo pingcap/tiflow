@@ -131,6 +131,7 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 				sql, args = prepareDelete(row.Table.QuoteString(), row.PreColumns, true)
 			}
 			_, err := s.db.ExecContext(ctx, sql, args...)
+			log.Info("execute dml", zap.String("sql", sql))
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -143,6 +144,7 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, true, false)
 			}
 			_, err := s.db.ExecContext(ctx, sql, args...)
+			log.Info("execute dml", zap.String("sql", sql))
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -161,6 +163,7 @@ func (s *simpleMySQLSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent)
 		sql = fmt.Sprintf("use %s;%s", ddl.TableInfo.Schema, ddl.Query)
 	}
 	_, err := s.db.ExecContext(ctx, sql)
+	log.Info("execute ddl", zap.String("sql", sql))
 	if err != nil && errorutil.IsIgnorableMySQLDDLError(err) {
 		log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
 		return nil
