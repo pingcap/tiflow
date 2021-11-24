@@ -55,20 +55,12 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-<<<<<<< HEAD
-	pdClient   pd.Client
-	kvStorage  tidbkv.Storage
-	etcdClient *kv.CDCEtcdClient
-	grpcPool   kv.GrpcPool
-=======
 	pdClient     pd.Client
 	kvStorage    tidbkv.Storage
-	etcdClient   *etcd.CDCEtcdClient
+	etcdClient   *kv.CDCEtcdClient
 	grpcPool     kv.GrpcPool
 	TimeAcquirer pdtime.TimeAcquirer
->>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013))
-
-	cancel context.CancelFunc
+	cancel       context.CancelFunc
 
 	newProcessorManager func() *processor.Manager
 	newOwner            func(pd.Client) *owner.Owner
@@ -107,17 +99,13 @@ func (c *Capture) reset(ctx context.Context) error {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
 	c.session = sess
-<<<<<<< HEAD
 	c.election = concurrency.NewElection(sess, kv.CaptureOwnerKey)
-=======
-	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
 
 	if c.TimeAcquirer != nil {
 		c.TimeAcquirer.Stop()
 	}
 	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
 
->>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013))
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
 	}
@@ -166,21 +154,12 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-<<<<<<< HEAD
-		PDClient:    c.pdClient,
-		KVStorage:   c.kvStorage,
-		CaptureInfo: c.info,
-		EtcdClient:  c.etcdClient,
-		GrpcPool:    c.grpcPool,
-=======
-		PDClient:         c.pdClient,
-		KVStorage:        c.kvStorage,
-		CaptureInfo:      c.info,
-		EtcdClient:       c.etcdClient,
-		GrpcPool:         c.grpcPool,
-		TimeAcquirer:     c.TimeAcquirer,
-		TableActorSystem: c.tableActorSystem,
->>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013))
+		PDClient:     c.pdClient,
+		KVStorage:    c.kvStorage,
+		CaptureInfo:  c.info,
+		EtcdClient:   c.etcdClient,
+		GrpcPool:     c.grpcPool,
+		TimeAcquirer: c.TimeAcquirer,
 	})
 	err := c.register(ctx)
 	if err != nil {

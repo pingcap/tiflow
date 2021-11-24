@@ -16,12 +16,6 @@ package processor
 import (
 	"context"
 	"fmt"
-	"io"
-	"math"
-	"strconv"
-	"sync"
-	"time"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -42,6 +36,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
+	"io"
+	"math"
+	"strconv"
+	"sync"
 )
 
 const (
@@ -170,18 +168,12 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	if err := p.checkTablesNum(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
-<<<<<<< HEAD
-	p.handlePosition()
-=======
-	if err := p.flushRedoLogMeta(ctx); err != nil {
-		return nil, err
-	}
+
 	// it is no need to check the err here, because we will use
 	// local time when an error return, which is acceptable
 	pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
 
 	p.handlePosition(oracle.GetPhysical(pdTime))
->>>>>>> c91af794e (*: fix changefeed checkpoint lag negative value error (#3013))
 	p.pushResolvedTs2Table()
 	p.handleWorkload()
 	p.doGCSchemaStorage(ctx)
