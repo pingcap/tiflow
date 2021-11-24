@@ -641,6 +641,11 @@ error = '''
 peer-to-peer message server received an RPC call with illegal metadata
 '''
 
+["CDC:ErrPeerMessageInternalSenderClosed"]
+error = '''
+peer-to-peer message server tries to send to a closed stream. Internal only.
+'''
+
 ["CDC:ErrPendingRegionCancel"]
 error = '''
 pending region cancelled due to stream disconnecting
