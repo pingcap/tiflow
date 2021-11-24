@@ -47,24 +47,23 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) {
 			m.cleanUpInfos()
 		}
 	}()
+
 	if m.handleAdminJob() {
 		// `handleAdminJob` returns true means that some admin jobs are pending
 		// skip to the next tick until all the admin jobs is handled
 		return
 	}
-	switch m.state.Info.State {
-	case model.StateRemoved:
+
+	if m.state.Info.State == model.StateRemoved {
 		m.shouldBeRunning = false
 		m.shouldBeRemoved = true
 		return
-	case model.StateStopped, model.StateFailed, model.StateFinished:
+	}
+	if isStopped(m.state) {
 		m.shouldBeRunning = false
 		return
 	}
-	if m.state.Info.AdminJobType.IsStopState() {
-		m.shouldBeRunning = false
-		return
-	}
+
 	errs := m.errorsReportedByProcessors()
 	m.handleError(errs...)
 }
@@ -141,14 +140,10 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		checkpointTs := m.state.Info.GetCheckpointTs(m.state.Status)
 		log.Info("the changefeed is removed", zap.String("changefeed-id", m.state.ID), zap.Uint64("checkpoint-ts", checkpointTs))
 	case model.AdminResume:
-		switch m.state.Info.State {
-		case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished:
-		default:
-			if !m.state.Info.AdminJobType.IsStopState() {
-				log.Warn("can not resume the changefeed in the current state", zap.String("changefeedID", m.state.ID),
-					zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
-				return
-			}
+		if !isStopped(m.state) {
+			log.Warn("can not resume the changefeed in the current state", zap.String("changefeedID", m.state.ID),
+				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
+			return
 		}
 		m.shouldBeRunning = true
 		jobsPending = true
@@ -308,4 +303,22 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		m.patchState(model.StateError)
 		return
 	}
+}
+
+// isStopped returns whether the current changefeed is stopped or not.
+func isStopped(state *orchestrator.ChangefeedReactorState) bool {
+	switch state.Info.State {
+	case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished:
+		return true
+	}
+
+	// Notice: In the old owner we used this field to determine if the task was paused or not,
+	// we need to handle this field in the new owner.
+	// Otherwise, we will see that the old version of the task is paused and then upgraded,
+	// and the task is automatically resumed after the upgrade.
+	if state.Info.AdminJobType.IsStopState() {
+		return true
+	}
+
+	return false
 }

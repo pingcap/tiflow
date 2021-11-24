@@ -253,3 +253,97 @@ func (s *feedStateManagerSuite) TestChangefeedStatusNotExist(c *check.C) {
 	c.Assert(state.Info, check.IsNil)
 	c.Assert(state.Exist(), check.IsFalse)
 }
+
+func (s *feedStateManagerSuite) TestIsStopped(c *check.C) {
+	testCases := []struct {
+		state    *orchestrator.ChangefeedReactorState
+		expected bool
+	}{
+		{
+			state: &orchestrator.ChangefeedReactorState{
+				Info: &model.ChangeFeedInfo{
+					AdminJobType: model.AdminResume,
+					State:        model.StateNormal,
+				},
+			},
+			expected: false,
+		},
+		{
+			state: &orchestrator.ChangefeedReactorState{
+				Info: &model.ChangeFeedInfo{
+					AdminJobType: model.AdminResume,
+					State:        model.StateRemoved,
+				},
+			},
+			expected: false,
+		},
+		{
+			state: &orchestrator.ChangefeedReactorState{
+				Info: &model.ChangeFeedInfo{
+					AdminJobType: model.AdminResume,
+					State:        model.StateError,
+				},
+			},
+			expected: true,
+		},
+		{
+			state: &orchestrator.ChangefeedReactorState{
+				Info: &model.ChangeFeedInfo{
+					AdminJobType: model.AdminResume,
+					State:        model.StateFailed,
+				},
+			},
+			expected: true,
+		},
+		{
+			state: &orchestrator.ChangefeedReactorState{
+				Info: &model.ChangeFeedInfo{
+					AdminJobType: model.AdminResume,
+					State:        model.StateStopped,
+				},
+			},
+			expected: true,
+		},
+		{
+			state: &orchestrator.ChangefeedReactorState{
+				Info: &model.ChangeFeedInfo{
+					AdminJobType: model.AdminResume,
+					State:        model.StateFinished,
+				},
+			},
+			expected: true,
+		},
+		{
+			state: &orchestrator.ChangefeedReactorState{
+				Info: &model.ChangeFeedInfo{
+					AdminJobType: model.AdminStop,
+					State:        model.StateNormal,
+				},
+			},
+			expected: true,
+		},
+		{
+			state: &orchestrator.ChangefeedReactorState{
+				Info: &model.ChangeFeedInfo{
+					AdminJobType: model.AdminRemove,
+					State:        model.StateNormal,
+				},
+			},
+			expected: true,
+		},
+		{
+			state: &orchestrator.ChangefeedReactorState{
+				Info: &model.ChangeFeedInfo{
+					AdminJobType: model.AdminFinish,
+					State:        model.StateNormal,
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		c.Assert(isStopped(tc.state), check.Equals, tc.expected)
+	}
+
+}
