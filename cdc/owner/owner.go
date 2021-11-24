@@ -48,7 +48,7 @@ const (
 )
 
 // versionInconsistentLogRate represents the rate of log output when there are
-// captures version is different with the owner version in the cluster
+// captures with versions different from that of the owner
 const versionInconsistentLogRate = 1
 
 type ownerJob struct {
@@ -285,7 +285,7 @@ func (o *Owner) clusterVersionConsistent(captures map[model.CaptureID]*model.Cap
 	for _, capture := range captures {
 		if myVersion != capture.Version {
 			if o.logLimiter.Allow() {
-				log.Warn("the capture version is different with the owner", zap.Reflect("capture", capture), zap.String("my-version", myVersion))
+				log.Warn("the capture version is different with the owner", zap.Reflect("capture", capture), zap.String("owner-version", myVersion))
 			}
 			return false
 		}
