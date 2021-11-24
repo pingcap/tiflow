@@ -189,6 +189,10 @@ func (s *utilsSuite) TestAndWriteExampleReplicaTOML(c *check.C) {
 			{Dispatcher: "ts", Matcher: []string{"test1.*", "test2.*"}},
 			{Dispatcher: "rowid", Matcher: []string{"test3.*", "test4.*"}},
 		},
+		ColumnSelectors: []*config.ColumnSelector{
+			{Matcher: []string{"test1.*", "test2.*"}, Columns: []string{"column1", "column2"}},
+			{Matcher: []string{"test3.*", "test4.*"}, Columns: []string{"!a", "column3"}},
+		},
 		Protocol: "default",
 	})
 	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{

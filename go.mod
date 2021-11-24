@@ -25,7 +25,7 @@ require (
 	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/getkin/kin-openapi v0.80.0
 	github.com/gin-gonic/gin v1.7.4
-	github.com/go-mysql-org/go-mysql v1.1.3-0.20210705101833-83965e516929
+	github.com/go-mysql-org/go-mysql v1.1.3-0.20211111092245-d7f36836d6b7
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/protobuf v1.3.2
@@ -56,7 +56,7 @@ require (
 	github.com/pingcap/kvproto v0.0.0-20211029081837-3c7bd947cf9b
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
 	github.com/pingcap/tidb v1.1.0-beta.0.20211115203106-b076e193b320
-	github.com/pingcap/tidb-tools v5.2.2-0.20211019062242-37a8bef2fa17+incompatible
+	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20211117085347-276721877cf8
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0

@@ -5,9 +5,6 @@ services:
     build:
       context: ../../../
       dockerfile: ./deployments/ticdc/docker/integration-test.Dockerfile
-    depends_on:
-      - "zookeeper"
-      - "kafka"
     command:
       - bash
       - -c
