@@ -4,7 +4,6 @@
         "description": "This is a docs of TiCDC OpenAPI.",
         "title": "TiCDC OpenAPI",
         "contact": {},
-        "license": {},
         "version": "1.0"
     },
     "basePath": "/api/v1",
@@ -34,6 +33,12 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -104,9 +109,17 @@
                     }
                 ],
                 "responses": {
-                    "202": {},
+                    "202": {
+                        "description": ""
+                    },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -145,6 +158,12 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -224,9 +243,17 @@
                     }
                 ],
                 "responses": {
-                    "202": {},
+                    "202": {
+                        "description": ""
+                    },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -255,9 +282,17 @@
                     }
                 ],
                 "responses": {
-                    "202": {},
+                    "202": {
+                        "description": ""
+                    },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -288,9 +323,17 @@
                     }
                 ],
                 "responses": {
-                    "202": {},
+                    "202": {
+                        "description": ""
+                    },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -321,9 +364,17 @@
                     }
                 ],
                 "responses": {
-                    "202": {},
+                    "202": {
+                        "description": ""
+                    },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -372,9 +423,17 @@
                     }
                 ],
                 "responses": {
-                    "202": {},
+                    "202": {
+                        "description": ""
+                    },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -405,9 +464,17 @@
                     }
                 ],
                 "responses": {
-                    "202": {},
+                    "202": {
+                        "description": ""
+                    },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -429,7 +496,9 @@
                 ],
                 "summary": "Check if CDC cluster is health",
                 "responses": {
-                    "200": {},
+                    "200": {
+                        "description": ""
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -464,7 +533,9 @@
                     }
                 ],
                 "responses": {
-                    "200": {},
+                    "200": {
+                        "description": ""
+                    },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
@@ -488,9 +559,17 @@
                 ],
                 "summary": "notify the owner to resign",
                 "responses": {
-                    "202": {},
+                    "202": {
+                        "description": ""
+                    },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -526,6 +605,12 @@
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
                     }
                 }
             }
@@ -555,6 +640,12 @@
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
                     }
                 }
             }
@@ -581,6 +672,12 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -657,14 +754,12 @@
             "type": "object",
             "properties": {
                 "checkpoint_time": {
-                    "type": "object",
-                    "$ref": "#/definitions/model.JSONTime"
+                    "type": "string"
                 },
                 "checkpoint_tso": {
                     "type": "integer"
                 },
                 "error": {
-                    "type": "object",
                     "$ref": "#/definitions/model.RunningError"
                 },
                 "id": {
@@ -707,7 +802,6 @@
                     "default": 16
                 },
                 "sink_config": {
-                    "type": "object",
                     "$ref": "#/definitions/config.SinkConfig"
                 },
                 "sink_uri": {
@@ -730,21 +824,18 @@
             "type": "object",
             "properties": {
                 "checkpoint_time": {
-                    "type": "object",
-                    "$ref": "#/definitions/model.JSONTime"
+                    "type": "string"
                 },
                 "checkpoint_tso": {
                     "type": "integer"
                 },
                 "create_time": {
-                    "type": "object",
-                    "$ref": "#/definitions/model.JSONTime"
+                    "type": "string"
                 },
                 "creator_version": {
                     "type": "string"
                 },
                 "error": {
-                    "type": "object",
                     "$ref": "#/definitions/model.RunningError"
                 },
                 "error_history": {
@@ -790,9 +881,6 @@
                 }
             }
         },
-        "model.JSONTime": {
-            "$ref": "#/definitions/time.Time"
-        },
         "model.ProcessorCommonInfo": {
             "type": "object",
             "properties": {
@@ -813,7 +901,6 @@
                 },
                 "error": {
                     "description": "Error code when error happens",
-                    "type": "object",
                     "$ref": "#/definitions/model.RunningError"
                 },
                 "resolved_ts": {

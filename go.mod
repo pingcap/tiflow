@@ -68,8 +68,8 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
 	github.com/swaggo/files v0.0.0-20190704085106-630677cd5c14
-	github.com/swaggo/gin-swagger v1.3.2
-	github.com/swaggo/swag v1.6.6
+	github.com/swaggo/gin-swagger v1.2.0
+	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tidwall/gjson v1.9.1
 	github.com/tidwall/sjson v1.2.2

@@ -172,7 +172,7 @@ fmt: tools/bin/gofumports tools/bin/shfmt
 	@echo "run shfmt"
 	tools/bin/shfmt -d -w .
 
-apidoc:
+apidoc:	tools/bin/swag
 	@echo "generate ticdc OpenAPI docs"
 	@./tools/check/check-httpapi-docs.sh
 
@@ -409,6 +409,10 @@ tools/bin/gotestsum: tools/check/go.mod
 
 tools/bin/errdoc-gen: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
+
+tools/bin/swag: tools/check/go.mod
+	cd tools/check && $(GO) build -mod=mod -o ../bin/swag github.com/swaggo/swag/cmd/swag
+
 
 check_failpoint_ctl: tools/bin/failpoint-ctl
 
