@@ -440,16 +440,16 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
-workloop:
+WorkLoop:
 	for {
 		select {
 		case <-ctx1.Done():
-			break workloop
+			c.Fatal(ctx1.Err())
 		case <-ticker.C:
 			_, err = owner.Tick(ctx, state)
 			c.Assert(err, check.IsNil)
 		case <-done:
-			break workloop
+			break WorkLoop
 		}
 	}
 	c.Assert(errIn, check.IsNil)
