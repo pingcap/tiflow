@@ -735,11 +735,11 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	c.Assert(err, IsNil)
 
 	gtidEventCount := 0
-	for i, event := range obtainBaseEvents {
-		c.Assert(event.Header, DeepEquals, allEvents[i].Header)
-		if ev, ok := event.Event.(*replication.GTIDEvent); ok {
-			u, _ := uuid.FromBytes(ev.SID)
-			c.Assert(preGset.Update(fmt.Sprintf("%s:%d", u.String(), ev.GNO)), IsNil)
+	for i, ev := range obtainBaseEvents {
+		c.Assert(ev.Header, DeepEquals, allEvents[i].Header)
+		if _, ok := ev.Event.(*replication.GTIDEvent); ok {
+			gtidStr, _ := event.GetGTIDStr(ev)
+			c.Assert(preGset.Update(gtidStr), IsNil)
 
 			// get pos by preGset
 			pos, err2 := r.getPosByGTID(preGset.Clone())
@@ -1077,11 +1077,10 @@ func (t *testReaderSuite) genEvents(c *C, eventTypes []replication.EventType, la
 			events = append(events, evs.Events...)
 			latestPos = evs.LatestPos
 			latestGTID = evs.LatestGTID
-			ev, ok := evs.Events[0].Event.(*replication.GTIDEvent)
+			_, ok := evs.Events[0].Event.(*replication.GTIDEvent)
 			c.Assert(ok, IsTrue)
-			u, _ := uuid.FromBytes(ev.SID)
-			gs := fmt.Sprintf("%s:%d", u.String(), ev.GNO)
-			err = originSet.Update(gs)
+			gtidStr, _ := event.GetGTIDStr(evs.Events[0])
+			err = originSet.Update(gtidStr)
 			c.Assert(err, IsNil)
 		case replication.XID_EVENT:
 			insertDMLData := []*event.DMLData{
@@ -1098,11 +1097,10 @@ func (t *testReaderSuite) genEvents(c *C, eventTypes []replication.EventType, la
 			events = append(events, evs.Events...)
 			latestPos = evs.LatestPos
 			latestGTID = evs.LatestGTID
-			ev, ok := evs.Events[0].Event.(*replication.GTIDEvent)
+			_, ok := evs.Events[0].Event.(*replication.GTIDEvent)
 			c.Assert(ok, IsTrue)
-			u, _ := uuid.FromBytes(ev.SID)
-			gs := fmt.Sprintf("%s:%d", u.String(), ev.GNO)
-			err = originSet.Update(gs)
+			gtidStr, _ := event.GetGTIDStr(evs.Events[0])
+			err = originSet.Update(gtidStr)
 			c.Assert(err, IsNil)
 		case replication.ROTATE_EVENT:
 			ev, err := event.GenRotateEvent(header, latestPos, []byte("next_log"), 4)

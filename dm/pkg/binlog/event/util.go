@@ -28,6 +28,7 @@ import (
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/google/uuid"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/mysql"
 
@@ -475,4 +476,20 @@ func statusVarsToKV(statusVars []byte) (map[byte][]byte, error) {
 	}
 
 	return vars, nil
+}
+
+// GetGTIDStr gets GTID string representation from a GTID event ot MariaDB GTID evnets.
+// learn from: https://github.com/go-mysql-org/go-mysql/blob/c6ab05a85eb86dc51a27ceed6d2f366a32874a24/replication/binlogsyncer.go#L736
+// learn from: https://github.com/go-mysql-org/go-mysql/blob/c6ab05a85eb86dc51a27ceed6d2f366a32874a24/replication/binlogsyncer.go#L745
+func GetGTIDStr(e *replication.BinlogEvent) (string, error) {
+	switch ev := e.Event.(type) {
+	case *replication.GTIDEvent:
+		u, _ := uuid.FromBytes(ev.SID)
+		return fmt.Sprintf("%s:%d", u.String(), ev.GNO), nil
+	case *replication.MariadbGTIDEvent:
+		GTID := ev.GTID
+		return fmt.Sprintf("%d-%d-%d", GTID.DomainID, GTID.ServerID, GTID.SequenceNumber), nil
+	default:
+		return "", fmt.Errorf("unsupported event type %d", e.Header.EventType)
+	}
 }

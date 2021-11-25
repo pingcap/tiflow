@@ -15,7 +15,6 @@ package relay
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -27,7 +26,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
@@ -552,8 +550,11 @@ func (r *BinlogReader) parseFile(
 				state.latestPos = int64(e.Header.LogPos)
 				break
 			}
-			u, _ := uuid.FromBytes(ev.SID)
-			state.replaceWithHeartbeat, err = r.advanceCurrentGtidSet(fmt.Sprintf("%s:%d", u.String(), ev.GNO))
+			gtidStr, err2 := event.GetGTIDStr(e)
+			if err2 != nil {
+				return errors.Trace(err2)
+			}
+			state.replaceWithHeartbeat, err = r.advanceCurrentGtidSet(gtidStr)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -563,8 +564,11 @@ func (r *BinlogReader) parseFile(
 				state.latestPos = int64(e.Header.LogPos)
 				break
 			}
-			GTID := ev.GTID
-			state.replaceWithHeartbeat, err = r.advanceCurrentGtidSet(fmt.Sprintf("%d-%d-%d", GTID.DomainID, GTID.ServerID, GTID.SequenceNumber))
+			gtidStr, err2 := event.GetGTIDStr(e)
+			if err2 != nil {
+				return errors.Trace(err2)
+			}
+			state.replaceWithHeartbeat, err = r.advanceCurrentGtidSet(gtidStr)
 			if err != nil {
 				return errors.Trace(err)
 			}

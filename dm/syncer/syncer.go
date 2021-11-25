@@ -1429,6 +1429,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		currentLocation = s.checkpoint.GlobalPoint() // also init to global checkpoint
 		startLocation   = s.checkpoint.GlobalPoint()
 		lastLocation    = s.checkpoint.GlobalPoint()
+
+		currentGTID string
 	)
 	tctx.L().Info("replicate binlog from checkpoint", zap.Stringer("checkpoint", lastLocation))
 
@@ -1564,7 +1566,17 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				if err1 != nil {
 					return err
 				}
-				if _, ok := e.Event.(*replication.RowsEvent); ok {
+				switch e.Event.(type) {
+				case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+					gtidStr, err2 := event.GetGTIDStr(e)
+					if err2 != nil {
+						return err2
+					}
+					if currentGTID != gtidStr {
+						s.tctx.L().Error("after recover GTID-based replication, the first GTID is not same as broken one. May meet duplicate entry or corrupt data if table has no PK/UK.")
+						return nil
+					}
+				case *replication.RowsEvent:
 					i++
 				}
 			}
@@ -1871,6 +1883,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					tctx.L().Info("meet heartbeat event and then flush jobs")
 					err2 = s.flushJobs()
 				}
+			}
+		case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+			currentGTID, err2 = event.GetGTIDStr(e)
+			if err2 != nil {
+				s.tctx.L().DPanic("failed to get GTID", zap.Error(err2))
 			}
 		}
 		if err2 != nil {

@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/ticdc/dm/dm/unit"
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
 	binlogReader "github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
@@ -120,6 +121,9 @@ type Relay struct {
 	meta   Meta
 	closed atomic.Bool
 	sync.RWMutex
+
+	// TODO: move it inside meta, and seems meta is no need to be a interface
+	currentGTID string
 
 	logger log.Logger
 
@@ -343,6 +347,18 @@ func (r *Relay) process(ctx context.Context) error {
 						err = err2
 						goto checkError
 					}
+					// only skip event of same GTID after recovering
+					if res.Event.Header.EventType == replication.GTID_EVENT ||
+						res.Event.Header.EventType == replication.MARIADB_GTID_EVENT {
+						gtidStr, err3 := event.GetGTIDStr(res.Event)
+						if err3 != nil {
+							return err3
+						}
+
+						if gtidStr != r.currentGTID {
+							return errors.New("after recover GTID-based replication, the first GTID is not same as broken one")
+						}
+					}
 					tResult := r.preprocessEvent(res.Event, parser2)
 					// do not count skip event
 					if !tResult.Ignore {
@@ -559,6 +575,12 @@ func (r *Relay) preprocessEvent(e *replication.BinlogEvent, parser2 *parser.Pars
 			// ref: https://dev.mysql.com/doc/internals/en/heartbeat-event.html
 			result.Ignore = true
 			result.IgnoreReason = ignoreReasonHeartbeat
+		}
+	case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+		var err error
+		r.currentGTID, err = event.GetGTIDStr(e)
+		if err != nil {
+			r.logger.DPanic("failed to get GTID from binlog event", zap.Error(err))
 		}
 	default:
 		if e.Header.Flags&replication.LOG_EVENT_ARTIFICIAL_F != 0 {
