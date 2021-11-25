@@ -1105,7 +1105,7 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 		// worker resume, it can not execute the DML/DDL in old binlog because of downstream table structure mismatching.
 		// We should find a way to (compensating) implement a transaction containing interaction with both etcd and SQL.
 		if err != nil && (terror.ErrDBExecuteFailed.Equal(err) || terror.ErrDBUnExpect.Equal(err)) {
-			ctx.L().Warn("error detected when executing SQL job, skip flush checkpoint",
+			ctx.L().Warn("error detected when executing SQL job, skip flush checkpoint and shutdown checkpointFlushWorker",
 				zap.Stringer("global_pos", task.snapshotInfo.globalPos),
 				zap.Error(err))
 
@@ -1158,6 +1158,21 @@ func (s *Syncer) flushCheckPoints() error {
 }
 
 func (s *Syncer) flushCheckPointsAsync(asyncFlushJobWg *sync.WaitGroup, syncFlushErrCh chan error, flushJobSeq int64) {
+	err := s.execError.Load()
+	// TODO: for now, if any error occurred (including user canceled), checkpoint won't be updated. But if we have put
+	// optimistic shard info, DM-master may resolved the optimistic lock and let other worker execute DDL. So after this
+	// worker resume, it can not execute the DML/DDL in old binlog because of downstream table structure mismatching.
+	// We should find a way to (compensating) implement a transaction containing interaction with both etcd and SQL.
+	if err != nil && (terror.ErrDBExecuteFailed.Equal(err) || terror.ErrDBUnExpect.Equal(err)) {
+		s.tctx.L().Warn("error detected when executing SQL job, skip flush flushCheckPointsAsync",
+			zap.Stringer("checkpoint", s.checkpoint),
+			zap.Error(err))
+		if syncFlushErrCh != nil {
+			syncFlushErrCh <- err
+		}
+		return
+	}
+
 	var (
 		exceptTableIDs map[string]bool
 		exceptTables   []*filter.Table
