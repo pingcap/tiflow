@@ -316,23 +316,25 @@ func shouldRunning(info *model.ChangeFeedInfo) (bool, model.FeedState, bool) {
 	// we need to handle this field in the new owner.
 	// Otherwise, we will see that the old version of the task is paused and then upgraded,
 	// and the task is automatically resumed after the upgrade.
-	state := model.StateNormal
-	switch info.AdminJobType {
-	// This corresponds to the case of failure or error.
-	case model.AdminNone, model.AdminResume:
-		if info.Error != nil {
-			if cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
-				state = model.StateFailed
-			} else {
-				state = model.StateError
+	state := info.State
+	if state == model.StateNormal {
+		switch info.AdminJobType {
+		// This corresponds to the case of failure or error.
+		case model.AdminNone, model.AdminResume:
+			if info.Error != nil {
+				if cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
+					state = model.StateFailed
+				} else {
+					state = model.StateError
+				}
 			}
+		case model.AdminStop:
+			state = model.StateStopped
+		case model.AdminFinish:
+			state = model.StateFinished
+		case model.AdminRemove:
+			state = model.StateRemoved
 		}
-	case model.AdminStop:
-		state = model.StateStopped
-	case model.AdminFinish:
-		state = model.StateFinished
-	case model.AdminRemove:
-		state = model.StateRemoved
 	}
 	needsPatch := state != info.State
 

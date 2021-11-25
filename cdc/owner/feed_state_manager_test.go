@@ -286,7 +286,7 @@ func (s *feedStateManagerSuite) TestShouldRunning(c *check.C) {
 		{
 			info: &model.ChangeFeedInfo{
 				AdminJobType: model.AdminNone,
-				State:        "",
+				State:        model.StateNormal,
 				Error: &model.RunningError{
 					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
 				},
@@ -298,7 +298,7 @@ func (s *feedStateManagerSuite) TestShouldRunning(c *check.C) {
 		{
 			info: &model.ChangeFeedInfo{
 				AdminJobType: model.AdminResume,
-				State:        "",
+				State:        model.StateNormal,
 				Error: &model.RunningError{
 					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
 				},
@@ -310,7 +310,7 @@ func (s *feedStateManagerSuite) TestShouldRunning(c *check.C) {
 		{
 			info: &model.ChangeFeedInfo{
 				AdminJobType: model.AdminNone,
-				State:        "",
+				State:        model.StateNormal,
 				Error: &model.RunningError{
 					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
 				},
@@ -322,7 +322,7 @@ func (s *feedStateManagerSuite) TestShouldRunning(c *check.C) {
 		{
 			info: &model.ChangeFeedInfo{
 				AdminJobType: model.AdminResume,
-				State:        "",
+				State:        model.StateNormal,
 				Error: &model.RunningError{
 					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
 				},
