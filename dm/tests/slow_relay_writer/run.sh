@@ -27,7 +27,7 @@ function incremental_data() {
 function run() {
 	prepare_data
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/relay/SlowDownWriteDMLRelayLog=return();github.com/pingcap/ticdc/dm/relay/SetHeartbeatInterval=return(5)'
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/relay/SlowDownWriteDMLRelayLog=10*return();github.com/pingcap/ticdc/dm/relay/SetHeartbeatInterval=return(5)'
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -45,8 +45,10 @@ function run() {
 	incremental_data
 	echo "finish incremental_data"
 
-	sleep 20
+	# we injected 10*1s by SlowDownWriteDMLRelayLog, so sleep a longer time
+	sleep 10
 
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "enter SlowDownWriteDMLRelayLog"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"synced\": true" 1

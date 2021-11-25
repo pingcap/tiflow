@@ -1887,7 +1887,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
 			currentGTID, err2 = event.GetGTIDStr(e)
 			if err2 != nil {
-				s.tctx.L().DPanic("failed to get GTID", zap.Error(err2))
+				return err2
 			}
 		}
 		if err2 != nil {

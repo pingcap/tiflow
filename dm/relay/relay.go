@@ -122,7 +122,7 @@ type Relay struct {
 	closed atomic.Bool
 	sync.RWMutex
 
-	// TODO: move it inside meta, and seems meta is no need to be a interface
+	// TODO: move it inside meta, and seems meta is no need to be an interface
 	currentGTID string
 
 	logger log.Logger
@@ -347,7 +347,7 @@ func (r *Relay) process(ctx context.Context) error {
 						err = err2
 						goto checkError
 					}
-					// only skip event of same GTID after recovering
+					// only skip events of same GTID after recovering
 					if res.Event.Header.EventType == replication.GTID_EVENT ||
 						res.Event.Header.EventType == replication.MARIADB_GTID_EVENT {
 						gtidStr, err3 := event.GetGTIDStr(res.Event)
