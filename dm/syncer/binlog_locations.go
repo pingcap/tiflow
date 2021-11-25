@@ -91,6 +91,11 @@ func shouldUpdatePos(e *replication.BinlogEvent) bool {
 		replication.PREVIOUS_GTIDS_EVENT, replication.MARIADB_GTID_LIST_EVENT:
 		return false
 	}
+	if e.Header.Flags&replication.LOG_EVENT_ARTIFICIAL_F != 0 {
+		// ignore events with LOG_EVENT_ARTIFICIAL_F flag(0x0020) set
+		// ref: https://dev.mysql.com/doc/internals/en/binlog-event-flag.html
+		return false
+	}
 
 	return true
 }
@@ -156,6 +161,10 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 
 		l.setCurrentGTID(ev.GSet)
 		l.saveTxnEndLocation(false)
+	case *replication.MariadbGTIDEvent:
+		if !ev.IsDDL() {
+			l.inDML = true
+		}
 	}
 }
 
