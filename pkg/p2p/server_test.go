@@ -17,29 +17,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/proto/p2p"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
 const (
-	defaultTimeout                  = time.Second * 10
-	defaultMessageBatchSizeSmall    = 128
-	defaultMessageBatchSizeMedium   = 512
-	defaultMessageBatchSizeLarge    = 1024
-	defaultMultiClientCount         = 16
-	defaultMultiTopicCount          = 64
-	defaultAddHandlerDelay          = time.Millisecond * 200
-	defaultAddHandlerDelayVariation = time.Millisecond * 100
+	defaultTimeout                = time.Second * 10
+	defaultMessageBatchSizeSmall  = 128
+	defaultMessageBatchSizeMedium = 512
+	defaultMessageBatchSizeLarge  = 1024
+	defaultMultiClientCount       = 16
 )
 
 // read only
@@ -107,99 +101,6 @@ func mustAddHandler(ctx context.Context, t *testing.T, server *MessageServer, to
 
 type testTopicContent struct {
 	Index int64
-}
-
-// TODO refactor these tests to reuse more code
-func TestServerSingleClientSingleTopic(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
-	defer cancel()
-
-	server, newClient, closer := newServerForTesting(t, "test-server-1")
-	defer closer()
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := server.Run(ctx)
-		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
-
-	var lastIndex int64
-	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
-		require.Equal(t, "test-client-1", senderID)
-		require.IsType(t, &testTopicContent{}, i)
-		content := i.(*testTopicContent)
-		swapped := atomic.CompareAndSwapInt64(&lastIndex, content.Index-1, content.Index)
-		require.True(t, swapped)
-		return nil
-	})
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		select {
-		case <-ctx.Done():
-		case err := <-errCh:
-			require.NoError(t, err)
-		}
-	}()
-
-	client, closeClient := newClient()
-	defer closeClient()
-
-	stream, err := client.SendMessage(ctx)
-	require.NoError(t, err)
-
-	err = stream.Send(&p2p.MessagePacket{
-		Meta: &p2p.StreamMeta{
-			SenderId:   "test-client-1",
-			ReceiverId: "test-server-1",
-			Epoch:      1,
-		},
-	})
-	require.NoError(t, err)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var lastAck int64
-		for {
-			resp, err := stream.Recv()
-			require.NoError(t, err)
-			require.Equal(t, p2p.ExitReason_OK, resp.ExitReason)
-
-			acks := resp.Ack
-			require.Len(t, acks, 1)
-			require.Equal(t, "test-topic-1", acks[0].Topic)
-			require.GreaterOrEqual(t, acks[0].LastSeq, lastAck)
-			lastAck = acks[0].LastSeq
-			if lastAck == defaultMessageBatchSizeLarge {
-				closer()
-				cancel()
-				return
-			}
-		}
-	}()
-
-	for i := 0; i < defaultMessageBatchSizeLarge; i++ {
-		content := &testTopicContent{Index: int64(i + 1)}
-		bytes, err := json.Marshal(content)
-		require.NoError(t, err)
-
-		err = stream.Send(&p2p.MessagePacket{
-			Entries: []*p2p.MessageEntry{
-				{
-					Topic:    "test-topic-1",
-					Content:  bytes,
-					Sequence: int64(i + 1),
-				},
-			},
-		})
-		require.NoError(t, err)
-	}
-
-	wg.Wait()
 }
 
 func TestServerMultiClientSingleTopic(t *testing.T) {
@@ -299,113 +200,6 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 	ackWg.Wait()
 	closer()
 	cancel()
-
-	wg.Wait()
-}
-
-func TestServerSingleClientMultiTopic(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
-	defer cancel()
-
-	server, newClient, closer := newServerForTesting(t, "test-server-1")
-	defer closer()
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := server.Run(ctx)
-		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
-
-	lastIndices := make([]int64, defaultMultiTopicCount)
-	for i := 0; i < defaultMultiTopicCount; i++ {
-		i := i
-		topic := fmt.Sprintf("test-topic-%d", i)
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			time.Sleep(defaultAddHandlerDelay + time.Duration(rand.Float64()*float64(defaultAddHandlerDelayVariation)))
-			errCh := mustAddHandler(ctx, t, server, topic, &testTopicContent{}, func(senderID string, value interface{}) error {
-				require.Equal(t, "test-client-1", senderID)
-				require.IsType(t, &testTopicContent{}, value)
-				content := value.(*testTopicContent)
-				old := atomic.SwapInt64(&lastIndices[i], content.Index)
-				require.Equal(t, content.Index-1, old)
-				return nil
-			})
-
-			select {
-			case <-ctx.Done():
-			case err := <-errCh:
-				require.NoError(t, err)
-			}
-		}()
-	}
-
-	client, closeClient := newClient()
-	defer closeClient()
-
-	stream, err := client.SendMessage(ctx)
-	require.NoError(t, err)
-
-	err = stream.Send(&p2p.MessagePacket{
-		Meta: &p2p.StreamMeta{
-			SenderId:   "test-client-1",
-			ReceiverId: "test-server-1",
-			Epoch:      0,
-		},
-	})
-	require.NoError(t, err)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer cancel()
-		defer closer()
-		lastAcks := make(map[string]int64, defaultMultiTopicCount)
-		for {
-			resp, err := stream.Recv()
-			require.NoError(t, err)
-			require.Equal(t, p2p.ExitReason_OK, resp.ExitReason)
-
-			var finishedCount int
-			acks := resp.Ack
-			for _, ack := range acks {
-				require.GreaterOrEqual(t, ack.LastSeq, lastAcks[ack.Topic])
-				lastAcks[ack.Topic] = ack.LastSeq
-				if ack.LastSeq == defaultMessageBatchSizeSmall {
-					finishedCount++
-				}
-			}
-
-			if finishedCount == defaultMultiTopicCount {
-				return
-			}
-		}
-	}()
-
-	for i := 0; i < defaultMessageBatchSizeSmall; i++ {
-		content := &testTopicContent{Index: int64(i + 1)}
-		bytes, err := json.Marshal(content)
-		require.NoError(t, err)
-
-		var entries []*p2p.MessageEntry
-		for j := 0; j < defaultMultiTopicCount; j++ {
-			topic := fmt.Sprintf("test-topic-%d", j)
-			entries = append(entries, &p2p.MessageEntry{
-				Topic:    topic,
-				Content:  bytes,
-				Sequence: int64(i + 1),
-			})
-		}
-		err = stream.Send(&p2p.MessagePacket{
-			Entries: entries,
-		})
-		require.NoError(t, err)
-	}
 
 	wg.Wait()
 }
@@ -520,123 +314,6 @@ func TestServerDeregisterHandler(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
-
-	wg.Wait()
-}
-
-func TestServerSingleClientReconnection(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
-	defer cancel()
-
-	server, newClient, closer := newServerForTesting(t, "test-server-1")
-	defer closer()
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := server.Run(ctx)
-		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
-
-	var lastIndex int64
-	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
-		require.Equal(t, "test-client-1", senderID)
-		require.IsType(t, &testTopicContent{}, i)
-		content := i.(*testTopicContent)
-		require.Equal(t, content.Index-1, atomic.LoadInt64(&lastIndex))
-		atomic.StoreInt64(&lastIndex, content.Index)
-		return nil
-	})
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		select {
-		case <-ctx.Done():
-		case err := <-errCh:
-			require.NoError(t, err)
-		}
-	}()
-
-	var lastAck int64
-	for i := 0; ; i++ {
-		i := i
-		client, closeClient := newClient()
-
-		stream, err := client.SendMessage(ctx)
-		require.NoError(t, err)
-
-		err = stream.Send(&p2p.MessagePacket{
-			Meta: &p2p.StreamMeta{
-				SenderId:   "test-client-1",
-				ReceiverId: "test-server-1",
-				Epoch:      int64(i),
-			},
-		})
-		require.NoError(t, err)
-
-		var subWg sync.WaitGroup
-		subWg.Add(1)
-		go func() {
-			defer subWg.Done()
-			defer closeClient()
-
-			startSeq := atomic.LoadInt64(&lastAck) + 1
-			for j := startSeq; j < startSeq+defaultMessageBatchSizeSmall; j++ {
-				content := &testTopicContent{Index: j}
-				bytes, err := json.Marshal(content)
-				require.NoError(t, err)
-
-				err = stream.Send(&p2p.MessagePacket{
-					Entries: []*p2p.MessageEntry{
-						{
-							Topic:    "test-topic-1",
-							Content:  bytes,
-							Sequence: j,
-						},
-					},
-				})
-				require.NoError(t, err)
-			}
-			// Makes sure that some ACKs have been sent
-			time.Sleep(defaultServerConfig4Testing.AckInterval * 2)
-		}()
-
-		subWg.Add(1)
-		go func() {
-			defer subWg.Done()
-			for {
-				resp, err := stream.Recv()
-				if err != nil {
-					log.Warn("Recv returned error", zap.Error(err), zap.Int64("lastAck", atomic.LoadInt64(&lastAck)))
-					return
-				}
-
-				require.Equal(t, p2p.ExitReason_OK, resp.ExitReason)
-
-				acks := resp.Ack
-				require.Len(t, acks, 1)
-				require.Equal(t, "test-topic-1", acks[0].Topic)
-				require.GreaterOrEqual(t, acks[0].LastSeq, atomic.LoadInt64(&lastAck))
-				atomic.StoreInt64(&lastAck, acks[0].LastSeq)
-				if lastAck == defaultMessageBatchSizeLarge {
-					return
-				}
-			}
-		}()
-
-		subWg.Wait()
-		closeClient()
-
-		if atomic.LoadInt64(&lastAck) == defaultMessageBatchSizeLarge {
-			log.Info("test finished")
-			break
-		}
-	}
-
-	closer()
-	cancel()
 
 	wg.Wait()
 }
