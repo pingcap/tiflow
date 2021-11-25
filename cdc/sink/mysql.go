@@ -338,14 +338,31 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 func needSwitchDB(ddl *model.DDLEvent) bool {
-	if len(ddl.TableInfo.Schema) == 0 {
-		return false
-	}
-	if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
-		return false
-	}
-	return true
+	return len(ddl.TableInfo.Table) != 0
+	//if len(ddl.TableInfo.Schema) == 0 {
+	//	return false
+	//}
+	//if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
+	//	return false
+	//}
+	//return true
 }
+
+//func (s *simpleMySQLSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+//	var sql string
+//	if len(ddl.TableInfo.Table) == 0 {
+//		sql = ddl.Query
+//	} else {
+//		sql = fmt.Sprintf("use %s;%s", ddl.TableInfo.Schema, ddl.Query)
+//	}
+//	_, err := s.db.ExecContext(ctx, sql)
+//	log.Info("execute ddl", zap.String("sql", sql))
+//	if err != nil && errorutil.IsIgnorableMySQLDDLError(err) {
+//		log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
+//		return nil
+//	}
+//	return err
+//}
 
 // adjustSQLMode adjust sql mode according to sink config.
 func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
