@@ -93,13 +93,13 @@ func newBinlogReader(logger log.Logger, cfg *BinlogReaderConfig, relay Process) 
 	newtctx := tcontext.NewContext(ctx, logger.WithFields(zap.String("component", "binlog reader")))
 
 	binlogReader := &BinlogReader{
-		cfg:       cfg,
-		parser:    parser,
-		indexPath: path.Join(cfg.RelayDir, utils.UUIDIndexFilename),
-		cancel:    cancel,
-		tctx:      newtctx,
-		notifyCh:  make(chan interface{}, 1),
-		relay:     relay,
+		cfg:                 cfg,
+		parser:              parser,
+		indexPath:           path.Join(cfg.RelayDir, utils.UUIDIndexFilename),
+		cancel:              cancel,
+		tctx:                newtctx,
+		notifyCh:            make(chan interface{}, 1),
+		relay:               relay,
 		lastFileGracefulEnd: true,
 	}
 	binlogReader.relay.RegisterListener(binlogReader)
@@ -498,7 +498,7 @@ func (r *BinlogReader) parseFileAsPossible(ctx context.Context, s *LocalStreamer
 	}
 }
 
-// parseFile parses single relay log file from specified offset
+// parseFile parses single relay log file from specified offset.
 func (r *BinlogReader) parseFile(
 	ctx context.Context,
 	s *LocalStreamer,
