@@ -453,6 +453,7 @@ func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEve
 	if err := json.Unmarshal(b.value, data); err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	b.ty = model.MqMessageTypeUnknown
 	b.value = nil
 	return canalFlatMessage2RowChangedEvent(data)

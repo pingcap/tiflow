@@ -192,6 +192,13 @@ func formatColumnVal(c column) column {
 			}
 			c.Value = uint64(intNum)
 		}
+		if s, ok := c.Value.(string); ok {
+			intNum, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+			}
+			c.Value = uint64(intNum)
+		}
 	}
 	return c
 }
