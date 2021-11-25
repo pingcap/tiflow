@@ -85,6 +85,7 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
 		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
 	c.Assert(err, check.IsNil)
@@ -199,6 +200,7 @@ func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
 		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
 	c.Assert(err, check.IsNil)
@@ -378,6 +380,7 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
 		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
 	c.Assert(err, check.IsNil)
@@ -410,6 +413,7 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 	changefeedInfo1 := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
 		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
 	}
 	changefeedStr1, err := changefeedInfo1.Marshal()
 	c.Assert(err, check.IsNil)

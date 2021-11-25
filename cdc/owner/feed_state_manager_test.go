@@ -35,7 +35,7 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
-		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}, State: model.StateNormal}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		c.Assert(status, check.IsNil)
@@ -110,7 +110,7 @@ func (s *feedStateManagerSuite) TestMarkFinished(c *check.C) {
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
-		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}, State: model.StateNormal}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		c.Assert(status, check.IsNil)
@@ -138,7 +138,7 @@ func (s *feedStateManagerSuite) TestCleanUpInfos(c *check.C) {
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
-		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}, State: model.StateNormal}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		c.Assert(status, check.IsNil)
@@ -181,7 +181,7 @@ func (s *feedStateManagerSuite) TestHandleError(c *check.C) {
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
-		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}, State: model.StateNormal}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		c.Assert(status, check.IsNil)

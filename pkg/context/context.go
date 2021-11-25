@@ -196,6 +196,7 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 			Info: &model.ChangeFeedInfo{
 				StartTs: oracle.GoTimeToTS(time.Now()),
 				Config:  config.GetDefaultReplicaConfig(),
+				State:   model.StateNormal,
 			},
 		})
 	}
