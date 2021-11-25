@@ -44,6 +44,9 @@ func newClientBatchSender(stream clientStream, maxEntryCount, maxSizeBytes int) 
 	}
 }
 
+// Append appends a message to the batch. If the resulting batch contains more than
+// maxEntryCount messages or the total size of messages exceeds maxSizeBytes,
+// the batch is flushed.
 func (s *clientBatchSenderImpl) Append(msg messageEntry) error {
 	s.buffer = append(s.buffer, msg)
 	s.sizeBytes += msg.Size()
@@ -54,6 +57,7 @@ func (s *clientBatchSenderImpl) Append(msg messageEntry) error {
 	return nil
 }
 
+// Flush flushes the batch.
 func (s *clientBatchSenderImpl) Flush() error {
 	if len(s.buffer) == 0 {
 		return nil

@@ -27,10 +27,15 @@ import (
 )
 
 type clientConnectOptions struct {
-	network    string
-	addr       string
+	// network and addr are similar to the parameters
+	// to net.Dial.
+	network string
+	addr    string
+
+	// credential is used to setup the connection to the gRPC server.
 	credential *security.Credential
-	timeout    time.Duration
+	// timeout specifies the DialTimeout of the connection.
+	timeout time.Duration
 }
 
 type cancelFn = func()
@@ -47,6 +52,8 @@ func newClientConnector() clientConnector {
 	return &clientConnectorImpl{}
 }
 
+// Connect creates a gRPC client connection to the server.
+// the returned cancelFn must be called to close the connection.
 func (c *clientConnectorImpl) Connect(opts clientConnectOptions) (proto.CDCPeerToPeerClient, cancelFn, error) {
 	securityOption, err := opts.credential.ToGRPCDialOption()
 	if err != nil {
