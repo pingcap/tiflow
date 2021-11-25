@@ -511,6 +511,7 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 		Table:  *flatMessage.getTable(),
 	}
 
+	// update event was split into a `delete` and `insert` event
 	var err error
 	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(), flatMessage.getMySQLType(), flatMessage.getJavaSQLType())
 	if err != nil {
@@ -520,7 +521,6 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 	if err != nil {
 		return nil, err
 	}
-
 	return result, err
 }
 
