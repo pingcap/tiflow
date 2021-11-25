@@ -3175,7 +3175,7 @@ tags = ["internal", "low"]
 [error.DM-scheduler-46029]
 message = "the source has `start-relay` with worker name for workers %v, so it can't `stop-relay` without worker name now"
 description = ""
-workaround = "Please specify worker names for `start-relay`."
+workaround = "Please specify worker names for `stop-relay`."
 tags = ["internal", "low"]
 
 [error.DM-scheduler-46030]

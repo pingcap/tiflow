@@ -1405,7 +1405,7 @@ func (t *testScheduler) TestRelayWithWithoutWorker(c *C) {
 	c.Assert(worker1.Stage(), Equals, WorkerBound)
 	c.Assert(worker2.Stage(), Equals, WorkerFree)
 
-	// step 4: check when enable-relay = true, can't start/stop relay without worker name
+	// step 4: check when enable-relay = true, can't start/stop relay with worker name
 	c.Assert(s.StartRelay(sourceID1, []string{}), IsNil)
 
 	err := s.StartRelay(sourceID1, []string{workerName1})
