@@ -141,6 +141,14 @@ func (c *column) ToSinkColumn(name string) *model.Column {
 			}
 		}
 		col.Value = []byte(str)
+	case mysql.TypeBit:
+		if s, ok := c.Value.(string); ok {
+			intNum, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+			}
+			c.Value = uint64(intNum)
+		}
 	default:
 		col.Value = c.Value
 	}
@@ -187,13 +195,6 @@ func formatColumnVal(c column) column {
 	case mysql.TypeBit:
 		if s, ok := c.Value.(json.Number); ok {
 			intNum, err := s.Int64()
-			if err != nil {
-				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
-			}
-			c.Value = uint64(intNum)
-		}
-		if s, ok := c.Value.(string); ok {
-			intNum, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
 				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
