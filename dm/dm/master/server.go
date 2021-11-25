@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
@@ -118,7 +118,7 @@ type Server struct {
 
 	closed atomic.Bool
 
-	echo *echo.Echo // injected in `InitOpenAPIHandles`
+	openapiHandles *gin.Engine // injected in `InitOpenAPIHandles`
 }
 
 // NewServer creates a new Server.
@@ -194,7 +194,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		if initOpenAPIErr := s.InitOpenAPIHandles(); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
-		userHandles["/api/v1/"] = s.echo
+		userHandles["/api/v1/"] = s.openapiHandles
 	}
 
 	// gRPC API server
@@ -1490,6 +1490,9 @@ func extractWorkerError(result *pb.ProcessResult) error {
 //     * stop: related task can't be found in worker's result
 // Relay:
 //   OperateRelay:
+//     * start: related relay status is running
+//     * stop: related relay status can't be found in worker's result
+//   OperateWorkerRelay:
 //     * pause: related relay status is paused
 //     * resume: related relay status is running
 // returns OK, error message of QueryStatusResponse, raw QueryStatusResponse, error that not from QueryStatusResponse.
@@ -1527,6 +1530,13 @@ func (s *Server) waitOperationOk(
 		case pb.RelayOp_PauseRelay:
 			expect = pb.Stage_Paused
 		case pb.RelayOp_StopRelay:
+			expect = pb.Stage_Stopped
+		}
+	case *pb.OperateRelayRequest:
+		switch req.Op {
+		case pb.RelayOpV2_StartRelayV2:
+			expect = pb.Stage_Running
+		case pb.RelayOpV2_StopRelayV2:
 			expect = pb.Stage_Stopped
 		}
 	default:
@@ -1642,6 +1652,24 @@ func (s *Server) waitOperationOk(
 				} else {
 					return false, "", queryResp, terror.ErrMasterOperRespNotSuccess.Generate("relay is disabled for this source")
 				}
+			case *pb.OperateRelayRequest:
+				// including the situation that source status is nil and relay status is nil
+				relayStatus := queryResp.GetSourceStatus().GetRelayStatus()
+				if relayStatus == nil {
+					if expect == pb.Stage_Stopped {
+						return true, "", queryResp, nil
+					}
+				} else {
+					msg := ""
+					if err2 := extractWorkerError(relayStatus.Result); err2 != nil {
+						msg = err2.Error()
+					}
+					ok := relayStatus.Stage == expect
+
+					if ok || msg != "" {
+						return ok, msg, queryResp, nil
+					}
+				}
 			}
 			log.L().Info("fail to get expect operation result", zap.Int("retryNum", num), zap.String("task", taskName),
 				zap.String("source", sourceID), zap.Stringer("expect", expect), zap.Stringer("resp", queryResp))
@@ -1701,9 +1729,12 @@ func (s *Server) getSourceRespsAfterOperation(ctx context.Context, taskName stri
 			defer wg.Done()
 			source1, _ := args[0].(string)
 			worker1, _ := args[1].(string)
-			workerCli := s.scheduler.GetWorkerBySource(source1)
-			if workerCli == nil && worker1 != "" {
+			var workerCli *scheduler.Worker
+			if worker1 != "" {
 				workerCli = s.scheduler.GetWorkerByName(worker1)
+			}
+			if workerCli == nil {
+				workerCli = s.scheduler.GetWorkerBySource(source1)
 			}
 			sourceResp := s.handleOperationResult(ctx, workerCli, taskName, source1, req)
 			sourceResp.Source = source1 // may return other source's ID during stop worker
@@ -2243,6 +2274,30 @@ func (s *Server) OperateRelay(ctx context.Context, req *pb.OperateRelayRequest) 
 		return resp2, nil
 	}
 	resp2.Result = true
+	// TODO: now we make sure req.Source isn't empty and len(req.Worker)>=1 in dmctl,
+	// we need refactor the logic here if this behavior changed in the future
+	// TODO: if len(req.Worker)==0 for a quick path, we must adjust req.Worker here
+	var workerToCheck []string
+	for _, worker := range req.Worker {
+		w := s.scheduler.GetWorkerByName(worker)
+		if w != nil && w.Stage() != scheduler.WorkerOffline {
+			workerToCheck = append(workerToCheck, worker)
+		} else {
+			resp2.Sources = append(resp2.Sources, &pb.CommonWorkerResponse{
+				Result: true,
+				Msg:    "source relay is operated but the bounded worker is offline",
+				Source: req.Source,
+				Worker: worker,
+			})
+		}
+	}
+	if len(workerToCheck) > 0 {
+		sources := make([]string, len(req.Worker))
+		for i := range workerToCheck {
+			sources[i] = req.Source
+		}
+		resp2.Sources = append(resp2.Sources, s.getSourceRespsAfterOperation(ctx, "", sources, workerToCheck, req)...)
+	}
 	return resp2, nil
 }
 
