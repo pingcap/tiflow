@@ -103,10 +103,10 @@ function ddl_test() {
 
 	echo $ddl >${WORK_DIR}/ddl_temp.sql
 	ensure 10 check_ddl_executed "${WORK_DIR}/cdc.log" "${WORK_DIR}/ddl_temp.sql" true
-	ddl_start_ts=$(grep "Execute DDL succeeded" ${WORK_DIR}/cdc.log | tail -n 1 | grep -oE '"StartTs\\":[0-9]{18}' | awk -F: '{print $(NF)}')
+	ddl_finished_ts=$(grep "Execute DDL succeeded" ${WORK_DIR}/cdc.log | tail -n 1 | grep -oE '"CommitTs\\":[0-9]{18}' | awk -F: '{print $(NF)}')
 	cdc cli changefeed remove --changefeed-id=${changefeedid}
-	changefeedid=$(cdc cli changefeed create --no-confirm --start-ts=${ddl_start_ts} --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
-	echo "create new changefeed ${changefeedid} from ${ddl_start_ts}"
+	changefeedid=$(cdc cli changefeed create --no-confirm --start-ts=${ddl_finished_ts} --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
+	echo "create new changefeed ${changefeedid} from ${ddl_finished_ts}"
 	ensure 10 check_ts_forward $changefeedid
 	ensure 10 check_ddl_executed "${WORK_DIR}/cdc.log" "${WORK_DIR}/ddl_temp.sql" $is_reentrant
 }
