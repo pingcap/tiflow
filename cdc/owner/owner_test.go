@@ -151,6 +151,7 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
 		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
 	c.Assert(err, check.IsNil)

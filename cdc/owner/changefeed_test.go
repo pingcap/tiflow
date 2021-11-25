@@ -224,6 +224,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 		Info: &model.ChangeFeedInfo{
 			StartTs: startTs,
 			Config:  config.GetDefaultReplicaConfig(),
+			State:   model.StateNormal,
 		},
 	})
 
