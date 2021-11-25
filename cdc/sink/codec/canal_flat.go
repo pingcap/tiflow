@@ -407,8 +407,9 @@ func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 type CanalFlatEventBatchDecoder struct {
 	key                 []byte
 	value               []byte
-	ty                  model.MqMessageType
 	enableTiDBExtension bool
+
+	ty model.MqMessageType
 }
 
 func NewCanalFlatEventBatchDecoder(key, value []byte, enableTiDBExtension bool) EventBatchDecoder {
