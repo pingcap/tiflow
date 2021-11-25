@@ -76,7 +76,9 @@ func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.Re
 	if err != nil {
 		return nil, err
 	}
-	dsn.Params["allow_auto_random_explicit_insert"] = autoRandom
+	if autoRandom != "" {
+		dsn.Params["allow_auto_random_explicit_insert"] = autoRandom
+	}
 
 	db, err = sql.Open("mysql", dsn.FormatDSN())
 	if err != nil {
