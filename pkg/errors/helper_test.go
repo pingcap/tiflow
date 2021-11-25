@@ -32,9 +32,9 @@ func TestWrapError(t *testing.T) {
 			expected string
 			args     []interface{}
 		}{
-			{ErrDecodeFailed, nil, true, "", []interface{}{}},
+			{ErrDecodeFailed, nil, true, "", nil},
 			{ErrDecodeFailed, err, false, "[CDC:ErrDecodeFailed]decode failed: args data: cause error", []interface{}{"args data"}},
-			{ErrWriteTsConflict, err, false, "[CDC:ErrWriteTsConflict]write ts conflict: cause error", []interface{}{}},
+			{ErrWriteTsConflict, err, false, "[CDC:ErrWriteTsConflict]write ts conflict: cause error", nil},
 		}
 	)
 	for _, tc := range testCases {
