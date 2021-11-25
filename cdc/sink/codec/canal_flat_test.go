@@ -150,28 +150,9 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 	c.Assert(withExtension.Extensions, check.NotNil)
 	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseUpdate.CommitTs)
 
-	message, err = encoder.newFlatMessageForDML(testCaseUpdate2)
+	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
 	c.Assert(err, check.IsNil)
-
-	openProtocolEncoder := NewJSONEventBatchEncoder()
-	err = openProtocolEncoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
-	c.Assert(err, check.IsNil)
-
-	result, err := openProtocolEncoder.AppendRowChangedEvent(testCaseUpdate2)
-	c.Assert(result, check.Equals, EncoderNoOperation)
-	openProtocolEncoder.AppendResolvedEvent(429352262595510279)
-	resolved := openProtocolEncoder.Build()
-
-	decoder, err := NewJSONEventBatchDecoder(resolved[0].Key, resolved[0].Value)
-	c.Assert(err, check.IsNil)
-	ty, hasNext, err := decoder.HasNext()
-	c.Assert(err, check.IsNil)
-	c.Assert(hasNext, check.IsTrue)
-	c.Assert(ty, check.Equals, model.MqMessageTypeRow)
-
-	consumed, err := decoder.NextRowChangedEvent()
-	c.Assert(err, check.IsNil)
-	c.Assert(consumed, check.NotNil)
+	c.Assert(message, check.NotNil)
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C) {
