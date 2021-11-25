@@ -341,7 +341,7 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	if len(ddl.TableInfo.Schema) == 0 {
 		return false
 	}
-	if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema || ddl.Type == timodel.ActionNone {
+	if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
 		return false
 	}
 	return true
