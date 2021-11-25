@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	timodel "github.com/pingcap/tidb/parser/model"
+
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -338,14 +340,13 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 func needSwitchDB(ddl *model.DDLEvent) bool {
-	return len(ddl.TableInfo.Table) != 0
-	//if len(ddl.TableInfo.Schema) == 0 {
-	//	return false
-	//}
-	//if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
-	//	return false
-	//}
-	//return true
+	if len(ddl.TableInfo.Schema) == 0 {
+		return false
+	}
+	if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
+		return false
+	}
+	return true
 }
 
 // adjustSQLMode adjust sql mode according to sink config.
