@@ -96,9 +96,10 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	ctx := context.Background()
 
 	TimeAcquirer := pdtime.NewTimeAcquirer(mockPDClient)
-	go TimeAcquirer.Run(ctx)
+	go func() {
+		TimeAcquirer.Run(ctx)
+	}()
 	time.Sleep(1 * time.Second)
-	defer TimeAcquirer.Stop()
 
 	cCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		TimeAcquirer: TimeAcquirer,
@@ -116,4 +117,5 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	err = gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)
 	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
+	TimeAcquirer.Stop()
 }
