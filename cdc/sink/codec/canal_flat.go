@@ -83,6 +83,7 @@ type canalFlatMessageInterface interface {
 	getData() map[string]interface{}
 	getMySQLType() map[string]string
 	getJavaSQLType() map[string]int32
+	getEventType() canal.EventType
 }
 
 // adapted from https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java#L1
@@ -152,6 +153,10 @@ func (c *canalFlatMessage) getMySQLType() map[string]string {
 
 func (c *canalFlatMessage) getJavaSQLType() map[string]int32 {
 	return c.SQLType
+}
+
+func (c *canalFlatMessage) getEventType() canal.EventType {
+	return canal.EventType(canal.EventType_value[c.EventType])
 }
 
 type tidbExtension struct {
@@ -516,7 +521,7 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 		return nil, err
 	}
 
-	return result, nil
+	return result, err
 }
 
 func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType map[string]string, javaSQLType map[string]int32) ([]*model.Column, error) {
