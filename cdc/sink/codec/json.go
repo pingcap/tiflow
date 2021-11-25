@@ -147,7 +147,7 @@ func (c *column) ToSinkColumn(name string) *model.Column {
 			if err != nil {
 				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
-			c.Value = uint64(intNum)
+			col.Value = uint64(intNum)
 		}
 	default:
 		col.Value = c.Value
