@@ -265,6 +265,7 @@ function run_dmctl_with_retry() {
 function ensure_start_relay() {
 	# manually enable relay for source1 after v2.0.2
 	if [[ "$PRE_VER" != "v2.0.0" ]] && [[ "$PRE_VER" != "v2.0.1" ]]; then
+	  # always use CUR_VER, because we might use tiup mirror in previous steps.
 		run_dmctl_with_retry $CUR_VER "start-relay -s mysql-replica-01" "\"result\": true" 2
 	fi
 }
