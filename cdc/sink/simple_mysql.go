@@ -72,7 +72,13 @@ func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.Re
 	}
 	defer testDB.Close()
 
-	db, err = sql.Open("mysql", dsnStr)
+	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
+	if err != nil {
+		return nil, err
+	}
+	dsn.Params["allow_auto_random_explicit_insert"] = autoRandom
+
+	db, err = sql.Open("mysql", dsn.FormatDSN())
 	if err != nil {
 		return nil, errors.Annotate(
 			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
