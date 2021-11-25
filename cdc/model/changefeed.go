@@ -72,7 +72,7 @@ func (s FeedState) ToInt() int {
 	return -1
 }
 
-// Resumable specifies whether the current state of the changefeed can be resumed.
+// Resumable specifies whether the current state can be resumed.
 func (s FeedState) Resumable() bool {
 	switch s {
 	case StateFailed, StateError, StateStopped, StateFinished:

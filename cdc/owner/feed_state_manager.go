@@ -55,16 +55,19 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) {
 	}
 
 	shouldBeRunning, s, needsPatch := shouldRunning(m.state.Info)
-	// When upgrading from an old owner to new owner, the state is not set.
+	// When upgrading from the old owner to the new owner, the state and admin job type will be inconsistent.
 	if needsPatch {
-		log.Info("handle old owner state patch", zap.String("old state", string(m.state.Info.State)), zap.String("new state", string(s)))
+		log.Info("handle old owner inconsistent state",
+			zap.String("old state", string(m.state.Info.State)),
+			zap.String("admin job type", m.state.Info.AdminJobType.String()),
+			zap.String("new state", string(s)))
 		m.patchState(s)
 	}
 	if !shouldBeRunning {
 		if s == model.StateRemoved {
 			m.shouldBeRemoved = true
 		}
-		m.shouldBeRunning = shouldBeRunning
+		m.shouldBeRunning = false
 		return
 	}
 
@@ -317,6 +320,8 @@ func shouldRunning(info *model.ChangeFeedInfo) (bool, model.FeedState, bool) {
 	// Otherwise, we will see that the old version of the task is paused and then upgraded,
 	// and the task is automatically resumed after the upgrade.
 	state := info.State
+	// Upgrading from an old owner, we need to deal with cases where the state is normal,
+	// but actually contains errors and does not match the admin job type.
 	if state == model.StateNormal {
 		switch info.AdminJobType {
 		// This corresponds to the case of failure or error.

@@ -356,3 +356,41 @@ func TestGetTs(t *testing.T) {
 	status := &ChangeFeedStatus{CheckpointTs: checkpointTs}
 	require.Equal(t, info.GetCheckpointTs(status), checkpointTs)
 }
+
+func TestFeedStateResumable(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		state    FeedState
+		expected bool
+	}{
+		{
+			state:    StateFailed,
+			expected: true,
+		},
+		{
+			state:    StateError,
+			expected: true,
+		},
+		{
+			state:    StateFinished,
+			expected: true,
+		},
+		{
+			state:    StateStopped,
+			expected: true,
+		},
+		{
+			state:    StateRemoved,
+			expected: false,
+		},
+		{
+			state:    StateNormal,
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		require.Equal(t, tc.state.Resumable(), tc.expected)
+	}
+}
