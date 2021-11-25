@@ -265,6 +265,16 @@ func (s *feedStateManagerSuite) TestShouldRunning(c *check.C) {
 	}{
 		{
 			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminNone,
+				State:        model.StateNormal,
+				Error:        nil,
+			},
+			expectedShouldBeRunning: true,
+			expectedState:           model.StateNormal,
+			expectedNeedsPatch:      false,
+		},
+		{
+			info: &model.ChangeFeedInfo{
 				AdminJobType: model.AdminResume,
 				State:        model.StateNormal,
 				Error:        nil,
@@ -276,46 +286,6 @@ func (s *feedStateManagerSuite) TestShouldRunning(c *check.C) {
 		{
 			info: &model.ChangeFeedInfo{
 				AdminJobType: model.AdminNone,
-				State:        model.StateFailed,
-				Error:        nil,
-			},
-			expectedShouldBeRunning: false,
-			expectedState:           model.StateFailed,
-			expectedNeedsPatch:      false,
-		},
-		{
-			info: &model.ChangeFeedInfo{
-				AdminJobType: model.AdminNone,
-				State:        model.StateError,
-				Error:        nil,
-			},
-			expectedShouldBeRunning: false,
-			expectedState:           model.StateError,
-			expectedNeedsPatch:      false,
-		},
-		{
-			info: &model.ChangeFeedInfo{
-				AdminJobType: model.AdminStop,
-				State:        model.StateStopped,
-				Error:        nil,
-			},
-			expectedShouldBeRunning: false,
-			expectedState:           model.StateStopped,
-			expectedNeedsPatch:      false,
-		},
-		{
-			info: &model.ChangeFeedInfo{
-				AdminJobType: model.AdminRemove,
-				State:        model.StateRemoved,
-				Error:        nil,
-			},
-			expectedShouldBeRunning: false,
-			expectedState:           model.StateRemoved,
-			expectedNeedsPatch:      false,
-		},
-		{
-			info: &model.ChangeFeedInfo{
-				AdminJobType: model.AdminNone,
 				State:        "",
 				Error: &model.RunningError{
 					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
@@ -364,7 +334,7 @@ func (s *feedStateManagerSuite) TestShouldRunning(c *check.C) {
 		{
 			info: &model.ChangeFeedInfo{
 				AdminJobType: model.AdminStop,
-				State:        "",
+				State:        model.StateNormal,
 				Error:        nil,
 			},
 			expectedShouldBeRunning: false,
@@ -374,7 +344,7 @@ func (s *feedStateManagerSuite) TestShouldRunning(c *check.C) {
 		{
 			info: &model.ChangeFeedInfo{
 				AdminJobType: model.AdminFinish,
-				State:        "",
+				State:        model.StateNormal,
 				Error:        nil,
 			},
 			expectedShouldBeRunning: false,
@@ -384,7 +354,7 @@ func (s *feedStateManagerSuite) TestShouldRunning(c *check.C) {
 		{
 			info: &model.ChangeFeedInfo{
 				AdminJobType: model.AdminRemove,
-				State:        "",
+				State:        model.StateNormal,
 				Error:        nil,
 			},
 			expectedShouldBeRunning: false,
@@ -393,22 +363,12 @@ func (s *feedStateManagerSuite) TestShouldRunning(c *check.C) {
 		},
 		{
 			info: &model.ChangeFeedInfo{
-				AdminJobType: model.AdminNone,
-				State:        "",
+				AdminJobType: model.AdminRemove,
+				State:        model.StateNormal,
 				Error:        nil,
 			},
-			expectedShouldBeRunning: true,
-			expectedState:           model.StateNormal,
-			expectedNeedsPatch:      true,
-		},
-		{
-			info: &model.ChangeFeedInfo{
-				AdminJobType: model.AdminResume,
-				State:        "",
-				Error:        nil,
-			},
-			expectedShouldBeRunning: true,
-			expectedState:           model.StateNormal,
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateRemoved,
 			expectedNeedsPatch:      true,
 		},
 	}
