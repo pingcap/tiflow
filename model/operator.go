@@ -12,6 +12,7 @@ const (
 
 // benchmark operators
 type TableReaderOp struct {
+	FlowID   string `json:"flow-id"`
 	Addr     string `json:"address"`
 	TableNum int32  `json:"table-num"`
 }

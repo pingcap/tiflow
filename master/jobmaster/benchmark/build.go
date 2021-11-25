@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/model"
@@ -24,6 +25,7 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 	tableTasks := make([]*model.Task, 0)
 	for _, addr := range config.Servers {
 		tableOp := model.TableReaderOp{
+			FlowID:   config.FlowID,
 			Addr:     addr,
 			TableNum: int32(config.TableNum),
 		}
@@ -32,11 +34,12 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 			return nil, err
 		}
 		t := &model.Task{
-			JobID: job.ID,
-			ID:    model.TaskID(idAllocator.AllocID()),
-			Cost:  1,
-			Op:    js,
-			OpTp:  model.TableReaderType,
+			FlowID: config.FlowID,
+			JobID:  job.ID,
+			ID:     model.TaskID(idAllocator.AllocID()),
+			Cost:   1,
+			Op:     js,
+			OpTp:   model.TableReaderType,
 		}
 		tableTasks = append(tableTasks, t)
 	}
@@ -53,27 +56,29 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 			return nil, err
 		}
 		hashTask := &model.Task{
-			JobID: job.ID,
-			ID:    model.TaskID(idAllocator.AllocID()),
-			Cost:  1,
-			Op:    js,
-			OpTp:  model.HashType,
+			FlowID: config.FlowID,
+			JobID:  job.ID,
+			ID:     model.TaskID(idAllocator.AllocID()),
+			Cost:   1,
+			Op:     js,
+			OpTp:   model.HashType,
 		}
 		hashTasks = append(hashTasks, hashTask)
 
 		sinkOp := model.TableSinkOp{
-			File: fmt.Sprintf("/tmp/table_%d", i),
+			File: filepath.Join("/tmp", "dataflow", config.FlowID, fmt.Sprintf("table_%d", i)),
 		}
 		js, err = json.Marshal(sinkOp)
 		if err != nil {
 			return nil, err
 		}
 		sinkTask := &model.Task{
-			JobID: job.ID,
-			ID:    model.TaskID(idAllocator.AllocID()),
-			Cost:  1,
-			Op:    js,
-			OpTp:  model.TableSinkType,
+			FlowID: config.FlowID,
+			JobID:  job.ID,
+			ID:     model.TaskID(idAllocator.AllocID()),
+			Cost:   1,
+			Op:     js,
+			OpTp:   model.TableSinkType,
 		}
 		sinkTasks = append(sinkTasks, sinkTask)
 		connectTwoTask(hashTask, sinkTask)

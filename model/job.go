@@ -21,6 +21,9 @@ func (j *Job) ToPB() *pb.SubmitBatchTasksRequest {
 }
 
 type Task struct {
+	// FlowID is unique for a same dataflow, passed from submitted job
+	FlowID string
+
 	ID      TaskID
 	JobID   JobID
 	Outputs []TaskID

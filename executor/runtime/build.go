@@ -24,6 +24,7 @@ func newHashOp(cfg *model.HashOp) operator {
 
 func newReadTableOp(cfg *model.TableReaderOp) operator {
 	return &opReceive{
+		flowID:   cfg.FlowID,
 		addr:     cfg.Addr,
 		data:     make(chan *Record, 1024),
 		tableCnt: cfg.TableNum,

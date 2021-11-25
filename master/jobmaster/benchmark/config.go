@@ -20,6 +20,8 @@ func NewConfig() *Config {
 type Config struct {
 	flagSet *flag.FlagSet `json:"-"`
 
+	// FlowID is a unique identifier of submitted job
+	FlowID   string   `toml:"flow-id" json:"flow-id"`
 	TableNum int      `toml:"table-num" json:"table-num"`
 	Servers  []string `toml:"servers"   json:"servers"`
 	Timeout  int      `toml:"timeout"   json:"timeout"`

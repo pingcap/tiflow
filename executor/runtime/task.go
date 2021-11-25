@@ -18,6 +18,7 @@ const (
 )
 
 type Record struct {
+	flowID  string
 	start   time.Time
 	end     time.Time
 	payload []byte
@@ -26,7 +27,7 @@ type Record struct {
 }
 
 func (r *Record) toString() string {
-	return fmt.Sprintf("start %s end %s payload %s\n", r.start.String(), r.end.String(), string(r.payload))
+	return fmt.Sprintf("[flow=%s] [start=%s] [end=%s] [payload=%s]\n", r.flowID, r.start.String(), r.end.String(), string(r.payload))
 }
 
 type Channel struct {
