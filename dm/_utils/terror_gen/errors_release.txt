@@ -179,6 +179,7 @@ ErrConfigGenColumnMapping,[code=20046:class=config:scope=internal:level=high], "
 ErrConfigInvalidChunkFileSize,[code=20047:class=config:scope=internal:level=high], "Message: invalid `chunk-filesize` %v, Workaround: Please check the `chunk-filesize` config in task configuration file."
 ErrConfigOnlineDDLInvalidRegex,[code=20048:class=config:scope=internal:level=high], "Message: config '%s' regex pattern '%s' invalid, reason: %s, Workaround: Please check if params is correctly in the configuration file."
 ErrConfigOnlineDDLMistakeRegex,[code=20049:class=config:scope=internal:level=high], "Message: online ddl sql '%s' invalid, table %s fail to match '%s' online ddl regex, Workaround: Please update your `shadow-table-rules` or `trash-table-rules` in the configuration file."
+ErrTaskConfigTemplateExists,[code=20050:class=config:scope=internal:level=low], "Message: the task config template for '%s' already exists, Workaround: If you want to override it, pleaset use the overwite flag."
 ErrBinlogExtractPosition,[code=22001:class=binlog-op:scope=internal:level=high]
 ErrBinlogInvalidFilename,[code=22002:class=binlog-op:scope=internal:level=high], "Message: invalid binlog filename"
 ErrBinlogParsePosFromStr,[code=22003:class=binlog-op:scope=internal:level=high]

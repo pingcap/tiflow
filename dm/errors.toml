@@ -1084,6 +1084,12 @@ description = ""
 workaround = "Please update your `shadow-table-rules` or `trash-table-rules` in the configuration file."
 tags = ["internal", "high"]
 
+[error.DM-config-20050]
+message = "the task config template for '%s' already exists"
+description = ""
+workaround = "If you want to override it, pleaset use the overwite flag."
+tags = ["internal", "low"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""

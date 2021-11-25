@@ -88,13 +88,17 @@ var (
 	// tb2:                       +a +b +c
 	// tb3:          +a +b +c
 	ShardDDLOptimismDroppedColumnsKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/shardddl-optimism/dropped-columns/")
+
+	// TaskConfigTemplateKeyAdapter is used to store the config of the task config template, now it's only used for WebUI.
+	// k/v: Encode(task-name) -> openapi.Task.
+	TaskConfigTemplateKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/task-config-template/")
 )
 
 func keyAdapterKeysLen(s KeyAdapter) int {
 	switch s {
 	case WorkerRegisterKeyAdapter, UpstreamConfigKeyAdapter, UpstreamBoundWorkerKeyAdapter,
 		WorkerKeepAliveKeyAdapter, StageRelayKeyAdapter,
-		UpstreamLastBoundWorkerKeyAdapter, UpstreamRelayWorkerKeyAdapter:
+		UpstreamLastBoundWorkerKeyAdapter, UpstreamRelayWorkerKeyAdapter, TaskConfigTemplateKeyAdapter:
 		return 1
 	case UpstreamSubTaskKeyAdapter, StageSubTaskKeyAdapter,
 		ShardDDLPessimismInfoKeyAdapter, ShardDDLPessimismOperationKeyAdapter,

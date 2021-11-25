@@ -81,6 +81,11 @@ func (t *testCommon) TestKeyAdapter(c *C) {
 			adapter: UpstreamSubTaskKeyAdapter,
 			want:    "/dm-master/upstream/subtask/6d7973716c31/e4b8ade6968731f09f8084efb88f",
 		},
+		{
+			keys:    []string{"task-1"},
+			adapter: TaskConfigTemplateKeyAdapter,
+			want:    "/dm-master/task-config-template/7461736b2d31",
+		},
 	}
 
 	for _, ca := range testCases {
