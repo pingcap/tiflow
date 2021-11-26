@@ -64,8 +64,13 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	ctxC = util.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
 	// NOTICE: always pull the old value internally
+<<<<<<< HEAD
 	// See also: TODO(hi-rustin): add issue link here.
 	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, ctx.GlobalVars().GrpcPool, ctx.GlobalVars().KVStorage,
+=======
+	// See also: https://github.com/pingcap/ticdc/issues/2301.
+	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, ctx.GlobalVars().GrpcPool, ctx.GlobalVars().RegionCache, ctx.GlobalVars().KVStorage,
+>>>>>>> e46ded913 (ticdc/kvclient: make multiple cdc kv clients share one RegionCache (#3464))
 		n.replicaInfo.StartTs, n.tableSpan(ctx), true)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
