@@ -21,7 +21,7 @@ type DB interface {
 	CollectMetrics(captureAddr string, id int)
 }
 
-// A Batch is a sequence of Sets, Merges, Deletes, and/or DeleteRanges that are
+// A Batch is a sequence of Puts and Deletes that Commit to DB.
 type Batch interface {
 	Put(key, value []byte)
 	Delete(key []byte)
