@@ -64,21 +64,58 @@ func (t *testReaderSuite) TearDownSuite(c *C) {
 	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/relay/SetHeartbeatInterval"), IsNil)
 }
 
-func newBinlogReaderForTest(logger log.Logger, cfg *BinlogReaderConfig, notify bool) *BinlogReader {
+func newBinlogReaderForTest(logger log.Logger, cfg *BinlogReaderConfig, notify bool, uuid string) *BinlogReader {
 	relay := NewRealRelay(&Config{Flavor: gmysql.MySQLFlavor})
-	reader := newBinlogReader(logger, cfg, relay)
+	r := newBinlogReader(logger, cfg, relay)
 	if notify {
-		reader.notifyCh <- struct{}{}
+		r.notifyCh <- struct{}{}
 	}
-	return reader
+	r.currentUUID = uuid
+	return r
+}
+
+func (t *testReaderSuite) setActiveRelayLog(r Process, uuid, filename string, offset int64) {
+	relay := r.(*Relay)
+	writer := relay.writer.(*FileWriter)
+	writer.out.uuid, writer.out.filename = uuid, filename
+	writer.out.offset.Store(offset)
+}
+
+func (t *testReaderSuite) createBinlogFileParseState(c *C, relayLogDir, relayLogFile string, offset int64, possibleLast bool) *binlogFileParseState {
+	fullPath := filepath.Join(relayLogDir, relayLogFile)
+	f, err := os.Open(fullPath)
+	c.Assert(err, IsNil)
+
+	return &binlogFileParseState{
+		possibleLast:         possibleLast,
+		fullPath:             fullPath,
+		relayLogFile:         relayLogFile,
+		relayLogDir:          relayLogDir,
+		f:                    f,
+		latestPos:            offset,
+		replaceWithHeartbeat: false,
+	}
+}
+
+func (t *testReaderSuite) TestparseFileAsPossibleFileNotExist(c *C) {
+	var (
+		baseDir     = c.MkDir()
+		currentUUID = "b60868af-5a6f-11e9-9ea3-0242ac160006.000001"
+		filename    = "test-mysql-bin.000001"
+		relayDir    = path.Join(baseDir, currentUUID)
+	)
+	cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
+	r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
+	needSwitch, lastestPos, err := r.parseFileAsPossible(context.Background(), nil, filename, 4, relayDir, true, false)
+	c.Assert(needSwitch, IsFalse)
+	c.Assert(lastestPos, Equals, int64(0))
+	c.Assert(err, ErrorMatches, ".*no such file or directory.*")
 }
 
 func (t *testReaderSuite) TestParseFileBase(c *C) {
 	var (
 		filename         = "test-mysql-bin.000001"
 		baseDir          = c.MkDir()
-		offset           int64
-		firstParse       = true
 		possibleLast     = false
 		baseEvents, _, _ = t.genBinlogEvents(c, t.lastPos, t.lastGTID)
 		s                = newLocalStreamer()
@@ -86,177 +123,168 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// no valid currentUUID provide, failed
-	currentUUID := "invalid-current-uuid"
-	relayDir := filepath.Join(baseDir, currentUUID)
-	cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
-	r := newBinlogReaderForTest(log.L(), cfg, true)
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, replaceWithHeartbeat, err := r.parseFile(
-		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false)
-	c.Assert(err, ErrorMatches, ".*invalid-current-uuid.*")
-	c.Assert(needSwitch, IsFalse)
-	c.Assert(needReParse, IsFalse)
-	c.Assert(latestPos, Equals, int64(0))
-	c.Assert(nextUUID, Equals, "")
-	c.Assert(nextBinlogName, Equals, "")
-	c.Assert(replaceWithHeartbeat, Equals, false)
-
 	// change to valid currentUUID
-	currentUUID = "b60868af-5a6f-11e9-9ea3-0242ac160006.000001"
-	relayDir = filepath.Join(baseDir, currentUUID)
+	currentUUID := "b60868af-5a6f-11e9-9ea3-0242ac160006.000001"
+	relayDir := filepath.Join(baseDir, currentUUID)
 	fullPath := filepath.Join(relayDir, filename)
-	cfg = &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
-	r = newBinlogReaderForTest(log.L(), cfg, true)
-
-	// relay log file not exists, failed
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, replaceWithHeartbeat, err = r.parseFile(
-		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false)
-	c.Assert(err, ErrorMatches, ".*(no such file or directory|The system cannot find the path specified).*")
-	c.Assert(needSwitch, IsFalse)
-	c.Assert(needReParse, IsFalse)
-	c.Assert(latestPos, Equals, int64(0))
-	c.Assert(nextUUID, Equals, "")
-	c.Assert(nextBinlogName, Equals, "")
-	c.Assert(replaceWithHeartbeat, Equals, false)
-
-	// empty relay log file, failed, got EOF
-	err = os.MkdirAll(relayDir, 0o700)
-	c.Assert(err, IsNil)
-	f, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY, 0o600)
-	c.Assert(err, IsNil)
+	err1 := os.MkdirAll(relayDir, 0o700)
+	c.Assert(err1, IsNil)
+	f, err1 := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY, 0o600)
+	c.Assert(err1, IsNil)
 	defer f.Close()
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, replaceWithHeartbeat, err = r.parseFile(
-		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false)
-	c.Assert(errors.Cause(err), Equals, io.EOF)
-	c.Assert(needSwitch, IsFalse)
-	c.Assert(needReParse, IsFalse)
-	c.Assert(latestPos, Equals, int64(0))
-	c.Assert(nextUUID, Equals, "")
-	c.Assert(nextBinlogName, Equals, "")
-	c.Assert(replaceWithHeartbeat, Equals, false)
+
+	// empty relay log file, got EOF when reading format description event separately and possibleLast = false
+	{
+		cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
+		t.setActiveRelayLog(r.relay, currentUUID, filename, 0)
+		state := t.createBinlogFileParseState(c, relayDir, filename, 100, possibleLast)
+		needSwitch, needReParse, err := r.parseFile(ctx, s, true, state)
+		c.Assert(errors.Cause(err), Equals, io.EOF)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(needReParse, IsFalse)
+		c.Assert(state.latestPos, Equals, int64(100))
+		c.Assert(state.formatDescEventRead, IsFalse)
+		c.Assert(state.replaceWithHeartbeat, Equals, false)
+	}
 
 	// write some events to binlog file
-	_, err = f.Write(replication.BinLogFileHeader)
-	c.Assert(err, IsNil)
+	_, err1 = f.Write(replication.BinLogFileHeader)
+	c.Assert(err1, IsNil)
 	for _, ev := range baseEvents {
-		_, err = f.Write(ev.RawData)
-		c.Assert(err, IsNil)
+		_, err1 = f.Write(ev.RawData)
+		c.Assert(err1, IsNil)
 	}
+	fileSize, _ := f.Seek(0, io.SeekCurrent)
 
 	t.purgeStreamer(c, s)
 
 	// base test with only one valid binlog file
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, replaceWithHeartbeat, err = r.parseFile(
-		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false)
-	c.Assert(err, IsNil)
-	c.Assert(needSwitch, IsFalse)
-	c.Assert(needReParse, IsFalse)
-	c.Assert(latestPos, Equals, int64(baseEvents[len(baseEvents)-1].Header.LogPos))
-	c.Assert(nextUUID, Equals, "")
-	c.Assert(nextBinlogName, Equals, "")
-	c.Assert(replaceWithHeartbeat, Equals, false)
+	{
+		cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
+		t.setActiveRelayLog(r.relay, currentUUID, filename, fileSize)
+		state := t.createBinlogFileParseState(c, relayDir, filename, 4, possibleLast)
+		needSwitch, needReParse, err := r.parseFile(ctx, s, true, state)
+		c.Assert(err, IsNil)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(needReParse, IsFalse)
+		c.Assert(state.latestPos, Equals, int64(baseEvents[len(baseEvents)-1].Header.LogPos))
+		c.Assert(state.formatDescEventRead, IsTrue)
+		c.Assert(state.replaceWithHeartbeat, IsFalse)
 
-	// try get events back, firstParse should have fake RotateEvent
-	var fakeRotateEventCount int
-	i := 0
-	for {
-		ev, err2 := s.GetEvent(ctx)
-		c.Assert(err2, IsNil)
-		if ev.Header.Timestamp == 0 || ev.Header.LogPos == 0 {
-			if ev.Header.EventType == replication.ROTATE_EVENT {
-				fakeRotateEventCount++
+		// try get events back, firstParse should have fake RotateEvent
+		var fakeRotateEventCount int
+		i := 0
+		for {
+			ev, err2 := s.GetEvent(ctx)
+			c.Assert(err2, IsNil)
+			if ev.Header.Timestamp == 0 || ev.Header.LogPos == 0 {
+				if ev.Header.EventType == replication.ROTATE_EVENT {
+					fakeRotateEventCount++
+				}
+				continue // ignore fake event
 			}
-			continue // ignore fake event
+			c.Assert(ev, DeepEquals, baseEvents[i])
+			i++
+			if i >= len(baseEvents) {
+				break
+			}
 		}
-		c.Assert(ev, DeepEquals, baseEvents[i])
-		i++
-		if i >= len(baseEvents) {
-			break
-		}
+		c.Assert(fakeRotateEventCount, Equals, 1)
+		t.verifyNoEventsInStreamer(c, s)
 	}
-	c.Assert(fakeRotateEventCount, Equals, 1)
-	t.verifyNoEventsInStreamer(c, s)
 
-	// try get events back, not firstParse should have no fake RotateEvent
-	firstParse = false
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, replaceWithHeartbeat, err = r.parseFile(
-		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false)
-	c.Assert(err, IsNil)
-	c.Assert(needSwitch, IsFalse)
-	c.Assert(needReParse, IsFalse)
-	c.Assert(latestPos, Equals, int64(baseEvents[len(baseEvents)-1].Header.LogPos))
-	c.Assert(nextUUID, Equals, "")
-	c.Assert(nextBinlogName, Equals, "")
-	c.Assert(replaceWithHeartbeat, Equals, false)
-	fakeRotateEventCount = 0
-	i = 0
-	for {
-		ev, err2 := s.GetEvent(ctx)
-		c.Assert(err2, IsNil)
-		if ev.Header.Timestamp == 0 || ev.Header.LogPos == 0 {
-			if ev.Header.EventType == replication.ROTATE_EVENT {
-				fakeRotateEventCount++
+	// try get events back, since firstParse=false, should have no fake RotateEvent
+	{
+		cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
+		t.setActiveRelayLog(r.relay, currentUUID, filename, fileSize)
+		state := t.createBinlogFileParseState(c, relayDir, filename, 4, possibleLast)
+		needSwitch, needReParse, err := r.parseFile(ctx, s, false, state)
+		c.Assert(err, IsNil)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(needReParse, IsFalse)
+		c.Assert(state.latestPos, Equals, int64(baseEvents[len(baseEvents)-1].Header.LogPos))
+		c.Assert(state.formatDescEventRead, IsTrue)
+		c.Assert(state.replaceWithHeartbeat, Equals, false)
+		fakeRotateEventCount := 0
+		i := 0
+		for {
+			ev, err2 := s.GetEvent(ctx)
+			c.Assert(err2, IsNil)
+			if ev.Header.Timestamp == 0 || ev.Header.LogPos == 0 {
+				if ev.Header.EventType == replication.ROTATE_EVENT {
+					fakeRotateEventCount++
+				}
+				continue // ignore fake event
 			}
-			continue // ignore fake event
+			c.Assert(ev, DeepEquals, baseEvents[i])
+			i++
+			if i >= len(baseEvents) {
+				break
+			}
 		}
-		c.Assert(ev, DeepEquals, baseEvents[i])
-		i++
-		if i >= len(baseEvents) {
-			break
-		}
+		c.Assert(fakeRotateEventCount, Equals, 0)
+		t.verifyNoEventsInStreamer(c, s)
 	}
-	c.Assert(fakeRotateEventCount, Equals, 0)
-	t.verifyNoEventsInStreamer(c, s)
 
 	// generate another non-fake RotateEvent
-	rotateEv, err := event.GenRotateEvent(baseEvents[0].Header, uint32(latestPos), []byte("mysql-bin.888888"), 4)
+	rotateEv, err := event.GenRotateEvent(baseEvents[0].Header, uint32(fileSize), []byte("mysql-bin.888888"), 4)
 	c.Assert(err, IsNil)
 	_, err = f.Write(rotateEv.RawData)
 	c.Assert(err, IsNil)
+	fileSize, _ = f.Seek(0, io.SeekCurrent)
 
 	// latest is still the end_log_pos of the last event, not the next relay file log file's position
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, replaceWithHeartbeat, err = r.parseFile(
-		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false)
-	c.Assert(err, IsNil)
-	c.Assert(needSwitch, IsFalse)
-	c.Assert(needReParse, IsFalse)
-	c.Assert(latestPos, Equals, int64(rotateEv.Header.LogPos))
-	c.Assert(nextUUID, Equals, "")
-	c.Assert(nextBinlogName, Equals, "")
-	c.Assert(replaceWithHeartbeat, Equals, false)
-	t.purgeStreamer(c, s)
-
-	// parse from a non-zero offset
-	offset = int64(rotateEv.Header.LogPos - rotateEv.Header.EventSize)
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, replaceWithHeartbeat, err = r.parseFile(
-		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false)
-	c.Assert(err, IsNil)
-	c.Assert(needSwitch, IsFalse)
-	c.Assert(needReParse, IsFalse)
-	c.Assert(latestPos, Equals, int64(rotateEv.Header.LogPos))
-	c.Assert(nextUUID, Equals, "")
-	c.Assert(nextBinlogName, Equals, "")
-	c.Assert(replaceWithHeartbeat, Equals, false)
-
-	// should only get a RotateEvent
-	i = 0
-	for {
-		ev, err2 := s.GetEvent(ctx)
-		c.Assert(err2, IsNil)
-		switch ev.Header.EventType {
-		case replication.ROTATE_EVENT:
-			c.Assert(ev.RawData, DeepEquals, rotateEv.RawData)
-			i++
-		default:
-			c.Fatalf("got unexpected event %+v", ev.Header)
-		}
-		if i >= 1 {
-			break
-		}
+	{
+		cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
+		t.setActiveRelayLog(r.relay, currentUUID, filename, fileSize)
+		state := t.createBinlogFileParseState(c, relayDir, filename, 4, possibleLast)
+		needSwitch, needReParse, err := r.parseFile(ctx, s, true, state)
+		c.Assert(err, IsNil)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(needReParse, IsFalse)
+		c.Assert(state.latestPos, Equals, int64(rotateEv.Header.LogPos))
+		c.Assert(state.formatDescEventRead, IsTrue)
+		c.Assert(state.replaceWithHeartbeat, Equals, false)
+		t.purgeStreamer(c, s)
 	}
-	t.verifyNoEventsInStreamer(c, s)
 
-	cancel()
+	// parse from offset > 4
+	{
+		cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
+		t.setActiveRelayLog(r.relay, currentUUID, filename, fileSize)
+		offset := int64(rotateEv.Header.LogPos - rotateEv.Header.EventSize)
+		state := t.createBinlogFileParseState(c, relayDir, filename, offset, possibleLast)
+		needSwitch, needReParse, err := r.parseFile(ctx, s, false, state)
+		c.Assert(err, IsNil)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(needReParse, IsFalse)
+		c.Assert(state.latestPos, Equals, int64(rotateEv.Header.LogPos))
+		c.Assert(state.formatDescEventRead, IsTrue)
+		c.Assert(state.replaceWithHeartbeat, Equals, false)
+
+		// should only get a RotateEvent
+		i := 0
+		for {
+			ev, err2 := s.GetEvent(ctx)
+			c.Assert(err2, IsNil)
+			switch ev.Header.EventType {
+			case replication.ROTATE_EVENT:
+				c.Assert(ev.RawData, DeepEquals, rotateEv.RawData)
+				i++
+			default:
+				c.Fatalf("got unexpected event %+v", ev.Header)
+			}
+			if i >= 1 {
+				break
+			}
+		}
+		t.verifyNoEventsInStreamer(c, s)
+	}
 }
 
 func (t *testReaderSuite) TestParseFileRelayNeedSwitchSubDir(c *C) {
@@ -266,7 +294,6 @@ func (t *testReaderSuite) TestParseFileRelayNeedSwitchSubDir(c *C) {
 		notUsedGTIDSetStr = t.lastGTID.String()
 		baseDir           = c.MkDir()
 		offset            int64
-		firstParse        = true
 		possibleLast      = true
 		currentUUID       = "b60868af-5a6f-11e9-9ea3-0242ac160006.000001"
 		switchedUUID      = "b60868af-5a6f-11e9-9ea3-0242ac160007.000002"
@@ -276,7 +303,7 @@ func (t *testReaderSuite) TestParseFileRelayNeedSwitchSubDir(c *C) {
 		nextFullPath      = filepath.Join(nextRelayDir, nextFilename)
 		s                 = newLocalStreamer()
 		cfg               = &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
-		r                 = newBinlogReaderForTest(log.L(), cfg, true)
+		r                 = newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
 	)
 
 	// create the current relay log file and meta
@@ -290,23 +317,6 @@ func (t *testReaderSuite) TestParseFileRelayNeedSwitchSubDir(c *C) {
 	c.Assert(err, IsNil)
 	t.createMetaFile(c, relayDir, filename, uint32(offset), notUsedGTIDSetStr)
 
-	// invalid UUID in UUID list, error
-	r.uuids = []string{currentUUID, "invalid.uuid"}
-	t.writeUUIDs(c, baseDir, r.uuids)
-	ctx1, cancel1 := context.WithTimeout(context.Background(), parseFileTimeout)
-	defer cancel1()
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, replaceWithHeartbeat, err := r.parseFile(
-		ctx1, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false)
-	c.Assert(err, ErrorMatches, ".*not valid.*")
-	c.Assert(needSwitch, IsFalse)
-	c.Assert(needReParse, IsFalse)
-	c.Assert(latestPos, Equals, int64(0))
-	c.Assert(nextUUID, Equals, "")
-	c.Assert(nextBinlogName, Equals, "")
-	c.Assert(replaceWithHeartbeat, Equals, false)
-	t.purgeStreamer(c, s)
-
-	// next sub dir exits, need to switch
 	r.uuids = []string{currentUUID, switchedUUID}
 	t.writeUUIDs(c, baseDir, r.uuids)
 	err = os.MkdirAll(nextRelayDir, 0o700)
@@ -318,15 +328,16 @@ func (t *testReaderSuite) TestParseFileRelayNeedSwitchSubDir(c *C) {
 	ctx2, cancel2 := context.WithTimeout(context.Background(), parseFileTimeout)
 	defer cancel2()
 	t.createMetaFile(c, nextRelayDir, filename, uint32(offset), notUsedGTIDSetStr)
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, replaceWithHeartbeat, err = r.parseFile(
-		ctx2, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false)
+	state := t.createBinlogFileParseState(c, relayDir, filename, offset, possibleLast)
+	state.formatDescEventRead = true
+	t.setActiveRelayLog(r.relay, "next", "next", 4)
+	needSwitch, needReParse, err := r.parseFile(ctx2, s, true, state)
 	c.Assert(err, IsNil)
 	c.Assert(needSwitch, IsTrue)
 	c.Assert(needReParse, IsFalse)
-	c.Assert(latestPos, Equals, int64(0))
-	c.Assert(nextUUID, Equals, switchedUUID)
-	c.Assert(nextBinlogName, Equals, nextFilename)
-	c.Assert(replaceWithHeartbeat, Equals, false)
+	c.Assert(state.latestPos, Equals, int64(4))
+	c.Assert(state.formatDescEventRead, IsTrue)
+	c.Assert(state.replaceWithHeartbeat, Equals, false)
 	t.purgeStreamer(c, s)
 
 	// NOTE: if we want to test the returned `needReParse` of `needSwitchSubDir`,
@@ -338,8 +349,6 @@ func (t *testReaderSuite) TestParseFileRelayWithIgnorableError(c *C) {
 		filename          = "test-mysql-bin.000001"
 		notUsedGTIDSetStr = t.lastGTID.String()
 		baseDir           = c.MkDir()
-		offset            int64
-		firstParse        = true
 		possibleLast      = true
 		baseEvents, _, _  = t.genBinlogEvents(c, t.lastPos, t.lastGTID)
 		currentUUID       = "b60868af-5a6f-11e9-9ea3-0242ac160006.000001"
@@ -347,7 +356,6 @@ func (t *testReaderSuite) TestParseFileRelayWithIgnorableError(c *C) {
 		fullPath          = filepath.Join(relayDir, filename)
 		s                 = newLocalStreamer()
 		cfg               = &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
-		r                 = newBinlogReaderForTest(log.L(), cfg, true)
 	)
 
 	// create the current relay log file and write some events
@@ -356,50 +364,34 @@ func (t *testReaderSuite) TestParseFileRelayWithIgnorableError(c *C) {
 	f, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY, 0o600)
 	c.Assert(err, IsNil)
 	defer f.Close()
-	t.createMetaFile(c, relayDir, filename, uint32(offset), notUsedGTIDSetStr)
-
-	// file has no data, meet io.EOF error (when reading file header) and ignore it.
-	ctx1, cancel1 := context.WithTimeout(context.Background(), parseFileTimeout)
-	defer cancel1()
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, replaceWithHeartbeat, err := r.parseFile(
-		ctx1, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false)
-	c.Assert(err, IsNil)
-	c.Assert(needSwitch, IsFalse)
-	c.Assert(needReParse, IsTrue)
-	c.Assert(latestPos, Equals, int64(0))
-	c.Assert(nextUUID, Equals, "")
-	c.Assert(nextBinlogName, Equals, "")
-	c.Assert(replaceWithHeartbeat, Equals, false)
+	t.createMetaFile(c, relayDir, filename, 0, notUsedGTIDSetStr)
 
 	_, err = f.Write(replication.BinLogFileHeader)
 	c.Assert(err, IsNil)
-	for _, ev := range baseEvents {
-		_, err = f.Write(ev.RawData)
-		c.Assert(err, IsNil)
-	}
-	_, err = f.Write([]byte("some invalid binlog event data"))
+	_, err = f.Write(baseEvents[0].RawData[:replication.EventHeaderSize])
 	c.Assert(err, IsNil)
 
-	// meet `err EOF` error (when parsing binlog event) ignored
-	ctx2, cancel2 := context.WithTimeout(context.Background(), parseFileTimeout)
-	defer cancel2()
-	r.notifyCh <- struct{}{} // notify again
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, replaceWithHeartbeat, err = r.parseFile(
-		ctx2, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false)
-	c.Assert(err, IsNil)
-	c.Assert(needSwitch, IsFalse)
-	c.Assert(needReParse, IsTrue)
-	c.Assert(latestPos, Equals, int64(baseEvents[len(baseEvents)-1].Header.LogPos))
-	c.Assert(nextUUID, Equals, "")
-	c.Assert(nextBinlogName, Equals, "")
-	c.Assert(replaceWithHeartbeat, Equals, false)
+	// meet io.EOF error when read event and ignore it.
+	{
+		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
+		state := t.createBinlogFileParseState(c, relayDir, filename, 4, possibleLast)
+		state.formatDescEventRead = true
+		t.setActiveRelayLog(r.relay, currentUUID, filename, 100)
+		needSwitch, needReParse, err := r.parseFile(context.Background(), s, true, state)
+		c.Assert(err, IsNil)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(needReParse, IsTrue)
+		c.Assert(state.latestPos, Equals, int64(4))
+		c.Assert(state.formatDescEventRead, IsTrue)
+		c.Assert(state.replaceWithHeartbeat, Equals, false)
+	}
 }
 
 func (t *testReaderSuite) TestUpdateUUIDs(c *C) {
 	var (
 		baseDir = c.MkDir()
 		cfg     = &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
-		r       = newBinlogReaderForTest(log.L(), cfg, true)
+		r       = newBinlogReaderForTest(log.L(), cfg, true, "")
 	)
 	c.Assert(r.uuids, HasLen, 0)
 
@@ -435,7 +427,7 @@ func (t *testReaderSuite) TestStartSyncByPos(c *C) {
 			"b60868af-5a6f-11e9-9ea3-0242ac160008.000003",
 		}
 		cfg      = &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
-		r        = newBinlogReaderForTest(log.L(), cfg, false)
+		r        = newBinlogReaderForTest(log.L(), cfg, false, "")
 		startPos = gmysql.Position{Name: "test-mysql-bin|000001.000001"} // from the first relay log file in the first sub directory
 	)
 
@@ -497,6 +489,7 @@ func (t *testReaderSuite) TestStartSyncByPos(c *C) {
 		_, err = lastF.Write(ev.RawData)
 		c.Assert(err, IsNil)
 	}
+	r.notifyCh <- struct{}{}
 
 	// read extra events back
 	obtainExtraEvents := make([]*replication.BinlogEvent, 0, len(extraEvents))
@@ -521,6 +514,7 @@ func (t *testReaderSuite) TestStartSyncByPos(c *C) {
 	err = os.WriteFile(lastFilename, eventsBuf.Bytes(), 0o600)
 	c.Assert(err, IsNil)
 	t.createMetaFile(c, path.Join(baseDir, UUIDs[2]), lastFilename, lastPos, notUsedGTIDSetStr)
+	r.notifyCh <- struct{}{}
 
 	obtainExtraEvents2 := make([]*replication.BinlogEvent, 0, len(baseEvents)-1)
 	for {
@@ -567,7 +561,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 		baseDir         = c.MkDir()
 		events          []*replication.BinlogEvent
 		cfg             = &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
-		r               = newBinlogReaderForTest(log.L(), cfg, false)
+		r               = newBinlogReaderForTest(log.L(), cfg, false, "")
 		lastPos         uint32
 		lastGTID        gtid.Set
 		previousGset, _ = gtid.ParserGTID(gmysql.MySQLFlavor, "")
@@ -758,7 +752,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	}
 
 	r.Close()
-	r = newBinlogReaderForTest(log.L(), cfg, true)
+	r = newBinlogReaderForTest(log.L(), cfg, true, "")
 
 	excludeStrs := []string{}
 	// exclude first uuid
@@ -802,12 +796,12 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	c.Assert(os.Remove(path.Join(baseDir, excludeUUID, "mysql.000001")), IsNil)
 
 	r.Close()
-	r = newBinlogReaderForTest(log.L(), cfg, true)
+	r = newBinlogReaderForTest(log.L(), cfg, true, "")
 	_, err = r.StartSyncByGTID(preGset)
 	c.Assert(err, IsNil)
 
 	r.Close()
-	r = newBinlogReaderForTest(log.L(), cfg, true)
+	r = newBinlogReaderForTest(log.L(), cfg, true, "")
 	_, err = r.StartSyncByGTID(excludeGset)
 	// error because file has been purge
 	c.Assert(terror.ErrNoRelayPosMatchGTID.Equal(err), IsTrue)
@@ -816,12 +810,12 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	c.Assert(os.RemoveAll(path.Join(baseDir, excludeUUID)), IsNil)
 
 	r.Close()
-	r = newBinlogReaderForTest(log.L(), cfg, true)
+	r = newBinlogReaderForTest(log.L(), cfg, true, "")
 	_, err = r.StartSyncByGTID(preGset)
 	c.Assert(err, IsNil)
 
 	r.Close()
-	r = newBinlogReaderForTest(log.L(), cfg, true)
+	r = newBinlogReaderForTest(log.L(), cfg, true, "")
 	_, err = r.StartSyncByGTID(excludeGset)
 	// error because subdir has been purge
 	c.Assert(err, ErrorMatches, ".*no such file or directory.*")
@@ -838,7 +832,7 @@ func (t *testReaderSuite) TestStartSyncError(c *C) {
 		startPos = gmysql.Position{Name: "test-mysql-bin|000001.000001"} // from the first relay log file in the first sub directory
 	)
 
-	r := newBinlogReaderForTest(log.L(), cfg, true)
+	r := newBinlogReaderForTest(log.L(), cfg, true, "")
 	err := r.checkRelayPos(startPos)
 	c.Assert(err, ErrorMatches, ".*empty UUIDs not valid.*")
 
@@ -857,7 +851,7 @@ func (t *testReaderSuite) TestStartSyncError(c *C) {
 	c.Assert(s, IsNil)
 
 	// write UUIDs into index file
-	r = newBinlogReaderForTest(log.L(), cfg, true) // create a new reader
+	r = newBinlogReaderForTest(log.L(), cfg, true, "") // create a new reader
 	uuidBytes := t.uuidListToBytes(c, UUIDs)
 	err = os.WriteFile(r.indexPath, uuidBytes, 0o600)
 	c.Assert(err, IsNil)
@@ -902,7 +896,7 @@ func (t *testReaderSuite) TestAdvanceCurrentGTIDSet(c *C) {
 	var (
 		baseDir        = c.MkDir()
 		cfg            = &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
-		r              = newBinlogReaderForTest(log.L(), cfg, true)
+		r              = newBinlogReaderForTest(log.L(), cfg, true, "")
 		mysqlGset, _   = gmysql.ParseMysqlGTIDSet("b60868af-5a6f-11e9-9ea3-0242ac160006:1-6")
 		mariadbGset, _ = gmysql.ParseMariadbGTIDSet("0-1-5")
 	)
@@ -936,7 +930,7 @@ func (t *testReaderSuite) TestReParseUsingGTID(c *C) {
 	var (
 		baseDir   = c.MkDir()
 		cfg       = &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
-		r         = newBinlogReaderForTest(log.L(), cfg, true)
+		r         = newBinlogReaderForTest(log.L(), cfg, true, "")
 		uuid      = "ba8f633f-1f15-11eb-b1c7-0242ac110002.000001"
 		gtidStr   = "ba8f633f-1f15-11eb-b1c7-0242ac110002:1"
 		file      = "mysql.000001"
@@ -1189,4 +1183,343 @@ func (t *testReaderSuite) createMetaFile(c *C, relayDirPath, binlogFileName stri
 	err := toml.NewEncoder(metaFile).Encode(&meta)
 	c.Assert(err, IsNil)
 	metaFile.Close()
+}
+
+type mockActiveCase struct {
+	active bool
+	offset int64
+}
+
+type mockFileWriterForActiveTest struct {
+	cnt   int
+	cases []mockActiveCase
+}
+
+func (m *mockFileWriterForActiveTest) Init(uuid, filename string) {
+	panic("should be used")
+}
+
+func (m *mockFileWriterForActiveTest) Close() error {
+	panic("should be used")
+}
+
+func (m *mockFileWriterForActiveTest) WriteEvent(ev *replication.BinlogEvent) (WResult, error) {
+	panic("should be used")
+}
+
+func (m *mockFileWriterForActiveTest) IsActive(uuid, filename string) (bool, int64) {
+	v := m.cases[m.cnt]
+	m.cnt++
+	return v.active, v.offset
+}
+
+func (t *testReaderSuite) TestwaitBinlogChanged(c *C) {
+	var (
+		relayFiles = []string{
+			"mysql-bin.000001",
+			"mysql-bin.000002",
+		}
+		binlogPos  = uint32(4)
+		binlogGTID = "ba8f633f-1f15-11eb-b1c7-0242ac110002:1"
+		relayPaths = make([]string, len(relayFiles))
+		data       = []byte("meaningless file content")
+		size       = int64(len(data))
+	)
+
+	// create relay log dir
+	subDir := c.MkDir()
+	// join the file path
+	for i, rf := range relayFiles {
+		relayPaths[i] = filepath.Join(subDir, rf)
+		f, _ := os.Create(relayPaths[i])
+		_ = f.Close()
+	}
+
+	rotateRelayFile := func(filename string) {
+		meta := LocalMeta{BinLogName: filename, BinLogPos: binlogPos, BinlogGTID: binlogGTID}
+		metaFile, err2 := os.Create(path.Join(subDir, utils.MetaFilename))
+		c.Assert(err2, IsNil)
+		err := toml.NewEncoder(metaFile).Encode(&meta)
+		c.Assert(err, IsNil)
+		_ = metaFile.Close()
+	}
+
+	// meta not found
+	{
+		cfg := &BinlogReaderConfig{RelayDir: "", Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, false, "")
+		t.setActiveRelayLog(r.relay, "next", "next", 0)
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[0], 0, true)
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsFalse)
+		c.Assert(err, NotNil)
+		c.Assert(err, ErrorMatches, ".*no such file or directory*")
+	}
+
+	// write meta
+	rotateRelayFile(relayFiles[0])
+
+	// relay file not found
+	{
+		cfg := &BinlogReaderConfig{RelayDir: "", Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, false, "")
+		t.setActiveRelayLog(r.relay, "next", "next", 0)
+		state := &binlogFileParseState{
+			relayLogDir:  subDir,
+			relayLogFile: "not-exist-file",
+		}
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsFalse)
+		c.Assert(err, NotNil)
+		c.Assert(err, ErrorMatches, ".*no such file or directory*")
+	}
+
+	// create the first relay file
+	err1 := os.WriteFile(relayPaths[0], data, 0o600)
+	c.Assert(err1, IsNil)
+	// rotate relay file
+	rotateRelayFile(relayFiles[1])
+
+	// file decreased when meta changed
+	{
+		cfg := &BinlogReaderConfig{RelayDir: "", Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, false, "")
+		t.setActiveRelayLog(r.relay, "next", "next", 0)
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[0], size+100, true)
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsFalse)
+		c.Assert(err, NotNil)
+		c.Assert(terror.ErrRelayLogFileSizeSmaller.Equal(err), IsTrue)
+	}
+
+	// return changed file in meta
+	{
+		cfg := &BinlogReaderConfig{RelayDir: "", Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, false, "")
+		t.setActiveRelayLog(r.relay, "next", "next", 0)
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[0], size, true)
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsFalse)
+		c.Assert(err, IsNil)
+	}
+
+	// file increased when checking meta
+	{
+		cfg := &BinlogReaderConfig{RelayDir: "", Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, false, "")
+		t.setActiveRelayLog(r.relay, "next", "next", 0)
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[0], 0, true)
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsTrue)
+		c.Assert(err, IsNil)
+	}
+
+	// context timeout (no new write)
+	{
+		newCtx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+		defer cancel()
+		cfg := &BinlogReaderConfig{RelayDir: "", Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, false, "current-uuid") // no notify
+		t.setActiveRelayLog(r.relay, "current-uuid", relayFiles[0], 0)
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[0], 0, true)
+		needSwitch, reParse, err := r.waitBinlogChanged(newCtx, state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsFalse)
+		c.Assert(err, IsNil)
+	}
+
+	// this dir is different from the dir of current binlog file, but for test it doesn't matter
+	relayDir := c.MkDir()
+	t.writeUUIDs(c, relayDir, []string{"xxx.000001", "invalid uuid"})
+
+	// getSwitchPath return error(invalid uuid file)
+	{
+		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, false, "xxx.000001")
+		t.setActiveRelayLog(r.relay, "next", "next", 0)
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[1], 0, true)
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsFalse)
+		c.Assert(terror.ErrRelayParseUUIDSuffix.Equal(err), IsTrue)
+	}
+
+	t.writeUUIDs(c, relayDir, []string{"xxx.000001", "xxx.000002"})
+	_ = os.MkdirAll(filepath.Join(relayDir, "xxx.000002"), 0o700)
+	_ = os.WriteFile(filepath.Join(relayDir, "xxx.000002", "mysql.000001"), nil, 0o600)
+
+	// binlog dir switched, but last file not exists so failed to check change of file length
+	// should not happen in real, just for branch test
+	{
+		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, false, "xxx.000001")
+		t.setActiveRelayLog(r.relay, "next", "next", 0)
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[1], 0, true)
+		_ = os.Remove(relayPaths[1])
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsFalse)
+		c.Assert(terror.ErrGetRelayLogStat.Equal(err), IsTrue)
+	}
+
+	err1 = os.WriteFile(relayPaths[1], nil, 0o600)
+	c.Assert(err1, IsNil)
+
+	// binlog dir switched, but last file smaller
+	{
+		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, false, "xxx.000001")
+		t.setActiveRelayLog(r.relay, "next", "next", 0)
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[1], size, true)
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsFalse)
+		c.Assert(terror.ErrRelayLogFileSizeSmaller.Equal(err), IsTrue)
+	}
+
+	err1 = os.WriteFile(relayPaths[1], data, 0o600)
+	c.Assert(err1, IsNil)
+
+	// binlog dir switched, but last file bigger
+	{
+		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, false, "xxx.000001")
+		t.setActiveRelayLog(r.relay, "next", "next", 0)
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[1], 0, true)
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsTrue)
+		c.Assert(err, IsNil)
+	}
+
+	// binlog dir switched, but last file not changed
+	{
+		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, false, "xxx.000001")
+		t.setActiveRelayLog(r.relay, "next", "next", 0)
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[1], size, true)
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsTrue)
+		c.Assert(reParse, IsFalse)
+		c.Assert(err, IsNil)
+	}
+
+	// got notified and active pos > current read pos
+	{
+		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, true, "xxx.000001")
+		t.setActiveRelayLog(r.relay, r.currentUUID, relayFiles[1], size)
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[1], 0, true)
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsTrue)
+		c.Assert(err, IsNil)
+	}
+
+	// got notified but not active
+	{
+		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, true, "xxx.000001")
+		relay := r.relay.(*Relay)
+		relay.writer = &mockFileWriterForActiveTest{cases: []mockActiveCase{
+			{true, 0},
+			{false, 0},
+		}}
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[1], 0, true)
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsTrue)
+		c.Assert(err, IsNil)
+	}
+
+	// got notified, first notified is active but has already read to that offset
+	// second notify, got new data
+	{
+		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, true, "xxx.000001")
+		r.notifyCh = make(chan interface{}, 2)
+		r.notifyCh <- struct{}{}
+		r.notifyCh <- struct{}{}
+		relay := r.relay.(*Relay)
+		relay.writer = &mockFileWriterForActiveTest{cases: []mockActiveCase{
+			{true, 0},
+			{true, 0},
+			{true, size},
+		}}
+		state := t.createBinlogFileParseState(c, subDir, relayFiles[1], 0, true)
+		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
+		c.Assert(needSwitch, IsFalse)
+		c.Assert(reParse, IsTrue)
+		c.Assert(err, IsNil)
+	}
+}
+
+func (t *testReaderSuite) TestGetSwitchPath(c *C) {
+	var (
+		relayDir = c.MkDir()
+		UUIDs    = []string{
+			"53ea0ed1-9bf8-11e6-8bea-64006a897c73.000001",
+			"53ea0ed1-9bf8-11e6-8bea-64006a897c72.000002",
+			"53ea0ed1-9bf8-11e6-8bea-64006a897c71.000003",
+		}
+		currentUUID = UUIDs[len(UUIDs)-1] // no next UUID
+	)
+
+	UUIDs = append(UUIDs, "invalid.uuid")
+
+	// invalid UUID in UUIDs, error
+	t.writeUUIDs(c, relayDir, UUIDs)
+	{
+		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
+		switchPath, err := r.getSwitchPath()
+		c.Assert(switchPath, IsNil)
+		c.Assert(terror.ErrRelayParseUUIDSuffix.Equal(err), IsTrue)
+	}
+
+	UUIDs = UUIDs[:len(UUIDs)-1] // remove the invalid UUID
+	t.writeUUIDs(c, relayDir, UUIDs)
+
+	// no next sub directory
+	{
+		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, true, UUIDs[0])
+		switchPath, err := r.getSwitchPath()
+		c.Assert(switchPath, IsNil)
+		c.Assert(err, ErrorMatches, fmt.Sprintf(".*%s.*(no such file or directory|The system cannot find the file specified).*", UUIDs[1]))
+	}
+
+	err1 := os.Mkdir(filepath.Join(relayDir, UUIDs[1]), 0o700)
+	c.Assert(err1, IsNil)
+
+	// uuid directory exist, but no binlog file inside
+	{
+		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, true, UUIDs[0])
+		switchPath, err := r.getSwitchPath()
+		c.Assert(switchPath, IsNil)
+		c.Assert(err, IsNil)
+	}
+
+	// create a relay log file in the next sub directory
+	nextBinlogPath := filepath.Join(relayDir, UUIDs[1], "mysql-bin.000001")
+	err1 = os.MkdirAll(filepath.Dir(nextBinlogPath), 0o700)
+	c.Assert(err1, IsNil)
+	err1 = os.WriteFile(nextBinlogPath, nil, 0o600)
+	c.Assert(err1, IsNil)
+
+	// switch to the next
+	{
+		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
+		r := newBinlogReaderForTest(log.L(), cfg, true, UUIDs[0])
+		switchPath, err := r.getSwitchPath()
+		c.Assert(switchPath.nextUUID, Equals, UUIDs[1])
+		c.Assert(switchPath.nextBinlogName, Equals, filepath.Base(nextBinlogPath))
+		c.Assert(err, IsNil)
+	}
 }

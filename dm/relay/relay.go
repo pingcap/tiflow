@@ -107,6 +107,8 @@ type Process interface {
 	UnRegisterListener(el Listener)
 	// NewReader creates a new relay reader
 	NewReader(logger log.Logger, cfg *BinlogReaderConfig) *BinlogReader
+	// IsActive check whether given uuid+filename is active binlog file, if true return current file offset
+	IsActive(uuid, filename string) (bool, int64)
 }
 
 // Relay relays mysql binlog to local file.
@@ -138,7 +140,7 @@ func NewRealRelay(cfg *Config) Process {
 		logger:    log.With(zap.String("component", "relay log")),
 		listeners: make(map[Listener]struct{}),
 	}
-	r.writer = NewFileWriter(r.logger)
+	r.writer = NewFileWriter(r.logger, cfg.RelayDir)
 	return r
 }
 
@@ -288,7 +290,7 @@ func (r *Relay) process(ctx context.Context) error {
 	}()
 
 	uuid, pos := r.meta.Pos()
-	r.writer.Init(r.meta.Dir(), pos.Name)
+	r.writer.Init(uuid, pos.Name)
 	r.logger.Info("started underlying writer", zap.String("UUID", uuid), zap.String("filename", pos.Name))
 	defer func() {
 		err = r.writer.Close()
@@ -686,7 +688,9 @@ func (r *Relay) handleEvents(
 
 		// 3. save events into file
 		writeTimer := time.Now()
-		r.logger.Debug("writing binlog event", zap.Reflect("header", e.Header))
+		if ce := r.logger.Check(zap.DebugLevel, ""); ce != nil {
+			r.logger.Debug("writing binlog event", zap.Reflect("header", e.Header))
+		}
 		wResult, err := r.writer.WriteEvent(e)
 		if err != nil {
 			relayLogWriteErrorCounter.Inc()
@@ -1015,6 +1019,10 @@ func (r *Relay) Close() {
 
 	r.closed.Store(true)
 	r.logger.Info("relay unit closed")
+}
+
+func (r *Relay) IsActive(uuid, filename string) (bool, int64) {
+	return r.writer.IsActive(uuid, filename)
 }
 
 // Status implements the dm.Unit interface.
