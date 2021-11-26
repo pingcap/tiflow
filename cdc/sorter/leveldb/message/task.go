@@ -22,13 +22,13 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-// Task is a leveldb actor task. It carries write and read request.
+// Task is a db actor task. It carries write and read request.
 type Task struct {
 	UID     uint32
 	TableID uint64
 
 	// encoded key -> serde.marshal(event)
-	// If a value is empty, it deletes the key/value entry in leveldb.
+	// If a value is empty, it deletes the key/value entry in db.
 	Events map[Key][]byte
 	// Must be buffered channel to avoid blocking.
 	SnapCh chan LimitedSnapshot `json:"-"` // Make Task JSON printable.
@@ -40,7 +40,7 @@ type Task struct {
 	CleanupRatelimited bool
 }
 
-// Key is the key that is written to leveldb.
+// Key is the key that is written to db.
 type Key string
 
 // String returns a pretty printed string.

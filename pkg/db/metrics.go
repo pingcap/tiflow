@@ -46,7 +46,7 @@ var (
 		Help:      "The number of iterator by the db",
 	}, []string{"capture", "id"})
 
-	sorterDBLevelCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	dbLevelCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "level_count",
@@ -72,7 +72,7 @@ var (
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(dbSnapshotGauge)
 	registry.MustRegister(dbIteratorGauge)
-	registry.MustRegister(sorterDBLevelCount)
+	registry.MustRegister(dbLevelCount)
 	registry.MustRegister(dbWriteBytes)
 	registry.MustRegister(dbReadBytes)
 	registry.MustRegister(dbWriteDelayDuration)

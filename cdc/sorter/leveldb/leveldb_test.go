@@ -67,7 +67,7 @@ func TestMaybeWrite(t *testing.T) {
 	require.Nil(t, ldb.maybeWrite(false))
 	require.EqualValues(t, ldb.wb.Count(), 0)
 
-	// Close leveldb.
+	// Close db.
 	closed := !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
 	closedWg.Wait()
@@ -146,7 +146,7 @@ func TestPutReadDelete(t *testing.T) {
 	require.Nil(t, iter.Release())
 	require.Nil(t, snap.Release())
 
-	// Close leveldb.
+	// Close db.
 	closed = !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
 	closedWg.Wait()
@@ -217,7 +217,7 @@ func TestModelChecking(t *testing.T) {
 
 		// Put to model.
 		model.put(message.Key(key), value)
-		// Put to leveldb.
+		// Put to db.
 		tasks, _ := makeTask(map[message.Key][]byte{message.Key(key): value}, false)
 		closed := !ldb.Poll(ctx, tasks)
 		require.False(t, closed)
@@ -268,7 +268,7 @@ func TestModelChecking(t *testing.T) {
 		require.Nil(t, snap.Release())
 	}
 
-	// Close leveldb.
+	// Close db.
 	closed := !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
 	require.Nil(t, db.Close())

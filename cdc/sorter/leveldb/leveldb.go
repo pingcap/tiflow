@@ -61,8 +61,8 @@ func NewDBActor(
 	const writeBatchCapFactor = 2
 	wbCap := wbSize * writeBatchCapFactor
 	wb := db.Batch(wbCap)
-	// IterCount limits the total number of opened iterators to release leveldb
-	// resources (memtables and SST files) in time.
+	// IterCount limits the total number of opened iterators to release db
+	// resources in time.
 	iterSema := semaphore.NewWeighted(int64(cfg.Concurrency))
 	mb := actor.NewMailbox(actor.ID(id), cfg.Concurrency)
 	wg.Add(1)

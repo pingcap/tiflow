@@ -31,7 +31,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// The interval of collecting leveldb metrics.
+// The interval of collecting db metrics.
 const defaultMetricInterval = 15 * time.Second
 
 // State of a system.
@@ -43,7 +43,7 @@ const (
 	sysStateStopped
 )
 
-// System manages leveldb sorter resource.
+// System manages db sorter resource.
 type System struct {
 	dbs         []db.DB
 	dbSystem    *actor.System
@@ -88,7 +88,7 @@ func (s *System) ActorID(tableID uint64) actor.ID {
 	return actor.ID(h.Sum64() % uint64(s.cfg.Count))
 }
 
-// Router returns leveldb actors router.
+// Router returns db actors router.
 func (s *System) Router() *actor.Router {
 	return s.dbRouter
 }
@@ -128,13 +128,13 @@ func (s *System) Start(ctx context.Context) error {
 	captureAddr := config.GetGlobalServerConfig().AdvertiseAddr
 	dbCount := s.cfg.Count
 	for id := 0; id < dbCount; id++ {
-		// Open leveldb.
+		// Open db.
 		db, err := db.OpenDB(ctx, id, s.dir, s.cfg)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		s.dbs = append(s.dbs, db)
-		// Create and spawn leveldb actor.
+		// Create and spawn db actor.
 		dbac, dbmb, err := lsorter.NewDBActor(
 			ctx, id, db, s.cfg, s.closedWg, captureAddr)
 		if err != nil {
@@ -211,11 +211,11 @@ func (s *System) Stop() error {
 		return errors.Trace(err)
 	}
 
-	// Close leveldbs.
+	// Close dbs.
 	for _, db := range s.dbs {
 		err = db.Close()
 		if err != nil {
-			log.Warn("leveldb close error", zap.Error(err))
+			log.Warn("db close error", zap.Error(err))
 		}
 	}
 	return nil

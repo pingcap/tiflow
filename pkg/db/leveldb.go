@@ -122,7 +122,7 @@ func (p *levelDB) CollectMetrics(captureAddr string, i int) {
 		WithLabelValues(captureAddr, id).Set(float64(stats.WriteDelayCount))
 	dbWriteDelayDuration.
 		WithLabelValues(captureAddr, id).Set(stats.WriteDelayDuration.Seconds())
-	metricLevelCount := sorterDBLevelCount.
+	metricLevelCount := dbLevelCount.
 		MustCurryWith(map[string]string{"capture": captureAddr, "id": id})
 	for level, count := range stats.LevelTablesCounts {
 		metricLevelCount.WithLabelValues(strconv.Itoa(level)).Set(float64(count))
