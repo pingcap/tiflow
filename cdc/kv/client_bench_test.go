@@ -187,6 +187,12 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 
 	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
 	defer grpcPool.Close()
+<<<<<<< HEAD
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
+>>>>>>> e46ded913 (ticdc/kvclient: make multiple cdc kv clients share one RegionCache (#3464))
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
@@ -194,7 +200,6 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
-		cdcClient.Close() //nolint:errcheck
 		wg.Done()
 	}()
 
@@ -276,6 +281,12 @@ func prepareBench(b *testing.B, regionNum int) (
 
 	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
 	defer grpcPool.Close()
+<<<<<<< HEAD
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
+>>>>>>> e46ded913 (ticdc/kvclient: make multiple cdc kv clients share one RegionCache (#3464))
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
@@ -283,7 +294,6 @@ func prepareBench(b *testing.B, regionNum int) (
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
-		cdcClient.Close() //nolint:errcheck
 		wg.Done()
 	}()
 

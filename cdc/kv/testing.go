@@ -150,8 +150,14 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	defer cancel()
 
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
+<<<<<<< HEAD
 	cli := NewCDCClient(context.Background(), pdCli, storage.(tikv.Storage), grpcPool)
 	defer cli.Close()
+=======
+	regionCache := tikv.NewRegionCache(pdCli)
+
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache)
+>>>>>>> e46ded913 (ticdc/kvclient: make multiple cdc kv clients share one RegionCache (#3464))
 
 	startTS := mustGetTimestamp(t, storage)
 
@@ -240,8 +246,13 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	defer cancel()
 
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
+<<<<<<< HEAD
 	cli := NewCDCClient(context.Background(), pdCli, storage.(tikv.Storage), grpcPool)
 	defer cli.Close()
+=======
+	regionCache := tikv.NewRegionCache(pdCli)
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache)
+>>>>>>> e46ded913 (ticdc/kvclient: make multiple cdc kv clients share one RegionCache (#3464))
 
 	startTS := mustGetTimestamp(t, storage)
 	lockresolver := txnutil.NewLockerResolver(storage.(tikv.Storage))

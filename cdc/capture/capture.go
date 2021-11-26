@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
@@ -59,6 +60,7 @@ type Capture struct {
 	kvStorage    tidbkv.Storage
 	etcdClient   *kv.CDCEtcdClient
 	grpcPool     kv.GrpcPool
+	regionCache  *tikv.RegionCache
 	TimeAcquirer pdtime.TimeAcquirer
 	cancel       context.CancelFunc
 
@@ -109,6 +111,10 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.grpcPool.Close()
 	}
 	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
+	if c.regionCache != nil {
+		c.regionCache.Close()
+	}
+	c.regionCache = tikv.NewRegionCache(c.pdClient)
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
@@ -153,12 +159,23 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
+<<<<<<< HEAD
 		PDClient:     c.pdClient,
 		KVStorage:    c.kvStorage,
 		CaptureInfo:  c.info,
 		EtcdClient:   c.etcdClient,
 		GrpcPool:     c.grpcPool,
 		TimeAcquirer: c.TimeAcquirer,
+=======
+		PDClient:         c.pdClient,
+		KVStorage:        c.kvStorage,
+		CaptureInfo:      c.info,
+		EtcdClient:       c.etcdClient,
+		GrpcPool:         c.grpcPool,
+		RegionCache:      c.regionCache,
+		TimeAcquirer:     c.TimeAcquirer,
+		TableActorSystem: c.tableActorSystem,
+>>>>>>> e46ded913 (ticdc/kvclient: make multiple cdc kv clients share one RegionCache (#3464))
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -347,6 +364,7 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 }
 
 // AsyncClose closes the capture by unregistering it from etcd
+// Note: this function should be reentrant
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
 	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
@@ -361,6 +379,20 @@ func (c *Capture) AsyncClose() {
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
 	}
+<<<<<<< HEAD
+=======
+	if c.regionCache != nil {
+		c.regionCache.Close()
+		c.regionCache = nil
+	}
+	if c.tableActorSystem != nil {
+		err := c.tableActorSystem.Stop()
+		if err != nil {
+			log.Warn("stop table actor system failed", zap.Error(err))
+		}
+		c.tableActorSystem = nil
+	}
+>>>>>>> e46ded913 (ticdc/kvclient: make multiple cdc kv clients share one RegionCache (#3464))
 }
 
 // WriteDebugInfo writes the debug info into writer.
