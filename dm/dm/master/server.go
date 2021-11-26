@@ -875,10 +875,28 @@ func (s *Server) PurgeWorkerRelay(ctx context.Context, req *pb.PurgeWorkerRelayR
 
 	var wg sync.WaitGroup
 	for _, source := range req.Sources {
-		workers, err := s.scheduler.GetRelayWorkers(source)
+		var (
+			workers       []*scheduler.Worker
+			workerNameSet = make(map[string]struct{})
+			err           error
+		)
+
+		workers, err = s.scheduler.GetRelayWorkers(source)
 		if err != nil {
 			return nil, err
 		}
+		// returned workers is not duplicated
+		for _, w := range workers {
+			workerNameSet[w.BaseInfo().Name] = struct{}{}
+		}
+		// subtask workers may have been found in relay workers
+		taskWorker := s.scheduler.GetWorkerBySource(source)
+		if taskWorker != nil {
+			if _, ok := workerNameSet[taskWorker.BaseInfo().Name]; !ok {
+				workers = append(workers, taskWorker)
+			}
+		}
+
 		if len(workers) == 0 {
 			setWorkerResp(errorCommonWorkerResponse(fmt.Sprintf("relay worker for source %s not found, please `start-relay` first", source), source, ""))
 			continue
