@@ -17,12 +17,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/phayes/freeport"
 	"github.com/pingcap/ticdc/proto/p2p"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -38,23 +40,26 @@ const (
 
 // read only
 var defaultServerConfig4Testing = &MessageServerConfig{
-	MaxTopicPendingCount: 256,
-	MaxPendingTaskCount:  102400,
-	SendChannelSize:      16,
-	AckInterval:          time.Millisecond * 200,
-	WorkerPoolSize:       4,
-	MaxPeerCount:         1024,
+	MaxTopicPendingCount:                 256,
+	MaxPendingTaskCount:                  102400,
+	SendChannelSize:                      16,
+	AckInterval:                          time.Millisecond * 200,
+	WorkerPoolSize:                       4,
+	MaxPeerCount:                         1024,
+	WaitUnregisterHandleTimeoutThreshold: time.Millisecond * 100,
 }
 
 func newServerForTesting(t *testing.T, serverID string) (server *MessageServer, newClient func() (p2p.CDCPeerToPeerClient, func()), cancel func()) {
-	addr := t.TempDir() + "/p2p-testing.sock"
-	lis, err := net.Listen("unix", addr)
+	port := freeport.GetPort()
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	lis, err := net.Listen("tcp", addr)
 	require.NoError(t, err)
 
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
 
-	server = NewMessageServer(serverID, defaultServerConfig4Testing)
+	config := *defaultServerConfig4Testing
+	server = NewMessageServer(serverID, &config)
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, server)
 
 	var wg sync.WaitGroup
@@ -74,7 +79,7 @@ func newServerForTesting(t *testing.T, serverID string) (server *MessageServer, 
 			addr,
 			grpc.WithInsecure(),
 			grpc.WithContextDialer(func(_ context.Context, s string) (net.Conn, error) {
-				return net.Dial("unix", addr)
+				return net.Dial("tcp", addr)
 			}))
 		require.NoError(t, err)
 
@@ -110,32 +115,15 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 	server, newClient, closer := newServerForTesting(t, "test-server-2")
 	defer closer()
 
+	// Avoids server returning error due to congested topic.
+	server.config.MaxTopicPendingCount = math.MaxInt64
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := server.Run(ctx)
 		require.Regexp(t, ".*context canceled.*", err)
-	}()
-
-	lastIndices := make(map[string]int64)
-	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
-		require.Regexp(t, "test-client-.*", senderID)
-		require.IsType(t, &testTopicContent{}, i)
-		content := i.(*testTopicContent)
-		require.Equal(t, content.Index-1, lastIndices[senderID])
-		lastIndices[senderID] = content.Index
-		return nil
-	})
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		select {
-		case <-ctx.Done():
-		case err := <-errCh:
-			require.NoError(t, err)
-		}
 	}()
 
 	var ackWg sync.WaitGroup
@@ -196,6 +184,28 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 			}
 		}()
 	}
+
+	time.Sleep(1 * time.Second)
+
+	lastIndices := make(map[string]int64)
+	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
+		require.Regexp(t, "test-client-.*", senderID)
+		require.IsType(t, &testTopicContent{}, i)
+		content := i.(*testTopicContent)
+		require.Equal(t, content.Index-1, lastIndices[senderID])
+		lastIndices[senderID] = content.Index
+		return nil
+	})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-ctx.Done():
+		case err := <-errCh:
+			require.NoError(t, err)
+		}
+	}()
 
 	ackWg.Wait()
 	closer()
@@ -462,6 +472,13 @@ func TestServerIncomingConnectionStale(t *testing.T) {
 	require.NoError(t, err)
 	_ = stream.CloseSend()
 
+	require.Eventually(t, func() bool {
+		server.peerLock.RLock()
+		defer server.peerLock.RUnlock()
+		_, ok := server.peers["test-client-1"]
+		return ok
+	}, time.Millisecond*100, time.Millisecond*10)
+
 	stream, err = client.SendMessage(ctx)
 	require.NoError(t, err)
 
@@ -470,6 +487,71 @@ func TestServerIncomingConnectionStale(t *testing.T) {
 			SenderId:   "test-client-1",
 			ReceiverId: "test-server-1",
 			Epoch:      4, // a smaller epoch
+		},
+	})
+	require.NoError(t, err)
+
+	for {
+		resp, err := stream.Recv()
+		require.NoError(t, err)
+		if resp.ExitReason == p2p.ExitReason_OK {
+			continue
+		}
+		require.Equal(t, resp.ExitReason, p2p.ExitReason_STALE_CONNECTION)
+		break
+	}
+
+	cancel()
+	wg.Wait()
+}
+
+func TestServerOldConnectionStale(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	server, newClient, closer := newServerForTesting(t, "test-server-1")
+	defer closer()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(ctx)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	client, closeClient := newClient()
+	defer closeClient()
+
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer cancelStream()
+	stream, err := client.SendMessage(streamCtx)
+	require.NoError(t, err)
+
+	err = stream.Send(&p2p.MessagePacket{
+		Meta: &p2p.StreamMeta{
+			SenderId:   "test-client-1",
+			ReceiverId: "test-server-1",
+			Epoch:      4, // a smaller epoch
+		},
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		server.peerLock.RLock()
+		defer server.peerLock.RUnlock()
+		_, ok := server.peers["test-client-1"]
+		return ok
+	}, time.Millisecond*100, time.Millisecond*10)
+
+	stream1, err := client.SendMessage(ctx)
+	require.NoError(t, err)
+
+	err = stream1.Send(&p2p.MessagePacket{
+		Meta: &p2p.StreamMeta{
+			SenderId:   "test-client-1",
+			ReceiverId: "test-server-1",
+			Epoch:      5, // a larger epoch
 		},
 	})
 	require.NoError(t, err)
@@ -719,6 +801,107 @@ func TestServerVersionsIncompatible(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, p2p.ExitReason_UNKNOWN, resp.ExitReason)
 	require.Regexp(t, ".*incompatible.*", resp.String())
+
+	cancel()
+	wg.Wait()
+}
+
+func TestServerDataLossAfterUnregisterHandle(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*20)
+	defer cancel()
+
+	server, newClient, closer := newServerForTesting(t, "test-server-1")
+	defer closer()
+
+	serverCtx, cancelServer := context.WithCancel(ctx)
+	defer cancelServer()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(serverCtx)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	var called int32
+	mustAddHandler(ctx, t, server, "blocking-handler", &testTopicContent{}, func(_ string, _ interface{}) error {
+		if atomic.AddInt32(&called, 1) == 2 {
+			time.Sleep(1 * time.Second)
+		}
+		return nil
+	})
+
+	client, closeClient := newClient()
+	defer closeClient()
+
+	stream, err := client.SendMessage(ctx)
+	require.NoError(t, err)
+
+	err = stream.Send(&p2p.MessagePacket{
+		Meta: &p2p.StreamMeta{
+			SenderId:   "test-client-1",
+			ReceiverId: "test-server-1",
+			Epoch:      0,
+		},
+	})
+	require.NoError(t, err)
+
+	err = stream.Send(&p2p.MessagePacket{
+		Entries: []*p2p.MessageEntry{
+			{
+				Topic:    "blocking-handler",
+				Content:  []byte(`{"index":1}`), // just a dummy message
+				Sequence: 1,
+			},
+			{
+				Topic:    "blocking-handler",
+				Content:  []byte(`{"index":2}`), // just a dummy message
+				Sequence: 2,
+			},
+			{
+				// This message will be lost
+				Topic:    "blocking-handler",
+				Content:  []byte(`{"index":3}`), // just a dummy message
+				Sequence: 3,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return atomic.LoadInt32(&called) == 2
+	}, time.Millisecond*500, time.Millisecond*10)
+
+	err = server.SyncRemoveHandler(ctx, "blocking-handler")
+
+	require.NoError(t, err)
+
+	// re-registers the handler
+	errCh := mustAddHandler(ctx, t, server, "blocking-handler", &testTopicContent{}, func(_ string, msg interface{}) error {
+		require.Fail(t, "should not have been called", "value: %v", msg)
+		return nil
+	})
+
+	err = stream.Send(&p2p.MessagePacket{
+		Entries: []*p2p.MessageEntry{
+			{
+				// This message should never have reached the handler because the
+				// message with Sequence = 2 has been lost.
+				Topic:    "blocking-handler",
+				Content:  []byte(`{"index":4}`), // just a dummy message
+				Sequence: 4,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	select {
+	case <-ctx.Done():
+		require.Fail(t, "test timed out: TestServerDataLossAfterUnregisterHandle")
+	case err = <-errCh:
+	}
+	require.Error(t, err)
+	require.Regexp(t, "ErrPeerMessageDataLost", err.Error())
 
 	cancel()
 	wg.Wait()

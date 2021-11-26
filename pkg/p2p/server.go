@@ -36,16 +36,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const (
-	// waitUnregisterHandleTimeout specifies how long to wait for
-	// the topic handler to consume all pending messages before
-	// forcefully unregister the handler.
-	// For a correct implementation of the handler, the time it needs
-	// to consume these messages is minimal, as the handler is not
-	// expected to block on channels, etc.
-	waitUnregisterHandleTimeout = time.Second * 5
-)
-
 // MessageServerConfig stores configurations for the MessageServer
 type MessageServerConfig struct {
 	// The maximum number of entries to be cached for topics with no handler registered
@@ -64,6 +54,16 @@ type MessageServerConfig struct {
 	MaxPeerCount int
 	// Semver of the server. Empty string means no version check.
 	ServerVersion string
+
+	// The maximum time duration to wait before forcefully removing a handler.
+	//
+	// waitUnregisterHandleTimeout specifies how long to wait for
+	// the topic handler to consume all pending messages before
+	// forcefully unregister the handler.
+	// For a correct implementation of the handler, the time it needs
+	// to consume these messages is minimal, as the handler is not
+	// expected to block on channels, etc.
+	WaitUnregisterHandleTimeoutThreshold time.Duration
 }
 
 // cdcPeer is used to store information on one connected client.
@@ -228,7 +228,7 @@ func (m *MessageServer) run(ctx context.Context) error {
 				if handler, ok := m.handlers[task.topic]; ok {
 					delete(m.handlers, task.topic)
 					go func() {
-						err := handler.GracefulUnregister(ctx, waitUnregisterHandleTimeout)
+						err := handler.GracefulUnregister(ctx, m.config.WaitUnregisterHandleTimeoutThreshold)
 						if err != nil {
 							// This can only happen if `ctx` is cancelled or the workerpool
 							// fails to unregister the handle in time, which can be caused
@@ -239,11 +239,10 @@ func (m *MessageServer) run(ctx context.Context) error {
 							//
 							// Note: Even if `GracefulUnregister` does fail, the handle is still
 							// unregistered, only forcefully.
-							log.L().DPanic("failed to gracefully unregister handle",
+							log.Warn("failed to gracefully unregister handle",
 								zap.Error(err))
 						}
 						log.Debug("handler deregistered", zap.String("topic", task.topic))
-						m.acks.RemoveTopic(task.topic)
 						if task.done != nil {
 							close(task.done)
 						}
@@ -770,7 +769,7 @@ func (m *MessageServer) verifyStreamMeta(streamMeta *p2p.StreamMeta) error {
 		)
 	}
 
-	if m.config.ServerVersion == "" {
+	if m.config.ServerVersion == "" || streamMeta.ClientVersion == "" {
 		// skip checking versions
 		return nil
 	}
