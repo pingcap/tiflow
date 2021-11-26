@@ -279,6 +279,10 @@ cleanup-speed-limit = 14
 				MaxDays:    1,
 				MaxBackups: 1,
 			},
+			Sampling: &config.LogSamplingConfig{
+				Initial:    100,
+				Thereafter: 100,
+			},
 		},
 		DataDir:                dataDir,
 		GcTTL:                  500,
@@ -399,6 +403,10 @@ cert-allowed-cn = ["dd","ee"]
 				MaxSize:    200,
 				MaxDays:    1,
 				MaxBackups: 1,
+			},
+			Sampling: &config.LogSamplingConfig{
+				Initial:    100,
+				Thereafter: 100,
 			},
 		},
 		DataDir:                dataDir,

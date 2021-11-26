@@ -53,9 +53,15 @@ type LogFileConfig struct {
 	MaxBackups int `toml:"max-backups" json:"max-backups"`
 }
 
+type LogSamplingConfig struct {
+	Initial    int `toml:"initial" json:"initial"`
+	Thereafter int `toml:"thereafter" json:"thereafter"`
+}
+
 // LogConfig represents log config for server
 type LogConfig struct {
-	File *LogFileConfig `toml:"file" json:"file"`
+	File     *LogFileConfig     `toml:"file" json:"file"`
+	Sampling *LogSamplingConfig `toml:"sampling" json:"sampling"`
 }
 
 var defaultServerConfig = &ServerConfig{
@@ -68,6 +74,10 @@ var defaultServerConfig = &ServerConfig{
 			MaxSize:    300,
 			MaxDays:    0,
 			MaxBackups: 0,
+		},
+		Sampling: &LogSamplingConfig{
+			Initial:    100,
+			Thereafter: 100,
 		},
 	},
 	DataDir: "",

@@ -14,7 +14,11 @@
 package logutil
 
 import (
+	"bytes"
 	"context"
+	"io/ioutil"
+	"math/rand"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -81,4 +85,76 @@ func (s *logSuite) TestZapErrorFilter(c *check.C) {
 	for _, tc := range testCases {
 		c.Assert(ZapErrorFilter(tc.err, tc.filters...), check.DeepEquals, tc.expected)
 	}
+}
+
+func getLinesCount(logFile string) (int, error) {
+	f, err := os.Open(logFile)
+	f.Name()
+	if err != nil {
+		return 0, err
+	}
+	bytesContent, err := ioutil.ReadAll(f)
+	if err != nil {
+		return 0, err
+	}
+	sep := []byte{'\n'}
+	cnt := bytes.Count(bytesContent, sep)
+
+	return cnt, nil
+}
+
+func getRandomStr(n int) string {
+	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+	r := make([]rune, n)
+	for i := range r {
+		r[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(r)
+}
+
+func (s *logSuite) TestLogSampleAndDrop(c *check.C) {
+	defer testleak.AfterTest(c)()
+	f := filepath.Join(c.MkDir(), "test")
+	cfg := &Config{
+		Level:              "info",
+		File:               f,
+		SamplingInitial:    10,
+		SamplingThereafter: 10,
+	}
+	err := InitLogger(cfg)
+	c.Assert(err, check.IsNil)
+
+	// info logs with the same message should be logged as [0~9,19,29,39,49,59,69,79,89,99]
+	for i := 0; i < 100; i++ {
+		log.Info("test ticdc log info", zap.Int("index", i))
+	}
+	cnt, err := getLinesCount(f)
+	c.Assert(err, check.IsNil)
+	c.Assert(cnt, check.Equals, 19)
+
+	// clear the log file
+	err = os.Truncate(f, 0)
+	c.Assert(err, check.IsNil)
+
+	// debug logs should not be logged
+	for i := 0; i < 100; i++ {
+		log.Debug("test ticdc log debug", zap.Int("index", i))
+	}
+
+	cnt, err = getLinesCount(f)
+	c.Assert(err, check.IsNil)
+	c.Assert(cnt, check.Equals, 0)
+
+	// clear the log file
+	err = os.Truncate(f, 0)
+	c.Assert(err, check.IsNil)
+
+	// all warn logs without the same message should be logged
+	for i := 0; i < 100; i++ {
+		log.Warn(getRandomStr(5), zap.Int("index", i))
+	}
+	cnt, err = getLinesCount(f)
+	c.Assert(err, check.IsNil)
+	c.Assert(cnt, check.Equals, 100)
 }
