@@ -138,10 +138,12 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 				}
 				sql, args = prepareDelete(row.Table.QuoteString(), row.PreColumns, true)
 			}
-			_, err := s.db.ExecContext(ctx, sql, args...)
-			log.Info("exec row", zap.String("sql", sql), zap.Any("args", args))
-			if err != nil {
-				return errors.Trace(err)
+			if sql != "" && args != nil {
+				_, err := s.db.ExecContext(ctx, sql, args...)
+				log.Info("exec row", zap.String("sql", sql), zap.Any("args", args))
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 		}
 	} else {
@@ -151,10 +153,12 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 			} else {
 				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, true, false)
 			}
-			_, err := s.db.ExecContext(ctx, sql, args...)
-			log.Info("execute dml", zap.String("sql", sql))
-			if err != nil {
-				return errors.Trace(err)
+			if sql != "" && args != nil {
+				_, err := s.db.ExecContext(ctx, sql, args...)
+				log.Info("execute dml", zap.String("sql", sql))
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 		}
 	}
