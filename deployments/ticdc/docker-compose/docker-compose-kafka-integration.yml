@@ -2,13 +2,13 @@ version: '2.1'
 
 services:
   zookeeper:
-    image: wurstmeister/zookeeper
+    image: registry-mirror.pingcap.net/wurstmeister/zookeeper
     ports:
       - "2181:2181"
 
   kafka:
     container_name: kafka
-    image: wurstmeister/kafka:2.12-2.4.1
+    image: registry-mirror.pingcap.net/wurstmeister/kafka:2.12-2.4.1
     ports:
       - "9092:9092"
     environment:

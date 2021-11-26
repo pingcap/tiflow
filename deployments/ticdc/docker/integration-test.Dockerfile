@@ -55,5 +55,5 @@ COPY . .
 # We always need to clean before we build, please don't adjust its order.
 RUN make clean
 RUN make integration_test_build kafka_consumer cdc
-COPY --from=downloader /root/download/bin/* ./bin
+COPY --from=downloader /root/download/bin/* ./bin/
 RUN make check_third_party_binary
