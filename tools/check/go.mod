@@ -15,6 +15,7 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
 	github.com/rakyll/statik v0.1.7
 	github.com/zhouqiang-cl/gocovmerge v0.0.0-20190125174600-5256314471af
+	gotest.tools/gotestsum v1.7.0 // indirect
 	mvdan.cc/gofumpt v0.1.1
 	mvdan.cc/sh/v3 v3.3.1
 )

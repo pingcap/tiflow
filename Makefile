@@ -93,7 +93,8 @@ dev: check test
 
 test: unit_test dm_unit_test
 
-build: cdc dm
+build:
+	echo "Building TiDB CDC..."
 
 bank:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/bank ./tests/bank/bank.go ./tests/bank/case.go
@@ -127,9 +128,9 @@ unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov 
 	CGO_ENABLED=1 tools/bin/gotestsum --junitfile cdc-junit-report.xml -- -v -timeout 5m -p $(P) --race \
 	-covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES_WITHOUT_DM) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
-	tools/bin/gocov convert "$(TEST_DIR)/cov.unit.out" | tools/bin/gocov-xml > cdc-coverage.xml \
-	@bash <(curl -s https://codecov.io/bash) -F ticdc -f $(TEST_DIR)/unit_cov.out -t $(TICDC_CODECOV_TOKEN)
+	tools/bin/gocov convert "$(TEST_DIR)/cov.unit.out" | tools/bin/gocov-xml > cdc-coverage.xml
 	$(FAILPOINT_DISABLE)
+	@bash <(curl -s https://codecov.io/bash) -F cdc -f $(TEST_DIR)/cov.unit.out -t $(TICDC_CODECOV_TOKEN)
 
 leak_test: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
@@ -223,12 +224,8 @@ endif
 
 unit_test_coverage:
 	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
-ifeq ("$(JenkinsCI)", "1")
-	@bash <(curl -s https://codecov.io/bash) -f $(TEST_DIR)/unit_cov.out -t $(CODECOV_TOKEN)
-else
 	go tool cover -html "$(TEST_DIR)/unit_cov.out" -o "$(TEST_DIR)/unit_cov.html"
 	go tool cover -func="$(TEST_DIR)/unit_cov.out"
-endif
 
 data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
@@ -288,9 +285,10 @@ dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/goc
 	CGO_ENABLED=1 tools/bin/gotestsum --junitfile dm-junit-report.xml -- -v -timeout 5m -p $(P) --race \
 	-covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(DM_PACKAGES) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
-	tools/bin/gocov convert "$(DM_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > dm-coverage.xml \
-	@bash <(curl -s https://codecov.io/bash) -F DM -f $(DM_TEST_DIR)/cov.unit_test.out -t $(TICDC_CODECOV_TOKEN)
+	tools/bin/gocov convert "$(DM_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > dm-coverage.xml
 	$(FAILPOINT_DISABLE)
+	@bash <(curl -s https://codecov.io/bash) -F dm -f dm-coverage.xml -t $(TICDC_CODECOV_TOKEN)
+
 
 dm_integration_test_build: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
@@ -360,13 +358,9 @@ dm_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	find "$(DM_TEST_DIR)" -type f -name "cov.*.dmctl.*.out" -exec sed -i "s/mode: count/mode: atomic/g" {} \;
 	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.* | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*portal.*|.*chaos.*" > "$(DM_TEST_DIR)/all_cov.out"
 	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.unit_test*.out | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*portal.*|.*chaos.*" > $(DM_TEST_DIR)/unit_test.out
-ifeq ("$(JenkinsCI)", "1")
-	@bash <(curl -s https://codecov.io/bash) -f $(DM_TEST_DIR)/unit_test.out -t $(CODECOV_TOKEN)
-	tools/bin/goveralls -coverprofile=$(DM_TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
-else
 	go tool cover -html "$(DM_TEST_DIR)/all_cov.out" -o "$(DM_TEST_DIR)/all_cov.html"
 	go tool cover -html "$(DM_TEST_DIR)/unit_test.out" -o "$(DM_TEST_DIR)/unit_test_cov.html"
-endif
+
 
 tools/bin/failpoint-ctl: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/failpoint-ctl github.com/pingcap/failpoint/failpoint-ctl
