@@ -23,10 +23,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	lsorter "github.com/pingcap/ticdc/cdc/sorter/leveldb"
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/db"
 	"github.com/pingcap/ticdc/pkg/actor"
 	"github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/db"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -50,7 +50,8 @@ type System struct {
 	dbRouter    *actor.Router
 	cleanSystem *actor.System
 	cleanRouter *actor.Router
-	cfg         *config.SorterConfig
+	dir         string
+	cfg         *config.DBConfig
 	closedCh    chan struct{}
 	closedWg    *sync.WaitGroup
 
@@ -59,16 +60,17 @@ type System struct {
 }
 
 // NewSystem returns a system.
-func NewSystem(cfg *config.SorterConfig) *System {
+func NewSystem(dir string, cfg *config.DBConfig) *System {
 	dbSystem, dbRouter := actor.NewSystemBuilder("sorter").
-		WorkerNumber(cfg.LevelDB.Count).Build()
+		WorkerNumber(cfg.Count).Build()
 	cleanSystem, cleanRouter := actor.NewSystemBuilder("cleaner").
-		WorkerNumber(cfg.LevelDB.Count).Build()
+		WorkerNumber(cfg.Count).Build()
 	return &System{
 		dbSystem:    dbSystem,
 		dbRouter:    dbRouter,
 		cleanSystem: cleanSystem,
 		cleanRouter: cleanRouter,
+		dir:         dir,
 		cfg:         cfg,
 		closedCh:    make(chan struct{}),
 		closedWg:    new(sync.WaitGroup),
@@ -83,7 +85,7 @@ func (s *System) ActorID(tableID uint64) actor.ID {
 	b := [8]byte{}
 	binary.LittleEndian.PutUint64(b[:], tableID)
 	h.Write(b[:])
-	return actor.ID(h.Sum64() % uint64(s.cfg.LevelDB.Count))
+	return actor.ID(h.Sum64() % uint64(s.cfg.Count))
 }
 
 // Router returns leveldb actors router.
@@ -99,7 +101,7 @@ func (s *System) CleanerRouter() *actor.Router {
 // broadcase messages to actors in the router.
 // Caveats it may lose messages quietly.
 func (s *System) broadcast(ctx context.Context, router *actor.Router, msg message.Message) {
-	dbCount := s.cfg.LevelDB.Count
+	dbCount := s.cfg.Count
 	for id := 0; id < dbCount; id++ {
 		err := router.SendB(ctx, actor.ID(id), msg)
 		if err != nil {
@@ -124,10 +126,10 @@ func (s *System) Start(ctx context.Context) error {
 	s.dbSystem.Start(ctx)
 	s.cleanSystem.Start(ctx)
 	captureAddr := config.GetGlobalServerConfig().AdvertiseAddr
-	dbCount := s.cfg.LevelDB.Count
+	dbCount := s.cfg.Count
 	for id := 0; id < dbCount; id++ {
 		// Open leveldb.
-		db, err := db.OpenDB(ctx, id, s.cfg)
+		db, err := db.OpenDB(ctx, id, s.dir, s.cfg)
 		if err != nil {
 			return errors.Trace(err)
 		}

@@ -18,7 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/sorter/encoding"
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/db"
+	"github.com/pingcap/ticdc/pkg/db"
 	"golang.org/x/sync/semaphore"
 )
 

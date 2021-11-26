@@ -23,11 +23,11 @@ import (
 
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sorter/encoding"
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/db"
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
 	"github.com/pingcap/ticdc/pkg/actor"
 	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/db"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,11 +61,10 @@ func prepareData(t *testing.T, db db.DB, data [][]int) {
 func TestCleanerPoll(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
-	db, err := db.OpenDB(ctx, 1, cfg)
+	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	clean, _, err := NewCleanerActor(1, db, nil, cfg, closedWg)
@@ -158,11 +157,10 @@ func TestCleanerPoll(t *testing.T) {
 func TestCleanerContextCancel(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
-	db, err := db.OpenDB(ctx, 1, cfg)
+	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	ldb, _, err := NewCleanerActor(0, db, nil, cfg, closedWg)
@@ -179,13 +177,12 @@ func TestCleanerContextCancel(t *testing.T) {
 func TestCleanerWriteRateLimited(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
-	cfg.LevelDB.CleanupSpeedLimit = 4
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
+	cfg.CleanupSpeedLimit = 4
 	// wbSize = cleanup speed limit / 2
 
-	db, err := db.OpenDB(ctx, 1, cfg)
+	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	clean, _, err := NewCleanerActor(1, db, nil, cfg, closedWg)
@@ -223,7 +220,7 @@ func TestCleanerWriteRateLimited(t *testing.T) {
 	var delay time.Duration
 	var count int
 	for {
-		for i := 0; i < cfg.LevelDB.CleanupSpeedLimit/2; i++ {
+		for i := 0; i < cfg.CleanupSpeedLimit/2; i++ {
 			wb.Delete(keys[i])
 		}
 		delay, err = clean.writeRateLimited(wb, false)
@@ -257,13 +254,12 @@ func TestCleanerWriteRateLimited(t *testing.T) {
 func TestCleanerTaskRescheduled(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
-	cfg.LevelDB.CleanupSpeedLimit = 4
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
+	cfg.CleanupSpeedLimit = 4
 	// wbSize = cleanup speed limit / 2
 
-	db, err := db.OpenDB(ctx, 1, cfg)
+	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	router := actor.NewRouter("test")

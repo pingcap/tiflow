@@ -25,15 +25,14 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
-func TestModelChecking(t *testing.T) {
+func TestDB(t *testing.T) {
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
 	ldb, err := leveldb.Open(storage.NewMemStorage(), &opt.Options{})
 	require.Nil(t, err)
-	db, err := OpenDB(ctx, 1, cfg)
+	db, err := OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 
 	// Collect metrics

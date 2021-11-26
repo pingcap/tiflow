@@ -18,63 +18,63 @@ import (
 )
 
 var (
-	sorterDBWriteBytes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	dbWriteBytes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
-		Subsystem: "sorter",
-		Name:      "leveldb_write_bytes_total",
+		Subsystem: "db",
+		Name:      "write_bytes_total",
 		Help:      "The total number of write bytes by the leveldb",
 	}, []string{"capture", "id"})
 
-	sorterDBReadBytes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	dbReadBytes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
-		Subsystem: "sorter",
-		Name:      "leveldb_read_bytes_total",
+		Subsystem: "db",
+		Name:      "read_bytes_total",
 		Help:      "The total number of read bytes by the leveldb",
 	}, []string{"capture", "id"})
 
-	sorterDBSnapshotGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	dbSnapshotGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
-		Subsystem: "sorter",
-		Name:      "leveldb_snapshot_count_gauge",
-		Help:      "The number of snapshot by the sorter",
+		Subsystem: "db",
+		Name:      "snapshot_count_gauge",
+		Help:      "The number of snapshot by the db",
 	}, []string{"capture", "id"})
 
-	sorterDBIteratorGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	dbIteratorGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
-		Subsystem: "sorter",
-		Name:      "leveldb_iterator_count_gauge",
-		Help:      "The number of iterator by the sorter",
+		Subsystem: "db",
+		Name:      "iterator_count_gauge",
+		Help:      "The number of iterator by the db",
 	}, []string{"capture", "id"})
 
 	sorterDBLevelCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
-		Subsystem: "sorter",
-		Name:      "leveldb_level_count",
-		Help:      "The number of files in each level by the sorter",
+		Subsystem: "db",
+		Name:      "level_count",
+		Help:      "The number of files in each level by the db",
 	}, []string{"capture", "level", "id"})
 
-	sorterDBWriteDelayDuration = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	dbWriteDelayDuration = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
-		Subsystem: "sorter",
-		Name:      "leveldb_write_delay_seconds",
+		Subsystem: "db",
+		Name:      "write_delay_seconds",
 		Help:      "The duration of leveldb write delay seconds",
 	}, []string{"capture", "id"})
 
-	sorterDBWriteDelayCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	dbWriteDelayCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
-		Subsystem: "sorter",
-		Name:      "leveldb_write_delay_total",
+		Subsystem: "db",
+		Name:      "write_delay_total",
 		Help:      "The total number of leveldb delay",
 	}, []string{"capture", "id"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(sorterDBSnapshotGauge)
-	registry.MustRegister(sorterDBIteratorGauge)
+	registry.MustRegister(dbSnapshotGauge)
+	registry.MustRegister(dbIteratorGauge)
 	registry.MustRegister(sorterDBLevelCount)
-	registry.MustRegister(sorterDBWriteBytes)
-	registry.MustRegister(sorterDBReadBytes)
-	registry.MustRegister(sorterDBWriteDelayDuration)
-	registry.MustRegister(sorterDBWriteDelayCount)
+	registry.MustRegister(dbWriteBytes)
+	registry.MustRegister(dbReadBytes)
+	registry.MustRegister(dbWriteDelayDuration)
+	registry.MustRegister(dbWriteDelayCount)
 }

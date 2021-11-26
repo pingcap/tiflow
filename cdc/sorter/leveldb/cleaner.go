@@ -21,11 +21,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/sorter/encoding"
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/db"
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
 	"github.com/pingcap/ticdc/pkg/actor"
 	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/db"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -46,17 +46,17 @@ var _ actor.Actor = (*CleanerActor)(nil)
 // NewCleanerActor returns a cleaner actor.
 func NewCleanerActor(
 	id int, db db.DB, router *actor.Router,
-	cfg *config.SorterConfig, wg *sync.WaitGroup,
+	cfg *config.DBConfig, wg *sync.WaitGroup,
 ) (*CleanerActor, actor.Mailbox, error) {
 	wg.Add(1)
 	wbSize := 500 // default write batch size.
-	if (cfg.LevelDB.CleanupSpeedLimit / 2) < wbSize {
+	if (cfg.CleanupSpeedLimit / 2) < wbSize {
 		// wb size must be less than speed limit, otherwise it is easily
 		// rate-limited.
-		wbSize = cfg.LevelDB.CleanupSpeedLimit / 2
+		wbSize = cfg.CleanupSpeedLimit / 2
 	}
-	limiter := rate.NewLimiter(rate.Limit(cfg.LevelDB.CleanupSpeedLimit), wbSize*2)
-	mb := actor.NewMailbox(actor.ID(id), cfg.LevelDB.Concurrency)
+	limiter := rate.NewLimiter(rate.Limit(cfg.CleanupSpeedLimit), wbSize*2)
+	mb := actor.NewMailbox(actor.ID(id), cfg.Concurrency)
 	return &CleanerActor{
 		id:       actor.ID(id),
 		db:       db,

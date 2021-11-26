@@ -33,26 +33,25 @@ import (
 )
 
 // OpenDB opens a leveldb.
-func OpenDB(ctx context.Context, id int, cfg *config.SorterConfig) (DB, error) {
-	lcfg := cfg.LevelDB
+func OpenDB(ctx context.Context, id int, path string, cfg *config.DBConfig) (DB, error) {
 	var option opt.Options
-	option.OpenFilesCacheCapacity = lcfg.MaxOpenFiles / lcfg.Count
-	option.BlockCacheCapacity = lcfg.BlockCacheSize / lcfg.Count
-	option.BlockSize = lcfg.BlockSize
-	option.WriteBuffer = lcfg.WriterBufferSize
+	option.OpenFilesCacheCapacity = cfg.MaxOpenFiles / cfg.Count
+	option.BlockCacheCapacity = cfg.BlockCacheSize / cfg.Count
+	option.BlockSize = cfg.BlockSize
+	option.WriteBuffer = cfg.WriterBufferSize
 	option.Compression = opt.NoCompression
-	if lcfg.Compression == "snappy" {
+	if cfg.Compression == "snappy" {
 		option.Compression = opt.SnappyCompression
 	}
-	option.CompactionTableSize = lcfg.TargetFileSizeBase
-	option.CompactionL0Trigger = lcfg.CompactionL0Trigger
-	option.WriteL0SlowdownTrigger = lcfg.WriteL0SlowdownTrigger
-	option.WriteL0PauseTrigger = lcfg.WriteL0PauseTrigger
+	option.CompactionTableSize = cfg.TargetFileSizeBase
+	option.CompactionL0Trigger = cfg.CompactionL0Trigger
+	option.WriteL0SlowdownTrigger = cfg.WriteL0SlowdownTrigger
+	option.WriteL0PauseTrigger = cfg.WriteL0PauseTrigger
 	option.ErrorIfExist = true
 	option.NoSync = true
 
-	// TODO make sure sorter dir is under data dir.
-	dbDir := filepath.Join(cfg.SortDir, fmt.Sprintf("%04d", id))
+	// TODO make sure path is under data dir.
+	dbDir := filepath.Join(path, fmt.Sprintf("%04d", id))
 	err := retry.Do(ctx, func() error {
 		err1 := os.RemoveAll(dbDir)
 		if err1 != nil {
@@ -111,17 +110,17 @@ func (p *levelDB) CollectMetrics(captureAddr string, i int) {
 		WithLabelValues(captureAddr, id).Set(float64(stats.BlockCacheSize))
 	sorter.OpenFileCountGauge.
 		WithLabelValues(captureAddr, id).Set(float64(stats.OpenedTablesCount))
-	sorterDBSnapshotGauge.
+	dbSnapshotGauge.
 		WithLabelValues(captureAddr, id).Set(float64(stats.AliveSnapshots))
-	sorterDBIteratorGauge.
+	dbIteratorGauge.
 		WithLabelValues(captureAddr, id).Set(float64(stats.AliveIterators))
-	sorterDBReadBytes.
+	dbReadBytes.
 		WithLabelValues(captureAddr, id).Set(float64(stats.IORead))
-	sorterDBWriteBytes.
+	dbWriteBytes.
 		WithLabelValues(captureAddr, id).Set(float64(stats.IOWrite))
-	sorterDBWriteDelayCount.
+	dbWriteDelayCount.
 		WithLabelValues(captureAddr, id).Set(float64(stats.WriteDelayCount))
-	sorterDBWriteDelayDuration.
+	dbWriteDelayDuration.
 		WithLabelValues(captureAddr, id).Set(stats.WriteDelayDuration.Seconds())
 	metricLevelCount := sorterDBLevelCount.
 		MustCurryWith(map[string]string{"capture": captureAddr, "id": id})

@@ -21,11 +21,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/db"
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
 	"github.com/pingcap/ticdc/pkg/actor"
 	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/db"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -50,21 +50,21 @@ var _ actor.Actor = (*DBActor)(nil)
 
 // NewDBActor returns a db actor.
 func NewDBActor(
-	ctx context.Context, id int, db db.DB, cfg *config.SorterConfig,
+	ctx context.Context, id int, db db.DB, cfg *config.DBConfig,
 	wg *sync.WaitGroup, captureAddr string,
 ) (*DBActor, actor.Mailbox, error) {
 	idTag := strconv.Itoa(id)
 	// Write batch size should be larger than block size to save CPU.
 	const writeBatchSizeFactor = 16
-	wbSize := cfg.LevelDB.BlockSize * writeBatchSizeFactor
+	wbSize := cfg.BlockSize * writeBatchSizeFactor
 	// Double batch capacity to avoid memory reallocation.
 	const writeBatchCapFactor = 2
 	wbCap := wbSize * writeBatchCapFactor
 	wb := db.Batch(wbCap)
 	// IterCount limits the total number of opened iterators to release leveldb
 	// resources (memtables and SST files) in time.
-	iterSema := semaphore.NewWeighted(int64(cfg.LevelDB.Concurrency))
-	mb := actor.NewMailbox(actor.ID(id), cfg.LevelDB.Concurrency)
+	iterSema := semaphore.NewWeighted(int64(cfg.Concurrency))
+	mb := actor.NewMailbox(actor.ID(id), cfg.Concurrency)
 	wg.Add(1)
 	return &DBActor{
 		id:       actor.ID(id),

@@ -22,10 +22,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/db"
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
 	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/db"
 	"github.com/pingcap/ticdc/pkg/leakutil"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -40,11 +40,10 @@ func TestMaybeWrite(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
-	db, err := db.OpenDB(ctx, 1, cfg)
+	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
@@ -86,11 +85,10 @@ func makeTask(events map[message.Key][]byte, needSnap bool) ([]actormsg.Message,
 
 func TestPutReadDelete(t *testing.T) {
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
-	db, err := db.OpenDB(ctx, 1, cfg)
+	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
@@ -192,11 +190,10 @@ func TestModelChecking(t *testing.T) {
 	seed := time.Now().Unix()
 	rd := rand.New(rand.NewSource(seed))
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
-	db, err := db.OpenDB(ctx, 1, cfg)
+	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
@@ -279,11 +276,10 @@ func TestModelChecking(t *testing.T) {
 
 func TestContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
-	db, err := db.OpenDB(ctx, 1, cfg)
+	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
