@@ -202,7 +202,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
 	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs, flowController, mounter)
-	sinkNode := newSinkNode(sink, replicaInfo.StartTs, targetTs, flowController)
+	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
 
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", sorterNode)
