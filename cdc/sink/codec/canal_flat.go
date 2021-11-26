@@ -521,6 +521,7 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 	if err != nil {
 		return nil, err
 	}
+
 	return result, err
 }
 
