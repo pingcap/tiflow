@@ -24,7 +24,12 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	tidbkv "github.com/pingcap/tidb/kv"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/store/tikv/oracle"
+=======
+	"github.com/tikv/client-go/v2/oracle"
+	"github.com/tikv/client-go/v2/tikv"
+>>>>>>> e46ded913 (ticdc/kvclient: make multiple cdc kv clients share one RegionCache (#3464))
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -33,11 +38,22 @@ import (
 // the lifecycle of vars in the GlobalVars shoule be aligned with the ticdc server process.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
+<<<<<<< HEAD
 	PDClient    pd.Client
 	KVStorage   tidbkv.Storage
 	CaptureInfo *model.CaptureInfo
 	EtcdClient  *kv.CDCEtcdClient
 	GrpcPool    kv.GrpcPool
+=======
+	PDClient         pd.Client
+	KVStorage        tidbkv.Storage
+	CaptureInfo      *model.CaptureInfo
+	EtcdClient       *etcd.CDCEtcdClient
+	GrpcPool         kv.GrpcPool
+	RegionCache      *tikv.RegionCache
+	TimeAcquirer     pdtime.TimeAcquirer
+	TableActorSystem *system.System
+>>>>>>> e46ded913 (ticdc/kvclient: make multiple cdc kv clients share one RegionCache (#3464))
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline
