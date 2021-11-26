@@ -88,6 +88,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 		{Name: "myfloat", Value: float64(3.14), Type: mysql.TypeFloat},
 		{Name: "mybytes", Value: []byte("Hello World"), Type: mysql.TypeBlob},
 		{Name: "ts", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
+		{Name: "myjson", Value: "{\"foo\": \"bar\"}", Type: mysql.TypeJSON},
 	}, time.Local)
 	c.Assert(err, check.IsNil)
 
