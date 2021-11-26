@@ -92,6 +92,12 @@ func (s *Credential) getSelfCommonName() (string, error) {
 // AddSelfCommonName add Common Name in certificate that specified by s.CertPath
 // to s.CertAllowedCN
 func (s *Credential) AddSelfCommonName() error {
+	// if CertAllowedCN was not specified, we should not use any common name
+	// otherwise, https requests without a certificate will not be accepted by
+	// cdc server
+	if len(s.CertAllowedCN) == 0 {
+		return nil
+	}
 	cn, err := s.getSelfCommonName()
 	if err != nil {
 		return err
