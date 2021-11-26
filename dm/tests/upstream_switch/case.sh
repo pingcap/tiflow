@@ -190,7 +190,7 @@ function clean_task() {
 		"stop-task task_pessimistic" \
 		"\result\": true" 3
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"stop-relay -s mysql-replica-02 worker2" \
+		"stop-relay -s mysql-replica-02" \
 		"\result\": true" 2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source stop mysql-replica-01" \
