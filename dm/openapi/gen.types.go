@@ -160,6 +160,20 @@ type Purge struct {
 	RemainSpace *int64 `json:"remain_space"`
 }
 
+// the config of relay
+type RelayConfig struct {
+	EnableRelay *bool `json:"enable_relay,omitempty"`
+
+	// starting GTID of the upstream binlog
+	RelayBinlogGtid *string `json:"relay_binlog_gtid"`
+
+	// starting filename of the upstream binlog
+	RelayBinlogName *string `json:"relay_binlog_name"`
+
+	// the directory where the relay log is stored
+	RelayDir *string `json:"relay_dir"`
+}
+
 // status of relay log
 type RelayStatus struct {
 	// upstream binlog file information
@@ -224,6 +238,9 @@ type Source struct {
 
 	// relay log cleanup policy configuration
 	Purge *Purge `json:"purge,omitempty"`
+
+	// the config of relay
+	RelayConfig *RelayConfig `json:"relay_config,omitempty"`
 
 	// data source ssl configuration, the field will be hidden when getting the data source configuration from the interface
 	Security *Security `json:"security"`
