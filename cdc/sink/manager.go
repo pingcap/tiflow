@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	redo "github.com/pingcap/ticdc/cdc/redo"
+	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -151,7 +151,8 @@ func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
 	if ok {
 		return checkPoints.(uint64)
 	}
-	// this function is call when something unexpected, return change level checkpoint is safe
+	// cannot find table level checkpointTs because of no table level resolvedTs flush task finished successfully,
+	// for example: first time to flush resolvedTs but cannot get the flush lock, return changefeed level checkpointTs is safe
 	return m.changeFeedCheckpointTs
 }
 
