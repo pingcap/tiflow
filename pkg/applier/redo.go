@@ -170,7 +170,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		return err
 	}
 
-	for tableID, _ := range tableResolvedTsMap {
+	for tableID := range tableResolvedTsMap {
 		_, err = s.FlushRowChangedEvents(ctx, tableID, resolvedTs)
 		if err != nil {
 			return err
