@@ -89,7 +89,6 @@ func (s *logSuite) TestZapErrorFilter(c *check.C) {
 
 func getLinesCount(logFile string) (int, error) {
 	f, err := os.Open(logFile)
-	f.Name()
 	if err != nil {
 		return 0, err
 	}
