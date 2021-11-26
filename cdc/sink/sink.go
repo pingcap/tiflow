@@ -45,7 +45,7 @@ type Sink interface {
 
 	// FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
 	// TiCDC guarantees that all the Events whose commitTs is less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
-	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error)
+	FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error)
 
 	// EmitCheckpointTs sends CheckpointTs to Sink
 	// TiCDC guarantees that all Events **in the cluster** which of commitTs less than or equal `checkpointTs` are sent to downstream successfully.
@@ -56,7 +56,7 @@ type Sink interface {
 
 	// Barrier is a synchronous function to wait all events to be flushed in underlying sink
 	// Note once Barrier is called, the resolved ts won't be pushed until the Barrier call returns.
-	Barrier(ctx context.Context) error
+	Barrier(ctx context.Context, tableID model.TableID) error
 }
 
 var sinkIniterMap = make(map[string]sinkInitFunc)
