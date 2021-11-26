@@ -1763,6 +1763,7 @@ func (s *clientSuite) TestIncompatibleTiKV(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
+	// NOTICE: eventCh may block the main logic of EventFeed
 	eventCh := make(chan model.RegionFeedEvent, 128)
 	wg.Add(1)
 	go func() {
