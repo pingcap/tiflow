@@ -55,7 +55,7 @@ func (c *checkSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	panic("unreachable")
 }
 
-func (c *checkSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (c *checkSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
 	var newRows []*model.RowChangedEvent
@@ -83,7 +83,7 @@ func (c *checkSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (c *checkSink) Barrier(ctx context.Context) error {
+func (c *checkSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
@@ -118,7 +118,7 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 			for j := 1; j < rowNum; j++ {
 				if rand.Intn(10) == 0 {
 					resolvedTs := lastResolvedTs + uint64(rand.Intn(j-int(lastResolvedTs)))
-					_, err := tableSink.FlushRowChangedEvents(ctx, resolvedTs)
+					_, err := tableSink.FlushRowChangedEvents(ctx, model.TableID(i), resolvedTs)
 					c.Assert(err, check.IsNil)
 					lastResolvedTs = resolvedTs
 				} else {
@@ -129,7 +129,7 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 					c.Assert(err, check.IsNil)
 				}
 			}
-			_, err := tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
+			_, err := tableSink.FlushRowChangedEvents(ctx, model.TableID(i), uint64(rowNum))
 			c.Assert(err, check.IsNil)
 		}()
 	}
@@ -180,7 +180,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				})
 				c.Assert(err, check.IsNil)
 			}
-			_, err := sink.FlushRowChangedEvents(ctx, resolvedTs)
+			_, err := sink.FlushRowChangedEvents(ctx, sink.(*tableSink).tableID, resolvedTs)
 			if err != nil {
 				c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 			}
@@ -244,7 +244,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 		CommitTs: uint64(110),
 	})
 	c.Assert(err, check.IsNil)
-	_, err = tableSink.FlushRowChangedEvents(ctx, 110)
+	_, err = tableSink.FlushRowChangedEvents(ctx, tableID, 110)
 	c.Assert(err, check.IsNil)
 	err = manager.destroyTableSink(ctx, tableID)
 	c.Assert(err, check.IsNil)
@@ -295,11 +295,11 @@ func BenchmarkManagerFlushing(b *testing.B) {
 	// All tables are flushed concurrently, except table 0.
 	for i := 1; i < goroutineNum; i++ {
 		i := i
-		tableSink := tableSinks[i]
+		tblSink := tableSinks[i]
 		go func() {
 			for j := 1; j < rowNum; j++ {
 				if j%2 == 0 {
-					_, err := tableSink.FlushRowChangedEvents(context.Background(), uint64(j))
+					_, err := tblSink.FlushRowChangedEvents(context.Background(), tblSink.(*tableSink).tableID, uint64(j))
 					if err != nil {
 						b.Error(err)
 					}
@@ -310,9 +310,9 @@ func BenchmarkManagerFlushing(b *testing.B) {
 
 	b.ResetTimer()
 	// Table 0 flush.
-	tableSink := tableSinks[0]
+	tblSink := tableSinks[0]
 	for i := 0; i < b.N; i++ {
-		_, err := tableSink.FlushRowChangedEvents(context.Background(), uint64(rowNum))
+		_, err := tblSink.FlushRowChangedEvents(context.Background(), tblSink.(*tableSink).tableID, uint64(rowNum))
 		if err != nil {
 			b.Error(err)
 		}
@@ -345,7 +345,7 @@ func (e *errorSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	panic("unreachable")
 }
 
-func (e *errorSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (e *errorSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	return 0, errors.New("error in flush row changed events")
 }
 
@@ -357,7 +357,7 @@ func (e *errorSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (e *errorSink) Barrier(ctx context.Context) error {
+func (e *errorSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
@@ -374,7 +374,7 @@ func (s *managerSuite) TestManagerError(c *check.C) {
 		Table:    &model.TableName{TableID: 1},
 	})
 	c.Assert(err, check.IsNil)
-	_, err = sink.FlushRowChangedEvents(ctx, 2)
+	_, err = sink.FlushRowChangedEvents(ctx, 1, 2)
 	c.Assert(err, check.IsNil)
 	err = <-errCh
 	c.Assert(err.Error(), check.Equals, "error in emit row changed events")
