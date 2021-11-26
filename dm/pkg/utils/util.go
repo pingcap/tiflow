@@ -264,6 +264,15 @@ func proxyFields() []zap.Field {
 	return fields
 }
 
+// SetToSlice converts a map of struct{} value to a slice to pretty print.
+func SetToSlice(set map[string]struct{}) []string {
+	slice := make([]string, 0, len(set))
+	for key := range set {
+		slice = append(slice, key)
+	}
+	return slice
+}
+
 func NewStoppedTimer() *time.Timer {
 	// stopped timer should be Reset with correct duration, so use 0 here
 	t := time.NewTimer(0)
