@@ -306,7 +306,7 @@ func (m *MessageServer) tick(ctx context.Context) {
 		peer.metricsAckCount.Inc()
 		err := peer.sender.Send(ctx, p2p.SendMessageResponse{
 			Ack:        acks,
-			ExitReason: p2p.ExitReason_OK,
+			ExitReason: p2p.ExitReason_OK, // ExitReason_Ok means not exiting
 		})
 		if err != nil {
 			log.Warn("sending response to peer failed", zap.Error(err))
@@ -393,9 +393,13 @@ func (m *MessageServer) AddHandler(
 			return nil
 		}
 
-		if lastAck != 0 && entry.Sequence > lastAck+1 {
+		if lastAck != initAck && entry.Sequence > lastAck+1 {
 			// We detected a message loss at seq = (lastAck+1).
-			// This can only happen if the receiver's handler had failed to
+			// Note that entry.Sequence == lastAck+1 is actual a requirement
+			// on the continuity of sequence numbers, which can be guaranteed
+			// by the client locally.
+
+			// A data loss can only happen if the receiver's handler had failed to
 			// unregister before the receiver restarted. This is expected to be
 			// rare and indicates problems with the receiver's handler.
 			// It is expected to happen only with extreme system latency or buggy code.
