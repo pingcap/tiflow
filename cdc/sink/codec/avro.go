@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/types"
-	tijson "github.com/pingcap/tidb/types/json"
 	"go.uber.org/zap"
 )
 
@@ -474,7 +473,7 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 	case mysql.TypeYear:
 		return col.Value.(int64), "long", nil
 	case mysql.TypeJSON:
-		return col.Value.(tijson.BinaryJSON).String(), "string", nil
+		return col.Value.(string), "string", nil
 	case mysql.TypeNewDecimal:
 		return col.Value.(string), "string", nil
 	case mysql.TypeEnum:
