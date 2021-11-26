@@ -33,8 +33,8 @@ MAC   := "Darwin"
 CDC_PKG := github.com/pingcap/ticdc
 DM_PKG := github.com/pingcap/ticdc/dm
 PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|ticdc\/tests|integration|testing_utils|pb|pbmock'
-PACKAGE_LIST_WITHOUT_DM := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/ticdc/dm' | grep github.com/pingcap/ticdc/pkg/etcd
-DM_PACKAGE_LIST := go list github.com/pingcap/ticdc/dm/... | grep -vE 'pb|pbmock|dm/cmd' | grep github.com/pingcap/ticdc/dm/pkg/conn
+PACKAGE_LIST_WITHOUT_DM := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/ticdc/dm'
+DM_PACKAGE_LIST := go list github.com/pingcap/ticdc/dm/... | grep -vE 'pb|pbmock|dm/cmd'
 PACKAGES := $$($(PACKAGE_LIST))
 PACKAGES_WITHOUT_DM := $$($(PACKAGE_LIST_WITHOUT_DM))
 DM_PACKAGES := $$($(DM_PACKAGE_LIST))
@@ -287,7 +287,6 @@ dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/goc
 	tools/bin/gocov convert "$(DM_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > dm-coverage.xml
 	$(FAILPOINT_DISABLE)
 	@bash <(curl -s https://codecov.io/bash) -F dm -f $(DM_TEST_DIR)/cov.unit_test.out -t $(TICDC_CODECOV_TOKEN)
-
 
 dm_integration_test_build: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
