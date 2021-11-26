@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	redo "github.com/pingcap/ticdc/cdc/redo"
+	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
