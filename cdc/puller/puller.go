@@ -69,6 +69,7 @@ func NewPuller(
 	ctx context.Context,
 	pdCli pd.Client,
 	grpcPool kv.GrpcPool,
+	regionCache *tikv.RegionCache,
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
@@ -86,7 +87,7 @@ func NewPuller(
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
-	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool)
+	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool, regionCache)
 	p := &pullerImpl{
 		kvCli:          kvCli,
 		kvStorage:      tikvStorage,
@@ -103,8 +104,6 @@ func NewPuller(
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	defer p.kvCli.Close()
-
 	g, ctx := errgroup.WithContext(ctx)
 
 	checkpointTs := p.checkpointTs
