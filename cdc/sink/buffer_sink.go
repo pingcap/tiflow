@@ -17,7 +17,6 @@ import (
 	"context"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -29,11 +28,12 @@ import (
 
 type bufferSink struct {
 	Sink
-	checkpointTs uint64
-	buffer       map[model.TableID][]*model.RowChangedEvent
-	bufferMu     sync.Mutex
-	flushTsChan  chan uint64
-	drawbackChan chan drawbackMsg
+	changeFeedCheckpointTs uint64
+	tableCheckpointTsMap   sync.Map
+	buffer                 map[model.TableID][]*model.RowChangedEvent
+	bufferMu               sync.Mutex
+	flushTsChan            chan flushMsg
+	drawbackChan           chan drawbackMsg
 }
 
 func newBufferSink(
@@ -46,10 +46,10 @@ func newBufferSink(
 	sink := &bufferSink{
 		Sink: backendSink,
 		// buffer shares the same flow control with table sink
-		buffer:       make(map[model.TableID][]*model.RowChangedEvent),
-		checkpointTs: checkpointTs,
-		flushTsChan:  make(chan uint64, 128),
-		drawbackChan: drawbackChan,
+		buffer:                 make(map[model.TableID][]*model.RowChangedEvent),
+		changeFeedCheckpointTs: checkpointTs,
+		flushTsChan:            make(chan flushMsg, 128),
+		drawbackChan:           drawbackChan,
 	}
 	go sink.run(ctx, errCh)
 	return sink
@@ -81,45 +81,45 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 			delete(b.buffer, drawback.tableID)
 			b.bufferMu.Unlock()
 			close(drawback.callback)
-		case resolvedTs := <-b.flushTsChan:
+		case flushEvent := <-b.flushTsChan:
 			b.bufferMu.Lock()
+			resolvedTs := flushEvent.resolvedTs
+			tableID := flushEvent.tableID
 			// find all rows before resolvedTs and emit to backend sink
-			for tableID, rows := range b.buffer {
-				i := sort.Search(len(rows), func(i int) bool {
-					return rows[i].CommitTs > resolvedTs
-				})
-				metricTotalRows.Add(float64(i))
-
-				start := time.Now()
-				err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)
-				if err != nil {
-					b.bufferMu.Unlock()
-					if errors.Cause(err) != context.Canceled {
-						errCh <- err
-					}
-					return
-				}
-				dur := time.Since(start)
-				metricEmitRowDuration.Observe(dur.Seconds())
-
-				// put remaining rows back to buffer
-				// append to a new, fixed slice to avoid lazy GC
-				b.buffer[tableID] = append(make([]*model.RowChangedEvent, 0, len(rows[i:])), rows[i:]...)
-			}
-			b.bufferMu.Unlock()
+			rows := b.buffer[tableID]
+			i := sort.Search(len(rows), func(i int) bool {
+				return rows[i].CommitTs > resolvedTs
+			})
+			metricTotalRows.Add(float64(i))
 
 			start := time.Now()
-			// todo: use real table ID
-			checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, 0, resolvedTs)
+			err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)
+			if err != nil {
+				b.bufferMu.Unlock()
+				if errors.Cause(err) != context.Canceled {
+					errCh <- err
+				}
+				return
+			}
+			dur := time.Since(start)
+			metricEmitRowDuration.Observe(dur.Seconds())
+
+			// put remaining rows back to buffer
+			// append to a new, fixed slice to avoid lazy GC
+			b.buffer[tableID] = append(make([]*model.RowChangedEvent, 0, len(rows[i:])), rows[i:]...)
+			b.bufferMu.Unlock()
+
+			start = time.Now()
+			checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
 			if err != nil {
 				if errors.Cause(err) != context.Canceled {
 					errCh <- err
 				}
 				return
 			}
-			atomic.StoreUint64(&b.checkpointTs, checkpointTs)
+			b.tableCheckpointTsMap.Store(tableID, checkpointTs)
 
-			dur := time.Since(start)
+			dur = time.Since(start)
 			metricFlushDuration.Observe(dur.Seconds())
 			if dur > 3*time.Second {
 				log.Warn("flush row changed events too slow",
@@ -150,8 +150,24 @@ func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Ro
 func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	select {
 	case <-ctx.Done():
-		return atomic.LoadUint64(&b.checkpointTs), ctx.Err()
-	case b.flushTsChan <- resolvedTs:
+		return b.getCheckpointTs(tableID), ctx.Err()
+	case b.flushTsChan <- flushMsg{
+		tableID:    tableID,
+		resolvedTs: resolvedTs,
+	}:
 	}
-	return atomic.LoadUint64(&b.checkpointTs), nil
+	return b.getCheckpointTs(tableID), nil
+}
+
+type flushMsg struct {
+	tableID    model.TableID
+	resolvedTs uint64
+}
+
+func (b *bufferSink) getCheckpointTs(tableID model.TableID) uint64 {
+	checkPoints, ok := b.tableCheckpointTsMap.Load(tableID)
+	if ok {
+		return checkPoints.(uint64)
+	}
+	return b.changeFeedCheckpointTs
 }
