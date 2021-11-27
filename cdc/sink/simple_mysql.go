@@ -112,10 +112,14 @@ func (s *simpleMySQLSink) EmitRowChangedEvents(ctx context.Context, rows ...*mod
 }
 
 func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	var sql string
-	var args []interface{}
+	sqls := make([]string, 0, len(rows))
+	args := make([][]interface{}, 0, len(rows))
 	if s.enableOldValue {
 		for _, row := range rows {
+			var (
+				query string
+				arg   []interface{}
+			)
 			if len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				// update
 				if s.enableCheckOldValue {
@@ -124,10 +128,10 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 						return errors.Trace(err)
 					}
 				}
-				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, true, false /* translateToInsert */)
+				query, arg = prepareReplace(row.Table.QuoteString(), row.Columns, true, false /* translateToInsert */)
 			} else if len(row.PreColumns) == 0 {
 				// insert
-				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, true, false /* translateToInsert */)
+				query, arg = prepareReplace(row.Table.QuoteString(), row.Columns, true, false /* translateToInsert */)
 			} else if len(row.Columns) == 0 {
 				// delete
 				if s.enableCheckOldValue {
@@ -136,32 +140,38 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 						return errors.Trace(err)
 					}
 				}
-				sql, args = prepareDelete(row.Table.QuoteString(), row.PreColumns, true)
+				query, arg = prepareDelete(row.Table.QuoteString(), row.PreColumns, true)
 			}
-			if sql != "" && args != nil {
-				_, err := s.db.ExecContext(ctx, sql, args...)
-				log.Info("exec row", zap.String("sql", sql), zap.Any("args", args))
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
+			sqls = append(sqls, query)
+			args = append(args, arg)
 		}
 	} else {
 		for _, row := range rows {
+			var (
+				query string
+				arg   []interface{}
+			)
 			if row.IsDelete() {
-				sql, args = prepareDelete(row.Table.QuoteString(), row.PreColumns, true)
+				query, arg = prepareDelete(row.Table.QuoteString(), row.PreColumns, true)
 			} else {
-				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, true, false)
+				query, arg = prepareReplace(row.Table.QuoteString(), row.Columns, true, false)
 			}
-			if sql != "" && args != nil {
-				_, err := s.db.ExecContext(ctx, sql, args...)
-				log.Info("execute dml", zap.String("sql", sql))
-				if err != nil {
-					return errors.Trace(err)
-				}
+			sqls = append(sqls, query)
+			args = append(args, arg)
+		}
+	}
+
+	for i := 0; i < len(sqls); i++ {
+		sql, arg := sqls[i], args[i]
+		if sql != "" && args != nil {
+			_, err := s.db.ExecContext(ctx, sql, arg...)
+			log.Info("exec row", zap.String("sql", sql), zap.Any("args", args))
+			if err != nil {
+				return errors.Trace(err)
 			}
 		}
 	}
+
 	return nil
 }
 
