@@ -128,7 +128,13 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 						return errors.Trace(err)
 					}
 				}
+				query, arg = prepareDelete(row.Table.QuoteString(), row.PreColumns, true)
+				sqls = append(sqls, query)
+				args = append(args, arg)
+
 				query, arg = prepareReplace(row.Table.QuoteString(), row.Columns, true, false /* translateToInsert */)
+				sqls = append(sqls, query)
+				args = append(args, arg)
 			} else if len(row.PreColumns) == 0 {
 				// insert
 				query, arg = prepareReplace(row.Table.QuoteString(), row.Columns, true, false /* translateToInsert */)
