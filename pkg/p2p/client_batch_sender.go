@@ -17,6 +17,13 @@ import (
 	proto "github.com/pingcap/ticdc/proto/p2p"
 )
 
+const (
+	// The maximum size of pre-allocated buffer.
+	// 4096 is reasonable given the scenarios under which
+	// the peer-message system is used.
+	maxPreallocBatchSize = 4096
+)
+
 type (
 	messageEntry = *proto.MessageEntry
 	clientStream = proto.CDCPeerToPeer_SendMessageClient
@@ -40,8 +47,13 @@ type clientBatchSenderImpl struct {
 }
 
 func newClientBatchSender(stream clientStream, maxEntryCount, maxSizeBytes int) clientBatchSender {
+	sliceCap := maxEntryCount
+	if sliceCap > maxPreallocBatchSize {
+		sliceCap = maxPreallocBatchSize
+	}
 	return &clientBatchSenderImpl{
 		stream:        stream,
+		buffer:        make([]messageEntry, 0, sliceCap),
 		maxEntryCount: maxEntryCount,
 		maxSizeBytes:  maxSizeBytes,
 	}
@@ -68,10 +80,8 @@ func (s *clientBatchSenderImpl) Flush() error {
 
 	var messagePacket proto.MessagePacket
 	messagePacket.Entries = s.buffer
-	s.buffer = nil
-
 	err := s.stream.Send(&messagePacket)
-	s.buffer = nil
 	s.sizeBytes = 0
+	s.buffer = s.buffer[:0]
 	return err
 }
