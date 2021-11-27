@@ -39,6 +39,7 @@ type Snapshot interface {
 
 // Iterator is an interface of an iterator of a DB.
 type Iterator interface {
+	Valid() bool
 	First() bool
 	Seek([]byte) bool
 	Next() bool

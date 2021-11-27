@@ -184,6 +184,10 @@ type leveldbIter struct {
 
 var _ Iterator = (*leveldbIter)(nil)
 
+func (i leveldbIter) Valid() bool {
+	return i.Iterator.Valid()
+}
+
 func (i leveldbIter) First() bool {
 	return i.Iterator.First()
 }

@@ -71,33 +71,29 @@ func TestDB(t *testing.T) {
 	}, nil)
 	iter := snap.Iterator([]byte(""), []byte("k4"))
 	// First
-	var ok bool
-	ok = liter.First()
-	require.True(t, ok)
-	ok = iter.First()
-	require.True(t, ok)
+	require.True(t, liter.First())
+	require.True(t, iter.First())
+	// Valid
+	require.True(t, liter.Valid())
+	require.True(t, iter.Valid())
 	// Key, Value
-	var key, val []byte
-	key = liter.Key()
-	val = liter.Value()
-	require.Equal(t, []byte("k1"), key)
-	require.Equal(t, []byte("v1"), val)
-	key = iter.Key()
-	val = iter.Value()
-	require.Equal(t, []byte("k1"), key)
-	require.Equal(t, []byte("v1"), val)
+	require.Equal(t, []byte("k1"), liter.Key())
+	require.Equal(t, []byte("v1"), liter.Value())
+	require.Equal(t, []byte("k1"), iter.Key())
+	require.Equal(t, []byte("v1"), iter.Value())
 	// Next
-	ok = liter.Next()
-	require.True(t, ok)
-	ok = iter.Next()
-	require.True(t, ok)
-	key = liter.Key()
-	require.Equal(t, []byte("k3"), key)
-	key = iter.Key()
-	require.Equal(t, []byte("k3"), key)
+	require.True(t, liter.Next())
+	require.True(t, iter.Next())
+	require.Equal(t, []byte("k3"), liter.Key())
+	require.Equal(t, []byte("k3"), iter.Key())
 	// Error
 	require.Nil(t, liter.Error())
 	require.Nil(t, iter.Error())
+	// Invalid
+	require.False(t, liter.Next())
+	require.False(t, iter.Next())
+	require.False(t, liter.Valid())
+	require.False(t, iter.Valid())
 
 	// Release
 	liter.Release()
