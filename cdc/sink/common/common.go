@@ -16,7 +16,6 @@ package common
 import (
 	"sort"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -55,7 +54,6 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 type UnresolvedTxnCache struct {
 	unresolvedTxnsMu sync.Mutex
 	unresolvedTxns   map[model.TableID][]*txnsWithTheSameCommitTs
-	checkpointTs     uint64
 }
 
 // NewUnresolvedTxnCache returns a new UnresolvedTxnCache
@@ -104,9 +102,6 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 // Resolved returns resolved txns according to resolvedTs
 // The returned map contains many txns grouped by tableID. for each table, the each commitTs of txn in txns slice is strictly increasing
 func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*model.SingleTableTxn {
-	if resolvedTs <= atomic.LoadUint64(&c.checkpointTs) {
-		return nil
-	}
 
 	c.unresolvedTxnsMu.Lock()
 	defer c.unresolvedTxnsMu.Unlock()
@@ -116,11 +111,6 @@ func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*mo
 
 	_, resolvedTxnsMap := splitResolvedTxn(resolvedTs, c.unresolvedTxns)
 	return resolvedTxnsMap
-}
-
-// UpdateCheckpoint updates the checkpoint ts
-func (c *UnresolvedTxnCache) UpdateCheckpoint(checkpointTs uint64) {
-	atomic.StoreUint64(&c.checkpointTs, checkpointTs)
 }
 
 func splitResolvedTxn(

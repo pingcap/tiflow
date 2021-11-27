@@ -17,7 +17,6 @@ import (
 	"context"
 	"runtime"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -29,14 +28,14 @@ import (
 )
 
 type mysqlSinkWorker struct {
-	txnCh            chan *model.SingleTableTxn
-	maxTxnRow        int
-	bucket           int
-	execDMLs         func(context.Context, []*model.RowChangedEvent, uint64, int) error
-	metricBucketSize prometheus.Counter
-	receiver         *notify.Receiver
-	checkpointTs     uint64
-	closedCh         chan struct{}
+	txnCh                chan *model.SingleTableTxn
+	maxTxnRow            int
+	bucket               int
+	execDMLs             func(context.Context, []*model.RowChangedEvent, uint64, int) error
+	metricBucketSize     prometheus.Counter
+	receiver             *notify.Receiver
+	tableCheckpointTsMap sync.Map
+	closedCh             chan struct{}
 }
 
 func newMySQLSinkWorker(
@@ -78,10 +77,10 @@ func (w *mysqlSinkWorker) appendFinishTxn(wg *sync.WaitGroup) {
 
 func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	var (
-		toExecRows   []*model.RowChangedEvent
-		replicaID    uint64
-		txnNum       int
-		lastCommitTs uint64
+		toExecRows        []*model.RowChangedEvent
+		replicaID         uint64
+		txnNum            int
+		tableLastCommitTs = make(map[model.TableID]uint64)
 	)
 
 	// mark FinishWg before worker exits, all data txns can be omitted.
@@ -119,7 +118,9 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			txnNum = 0
 			return err
 		}
-		atomic.StoreUint64(&w.checkpointTs, lastCommitTs)
+		for tableID, lastCommitTs := range tableLastCommitTs {
+			w.tableCheckpointTsMap.Store(tableID, lastCommitTs)
+		}
 		toExecRows = toExecRows[:0]
 		w.metricBucketSize.Add(float64(txnNum))
 		txnNum = 0
@@ -149,7 +150,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			}
 			replicaID = txn.ReplicaID
 			toExecRows = append(toExecRows, txn.Rows...)
-			lastCommitTs = txn.CommitTs
+			tableLastCommitTs[txn.Table.TableID] = txn.CommitTs
 			txnNum++
 		case <-w.receiver.C:
 			if err := flushRows(); err != nil {
