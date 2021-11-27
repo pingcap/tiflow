@@ -102,7 +102,6 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 // Resolved returns resolved txns according to resolvedTs
 // The returned map contains many txns grouped by tableID. for each table, the each commitTs of txn in txns slice is strictly increasing
 func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*model.SingleTableTxn {
-
 	c.unresolvedTxnsMu.Lock()
 	defer c.unresolvedTxnsMu.Unlock()
 	if len(c.unresolvedTxns) == 0 {
