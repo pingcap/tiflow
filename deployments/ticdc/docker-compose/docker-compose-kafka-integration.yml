@@ -37,5 +37,5 @@ services:
     command:
       - bash
       - -c
-      - make integration_test_kafka CASE=kafka_messages
+      - make integration_test_kafka CASE=clustered_index & tail -f /dev/null
     network_mode: "service:kafka"

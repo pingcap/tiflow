@@ -8,4 +8,4 @@ services:
     command:
       - bash
       - -c
-      - make integration_test_mysql CASE=cdclog_s3
+      - make integration_test_mysql CASE=cdclog_s3 & tail -f /dev/null
