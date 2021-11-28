@@ -138,6 +138,7 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 			} else if len(row.PreColumns) == 0 {
 				// insert
 				query, arg = prepareReplace(row.Table.QuoteString(), row.Columns, true, false /* translateToInsert */)
+				log.Info("prepareReplace", zap.Any("RowChangedEvent", row))
 			} else if len(row.Columns) == 0 {
 				// delete
 				if s.enableCheckOldValue {
