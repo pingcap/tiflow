@@ -170,8 +170,8 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 	for i := 0; i < len(sqls); i++ {
 		sql, arg := sqls[i], args[i]
 		if sql != "" && args != nil {
-			_, err := s.db.ExecContext(ctx, sql, arg...)
 			log.Info("exec row", zap.String("sql", sql), zap.Any("args", args))
+			_, err := s.db.ExecContext(ctx, sql, arg...)
 			if err != nil {
 				return errors.Trace(err)
 			}
