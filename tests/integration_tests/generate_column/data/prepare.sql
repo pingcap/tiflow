@@ -3,7 +3,7 @@ create database `generate_column`;
 use `generate_column`;
 
 create table t (a int, b int as (a + 1) stored primary key);
-insert into t(a) values (1),(2), (3),(4),(5),(6),(7);
+insert into t(a) values (1),(2),(3),(4),(5),(6),(7);
 update t set a = 10 where a = 1;
 update t set a = 11 where b = 3;
 delete from t where b=4;
