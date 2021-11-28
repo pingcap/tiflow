@@ -222,7 +222,7 @@ func (s *s3Sink) flushLogMeta(ctx context.Context) error {
 	return cerror.WrapError(cerror.ErrS3SinkWriteStorage, s.storage.WriteFile(ctx, logMetaFile, data))
 }
 
-func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	// we should flush all events before resolvedTs, there are two kind of flush policy
 	// 1. flush row events to a s3 chunk: if the event size is not enough,
 	//    TODO: when cdc crashed, we should repair these chunks to a complete file
@@ -347,7 +347,7 @@ func (s *s3Sink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (s *s3Sink) Barrier(ctx context.Context) error {
+func (s *s3Sink) Barrier(ctx context.Context, tableID model.TableID) error {
 	// Barrier does nothing because FlushRowChangedEvents in s3 sink has flushed
 	// all buffered events forcedlly.
 	return nil
