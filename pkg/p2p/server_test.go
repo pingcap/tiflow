@@ -806,6 +806,44 @@ func TestServerVersionsIncompatible(t *testing.T) {
 	wg.Wait()
 }
 
+func TestReceiverIDMismatch(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	server, newClient, closer := newServerForTesting(t, "test-server-1")
+	defer closer()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(ctx)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	client, closeClient := newClient()
+	defer closeClient()
+
+	stream, err := client.SendMessage(ctx)
+	require.NoError(t, err)
+
+	err = stream.Send(&p2p.MessagePacket{
+		Meta: &p2p.StreamMeta{
+			SenderId:   "test-client-1",
+			ReceiverId: "test-server-2", // mismatch
+			Epoch:      0,
+		},
+	})
+	require.NoError(t, err)
+
+	resp, err := stream.Recv()
+	require.NoError(t, err)
+	require.Equal(t, p2p.ExitReason_CAPTURE_ID_MISMATCH, resp.ExitReason)
+
+	cancel()
+	wg.Wait()
+}
+
 func TestServerDataLossAfterUnregisterHandle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*20)
 	defer cancel()
