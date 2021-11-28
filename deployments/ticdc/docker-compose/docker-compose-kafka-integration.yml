@@ -7,7 +7,6 @@ services:
       - "2181:2181"
 
   kafka:
-    container_name: kafka
     image: wurstmeister/kafka:2.12-2.4.1
     ports:
       - "9092:9092"
@@ -39,4 +38,4 @@ services:
       - bash
       - -c
       - make integration_test_kafka CASE=kafka_messages
-    network_mode: "container:kafka"
+    network_mode: "service:kafka"
