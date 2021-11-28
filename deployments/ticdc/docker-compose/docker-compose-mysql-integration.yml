@@ -9,3 +9,5 @@ services:
       - bash
       - -c
       - make integration_test_mysql CASE=cdclog_s3 & tail -f /dev/null
+    volumes:
+      - ./logs/tidb_cdc_test:/tmp/tidb_cdc_test
