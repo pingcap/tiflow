@@ -11,10 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package gc
 
 import (
-	"math"
+	"context"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -25,73 +25,63 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
 const (
-	// cdcServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
-	cdcServiceSafePointID = "ticdc"
-	pdTimeUpdateInterval  = 10 * time.Minute
+	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
+	CDCServiceSafePointID = "ticdc"
 )
 
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
 var gcSafepointUpdateInterval = 1 * time.Minute
 
-// GcManager is an interface for gc manager
-type GcManager interface {
-	updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error
-	currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error)
-	checkStaleCheckpointTs(ctx cdcContext.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts) error
+// Manager is an interface for gc manager
+type Manager interface {
+	// TryUpdateGCSafePoint tries to update TiCDC service GC safepoint.
+	// Manager may skip update when it thinks it is too frequent.
+	// Set `forceUpdate` to force Manager update.
+	TryUpdateGCSafePoint(ctx context.Context, checkpointTs model.Ts, forceUpdate bool) error
+	CheckStaleCheckpointTs(ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts) error
 }
 
 type gcManager struct {
-	gcTTL int64
+	pdClient pd.Client
+	gcTTL    int64
 
 	lastUpdatedTime   time.Time
 	lastSucceededTime time.Time
 	lastSafePointTs   uint64
 	isTiCDCBlockGC    bool
-
-	pdPhysicalTimeCache time.Time
-	lastUpdatedPdTime   time.Time
 }
 
-func newGCManager() *gcManager {
+// NewManager creates a new Manager.
+func NewManager(pdClient pd.Client) Manager {
 	serverConfig := config.GetGlobalServerConfig()
 	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))
 	})
 	return &gcManager{
+		pdClient:          pdClient,
 		lastSucceededTime: time.Now(),
 		gcTTL:             serverConfig.GcTTL,
 	}
 }
 
-func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error {
-	if time.Since(m.lastUpdatedTime) < gcSafepointUpdateInterval {
+func (m *gcManager) TryUpdateGCSafePoint(
+	ctx context.Context, checkpointTs model.Ts, forceUpdate bool,
+) error {
+	if time.Since(m.lastUpdatedTime) < gcSafepointUpdateInterval && !forceUpdate {
 		return nil
-	}
-	minCheckpointTs := uint64(math.MaxUint64)
-	for _, cfState := range state.Changefeeds {
-		if cfState.Info == nil {
-			continue
-		}
-		switch cfState.Info.State {
-		case model.StateNormal, model.StateStopped, model.StateError:
-		default:
-			continue
-		}
-		checkpointTs := cfState.Info.GetCheckpointTs(cfState.Status)
-		if minCheckpointTs > checkpointTs {
-			minCheckpointTs = checkpointTs
-		}
 	}
 	m.lastUpdatedTime = time.Now()
 
-	actual, err := ctx.GlobalVars().PDClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, m.gcTTL, minCheckpointTs)
+	actual, err := setServiceGCSafepoint(
+		ctx, m.pdClient, CDCServiceSafePointID, m.gcTTL, checkpointTs)
 	if err != nil {
 		log.Warn("updateGCSafePoint failed",
-			zap.Uint64("safePointTs", minCheckpointTs),
+			zap.Uint64("safePointTs", checkpointTs),
 			zap.Error(err))
 		if time.Since(m.lastSucceededTime) >= time.Second*time.Duration(m.gcTTL) {
 			return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
@@ -101,39 +91,32 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 	failpoint.Inject("InjectActualGCSafePoint", func(val failpoint.Value) {
 		actual = uint64(val.(int))
 	})
-	if actual == minCheckpointTs {
-		log.Info("update gc safe point success", zap.Uint64("gcSafePointTs", minCheckpointTs))
+	if actual == checkpointTs {
+		log.Info("update gc safe point success", zap.Uint64("gcSafePointTs", checkpointTs))
 	}
-	if actual > minCheckpointTs {
-		log.Warn("update gc safe point failed, the gc safe point is larger than checkpointTs", zap.Uint64("actual", actual), zap.Uint64("checkpointTs", minCheckpointTs))
+	if actual > checkpointTs {
+		log.Warn("update gc safe point failed, the gc safe point is larger than checkpointTs",
+			zap.Uint64("actual", actual), zap.Uint64("checkpointTs", checkpointTs))
 	}
 	// if the min checkpoint ts is equal to the current gc safe point,
 	// it means that the service gc safe point set by TiCDC is the min service gc safe point
-	m.isTiCDCBlockGC = actual == minCheckpointTs
+	m.isTiCDCBlockGC = actual == checkpointTs
 	m.lastSafePointTs = actual
 	m.lastSucceededTime = time.Now()
 	return nil
 }
 
-func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error) {
-	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
-		return m.pdPhysicalTimeCache, nil
-	}
-	physical, logical, err := ctx.GlobalVars().PDClient.GetTS(ctx)
-	if err != nil {
-		return time.Now(), errors.Trace(err)
-	}
-	m.pdPhysicalTimeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, logical))
-	m.lastUpdatedPdTime = time.Now()
-	return m.pdPhysicalTimeCache, nil
-}
-
-func (m *gcManager) checkStaleCheckpointTs(
-	ctx cdcContext.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
+func (m *gcManager) CheckStaleCheckpointTs(
+	ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
 ) error {
 	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
-		pdTime, err := m.currentTimeFromPDCached(ctx)
+		cctx, ok := ctx.(cdcContext.Context)
+		if !ok {
+			return cerror.ErrOwnerUnknown.GenWithStack("ctx not an cdcContext.Context, it should be")
+		}
+		pdTime, err := cctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		// TODO: should we return err here, or just log it?
 		if err != nil {
 			return errors.Trace(err)
 		}

@@ -18,11 +18,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/version"
-
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/pdtime"
+	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
@@ -33,11 +33,12 @@ import (
 // the lifecycle of vars in the GlobalVars shoule be aligned with the ticdc server process.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
-	PDClient    pd.Client
-	KVStorage   tidbkv.Storage
-	CaptureInfo *model.CaptureInfo
-	EtcdClient  *kv.CDCEtcdClient
-	GrpcPool    kv.GrpcPool
+	PDClient     pd.Client
+	KVStorage    tidbkv.Storage
+	CaptureInfo  *model.CaptureInfo
+	EtcdClient   *kv.CDCEtcdClient
+	GrpcPool     kv.GrpcPool
+	TimeAcquirer pdtime.TimeAcquirer
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline
@@ -184,6 +185,7 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
+		TimeAcquirer: pdtime.NewTimeAcquirer4Test(),
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
