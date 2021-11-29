@@ -91,13 +91,13 @@ func newMockTableExecutor(t *testing.T) *mockTableExecutor {
 	}
 }
 
-func (e *mockTableExecutor) AddTable(ctx cdcContext.Context, tableID model.TableID) error {
+func (e *mockTableExecutor) AddTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
 	args := e.Called(ctx, tableID)
 	require.NotContains(e.t, e.adding, tableID)
 	require.NotContains(e.t, e.running, tableID)
 	require.NotContains(e.t, e.removing, tableID)
 	e.adding[tableID] = struct{}{}
-	return args.Error(0)
+	return args.Bool(0), args.Error(1)
 }
 
 func (e *mockTableExecutor) RemoveTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {

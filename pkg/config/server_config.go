@@ -43,6 +43,8 @@ func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
 }
 
+const SchedulerV2Enabled = false
+
 // SecurityConfig represents security config for server
 type SecurityConfig = security.Credential
 

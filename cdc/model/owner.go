@@ -78,9 +78,9 @@ func (t AdminJobType) IsStopState() bool {
 // TaskPosition records the process information of a capture
 type TaskPosition struct {
 	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.
-	CheckPointTs uint64 `json:"checkpoint-ts"`
+	CheckPointTs uint64 `json:"checkpoint-ts"` // Deprecated
 	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
-	ResolvedTs uint64 `json:"resolved-ts"`
+	ResolvedTs uint64 `json:"resolved-ts"` // Deprecated
 	// The count of events were synchronized. This is updated by corresponding processor.
 	Count uint64 `json:"count"`
 	// Error when error happens

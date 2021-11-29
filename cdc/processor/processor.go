@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -31,6 +33,7 @@ import (
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/redo"
+	"github.com/pingcap/ticdc/cdc/scheduler"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
@@ -75,6 +78,12 @@ type processor struct {
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
 
+	// fields for integration with Scheduler(V2).
+	newSchedulerEnabled bool
+	agent               scheduler.Agent
+	checkpointTs        model.Ts
+	resolvedTs          model.Ts
+
 	metricResolvedTsGauge        prometheus.Gauge
 	metricResolvedTsLagGauge     prometheus.Gauge
 	metricCheckpointTsGauge      prometheus.Gauge
@@ -82,6 +91,127 @@ type processor struct {
 	metricSyncTableNumGauge      prometheus.Gauge
 	metricSchemaStorageGcTsGauge prometheus.Gauge
 	metricProcessorErrorCounter  prometheus.Counter
+}
+
+// checkReadyForMessages checks whether all necessary Etcd keys have been established.
+func (p *processor) checkReadyForMessages() bool {
+	return p.changefeed != nil && p.changefeed.Status != nil
+}
+
+// AddTable implements TableExecutor interface.
+func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
+	if !p.checkReadyForMessages() {
+		return false, nil
+	}
+
+	log.Info("adding table", zap.Int64("table-id", tableID))
+	err := p.addTable(ctx, tableID, &model.TableReplicaInfo{})
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return true, nil
+}
+
+// RemoveTable implements TableExecutor interface.
+func (p *processor) RemoveTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
+	if !p.checkReadyForMessages() {
+		return false, nil
+	}
+
+	table, ok := p.tables[tableID]
+	if !ok {
+		log.Warn("table which will be deleted is not found",
+			cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+		return true, nil
+	}
+
+	boundaryTs := p.changefeed.Status.CheckpointTs
+	if !table.AsyncStop(boundaryTs) {
+		// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
+		// and we do not want to alarm the user.
+		log.Debug("AsyncStop has failed, possible due to a full pipeline",
+			zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
+		return false, nil
+	}
+	return true, nil
+}
+
+// IsAddTableFinished implements TableExecutor interface.
+func (p *processor) IsAddTableFinished(ctx cdcContext.Context, tableID model.TableID) bool {
+	if !p.checkReadyForMessages() {
+		return false
+	}
+
+	table, exist := p.tables[tableID]
+	if !exist {
+		log.Panic("table which was added is not found",
+			cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+	}
+	localResolvedTs := p.resolvedTs
+	globalResolvedTs := p.changefeed.Status.ResolvedTs
+	localCheckpointTs := p.agent.GetLastSentCheckpointTs()
+	globalCheckpointTs := p.changefeed.Status.CheckpointTs
+
+	// These two conditions are used to determine if the table's pipeline has finished
+	// initializing and all invariants have been preserved.
+	//
+	// The processor needs to make sure all reasonable invariants about the checkpoint-ts and
+	// the resolved-ts are preserved before communicating with the Owner.
+	//
+	// These conditions are similar to those in the legacy implementation of the Owner/Processor.
+	if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
+		return false
+	}
+	if table.ResolvedTs() < localResolvedTs || localResolvedTs < globalResolvedTs {
+		return false
+	}
+	log.Info("Add Table finished",
+		cdcContext.ZapFieldChangefeed(ctx),
+		zap.Int64("tableID", tableID))
+	return true
+}
+
+// IsRemoveTableFinished implements TableExecutor interface.
+func (p *processor) IsRemoveTableFinished(ctx cdcContext.Context, tableID model.TableID) bool {
+	if !p.checkReadyForMessages() {
+		return false
+	}
+
+	table, exist := p.tables[tableID]
+	if !exist {
+		log.Panic("table which was added is not found",
+			cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+		return true
+	}
+	if table.Status() != tablepipeline.TableStatusStopped {
+		log.Debug("the table is still not stopped",
+			zap.Uint64("checkpointTs", table.CheckpointTs()),
+			zap.Int64("tableID", tableID))
+		return false
+	}
+
+	table.Cancel()
+	table.Wait()
+	delete(p.tables, tableID)
+	log.Info("Remove Table finished",
+		cdcContext.ZapFieldChangefeed(ctx),
+		zap.Int64("tableID", tableID))
+
+	return true
+}
+
+// GetAllCurrentTables implements TableExecutor interface.
+func (p *processor) GetAllCurrentTables() []model.TableID {
+	var ret []model.TableID
+	for tableID := range p.tables {
+		ret = append(ret, tableID)
+	}
+	return ret
+}
+
+// GetCheckpoint implements TableExecutor interface.
+func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
+	return p.checkpointTs, p.resolvedTs
 }
 
 // newProcessor creates a new processor
@@ -95,6 +225,8 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		captureInfo:   ctx.GlobalVars().CaptureInfo,
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
+
+		newSchedulerEnabled: config.SchedulerV2Enabled,
 
 		metricResolvedTsGauge:        resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricResolvedTsLagGauge:     resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
@@ -186,6 +318,12 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	p.pushResolvedTs2Table()
 	p.handleWorkload()
 	p.doGCSchemaStorage(ctx)
+
+	if p.newSchedulerEnabled {
+		if err := p.agent.Tick(ctx); err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
 	return p.changefeed, nil
 }
 
@@ -329,6 +467,10 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 
 // handleTableOperation handles the operation of `TaskStatus`(add table operation and remove table operation)
 func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
+	if p.newSchedulerEnabled {
+		return nil
+	}
+
 	patchOperation := func(tableID model.TableID, fn func(operation *model.TableOperation) error) {
 		p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			if status == nil || status.Operation == nil {
@@ -523,6 +665,11 @@ func (p *processor) sendError(err error) {
 // checkTablesNum if the number of table pipelines is equal to the number of TaskStatus in etcd state.
 // if the table number is not right, create or remove the odd tables.
 func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
+	if p.newSchedulerEnabled {
+		// No need to check this for the new scheduler.
+		return nil
+	}
+
 	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
 	if len(p.tables) == len(taskStatus.Tables) {
 		return nil
@@ -593,6 +740,12 @@ func (p *processor) handlePosition(currentTs int64) {
 	p.metricCheckpointTsLagGauge.Set(float64(currentTs-checkpointPhyTs) / 1e3)
 	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
 
+	if p.newSchedulerEnabled {
+		p.checkpointTs = minCheckpointTs
+		p.resolvedTs = minResolvedTs
+		return
+	}
+
 	// minResolvedTs and minCheckpointTs may less than global resolved ts and global checkpoint ts when a new table added, the startTs of the new table is less than global checkpoint ts.
 	if minResolvedTs != p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs ||
 		minCheckpointTs != p.changefeed.TaskPositions[p.captureInfo.ID].CheckPointTs {
@@ -644,6 +797,10 @@ func (p *processor) pushResolvedTs2Table() {
 
 // addTable creates a new table pipeline and adds it to the `p.tables`
 func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
+	if replicaInfo.StartTs == 0 {
+		replicaInfo.StartTs = p.changefeed.Status.CheckpointTs
+	}
+
 	if table, ok := p.tables[tableID]; ok {
 		if table.Status() == tablepipeline.TableStatusStopped {
 			log.Warn("The same table exists but is stopped. Cancel it and continue.", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
