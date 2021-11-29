@@ -6,7 +6,6 @@ import (
 	"net"
 
 	"github.com/hanfei1991/microcosm/master/cluster"
-	"github.com/hanfei1991/microcosm/master/jobmaster"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/test"
@@ -30,7 +29,7 @@ type Server struct {
 
 	// sched scheduler
 	executorManager *cluster.ExecutorManager
-	jobManager      *jobmaster.JobManager
+	jobManager      *JobManager
 	//
 	cfg *Config
 
@@ -42,7 +41,7 @@ type Server struct {
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	executorNotifier := make(chan model.ExecutorID, 100)
 	executorManager := cluster.NewExecutorManager(executorNotifier, cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
-	jobManager := jobmaster.NewJobManager(executorManager, executorManager, executorNotifier)
+	jobManager := NewJobManager(executorManager, executorManager, executorNotifier)
 	server := &Server{
 		cfg:             cfg,
 		executorManager: executorManager,

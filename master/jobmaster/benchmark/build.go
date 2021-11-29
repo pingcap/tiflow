@@ -7,12 +7,18 @@ import (
 	"path/filepath"
 
 	"github.com/hanfei1991/microcosm/master/cluster"
+	"github.com/hanfei1991/microcosm/master/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/autoid"
 )
 
+type jobMaster struct {
+	*system.Master
+	config *Config
+}
+
 // BuildBenchmarkJobMaster for benchmark workload.
-func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, resourceMgr cluster.ResourceMgr, client cluster.ExecutorClient) (*Master, error) {
+func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, resourceMgr cluster.ResourceMgr, client cluster.ExecutorClient) (*jobMaster, error) {
 	config, err := configFromJSON(rawConfig)
 	if err != nil {
 		return nil, err
@@ -90,7 +96,11 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 	}
 	job.Tasks = append(job.Tasks, hashTasks...)
 	job.Tasks = append(job.Tasks, sinkTasks...)
-	master := New(context.Background(), config, job, resourceMgr, client)
+	systemJobMaster := system.New(context.Background(), job, resourceMgr, client)
+	master := &jobMaster{
+		Master: systemJobMaster,
+		config: config,
+	}
 	return master, nil
 }
 

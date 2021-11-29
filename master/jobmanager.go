@@ -1,4 +1,4 @@
-package jobmaster
+package master
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/master/jobmaster/benchmark"
+	"github.com/hanfei1991/microcosm/master/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/autoid"
@@ -17,7 +18,7 @@ import (
 // JobManager manages all the job masters, and notify the offline executor to them.
 type JobManager struct {
 	mu         sync.Mutex
-	jobMasters map[model.JobID]JobMaster
+	jobMasters map[model.JobID]system.JobMaster
 
 	idAllocater    *autoid.Allocator
 	resourceMgr    cluster.ResourceMgr
@@ -52,7 +53,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 		Config:   string(req.Config),
 		UserName: req.User,
 	}
-	var jobMaster JobMaster
+	var jobMaster system.JobMaster
 	var err error
 	log.L().Logger.Info("submit job", zap.String("config", info.Config))
 	resp := &pb.SubmitJobResponse{}
@@ -86,7 +87,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 
 func NewJobManager(resource cluster.ResourceMgr, clt cluster.ExecutorClient, executorNotifier chan model.ExecutorID) *JobManager {
 	return &JobManager{
-		jobMasters:     make(map[model.JobID]JobMaster),
+		jobMasters:     make(map[model.JobID]system.JobMaster),
 		idAllocater:    autoid.NewAllocator(),
 		resourceMgr:    resource,
 		executorClient: clt,

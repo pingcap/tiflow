@@ -1,4 +1,4 @@
-package benchmark
+package system
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 
 // Master implements the master of benchmark workload.
 type Master struct {
-	*Config
 	job *model.Job
 
 	ctx    context.Context
@@ -39,7 +38,6 @@ type Master struct {
 // New creates a master instance
 func New(
 	parentCtx context.Context,
-	config *Config,
 	job *model.Job,
 	resourceMgr cluster.ResourceMgr,
 	client cluster.ExecutorClient,
@@ -48,7 +46,6 @@ func New(
 	return &Master{
 		ctx:             ctx,
 		cancel:          cancel,
-		Config:          config,
 		job:             job,
 		resourceManager: resourceMgr,
 		client:          client,
