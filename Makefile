@@ -132,7 +132,7 @@ unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov 
 
 leak_test: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
-	@export log_level=info;\
+	@export log_level=error;\
 	$(GOTEST) -count=1 --tags leak $(PACKAGES_WITHOUT_DM) || { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
