@@ -301,8 +301,8 @@ func newMockServiceSpecificAddr(
 		PermitWithoutStream: true,
 	}
 	kasp := keepalive.ServerParameters{
-		MaxConnectionIdle:     60 * time.Second, // If a client is idle for 15 seconds, send a GOAWAY
-		MaxConnectionAge:      60 * time.Second, // If any connection is alive for more than 30 seconds, send a GOAWAY
+		MaxConnectionIdle:     60 * time.Second, // If a client is idle for 60 seconds, send a GOAWAY
+		MaxConnectionAge:      60 * time.Second, // If any connection is alive for more than 60 seconds, send a GOAWAY
 		MaxConnectionAgeGrace: 5 * time.Second,  // Allow 5 seconds for pending RPCs to complete before forcibly closing connections
 		Time:                  5 * time.Second,  // Ping the client if it is idle for 5 seconds to ensure the connection is still active
 		Timeout:               1 * time.Second,  // Wait 1 second for the ping ack before assuming the connection is dead
@@ -2953,6 +2953,7 @@ func (s *clientSuite) testKVClientForceReconnect(c *check.C) {
 			server1Stopped <- struct{}{}
 		}()
 		for {
+			// Currently no msg more than 60s will cause a GoAway msg to end the connection
 			_, err := server.Recv()
 			if err != nil {
 				log.Error("mock server error", zap.Error(err))
@@ -3002,6 +3003,7 @@ func (s *clientSuite) testKVClientForceReconnect(c *check.C) {
 	initialized := mockInitializedEvent(regionID3, currentRequestID())
 	ch1 <- initialized
 
+	// Connection close for timeout
 	<-server1Stopped
 
 	var requestIds sync.Map
