@@ -65,7 +65,7 @@ func (m *mockSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockSink) Barrier(ctx context.Context) error {
+func (m *mockSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
