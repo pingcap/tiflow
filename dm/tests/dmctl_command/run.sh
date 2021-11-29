@@ -6,7 +6,7 @@ cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
-help_cnt=45
+help_cnt=44
 
 function run() {
 	# check dmctl output with help flag
