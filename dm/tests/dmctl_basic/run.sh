@@ -308,6 +308,21 @@ function run() {
 	stop_relay_fail
 	stop_relay_success
 
+	# stop worker to test query-status works well when no worker
+	ps aux | grep dmctl_basic/worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	ps aux | grep dmctl_basic/worker2 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER2_PORT 20
+
+	query_status_with_offline_worker
+
+	# start worker again
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $dm_worker1_conf
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $dm_worker2_conf
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
 	echo "config"
 	config_wrong_arg
 	config_to_file
@@ -435,8 +450,8 @@ function run() {
 
 cleanup_data dmctl
 # also cleanup dm processes in case of last run failed
-cleanup_process $*
-run $*
-cleanup_process $*
+cleanup_process
+run
+cleanup_process
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"
