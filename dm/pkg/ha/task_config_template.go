@@ -58,7 +58,7 @@ func PutTaskConfigTemplate(cli *clientv3.Client, task openapi.Task, overWrite bo
 	if err != nil {
 		return err
 	}
-	// user don't want overwrite and key already exists.
+	// user don't want to overwrite and key already exists.
 	if !overWrite && !resp.Succeeded {
 		return terror.ErrTaskConfigTemplateExists.Generate(task.Name)
 	}
