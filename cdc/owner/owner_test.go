@@ -54,7 +54,7 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 			return safePoint, nil
 		},
 	}
-	cf := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
+	owner := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func(ctx cdcContext.Context) (AsyncSink, error) {
 		return &mockAsyncSink{}, nil
@@ -72,7 +72,7 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 	captureBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	c.Assert(err, check.IsNil)
 	tester.MustUpdate(cdcKey.String(), captureBytes)
-	return cf, state, tester
+	return owner, state, tester
 }
 
 func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
