@@ -29,6 +29,9 @@ func NewCmd() *cobra.Command {
 		Use:   "cdc",
 		Short: "CDC",
 		Long:  `Change Data Capture`,
+		CompletionOptions: cobra.CompletionOptions{
+			DisableDefaultCmd: true,
+		},
 	}
 }
 
