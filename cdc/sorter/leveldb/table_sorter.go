@@ -25,9 +25,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
 	"github.com/pingcap/ticdc/pkg/actor"
 	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
+	"github.com/pingcap/ticdc/pkg/db"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
-	lutil "github.com/syndtr/goleveldb/leveldb/util"
 	"go.uber.org/zap"
 )
 
@@ -178,15 +178,14 @@ BATCH:
 // if needIter is true, caller receives an iterator and reads all resolved
 // events, up to the maxResolvedTs.
 func (ls *Sorter) asyncWrite(
-	ctx context.Context, events []*model.PolymorphicEvent, deleteKeys []message.Key,
-	needIter bool, maxResolvedTs uint64,
-) (chan message.LimitedIterator, error) {
+	ctx context.Context, events []*model.PolymorphicEvent, deleteKeys []message.Key, needSnap bool,
+) (chan message.LimitedSnapshot, error) {
 	// Write and sort events.
 	tk := message.Task{
 		UID:     ls.uid,
 		TableID: ls.tableID,
 		Events:  make(map[message.Key][]byte),
-		IterCh:  make(chan message.LimitedIterator, 1),
+		SnapCh:  make(chan message.LimitedSnapshot, 1),
 	}
 	for i := range events {
 		event := events[i]
@@ -209,15 +208,11 @@ func (ls *Sorter) asyncWrite(
 		tk.Events[deleteKeys[i]] = []byte{}
 	}
 
-	tk.NeedIter = needIter
-	tk.Irange = &lutil.Range{
-		Start: encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
-		Limit: encoding.EncodeTsKey(ls.uid, ls.tableID, maxResolvedTs+1),
-	}
+	tk.NeedSnap = needSnap
 
 	// Send write task to leveldb.
 	err := ls.router.SendB(ctx, ls.actorID, actormsg.SorterMessage(tk))
-	return tk.IterCh, errors.Trace(err)
+	return tk.SnapCh, errors.Trace(err)
 }
 
 // output nonblocking outputs an event. Caller should retry when it returns false.
@@ -288,7 +283,7 @@ func (ls *Sorter) outputBufferedResolvedEvents(
 // to send them later.
 // outputBuffer must be empty.
 func (ls *Sorter) outputIterEvents(
-	iter message.LimitedIterator, buffer *outputBuffer, maxResolvedTs uint64,
+	iter db.Iterator, buffer *outputBuffer, maxResolvedTs uint64,
 ) (uint64, error) {
 	lenResolvedEvents, lenDeleteKeys := buffer.len()
 	if lenDeleteKeys > 0 || lenResolvedEvents > 0 {
@@ -332,8 +327,6 @@ func (ls *Sorter) outputIterEvents(
 		lastCommitTs = event.CRTs
 		buffer.appendResolvedEvent(event)
 	}
-	iter.Iterator.Release()
-	iter.Sema.Release(1)
 
 	// Try shrink buffer to release memory.
 	buffer.maybeShrink()
@@ -412,7 +405,7 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	// It can only acquire an iterator when
 	// 1. No buffered resolved events, they must be sent before
 	//    sending further resolved events from iterator.
-	needIter := lenResolvedEvents == 0
+	needSnap := lenResolvedEvents == 0
 	// 2. There are some events that can be resolved.
 	//    -------|-----------------|-------------|-------> time
 	//    exhaustedResolvedTs
@@ -422,11 +415,11 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	//    exhaustedResolvedTs
 	//                       maxResolvedTs
 	//                                      maxCommitTs
-	needIter = needIter && state.exhaustedResolvedTs < maxCommitTs
+	needSnap = needSnap && state.exhaustedResolvedTs < maxCommitTs
 
 	// Write new events and delete sent keys.
-	iterCh, err := ls.asyncWrite(
-		ctx, newEvents, state.outputBuf.deleteKeys, needIter, maxResolvedTs)
+	iterCh, err :=
+		ls.asyncWrite(ctx, newEvents, state.outputBuf.deleteKeys, needSnap)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -435,7 +428,7 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	// Try shrink buffer to release memory.
 	state.outputBuf.maybeShrink()
 
-	if !needIter {
+	if !needSnap {
 		// No new events and no buffered resolved events.
 		// -------|-----------------|-------------|-------> time
 		//   maxCommitTs
@@ -449,18 +442,32 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	}
 
 	// Wait for writing and deleting.
-	var iter message.LimitedIterator
+	var snap message.LimitedSnapshot
 	var ok bool
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case iter, ok = <-iterCh:
+	case snap, ok = <-iterCh:
 	}
 	if !ok {
-		if needIter {
+		if needSnap {
 			log.Panic("need iterator", zap.Uint64("tableID", ls.tableID))
 		}
 	}
+	iter := snap.Iterator(
+		encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
+		encoding.EncodeTsKey(ls.uid, ls.tableID, maxResolvedTs+1),
+	)
+	defer func() {
+		if err := iter.Release(); err != nil {
+			log.Error("iterator release error",
+				zap.Error(err), zap.Uint64("tableID", ls.tableID))
+		}
+		if err := snap.Release(); err != nil {
+			log.Error("snapshot release error",
+				zap.Error(err), zap.Uint64("tableID", ls.tableID))
+		}
+	}()
 
 	// Read and send resolved events from iterator.
 	exhaustedResolvedTs, err :=

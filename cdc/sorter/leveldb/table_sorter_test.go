@@ -26,9 +26,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/actor"
 	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/db"
 	"github.com/stretchr/testify/require"
-	"github.com/syndtr/goleveldb/leveldb"
-	"github.com/syndtr/goleveldb/leveldb/util"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -209,15 +208,13 @@ func TestAsyncWrite(t *testing.T) {
 	cases := []struct {
 		events     []*model.PolymorphicEvent
 		deleteKeys []message.Key
-		needIter   bool
-		rts        uint64
+		needSnap   bool
 	}{
 		// Empty write and delete.
 		{
 			events:     []*model.PolymorphicEvent{},
 			deleteKeys: []message.Key{},
-			needIter:   false,
-			rts:        0,
+			needSnap:   false,
 		},
 		// Write one event
 		{
@@ -225,8 +222,7 @@ func TestAsyncWrite(t *testing.T) {
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}),
 			},
 			deleteKeys: []message.Key{},
-			needIter:   false,
-			rts:        0,
+			needSnap:   false,
 		},
 		// Write one event and delete one key.
 		{
@@ -237,8 +233,7 @@ func TestAsyncWrite(t *testing.T) {
 				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 2}))),
 			},
-			needIter: false,
-			rts:      0,
+			needSnap: false,
 		},
 		// Write one event and delete one key and need iter.
 		{
@@ -249,8 +244,7 @@ func TestAsyncWrite(t *testing.T) {
 				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 2}))),
 			},
-			needIter: true,
-			rts:      0,
+			needSnap: true,
 		},
 		// Write one event and a resolved ts event.
 		{
@@ -259,8 +253,7 @@ func TestAsyncWrite(t *testing.T) {
 				model.NewResolvedPolymorphicEvent(0, 3),
 			},
 			deleteKeys: []message.Key{},
-			needIter:   false,
-			rts:        3,
+			needSnap:   false,
 		},
 		// Write two events and a resolved ts event, delete one key.
 		{
@@ -273,13 +266,12 @@ func TestAsyncWrite(t *testing.T) {
 				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
 			},
-			needIter: false,
-			rts:      5,
+			needSnap: false,
 		},
 	}
 	for i, cs := range cases {
-		events, deleteKeys, needIter, rts := cs.events, cs.deleteKeys, cs.needIter, cs.rts
-		ch, err := ls.asyncWrite(ctx, events, deleteKeys, needIter, rts)
+		events, deleteKeys, needSnap := cs.events, cs.deleteKeys, cs.needSnap
+		ch, err := ls.asyncWrite(ctx, events, deleteKeys, needSnap)
 		require.Nil(t, err, "case #%d, %v", i, cs)
 		require.NotNil(t, ch, "case #%d, %v", i, cs)
 		task, ok := mb.Receive()
@@ -301,15 +293,11 @@ func TestAsyncWrite(t *testing.T) {
 			expectedEvents[key] = []byte{}
 		}
 		require.EqualValues(t, message.Task{
-			UID:     ls.uid,
-			TableID: ls.tableID,
-			Events:  expectedEvents,
-			IterCh:  ch,
-			Irange: &util.Range{
-				Start: encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
-				Limit: encoding.EncodeTsKey(ls.uid, ls.tableID, rts+1),
-			},
-			NeedIter:           needIter,
+			UID:                ls.uid,
+			TableID:            ls.tableID,
+			Events:             expectedEvents,
+			SnapCh:             ch,
+			NeedSnap:           needSnap,
 			Cleanup:            false,
 			CleanupRatelimited: false,
 		}, task.SorterTask, "case #%d, %v", i, cs)
@@ -516,12 +504,11 @@ func newTestEvent(crts, startTs uint64, key int) *model.PolymorphicEvent {
 
 func prepareTxnData(
 	t *testing.T, ls *Sorter, txnCount, txnSize int,
-) *leveldb.DB {
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	db, err := OpenDB(context.Background(), 1, cfg)
+) db.DB {
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	db, err := db.OpenDB(context.Background(), 1, t.TempDir(), cfg)
 	require.Nil(t, err)
-	wb := &leveldb.Batch{}
+	wb := db.Batch(0)
 	for i := 1; i < txnCount+1; i++ { // txns.
 		for j := 0; j < txnSize; j++ { // events.
 			event := newTestEvent(uint64(i)+1, uint64(i), j)
@@ -532,7 +519,7 @@ func prepareTxnData(
 			wb.Put(key, value)
 		}
 	}
-	require.Nil(t, db.Write(wb, nil))
+	require.Nil(t, wb.Commit())
 	return db
 }
 
@@ -693,23 +680,15 @@ func TestOutputIterEvents(t *testing.T) {
 		},
 	}
 
-	sema := semaphore.NewWeighted(1)
 	for i, cs := range cases {
 		ls.outputCh = make(chan *model.PolymorphicEvent, cs.outputChCap)
 		buf := newOutputBuffer(capacity)
 
-		dctx, dcancel := context.WithDeadline(ctx, time.Now().Add(100*time.Millisecond))
-		err := sema.Acquire(dctx, 1)
-		require.Nil(t, err)
-		dcancel()
-		irange := util.Range{
-			Start: encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
-			Limit: encoding.EncodeTsKey(ls.uid, ls.tableID, cs.maxResolvedTs+1),
-		}
-		iter := message.LimitedIterator{
-			Iterator: db.NewIterator(&irange, nil),
-			Sema:     sema,
-		}
+		snap, err := db.Snapshot()
+		require.Nil(t, err, "case #%d, %v", i, cs)
+		iter := snap.Iterator(
+			encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
+			encoding.EncodeTsKey(ls.uid, ls.tableID, cs.maxResolvedTs+1))
 		exhaustedRTs, err := ls.outputIterEvents(iter, buf, cs.maxResolvedTs)
 		require.Nil(t, err, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectExhaustedRTs, exhaustedRTs, "case #%d, %v", i, cs)
@@ -718,11 +697,11 @@ func TestOutputIterEvents(t *testing.T) {
 		outputEvents := receiveOutputEvents(ls.outputCh)
 		require.EqualValues(t, cs.expectOutputs, outputEvents, "case #%d, %v", i, cs)
 
-		wb := &leveldb.Batch{}
+		wb := db.Batch(0)
 		for _, key := range cs.expectDeleteKeys {
 			wb.Delete([]byte(key))
 		}
-		require.Nil(t, db.Write(wb, nil))
+		require.Nil(t, wb.Commit())
 	}
 
 	require.Nil(t, db.Close())
@@ -748,7 +727,7 @@ func TestPoll(t *testing.T) {
 
 	cases := []struct {
 		inputEvents []*model.PolymorphicEvent
-		inputIter   func() *message.LimitedIterator
+		inputSnap   func() *message.LimitedSnapshot
 		state       *pollState
 
 		expectEvents        []*model.PolymorphicEvent
@@ -764,7 +743,7 @@ func TestPoll(t *testing.T) {
 				eventsBuf: make([]*model.PolymorphicEvent, 1),
 				outputBuf: newOutputBuffer(1),
 			},
-			inputIter: func() *message.LimitedIterator { return nil },
+			inputSnap: func() *message.LimitedSnapshot { return nil },
 
 			expectEvents:     []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{},
@@ -785,8 +764,8 @@ func TestPoll(t *testing.T) {
 				eventsBuf: make([]*model.PolymorphicEvent, 2),
 				outputBuf: newOutputBuffer(1),
 			},
-			// An iteraor that outputs nothing.
-			inputIter: newIterator(ctx, t, ls, db, 0, sema),
+			// An empty snapshot.
+			inputSnap: newEmptySnapshot(ctx, t, sema),
 
 			expectEvents:     []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{},
@@ -808,7 +787,7 @@ func TestPoll(t *testing.T) {
 				eventsBuf: make([]*model.PolymorphicEvent, 2),
 				outputBuf: newOutputBuffer(1),
 			},
-			inputIter: newIterator(ctx, t, ls, db, 2, sema),
+			inputSnap: newSnapshot(ctx, t, db, sema),
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
@@ -837,7 +816,7 @@ func TestPoll(t *testing.T) {
 				maxCommitTs:         2,
 				exhaustedResolvedTs: 2,
 			},
-			inputIter: func() *message.LimitedIterator { return nil },
+			inputSnap: func() *message.LimitedSnapshot { return nil },
 
 			expectEvents:     []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{},
@@ -863,7 +842,7 @@ func TestPoll(t *testing.T) {
 					advisedCapacity: 2,
 				},
 			},
-			inputIter: func() *message.LimitedIterator { return nil },
+			inputSnap: func() *message.LimitedSnapshot { return nil },
 
 			expectEvents:     []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{},
@@ -883,7 +862,7 @@ func TestPoll(t *testing.T) {
 		_, state := i, cs.state
 		var wg sync.WaitGroup
 		wg.Add(1)
-		go func() { handleTask(mb, cs.inputIter(), &wg) }()
+		go func() { handleTask(mb, cs.inputSnap(), &wg) }()
 		for i := range cs.inputEvents {
 			ls.AddEntry(ctx, cs.inputEvents[i])
 		}
@@ -902,7 +881,7 @@ func TestPoll(t *testing.T) {
 	require.Nil(t, db.Close())
 }
 
-func handleTask(mb actor.Mailbox, iter *message.LimitedIterator, wg *sync.WaitGroup) {
+func handleTask(mb actor.Mailbox, iter *message.LimitedSnapshot, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
 		time.Sleep(20 * time.Millisecond)
@@ -911,25 +890,55 @@ func handleTask(mb actor.Mailbox, iter *message.LimitedIterator, wg *sync.WaitGr
 			continue
 		}
 		if iter != nil {
-			task.SorterTask.IterCh <- *iter
+			task.SorterTask.SnapCh <- *iter
 		}
-		close(task.SorterTask.IterCh)
+		close(task.SorterTask.SnapCh)
 		return
 	}
 }
 
-func newIterator(
-	ctx context.Context, t *testing.T, ls *Sorter, db *leveldb.DB,
-	maxResolvedTs uint64, sema *semaphore.Weighted,
-) func() *message.LimitedIterator {
-	return func() *message.LimitedIterator {
-		irange := &util.Range{
-			Start: encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
-			Limit: encoding.EncodeTsKey(ls.uid, ls.tableID, maxResolvedTs+1),
-		}
+func newSnapshot(
+	ctx context.Context, t *testing.T, db db.DB,
+	sema *semaphore.Weighted,
+) func() *message.LimitedSnapshot {
+	return func() *message.LimitedSnapshot {
 		require.Nil(t, sema.Acquire(ctx, 1))
-		return &message.LimitedIterator{
-			Iterator: db.NewIterator(irange, nil),
+		snap, err := db.Snapshot()
+		require.Nil(t, err)
+		return &message.LimitedSnapshot{
+			Snapshot: snap,
+			Sema:     sema,
+		}
+	}
+}
+
+type emptySnapshot struct {
+	db.Snapshot
+}
+
+func (e emptySnapshot) Iterator(_, _ []byte) db.Iterator { return emptyIterator{} }
+func (e emptySnapshot) Release() error                   { return nil }
+
+type emptyIterator struct {
+	db.Iterator
+}
+
+func (emptyIterator) Valid() bool      { return false }
+func (emptyIterator) First() bool      { return false }
+func (emptyIterator) Seek([]byte) bool { return false }
+func (emptyIterator) Next() bool       { return false }
+func (emptyIterator) Key() []byte      { return nil }
+func (emptyIterator) Value() []byte    { return nil }
+func (emptyIterator) Error() error     { return nil }
+func (emptyIterator) Release() error   { return nil }
+
+func newEmptySnapshot(
+	ctx context.Context, t *testing.T, sema *semaphore.Weighted,
+) func() *message.LimitedSnapshot {
+	return func() *message.LimitedSnapshot {
+		require.Nil(t, sema.Acquire(ctx, 1))
+		return &message.LimitedSnapshot{
+			Snapshot: emptySnapshot{},
 			Sema:     sema,
 		}
 	}
