@@ -32,9 +32,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// OpenDB opens a leveldb.
-func OpenDB(ctx context.Context, id int, path string, cfg *config.DBConfig) (DB, error) {
+func buildOption(cfg *config.DBConfig) opt.Options {
 	var option opt.Options
+	// We may have multiple DB instance, so we divide resources.
 	option.OpenFilesCacheCapacity = cfg.MaxOpenFiles / cfg.Count
 	option.BlockCacheCapacity = cfg.BlockCacheSize / cfg.Count
 	option.BlockSize = cfg.BlockSize
@@ -50,6 +50,11 @@ func OpenDB(ctx context.Context, id int, path string, cfg *config.DBConfig) (DB,
 	option.ErrorIfExist = true
 	option.NoSync = true
 
+	return option
+}
+
+// OpenDB opens a leveldb.
+func OpenDB(ctx context.Context, id int, path string, cfg *config.DBConfig) (DB, error) {
 	// TODO make sure path is under data dir.
 	dbDir := filepath.Join(path, fmt.Sprintf("%04d", id))
 	err := retry.Do(ctx, func() error {
@@ -65,6 +70,7 @@ func OpenDB(ctx context.Context, id int, path string, cfg *config.DBConfig) (DB,
 	if err != nil {
 		return nil, cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
 	}
+	option := buildOption(cfg)
 	db, err := leveldb.OpenFile(dbDir, &option)
 	if err != nil {
 		return nil, cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
