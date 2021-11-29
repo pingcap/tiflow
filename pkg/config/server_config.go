@@ -43,6 +43,8 @@ func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
 }
 
+// SchedulerV2Enabled determines wether to used the peer-message based scheduler.
+// TODO set this to true
 const SchedulerV2Enabled = false
 
 // SecurityConfig represents security config for server
