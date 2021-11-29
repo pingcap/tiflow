@@ -92,22 +92,7 @@ const (
     "max-memory-percentage": 30,
     "max-memory-consumption": 17179869184,
     "num-workerpool-goroutine": 16,
-    "sort-dir": "/tmp/sorter",
-    "enable-leveldb-sorter": false,
-    "leveldb": {
-      "count": 16,
-      "concurrency": 256,
-      "max-open-files": 10000,
-      "block-size": 65536,
-      "block-cache-size": 4294967296,
-      "writer-buffer-size": 8388608,
-      "compression": "snappy",
-      "target-file-size-base": 8388608,
-      "compaction-l0-trigger": 160,
-      "write-l0-slowdown-trigger": 2147483647,
-      "write-l0-pause-trigger": 2147483647,
-      "cleanup-speed-limit": 10000
-    }
+    "sort-dir": "/tmp/sorter"
   },
   "security": {
     "ca-path": "",
@@ -122,7 +107,22 @@ const (
     "region-scan-limit": 40
   },
   "debug": {
-    "enable-table-actor": true
+    "enable-table-actor": true,
+    "enable-db-sorter": false,
+    "db": {
+      "count": 16,
+      "concurrency": 256,
+      "max-open-files": 10000,
+      "block-size": 65536,
+      "block-cache-size": 4294967296,
+      "writer-buffer-size": 8388608,
+      "compression": "snappy",
+      "target-file-size-base": 8388608,
+      "compaction-l0-trigger": 160,
+      "write-l0-slowdown-trigger": 2147483647,
+      "write-l0-pause-trigger": 2147483647,
+      "cleanup-speed-limit": 10000
+    }
   }
 }`
 

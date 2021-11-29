@@ -21,7 +21,7 @@ var (
 	sorterWriteBytesHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
-		Name:      "leveldb_write_bytes",
+		Name:      "db_write_bytes",
 		Help:      "Bucketed histogram of sorter write batch bytes",
 		Buckets:   prometheus.ExponentialBuckets(16, 2.0, 20),
 	}, []string{"capture", "id"})
@@ -29,7 +29,7 @@ var (
 	sorterWriteDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
-		Name:      "leveldb_write_duration_seconds",
+		Name:      "db_write_duration_seconds",
 		Help:      "Bucketed histogram of sorter write duration",
 		Buckets:   prometheus.ExponentialBuckets(0.004, 2.0, 20),
 	}, []string{"capture", "id"})
@@ -37,7 +37,7 @@ var (
 	sorterCleanupKVCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
-		Name:      "leveldb_cleanup_kv_total",
+		Name:      "db_cleanup_kv_total",
 		Help:      "The total number of cleaned up kv entries",
 	}, []string{"capture", "id"})
 )
