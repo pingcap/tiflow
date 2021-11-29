@@ -637,6 +637,14 @@ func (p *processor) handleWorkload() {
 // pushResolvedTs2Table sends global resolved ts to all the table pipelines.
 func (p *processor) pushResolvedTs2Table() {
 	resolvedTs := p.changefeed.Status.ResolvedTs
+	schemaResolvedTs := p.schemaStorage.ResolvedTs()
+	if schemaResolvedTs < resolvedTs {
+		// Do not update barrier ts that is larger than
+		// DDL puller's resolved ts.
+		// When DDL puller stall, resolved events that outputed by sorter
+		// may pile up in memory, as they have to wait DDL.
+		resolvedTs = schemaResolvedTs
+	}
 	for _, table := range p.tables {
 		table.UpdateBarrierTs(resolvedTs)
 	}
