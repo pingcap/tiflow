@@ -407,7 +407,7 @@ func (s *columnSuite) TestNonBinaryStringCol(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(row2, check.DeepEquals, row)
 	jsonCol2 := row2.Update["test"]
-	col2 := jsonCol2.ToSinkColumn("test")
+	col2 := jsonCol2.ToSinkColumn("test", false)
 	col2.Value = string(col2.Value.([]byte))
 	c.Assert(col2, check.DeepEquals, col)
 }
@@ -430,6 +430,6 @@ func (s *columnSuite) TestVarBinaryCol(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(row2, check.DeepEquals, row)
 	jsonCol2 := row2.Update["test"]
-	col2 := jsonCol2.ToSinkColumn("test")
+	col2 := jsonCol2.ToSinkColumn("test", false)
 	c.Assert(col2, check.DeepEquals, col)
 }

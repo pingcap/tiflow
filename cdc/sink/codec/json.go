@@ -134,7 +134,7 @@ func (c *column) ToSinkColumn(name string) *model.Column {
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 		str := col.Value.(string)
 		var err error
-		if c.Flag.IsBinary() {
+		if c.Flag.IsBinary() || isCanalBinaryType {
 			str, err = strconv.Unquote("\"" + str + "\"")
 			if err != nil {
 				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
@@ -316,7 +316,7 @@ func sinkColumns2JsonColumns(cols []*model.Column) map[string]column {
 func jsonColumns2SinkColumns(cols map[string]column) []*model.Column {
 	sinkCols := make([]*model.Column, 0, len(cols))
 	for name, col := range cols {
-		c := col.ToSinkColumn(name)
+		c := col.ToSinkColumn(name, false)
 		sinkCols = append(sinkCols, c)
 	}
 	if len(sinkCols) == 0 {
