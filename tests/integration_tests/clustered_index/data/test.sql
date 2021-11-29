@@ -152,13 +152,13 @@ INSERT INTO t_set VALUES ('a',1),('b,c',2),('a,c',3);
 delete from t_set where b = 2;
 update t_set set s = 'b' where b = 3;
 
-
-create table t8(a int, b varchar(255) as (concat(a, "test")) stored, primary key(b));
-INSERT INTO t8(a) VALUES (2020);
-INSERT INTO t8(a) VALUES (2021);
-INSERT INTO t8(a) VALUES (2022);
-UPDATE t8 SET a = 2023 WHERE a = 2022;
-DELETE FROM t8 WHERE a = 2021;
+-- generated column can not be synced to downstream by canal-json with simple mysql.
+-- create table t8(a int, b varchar(255) as (concat(a, "test")) stored, primary key(b));
+-- INSERT INTO t8(a) VALUES (2020);
+-- INSERT INTO t8(a) VALUES (2021);
+-- INSERT INTO t8(a) VALUES (2022);
+-- UPDATE t8 SET a = 2023 WHERE a = 2022;
+-- DELETE FROM t8 WHERE a = 2021;
 
 
 create table t9(a int, b varchar(255), c int, primary key(a ,b));
