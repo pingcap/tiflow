@@ -400,7 +400,7 @@ func (l *Location) ResetSuffix() {
 // Use this func instead of GITSet.Set to avoid change other location.
 func (l *Location) SetGTID(gset gmysql.GTIDSet) error {
 	flavor := gmysql.MySQLFlavor
-	if _, ok := gset.(*gmysql.MariadbGTIDSet); ok {
+	if _, ok := l.gtidSet.(*gtid.MariadbGTIDSet); ok {
 		flavor = gmysql.MariaDBFlavor
 	}
 
