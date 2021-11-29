@@ -161,6 +161,10 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 				MaxDays:    0,
 				MaxBackups: 0,
 			},
+			Sampling: &config.LogSamplingConfig{
+				Initial:    100,
+				Thereafter: 100,
+			},
 		},
 		DataDir:                dataDir,
 		GcTTL:                  10,
@@ -232,6 +236,10 @@ processor-flush-interval = "600ms"
 max-size = 200
 max-days = 1
 max-backups = 1
+
+[log.sampling]
+initial = 100
+thereafter = 100
 
 [sorter]
 chunk-size-limit = 10000000
@@ -350,6 +358,10 @@ processor-flush-interval = "600ms"
 max-size = 200
 max-days = 1
 max-backups = 1
+
+[log.sampling]
+initial = 100
+thereafter = 100
 
 [sorter]
 chunk-size-limit = 10000000
