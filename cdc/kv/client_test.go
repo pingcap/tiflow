@@ -45,6 +45,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 )
 
 func Test(t *testing.T) {
@@ -275,7 +276,18 @@ func newMockServiceSpecificAddr(
 	lis, err := lc.Listen(ctx, "tcp", listenAddr)
 	c.Assert(err, check.IsNil)
 	addr = lis.Addr().String()
-	grpcServer = grpc.NewServer()
+	kaep := keepalive.EnforcementPolicy{
+		MinTime:             60 * time.Second,
+		PermitWithoutStream: true,
+	}
+	kasp := keepalive.ServerParameters{
+		MaxConnectionIdle:     60 * time.Second, // If a client is idle for 60 seconds, send a GOAWAY
+		MaxConnectionAge:      60 * time.Second, // If any connection is alive for more than 60 seconds, send a GOAWAY
+		MaxConnectionAgeGrace: 5 * time.Second,  // Allow 5 seconds for pending RPCs to complete before forcibly closing connections
+		Time:                  5 * time.Second,  // Ping the client if it is idle for 5 seconds to ensure the connection is still active
+		Timeout:               1 * time.Second,  // Wait 1 second for the ping ack before assuming the connection is dead
+	}
+	grpcServer = grpc.NewServer(grpc.KeepaliveEnforcementPolicy(kaep), grpc.KeepaliveParams(kasp))
 	cdcpb.RegisterChangeDataServer(grpcServer, srv)
 	wg.Add(1)
 	go func() {
@@ -1586,10 +1598,7 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	var genLock sync.Mutex
 	nextVer := -1
 	call := int32(0)
-	// 20 here not too much, since check version itself has 3 time retry, and
-	// region cache could also call get store API, which will trigger version
-	// generator too.
-	versionGenCallBoundary := int32(20)
+	versionGenCallBoundary := int32(8)
 	gen := func() string {
 		genLock.Lock()
 		defer genLock.Unlock()
@@ -1643,8 +1652,16 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
+	// NOTICE: eventCh may block the main logic of EventFeed
+	eventCh := make(chan model.RegionFeedEvent, 128)
+>>>>>>> 82c4d68de (kvclient(ticdc): fix kvclient takes too long time to recover (#3612))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2023,7 +2040,6 @@ func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Change
 		ch1 <- event
 	}
 	clientWg.Wait()
-
 	cancel()
 }
 
@@ -2506,6 +2522,7 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	cancel()
 }
 
+<<<<<<< HEAD
 func (s *clientSuite) TestSingleRegionInfoClone(c *check.C) {
 	defer testleak.AfterTest(c)()
 	sri := newSingleRegionInfo(
@@ -2522,6 +2539,8 @@ func (s *clientSuite) TestSingleRegionInfoClone(c *check.C) {
 	c.Assert(sri2.rpcCtx, check.DeepEquals, &tikv.RPCContext{})
 }
 
+=======
+>>>>>>> 82c4d68de (kvclient(ticdc): fix kvclient takes too long time to recover (#3612))
 // TestResolveLockNoCandidate tests the resolved ts manager can work normally
 // when no region exceeds reslove lock interval, that is what candidate means.
 func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
@@ -2854,6 +2873,7 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 			server1Stopped <- struct{}{}
 		}()
 		for {
+			// Currently no msg more than 60s will cause a GoAway msg to end the connection
 			_, err := server.Recv()
 			if err != nil {
 				log.Error("mock server error", zap.Error(err))
@@ -2902,6 +2922,7 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	initialized := mockInitializedEvent(regionID3, currentRequestID())
 	ch1 <- initialized
 
+	// Connection close for timeout
 	<-server1Stopped
 
 	var requestIds sync.Map
