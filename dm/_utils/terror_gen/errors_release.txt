@@ -364,7 +364,7 @@ ErrMasterPartWorkerExecDDLFail,[code=38025:class=dm-master:scope=internal:level=
 ErrMasterWorkerExistDDLLock,[code=38026:class=dm-master:scope=internal:level=high], "Message: worker %s exist ddl lock, Workaround: Please unlock ddl lock first."
 ErrMasterGetWorkerCfgExtractor,[code=38027:class=dm-master:scope=internal:level=high]
 ErrMasterTaskConfigExtractor,[code=38028:class=dm-master:scope=internal:level=high]
-ErrMasterWorkerArgsExtractor,[code=38029:class=dm-master:scope=internal:level=high]
+ErrMasterWorkerArgsExtractor,[code=38029:class=dm-master:scope=internal:level=high], "Workaround: Please use list-member command to see if the some workers are offline."
 ErrMasterQueryWorkerConfig,[code=38030:class=dm-master:scope=internal:level=high]
 ErrMasterOperNotFound,[code=38031:class=dm-master:scope=internal:level=high], "Message: operation %d of task %s on worker %s not found, Workaround: Please execute `query-status` to check status."
 ErrMasterOperRespNotSuccess,[code=38032:class=dm-master:scope=internal:level=high], "Message: some error occurs in dm-worker: %s, Workaround: Please execute `query-status` to check status."
@@ -526,6 +526,10 @@ ErrSchedulerLatchInUse,[code=46024:class=scheduler:scope=internal:level=low], "M
 ErrSchedulerSourceCfgUpdate,[code=46025:class=scheduler:scope=internal:level=low], "Message: source can only update relay-log related parts for now"
 ErrSchedulerWrongWorkerInput,[code=46026:class=scheduler:scope=internal:level=medium], "Message: require DM master to modify worker [%s] with source [%s], but currently the worker is bound to source [%s]"
 ErrSchedulerBoundDiffWithStartedRelay,[code=46027:class=scheduler:scope=internal:level=medium], "Message: require DM worker [%s] to be bound to source [%s], but it has been started relay for source [%s], Workaround: If you intend to bind the source with worker, you can stop-relay for current source."
+ErrSchedulerStartRelayOnSpecified,[code=46028:class=scheduler:scope=internal:level=low], "Message: the source has `start-relay` with worker name for workers %v, so it can't `start-relay` without worker name now, Workaround: Please stop all relay workers first, or specify worker name for `start-relay`."
+ErrSchedulerStopRelayOnSpecified,[code=46029:class=scheduler:scope=internal:level=low], "Message: the source has `start-relay` with worker name for workers %v, so it can't `stop-relay` without worker name now, Workaround: Please specify worker names for `stop-relay`."
+ErrSchedulerStartRelayOnBound,[code=46030:class=scheduler:scope=internal:level=low], "Message: the source has `start-relay` automatically for bound worker, so it can't `start-relay` with worker name now, Workaround: Please stop relay by `stop-relay` without worker name first."
+ErrSchedulerStopRelayOnBound,[code=46031:class=scheduler:scope=internal:level=low], "Message: the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now, Workaround: Please use `stop-relay` without worker name."
 ErrCtlGRPCCreateConn,[code=48001:class=dmctl:scope=internal:level=high], "Message: can not create grpc connection, Workaround: Please check your network connection."
 ErrCtlInvalidTLSCfg,[code=48002:class=dmctl:scope=internal:level=medium], "Message: invalid TLS config, Workaround: Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in command line."
 ErrCtlLoadTLSCfg,[code=48003:class=dmctl:scope=internal:level=high], "Message: can not load tls config, Workaround: Please ensure that the tls certificate is accessible on the node currently running dmctl."
