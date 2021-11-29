@@ -37,7 +37,7 @@ services:
     command:
       - bash
       - -c
-      - make integration_test_kafka CASE=clustered_index & tail -f /dev/null
+      - make integration_test_kafka CASE="${CASE}" & tail -f /dev/null
     network_mode: "service:kafka"
     volumes:
       - ./logs/tidb_cdc_test:/tmp/tidb_cdc_test
