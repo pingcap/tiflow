@@ -89,7 +89,9 @@ var (
 	// tb3:          +a +b +c
 	ShardDDLOptimismDroppedColumnsKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/shardddl-optimism/dropped-columns/")
 
-	// TaskConfigTemplateKeyAdapter is used to store the config of the task config template, now it's only used for WebUI.
+	// TaskConfigTemplateKeyAdapter is used to store the task config template(openapi.Task), now it's only used for WebUI.
+	// openapi.Task is a struct that can be converted to config.StubTaskConfig so if any field of openapi.Task updated
+	// user should use ha.PutTaskConfigTemplate(key, openapi.Task,overwrite) to force update the content in etcd.
 	// k/v: Encode(task-name) -> openapi.Task.
 	TaskConfigTemplateKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/task-config-template/")
 )
