@@ -76,17 +76,17 @@ func TestServerConfigValidateAndAdjust(t *testing.T) {
 	require.EqualValues(t, GetDefaultServerConfig().PerTableMemoryQuota, conf.PerTableMemoryQuota)
 }
 
-func TestSorterConfigValidateAndAdjust(t *testing.T) {
+func TestDBConfigValidateAndAdjust(t *testing.T) {
 	t.Parallel()
-	conf := GetDefaultServerConfig().Clone().Sorter
+	conf := GetDefaultServerConfig().Clone().Debug.DB
 
 	require.Nil(t, conf.ValidateAndAdjust())
-	conf.LevelDB.Compression = "none"
+	conf.Compression = "none"
 	require.Nil(t, conf.ValidateAndAdjust())
-	conf.LevelDB.Compression = "snappy"
+	conf.Compression = "snappy"
 	require.Nil(t, conf.ValidateAndAdjust())
-	conf.LevelDB.Compression = "invalid"
+	conf.Compression = "invalid"
 	require.Error(t, conf.ValidateAndAdjust())
-	conf.LevelDB.CleanupSpeedLimit = 0
+	conf.CleanupSpeedLimit = 0
 	require.Error(t, conf.ValidateAndAdjust())
 }
