@@ -207,7 +207,7 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 
 // FlushRowChangedEvents will flush all received events, we don't allow mysql
 // sink to receive events before resolving
-func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	if atomic.LoadUint64(&s.maxResolvedTs) < resolvedTs {
 		atomic.StoreUint64(&s.maxResolvedTs, resolvedTs)
 	}
@@ -478,7 +478,7 @@ func (s *mysqlSink) Close(ctx context.Context) error {
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }
 
-func (s *mysqlSink) Barrier(ctx context.Context) error {
+func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	warnDuration := 3 * time.Minute
 	ticker := time.NewTicker(warnDuration)
 	defer ticker.Stop()
@@ -495,7 +495,7 @@ func (s *mysqlSink) Barrier(ctx context.Context) error {
 			if s.checkpointTs() >= maxResolvedTs {
 				return nil
 			}
-			checkpointTs, err := s.FlushRowChangedEvents(ctx, maxResolvedTs)
+			checkpointTs, err := s.FlushRowChangedEvents(ctx, tableID, maxResolvedTs)
 			if err != nil {
 				return err
 			}

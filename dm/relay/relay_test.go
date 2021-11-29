@@ -122,6 +122,10 @@ type mockWriter struct {
 	latestEvent *replication.BinlogEvent
 }
 
+func (w *mockWriter) IsActive(uuid, filename string) (bool, int64) {
+	return false, 0
+}
+
 func (w *mockWriter) Close() error {
 	return nil
 }

@@ -282,7 +282,6 @@ type CDCKVClient interface {
 		isPullerInit PullerInitialization,
 		eventCh chan<- model.RegionFeedEvent,
 	) error
-	Close() error
 }
 
 // NewCDCKVClient is the constructor of CDC KV client
@@ -303,7 +302,7 @@ type CDCClient struct {
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grpcPool GrpcPool) (c CDCKVClient) {
+func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grpcPool GrpcPool, regionCache *tikv.RegionCache) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
 
 	var store TiKVStorage
@@ -321,17 +320,10 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grp
 		pd:             pd,
 		kvStorage:      store,
 		grpcPool:       grpcPool,
-		regionCache:    tikv.NewRegionCache(pd),
+		regionCache:    regionCache,
 		regionLimiters: defaultRegionEventFeedLimiters,
 	}
 	return
-}
-
-// Close CDCClient
-func (c *CDCClient) Close() error {
-	c.regionCache.Close()
-
-	return nil
 }
 
 func (c *CDCClient) getRegionLimiter(regionID uint64) *rate.Limiter {
