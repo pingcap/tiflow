@@ -769,7 +769,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *C) {
 	})
 
 	// other event type with LOG_EVENT_ARTIFICIAL_F
-	ev, err = event.GenCommonGTIDEvent(gmysql.MySQLFlavor, header.ServerID, latestPos, gtidSet)
+	ev, err = event.GenTableMapEvent(header, latestPos, 0, []byte("testdb"), []byte("testtbl"), []byte("INT"))
 	c.Assert(err, IsNil)
 	ev.Header.Flags |= replication.LOG_EVENT_ARTIFICIAL_F
 	cases = append(cases, Case{
