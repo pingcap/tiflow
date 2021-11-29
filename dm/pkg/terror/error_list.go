@@ -245,6 +245,7 @@ const (
 	codeConfigOnlineDDLInvalidRegex
 	codeConfigOnlineDDLMistakeRegex
 	codeConfigTaskConfigTemplateExists
+	codeConfigTaskConfigTemplateNotExists
 )
 
 // Binlog operation error code list.
@@ -894,7 +895,8 @@ var (
 		"config '%s' regex pattern '%s' invalid, reason: %s", "Please check if params is correctly in the configuration file.")
 	ErrConfigOnlineDDLMistakeRegex = New(codeConfigOnlineDDLMistakeRegex, ClassConfig, ScopeInternal, LevelHigh,
 		"online ddl sql '%s' invalid, table %s fail to match '%s' online ddl regex", "Please update your `shadow-table-rules` or `trash-table-rules` in the configuration file.")
-	ErrTaskConfigTemplateExists = New(codeConfigTaskConfigTemplateExists, ClassConfig, ScopeInternal, LevelLow, "the task config template for '%s' already exists", "If you want to override it, pleaset use the overwite flag.")
+	ErrTaskConfigTemplateExists    = New(codeConfigTaskConfigTemplateExists, ClassConfig, ScopeInternal, LevelLow, "the task config template for '%s' already exists", "If you want to override it, pleaset use the overwite flag.")
+	ErrTaskConfigTemplateNotExists = New(codeConfigTaskConfigTemplateNotExists, ClassConfig, ScopeInternal, LevelLow, "the task config template for '%s' not exists", "")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")

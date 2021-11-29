@@ -65,6 +65,28 @@ func PutTaskConfigTemplate(cli *clientv3.Client, task openapi.Task, overWrite bo
 	return nil
 }
 
+// PutTaskConfigTemplate puts the task config template of task-name.
+func PutTaskConfigTemplateIfExist(cli *clientv3.Client, task openapi.Task) error {
+	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
+	defer cancel()
+
+	key := common.TaskConfigTemplateKeyAdapter.Encode(task.Name)
+	taskJSON, err := task.ToJSON()
+	if err != nil {
+		return err // it should not happen.
+	}
+	txn := cli.Txn(ctx).If(clientv3util.KeyExists(key)).Then(clientv3.OpPut(key, string(taskJSON)))
+	resp, err := txn.Commit()
+	if err != nil {
+		return err
+	}
+	// user want to update a key not exists.
+	if !resp.Succeeded {
+		return terror.ErrTaskConfigTemplateNotExists.Generate(task.Name)
+	}
+	return nil
+}
+
 // DeleteTaskConfigTemplate deletes the task config template of task-name.
 func DeleteTaskConfigTemplate(cli *clientv3.Client, taskName string) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)

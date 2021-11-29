@@ -1090,6 +1090,12 @@ description = ""
 workaround = "If you want to override it, pleaset use the overwite flag."
 tags = ["internal", "low"]
 
+[error.DM-config-20051]
+message = "the task config template for '%s' not exists"
+description = ""
+workaround = ""
+tags = ["internal", "low"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""

@@ -70,6 +70,19 @@ func (t *testForEtcd) TestTaskConfigTemplateEtcd(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(*task1InEtcd, DeepEquals, task1)
 
+	// put task config that not exist will fail
+	task3, err := fixtures.GenNoShardOpenAPITaskForTest()
+	c.Assert(err, IsNil)
+	task3.Name = "test-3"
+	c.Assert(terror.ErrTaskConfigTemplateNotExists.Equal(PutTaskConfigTemplateIfExist(etcdTestCli, task3)), IsTrue)
+
+	// update exist task config template will success
+	task1.TaskMode = openapi.TaskTaskModeAll
+	c.Assert(PutTaskConfigTemplateIfExist(etcdTestCli, task1), IsNil)
+	task1InEtcd, err = GetTaskConfigTemplate(etcdTestCli, task1.Name)
+	c.Assert(err, IsNil)
+	c.Assert(*task1InEtcd, DeepEquals, task1)
+
 	// delete task config
 	c.Assert(DeleteTaskConfigTemplate(etcdTestCli, task1.Name), IsNil)
 	tasks, err = GetAllTaskConfigTemplate(etcdTestCli)
