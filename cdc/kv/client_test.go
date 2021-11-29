@@ -1703,10 +1703,7 @@ func (s *clientSuite) TestIncompatibleTiKV(c *check.C) {
 	var genLock sync.Mutex
 	nextVer := -1
 	call := int32(0)
-	// 20 here not too much, since check version itself has 3 time retry, and
-	// region cache could also call get store API, which will trigger version
-	// generator too.
-	versionGenCallBoundary := int32(20)
+	versionGenCallBoundary := int32(8)
 	gen := func() string {
 		genLock.Lock()
 		defer genLock.Unlock()
