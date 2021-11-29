@@ -247,11 +247,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	status.Location.Position = pos
-	if err2 := status.Location.SetGTID(gtidSet.Origin()); err2 != nil {
-		return err2
-	}
-
+	status.Location = binlog.InitLocation(pos, gtidSet)
 	ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel2()
 	binlogs, err := binlog.GetBinaryLogs(ctx2, w.sourceDB.DB)
