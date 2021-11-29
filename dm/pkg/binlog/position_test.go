@@ -763,6 +763,12 @@ func (t *testPositionSuite) TestSetGTID(c *C) {
 	c.Assert(loc.gtidSet.String(), Equals, GTIDSetStr2)
 	c.Assert(loc2.gtidSet.String(), Equals, GTIDSetStr)
 	c.Assert(CompareLocation(loc, loc2, true), Equals, 1)
+
+	// test set gtid to mariadb
+	GTIDSetStr3 := "0-1-60"
+	gset3, _ := gtid.ParserGTID("mariadb", GTIDSetStr3)
+	mariaDBSet3 := gset3.Origin()
+	c.Assert(loc2.SetGTID(mariaDBSet3), IsNil)
 }
 
 func (t *testPositionSuite) TestExtractSuffix(c *C) {
