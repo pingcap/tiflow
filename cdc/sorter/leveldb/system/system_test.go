@@ -24,11 +24,10 @@ import (
 func TestSystemStartStop(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
-	sys := NewSystem(cfg)
+	sys := NewSystem(t.TempDir(), cfg)
 	require.Nil(t, sys.Start(ctx))
 	require.Nil(t, sys.Stop())
 
@@ -40,22 +39,20 @@ func TestSystemStartStop(t *testing.T) {
 
 func TestSystemStopUnstarted(t *testing.T) {
 	t.Parallel()
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
-	sys := NewSystem(cfg)
+	sys := NewSystem(t.TempDir(), cfg)
 	require.Nil(t, sys.Stop())
 }
 
 func TestCollectMetrics(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 2
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 2
 
-	sys := NewSystem(cfg)
+	sys := NewSystem(t.TempDir(), cfg)
 	require.Nil(t, sys.Start(ctx))
 	collectMetrics(sys.dbs, "")
 	require.Nil(t, sys.Stop())
@@ -64,11 +61,10 @@ func TestCollectMetrics(t *testing.T) {
 func TestActorID(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 2
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 2
 
-	sys := NewSystem(cfg)
+	sys := NewSystem(t.TempDir(), cfg)
 	require.Nil(t, sys.Start(ctx))
 	id1 := sys.ActorID(1)
 	id2 := sys.ActorID(1)

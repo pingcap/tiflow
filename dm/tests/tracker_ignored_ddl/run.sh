@@ -47,6 +47,14 @@ function run() {
 	run_sql_tidb "select count(1) from $TEST_NAME.t1;"
 	check_contains "count(1): 2"
 	echo "increment2 check success"
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-relay -s $SOURCE_ID1" \
+		"\"result\": true" 1
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Running\"" 1
 }
 
 cleanup_data $TEST_NAME

@@ -106,7 +106,7 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 	return minTs
 }
 
-func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
+func (m *Manager) flushBackendSink(ctx context.Context, tableID model.TableID) (model.Ts, error) {
 	// NOTICE: Because all table sinks will try to flush backend sink,
 	// which will cause a lot of lock contention and blocking in high concurrency cases.
 	// So here we use flushing as a lightweight lock to improve the lock competition problem.
@@ -119,7 +119,7 @@ func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
 		atomic.StoreInt64(&m.flushing, 0)
 	}()
 	minEmittedTs := m.getMinEmittedTs()
-	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
+	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, tableID, minEmittedTs)
 	if err != nil {
 		return m.getCheckpointTs(), errors.Trace(err)
 	}
@@ -142,7 +142,7 @@ func (m *Manager) destroyTableSink(ctx context.Context, tableID model.TableID) e
 		return ctx.Err()
 	case <-callback:
 	}
-	return m.backendSink.Barrier(ctx)
+	return m.backendSink.Barrier(ctx, tableID)
 }
 
 func (m *Manager) getCheckpointTs() uint64 {
