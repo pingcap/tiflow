@@ -25,9 +25,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
 	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/db"
 	"github.com/pingcap/ticdc/pkg/leakutil"
 	"github.com/stretchr/testify/require"
-	"github.com/syndtr/goleveldb/leveldb"
 	"go.uber.org/goleak"
 )
 
@@ -40,130 +40,113 @@ func TestMaybeWrite(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
-	db, err := OpenDB(ctx, 1, cfg)
+	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewLevelDBActor(ctx, 0, db, cfg, closedWg, "")
+	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
 	require.Nil(t, err)
-	stats := leveldb.DBStats{}
-	err = ldb.db.Stats(&stats)
-	require.Nil(t, err)
-	writeBase := stats.IOWrite
 
 	// Empty batch
-	err = ldb.maybeWrite(false)
-	require.Nil(t, err)
-	err = ldb.db.Stats(&stats)
-	require.Nil(t, err)
-	require.Equal(t, stats.IOWrite, writeBase)
-
-	// Empty batch, force write
-	err = ldb.maybeWrite(true)
-	require.Nil(t, err)
-	err = ldb.db.Stats(&stats)
-	require.Nil(t, err)
-	require.Equal(t, stats.IOWrite, writeBase)
+	require.Nil(t, ldb.maybeWrite(false))
 
 	// None empty batch
 	ldb.wb.Put([]byte("abc"), []byte("abc"))
-	err = ldb.maybeWrite(false)
-	require.Nil(t, err)
-	require.Equal(t, ldb.wb.Len(), 1)
+	require.Nil(t, ldb.maybeWrite(false))
+	require.EqualValues(t, ldb.wb.Count(), 1)
 
 	// None empty batch
-	err = ldb.maybeWrite(true)
-	require.Nil(t, err)
-	require.Equal(t, ldb.wb.Len(), 0)
+	require.Nil(t, ldb.maybeWrite(true))
+	require.EqualValues(t, ldb.wb.Count(), 0)
 
 	ldb.wb.Put([]byte("abc"), []byte("abc"))
 	ldb.wbSize = 1
-	require.Greater(t, len(ldb.wb.Dump()), ldb.wbSize)
-	err = ldb.maybeWrite(false)
-	require.Nil(t, err)
-	require.Equal(t, ldb.wb.Len(), 0)
+	require.Greater(t, len(ldb.wb.Repr()), ldb.wbSize)
+	require.Nil(t, ldb.maybeWrite(false))
+	require.EqualValues(t, ldb.wb.Count(), 0)
 
-	// Close leveldb.
+	// Close db.
 	closed := !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
 
-func makeTask(events map[message.Key][]byte, needIter bool) ([]actormsg.Message, chan message.LimitedIterator) {
-	iterCh := make(chan message.LimitedIterator, 1)
+func makeTask(events map[message.Key][]byte, needSnap bool) ([]actormsg.Message, chan message.LimitedSnapshot) {
+	snapCh := make(chan message.LimitedSnapshot, 1)
 	return []actormsg.Message{actormsg.SorterMessage(message.Task{
 		Events:   events,
-		IterCh:   iterCh,
-		NeedIter: needIter,
-	})}, iterCh
+		SnapCh:   snapCh,
+		NeedSnap: needSnap,
+	})}, snapCh
 }
 
 func TestPutReadDelete(t *testing.T) {
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
-	db, err := OpenDB(ctx, 1, cfg)
+	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewLevelDBActor(ctx, 0, db, cfg, closedWg, "")
+	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
 	require.Nil(t, err)
 
 	// Put only.
-	tasks, iterCh := makeTask(map[message.Key][]byte{"key": {}}, false)
+	tasks, snapCh := makeTask(map[message.Key][]byte{"key": {}}, false)
 	closed := !ldb.Poll(ctx, tasks)
 	require.False(t, closed)
-	_, ok := <-iterCh
+	_, ok := <-snapCh
 	require.False(t, ok)
 
 	// Put and read.
-	tasks, iterCh = makeTask(map[message.Key][]byte{"key": []byte("value")}, true)
+	tasks, snapCh = makeTask(map[message.Key][]byte{"key": []byte("value")}, true)
 	closed = !ldb.Poll(ctx, tasks)
 	require.False(t, closed)
-	iter, ok := <-iterCh
+	snap, ok := <-snapCh
 	require.True(t, ok)
+	iter := snap.Iterator([]byte(""), []byte{0xff})
 	require.NotNil(t, iter)
 	ok = iter.Seek([]byte(""))
 	require.True(t, ok)
 	require.EqualValues(t, iter.Key(), "key")
 	ok = iter.Next()
 	require.False(t, ok)
-	iter.Release()
-	iter.Sema.Release(1)
+	require.Nil(t, iter.Release())
+	require.Nil(t, snap.Release())
 
 	// Read only.
-	tasks, iterCh = makeTask(make(map[message.Key][]byte), true)
+	tasks, snapCh = makeTask(make(map[message.Key][]byte), true)
 	closed = !ldb.Poll(ctx, tasks)
 	require.False(t, closed)
-	iter, ok = <-iterCh
+	snap, ok = <-snapCh
 	require.True(t, ok)
+	iter = snap.Iterator([]byte(""), []byte{0xff})
 	require.NotNil(t, iter)
 	ok = iter.Seek([]byte(""))
 	require.True(t, ok)
 	require.EqualValues(t, iter.Key(), "key")
 	ok = iter.Next()
 	require.False(t, ok)
-	iter.Release()
-	iter.Sema.Release(1)
+	require.Nil(t, iter.Release())
+	require.Nil(t, snap.Release())
 
 	// Delete and read.
-	tasks, iterCh = makeTask(map[message.Key][]byte{"key": {}}, true)
+	tasks, snapCh = makeTask(map[message.Key][]byte{"key": {}}, true)
 	closed = !ldb.Poll(ctx, tasks)
 	require.False(t, closed)
-	iter, ok = <-iterCh
+	snap, ok = <-snapCh
 	require.True(t, ok)
+	iter = snap.Iterator([]byte(""), []byte{0xff})
 	require.NotNil(t, iter)
 	ok = iter.Seek([]byte(""))
 	require.False(t, ok, string(iter.Key()))
-	iter.Release()
-	iter.Sema.Release(1)
+	require.Nil(t, iter.Release())
+	require.Nil(t, snap.Release())
 
-	// Close leveldb.
+	// Close db.
 	closed = !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
 	closedWg.Wait()
@@ -207,14 +190,13 @@ func TestModelChecking(t *testing.T) {
 	seed := time.Now().Unix()
 	rd := rand.New(rand.NewSource(seed))
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
-	db, err := OpenDB(ctx, 1, cfg)
+	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewLevelDBActor(ctx, 0, db, cfg, closedWg, "")
+	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
 	require.Nil(t, err)
 
 	minKey := message.Key("")
@@ -235,7 +217,7 @@ func TestModelChecking(t *testing.T) {
 
 		// Put to model.
 		model.put(message.Key(key), value)
-		// Put to leveldb.
+		// Put to db.
 		tasks, _ := makeTask(map[message.Key][]byte{message.Key(key): value}, false)
 		closed := !ldb.Poll(ctx, tasks)
 		require.False(t, closed)
@@ -268,10 +250,11 @@ func TestModelChecking(t *testing.T) {
 			}
 		}
 
-		tasks, iterCh := makeTask(map[message.Key][]byte{}, true)
+		tasks, snapCh := makeTask(map[message.Key][]byte{}, true)
 		closed := !ldb.Poll(ctx, tasks)
 		require.False(t, closed)
-		iter := <-iterCh
+		snap := <-snapCh
+		iter := snap.Iterator([]byte(minKey), []byte(maxKey))
 		iter.Seek([]byte(minKey))
 		keys := model.iter(minKey, maxKey)
 		for idx, key := range keys {
@@ -281,9 +264,11 @@ func TestModelChecking(t *testing.T) {
 			require.Equal(t, ok, idx != len(keys)-1,
 				"index %d, len(model): %d, seed: %d", idx, len(model.kvs), seed)
 		}
+		require.Nil(t, iter.Release())
+		require.Nil(t, snap.Release())
 	}
 
-	// Close leveldb.
+	// Close db.
 	closed := !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
 	require.Nil(t, db.Close())
@@ -291,14 +276,13 @@ func TestModelChecking(t *testing.T) {
 
 func TestContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	cfg := config.GetDefaultServerConfig().Clone().Sorter
-	cfg.SortDir = t.TempDir()
-	cfg.LevelDB.Count = 1
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
 
-	db, err := OpenDB(ctx, 1, cfg)
+	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewLevelDBActor(ctx, 0, db, cfg, closedWg, "")
+	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
 	require.Nil(t, err)
 
 	cancel()
