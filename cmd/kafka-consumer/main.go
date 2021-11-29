@@ -522,7 +522,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 		return
 	}
 	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-	if ddl.CommitTs <= globalResolvedTs {
+	if ddl.CommitTs < globalResolvedTs {
 		log.Error("unexpected ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
 		return
 	}
