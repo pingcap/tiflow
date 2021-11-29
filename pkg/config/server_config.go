@@ -87,10 +87,19 @@ var defaultServerConfig = &ServerConfig{
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
 		NumWorkerPoolGoroutine: 16,
 		SortDir:                DefaultSortDir,
-
+	},
+	Security:            &SecurityConfig{},
+	PerTableMemoryQuota: 10 * 1024 * 1024, // 10MB
+	KVClient: &KVClientConfig{
+		WorkerConcurrent: 8,
+		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
+		RegionScanLimit:  40,
+	},
+	Debug: &DebugConfig{
+		EnableTableActor: true,
 		// Default leveldb sorter config
-		EnableLevelDB: false,
-		LevelDB: LevelDBConfig{
+		EnableDBSorter: false,
+		DB: &DBConfig{
 			Count: 16,
 			// Following configs are optimized for write throughput.
 			// Users should not change them.
@@ -106,16 +115,6 @@ var defaultServerConfig = &ServerConfig{
 			WriteL0PauseTrigger:    math.MaxInt32,
 			CleanupSpeedLimit:      10000,
 		},
-	},
-	Security:            &SecurityConfig{},
-	PerTableMemoryQuota: 10 * 1024 * 1024, // 10MB
-	KVClient: &KVClientConfig{
-		WorkerConcurrent: 8,
-		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
-		RegionScanLimit:  40,
-	},
-	Debug: &DebugConfig{
-		EnableTableActor: true,
 	},
 }
 
