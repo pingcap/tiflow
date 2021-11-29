@@ -41,13 +41,13 @@ ignore:
 
 flags:
   cdc:
-    carryforward: false
+    carryforward: true
     paths:
       - "cdc/"
       - "cmd/"
       - "pkg/"
 
   dm:
-    carryforward: false
+    carryforward: true
     paths:
       - "dm/"
