@@ -460,7 +460,7 @@ func (t *testReaderSuite) TestStartSyncByPos(c *C) {
 			var content []byte
 			content = append(content, eventsBuf.Bytes()...)
 			// don't add rotate event for the last file because we'll append more events to it.
-			if !(i==2&&j==i+1) {
+			if !(i == 2 && j == i+1) {
 				rotateEvent, err2 := event.GenRotateEvent(baseEvents[0].Header, lastPos, []byte(filenamePrefix+strconv.Itoa(j+1)), 4)
 				c.Assert(err2, IsNil)
 				content = append(content, rotateEvent.RawData...)
