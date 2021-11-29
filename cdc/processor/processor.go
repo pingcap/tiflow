@@ -159,6 +159,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if !p.checkChangefeedNormal() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
+	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Status.CheckpointTs)
 	// we should skip this tick after create a task position
 	if p.createTaskPosition() {
 		return p.changefeed, nil
