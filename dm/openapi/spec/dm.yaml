@@ -1,7 +1,7 @@
 openapi: "3.0.0"
 info:
   title: DM OpenAPI DOC
-  version: "2.1.0"
+  version: "5.3.0"
 externalDocs:
   description: "DM OpenAPI DOC"
   url: "https://docs.pingcap.com/zh/tidb-data-migration/stable"
@@ -970,6 +970,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SourceStatus"
+        relay_config:
+          $ref: "#/components/schemas/RelayConfig"
       required:
         - "source_name"
         - "host"
@@ -1424,6 +1426,28 @@ components:
       items:
         type: string
         example: "task-1"
+
+    RelayConfig:
+      description: the config of relay
+      type: object
+      properties:
+        enable_relay:
+          type: boolean
+        relay_binlog_name:
+          type: string
+          example: "mysql-bin.000002"
+          description: "starting filename of the upstream binlog"
+          nullable: true
+        relay_binlog_gtid:
+          type: string
+          example: "e9a1fc22-ec08-11e9-b2ac-0242ac110003:1-7849"
+          description: "starting GTID of the upstream binlog"
+          nullable: true
+        relay_dir:
+          type: string
+          default: "./relay_log"
+          description: "the directory where the relay log is stored"
+          nullable: true
 
     WorkerNameRequest:
       description: requests related to workers
