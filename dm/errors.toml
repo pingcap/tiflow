@@ -2209,7 +2209,7 @@ tags = ["internal", "high"]
 [error.DM-dm-master-38029]
 message = ""
 description = ""
-workaround = ""
+workaround = "Please use list-member command to see if the some workers are offline."
 tags = ["internal", "high"]
 
 [error.DM-dm-master-38030]
@@ -3177,6 +3177,30 @@ message = "require DM worker [%s] to be bound to source [%s], but it has been st
 description = ""
 workaround = "If you intend to bind the source with worker, you can stop-relay for current source."
 tags = ["internal", "medium"]
+
+[error.DM-scheduler-46028]
+message = "the source has `start-relay` with worker name for workers %v, so it can't `start-relay` without worker name now"
+description = ""
+workaround = "Please stop all relay workers first, or specify worker name for `start-relay`."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46029]
+message = "the source has `start-relay` with worker name for workers %v, so it can't `stop-relay` without worker name now"
+description = ""
+workaround = "Please specify worker names for `stop-relay`."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46030]
+message = "the source has `start-relay` automatically for bound worker, so it can't `start-relay` with worker name now"
+description = ""
+workaround = "Please stop relay by `stop-relay` without worker name first."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46031]
+message = "the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now"
+description = ""
+workaround = "Please use `stop-relay` without worker name."
+tags = ["internal", "low"]
 
 [error.DM-dmctl-48001]
 message = "can not create grpc connection"

@@ -360,7 +360,7 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 								// we check if observeSourceBound has started a worker
 								// TODO: add a test for this situation
 								if !w.relayEnabled.Load() {
-									if err2 := w.EnableRelay(); err2 != nil {
+									if err2 := w.EnableRelay(false); err2 != nil {
 										return err2
 									}
 								}
@@ -679,12 +679,15 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 	}
 
 	if sourceCfg.EnableRelay {
-		w.startedRelayBySourceCfg = true
-		if err2 := w.EnableRelay(); err2 != nil {
+		log.L().Info("will start relay by `enable-relay` in source config")
+		if err2 := w.EnableRelay(true); err2 != nil {
 			log.L().Error("found a `enable-relay: true` source, but failed to enable relay for DM worker",
 				zap.Error(err2))
 			return err2
 		}
+	} else if w.startedRelayBySourceCfg {
+		log.L().Info("will disable relay by `enable-relay: false` in source config")
+		w.DisableRelay()
 	}
 
 	if err2 := w.EnableHandleSubtasks(); err2 != nil {
@@ -748,7 +751,7 @@ func (s *Server) enableRelay(sourceCfg *config.SourceConfig, needLock bool) erro
 		// because no re-assigned mechanism exists for keepalived DM-worker yet.
 		return err2
 	}
-	if err2 = w.EnableRelay(); err2 != nil {
+	if err2 = w.EnableRelay(false); err2 != nil {
 		s.setSourceStatus(sourceCfg.SourceID, err2, false)
 		return err2
 	}
