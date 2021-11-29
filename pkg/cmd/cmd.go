@@ -28,6 +28,9 @@ func NewCmd() *cobra.Command {
 		Use:   "cdc",
 		Short: "CDC",
 		Long:  `Change Data Capture`,
+		CompletionOptions: cobra.CompletionOptions{
+			DisableDefaultCmd: true,
+		},
 	}
 }
 
@@ -35,15 +38,15 @@ func NewCmd() *cobra.Command {
 func Run() {
 	cmd := NewCmd()
 
-	// Outputs cmd.Print to stdout.
 	cmd.SetOut(os.Stdout)
+	cmd.SetErr(os.Stderr)
 
 	cmd.AddCommand(server.NewCmdServer())
 	cmd.AddCommand(cli.NewCmdCli())
 	cmd.AddCommand(version.NewCmdVersion())
 
 	if err := cmd.Execute(); err != nil {
-		cmd.Println(err)
+		cmd.PrintErrln(err)
 		os.Exit(1)
 	}
 }
