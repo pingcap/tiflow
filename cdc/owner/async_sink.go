@@ -127,8 +127,8 @@ func (s *asyncSinkImpl) waitSinkInitialized(ctx cdcContext.Context) {
 }
 
 func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
-	s.waitSinkInitialized(ctx)
 	defer s.wg.Done()
+	s.waitSinkInitialized(ctx)
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
