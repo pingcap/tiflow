@@ -35,9 +35,17 @@ var _ = check.Suite(&managerSuite{})
 
 type checkSink struct {
 	*check.C
-	rows           []*model.RowChangedEvent
+	rows           map[model.TableID][]*model.RowChangedEvent
 	rowsMu         sync.Mutex
-	lastResolvedTs uint64
+	lastResolvedTs map[model.TableID]uint64
+}
+
+func newCheckSink(c *check.C) *checkSink {
+	return &checkSink{
+		C:              c,
+		rows:           make(map[model.TableID][]*model.RowChangedEvent),
+		lastResolvedTs: make(map[model.TableID]uint64),
+	}
 }
 
 func (c *checkSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
@@ -47,7 +55,9 @@ func (c *checkSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
-	c.rows = append(c.rows, rows...)
+	for _, row := range rows {
+		c.rows[row.Table.TableID] = append(c.rows[row.Table.TableID], row)
+	}
 	return nil
 }
 
@@ -59,20 +69,21 @@ func (c *checkSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
 	var newRows []*model.RowChangedEvent
-	for _, row := range c.rows {
-		if row.CommitTs <= c.lastResolvedTs {
-			return c.lastResolvedTs, errors.Errorf("commit-ts(%d) is not greater than lastResolvedTs(%d)", row.CommitTs, c.lastResolvedTs)
+	rows := c.rows[tableID]
+	for _, row := range rows {
+		if row.CommitTs <= c.lastResolvedTs[tableID] {
+			return c.lastResolvedTs[tableID], errors.Errorf("commit-ts(%d) is not greater than lastResolvedTs(%d)", row.CommitTs, c.lastResolvedTs)
 		}
 		if row.CommitTs > resolvedTs {
 			newRows = append(newRows, row)
 		}
 	}
 
-	c.Assert(c.lastResolvedTs, check.LessEqual, resolvedTs)
-	c.lastResolvedTs = resolvedTs
-	c.rows = newRows
+	c.Assert(c.lastResolvedTs[tableID], check.LessEqual, resolvedTs)
+	c.lastResolvedTs[tableID] = resolvedTs
+	c.rows[tableID] = newRows
 
-	return c.lastResolvedTs, nil
+	return c.lastResolvedTs[tableID], nil
 }
 
 func (c *checkSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -92,7 +103,7 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
 	defer manager.Close(ctx)
 	goroutineNum := 10
 	rowNum := 100
@@ -147,7 +158,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
 	defer manager.Close(ctx)
 	goroutineNum := 200
 	var wg sync.WaitGroup
@@ -234,7 +245,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	defer cancel()
 
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
 	defer manager.Close(ctx)
 
 	tableID := int64(49)
@@ -255,7 +266,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 func BenchmarkManagerFlushing(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{}, errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(nil), errCh, 0, "", "")
 
 	// Init table sinks.
 	goroutineNum := 2000
