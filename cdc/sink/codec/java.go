@@ -39,8 +39,9 @@ const (
 	JavaSQLTypeLONGVARBINARY JavaSQLType = -4
 	JavaSQLTypeNULL          JavaSQLType = 0
 	JavaSQLTypeBLOB          JavaSQLType = 2004
-	JavaSQLTypeOTHER         JavaSQLType = 1111
+	JavaSQLTypeCLOB          JavaSQLType = 2005
 
+	JavaSQLTypeOTHER JavaSQLType = 1111
 	// unused
 	// JavaSQLTypeFLOAT                   JavaSQLType = 6
 	// JavaSQLTypeNUMERIC                 JavaSQLType = 2
@@ -48,7 +49,7 @@ const (
 	// JavaSQLTypeDISTINCT                JavaSQLType = 2001
 	// JavaSQLTypeSTRUCT                  JavaSQLType = 2002
 	// JavaSQLTypeARRAY                   JavaSQLType = 2003
-	// JavaSQLTypeCLOB                    JavaSQLType = 2005
+
 	// JavaSQLTypeREF                     JavaSQLType = 2006
 	// JavaSQLTypeDATALINK                JavaSQLType = 70
 	// JavaSQLTypeBOOLEAN                 JavaSQLType = 16

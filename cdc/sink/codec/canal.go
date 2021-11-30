@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pingcap/tidb/parser/mysql"
+
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -27,7 +29,6 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	mm "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
 	parser_types "github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
@@ -133,11 +134,91 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 	return h
 }
 
+func checkIntNumberNegative(value interface{}) bool {
+	switch v := value.(type) {
+	case int64:
+		return v < 0
+	case uint64:
+		return v < 0
+	default:
+		log.Panic("get unexpected value type", zap.Any("type", v))
+	}
+	return false
+}
+
+func isText(mysqlType string) bool {
+	return strings.Contains(mysqlType, "text")
+}
+
+func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
+	javaType := MysqlToJavaType(c.Type, c.Flag.IsBinary())
+
+	switch javaType {
+	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
+		if isText(mysqlType) {
+			return JavaSQLTypeCLOB
+		}
+		return JavaSQLTypeBLOB
+	}
+
+	// Some special cases handled in canal
+	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
+	shouldPromote := c.Flag.IsUnsigned() && checkIntNumberNegative(c.Value)
+	if !shouldPromote {
+		return javaType
+	}
+
+	switch c.Type {
+	case mysql.TypeTiny:
+		result = JavaSQLTypeSMALLINT
+	case mysql.TypeShort, mysql.TypeInt24:
+		result = JavaSQLTypeINTEGER
+	case mysql.TypeLong:
+		result = JavaSQLTypeBIGINT
+	case mysql.TypeLonglong:
+		result = JavaSQLTypeDECIMAL
+	}
+
+	return result
+}
+
+func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType) (result string, err error) {
+	switch v := value.(type) {
+	case int64:
+		result = strconv.FormatInt(v, 10)
+	case uint64:
+		result = strconv.FormatUint(v, 10)
+	case float32:
+		result = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		result = strconv.FormatFloat(v, 'f', -1, 64)
+	case string:
+		result = v
+	case []byte:
+		// special handle for text and blob
+		// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
+		switch javaType {
+		case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR:
+			result = string(v)
+		default:
+			decoded, err := b.bytesDecoder.Bytes(v)
+			if err != nil {
+				return "", err
+			}
+			result = string(decoded)
+			javaType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
+		}
+	default:
+		result = fmt.Sprintf("%v", v)
+	}
+
+	return result, nil
+}
+
 // build the Column in the canal RowData
+// reference: https://github.com/alibaba/canal/blob/master/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	isBinary := c.Flag.IsBinary()
-	sqlType := MysqlToJavaType(c.Type, isBinary)
-
 	mysqlType := parser_types.TypeStr(c.Type)
 	if isBinary {
 		if parser_types.IsTypeBlob(c.Type) {
@@ -147,71 +228,24 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		}
 	}
 
-	// Some special cases handled in canal
-	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
-	switch c.Type {
-	// Since we cannot get the signed/unsigned flag of the column in the RowChangedEvent currently,
-	// we promote the sqlTypes regardless of the flag.
-	case mysql.TypeTiny:
-		sqlType = JavaSQLTypeSMALLINT
-	case mysql.TypeShort:
-		sqlType = JavaSQLTypeINTEGER
-	case mysql.TypeInt24:
-		sqlType = JavaSQLTypeINTEGER
-	case mysql.TypeLong:
-		sqlType = JavaSQLTypeBIGINT
-	case mysql.TypeLonglong:
-		sqlType = JavaSQLTypeDECIMAL
-	}
-	switch sqlType {
-	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
-		if c.Flag.IsBinary() {
-			sqlType = JavaSQLTypeBLOB
-		} else {
-			// In jdbc, text type is mapping to JavaSQLTypeVARCHAR
-			// see https://dev.mysql.com/doc/connector-j/5.1/en/connector-j-reference-type-conversions.html
-			sqlType = JavaSQLTypeVARCHAR
-		}
-	}
+	javaType := getJavaSQLType(c, mysqlType)
 
-	isKey := c.Flag.IsPrimaryKey()
 	isNull := c.Value == nil
-	value := ""
+	var (
+		value string
+		err   error
+	)
 	if !isNull {
-		switch v := c.Value.(type) {
-		case int64:
-			value = strconv.FormatInt(v, 10)
-		case uint64:
-			value = strconv.FormatUint(v, 10)
-		case float32:
-			value = strconv.FormatFloat(float64(v), 'f', -1, 32)
-		case float64:
-			value = strconv.FormatFloat(v, 'f', -1, 64)
-		case string:
-			value = v
-		case []byte:
-			// special handle for text and blob
-			// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
-			switch sqlType {
-			case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR:
-				value = string(v)
-			default:
-				decoded, err := b.bytesDecoder.Bytes(v)
-				if err != nil {
-					return nil, cerror.WrapError(cerror.ErrCanalDecodeFailed, err)
-				}
-				value = string(decoded)
-				sqlType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
-			}
-		default:
-			value = fmt.Sprintf("%v", v)
+		value, err = b.formatValue(c.Value, javaType)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrCanalDecodeFailed, err)
 		}
 	}
 
 	canalColumn := &canal.Column{
-		SqlType:       int32(sqlType),
+		SqlType:       int32(javaType),
 		Name:          colName,
-		IsKey:         isKey,
+		IsKey:         c.Flag.IsPrimaryKey(),
 		Updated:       updated,
 		IsNullPresent: &canal.Column_IsNull{IsNull: isNull},
 		Value:         value,
