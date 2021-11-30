@@ -227,7 +227,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			costTime := time.Since(startTime).Seconds()
 			if costTime > time.Second.Seconds()*1 {
-				log.Warn("etcdWorker commit etcd txn cost time more than 1 second", zap.Float64("cost time in seconds", costTime))
+				log.Warn("etcdWorker ticks reactor cost time more than 1 second", zap.Float64("cost time in seconds", costTime))
 			}
 			worker.metrics.metricEtcdWorkerTickDuration.Observe(costTime)
 			if err != nil {
