@@ -20,16 +20,22 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pingcap/tidb/parser/mysql"
+
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	mm "github.com/pingcap/tidb/parser/model"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	canal "github.com/pingcap/tiflow/proto/canal"
+=======
+	parser_types "github.com/pingcap/tidb/parser/types"
+>>>>>>> 9439513ff (fix it.)
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -169,6 +175,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 
 	// Some special cases handled in canal
 	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
+<<<<<<< HEAD
 	// For unsigned type, promote by the following rule:
 	// TinyInt,  1byte, [-128, 127], [0, 255], if a > 127
 	// SmallInt, 2byte, [-32768, 32767], [0, 65535], if a > 32767
@@ -190,11 +197,58 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 	case mysql.TypeLonglong:
 		if number > math.MaxInt64 {
 			javaType = JavaSQLTypeDECIMAL
+=======
+	shouldPromote := c.Flag.IsUnsigned() && checkIntNumberNegative(c.Value)
+	if !shouldPromote {
+		return javaType
+	}
+
+	switch c.Type {
+	case mysql.TypeTiny:
+		result = JavaSQLTypeSMALLINT
+	case mysql.TypeShort, mysql.TypeInt24:
+		result = JavaSQLTypeINTEGER
+	case mysql.TypeLong:
+		result = JavaSQLTypeBIGINT
+	case mysql.TypeLonglong:
+		result = JavaSQLTypeDECIMAL
+	}
+
+	return result
+}
+
+func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType) (result string, err error) {
+	switch v := value.(type) {
+	case int64:
+		result = strconv.FormatInt(v, 10)
+	case uint64:
+		result = strconv.FormatUint(v, 10)
+	case float32:
+		result = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		result = strconv.FormatFloat(v, 'f', -1, 64)
+	case string:
+		result = v
+	case []byte:
+		// special handle for text and blob
+		// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
+		switch javaType {
+		case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR:
+			result = string(v)
+		default:
+			decoded, err := b.bytesDecoder.Bytes(v)
+			if err != nil {
+				return "", err
+			}
+			result = string(decoded)
+			javaType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
+>>>>>>> 9439513ff (fix it.)
 		}
 	default:
 		result = fmt.Sprintf("%v", v)
 	}
 
+<<<<<<< HEAD
 	return javaType
 }
 
@@ -234,6 +288,35 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType)
 				return "", err
 			}
 			result = string(decoded)
+=======
+	return result, nil
+}
+
+// build the Column in the canal RowData
+// reference: https://github.com/alibaba/canal/blob/master/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
+func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
+	isBinary := c.Flag.IsBinary()
+	mysqlType := parser_types.TypeStr(c.Type)
+	if isBinary {
+		if parser_types.IsTypeBlob(c.Type) {
+			mysqlType = strings.Replace(mysqlType, "text", "blob", 1)
+		} else if parser_types.IsTypeChar(c.Type) {
+			mysqlType = strings.Replace(mysqlType, "char", "binary", 1)
+		}
+	}
+
+	javaType := getJavaSQLType(c, mysqlType)
+
+	isNull := c.Value == nil
+	var (
+		value string
+		err   error
+	)
+	if !isNull {
+		value, err = b.formatValue(c.Value, javaType)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrCanalDecodeFailed, err)
+>>>>>>> 9439513ff (fix it.)
 		}
 	default:
 		result = fmt.Sprintf("%v", v)

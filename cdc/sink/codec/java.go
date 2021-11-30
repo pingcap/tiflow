@@ -40,6 +40,7 @@ const (
 	JavaSQLTypeBLOB          JavaSQLType = 2004
 	JavaSQLTypeCLOB          JavaSQLType = 2005
 
+	JavaSQLTypeOTHER JavaSQLType = 1111
 	// unused
 	// JavaSQLTypeLONGVARCHAR             JavaSQLType = -1
 	// JavaSQLTypeFLOAT                   JavaSQLType = 6
