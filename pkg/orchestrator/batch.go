@@ -23,6 +23,7 @@ const (
 	// 1.25 MiB
 	// Ref: https://etcd.io/docs/v3.3/dev-guide/limit/
 	etcdTxnMaxSize = 1024 * (1024 + 256)
+	etcdTxmMaxOps  = 128
 )
 
 // getBatchChangedState has 4 return values:
@@ -45,7 +46,7 @@ func getBatchChangedState(state map[util.EtcdKey][]byte, patchGroups [][]DataPat
 		if i == 0 && changedSize >= etcdTxnMaxSize {
 			return nil, 0, 0, cerrors.ErrEtcdTxnSizeExceed.GenWithStackByArgs()
 		}
-		if totalSize+changedSize >= etcdTxnMaxSize {
+		if totalSize+changedSize >= etcdTxnMaxSize || len(batchChangedState)+len(changedState) >= etcdTxmMaxOps {
 			break
 		}
 		for k, v := range changedState {
