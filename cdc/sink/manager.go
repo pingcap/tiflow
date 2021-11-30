@@ -88,7 +88,10 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
 func (m *Manager) Close(ctx context.Context) error {
 	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
-	return m.backendSink.Close(ctx)
+	if m.backendSink != nil {
+		return m.backendSink.Close(ctx)
+	}
+	return nil
 }
 
 func (m *Manager) getMinEmittedTs(tableID model.TableID) model.Ts {
@@ -153,7 +156,11 @@ func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
 	}
 	// cannot find table level checkpointTs because of no table level resolvedTs flush task finished successfully,
 	// for example: first time to flush resolvedTs but cannot get the flush lock, return changefeed level checkpointTs is safe
-	return m.changeFeedCheckpointTs
+	return atomic.LoadUint64(&m.changeFeedCheckpointTs)
+}
+
+func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
+	atomic.StoreUint64(&m.changeFeedCheckpointTs, checkpointTs)
 }
 
 type drawbackMsg struct {
