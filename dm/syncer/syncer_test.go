@@ -280,8 +280,9 @@ func (s *testSyncerSuite) TestSelectDB(c *C) {
 	qec := &queryEventContext{
 		p: p,
 	}
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for _, cs := range cases {
-		e, err := event.GenQueryEvent(header, 123, 0, 0, 0, nil, cs.schema, cs.query)
+		e, err := event.GenQueryEvent(header, 123, 0, 0, 0, statusVars, cs.schema, cs.query)
 		c.Assert(err, IsNil)
 		c.Assert(e, NotNil)
 		ev, ok := e.Event.(*replication.QueryEvent)
@@ -289,7 +290,7 @@ func (s *testSyncerSuite) TestSelectDB(c *C) {
 
 		sql := string(ev.Query)
 		schema := string(ev.Schema)
-		ddlInfo, err := syncer.genDDLInfo(p, schema, sql)
+		ddlInfo, err := syncer.genDDLInfo(p, schema, sql, ev.StatusVars)
 		c.Assert(err, IsNil)
 
 		qec.ddlSchema = schema
@@ -420,6 +421,7 @@ func (s *testSyncerSuite) TestIgnoreDB(c *C) {
 	qec := &queryEventContext{
 		p: p,
 	}
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for _, e := range allEvents {
 		ev, ok := e.Event.(*replication.QueryEvent)
 		if !ok {
@@ -427,7 +429,7 @@ func (s *testSyncerSuite) TestIgnoreDB(c *C) {
 		}
 		sql := string(ev.Query)
 		schema := string(ev.Schema)
-		ddlInfo, err := syncer.genDDLInfo(p, schema, sql)
+		ddlInfo, err := syncer.genDDLInfo(p, schema, sql, statusVars)
 		c.Assert(err, IsNil)
 
 		qec.ddlSchema = schema
@@ -783,10 +785,6 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
 	syncer.downstreamTrackConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
-	mock.ExpectQuery(fmt.Sprintf("SELECT TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'", "test_1", "t_1")).WillReturnRows(
-		sqlmock.NewRows([]string{"TABLE_COLLATION"}).AddRow(""))
-	mock.ExpectQuery(fmt.Sprintf("SELECT TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'", "test_1", "t_2")).WillReturnRows(
-		sqlmock.NewRows([]string{"TABLE_COLLATION"}).AddRow(""))
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
@@ -796,8 +794,6 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_1`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24), KEY `index1` (`name`))"))
-	mock.ExpectQuery(fmt.Sprintf("SELECT TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'", "test_1", "t_3")).WillReturnRows(
-		sqlmock.NewRows([]string{"TABLE_COLLATION"}).AddRow(""))
 	s.mockGetServerUnixTS(mock)
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
@@ -852,7 +848,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			nil,
 		}, {
 			ddl,
-			[]string{"CREATE DATABASE IF NOT EXISTS `test_1`"},
+			[]string{"CREATE DATABASE IF NOT EXISTS `test_1` COLLATE = utf8mb4_bin"},
 			nil,
 		}, {
 			flush,
@@ -1048,8 +1044,6 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	}
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
 	syncer.downstreamTrackConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
-	mock.ExpectQuery(fmt.Sprintf("SELECT TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'", "test_1", "t_1")).WillReturnRows(
-		sqlmock.NewRows([]string{"TABLE_COLLATION"}).AddRow(""))
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
@@ -1125,7 +1119,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			nil,
 		}, {
 			ddl,
-			[]string{"CREATE DATABASE IF NOT EXISTS `test_1`"},
+			[]string{"CREATE DATABASE IF NOT EXISTS `test_1` COLLATE = utf8mb4_bin"},
 			nil,
 		}, {
 			flush,
@@ -1325,9 +1319,9 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 					AddRow(testTbl, " CREATE TABLE `"+testTbl+"` (\n  `c` int(11) DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
 		}},
 	}
-
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for _, ca := range cases {
-		ddlInfo, err := syncer.genDDLInfo(qec.p, qec.ddlSchema, ca.sql)
+		ddlInfo, err := syncer.genDDLInfo(qec.p, qec.ddlSchema, ca.sql, statusVars)
 		c.Assert(err, IsNil)
 		ca.callback()
 
@@ -1344,6 +1338,7 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 	ec := &eventContext{
 		tctx: tctx,
 	}
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for _, e := range allEvents {
 		switch ev := e.Event.(type) {
 		case *replication.QueryEvent:
@@ -1362,7 +1357,7 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 			qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 			c.Assert(err, IsNil)
 			for _, sql := range qec.splitDDLs {
-				sqls, err := syncer.processOneDDL(qec, sql)
+				sqls, err := syncer.processOneDDL(qec, sql, statusVars)
 				c.Assert(err, IsNil)
 				qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 			}
@@ -1374,7 +1369,7 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 			}
 
 			for j, sql := range qec.appliedDDLs {
-				ddlInfo, err := syncer.genDDLInfo(p, string(ev.Schema), sql)
+				ddlInfo, err := syncer.genDDLInfo(p, string(ev.Schema), sql, statusVars)
 				c.Assert(err, IsNil)
 
 				needSkip, err := syncer.skipQueryEvent(qec, ddlInfo)

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
@@ -51,8 +52,8 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 // 2. skip sql by skipQueryEvent;
 // 3. apply online ddl if onlineDDL is not nil:
 //    * specially, if skip, apply empty string;
-func (s *Syncer) processOneDDL(qec *queryEventContext, sql string) ([]string, error) {
-	ddlInfo, err := s.genDDLInfo(qec.p, qec.ddlSchema, sql)
+func (s *Syncer) processOneDDL(qec *queryEventContext, sql string, statusVars []byte) ([]string, error) {
+	ddlInfo, err := s.genDDLInfo(qec.p, qec.ddlSchema, sql, statusVars)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +103,7 @@ func (s *Syncer) processOneDDL(qec *queryEventContext, sql string) ([]string, er
 }
 
 // genDDLInfo generates ddl info by given sql.
-func (s *Syncer) genDDLInfo(p *parser.Parser, schema, sql string) (*ddlInfo, error) {
+func (s *Syncer) genDDLInfo(p *parser.Parser, schema, sql string, statusVars []byte) (*ddlInfo, error) {
 	s.tctx.L().Debug("begin generate ddl info", zap.String("event", "query"), zap.String("statement", sql))
 	stmt, err := p.ParseOneStmt(sql, "", "")
 	if err != nil {
@@ -120,14 +121,21 @@ func (s *Syncer) genDDLInfo(p *parser.Parser, schema, sql string) (*ddlInfo, err
 		targetTables = append(targetTables, renamedTable)
 	}
 
-	routedDDL, err := parserpkg.RenameDDLTable(stmt, targetTables)
-	return &ddlInfo{
+	ddlInfo := &ddlInfo{
 		originDDL:    sql,
-		routedDDL:    routedDDL,
 		originStmt:   stmt,
 		sourceTables: sourceTables,
 		targetTables: targetTables,
-	}, err
+	}
+
+	err = adjustCollation(s.tctx, ddlInfo, statusVars)
+	if err != nil {
+		return nil, err
+	}
+
+	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+	ddlInfo.routedDDL = routedDDL
+	return ddlInfo, err
 }
 
 func (s *Syncer) dropSchemaInSharding(tctx *tcontext.Context, sourceSchema string) error {
@@ -192,7 +200,10 @@ func (s *Syncer) clearOnlineDDL(tctx *tcontext.Context, targetTable *filter.Tabl
 	return nil
 }
 
-func (s *Syncer) adjustTableCollation(ddlInfo *ddlInfo) error {
+// adjustCollation
+func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte) error {
+
+	// check create table has collation
 	if createStmt, ok := ddlInfo.originStmt.(*ast.CreateTableStmt); ok {
 		// create table like old table has no table_options
 		// See https://dev.mysql.com/doc/refman/5.7/en/create-table.html
@@ -205,29 +216,37 @@ func (s *Syncer) adjustTableCollation(ddlInfo *ddlInfo) error {
 				return nil
 			}
 		}
-		sourceTable := ddlInfo.sourceTables[0]
-		collationInfo, err := utils.GetTableCollation(s.tctx.Ctx, s.fromDB.BaseDB.DB, sourceTable.Schema, sourceTable.Name)
-		if err != nil {
-			s.tctx.L().Error("get source table collation info failed.", zap.Stringer("table", sourceTable), zap.Error(err))
-			return err
+		tctx.L().Warn("detect create table risk which use implicit collation", zap.String("originSQL", ddlInfo.originDDL))
+
+	} else if createStmt, ok := ddlInfo.originStmt.(*ast.CreateDatabaseStmt); ok {
+		// collation is in create database syntax create_option
+		// See https://dev.mysql.com/doc/refman/8.0/en/create-database.html
+		hasCharset := false
+		for _, createOption := range createStmt.Options {
+			// already have 'Collation'
+			if createOption.Tp == ast.DatabaseOptionCollate {
+				return nil
+			}
+			if createOption.Tp == ast.DatabaseOptionCharset {
+				hasCharset = true
+			}
 		}
-		if collationInfo == "" {
+
+		// just has charset, can not add collation by server collation
+		if hasCharset {
+			tctx.L().Warn("detect create database risk which use implicit collation", zap.String("originSQL", ddlInfo.originDDL))
 			return nil
+		}
+
+		// add collation by server collation from binlog statusVars
+		collation, err := event.GetServerCollationByStatusVars(statusVars)
+		if err != nil {
+			tctx.L().Warn("found error when get collation_server from binlog status_vars", zap.Error(err))
 		}
 		// add collation
-		if createStmt.Options == nil {
-			createStmt.Options = make([]*ast.TableOption, 1)
-		}
-		createStmt.Options = append(createStmt.Options, &ast.TableOption{Tp: ast.TableOptionCollate, StrValue: collationInfo})
-		routedDDL, err := parserpkg.RenameDDLTable(createStmt, ddlInfo.targetTables)
-		if err != nil {
-			s.tctx.L().Warn("Regenerate ddl failed after add Collation.", zap.Stringer("table", sourceTable), zap.String("Collation", collationInfo), zap.Error(err))
-			return nil
-		}
-		if routedDDL != "" {
-			ddlInfo.routedDDL = routedDDL
-		}
+		createStmt.Options = append(createStmt.Options, &ast.DatabaseOption{Tp: ast.DatabaseOptionCollate, Value: collation})
 	}
+
 	return nil
 }
 

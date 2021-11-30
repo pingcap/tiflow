@@ -2285,7 +2285,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 	// TODO: save stmt, tableName to avoid parse the sql to get them again
 	qec.p = parser.New()
 	for _, sql := range qec.splitDDLs {
-		sqls, err2 := s.processOneDDL(qec, sql)
+		sqls, err2 := s.processOneDDL(qec, sql, ev.StatusVars)
 		if err2 != nil {
 			qec.tctx.L().Error("fail to process ddl", zap.String("event", "query"), zap.Stringer("queryEventContext", qec), log.ShortError(err2))
 			return err2
@@ -2318,12 +2318,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 			continue
 		}
 		// We use default parser because sqls are came from above *Syncer.splitAndFilterDDL, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
-		ddlInfo, err2 := s.genDDLInfo(qec.p, qec.ddlSchema, sql)
-		if err2 != nil {
-			return err2
-		}
-		// adjust 'Collation' base on upstream
-		err2 = s.adjustTableCollation(ddlInfo)
+		ddlInfo, err2 := s.genDDLInfo(qec.p, qec.ddlSchema, sql, ev.StatusVars)
 		if err2 != nil {
 			return err2
 		}

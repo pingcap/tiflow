@@ -632,20 +632,3 @@ func GetTableCreateSQL(ctx context.Context, conn *sql.Conn, tableID string) (sql
 	}
 	return createStr, nil
 }
-
-// GetTableCollation gets table collation info by 'SELECE TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES'.
-func GetTableCollation(ctx context.Context, db *sql.DB, schema string, table string) (info string, err error) {
-	querySQL := fmt.Sprintf("SELECT TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'", schema, table)
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-	defer conn.Close()
-	row := conn.QueryRowContext(ctx, querySQL)
-	var collation string
-	err = row.Scan(&collation)
-	if err != nil {
-		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-	return collation, nil
-}

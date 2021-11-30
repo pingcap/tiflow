@@ -130,7 +130,7 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 		p:            p,
 	}
 	for _, ca := range cases {
-		ddlInfo, err := syncer.genDDLInfo(p, ca.schema, ca.sql)
+		ddlInfo, err := syncer.genDDLInfo(p, ca.schema, ca.sql, nil)
 		c.Assert(err, IsNil)
 		qec.ddlSchema = ca.schema
 		qec.originSQL = ca.sql

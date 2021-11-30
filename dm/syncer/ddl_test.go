@@ -31,13 +31,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 	onlineddl "github.com/pingcap/ticdc/dm/syncer/online-ddl-tools"
 )
 
@@ -121,7 +119,7 @@ func (s *testDDLSuite) TestCommentQuote(c *C) {
 	c.Assert(syncer.genRouter(), IsNil)
 
 	for _, sql := range qec.splitDDLs {
-		sqls, err := syncer.processOneDDL(qec, sql)
+		sqls, err := syncer.processOneDDL(qec, sql, nil)
 		c.Assert(err, IsNil)
 		qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 	}
@@ -186,8 +184,8 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	}
 
 	targetSQLs := [][]string{
-		{"CREATE DATABASE IF NOT EXISTS `xs1`"},
-		{"CREATE DATABASE IF NOT EXISTS `xs1`"},
+		{"CREATE DATABASE IF NOT EXISTS `xs1` COLLATE = utf8mb4_bin"},
+		{"CREATE DATABASE IF NOT EXISTS `xs1` COLLATE = utf8mb4_bin"},
 		{"DROP DATABASE IF EXISTS `xs1`"},
 		{"DROP DATABASE IF EXISTS `xs1`"},
 		{"DROP TABLE IF EXISTS `xs1`.`t1`"},
@@ -235,7 +233,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	ec := &eventContext{
 		tctx: tctx,
 	}
-
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for i, sql := range sqls {
 		qec := &queryEventContext{
 			eventContext: ec,
@@ -250,7 +248,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
 		for _, sql2 := range qec.splitDDLs {
-			sqls, err := syncer.processOneDDL(qec, sql2)
+			sqls, err := syncer.processOneDDL(qec, sql2, statusVars)
 			c.Assert(err, IsNil)
 			for _, sql3 := range sqls {
 				if len(sql3) == 0 {
@@ -262,7 +260,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 		c.Assert(qec.appliedDDLs, DeepEquals, expectedSQLs[i])
 		c.Assert(targetSQLs[i], HasLen, len(qec.appliedDDLs))
 		for j, sql2 := range qec.appliedDDLs {
-			ddlInfo, err2 := syncer.genDDLInfo(qec.p, qec.ddlSchema, sql2)
+			ddlInfo, err2 := syncer.genDDLInfo(qec.p, qec.ddlSchema, sql2, statusVars)
 			c.Assert(err2, IsNil)
 			c.Assert(targetSQLs[i][j], Equals, ddlInfo.routedDDL)
 		}
@@ -398,7 +396,7 @@ func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *C) {
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
 		for _, sql := range qec.splitDDLs {
-			sqls, err := syncer.processOneDDL(qec, sql)
+			sqls, err := syncer.processOneDDL(qec, sql, nil)
 			c.Assert(err, IsNil)
 			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 		}
@@ -481,7 +479,7 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
 		for _, sql := range qec.splitDDLs {
-			sqls, err := syncer.processOneDDL(qec, sql)
+			sqls, err := syncer.processOneDDL(qec, sql, nil)
 			c.Assert(err, IsNil)
 			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 		}
@@ -555,7 +553,7 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 			ddlSchema:    "test",
 			p:            p,
 		}
-		sqls, err := syncer.processOneDDL(qec, sql)
+		sqls, err := syncer.processOneDDL(qec, sql, nil)
 		c.Assert(err, IsNil)
 		table := ca.ghostname
 		matchRules := config.ShadowTableRules
@@ -573,7 +571,7 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 			ddlSchema:    "test",
 			p:            p,
 		}
-		sqls, err = syncer.processOneDDL(qec, sql)
+		sqls, err = syncer.processOneDDL(qec, sql, nil)
 		c.Assert(terror.ErrConfigOnlineDDLMistakeRegex.Equal(err), IsTrue)
 		c.Assert(sqls, HasLen, 0)
 		c.Assert(err, ErrorMatches, ".*"+sql+".*"+table+".*"+matchRules+".*")
@@ -643,35 +641,35 @@ func (s *testDDLSuite) TestAdjustTableCollation(c *C) {
 	// duplicate with pkg/parser
 	sqls := []string{
 		"create table `test`.`t1` (id int) CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
-		"create table `test`.`t1` like `test`.`t2`",
-		"create table `test`.`t1` (id int) CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci as select id from `test`.`t2`",
-		"create table `test`.`t1` (id int primary key) CHARSET=utf8mb4",
+		"create table `test`.`t1` (id int) CHARSET=utf8mb4",
+		"create table `test`.`t1` (id int) COLLATE=utf8mb4_general_ci",
 		"create table `test`.`t1` (id int)",
+		"create database `test` CHARACTER SET=utf8mb4 COLLATE=utf8mb4_general_ci",
+		"create database `test` CHARACTER SET=utf8mb4",
+		"create database `test` COLLATE=utf8mb4_general_ci",
+		"create database if not exists `test`",
 	}
 
 	expectedSQLs := []string{
-		"create table `test`.`t1` (id int) CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
-		"create table `test`.`t1` like `test`.`t2`",
-		"create table `test`.`t1` (id int) CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci as select id from `test`.`t2`",
-		"CREATE TABLE `test`.`t` (`id` INT PRIMARY KEY) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT CHARACTER SET = UTF8MB4",
 		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT)",
+		"CREATE DATABASE `test` CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci",
+		"CREATE DATABASE `test` CHARACTER SET = utf8mb4",
+		"CREATE DATABASE `test` COLLATE = utf8mb4_general_ci",
+		"CREATE DATABASE IF NOT EXISTS `test` COLLATE = utf8mb4_bin",
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
 	syncer := NewSyncer(&config.SubTaskConfig{}, nil, nil)
 	syncer.tctx = tctx
-
-	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
-	defer db.Close()
-	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
 	p := parser.New()
-	schemaName := "test"
-	tableName := "t"
 	tab := &filter.Table{
 		Schema: "test",
 		Name:   "t",
 	}
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for i, sql := range sqls {
 		ddlInfo := &ddlInfo{
 			originDDL:    sql,
@@ -683,12 +681,10 @@ func (s *testDDLSuite) TestAdjustTableCollation(c *C) {
 		c.Assert(err, IsNil)
 		c.Assert(stmt, NotNil)
 		ddlInfo.originStmt = stmt
-		if i > 2 {
-			mock.ExpectQuery(fmt.Sprintf("SELECT TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'", schemaName, tableName)).WillReturnRows(
-				sqlmock.NewRows([]string{"TABLE_COLLATION"}).AddRow("utf8mb4_general_ci"))
-		}
-		syncer.adjustTableCollation(ddlInfo)
-		c.Assert(ddlInfo.routedDDL, Equals, expectedSQLs[i])
+		adjustCollation(tctx, ddlInfo, statusVars)
+		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+		c.Assert(err, IsNil)
+		c.Assert(routedDDL, Equals, expectedSQLs[i])
 	}
 }
 
