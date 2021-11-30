@@ -195,6 +195,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 }
 
 func (b *canalEntryBuilder) formatValue(value interface{}, mysqlType string, javaType JavaSQLType) (result string, err error) {
+	// canal-json would convert all value to string.
 	switch v := value.(type) {
 	case int64:
 		result = strconv.FormatInt(v, 10)
