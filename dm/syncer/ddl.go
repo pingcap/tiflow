@@ -128,11 +128,7 @@ func (s *Syncer) genDDLInfo(p *parser.Parser, schema, sql string, statusVars []b
 		targetTables: targetTables,
 	}
 
-	err = adjustCollation(s.tctx, ddlInfo, statusVars)
-	if err != nil {
-		return nil, err
-	}
-
+	adjustCollation(s.tctx, ddlInfo, statusVars)
 	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
 	ddlInfo.routedDDL = routedDDL
 	return ddlInfo, err
@@ -200,24 +196,22 @@ func (s *Syncer) clearOnlineDDL(tctx *tcontext.Context, targetTable *filter.Tabl
 	return nil
 }
 
-// adjustCollation
-func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte) error {
-
+// adjustCollation adds collation for create database and check create table.
+func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte) {
 	// check create table has collation
 	if createStmt, ok := ddlInfo.originStmt.(*ast.CreateTableStmt); ok {
 		// create table like old table has no table_options
 		// See https://dev.mysql.com/doc/refman/5.7/en/create-table.html
 		if createStmt.ReferTable != nil {
-			return nil
+			return
 		}
 		for _, tableOption := range createStmt.Options {
 			// already have 'Collation'
 			if tableOption.Tp == ast.TableOptionCollate {
-				return nil
+				return
 			}
 		}
 		tctx.L().Warn("detect create table risk which use implicit collation", zap.String("originSQL", ddlInfo.originDDL))
-
 	} else if createStmt, ok := ddlInfo.originStmt.(*ast.CreateDatabaseStmt); ok {
 		// collation is in create database syntax create_option
 		// See https://dev.mysql.com/doc/refman/8.0/en/create-database.html
@@ -225,7 +219,7 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 		for _, createOption := range createStmt.Options {
 			// already have 'Collation'
 			if createOption.Tp == ast.DatabaseOptionCollate {
-				return nil
+				return
 			}
 			if createOption.Tp == ast.DatabaseOptionCharset {
 				hasCharset = true
@@ -235,7 +229,7 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 		// just has charset, can not add collation by server collation
 		if hasCharset {
 			tctx.L().Warn("detect create database risk which use implicit collation", zap.String("originSQL", ddlInfo.originDDL))
-			return nil
+			return
 		}
 
 		// add collation by server collation from binlog statusVars
@@ -246,8 +240,6 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 		// add collation
 		createStmt.Options = append(createStmt.Options, &ast.DatabaseOption{Tp: ast.DatabaseOptionCollate, Value: collation})
 	}
-
-	return nil
 }
 
 type ddlInfo struct {
