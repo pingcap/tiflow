@@ -21,6 +21,6 @@ import (
 	"embed"
 )
 
-// Assets represent the frontend WebUI assets
+// WebUIAssets represent the frontend WebUI assets.
 //go:embed dist/*
 var WebUIAssets embed.FS

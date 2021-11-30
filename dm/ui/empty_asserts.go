@@ -19,5 +19,5 @@ package ui
 
 import "embed"
 
-// Assets represent the frontend WebUI assets, but this fs is empty when no `make dm-master-with-webui`
+// WebUIAssets represent the frontend WebUI assets, but this fs is empty when no `make dm-master-with-webui`.
 var WebUIAssets embed.FS
