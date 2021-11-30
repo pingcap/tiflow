@@ -74,10 +74,13 @@ func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, 
 		ID:   "test-changefeed",
 		Info: &model.ChangeFeedInfo{SinkURI: "blackhole://", Config: config.GetDefaultReplicaConfig()},
 	})
-	sink, err := newAsyncSink(ctx)
-	c.Assert(err, check.IsNil)
+
 	mockSink := &mockSink{}
-	sink.(*asyncSinkImpl).sink = mockSink
+	sink, err := newAsyncSink(ctx, func(a *asyncSinkImpl) error {
+		a.attachSink(mockSink)
+		return nil
+	})
+	c.Assert(err, check.IsNil)
 	return ctx, sink, mockSink
 }
 

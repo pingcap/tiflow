@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
 	"go.uber.org/zap"
 )
 
@@ -67,16 +66,13 @@ type asyncSinkImpl struct {
 	errCh  chan error
 
 	initialized chan struct{}
+	sinkMu      sync.Mutex
 }
 
-func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
+type asyncSinkInitFunc func(a *asyncSinkImpl) error
+
+func newAsyncSink(ctx cdcContext.Context, initializer asyncSinkInitFunc) (AsyncSink, error) {
 	ctx, cancel := cdcContext.WithCancel(ctx)
-	changefeedID := ctx.ChangefeedVars().ID
-	changefeedInfo := ctx.ChangefeedVars().Info
-	filter, err := filter.NewFilter(changefeedInfo.Config)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 
 	errCh := make(chan error, defaultErrChSize)
 	asyncSink := &asyncSinkImpl{
@@ -90,17 +86,16 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 	asyncSink.wg.Add(1)
 	go func() {
 		defer asyncSink.wg.Done()
-		s, err := sink.New(ctx, changefeedID, changefeedInfo.SinkURI, filter, changefeedInfo.Config, changefeedInfo.Opts, errCh)
-		if err != nil {
-			asyncSink.errCh <- err
-			return
-		}
-		asyncSink.sink = s
-		close(asyncSink.initialized)
+		errCh <- initializer(asyncSink)
 	}()
 
-	if changefeedInfo.SyncPointEnabled {
-		asyncSink.syncpointStore, err = sink.NewSyncpointStore(ctx, changefeedID, changefeedInfo.SinkURI)
+	var (
+		err  error
+		id   = ctx.ChangefeedVars().ID
+		info = ctx.ChangefeedVars().Info
+	)
+	if info.SyncPointEnabled {
+		asyncSink.syncpointStore, err = sink.NewSyncpointStore(ctx, id, info.SinkURI)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -111,6 +106,13 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 	asyncSink.wg.Add(1)
 	go asyncSink.run(ctx)
 	return asyncSink, nil
+}
+
+func (s *asyncSinkImpl) attachSink(backendSink sink.Sink) {
+	s.sinkMu.Lock()
+	defer s.sinkMu.Unlock()
+	s.sink = backendSink
+	close(s.initialized)
 }
 
 func (s *asyncSinkImpl) waitSinkInitialized(ctx cdcContext.Context) {
