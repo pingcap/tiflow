@@ -135,15 +135,18 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 
 // build the Column in the canal RowData
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
-	sqlType := MysqlToJavaType(c.Type)
+	isBinary := c.Flag.IsBinary()
+	sqlType := MysqlToJavaType(c.Type, isBinary)
+
 	mysqlType := parser_types.TypeStr(c.Type)
-	if c.Flag.IsBinary() {
+	if isBinary {
 		if parser_types.IsTypeBlob(c.Type) {
 			mysqlType = strings.Replace(mysqlType, "text", "blob", 1)
 		} else if parser_types.IsTypeChar(c.Type) {
 			mysqlType = strings.Replace(mysqlType, "char", "binary", 1)
 		}
 	}
+
 	// Some special cases handled in canal
 	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
 	switch c.Type {
