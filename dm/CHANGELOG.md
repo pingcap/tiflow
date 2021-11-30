@@ -37,7 +37,6 @@ As of DM v2.0, DM uses a TiDB-independent version number; after DM v2.0, DM uses
 - Optimize logic for fetching status data from upstream sources to reduce pressure on upstream [#2076](https://github.com/pingcap/dm/pull/2076)
 - Report errors and prompt users when encountering unsupported binlog formats [#2099](https://github.com/pingcap/dm/pull/2099)
 - Support for batch manipulation of all sync tasks in a data source via dmctl [#2166](https://github.com/pingcap/dm/pull/2166)
-- Generate DML WHERE statements from downstream table schemas [#3168](https://github.com/pingcap/ticdc/pull/3168)
 - Support for automatic acquisition and configuration of upstream and downstream time zones [#3403](https://github.com/pingcap/ticdc/pull/3403)
 
 ### Known issues
