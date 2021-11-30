@@ -101,6 +101,7 @@ func (t *testJobSuite) TestJob(c *C) {
 			Length: types.UnspecifiedLength,
 		}},
 	}
+	workerCount := 16
 
 	testCases := []struct {
 		job    *job
@@ -116,7 +117,7 @@ func (t *testJobSuite) TestJob(c *C) {
 			newXIDJob(binlog.NewLocation(""), binlog.NewLocation(""), binlog.NewLocation("")),
 			"tp: xid, dml: , ddls: [], last_location: position: (, 4), gtid-set: , start_location: position: (, 4), gtid-set: , current_location: position: (, 4), gtid-set: ",
 		}, {
-			newFlushJob(),
+			newFlushJob(workerCount),
 			"tp: flush, dml: , ddls: [], last_location: position: (, 0), gtid-set: , start_location: position: (, 0), gtid-set: , current_location: position: (, 0), gtid-set: ",
 		}, {
 			newSkipJob(ec),

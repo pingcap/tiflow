@@ -14,7 +14,6 @@
 package syncer
 
 import (
-	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -118,9 +117,6 @@ func (w *DMLWorker) run() {
 		metrics.QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
 		switch j.tp {
 		case flush:
-			j.wg = &sync.WaitGroup{}
-			j.wg.Add(len(jobChs))
-
 			// flush for every DML queue
 			for i, jobCh := range jobChs {
 				startTime := time.Now()
@@ -141,8 +137,6 @@ func (w *DMLWorker) run() {
 			w.flushCh <- j
 		case conflict:
 			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
-			j.wg = &sync.WaitGroup{}
-			j.wg.Add(w.workerCount)
 
 			// flush for every DML queue
 			for i, jobCh := range jobChs {

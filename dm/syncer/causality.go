@@ -29,11 +29,12 @@ import (
 // if some conflicts exist in more than one groups, causality generate a conflict job and reset.
 // this mechanism meets quiescent consistency to ensure correctness.
 type causality struct {
-	relations *rollingMap
-	outCh     chan *job
-	inCh      chan *job
-	logger    log.Logger
-	sessCtx   sessionctx.Context
+	relations   *rollingMap
+	outCh       chan *job
+	inCh        chan *job
+	logger      log.Logger
+	sessCtx     sessionctx.Context
+	workerCount int
 
 	// for metrics
 	task   string
@@ -43,13 +44,14 @@ type causality struct {
 // causalityWrap creates and runs a causality instance.
 func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 	causality := &causality{
-		relations: newRollingMap(),
-		task:      syncer.cfg.Name,
-		source:    syncer.cfg.SourceID,
-		logger:    syncer.tctx.Logger.WithFields(zap.String("component", "causality")),
-		inCh:      inCh,
-		outCh:     make(chan *job, syncer.cfg.QueueSize),
-		sessCtx:   syncer.sessCtx,
+		relations:   newRollingMap(),
+		task:        syncer.cfg.Name,
+		source:      syncer.cfg.SourceID,
+		logger:      syncer.tctx.Logger.WithFields(zap.String("component", "causality")),
+		inCh:        inCh,
+		outCh:       make(chan *job, syncer.cfg.QueueSize),
+		sessCtx:     syncer.sessCtx,
+		workerCount: syncer.cfg.WorkerCount,
 	}
 
 	go func() {
@@ -81,7 +83,7 @@ func (c *causality) run() {
 			// detectConflict before add
 			if c.detectConflict(keys) {
 				c.logger.Debug("meet causality key, will generate a conflict job to flush all sqls", zap.Strings("keys", keys))
-				c.outCh <- newConflictJob()
+				c.outCh <- newConflictJob(c.workerCount)
 				c.relations.clear()
 			}
 			j.dml.key = c.add(keys, j.seq)

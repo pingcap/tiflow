@@ -180,11 +180,15 @@ func newXIDJob(location, startLocation, currentLocation binlog.Location) *job {
 	}
 }
 
-func newFlushJob() *job {
+func newFlushJob(workerCount int) *job {
+	wg := &sync.WaitGroup{}
+	wg.Add(workerCount)
+
 	return &job{
 		tp:          flush,
 		targetTable: &filter.Table{},
 		jobAddTime:  time.Now(),
+		wg:          wg,
 	}
 }
 
@@ -208,11 +212,15 @@ func newGCJob(flushJobSeq int64) *job {
 	}
 }
 
-func newConflictJob() *job {
+func newConflictJob(workerCount int) *job {
+	wg := &sync.WaitGroup{}
+	wg.Add(workerCount)
+
 	return &job{
 		tp:          conflict,
 		targetTable: &filter.Table{},
 		jobAddTime:  time.Now(),
+		wg:          wg,
 	}
 }
 

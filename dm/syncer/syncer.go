@@ -976,7 +976,7 @@ func (s *Syncer) addJob(job *job) error {
 	})
 	if flushFirstJob {
 		s.jobWg.Add(1)
-		s.dmlJobCh <- newFlushJob()
+		s.dmlJobCh <- newFlushJob(s.cfg.WorkerCount)
 		s.jobWg.Wait()
 	}
 
@@ -3126,7 +3126,7 @@ func (s *Syncer) recordSkipSQLsLocation(ec *eventContext) error {
 // NOTE: currently, flush job is always sync operation.
 func (s *Syncer) flushJobs() error {
 	s.tctx.L().Info("flush all jobs", zap.Stringer("global checkpoint", s.checkpoint))
-	job := newFlushJob()
+	job := newFlushJob(s.cfg.WorkerCount)
 	return s.addJobFunc(job)
 }
 

@@ -273,7 +273,7 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 			j := newDMLJob(dml.op, sourceTable, targetTable, dml, ec)
 			inCh <- j
 		}
-		inCh <- newFlushJob()
+		inCh <- newFlushJob(syncer.cfg.WorkerCount)
 		c.Assert(
 			utils.WaitSomething(10, time.Millisecond, func() bool {
 				return len(outCh) == len(tc.output)+1
