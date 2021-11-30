@@ -80,10 +80,12 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 
 	// mock kafka broker processes 1 row changed event
 	leader.Returns(prodSuccess)
+	tableID := model.TableID(1)
 	row := &model.RowChangedEvent{
 		Table: &model.TableName{
-			Schema: "test",
-			Table:  "t1",
+			Schema:  "test",
+			Table:   "t1",
+			TableID: tableID,
 		},
 		StartTs:  100,
 		CommitTs: 120,
@@ -91,11 +93,11 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	}
 	err = sink.EmitRowChangedEvents(ctx, row)
 	c.Assert(err, check.IsNil)
-	checkpointTs, err := sink.FlushRowChangedEvents(ctx, uint64(120))
+	checkpointTs, err := sink.FlushRowChangedEvents(ctx, tableID, uint64(120))
 	c.Assert(err, check.IsNil)
 	c.Assert(checkpointTs, check.Equals, uint64(120))
 	// flush older resolved ts
-	checkpointTs, err = sink.FlushRowChangedEvents(ctx, uint64(110))
+	checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, uint64(110))
 	c.Assert(err, check.IsNil)
 	c.Assert(checkpointTs, check.Equals, uint64(120))
 

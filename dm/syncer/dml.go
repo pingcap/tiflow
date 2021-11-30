@@ -45,6 +45,7 @@ const (
 	updateDML                      = dmlOpType(update)
 	deleteDML                      = dmlOpType(del)
 	insertOnDuplicateDML dmlOpType = iota + 1
+	replaceDML
 )
 
 func (op dmlOpType) String() (str string) {
@@ -57,6 +58,8 @@ func (op dmlOpType) String() (str string) {
 		return "delete"
 	case insertOnDuplicateDML:
 		return "insert on duplicate update"
+	case replaceDML:
+		return "replace"
 	}
 	return
 }
@@ -821,11 +824,15 @@ func (dml *DML) genDeleteSQL() ([]string, [][]interface{}) {
 }
 
 // genInsertSQL generates a `INSERT`.
-// if in safemode, generates a `INSERT ON DUPLICATE UPDATE` statement.
+// if in safemode, generates a `REPLACE` statement.
 func (dml *DML) genInsertSQL() ([]string, [][]interface{}) {
 	var buf strings.Builder
 	buf.Grow(1024)
-	buf.WriteString("INSERT INTO ")
+	if dml.safeMode {
+		buf.WriteString("REPLACE INTO ")
+	} else {
+		buf.WriteString("INSERT INTO ")
+	}
 	buf.WriteString(dml.targetTableID)
 	buf.WriteString(" (")
 	for i, column := range dml.columns {
@@ -846,16 +853,6 @@ func (dml *DML) genInsertSQL() ([]string, [][]interface{}) {
 			buf.WriteString("?)")
 		}
 	}
-	if dml.safeMode {
-		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
-		for i, column := range dml.columns {
-			col := dbutil.ColumnName(column.Name.O)
-			buf.WriteString(col + "=VALUES(" + col + ")")
-			if i != len(dml.columns)-1 {
-				buf.WriteByte(',')
-			}
-		}
-	}
 	return []string{buf.String()}, [][]interface{}{dml.values}
 }
 
@@ -873,16 +870,21 @@ func valuesHolder(n int) string {
 	return builder.String()
 }
 
-// genInsertOnDuplicateSQLMultipleRows generates a `INSERT` with multiple rows like 'INSERT INTO tb(a,b) VALUES (1,1),(2,2)'
+// genInsertSQLMultipleRows generates a `INSERT` with multiple rows like 'INSERT INTO tb(a,b) VALUES (1,1),(2,2)'
+// if replace, generates a `REPLACE' with multiple rows like 'REPLACE INTO tb(a,b) VALUES (1,1),(2,2)'
 // if onDuplicate, generates a `INSERT ON DUPLICATE KEY UPDATE` statement like 'INSERT INTO tb(a,b) VALUES (1,1),(2,2) ON DUPLICATE KEY UPDATE a=VALUES(a),b=VALUES(b)'.
-func genInsertOnDuplicateSQLMultipleRows(onDuplicate bool, dmls []*DML) ([]string, [][]interface{}) {
+func genInsertSQLMultipleRows(op dmlOpType, dmls []*DML) ([]string, [][]interface{}) {
 	if len(dmls) == 0 {
 		return nil, nil
 	}
 
 	var buf strings.Builder
 	buf.Grow(1024)
-	buf.WriteString("INSERT INTO")
+	if op == replaceDML {
+		buf.WriteString("REPLACE INTO")
+	} else {
+		buf.WriteString("INSERT INTO")
+	}
 	buf.WriteString(" " + dmls[0].targetTableID + " (")
 	for i, column := range dmls[0].columns {
 		buf.WriteString(dbutil.ColumnName(column.Name.O))
@@ -902,7 +904,7 @@ func genInsertOnDuplicateSQLMultipleRows(onDuplicate bool, dmls []*DML) ([]strin
 		buf.WriteString(holder)
 	}
 
-	if onDuplicate {
+	if op == insertOnDuplicateDML {
 		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
 		for i, column := range dmls[0].columns {
 			col := dbutil.ColumnName(column.Name.O)
@@ -963,10 +965,8 @@ func genSQLMultipleRows(op dmlOpType, dmls []*DML) (queries []string, args [][]i
 		log.L().Debug("generate DMLs with multiple rows", zap.Stringer("op", op), zap.Stringer("original op", dmls[0].op), zap.Int("rows", len(dmls)))
 	}
 	switch op {
-	case insertDML:
-		return genInsertOnDuplicateSQLMultipleRows(false, dmls)
-	case insertOnDuplicateDML:
-		return genInsertOnDuplicateSQLMultipleRows(true, dmls)
+	case insertDML, replaceDML, insertOnDuplicateDML:
+		return genInsertSQLMultipleRows(op, dmls)
 	case deleteDML:
 		return genDeleteSQLMultipleRows(dmls)
 	}
@@ -1088,17 +1088,19 @@ func genDMLsWithSameOp(dmls []*DML) ([]string, [][]interface{}) {
 	// group dmls with same dmlOp
 	for i, dml := range dmls {
 		curOp := dmlOpType(dml.op)
-		// if update statement didn't update identify values, regard it as insert on duplicate.
-		// if insert with safemode, regard it as insert on duplicate.
-		if (curOp == updateDML && !dml.updateIdentify()) || (curOp == insertDML && dml.safeMode) {
+		if curOp == updateDML && !dml.updateIdentify() && !dml.safeMode {
+			// if update statement didn't update identify values and not in safemode, regard it as insert on duplicate.
 			curOp = insertOnDuplicateDML
+		} else if curOp == insertDML && dml.safeMode {
+			// if insert with safemode, regard it as replace
+			curOp = replaceDML
 		}
 
 		if i == 0 {
 			lastOp = curOp
 		}
 
-		// now there are 4 situations: [insert, insert on duplicate(insert with safemode/update without identify keys), update(update identify keys), delete]
+		// now there are 5 situations: [insert, replace(insert with safemode), insert on duplicate(update without identify keys), update(update identify keys/update with safemode), delete]
 		if lastOp != curOp {
 			query, arg := genDMLsWithSameTable(lastOp, groupDMLs)
 			queries = append(queries, query...)
