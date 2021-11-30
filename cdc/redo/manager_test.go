@@ -93,7 +93,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 	}
 
 	cfg := &config.ConsistentConfig{
-		Level:   string(consistentLevelEventual),
+		Level:   string(ConsistentLevelEventual),
 		Storage: "blackhole://",
 	}
 	errCh := make(chan error, 1)
@@ -181,7 +181,7 @@ func TestLogManagerInOwner(t *testing.T) {
 	defer cancel()
 
 	cfg := &config.ConsistentConfig{
-		Level:   string(consistentLevelEventual),
+		Level:   string(ConsistentLevelEventual),
 		Storage: "blackhole://",
 	}
 	opts := &ManagerOptions{
