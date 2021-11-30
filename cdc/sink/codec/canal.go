@@ -151,7 +151,7 @@ func isText(mysqlType string) bool {
 }
 
 func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
-	javaType := MysqlToJavaType(c.Type, c.Flag.IsBinary())
+	javaType := MySQLType2JavaType(c.Type, c.Flag.IsBinary())
 
 	switch javaType {
 	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
