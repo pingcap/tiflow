@@ -175,7 +175,7 @@ BATCH:
 
 // asyncWrite writes events and delete keys asynchronously.
 // It returns a channel to notify caller when write is done,
-// if needIter is true, caller receives an iterator and reads all resolved
+// if needSnap is true, caller receives a snapshot and reads all resolved
 // events, up to the maxResolvedTs.
 func (ls *Sorter) asyncWrite(
 	ctx context.Context, events []*model.PolymorphicEvent, deleteKeys []message.Key, needSnap bool,
@@ -402,9 +402,9 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	// New received events.
 	newEvents := state.eventsBuf[:n]
 
-	// It can only acquire an iterator when
+	// It can only acquire a snapshot when
 	// 1. No buffered resolved events, they must be sent before
-	//    sending further resolved events from iterator.
+	//    sending further resolved events from snapshot.
 	needSnap := lenResolvedEvents == 0
 	// 2. There are some events that can be resolved.
 	//    -------|-----------------|-------------|-------> time
@@ -451,7 +451,7 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	}
 	if !ok {
 		if needSnap {
-			log.Panic("need iterator", zap.Uint64("tableID", ls.tableID))
+			log.Panic("need snapshot", zap.Uint64("tableID", ls.tableID))
 		}
 	}
 	iter := snap.Iterator(
