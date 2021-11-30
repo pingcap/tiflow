@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pingcap/tidb/parser/mysql"
+
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -191,6 +193,8 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 		if number > math.MaxInt64 {
 			javaType = JavaSQLTypeDECIMAL
 		}
+	default:
+		result = fmt.Sprintf("%v", v)
 	}
 
 	return javaType
