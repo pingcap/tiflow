@@ -80,10 +80,11 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 
 	errCh := make(chan error, defaultErrChSize)
 	asyncSink := &asyncSinkImpl{
-		sink:   nil,
-		ddlCh:  make(chan *model.DDLEvent, 1),
-		errCh:  errCh,
-		cancel: cancel,
+		sink:        nil,
+		ddlCh:       make(chan *model.DDLEvent, 1),
+		errCh:       errCh,
+		cancel:      cancel,
+		initialized: make(chan struct{}),
 	}
 
 	asyncSink.wg.Add(1)
