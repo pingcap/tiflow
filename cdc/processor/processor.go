@@ -103,7 +103,9 @@ func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID) (boo
 		return false, nil
 	}
 
-	log.Info("adding table", zap.Int64("table-id", tableID))
+	log.Info("adding table",
+		zap.Int64("table-id", tableID),
+		cdcContext.ZapFieldChangefeed(ctx))
 	err := p.addTable(ctx, tableID, &model.TableReplicaInfo{})
 	if err != nil {
 		return false, errors.Trace(err)
@@ -129,7 +131,9 @@ func (p *processor) RemoveTable(ctx cdcContext.Context, tableID model.TableID) (
 		// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
 		// and we do not want to alarm the user.
 		log.Debug("AsyncStop has failed, possible due to a full pipeline",
-			zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
+			cdcContext.ZapFieldChangefeed(ctx),
+			zap.Uint64("checkpointTs", table.CheckpointTs()),
+			zap.Int64("tableID", tableID))
 		return false, nil
 	}
 	return true, nil
@@ -144,7 +148,8 @@ func (p *processor) IsAddTableFinished(ctx cdcContext.Context, tableID model.Tab
 	table, exist := p.tables[tableID]
 	if !exist {
 		log.Panic("table which was added is not found",
-			cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+			cdcContext.ZapFieldChangefeed(ctx),
+			zap.Int64("tableID", tableID))
 	}
 	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
@@ -178,12 +183,14 @@ func (p *processor) IsRemoveTableFinished(ctx cdcContext.Context, tableID model.
 
 	table, exist := p.tables[tableID]
 	if !exist {
-		log.Panic("table which was added is not found",
-			cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+		log.Panic("table which was deleted is not found",
+			cdcContext.ZapFieldChangefeed(ctx),
+			zap.Int64("tableID", tableID))
 		return true
 	}
 	if table.Status() != tablepipeline.TableStatusStopped {
 		log.Debug("the table is still not stopped",
+			cdcContext.ZapFieldChangefeed(ctx),
 			zap.Uint64("checkpointTs", table.CheckpointTs()),
 			zap.Int64("tableID", tableID))
 		return false
@@ -201,7 +208,7 @@ func (p *processor) IsRemoveTableFinished(ctx cdcContext.Context, tableID model.
 
 // GetAllCurrentTables implements TableExecutor interface.
 func (p *processor) GetAllCurrentTables() []model.TableID {
-	var ret []model.TableID
+	ret := make([]model.TableID, 0, len(p.tables))
 	for tableID := range p.tables {
 		ret = append(ret, tableID)
 	}
