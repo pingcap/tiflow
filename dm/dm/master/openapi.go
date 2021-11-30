@@ -176,7 +176,7 @@ func (s *Server) DMAPICreateSource(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	cfg := modelToSourceCfg(createSourceReq)
+	cfg := config.OpenAPISourceToSourceCfg(createSourceReq)
 	if err := checkAndAdjustSourceConfigFunc(c.Request.Context(), cfg); err != nil {
 		_ = c.Error(err)
 		return
@@ -193,7 +193,7 @@ func (s *Server) DMAPIGetSourceList(c *gin.Context, params openapi.DMAPIGetSourc
 	sourceMap := s.scheduler.GetSourceCfgs()
 	sourceList := []openapi.Source{}
 	for key := range sourceMap {
-		sourceList = append(sourceList, sourceCfgToModel(sourceMap[key]))
+		sourceList = append(sourceList, config.SourceCfgToOpenAPISource((sourceMap[key])))
 	}
 	// fill status
 	if params.WithStatus != nil && *params.WithStatus {
@@ -839,63 +839,4 @@ func terrorHTTPErrorHandler() gin.HandlerFunc {
 		}
 		c.IndentedJSON(http.StatusBadRequest, openapi.ErrorWithMessage{ErrorMsg: msg, ErrorCode: code})
 	}
-}
-
-func sourceCfgToModel(cfg *config.SourceConfig) openapi.Source {
-	// PM's requirement, we always return obfuscated password to user
-	source := openapi.Source{
-		EnableGtid: cfg.EnableGTID,
-		Host:       cfg.From.Host,
-		Password:   "******",
-		Port:       cfg.From.Port,
-		SourceName: cfg.SourceID,
-		User:       cfg.From.User,
-		Purge: &openapi.Purge{
-			Expires:     &cfg.Purge.Expires,
-			Interval:    &cfg.Purge.Interval,
-			RemainSpace: &cfg.Purge.RemainSpace,
-		},
-	}
-	if cfg.From.Security != nil {
-		// NOTE we don't return security content here, because we don't want to expose it to the user.
-		var certAllowedCn []string
-		certAllowedCn = append(certAllowedCn, cfg.From.Security.CertAllowedCN...)
-		source.Security = &openapi.Security{CertAllowedCn: &certAllowedCn}
-	}
-	return source
-}
-
-func modelToSourceCfg(source openapi.Source) *config.SourceConfig {
-	cfg := config.NewSourceConfig()
-	from := config.DBConfig{
-		Host:     source.Host,
-		Port:     source.Port,
-		User:     source.User,
-		Password: source.Password,
-	}
-	if source.Security != nil {
-		from.Security = &config.Security{
-			SSLCABytes:   []byte(source.Security.SslCaContent),
-			SSLKEYBytes:  []byte(source.Security.SslKeyContent),
-			SSLCertBytes: []byte(source.Security.SslCertContent),
-		}
-		if source.Security.CertAllowedCn != nil {
-			from.Security.CertAllowedCN = *source.Security.CertAllowedCn
-		}
-	}
-	cfg.From = from
-	cfg.EnableGTID = source.EnableGtid
-	cfg.SourceID = source.SourceName
-	if purge := source.Purge; purge != nil {
-		if purge.Expires != nil {
-			cfg.Purge.Expires = *purge.Expires
-		}
-		if purge.Interval != nil {
-			cfg.Purge.Interval = *purge.Interval
-		}
-		if purge.RemainSpace != nil {
-			cfg.Purge.RemainSpace = *purge.RemainSpace
-		}
-	}
-	return cfg
 }

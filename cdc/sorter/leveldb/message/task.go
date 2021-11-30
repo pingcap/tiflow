@@ -16,32 +16,31 @@ package message
 import (
 	"fmt"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/sorter/encoding"
-	Iterator "github.com/syndtr/goleveldb/leveldb/iterator"
-	lutil "github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/pingcap/ticdc/pkg/db"
 	"golang.org/x/sync/semaphore"
 )
 
-// Task is a leveldb actor task. It carries write and read request.
+// Task is a db actor task. It carries write and read request.
 type Task struct {
 	UID     uint32
 	TableID uint64
 
 	// encoded key -> serde.marshal(event)
-	// If a value is empty, it deletes the key/value entry in leveldb.
+	// If a value is empty, it deletes the key/value entry in db.
 	Events map[Key][]byte
 	// Must be buffered channel to avoid blocking.
-	IterCh chan LimitedIterator `json:"-"` // Make Task JSON printable.
-	Irange *lutil.Range
-	// Set NeedIter whenever caller wants to read something from an iterator.
-	NeedIter bool
+	SnapCh chan LimitedSnapshot `json:"-"` // Make Task JSON printable.
+	// Set NeedSnap whenever caller wants to read something from a snapshot.
+	NeedSnap bool
 
 	// For clean-up table task.
 	Cleanup            bool
 	CleanupRatelimited bool
 }
 
-// Key is the key that is written to leveldb.
+// Key is the key that is written to db.
 type Key string
 
 // String returns a pretty printed string.
@@ -52,11 +51,17 @@ func (k Key) String() string {
 		uid, tableID, startTs, CRTs)
 }
 
-// LimitedIterator is a wrapper of leveldb iterator that has a sema to limit
-// the total number of open iterators.
-type LimitedIterator struct {
-	Iterator.Iterator
+// LimitedSnapshot is a wrapper of db.Snapshot that has a sema to limit
+// the total number of alive snapshots.
+type LimitedSnapshot struct {
+	db.Snapshot
 	Sema *semaphore.Weighted
+}
+
+// Release resources of the snapshot.
+func (s *LimitedSnapshot) Release() error {
+	s.Sema.Release(1)
+	return errors.Trace(s.Snapshot.Release())
 }
 
 // NewCleanupTask returns a clean up task to clean up table data.
