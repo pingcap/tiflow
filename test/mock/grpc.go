@@ -107,7 +107,7 @@ func (s *baseServer) Stop() {
 }
 
 func (s *executorServer) dial() (Conn, error) {
-	return &executorServerConn{}, nil
+	return &executorServerConn{s}, nil
 }
 
 func (c *executorClient) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksRequest, opts ...grpc.CallOption) (*pb.SubmitBatchTasksResponse, error) {

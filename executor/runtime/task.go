@@ -1,12 +1,14 @@
 package runtime
 
 import (
-	"fmt"
+	//	"fmt"
 	//"log"
+	"fmt"
 	"sync/atomic"
 	"time"
 
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/test"
 )
 
 type TaskStatus int32
@@ -21,19 +23,18 @@ type Record struct {
 	flowID  string
 	start   time.Time
 	end     time.Time
-	payload []byte
-	hashVal uint32
-	tid     int32
+	Payload interface{}
+	Tid     int32
 }
 
 func (r *Record) toString() string {
-	return fmt.Sprintf("[flow=%s] [start=%s] [end=%s] [payload=%s]\n", r.flowID, r.start.String(), r.end.String(), string(r.payload))
+	return fmt.Sprintf("flowID %s start %s end %s\n", r.flowID, r.start.String(), r.end.String())
 }
 
 type Channel struct {
 	innerChan chan *Record
-	sendWaker func()
-	recvWaker func()
+	sendCtx   *taskContext
+	recvCtx   *taskContext
 }
 
 func (c *Channel) readBatch(batch int) []*Record {
@@ -47,7 +48,7 @@ func (c *Channel) readBatch(batch int) []*Record {
 		}
 	}
 	if len(records) > 0 {
-		c.sendWaker()
+		c.sendCtx.wake()
 	}
 	return records
 }
@@ -58,29 +59,39 @@ func (c *Channel) writeBatch(records []*Record) ([]*Record, bool) {
 		case c.innerChan <- record:
 		default:
 			if i > 0 {
-				c.recvWaker()
+				c.recvCtx.wake()
 			}
 			return records[i:], i == 0
 		}
 	}
-	c.recvWaker()
+	c.recvCtx.wake()
 	return nil, false
 }
 
+type taskContext struct {
+	wake func()
+	// err error // record error during async job
+	testCtx *test.Context
+}
+
+// a vector of records
+type Chunk []*Record
+
 type taskContainer struct {
-	cfg    *model.Task
-	id     model.TaskID
-	status int32
-	cache  [][]*Record
-	op     operator
-	inputs []*Channel
-	output []*Channel
-	//	waker  func()
-	ctx *taskContext
+	cfg         *model.Task
+	id          model.TaskID
+	status      int32
+	inputCache  []Chunk
+	outputCache []Chunk
+	op          operator
+	inputs      []*Channel
+	outputs     []*Channel
+	ctx         *taskContext
 }
 
 func (t *taskContainer) prepare() error {
-	t.cache = make([][]*Record, len(t.output))
+	t.inputCache = make([]Chunk, len(t.inputs))
+	t.outputCache = make([]Chunk, len(t.outputs))
 	return t.op.prepare()
 }
 
@@ -114,9 +125,9 @@ func (t *taskContainer) setRunnable() {
 
 func (t *taskContainer) tryFlush() (blocked bool) {
 	hasBlocked := false
-	for i, cache := range t.cache {
+	for i, cache := range t.outputCache {
 		blocked := false
-		t.cache[i], blocked = t.output[i].writeBatch(cache)
+		t.outputCache[i], blocked = t.outputs[i].writeBatch(cache)
 		if blocked {
 			hasBlocked = true
 		}
@@ -124,24 +135,58 @@ func (t *taskContainer) tryFlush() (blocked bool) {
 	return hasBlocked
 }
 
+func (t *taskContainer) readDataFromInput(idx int, batch int) Chunk {
+	if len(t.inputCache[idx]) != 0 {
+		chk := t.inputCache[idx]
+		t.inputCache[idx] = t.inputCache[idx][:0]
+		return chk
+	}
+	return t.inputs[idx].readBatch(batch)
+}
+
 func (t *taskContainer) Poll() TaskStatus {
-	//	log.Printf("task %d polling", t.id)
 	if t.tryFlush() {
 		return Blocked
 	}
-	r := make([]*Record, 0, len(t.inputs)*128)
-	for _, input := range t.inputs {
-		tmp := input.readBatch(128)
-		r = append(r, tmp...)
+	idx := t.op.nextWantedInputIdx()
+	r := make(Chunk, 1, 128)
+	if idx == -1 {
+		for i := range t.inputs {
+			r = append(r, t.readDataFromInput(i, 128)...)
+		}
+	} else {
+		r = t.readDataFromInput(idx, 128)
 	}
 
-	if len(r) == 0 && len(t.inputs) > 0 {
+	if len(r) == 0 && len(t.inputs) != 0 {
+		// we don't have any input data
 		return Blocked
 	}
 
 	// do compute
 	blocked := false
-	t.cache, blocked = t.op.next(t.ctx, r)
+	var outputs []Chunk
+	var err error
+	for i, record := range r {
+		outputs, blocked, err = t.op.next(t.ctx, record, idx)
+		if err != nil {
+			// TODO: report error to job manager
+			panic(err)
+		}
+		for i, output := range outputs {
+			t.outputCache[i] = append(t.outputCache[i], output...)
+		}
+		// TODO: limit the amount of output records
+		if blocked {
+			if i+1 < len(r) {
+				if idx == -1 {
+					idx = 0
+				}
+				t.inputCache[idx] = append(t.inputCache[idx], r[i+1:]...)
+			}
+			break
+		}
+	}
 
 	if t.tryFlush() {
 		// log.Printf("task %d flush blocked", t.id)

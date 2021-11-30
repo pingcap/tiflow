@@ -44,9 +44,16 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	server := executor.NewServer(cfg, nil)
 	if err != nil {
-		log.L().Error("fail to start dm-master", zap.Error(err))
+		log.L().Error("fail to start executor", zap.Error(err))
 		os.Exit(2)
 	}
+	err = server.Start(ctx)
+	if err != nil {
+		log.L().Error("fail to start executor", zap.Error(err))
+		os.Exit(2)
+	}
+
+	// 4. wait for stopping the process
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
 		syscall.SIGHUP,
@@ -58,9 +65,5 @@ func main() {
 		log.L().Info("got signal to exit", zap.Stringer("signal", sig))
 		cancel()
 	}()
-	err = server.Start(ctx)
-	if err != nil {
-		log.L().Error("fail to start dm-master", zap.Error(err))
-		os.Exit(2)
-	}
+	<-ctx.Done()
 }

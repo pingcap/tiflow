@@ -1,4 +1,4 @@
-package executor
+package master
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-type MasterClient struct {
+type Client struct {
 	urls   []string
 	leader string
 	conn   closeable
@@ -24,7 +24,7 @@ type closeable interface {
 	Close() error
 }
 
-func (c *MasterClient) init(ctx context.Context) error {
+func (c *Client) init(ctx context.Context) error {
 	log.L().Logger.Info("dialing master", zap.String("leader", c.leader))
 	conn, err := grpc.DialContext(ctx, c.leader, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
@@ -35,7 +35,7 @@ func (c *MasterClient) init(ctx context.Context) error {
 	return nil
 }
 
-func (c *MasterClient) initForTest(_ context.Context) error {
+func (c *Client) initForTest(_ context.Context) error {
 	log.L().Logger.Info("dialing master", zap.String("leader", c.leader))
 	conn, err := mock.Dial(c.leader)
 	if err != nil {
@@ -46,8 +46,8 @@ func (c *MasterClient) initForTest(_ context.Context) error {
 	return nil
 }
 
-func NewMasterClient(ctx context.Context, join []string) (*MasterClient, error) {
-	client := &MasterClient{
+func NewMasterClient(ctx context.Context, join []string) (*Client, error) {
+	client := &Client{
 		urls: join,
 	}
 	client.leader = client.urls[0]
@@ -61,15 +61,19 @@ func NewMasterClient(ctx context.Context, join []string) (*MasterClient, error) 
 }
 
 // SendHeartbeat to master-server.
-func (c *MasterClient) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest, timeout time.Duration) (*pb.HeartbeatResponse, error) {
+func (c *Client) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest, timeout time.Duration) (*pb.HeartbeatResponse, error) {
 	ctx1, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	return c.client.Heartbeat(ctx1, req)
 }
 
 // RegisterExecutor to master-server.
-func (c *MasterClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, timeout time.Duration) (resp *pb.RegisterExecutorResponse, err error) {
+func (c *Client) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, timeout time.Duration) (resp *pb.RegisterExecutorResponse, err error) {
 	ctx1, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	return c.client.RegisterExecutor(ctx1, req)
+}
+
+func (c *Client) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp *pb.SubmitJobResponse, err error) {
+	return c.client.SubmitJob(ctx, req)
 }

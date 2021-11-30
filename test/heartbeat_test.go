@@ -1,7 +1,6 @@
 package test_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -28,12 +27,6 @@ func TestT(t *testing.T) {
 var _ = SerialSuites(&testHeartbeatSuite{})
 
 type testHeartbeatSuite struct {
-	master   *master.Server
-	executor *executor.Server
-
-	masterCtx   *test.Context
-	executorCtx *test.Context
-
 	keepAliveTTL      time.Duration
 	keepAliveInterval time.Duration
 	rpcTimeout        time.Duration
@@ -45,7 +38,7 @@ func (t *testHeartbeatSuite) SetUpSuite(c *C) {
 	t.rpcTimeout = 6 * time.Second
 }
 
-func (t *testHeartbeatSuite) SetUpTest(c *C) {
+func (t *testHeartbeatSuite) TestHeartbeatExecutorCrush(c *C) {
 	masterCfg := &master.Config{
 		Name:              "master1",
 		MasterAddr:        "127.0.0.1:1991",
@@ -54,10 +47,6 @@ func (t *testHeartbeatSuite) SetUpTest(c *C) {
 		KeepAliveInterval: t.keepAliveInterval,
 		RPCTimeout:        t.rpcTimeout,
 	}
-	var err error
-	t.masterCtx = test.NewContext()
-	t.master, err = master.NewServer(masterCfg, t.masterCtx)
-	c.Assert(err, IsNil)
 	// one master + one executor
 	executorCfg := &executor.Config{
 		Join:              "127.0.0.1:1991",
@@ -66,31 +55,23 @@ func (t *testHeartbeatSuite) SetUpTest(c *C) {
 		KeepAliveInterval: t.keepAliveInterval,
 		RPCTimeout:        t.rpcTimeout,
 	}
-	t.executorCtx = test.NewContext()
-	t.executor = executor.NewServer(executorCfg, t.executorCtx)
-}
 
-func (t *testHeartbeatSuite) TearDownTest(c *C) {
-	t.master.Stop()
-	t.executor.Stop()
-}
-
-func (t *testHeartbeatSuite) TestHeartbeatExecutorCrush(c *C) {
-	ctx := context.Background()
-	masterCtx, masterCancel := context.WithCancel(ctx)
-	defer masterCancel()
-	err := t.master.Start(masterCtx)
+	cluster := new(MiniCluster)
+	masterCtx, err := cluster.CreateMaster(masterCfg)
 	c.Assert(err, IsNil)
-	execCtx, execCancel := context.WithCancel(ctx)
-	go func() {
-		err = t.executor.Start(execCtx)
-		c.Assert(err, IsNil)
-	}()
+	executorCtx := cluster.CreateExecutor(executorCfg)
+	// Start cluster
+	err = cluster.AsyncStartMaster()
+	c.Assert(err, IsNil)
+
+	err = cluster.AsyncStartExector()
+	c.Assert(err, IsNil)
 
 	time.Sleep(2 * time.Second)
-	execCancel()
+	cluster.StopExec()
 
-	executorEvent := <-t.executorCtx.ExcutorChange()
-	masterEvent := <-t.masterCtx.ExcutorChange()
+	executorEvent := <-executorCtx.ExecutorChange()
+	masterEvent := <-masterCtx.ExecutorChange()
 	c.Assert(executorEvent.Time.Add(t.keepAliveTTL), Less, masterEvent.Time)
+	cluster.StopMaster()
 }
