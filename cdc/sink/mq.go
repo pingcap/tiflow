@@ -155,7 +155,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	return nil
 }
 
-func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	if resolvedTs <= k.checkpointTs {
 		return k.checkpointTs, nil
 	}
@@ -260,7 +260,7 @@ func (k *mqSink) Close(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
-func (k *mqSink) Barrier(cxt context.Context) error {
+func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {
 	// Barrier does nothing because FlushRowChangedEvents in mq sink has flushed
 	// all buffered events by force.
 	return nil

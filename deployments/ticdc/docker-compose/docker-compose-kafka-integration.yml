@@ -1,0 +1,42 @@
+version: '2.1'
+
+services:
+  zookeeper:
+    image: wurstmeister/zookeeper
+    ports:
+      - "2181:2181"
+
+  kafka:
+    container_name: kafka
+    image: wurstmeister/kafka:2.12-2.4.1
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_MESSAGE_MAX_BYTES: 1073741824
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 1073741824
+      KAFKA_BROKER_ID: 1
+      RACK_COMMAND: "curl -sfL https://git.io/JJZXX -o /tmp/kafka.server.keystore.jks && curl -sfL https://git.io/JJZXM -o /tmp/kafka.server.truststore.jks"
+      KAFKA_LISTENERS: "SSL://127.0.0.1:9093,PLAINTEXT://127.0.0.1:9092"
+      KAFKA_ADVERTISED_LISTENERS: "SSL://127.0.0.1:9093,PLAINTEXT://127.0.0.1:9092"
+      KAFKA_SSL_KEYSTORE_LOCATION: "/tmp/kafka.server.keystore.jks"
+      KAFKA_SSL_KEYSTORE_PASSWORD: "test1234"
+      KAFKA_SSL_KEY_PASSWORD: "test1234"
+      KAFKA_SSL_TRUSTSTORE_LOCATION: "/tmp/kafka.server.truststore.jks"
+      KAFKA_SSL_TRUSTSTORE_PASSWORD: "test1234"
+      ZK: "zk"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    depends_on:
+      - "zookeeper"
+
+  kafka_integration_test:
+    build:
+      context: ../../../
+      dockerfile: ./deployments/ticdc/docker/integration-test.Dockerfile
+    depends_on:
+      - "zookeeper"
+      - "kafka"
+    command:
+      - bash
+      - -c
+      - make integration_test_kafka CASE=kafka_messages
+    network_mode: "container:kafka"

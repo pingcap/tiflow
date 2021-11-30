@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/syncer/metrics"
+	"github.com/pingcap/tidb/sessionctx"
 )
 
 // causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.
@@ -31,6 +32,7 @@ type causality struct {
 	outCh     chan *job
 	inCh      chan *job
 	logger    log.Logger
+	sessCtx   sessionctx.Context
 
 	// for metrics
 	task   string
@@ -46,6 +48,7 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 		logger:    syncer.tctx.Logger.WithFields(zap.String("component", "causality")),
 		inCh:      inCh,
 		outCh:     make(chan *job, syncer.cfg.QueueSize),
+		sessCtx:   syncer.sessCtx,
 	}
 
 	go func() {
@@ -66,7 +69,7 @@ func (c *causality) run() {
 		if j.tp == flush {
 			c.reset()
 		} else {
-			keys := j.dml.identifyKeys()
+			keys := j.dml.identifyKeys(c.sessCtx)
 			// detectConflict before add
 			if c.detectConflict(keys) {
 				c.logger.Debug("meet causality key, will generate a conflict job to flush all sqls", zap.Strings("keys", keys))

@@ -211,15 +211,20 @@ check-static: tools/bin/golangci-lint
 
 check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts
 
-coverage: tools/bin/gocovmerge tools/bin/goveralls
+integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
-	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls
 	tools/bin/goveralls -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
-	@bash <(curl -s https://codecov.io/bash) -f $(TEST_DIR)/unit_cov.out -t $(CODECOV_TOKEN)
 else
 	go tool cover -html "$(TEST_DIR)/all_cov.out" -o "$(TEST_DIR)/all_cov.html"
+endif
+
+unit_test_coverage:
+	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
+ifeq ("$(JenkinsCI)", "1")
+	@bash <(curl -s https://codecov.io/bash) -f $(TEST_DIR)/unit_cov.out -t $(CODECOV_TOKEN)
+else
 	go tool cover -html "$(TEST_DIR)/unit_cov.out" -o "$(TEST_DIR)/unit_cov.html"
 	go tool cover -func="$(TEST_DIR)/unit_cov.out"
 endif
@@ -230,8 +235,8 @@ data-flow-diagram: docs/data-flow.dot
 clean:
 	go clean -i ./...
 	rm -rf *.out
-	rm -f bin/cdc
-	rm -f bin/cdc_kafka_consumer
+	rm -rf bin
+	rm -rf tools/bin
 
 dm: dm-master dm-worker dmctl dm-portal dm-syncer
 
