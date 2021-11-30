@@ -88,6 +88,7 @@ EOF
 
 # tidb server config file
 cat - >"$OUT_DIR/tidb-config-tls.toml" <<EOF
+socket = "/tmp/tidb-tls.sock"
 split-table = true
 alter-primary-key = true
 new_collations_enabled_on_first_bootstrap = true
