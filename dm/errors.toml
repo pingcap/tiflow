@@ -2197,7 +2197,7 @@ tags = ["internal", "high"]
 [error.DM-dm-master-38029]
 message = ""
 description = ""
-workaround = ""
+workaround = "Please use list-member command to see if the some workers are offline."
 tags = ["internal", "high"]
 
 [error.DM-dm-master-38030]
