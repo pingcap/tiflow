@@ -40,11 +40,11 @@ const (
 	JavaSQLTypeBLOB          JavaSQLType = 2004
 	JavaSQLTypeCLOB          JavaSQLType = 2005
 
-	JavaSQLTypeOTHER JavaSQLType = 1111
 	// unused
 	// JavaSQLTypeLONGVARCHAR             JavaSQLType = -1
 	// JavaSQLTypeFLOAT                   JavaSQLType = 6
 	// JavaSQLTypeNUMERIC                 JavaSQLType = 2
+	// JavaSQLTypeOTHER                   JavaSQLType = 1111
 	// JavaSQLTypeJAVA_OBJECT             JavaSQLType = 2000
 	// JavaSQLTypeDISTINCT                JavaSQLType = 2001
 	// JavaSQLTypeSTRUCT                  JavaSQLType = 2002
@@ -63,23 +63,9 @@ const (
 	// JavaSQLTypeTIMESTAMP_WITH_TIMEZONE JavaSQLType = 2014
 )
 
-<<<<<<< HEAD
 // mySQLType2JavaType converts the mysql protocol types to java sql types
-<<<<<<< HEAD
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L132-L269
 func mySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
-=======
-// take https://github.com/alibaba/canal/blob/b54bea5e3/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L1 as reference
-// for official `meta` related logic, it's not supported.
-func mySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
-=======
-// MysqlToJavaType converts the mysql protocol types to java sql types
-// take https://github.com/alibaba/canal/blob/master/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L132 as reference
-// for official `meta` related logic, it's not supported.
-func MysqlToJavaType(mysqlType byte, isBinary bool) JavaSQLType {
->>>>>>> c0ff89831 (try to fix canal-json type.)
-	// see https://github.com/mysql/mysql-connector-j/blob/5.1.49/src/com/mysql/jdbc/MysqlDefs.java
->>>>>>> c3f514083 (type fix.)
 	switch mysqlType {
 	case mysql.TypeTiny:
 		return JavaSQLTypeTINYINT
@@ -99,18 +85,9 @@ func MysqlToJavaType(mysqlType byte, isBinary bool) JavaSQLType {
 	case mysql.TypeNull:
 		return JavaSQLTypeNULL
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 	case mysql.TypeNewDecimal:
 		return JavaSQLTypeDECIMAL
 
-=======
->>>>>>> c0ff89831 (try to fix canal-json type.)
-=======
-	case mysql.TypeNewDecimal:
-		return JavaSQLTypeDECIMAL
-
->>>>>>> 05ad7dc19 (make the MySQLType2JavaType almost identical to the official implementation.)
 	case mysql.TypeTimestamp, mysql.TypeDatetime:
 		return JavaSQLTypeTIMESTAMP
 
@@ -133,22 +110,11 @@ func MysqlToJavaType(mysqlType byte, isBinary bool) JavaSQLType {
 		return JavaSQLTypeINTEGER
 
 	case mysql.TypeSet:
-<<<<<<< HEAD
 		return JavaSQLTypeBIT
 
 	// Blob related is not identical to the official implementation, since we do not know `meta` at the moment.
 	// see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L222-L231
 	// But this does not matter, they will be `JavaSQLTypeBlob` or `JavaSQLTypeClob` finally.
-=======
-		return JavaSQLTypeBINARY
-
-<<<<<<< HEAD
-	// todo (Ling Jin): for blob type, following converting rule is not totally identical to the official implementation.
-	// fix this later.
->>>>>>> c0ff89831 (try to fix canal-json type.)
-=======
-	// Blob related is not identical to the official implementation, since we do not know `meta` at the moment.
->>>>>>> 05ad7dc19 (make the MySQLType2JavaType almost identical to the official implementation.)
 	case mysql.TypeTinyBlob:
 		return JavaSQLTypeVARBINARY
 
@@ -167,16 +133,6 @@ func MysqlToJavaType(mysqlType byte, isBinary bool) JavaSQLType {
 		}
 		return JavaSQLTypeCHAR
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-	case mysql.TypeJSON:
-		// json: see jdbc 8.0, https://github.com/mysql/mysql-connector-j/blob/8.0.20/src/main/core-api/java/com/mysql/cj/MysqlType.java
-		return JavaSQLTypeLONGVARCHAR
-
->>>>>>> c0ff89831 (try to fix canal-json type.)
-=======
->>>>>>> 05ad7dc19 (make the MySQLType2JavaType almost identical to the official implementation.)
 	case mysql.TypeGeometry:
 		return JavaSQLTypeBINARY
 
@@ -184,13 +140,9 @@ func MysqlToJavaType(mysqlType byte, isBinary bool) JavaSQLType {
 		return JavaSQLTypeBIT
 
 	case mysql.TypeJSON:
-<<<<<<< HEAD
-=======
-		// json: see jdbc 8.0, https://github.com/mysql/mysql-connector-j/blob/8.0.20/src/main/core-api/java/com/mysql/cj/MysqlType.java
->>>>>>> c3f514083 (type fix.)
 		return JavaSQLTypeVARCHAR
 
 	default:
-		return JavaSQLTypeOTHER
+		return JavaSQLTypeVARCHAR
 	}
 }
