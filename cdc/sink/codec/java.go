@@ -64,10 +64,10 @@ const (
 	// JavaSQLTypeTIMESTAMP_WITH_TIMEZONE JavaSQLType = 2014
 )
 
-// MysqlToJavaType converts the mysql protocol types to java sql types
+// MySQLType2JavaType converts the mysql protocol types to java sql types
 // take https://github.com/alibaba/canal/blob/master/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L132 as reference
 // for official `meta` related logic, it's not supported.
-func MysqlToJavaType(mysqlType byte, isBinary bool) JavaSQLType {
+func MySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
 	// see https://github.com/mysql/mysql-connector-j/blob/5.1.49/src/com/mysql/jdbc/MysqlDefs.java
 	switch mysqlType {
 	case mysql.TypeTiny:
