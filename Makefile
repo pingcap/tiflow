@@ -238,6 +238,8 @@ clean:
 dm: dm-master dm-worker dmctl dm-portal dm-syncer
 
 dm-master:
+	@echo "buil webui first"
+	cd dm/ui && yarn && yarn build
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/dm-master ./dm/cmd/dm-master
 
 dm-worker:
