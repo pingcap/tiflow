@@ -50,6 +50,9 @@ func NewRootCmd() *cobra.Command {
 		Short:         "DM control",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		CompletionOptions: cobra.CompletionOptions{
+			DisableDefaultCmd: true,
+		},
 	}
 	// --worker worker1 -w worker2 --worker=worker3,worker4 -w=worker5,worker6
 	cmd.PersistentFlags().StringSliceVarP(&commandMasterFlags.workers, "source", "s", []string{}, "MySQL Source ID.")
