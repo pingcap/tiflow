@@ -123,7 +123,7 @@ func TestMessageClientBasics(t *testing.T) {
 	// wait for the stream meta to be received
 	require.Eventuallyf(t, func() bool {
 		return atomic.LoadInt32(&grpcStream.msgCount) > 0
-	}, time.Millisecond*100, time.Millisecond*10, "meta should have been received")
+	}, time.Second*1, time.Millisecond*10, "meta should have been received")
 
 	connector.AssertExpectations(t)
 	grpcClient.AssertExpectations(t)
@@ -140,7 +140,7 @@ func TestMessageClientBasics(t *testing.T) {
 	require.Equal(t, int64(1), seq)
 	require.Eventuallyf(t, func() bool {
 		return atomic.LoadInt32(&sender.sendCnt) == 1
-	}, time.Millisecond*100, time.Millisecond*10, "message should have been received")
+	}, time.Second*1, time.Millisecond*10, "message should have been received")
 	sender.AssertExpectations(t)
 
 	// Test point 3: CurrentAck works for a known topic
@@ -164,7 +164,7 @@ func TestMessageClientBasics(t *testing.T) {
 		ack, ok := client.CurrentAck("topic-1")
 		require.True(t, ok)
 		return ack == 1
-	}, time.Millisecond*100, time.Millisecond*10)
+	}, time.Second*1, time.Millisecond*10)
 
 	// Test point 6: Send another message (blocking)
 	sender.On("Append", &p2p.MessageEntry{
@@ -177,7 +177,7 @@ func TestMessageClientBasics(t *testing.T) {
 	require.Equal(t, int64(2), seq)
 	require.Eventuallyf(t, func() bool {
 		return atomic.LoadInt32(&sender.sendCnt) == 2
-	}, time.Millisecond*100, time.Millisecond*10, "message should have been received")
+	}, time.Second*1, time.Millisecond*10, "message should have been received")
 	sender.AssertExpectations(t)
 
 	// Test point 7: Interrupt the connection
@@ -221,7 +221,7 @@ func TestMessageClientBasics(t *testing.T) {
 	// We expect the connection to be closed
 	require.Eventually(t, func() bool {
 		return atomic.LoadInt32(&sender.sendCnt) == 1
-	}, time.Millisecond*100, time.Millisecond*10, "connection should have been closed")
+	}, time.Second*1, time.Millisecond*10, "connection should have been closed")
 	grpcStream.AssertExpectations(t)
 	sender.AssertExpectations(t)
 
