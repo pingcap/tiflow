@@ -54,7 +54,7 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 // FlushRowChangedEvents flushes sorted rows to sink manager, note the resolvedTs
 // is required to be no more than global resolvedTs, table barrierTs and table
 // redo log watermarkTs.
-func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	i := sort.Search(len(t.buffer), func(i int) bool {
 		return t.buffer[i].CommitTs > resolvedTs
 	})
@@ -64,7 +64,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		if err != nil {
 			return ckpt, err
 		}
-		return t.manager.flushBackendSink(ctx)
+		return t.manager.flushBackendSink(ctx, tableID)
 	}
 	resolvedRows := t.buffer[:i]
 	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
@@ -78,7 +78,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	if err != nil {
 		return ckpt, err
 	}
-	return t.manager.flushBackendSink(ctx)
+	return t.manager.flushBackendSink(ctx, tableID)
 }
 
 func (t *tableSink) flushRedoLogs(ctx context.Context, resolvedTs uint64) (uint64, error) {
@@ -116,6 +116,6 @@ func (t *tableSink) Close(ctx context.Context) error {
 }
 
 // Barrier is not used in table sink
-func (t *tableSink) Barrier(ctx context.Context) error {
+func (t *tableSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }

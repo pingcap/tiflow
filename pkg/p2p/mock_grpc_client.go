@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc"
 )
 
+//nolint:unused
 type mockSendMessageClient struct {
 	mock.Mock
 	// embeds an empty interface
@@ -62,10 +63,12 @@ func (s *mockSendMessageClient) Context() context.Context {
 	return s.ctx
 }
 
+//nolint:unused
 type mockCDCPeerToPeerClient struct {
 	mock.Mock
 }
 
+//nolint:unused
 func (c *mockCDCPeerToPeerClient) SendMessage(
 	ctx context.Context, opts ...grpc.CallOption,
 ) (p2p.CDCPeerToPeer_SendMessageClient, error) {

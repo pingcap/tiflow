@@ -39,7 +39,6 @@ type Sorter struct {
 	inputCh     chan *model.PolymorphicEvent
 	outputCh    chan *model.PolymorphicEvent
 	dir         string
-	pool        *backEndPool
 	metricsInfo *metricsInfo
 
 	closeCh chan struct{}
@@ -110,7 +109,6 @@ func NewUnifiedSorter(
 		inputCh:  make(chan *model.PolymorphicEvent, inputChSize),
 		outputCh: make(chan *model.PolymorphicEvent, outputChSize),
 		dir:      dir,
-		pool:     pool,
 		metricsInfo: &metricsInfo{
 			changeFeedID: changeFeedID,
 			tableName:    tableName,

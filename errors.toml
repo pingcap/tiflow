@@ -656,14 +656,9 @@ error = '''
 peer-to-peer message server received an RPC call with illegal metadata
 '''
 
-["CDC:ErrPeerMessageSendTryAgain"]
+["CDC:ErrPeerMessageInternalSenderClosed"]
 error = '''
-peer-to-peer message client has too many pending messages to send, try again later
-'''
-
-["CDC:ErrPeerMessageServerClosed"]
-error = '''
-peer-to-peer message server has closed connection: %s.
+peer-to-peer message server tries to send to a closed stream. Internal only.
 '''
 
 ["CDC:ErrPendingRegionCancel"]

@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -33,6 +34,8 @@ type BinlogWriter struct {
 
 	offset   atomic.Int64
 	file     *os.File
+	relayDir string
+	uuid     string
 	filename string
 
 	logger log.Logger
@@ -55,14 +58,16 @@ func (s *BinlogWriterStatus) String() string {
 }
 
 // NewBinlogWriter creates a BinlogWriter instance.
-func NewBinlogWriter(logger log.Logger) *BinlogWriter {
+func NewBinlogWriter(logger log.Logger, relayDir string) *BinlogWriter {
 	return &BinlogWriter{
-		logger: logger,
+		logger:   logger,
+		relayDir: relayDir,
 	}
 }
 
-func (w *BinlogWriter) Open(filename string) error {
-	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o644)
+func (w *BinlogWriter) Open(uuid, filename string) error {
+	fullName := filepath.Join(w.relayDir, uuid, filename)
+	f, err := os.OpenFile(fullName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o644)
 	if err != nil {
 		return terror.ErrBinlogWriterOpenFile.Delegate(err)
 	}
@@ -80,6 +85,7 @@ func (w *BinlogWriter) Open(filename string) error {
 
 	w.offset.Store(fs.Size())
 	w.file = f
+	w.uuid = uuid
 	w.filename = filename
 
 	return nil
@@ -100,6 +106,7 @@ func (w *BinlogWriter) Close() error {
 
 	w.file = nil
 	w.offset.Store(0)
+	w.uuid = ""
 	w.filename = ""
 
 	return err
@@ -131,4 +138,10 @@ func (w *BinlogWriter) Status() *BinlogWriterStatus {
 
 func (w *BinlogWriter) Offset() int64 {
 	return w.offset.Load()
+}
+
+func (w *BinlogWriter) isActive(uuid, filename string) (bool, int64) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return uuid == w.uuid && filename == w.filename, w.offset.Load()
 }
