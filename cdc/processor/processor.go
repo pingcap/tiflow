@@ -160,7 +160,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	// sink manager will return this checkpointTs to sink node if sink node resolvedTs flush failed
-	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Status.CheckpointTs)
+	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Info.GetCheckpointTs(state.Status))
 	// we should skip this tick after create a task position
 	if p.createTaskPosition() {
 		return p.changefeed, nil
