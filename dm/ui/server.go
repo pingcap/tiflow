@@ -16,7 +16,6 @@
 package ui
 
 import (
-	"embed"
 	"io/fs"
 	"net/http"
 
@@ -25,10 +24,6 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 )
-
-// Assets represent the frontend ui assets
-//go:embed dist/*
-var WebUIAssets embed.FS
 
 // WebUIAssetsHandler returns a http handler for serving static files
 func WebUIAssetsHandler() http.FileSystem {
@@ -39,7 +34,7 @@ func WebUIAssetsHandler() http.FileSystem {
 	return http.FS(stripped)
 }
 
-//InitWebUIRouter initializes the webUI router
+// InitWebUIRouter initializes the webUI router
 func InitWebUIRouter() *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
