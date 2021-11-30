@@ -1110,7 +1110,7 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 				zap.Error(err))
 
 			if task.syncFlushErrCh != nil {
-				task.syncFlushErrCh <- err
+				task.syncFlushErrCh <- nil
 			}
 			return
 		}
@@ -1168,7 +1168,8 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJobWg *sync.WaitGroup, syncFlus
 			zap.Stringer("checkpoint", s.checkpoint),
 			zap.Error(err))
 		if syncFlushErrCh != nil {
-			syncFlushErrCh <- err
+			// pass nil to avoid storing duplicate errors in s.execError
+			syncFlushErrCh <- nil
 		}
 		return
 	}
