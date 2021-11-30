@@ -147,6 +147,6 @@ func mySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
 		return JavaSQLTypeVARCHAR
 
 	default:
-		return JavaSQLTypeVARCHAR
+		return JavaSQLTypeOTHER
 	}
 }
