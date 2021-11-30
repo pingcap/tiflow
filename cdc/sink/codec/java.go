@@ -39,11 +39,11 @@ const (
 	JavaSQLTypeLONGVARBINARY JavaSQLType = -4
 	JavaSQLTypeNULL          JavaSQLType = 0
 	JavaSQLTypeBLOB          JavaSQLType = 2004
+	JavaSQLTypeOTHER         JavaSQLType = 1111
 
 	// unused
 	// JavaSQLTypeFLOAT                   JavaSQLType = 6
 	// JavaSQLTypeNUMERIC                 JavaSQLType = 2
-	// JavaSQLTypeOTHER                   JavaSQLType = 1111
 	// JavaSQLTypeJAVA_OBJECT             JavaSQLType = 2000
 	// JavaSQLTypeDISTINCT                JavaSQLType = 2001
 	// JavaSQLTypeSTRUCT                  JavaSQLType = 2002
@@ -64,7 +64,8 @@ const (
 )
 
 // MysqlToJavaType converts the mysql protocol types to java sql types
-func MysqlToJavaType(mysqlType byte) JavaSQLType {
+// take https://github.com/alibaba/canal/blob/master/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L132 as reference
+func MysqlToJavaType(mysqlType byte, isBinary bool) JavaSQLType {
 	// see https://github.com/mysql/mysql-connector-j/blob/5.1.49/src/com/mysql/jdbc/MysqlDefs.java
 	switch mysqlType {
 	case mysql.TypeNewDecimal:
@@ -88,7 +89,7 @@ func MysqlToJavaType(mysqlType byte) JavaSQLType {
 	case mysql.TypeNull:
 		return JavaSQLTypeNULL
 
-	case mysql.TypeTimestamp:
+	case mysql.TypeTimestamp, mysql.TypeDatetime:
 		return JavaSQLTypeTIMESTAMP
 
 	case mysql.TypeLonglong:
@@ -97,27 +98,23 @@ func MysqlToJavaType(mysqlType byte) JavaSQLType {
 	case mysql.TypeInt24:
 		return JavaSQLTypeINTEGER
 
-	case mysql.TypeDate:
+	case mysql.TypeDate, mysql.TypeNewDate:
 		return JavaSQLTypeDATE
 
 	case mysql.TypeDuration:
 		return JavaSQLTypeTIME
 
-	case mysql.TypeDatetime:
-		return JavaSQLTypeTIMESTAMP
-
 	case mysql.TypeYear:
-		return JavaSQLTypeDATE
-
-	case mysql.TypeNewDate:
-		return JavaSQLTypeDATE
+		return JavaSQLTypeVARCHAR
 
 	case mysql.TypeEnum:
-		return JavaSQLTypeCHAR
+		return JavaSQLTypeINTEGER
 
 	case mysql.TypeSet:
-		return JavaSQLTypeCHAR
+		return JavaSQLTypeBINARY
 
+	// todo (Ling Jin): for blob type, following converting rule is not totally identical to the official implementation.
+	// fix this later.
 	case mysql.TypeTinyBlob:
 		return JavaSQLTypeVARBINARY
 
@@ -131,14 +128,20 @@ func MysqlToJavaType(mysqlType byte) JavaSQLType {
 		return JavaSQLTypeLONGVARBINARY
 
 	case mysql.TypeVarString, mysql.TypeVarchar:
+		if isBinary {
+			return JavaSQLTypeVARBINARY
+		}
 		return JavaSQLTypeVARCHAR
+
+	case mysql.TypeString:
+		if isBinary {
+			return JavaSQLTypeBINARY
+		}
+		return JavaSQLTypeCHAR
 
 	case mysql.TypeJSON:
 		// json: see jdbc 8.0, https://github.com/mysql/mysql-connector-j/blob/8.0.20/src/main/core-api/java/com/mysql/cj/MysqlType.java
 		return JavaSQLTypeLONGVARCHAR
-
-	case mysql.TypeString:
-		return JavaSQLTypeCHAR
 
 	case mysql.TypeGeometry:
 		return JavaSQLTypeBINARY
