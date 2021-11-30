@@ -190,7 +190,9 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
@@ -198,7 +200,6 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
-		cdcClient.Close() //nolint:errcheck
 		wg.Done()
 	}()
 
@@ -280,7 +281,9 @@ func prepareBench(b *testing.B, regionNum int) (
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
@@ -288,7 +291,6 @@ func prepareBench(b *testing.B, regionNum int) (
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
-		cdcClient.Close() //nolint:errcheck
 		wg.Done()
 	}()
 
