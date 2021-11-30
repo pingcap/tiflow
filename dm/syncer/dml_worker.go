@@ -117,6 +117,7 @@ func (w *DMLWorker) run() {
 		metrics.QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
 		switch j.tp {
 		case flush:
+			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
 			// flush for every DML queue
 			for i, jobCh := range jobChs {
 				startTime := time.Now()
@@ -125,9 +126,11 @@ func (w *DMLWorker) run() {
 			}
 
 			j.wg.Wait()
-
+			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
 			w.flushCh <- j
 		case asyncFlush:
+			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+
 			// flush for every DML queue
 			for i, jobCh := range jobChs {
 				startTime := time.Now()
@@ -135,6 +138,7 @@ func (w *DMLWorker) run() {
 				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
 			}
 			w.flushCh <- j
+			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
 		case conflict:
 			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
 
