@@ -30,10 +30,10 @@ type Task struct {
 	Inputs  []TaskID
 
 	// TODO: operator or operator tree
-	OpTp             OperatorType
-	Op               Operator
-	Cost             int
-	PreferedLocation string
+	OpTp              OperatorType
+	Op                Operator
+	Cost              int
+	PreferredLocation string
 }
 
 func (t *Task) ToPB() *pb.TaskRequest {
@@ -47,6 +47,16 @@ func (t *Task) ToPB() *pb.TaskRequest {
 	}
 	for _, c := range t.Outputs {
 		req.Outputs = append(req.Outputs, int32(c))
+	}
+	return req
+}
+
+// ToScheduleTaskPB converts a task to a schedule task request
+func (t *Task) ToScheduleTaskPB() *pb.ScheduleTask {
+	req := &pb.ScheduleTask{
+		Task:              t.ToPB(),
+		Cost:              int64(t.Cost),
+		PreferredLocation: t.PreferredLocation,
 	}
 	return req
 }

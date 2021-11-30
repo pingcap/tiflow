@@ -43,6 +43,8 @@ func ToPBError(err error) *pb.Error {
 		pbErr.Code = pb.ErrorCode_NotEnoughResource
 	case ErrBuildJobFailed.RFCCode():
 		pbErr.Code = pb.ErrorCode_SubJobBuildFailed
+	case ErrGrpcBuildConn.RFCCode():
+		pbErr.Code = pb.ErrorCode_BuildGrpcConnFailed
 	default:
 		pbErr.Code = pb.ErrorCode_UnknownError
 	}

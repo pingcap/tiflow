@@ -25,6 +25,8 @@ type JobManager struct {
 	executorClient cluster.ExecutorClient
 
 	offExecutors chan model.ExecutorID
+
+	masterAddrs []string
 }
 
 // Start the deamon goroutine.
@@ -60,7 +62,16 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 	switch req.Tp {
 	case pb.SubmitJobRequest_Benchmark:
 		info.Type = model.JobBenchmark
-		jobMaster, err = benchmark.BuildBenchmarkJobMaster(info.Config, j.idAllocater, j.resourceMgr, j.executorClient)
+		// TODO: supposing job master will be running independently, then the
+		// addresses of server can change because of failover, the job master
+		// should have ways to detect and adapt automatically.
+		mClient, err := NewMasterClient(ctx, j.masterAddrs)
+		if err != nil {
+			resp.Err = errors.ToPBError(err)
+			return resp
+		}
+		jobMaster, err = benchmark.BuildBenchmarkJobMaster(
+			info.Config, j.idAllocater, j.resourceMgr, j.executorClient, mClient)
 		if err != nil {
 			resp.Err = errors.ToPBError(err)
 			return resp
@@ -85,12 +96,18 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 	return resp
 }
 
-func NewJobManager(resource cluster.ResourceMgr, clt cluster.ExecutorClient, executorNotifier chan model.ExecutorID) *JobManager {
+func NewJobManager(
+	resource cluster.ResourceMgr,
+	clt cluster.ExecutorClient,
+	executorNotifier chan model.ExecutorID,
+	masterAddrs []string,
+) *JobManager {
 	return &JobManager{
 		jobMasters:     make(map[model.JobID]system.JobMaster),
 		idAllocater:    autoid.NewAllocator(),
 		resourceMgr:    resource,
 		executorClient: clt,
 		offExecutors:   executorNotifier,
+		masterAddrs:    masterAddrs,
 	}
 }

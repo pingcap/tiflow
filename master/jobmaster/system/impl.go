@@ -23,6 +23,7 @@ type Master struct {
 
 	resourceManager cluster.ResourceMgr
 	client          cluster.ExecutorClient
+	mClient         cluster.JobMasterClient
 
 	offExecutors chan model.ExecutorID
 
@@ -41,6 +42,7 @@ func New(
 	job *model.Job,
 	resourceMgr cluster.ResourceMgr,
 	client cluster.ExecutorClient,
+	mClient cluster.JobMasterClient,
 ) *Master {
 	ctx, cancel := context.WithCancel(parentCtx)
 	return &Master{
@@ -49,6 +51,7 @@ func New(
 		job:             job,
 		resourceManager: resourceMgr,
 		client:          client,
+		mClient:         mClient,
 
 		offExecutors:         make(chan model.ExecutorID, 100),
 		scheduleWaitingTasks: make(chan scheduleGroup, 1024),
@@ -145,66 +148,53 @@ func (m *Master) dispatch(ctx context.Context, tasks []*Task) error {
 	return nil
 }
 
-// TODO: Implement different allocate task logic.
-func (m *Master) allocateTasksWithNaiveStrategy(snapshot *cluster.ResourceSnapshot, taskInfos []*model.Task) (bool, []*Task) {
-	var idx int = 0
-	tasks := make([]*Task, 0, len(taskInfos))
-	for _, task := range taskInfos {
-		originalIdx := idx
-		nTask := &Task{
-			Task: task,
-		}
-		for {
-			exec := snapshot.Executors[idx]
-			used := exec.Used
-			if exec.Reserved > used {
-				used = exec.Reserved
-			}
-			rest := exec.Capacity - used
-			if rest >= cluster.ResourceUsage(task.Cost) {
-				nTask.exec = exec.ID
-				exec.Reserved = exec.Reserved + cluster.ResourceUsage(task.Cost)
-				break
-			}
-			idx = (idx + 1) % len(snapshot.Executors)
-			if idx == originalIdx {
-				return false, nil
-			}
-		}
-		tasks = append(tasks, nTask)
-	}
-	return true, tasks
-}
-
 func (m *Master) reScheduleTask(group scheduleGroup) error {
-	snapshot := m.resourceManager.GetResourceSnapshot()
-	if len(snapshot.Executors) == 0 {
-		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
+	reqTasks := make([]*pb.ScheduleTask, 0, len(group))
+	for _, task := range group {
+		reqTasks = append(reqTasks, task.ToScheduleTaskPB())
 	}
-	taskInfos := make([]*model.Task, 0, len(group))
-	for _, t := range group {
-		taskInfos = append(taskInfos, t.Task)
+	req := &pb.TaskSchedulerRequest{Tasks: reqTasks}
+	resp, err := m.mClient.RequestForSchedule(m.ctx, req, time.Minute)
+	if err != nil {
+		// TODO: convert grpc error to rfc error
+		return err
 	}
-	success, tasks := m.allocateTasksWithNaiveStrategy(snapshot, taskInfos)
-	if !success {
-		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
+	for _, task := range group {
+		schedule, ok := resp.GetSchedule()[int32(task.ID)]
+		if !ok {
+			return errors.ErrMasterScheduleMissTask.GenWithStackByArgs(task.ID)
+		}
+		task.exec = model.ExecutorID(schedule.GetExecutorId())
 	}
-	err := m.dispatch(m.ctx, tasks)
+	err = m.dispatch(m.ctx, group)
 	return err
 }
 
 func (m *Master) scheduleJobImpl(ctx context.Context) error {
-	snapshot := m.resourceManager.GetResourceSnapshot()
-	if len(snapshot.Executors) == 0 {
-		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
+	reqTasks := make([]*pb.ScheduleTask, 0, len(m.job.Tasks))
+	for _, task := range m.job.Tasks {
+		reqTasks = append(reqTasks, task.ToScheduleTaskPB())
 	}
-	success, tasks := m.allocateTasksWithNaiveStrategy(snapshot, m.job.Tasks)
-	if !success {
-		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
+	req := &pb.TaskSchedulerRequest{Tasks: reqTasks}
+	resp, err := m.mClient.RequestForSchedule(m.ctx, req, time.Minute)
+	if err != nil {
+		// TODO: convert grpc error to rfc error
+		return err
+	}
+	tasks := make([]*Task, 0, len(m.job.Tasks))
+	for _, task := range m.job.Tasks {
+		schedule, ok := resp.GetSchedule()[int32(task.ID)]
+		if !ok {
+			return errors.ErrMasterScheduleMissTask.GenWithStackByArgs(task.ID)
+		}
+		tasks = append(tasks, &Task{
+			Task: task,
+			exec: model.ExecutorID(schedule.GetExecutorId()),
+		})
 	}
 
 	m.start() // go
-	err := m.dispatch(ctx, tasks)
+	err = m.dispatch(ctx, tasks)
 	return err
 }
 

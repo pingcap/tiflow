@@ -16,6 +16,8 @@ enum ErrorCode {
     TombstoneExecutor = 5;
     //
     SubJobBuildFailed = 6;
+    // create gRPC connection failed
+    BuildGrpcConnFailed  = 7;
     UnknownError = 10001;
 }
 

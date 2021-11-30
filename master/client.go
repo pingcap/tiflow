@@ -77,3 +77,15 @@ func (c *Client) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 func (c *Client) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp *pb.SubmitJobResponse, err error) {
 	return c.client.SubmitJob(ctx, req)
 }
+
+// RequestForSchedule sends TaskSchedulerRequest to server master and master
+// will ask resource manager for resource and allocates executors to given tasks
+func (c *Client) RequestForSchedule(
+	ctx context.Context,
+	req *pb.TaskSchedulerRequest,
+	timeout time.Duration,
+) (*pb.TaskSchedulerResponse, error) {
+	ctx1, cancel := context.WithCancel(ctx)
+	defer cancel()
+	return c.client.ScheduleTask(ctx1, req)
+}

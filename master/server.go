@@ -41,7 +41,16 @@ type Server struct {
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	executorNotifier := make(chan model.ExecutorID, 100)
 	executorManager := cluster.NewExecutorManager(executorNotifier, cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
-	jobManager := NewJobManager(executorManager, executorManager, executorNotifier)
+
+	urls, err := parseURLs(cfg.MasterAddr)
+	if err != nil {
+		return nil, err
+	}
+	masterAddrs := make([]string, 0, len(urls))
+	for _, u := range urls {
+		masterAddrs = append(masterAddrs, u.Host)
+	}
+	jobManager := NewJobManager(executorManager, executorManager, executorNotifier, masterAddrs)
 	server := &Server{
 		cfg:             cfg,
 		executorManager: executorManager,
@@ -74,6 +83,24 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	return &pb.RegisterExecutorResponse{
 		ExecutorId: int32(execInfo.ID),
 	}, nil
+}
+
+// ScheduleTask implements grpc interface. It works as follows
+// - receives request from job master
+// - queries resource manager to allocate resource and maps tasks to executors
+// - returns scheduler response to job master
+func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest) (*pb.TaskSchedulerResponse, error) {
+	// TODO: support running resource manager independently, and get resource snapshot via rpc.
+	snapshot := s.executorManager.GetResourceSnapshot()
+	if len(snapshot.Executors) == 0 {
+		return nil, errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
+	}
+	tasks := req.GetTasks()
+	success, scheduleResp := s.allocateTasksWithNaiveStrategy(snapshot, tasks)
+	if !success {
+		return nil, errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
+	}
+	return scheduleResp, nil
 }
 
 // DeleteExecutor deletes an executor, but have yet implemented.

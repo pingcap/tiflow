@@ -38,6 +38,7 @@ var (
 	ErrMasterGenEmbedEtcdConfigFail = errors.Normalize("", errors.RFCCodeText("DFLOW:ErrMasterGenEmbedEtcdConfigFail"))
 	ErrMasterStartEmbedEtcdFail     = errors.Normalize("failed to start embed etcd", errors.RFCCodeText("DFLOW:ErrMasterStartEmbedEtcdFail"))
 	ErrMasterParseURLFail           = errors.Normalize("failed to parse URL %s", errors.RFCCodeText("DFLOW:ErrMasterParseURLFail"))
+	ErrMasterScheduleMissTask       = errors.Normalize("task %d is not found after scheduling", errors.RFCCodeText("DFLOW:ErrMasterScheduleMissTask"))
 
 	// executor related errors
 	ErrExecutorConfigParseFlagSet = errors.Normalize("parse config flag set failed", errors.RFCCodeText("DFLOW:ErrExecutorConfigParseFlagSet"))

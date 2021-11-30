@@ -3,6 +3,7 @@ syntax = "proto3";
 package pb;
 
 import "error.proto";
+import "executor.proto";
 
 // I'm trying to phase out the communication protocal.
 // - system level
@@ -27,6 +28,8 @@ service Master {
     // TODO: Support more interface.
 
     // - PutClusterConfig
+
+    rpc ScheduleTask(TaskSchedulerRequest) returns(TaskSchedulerResponse) {}
 }
 
 message HeartbeatRequest {
@@ -72,4 +75,27 @@ message RegisterExecutorRequest {
 message RegisterExecutorResponse {
     Error err = 1;
     int32  executor_id = 2;
+}
+
+message ScheduleTask{
+    TaskRequest task = 1;
+    int64 cost = 2;
+    string preferred_location = 3;
+}
+
+// TaskSchedulerRequest is sent from job master to server master, server master
+// applies resource from resource manager, allocates executor to tasks.
+// The request contains an array of ScheduleTask.
+message TaskSchedulerRequest {
+    repeated ScheduleTask tasks = 1;
+}
+
+// ScheduleResult represents the where the task(sub job) will be running.
+// Currently it contains an executor id.
+message ScheduleResult {
+    int32 executor_id = 1;
+}
+
+message TaskSchedulerResponse {
+    map<int32, ScheduleResult> schedule = 1;
 }
