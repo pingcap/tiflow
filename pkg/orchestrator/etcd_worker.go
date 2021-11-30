@@ -35,9 +35,14 @@ import (
 
 const (
 	etcdRequestProgressDuration = 2 * time.Second
-	etcdTxnTimeoutDuration      = 30 * time.Second
-	etcdWatchChTimeoutDuration  = 10 * time.Second
-	deletionCounterKey          = "/meta/ticdc-delete-etcd-key-count"
+	// etcdTxnTimeoutDuration represents timeout duration for commit a txn to etcd
+	etcdTxnTimeoutDuration = 30 * time.Second
+	// if no msg comes from a etcd watchCh for etcdWatchChTimeoutDuration long,
+	// the watchCh should be reset
+	etcdWatchChTimeoutDuration = 10 * time.Second
+	// etcdWorkerLogsWarnDuration use to output warning log for some key func call
+	etcdWorkerLogsWarnDuration = 1 * time.Second
+	deletionCounterKey         = "/meta/ticdc-delete-etcd-key-count"
 )
 
 // EtcdWorker handles all interactions with Etcd
@@ -66,7 +71,9 @@ type EtcdWorker struct {
 	// a `compare-and-swap` semantics, which is essential for implementing
 	// snapshot isolation for Reactor ticks.
 	deleteCounter int64
-	metrics       *etcdWorkerMetrics
+
+	cancel  func()
+	metrics *etcdWorkerMetrics
 }
 
 type etcdWorkerMetrics struct {
@@ -123,14 +130,15 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		return errors.Trace(err)
 	}
 
-	ctx1, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	ticker := time.NewTicker(timerInterval)
 	defer ticker.Stop()
 
-	watchTicker := time.NewTicker(etcdWatchChTimeoutDuration)
-	defer watchTicker.Stop()
+	watchTimer := time.NewTimer(etcdWatchChTimeoutDuration)
+	defer watchTimer.Stop()
+
+	ctx1, cancel := context.WithCancel(ctx)
+	worker.cancel = cancel
+	defer worker.cancel()
 	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 
 	var (
@@ -156,8 +164,12 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			return ctx.Err()
 		case <-sessionDone:
 			return cerrors.ErrEtcdSessionDone.GenWithStackByArgs()
-		case <-watchTicker.C:
-			log.Warn("watchCh blocking too long, reset watchCh")
+		case <-watchTimer.C:
+			log.Warn("watchCh blocking too long, reset watchCh", zap.Duration("duration", etcdWatchChTimeoutDuration))
+			// we should call cancel here to release the resources held by last watch
+			cancel()
+			ctx1, cancel = context.WithCancel(ctx)
+			worker.cancel = cancel
 			watchCh = worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 		case <-ticker.C:
 			// There is no new event to handle on timer ticks, so we have nothing here.
@@ -167,7 +179,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				}
 			}
 		case response := <-watchCh:
-			watchTicker.Reset(etcdWatchChTimeoutDuration)
+			watchTimer.Reset(etcdWatchChTimeoutDuration)
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
@@ -226,8 +238,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			// it is safe that a batch of updates has been applied to worker.state before worker.reactor.Tick
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			costTime := time.Since(startTime).Seconds()
-			if costTime > time.Second.Seconds()*1 {
-				log.Warn("etcdWorker ticks reactor cost time more than 1 second", zap.Float64("cost time in seconds", costTime))
+			if costTime > etcdWorkerLogsWarnDuration.Seconds() {
+				log.Warn("EtcdWorker ticks reactor took too long", zap.Float64("duration", costTime))
 			}
 			worker.metrics.metricEtcdWorkerTickDuration.Observe(costTime)
 			if err != nil {
@@ -380,8 +392,8 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	defer cancel()
 	resp, err := worker.client.Txn(ctx1).If(cmps...).Then(ops...).Commit()
 	costTime := time.Since(startTime).Seconds()
-	if costTime > time.Second.Seconds()*1 {
-		log.Warn("etcdWorker commit etcd txn cost time more than 1 second", zap.Float64("cost time in seconds", costTime))
+	if costTime > etcdWorkerLogsWarnDuration.Seconds() {
+		log.Warn("Etcd transaction took too long", zap.Float64("duration", costTime))
 	}
 	worker.metrics.metricEtcdTxnDuration.Observe(costTime)
 	if err != nil {
