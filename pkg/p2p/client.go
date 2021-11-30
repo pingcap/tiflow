@@ -77,8 +77,6 @@ type MessageClient struct {
 	connector clientConnector
 }
 
-type clientStream = p2p.CDCPeerToPeer_SendMessageClient
-
 type topicEntry struct {
 	sentMessageMu sync.Mutex
 	sentMessages  deque.Deque
@@ -186,11 +184,7 @@ func (c *MessageClient) launchStream(ctx context.Context, gRPCClient p2p.CDCPeer
 		return errors.Trace(err)
 	}
 
-	if err := c.run(ctx, clientStream, cancelStream); err != nil {
-		return errors.Trace(err)
-	}
-	log.Panic("unreachable")
-	return nil
+	return errors.Trace(c.run(ctx, clientStream, cancelStream))
 }
 
 func (c *MessageClient) run(ctx context.Context, stream clientStream, cancel func()) error {
@@ -247,7 +241,7 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 			}
 
 			// We want to assert that `msg.Sequence` is continuous within a topic.
-			if old := tpk.lastSent.Swap(msg.Sequence); old != 0 && msg.Sequence != old+1 {
+			if old := tpk.lastSent.Swap(msg.Sequence); old != initAck && msg.Sequence != old+1 {
 				log.Panic("unexpected seq of message",
 					zap.String("topic", msg.Topic),
 					zap.Int64("seq", msg.Sequence))
@@ -263,6 +257,8 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 				return errors.Trace(err)
 			}
 		case <-ticker.C:
+			// The implementation of batchSender guarantees that
+			// an empty flush does not send any message.
 			if err := batchSender.Flush(); err != nil {
 				return errors.Trace(err)
 			}
@@ -351,7 +347,8 @@ func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
 			tpk, ok := c.topics[ack.GetTopic()]
 			c.topicMu.RUnlock()
 			if !ok {
-				log.Panic("Received ACK for unknown topic", zap.String("topic", ack.GetTopic()))
+				log.Warn("Received ACK for unknown topic", zap.String("topic", ack.GetTopic()))
+				continue
 			}
 
 			tpk.ack.Store(ack.GetLastSeq())

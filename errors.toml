@@ -661,6 +661,16 @@ error = '''
 peer-to-peer message server tries to send to a closed stream. Internal only.
 '''
 
+["CDC:ErrPeerMessageSendTryAgain"]
+error = '''
+peer-to-peer message client has too many pending messages to send, try again later
+'''
+
+["CDC:ErrPeerMessageServerClosed"]
+error = '''
+peer-to-peer message server has closed connection: %s.
+'''
+
 ["CDC:ErrPendingRegionCancel"]
 error = '''
 pending region cancelled due to stream disconnecting

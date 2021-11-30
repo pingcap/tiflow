@@ -228,3 +228,124 @@ func TestMessageClientBasics(t *testing.T) {
 	cancel()
 	wg.Wait()
 }
+
+func TestClientPermanentFailure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	configCloned := *clientConfigForUnitTesting
+	configCloned.BatchSendInterval = time.Hour // disables flushing
+
+	client := NewMessageClient("node-1", &configCloned)
+	sender := &mockClientBatchSender{}
+	client.newSenderFn = func(stream clientStream) clientBatchSender {
+		return sender
+	}
+	connector := &mockClientConnector{}
+	grpcClient := &mockCDCPeerToPeerClient{}
+	client.connector = connector
+	connector.On("Connect", mock.Anything).Return(grpcClient, func() {}, nil)
+
+	grpcStream := newMockSendMessageClient(ctx)
+	grpcClient.On("SendMessage", mock.Anything, []grpc.CallOption(nil)).Return(
+		grpcStream,
+		nil,
+	)
+	grpcStream.On("Send", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		packet := args.Get(0).(*p2p.MessagePacket)
+		require.EqualValues(t, &p2p.StreamMeta{
+			SenderId:             "node-1",
+			ReceiverId:           "node-2",
+			Epoch:                1, // 1 is the initial epoch
+			ClientVersion:        "v5.4.0",
+			SenderAdvertisedAddr: "fake-addr:8300",
+		}, packet.Meta)
+	})
+
+	grpcStream.On("Recv").Return(&p2p.SendMessageResponse{
+		ExitReason:   p2p.ExitReason_CAPTURE_ID_MISMATCH,
+		ErrorMessage: "test message",
+	}, nil)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := client.Run(ctx, "", "", "node-2", &security.Credential{})
+		require.Error(t, err)
+		require.Regexp(t, ".*ErrPeerMessageClientPermanentFail.*", err.Error())
+	}()
+
+	wg.Wait()
+
+	connector.AssertExpectations(t)
+	grpcStream.AssertExpectations(t)
+	sender.AssertExpectations(t)
+}
+
+func TestClientSendAnomalies(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	client := NewMessageClient("node-1", clientConfigForUnitTesting)
+	sender := &mockClientBatchSender{}
+
+	runCtx, closeClient := context.WithCancel(ctx)
+	defer closeClient()
+
+	client.newSenderFn = func(stream clientStream) clientBatchSender {
+		<-runCtx.Done()
+		return sender
+	}
+	connector := &mockClientConnector{}
+	grpcClient := &mockCDCPeerToPeerClient{}
+	client.connector = connector
+	connector.On("Connect", mock.Anything).Return(grpcClient, func() {}, nil)
+
+	grpcStream := newMockSendMessageClient(ctx)
+	grpcClient.On("SendMessage", mock.Anything, []grpc.CallOption(nil)).Return(
+		grpcStream,
+		nil,
+	)
+
+	grpcStream.On("Send", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		packet := args.Get(0).(*p2p.MessagePacket)
+		require.EqualValues(t, &p2p.StreamMeta{
+			SenderId:             "node-1",
+			ReceiverId:           "node-2",
+			Epoch:                1, // 1 is the initial epoch
+			ClientVersion:        "v5.4.0",
+			SenderAdvertisedAddr: "fake-addr:8300",
+		}, packet.Meta)
+		closeClient()
+	})
+
+	grpcStream.On("Recv").Return(nil, nil)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := client.Run(runCtx, "", "", "node-2", &security.Credential{})
+		require.Error(t, err)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	// Test point 1: ErrPeerMessageSendTryAgain
+	_, err := client.TrySendMessage(ctx, "test-topic", &testMessage{Value: 1})
+	require.Error(t, err)
+	require.Regexp(t, ".*ErrPeerMessageSendTryAgain.*", err.Error())
+
+	// Test point 2: close the client while SendMessage is blocking.
+	_, err = client.SendMessage(ctx, "test-topic", &testMessage{Value: 1})
+	require.Error(t, err)
+	require.Regexp(t, ".*ErrPeerMessageClientClosed.*", err.Error())
+
+	closeClient()
+	wg.Wait()
+
+	// Test point 3: call SendMessage after the client is closed.
+	_, err = client.SendMessage(ctx, "test-topic", &testMessage{Value: 1})
+	require.Error(t, err)
+	require.Regexp(t, ".*ErrPeerMessageClientClosed.*", err.Error())
+}
