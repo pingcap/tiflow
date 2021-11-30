@@ -159,11 +159,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 		return javaType
 	}
 
-<<<<<<< HEAD
 	// for **unsigned** integral types, should have type in `uint64`. see reference:
-=======
-	// for **unsigned** `Int` related data type, should have type in `uint64`. see reference:
->>>>>>> cb15ddc01 (fix test case.)
 	// https://github.com/pingcap/ticdc/blob/f0a38a7aaf9f3b11a4d807da275b567642733f58/cdc/entry/mounter.go#L493
 	// https://github.com/pingcap/tidb/blob/6495a5a116a016a3e077d181b8c8ad81f76ac31b/types/datum.go#L423-L455
 	number, ok := c.Value.(uint64)
