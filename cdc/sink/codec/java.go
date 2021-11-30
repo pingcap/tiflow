@@ -65,7 +65,7 @@ const (
 )
 
 // MySQLType2JavaType converts the mysql protocol types to java sql types
-// take https://github.com/alibaba/canal/blob/master/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L132 as reference
+// take https://github.com/alibaba/canal/blob/b54bea5e3/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L1 as reference
 // for official `meta` related logic, it's not supported.
 func MySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
 	// see https://github.com/mysql/mysql-connector-j/blob/5.1.49/src/com/mysql/jdbc/MysqlDefs.java
