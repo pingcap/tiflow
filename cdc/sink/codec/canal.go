@@ -136,9 +136,21 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 
 func checkIntNumberNegative(value interface{}) bool {
 	switch v := value.(type) {
+	case byte:
+		return v < 0
+	case int:
+		return v < 0
+	case int8:
+		return v < 0
+	case int16:
+		return v < 0
+	case int32:
+		return v < 0
 	case int64:
 		return v < 0
-	case uint64:
+	case float32:
+		return v < 0
+	case float64:
 		return v < 0
 	default:
 		log.Panic("get unexpected value type", zap.Any("type", v))
@@ -182,7 +194,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 	return result
 }
 
-func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType) (result string, err error) {
+func (b *canalEntryBuilder) formatValue(value interface{}, mysqlType string, javaType JavaSQLType) (result string, err error) {
 	switch v := value.(type) {
 	case int64:
 		result = strconv.FormatInt(v, 10)
@@ -201,17 +213,19 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType)
 		case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR:
 			result = string(v)
 		default:
+			// for `JavaSQLTypeBINARY`, `JavaSQLTypeVARBINARY`, `JavaSQLTypeLONGVARBINARY`
+			if isText(mysqlType) {
+				result = ""
+			}
 			decoded, err := b.bytesDecoder.Bytes(v)
 			if err != nil {
 				return "", err
 			}
 			result = string(decoded)
-			javaType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
 		}
 	default:
 		result = fmt.Sprintf("%v", v)
 	}
-
 	return result, nil
 }
 
@@ -236,7 +250,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		err   error
 	)
 	if !isNull {
-		value, err = b.formatValue(c.Value, javaType)
+		value, err = b.formatValue(c.Value, mysqlType, javaType)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrCanalDecodeFailed, err)
 		}
