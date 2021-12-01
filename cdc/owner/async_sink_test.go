@@ -84,12 +84,12 @@ func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, 
 			return err
 		}
 		c.Assert(tableInfos, check.DeepEquals, mockSink.initTableInfo)
-		if err := a.waitSinkInitialized(ctx); err != nil {
-			return err
-		}
 		a.attachSink(mockSink)
 		return nil
 	})
+	c.Assert(err, check.IsNil)
+
+	err = sink.(*asyncSinkImpl).waitSinkInitialized(ctx)
 	c.Assert(err, check.IsNil)
 	return ctx, sink, mockSink
 }
@@ -99,7 +99,6 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 	ctx := cdcContext.NewBackendContext4Test(false)
 	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
 	defer sink.Close(ctx)
-
 	waitCheckpointGrowingUp := func(m *mockSink, targetTs model.Ts) error {
 		return retry.Do(context.Background(), func() error {
 			if targetTs != atomic.LoadUint64(&m.checkpointTs) {
