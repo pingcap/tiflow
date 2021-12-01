@@ -136,8 +136,6 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 
 func checkIntNumberNegative(value interface{}) bool {
 	switch v := value.(type) {
-	case byte:
-		return v < 0
 	case int:
 		return v < 0
 	case int8:
@@ -230,19 +228,28 @@ func (b *canalEntryBuilder) formatValue(value interface{}, mysqlType string, jav
 	return result, nil
 }
 
+func getMySQLType(c *model.Column, isBinary bool) string {
+	mysqlType := parser_types.TypeStr(c.Type)
+	if !isBinary {
+		return mysqlType
+	}
+
+	if parser_types.IsTypeBlob(c.Type) {
+		return strings.Replace(mysqlType, "text", "blob", 1)
+	}
+
+	if parser_types.IsTypeChar(c.Type) {
+		return strings.Replace(mysqlType, "char", "binary", 1)
+	}
+
+	return mysqlType
+}
+
 // build the Column in the canal RowData
 // reference: https://github.com/alibaba/canal/blob/master/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	isBinary := c.Flag.IsBinary()
-	mysqlType := parser_types.TypeStr(c.Type)
-	if isBinary {
-		if parser_types.IsTypeBlob(c.Type) {
-			mysqlType = strings.Replace(mysqlType, "text", "blob", 1)
-		} else if parser_types.IsTypeChar(c.Type) {
-			mysqlType = strings.Replace(mysqlType, "char", "binary", 1)
-		}
-	}
-
+	mysqlType := getMySQLType(c, isBinary)
 	javaType := getJavaSQLType(c, mysqlType)
 
 	isNull := c.Value == nil
