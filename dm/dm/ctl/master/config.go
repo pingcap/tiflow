@@ -335,12 +335,12 @@ func getAllCfgs(cli *clientv3.Client) (map[string]*config.SourceConfig, map[stri
 
 func createDirectory(dir string) (string, string, error) {
 	taskDir := path.Join(dir, taskDirname)
-	if err := os.MkdirAll(taskDir, 0o600); err != nil {
+	if err := os.MkdirAll(taskDir, 0o700); err != nil {
 		common.PrintLinesf("can not create directory of task configs `%s`", taskDir)
 		return "", "", err
 	}
 	sourceDir := path.Join(dir, sourceDirname)
-	if err := os.MkdirAll(sourceDir, 0o600); err != nil {
+	if err := os.MkdirAll(sourceDir, 0o700); err != nil {
 		common.PrintLinesf("can not create directory of source configs `%s`", sourceDir)
 		return "", "", err
 	}
