@@ -73,18 +73,18 @@ func (b *tablePoint) String() string {
 type binlogPoint struct {
 	sync.RWMutex
 
-	location        tablePoint
-	flushedLocation tablePoint // location which flushed persistently
-	enableGTID      bool
+	savedPoint   tablePoint
+	flushedPoint tablePoint // point which flushed persistently
+	enableGTID   bool
 }
 
 func newBinlogPoint(location, flushedLocation binlog.Location, ti, flushedTI *model.TableInfo, enableGTID bool) *binlogPoint {
 	return &binlogPoint{
-		location: tablePoint{
+		savedPoint: tablePoint{
 			location: location,
 			ti:       ti,
 		},
-		flushedLocation: tablePoint{
+		flushedPoint: tablePoint{
 			location: flushedLocation,
 			ti:       flushedTI,
 		},
@@ -96,24 +96,24 @@ func (b *binlogPoint) save(location binlog.Location, ti *model.TableInfo) error 
 	b.Lock()
 	defer b.Unlock()
 
-	if binlog.CompareLocation(location, b.location.location, b.enableGTID) < 0 {
+	if binlog.CompareLocation(location, b.savedPoint.location, b.enableGTID) < 0 {
 		// support to save equal location, but not older location
-		return terror.ErrCheckpointSaveInvalidPos.Generate(location, b.location.location)
+		return terror.ErrCheckpointSaveInvalidPos.Generate(location, b.savedPoint.location)
 	}
 
-	b.location.location = location
-	b.location.ti = ti
+	b.savedPoint.location = location
+	b.savedPoint.ti = ti
 	return nil
 }
 
 func (b *binlogPoint) flush() {
-	b.flushBy(b.location)
+	b.flushBy(b.savedPoint)
 }
 
 func (b *binlogPoint) flushBy(tp tablePoint) {
 	b.Lock()
 	defer b.Unlock()
-	b.flushedLocation = tp
+	b.flushedPoint = tp
 }
 
 func (b *binlogPoint) rollback(schemaTracker *schema.Tracker, schema string) (isSchemaChanged bool) {
@@ -121,15 +121,15 @@ func (b *binlogPoint) rollback(schemaTracker *schema.Tracker, schema string) (is
 	defer b.Unlock()
 
 	// set suffix to 0 when we meet error
-	b.flushedLocation.location.ResetSuffix()
-	b.location.location = b.flushedLocation.location
-	if b.location.ti == nil {
+	b.flushedPoint.location.ResetSuffix()
+	b.savedPoint.location = b.flushedPoint.location
+	if b.savedPoint.ti == nil {
 		return // for global checkpoint, no need to rollback the schema.
 	}
 
 	// NOTE: no `Equal` function for `model.TableInfo` exists now, so we compare `pointer` directly,
 	// and after a new DDL applied to the schema, the returned pointer of `model.TableInfo` changed now.
-	trackedTi, _ := schemaTracker.GetTableInfo(&filter.Table{Schema: schema, Name: b.location.ti.Name.O}) // ignore the returned error, only compare `trackerTi` is enough.
+	trackedTi, _ := schemaTracker.GetTableInfo(&filter.Table{Schema: schema, Name: b.savedPoint.ti.Name.O}) // ignore the returned error, only compare `trackerTi` is enough.
 	// may three versions of schema exist:
 	// - the one tracked in the TiDB-with-mockTiKV.
 	// - the one in the checkpoint but not flushed.
@@ -137,49 +137,49 @@ func (b *binlogPoint) rollback(schemaTracker *schema.Tracker, schema string) (is
 	// if any of them are not equal, then we rollback them:
 	// - set the one in the checkpoint but not flushed to the one flushed.
 	// - set the one tracked to the one in the checkpoint by the caller of this method (both flushed and not flushed are the same now)
-	if isSchemaChanged = (trackedTi != b.location.ti) || (b.location.ti != b.flushedLocation.ti); isSchemaChanged {
-		b.location.ti = b.flushedLocation.ti
+	if isSchemaChanged = (trackedTi != b.savedPoint.ti) || (b.savedPoint.ti != b.flushedPoint.ti); isSchemaChanged {
+		b.savedPoint.ti = b.flushedPoint.ti
 	}
 	return
 }
 
 func (b *binlogPoint) outOfDate() bool {
-	return b.outOfDateBy(b.location.location)
+	return b.outOfDateBy(b.savedPoint.location)
 }
 
 func (b *binlogPoint) outOfDateBy(pos binlog.Location) bool {
 	b.RLock()
 	defer b.RUnlock()
 
-	return binlog.CompareLocation(pos, b.flushedLocation.location, b.enableGTID) > 0
+	return binlog.CompareLocation(pos, b.flushedPoint.location, b.enableGTID) > 0
 }
 
 // MySQLLocation returns point as binlog.Location.
 func (b *binlogPoint) MySQLLocation() binlog.Location {
 	b.RLock()
 	defer b.RUnlock()
-	return b.location.location
+	return b.savedPoint.location
 }
 
 // FlushedMySQLLocation returns flushed point as binlog.Location.
 func (b *binlogPoint) FlushedMySQLLocation() binlog.Location {
 	b.RLock()
 	defer b.RUnlock()
-	return b.flushedLocation.location
+	return b.flushedPoint.location
 }
 
 // TableInfo returns the table schema associated at the current binlog position.
 func (b *binlogPoint) TableInfo() *model.TableInfo {
 	b.RLock()
 	defer b.RUnlock()
-	return b.location.ti
+	return b.savedPoint.ti
 }
 
 func (b *binlogPoint) String() string {
 	b.RLock()
 	defer b.RUnlock()
 
-	return fmt.Sprintf("%v(flushed %v)", b.location, b.flushedLocation)
+	return fmt.Sprintf("%v(flushed %v)", b.savedPoint, b.flushedPoint)
 }
 
 // SnapshotInfo contains the id of checkpoint snapshot and its global position.
@@ -366,7 +366,7 @@ func (cp *RemoteCheckPoint) Snapshot() SnapshotInfo {
 		tableCpSnapshots := make(map[string]tablePoint)
 		for tbl, point := range tableCps {
 			if point.outOfDate() {
-				tableCpSnapshots[tbl] = point.location
+				tableCpSnapshots[tbl] = point.savedPoint
 			}
 		}
 		if len(tableCpSnapshots) > 0 {
@@ -389,8 +389,8 @@ func (cp *RemoteCheckPoint) Snapshot() SnapshotInfo {
 	}
 
 	globalLocation := &tablePoint{
-		location: cp.globalPoint.location.location.Clone(),
-		ti:       cp.globalPoint.location.ti,
+		location: cp.globalPoint.savedPoint.location.Clone(),
+		ti:       cp.globalPoint.savedPoint.ti,
 	}
 	snapshot.globalPoint = globalLocation
 	cp.snapshots = append(cp.snapshots, snapshot)
@@ -462,7 +462,7 @@ func (cp *RemoteCheckPoint) SaveTablePoint(table *filter.Table, point binlog.Loc
 
 // saveTablePoint saves single table's checkpoint without mutex.Lock.
 func (cp *RemoteCheckPoint) saveTablePoint(sourceTable *filter.Table, location binlog.Location, ti *model.TableInfo) {
-	if binlog.CompareLocation(cp.globalPoint.location.location, location, cp.cfg.EnableGTID) > 0 {
+	if binlog.CompareLocation(cp.globalPoint.savedPoint.location, location, cp.cfg.EnableGTID) > 0 {
 		panic(fmt.Sprintf("table checkpoint %+v less than global checkpoint %+v", location, cp.globalPoint))
 	}
 
@@ -722,7 +722,7 @@ func (cp *RemoteCheckPoint) FlushPointWithTableInfo(tctx *tcontext.Context, tabl
 		return err
 	}
 
-	err = point.save(point.location.location, ti)
+	err = point.save(point.savedPoint.location, ti)
 	if err != nil {
 		return err
 	}
@@ -828,12 +828,12 @@ func (cp *RemoteCheckPoint) Rollback(schemaTracker *schema.Tracker) {
 				if err := schemaTracker.DropTable(table); err != nil {
 					logger.Warn("failed to drop table from schema tracker", log.ShortError(err))
 				}
-				if point.location.ti != nil {
+				if point.savedPoint.ti != nil {
 					// TODO: Figure out how to recover from errors.
 					if err := schemaTracker.CreateSchemaIfNotExists(schemaName); err != nil {
 						logger.Error("failed to rollback schema on schema tracker: cannot create schema", log.ShortError(err))
 					}
-					if err := schemaTracker.CreateTableIfNotExists(table, point.location.ti); err != nil {
+					if err := schemaTracker.CreateTableIfNotExists(table, point.savedPoint.ti); err != nil {
 						logger.Error("failed to rollback schema on schema tracker: cannot create table", log.ShortError(err))
 					}
 				}
@@ -1169,7 +1169,7 @@ func (cp *RemoteCheckPoint) GetFlushedTableInfo(table *filter.Table) *model.Tabl
 
 	if tables, ok := cp.points[table.Schema]; ok {
 		if point, ok2 := tables[table.Name]; ok2 {
-			return point.flushedLocation.ti
+			return point.flushedPoint.ti
 		}
 	}
 	return nil
