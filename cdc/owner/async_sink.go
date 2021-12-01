@@ -115,23 +115,21 @@ func (s *asyncSinkImpl) attachSink(backendSink sink.Sink) {
 	close(s.initialized)
 }
 
-func (s *asyncSinkImpl) waitSinkInitialized(ctx cdcContext.Context) {
+func (s *asyncSinkImpl) waitSinkInitialized(ctx cdcContext.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		case err := <-s.errCh:
-			ctx.Throw(err)
-			return
+			return err
 		case <-s.initialized:
-			return
+			return nil
 		}
 	}
 }
 
 func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 	defer s.wg.Done()
-	s.waitSinkInitialized(ctx)
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
