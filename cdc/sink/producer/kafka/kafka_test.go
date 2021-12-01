@@ -217,7 +217,7 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	config.BrokerEndpoints = []string{""}
 	cfg.Metadata.Retry.Max = 1
 
-	err = topicPreProcess(topic, codec.ProtocolDefault, config, cfg)
+	err = topicPreProcess(topic, config, cfg)
 	c.Assert(errors.Cause(err), check.Equals, sarama.ErrOutOfBrokers)
 }
 
