@@ -677,8 +677,6 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 		return err
 	}
 
-	cp.Lock()
-	defer cp.Unlock()
 	cp.globalPoint.flushBy(*snapshotCp.globalPoint)
 	for _, point := range points {
 		point.tableCp.flushBy(point.snapshotTableCP)

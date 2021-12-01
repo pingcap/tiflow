@@ -151,7 +151,7 @@ type versionedMap struct {
 // rollingMap is a map this contains multi map instances.
 type rollingMap struct {
 	maps []*versionedMap
-	// current map fro write
+	// current map for write
 	cur *versionedMap
 }
 
