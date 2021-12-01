@@ -101,7 +101,7 @@ func (tb *tableBuffer) flush(ctx context.Context, sink *logSink) error {
 	flushedSize := int64(0)
 	for event := int64(0); event < sendEvents; event++ {
 		row := <-tb.dataCh
-		flushedSize += row.ApproximateSize
+		flushedSize += row.ApproximateDataSize
 		if event == sendEvents-1 {
 			// if last event, we record ts as new rotate file name
 			newFileName = makeTableFileObject(row.Table.TableID, row.CommitTs)
