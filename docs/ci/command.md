@@ -12,7 +12,7 @@
 
 | ci pipeline                                 | Commands                                                    | Only triggered by command |
 | ------------------------------------------- | ----------------------------------------------------------- | ------------------------- |
-| jenkins-ticdc/verify                        | /run-verify-ci<br />/run-all-tests<br />/merge              | No                        |
+| jenkins-ticdc/verify                        | /run-verify<br />/run-all-tests<br />/merge                 | No                        |
 | idc-jenkins-ci/unit-test                    | /run-unit-test<br />/run-all-tests<br />/merge              | No                        |
 | idc-jenkins-ci/leak-test                    | /run-leak-test<br />/run-all-tests<br />/merge              | No                        |
 | idc-jenkins-ci-ticdc/dm-compatibility-test  | /run-dm-compatibility-test<br />/run-all-tests<br />/merge  | Yes                       |
