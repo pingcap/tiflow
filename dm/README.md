@@ -59,24 +59,6 @@ See the "Deploy" section in [our doc](https://docs.pingcap.com/tidb-data-migrati
 
 See the "Configuration" section in [our doc](https://docs.pingcap.com/tidb-data-migration/stable/config-overview)
 
-## Web UI
-
-The web UI is placed in `ui/` directory built with TypeScript and React.
-
-To start to develop it you will need Nodejs environment ready and yarn installed as package manager, following scripts will help you to get started:
-
-```bash
-# cd to ui/ directory
-
-yarn install # install dependencies
-
-yarn start # start the development server
-
-yarn build # build and output static files to `dist` directory
-```
-
-See `package.json` for more information.
-
 ## Roadmap
 
 Read the [Roadmap](roadmap.md).
