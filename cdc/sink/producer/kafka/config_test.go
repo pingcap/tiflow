@@ -88,26 +88,22 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	defer testleak.AfterTest(c)
 	cfg := NewConfig()
 
+	// Normal config.
 	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
 		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
 	maxMessageSize := "4096" // 4kb
 	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
-
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
-
 	replicaConfig := config.GetDefaultReplicaConfig()
-
 	opts := make(map[string]string)
 	err = cfg.Initialize(sinkURI, replicaConfig, opts)
 	c.Assert(err, check.IsNil)
-
 	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
 	c.Assert(cfg.ReplicationFactor, check.Equals, int16(3))
 	c.Assert(cfg.Version, check.Equals, "2.6.0")
 	c.Assert(cfg.MaxMessageBytes, check.Equals, 4096)
-
 	expectedOpts := map[string]string{
 		"max-message-bytes": maxMessageSize,
 		"max-batch-size":    "5",
@@ -116,26 +112,48 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 		c.Assert(v, check.Equals, expectedOpts[k])
 	}
 
+	// Illegal partition-num.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0"
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	err = cfg.Initialize(sinkURI, replicaConfig, opts)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid partition num.*")
+
+	// Use enable-tidb-extension on other protocols.
+	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=1&enable-tidb-extension=true"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	err = cfg.Initialize(sinkURI, replicaConfig, opts)
+	c.Assert(errors.Cause(err), check.ErrorMatches, ".*enable-tidb-extension only support canal-json protocol.*")
+
+	// Test enable-tidb-extension.
+	uri = "kafka://127.0.0.1:9092/abc?enable-tidb-extension=true&protocol=canal-json"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = cfg.Initialize(sinkURI, replicaConfig, opts)
+	c.Assert(err, check.IsNil)
+	expectedOpts = map[string]string{
+		"enable-tidb-extension": "true",
+	}
+	for k, v := range opts {
+		c.Assert(v, check.Equals, expectedOpts[k])
+	}
 }
 
 func (s *kafkaSuite) TestAdjustPartitionNum(c *check.C) {
 	defer testleak.AfterTest(c)()
-	config := NewConfig()
-	err := config.adjustPartitionNum(2)
+	cfg := NewConfig()
+	err := cfg.adjustPartitionNum(2)
 	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(2))
+	c.Assert(cfg.PartitionNum, check.Equals, int32(2))
 
-	config.PartitionNum = 1
-	err = config.adjustPartitionNum(2)
+	cfg.PartitionNum = 1
+	err = cfg.adjustPartitionNum(2)
 	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(1))
+	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
 
-	config.PartitionNum = 3
-	err = config.adjustPartitionNum(2)
+	cfg.PartitionNum = 3
+	err = cfg.adjustPartitionNum(2)
 	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
 }
