@@ -45,10 +45,15 @@ func getBatchChangedState(state map[util.EtcdKey][]byte, patchGroups [][]DataPat
 		// if a changefeed's changedState size is larger than etcdTxnMaxSize
 		// or the length of changedState is larger than etcdTxnMaxOps
 		// we should return an error instantly
-		if i == 0 && changedSize >= etcdTxnMaxSize ||
-			len(batchChangedState)+len(changedState) >= etcdTxnMaxOps {
-			return nil, 0, 0, cerrors.ErrEtcdTxnSizeExceed.GenWithStackByArgs()
+		if i == 0 {
+			if changedSize > etcdTxnMaxSize {
+				return nil, 0, 0, cerrors.ErrEtcdTxnSizeExceed.GenWithStackByArgs(changedSize, etcdTxnMaxSize)
+			}
+			if len(changedState) > etcdTxnMaxOps {
+				return nil, 0, 0, cerrors.ErrEtcdTxnOpsExceed.GenWithStackByArgs(len(changedState), etcdTxnMaxOps)
+			}
 		}
+
 		// batchChangedState size should not exceeds the etcdTxnMaxSize limit
 		// and keys numbers should not exceeds the etcdTxnMaxOps limit
 		if totalSize+changedSize >= etcdTxnMaxSize ||
