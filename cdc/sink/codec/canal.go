@@ -20,8 +20,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/tidb/parser/mysql"
-
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -29,7 +27,8 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	mm "github.com/pingcap/tidb/parser/model"
-	parser_types "github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -233,16 +232,16 @@ func (b *canalEntryBuilder) formatValue(value interface{}, mysqlType string, jav
 }
 
 func getMySQLType(c *model.Column, isBinary bool) string {
-	mysqlType := parser_types.TypeStr(c.Type)
+	mysqlType := types.TypeStr(c.Type)
 	if !isBinary {
 		return mysqlType
 	}
 
-	if parser_types.IsTypeBlob(c.Type) {
+	if types.IsTypeBlob(c.Type) {
 		return strings.Replace(mysqlType, "text", "blob", 1)
 	}
 
-	if parser_types.IsTypeChar(c.Type) {
+	if types.IsTypeChar(c.Type) {
 		return strings.Replace(mysqlType, "char", "binary", 1)
 	}
 
