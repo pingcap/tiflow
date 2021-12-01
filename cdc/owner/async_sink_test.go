@@ -83,7 +83,7 @@ func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, 
 		if err := mockSink.Initialize(ctx, tableInfos); err != nil {
 			return err
 		}
-
+		c.Assert(tableInfos, check.DeepEquals, mockSink.initTableInfo)
 		a.attachSink(mockSink)
 		return nil
 	})
