@@ -573,30 +573,3 @@ func getTopicMaxMessageBytes(admin sarama.ClusterAdmin, info sarama.TopicDetail)
 
 	return getBrokerMessageMaxBytes(admin)
 }
-
-// adjust the partition-num by the topic's partition count
-func (c *Config) adjustPartitionNum(realPartitionCount int32) error {
-	// user does not specify the `partition-num` in the sink-uri
-	if c.PartitionNum == 0 {
-		c.PartitionNum = realPartitionCount
-		return nil
-	}
-
-	if c.PartitionNum < realPartitionCount {
-		log.Warn("number of partition specified in sink-uri is less than that of the actual topic. "+
-			"Some partitions will not have messages dispatched to",
-			zap.Int32("sink-uri partitions", c.PartitionNum),
-			zap.Int32("topic partitions", realPartitionCount))
-		return nil
-	}
-
-	// Make sure that the user-specified `partition-num` is not greater than
-	// the real partition count, since messages would be dispatched to different
-	// partitions, this could prevent potential correctness problems.
-	if c.PartitionNum > realPartitionCount {
-		return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
-			"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)",
-			c.PartitionNum, realPartitionCount)
-	}
-	return nil
-}

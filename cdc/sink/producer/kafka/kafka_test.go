@@ -15,8 +15,6 @@ package kafka
 
 import (
 	"context"
-	"fmt"
-	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -27,10 +25,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
@@ -65,45 +59,6 @@ func (s *kafkaSuite) TestClientID(c *check.C) {
 			c.Assert(id, check.Equals, tc.expected)
 		}
 	}
-}
-
-func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
-	defer testleak.AfterTest(c)
-	cfg := NewConfig()
-
-	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
-		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
-		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
-	maxMessageSize := "4096" // 4kb
-	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
-
-	sinkURI, err := url.Parse(uri)
-	c.Assert(err, check.IsNil)
-
-	replicaConfig := config.GetDefaultReplicaConfig()
-
-	opts := make(map[string]string)
-	err = cfg.Initialize(sinkURI, replicaConfig, opts)
-	c.Assert(err, check.IsNil)
-
-	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
-	c.Assert(cfg.ReplicationFactor, check.Equals, int16(3))
-	c.Assert(cfg.Version, check.Equals, "2.6.0")
-	c.Assert(cfg.MaxMessageBytes, check.Equals, 4096)
-
-	expectedOpts := map[string]string{
-		"max-message-bytes": maxMessageSize,
-		"max-batch-size":    "5",
-	}
-	for k, v := range opts {
-		c.Assert(v, check.Equals, expectedOpts[k])
-	}
-
-	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	err = cfg.Initialize(sinkURI, replicaConfig, opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid partition num.*")
 }
 
 func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
@@ -234,23 +189,6 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	}
 }
 
-func (s *kafkaSuite) TestAdjustPartitionNum(c *check.C) {
-	defer testleak.AfterTest(c)()
-	config := NewConfig()
-	err := config.adjustPartitionNum(2)
-	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(2))
-
-	config.PartitionNum = 1
-	err = config.adjustPartitionNum(2)
-	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(1))
-
-	config.PartitionNum = 3
-	err = config.adjustPartitionNum(2)
-	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
-}
-
 func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	defer testleak.AfterTest(c)
 	topic := "unit_test_2"
@@ -281,62 +219,6 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 
 	err = topicPreProcess(topic, codec.ProtocolDefault, config, cfg)
 	c.Assert(errors.Cause(err), check.Equals, sarama.ErrOutOfBrokers)
-}
-
-func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
-	defer testleak.AfterTest(c)()
-	ctx := context.Background()
-	config := NewConfig()
-	config.Version = "invalid"
-	_, err := newSaramaConfigImpl(ctx, config)
-	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
-
-	ctx = util.SetOwnerInCtx(ctx)
-	config.Version = "2.6.0"
-	config.ClientID = "^invalid$"
-	_, err = newSaramaConfigImpl(ctx, config)
-	c.Assert(cerror.ErrKafkaInvalidClientID.Equal(err), check.IsTrue)
-
-	config.ClientID = "test-kafka-client"
-	compressionCases := []struct {
-		algorithm string
-		expected  sarama.CompressionCodec
-	}{
-		{"none", sarama.CompressionNone},
-		{"gzip", sarama.CompressionGZIP},
-		{"snappy", sarama.CompressionSnappy},
-		{"lz4", sarama.CompressionLZ4},
-		{"zstd", sarama.CompressionZSTD},
-		{"others", sarama.CompressionNone},
-	}
-	for _, cc := range compressionCases {
-		config.Compression = cc.algorithm
-		cfg, err := newSaramaConfigImpl(ctx, config)
-		c.Assert(err, check.IsNil)
-		c.Assert(cfg.Producer.Compression, check.Equals, cc.expected)
-	}
-
-	config.Credential = &security.Credential{
-		CAPath: "/invalid/ca/path",
-	}
-	_, err = newSaramaConfigImpl(ctx, config)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*no such file or directory")
-
-	saslConfig := NewConfig()
-	saslConfig.Version = "2.6.0"
-	saslConfig.ClientID = "test-sasl-scram"
-	saslConfig.SaslScram = &security.SaslScram{
-		SaslUser:      "user",
-		SaslPassword:  "password",
-		SaslMechanism: sarama.SASLTypeSCRAMSHA256,
-	}
-
-	cfg, err := newSaramaConfigImpl(ctx, saslConfig)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg, check.NotNil)
-	c.Assert(cfg.Net.SASL.User, check.Equals, "user")
-	c.Assert(cfg.Net.SASL.Password, check.Equals, "password")
-	c.Assert(cfg.Net.SASL.Mechanism, check.Equals, sarama.SASLMechanism("SCRAM-SHA-256"))
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
