@@ -40,10 +40,6 @@ type checkSink struct {
 	lastResolvedTs uint64
 }
 
-func (c *checkSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	panic("unreachable")
-}
-
 func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
@@ -331,10 +327,6 @@ func BenchmarkManagerFlushing(b *testing.B) {
 
 type errorSink struct {
 	*check.C
-}
-
-func (e *errorSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	panic("unreachable")
 }
 
 func (e *errorSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
