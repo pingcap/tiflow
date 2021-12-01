@@ -47,15 +47,17 @@ dispatchers = [
 
 protocol = "default"
 
-column_selectors = [
+column-selectors = [
     {matcher = ['test1.*', 'test2.*'], columns = ["Column selector expression"]},
     {matcher = ['test1.*', 'test2.*'], columns = ["Column selector expression"]},
 ]
 ```
 
-Add a new selector array configuration item named `column_selectors`. Each item consists of a matcher array and a columns array. This allows us to support multiple table and column selections.
+Add a new selector array configuration item named `column-selectors`. Each item consists of a matcher array and a
+columns array. This allows us to support multiple table and column selections.
 
-The matcher match rules for tables are the same as the [TiDB table filter rules]. The column selector rules are explained in detail below.
+The matcher match rules for tables are the same as the [TiDB table filter rules]. The column selector rules are
+explained in detail below.
 
 ### Column selector expression details
 

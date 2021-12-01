@@ -70,9 +70,10 @@ func (s *TableStatus) Store(new TableStatus) {
 }
 
 type sinkNode struct {
-	config *config.ReplicaConfig
-	sink   sink.Sink
-	status TableStatus
+	config  *config.ReplicaConfig
+	sink    sink.Sink
+	status  TableStatus
+	tableID model.TableID
 
 	resolvedTs   model.Ts
 	checkpointTs model.Ts
@@ -87,8 +88,9 @@ type sinkNode struct {
 	isTableActorMode bool
 }
 
-func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
+func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
 	return &sinkNode{
+		tableID:      tableID,
 		sink:         sink,
 		status:       TableStatusInitializing,
 		targetTs:     targetTs,
@@ -154,7 +156,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 	if err := n.emitRow2Sink(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, resolvedTs)
+	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, n.tableID, resolvedTs)
 	if err != nil {
 		return errors.Trace(err)
 	}

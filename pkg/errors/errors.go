@@ -270,5 +270,6 @@ var (
 	ErrTCPServerClosed = errors.Normalize("The TCP server has been closed", errors.RFCCodeText("CDC:ErrTCPServerClosed"))
 
 	// p2p error
-	ErrPeerMessageIllegalMeta = errors.Normalize("peer-to-peer message server received an RPC call with illegal metadata", errors.RFCCodeText("CDC:ErrPeerMessageIllegalMeta"))
+	ErrPeerMessageIllegalMeta          = errors.Normalize("peer-to-peer message server received an RPC call with illegal metadata", errors.RFCCodeText("CDC:ErrPeerMessageIllegalMeta"))
+	ErrPeerMessageInternalSenderClosed = errors.Normalize("peer-to-peer message server tries to send to a closed stream. Internal only.", errors.RFCCodeText("CDC:ErrPeerMessageInternalSenderClosed"))
 )

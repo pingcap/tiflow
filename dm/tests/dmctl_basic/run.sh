@@ -76,12 +76,10 @@ function usage_and_arg_test() {
 	echo "start_relay_empty_arg"
 	start_relay_empty_arg
 	start_relay_wrong_arg
-	start_relay_without_worker
 
 	echo "stop_relay_empty_arg"
 	stop_relay_empty_arg
 	stop_relay_wrong_arg
-	stop_relay_without_worker
 }
 
 function recover_max_binlog_size() {
@@ -267,7 +265,9 @@ function run() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
 	start_relay_success
-	start_relay_fail
+	start_relay_diff_worker_fail
+	start_relay_without_worker_name_fail
+	stop_relay_without_worker_name_fail
 
 	echo "pause_relay_success"
 	pause_relay_success
@@ -308,6 +308,21 @@ function run() {
 	stop_relay_fail
 	stop_relay_success
 
+	# stop worker to test query-status works well when no worker
+	ps aux | grep dmctl_basic/worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	ps aux | grep dmctl_basic/worker2 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER2_PORT 20
+
+	query_status_with_offline_worker
+
+	# start worker again
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $dm_worker1_conf
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $dm_worker2_conf
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
 	echo "config"
 	config_wrong_arg
 	config_to_file
@@ -336,6 +351,11 @@ function run() {
 	# update_task_worker_not_found $TASK_CONF 127.0.0.1:9999
 	# update_task_success_single_worker $TASK_CONF $SOURCE_ID1
 	# update_task_success $TASK_CONF
+
+	start_relay_without_worker_name_success
+	start_relay_with_worker_name_fail
+	stop_relay_with_worker_name_fail
+	stop_relay_with_worker_name_success
 
 	start_relay_success
 
@@ -430,8 +450,8 @@ function run() {
 
 cleanup_data dmctl
 # also cleanup dm processes in case of last run failed
-cleanup_process $*
-run $*
-cleanup_process $*
+cleanup_process
+run
+cleanup_process
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"

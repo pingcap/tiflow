@@ -24,11 +24,13 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
+	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/cdc/sorter"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/actor"
 	"github.com/pingcap/ticdc/pkg/actor/message"
+	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
@@ -61,11 +63,17 @@ type sorterNode struct {
 	tableActorRouter *actor.Router
 	isTableActorMode bool
 	tableActorID     actor.ID
+
+	// The latest barrier ts that sorter has received.
+	barrierTs model.Ts
+
+	replConfig *config.ReplicaConfig
 }
 
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
 	flowController tableFlowController, mounter entry.Mounter,
+	replConfig *config.ReplicaConfig,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -74,6 +82,7 @@ func newSorterNode(
 		mounter:        mounter,
 		resolvedTs:     startTs,
 		outputCh:       make(chan pipeline.Message, defaultOutputChannelSize),
+		replConfig:     replConfig,
 	}
 }
 
@@ -160,7 +169,16 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 					log.Panic("unexpected empty msg", zap.Reflect("msg", msg))
 				}
 				if msg.RawKV.OpType != model.OpTypeResolved {
-					size := uint64(msg.RawKV.ApproximateSize())
+					// DESIGN NOTE: We send the messages to the mounter in
+					// this separate goroutine to prevent blocking
+					// the whole pipeline.
+					msg.SetUpFinishedChan()
+					select {
+					case <-ctx.Done():
+						return nil
+					case n.mounter.Input() <- msg:
+					}
+
 					commitTs := msg.CRTs
 					// We interpolate a resolved-ts if none has been sent for some time.
 					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
@@ -179,9 +197,21 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 							}
 						}
 					}
+
+					// Must wait before accessing msg.Row
+					err := msg.WaitPrepare(ctx)
+					if err != nil {
+						if errors.Cause(err) != context.Canceled {
+							ctx.Throw(err)
+						}
+						return errors.Trace(err)
+					}
+					// We calculate memory consumption by RowChangedEvent size.
+					// It's much larger than RawKVEntry.
+					size := uint64(msg.Row.ApproximateBytes())
 					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
 					// Otherwise the pipeline would deadlock.
-					err := n.flowController.Consume(commitTs, size, func() error {
+					err = n.flowController.Consume(commitTs, size, func() error {
 						if lastCRTs > lastSentResolvedTs {
 							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.
@@ -211,31 +241,6 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 						return nil
 					}
 					lastCRTs = commitTs
-
-					// DESIGN NOTE: We send the messages to the mounter in this separate goroutine to prevent
-					// blocking the whole pipeline.
-					msg.SetUpFinishedChan()
-					select {
-					case <-ctx.Done():
-						return nil
-					case n.mounter.Input() <- msg:
-					}
-					err = msg.WaitPrepare(ctx)
-					if err != nil {
-						if cerror.ErrFlowControllerAborted.Equal(err) {
-							log.Info("flow control cancelled for table",
-								zap.Int64("tableID", n.tableID),
-								zap.String("tableName", n.tableName))
-						} else {
-							if n.isTableActorMode {
-								log.Error("sorter stopped", zap.Error(err))
-								_ = tableActorRouter.SendB(stdCtx, n.tableActorID, message.StopMessage())
-							} else {
-								ctx.(pipeline.NodeContext).Throw(err)
-							}
-						}
-						return nil
-					}
 				} else {
 					// handle OpTypeResolved
 					if msg.CRTs < lastSentResolvedTs {
@@ -279,6 +284,21 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 					zap.Uint64("oldResolvedTs", oldResolvedTs))
 			}
 			atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
+
+			if resolvedTs > n.barrierTs &&
+				!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
+				// Do not send resolved ts events that is larger than
+				// barrier ts.
+				// When DDL puller stall, resolved events that outputed by
+				// sorter may pile up in memory, as they have to wait DDL.
+				//
+				// Disabled if redolog is on, it requires sink reports
+				// resolved ts, conflicts to this change.
+				// TODO: Remove redolog check once redolog decouples for global
+				//       resolved ts.
+				msg = pipeline.PolymorphicEventMessage(
+					model.NewResolvedPolymorphicEvent(0, n.barrierTs))
+			}
 		}
 		if n.isTableActorMode {
 			return n.sorter.TryAddEntry(ctx, msg.PolymorphicEvent)
@@ -286,6 +306,11 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 			n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
 			return true, nil
 		}
+	case pipeline.MessageTypeBarrier:
+		if msg.BarrierTs > n.barrierTs {
+			n.barrierTs = msg.BarrierTs
+		}
+		fallthrough
 	default:
 		return trySendMessageToNextNode(ctx, n.isTableActorMode, n.outputCh, msg), nil
 	}
