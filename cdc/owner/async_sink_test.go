@@ -88,9 +88,6 @@ func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, 
 		return nil
 	})
 	c.Assert(err, check.IsNil)
-
-	err = sink.(*asyncSinkImpl).waitSinkInitialized(ctx)
-	c.Assert(err, check.IsNil)
 	return ctx, sink, mockSink
 }
 
