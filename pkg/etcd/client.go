@@ -189,12 +189,20 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 			return
 		case response := <-watchCh:
 			watchTimer.Reset(etcdWatchChTimeoutDuration)
-			outCh <- response
+			if response.Err() == nil {
+				lastRevision = response.Header.Revision
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case outCh <- response: // it may blocking here
+			}
 		case <-watchTimer.C:
 			log.Warn("etcd watchCh blocking too long, reset the watchCh")
 			cancel()
 			ctx1, cancel = context.WithCancel(ctx)
 			watchCh = c.cli.Watch(ctx1, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+			watchTimer.Reset(etcdWatchChTimeoutDuration)
 		}
 	}
 }

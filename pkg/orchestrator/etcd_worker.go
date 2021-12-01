@@ -134,7 +134,9 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	ctx1, cancel := context.WithCancel(ctx)
 	defer cancel()
 	watchCh := make(chan clientv3.WatchResponse)
-	go worker.client.WatchWithChan(ctx1, watchCh, worker.prefix.String(), worker.revision)
+	go func() {
+		worker.client.WatchWithChan(ctx1, watchCh, worker.prefix.String(), worker.revision)
+	}()
 
 	var (
 		pendingPatches [][]DataPatch
