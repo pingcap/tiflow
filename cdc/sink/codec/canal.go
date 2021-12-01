@@ -191,7 +191,10 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 	return result
 }
 
-// canal-json would convert all value to string.
+// In the official canal-json implementation, value were extracted from binlog buffer.
+// see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L276-L1147
+// all value will be represented in string type
+// see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L760-L855
 func (b *canalEntryBuilder) formatValue(value interface{}, mysqlType string, javaType JavaSQLType) (result string, err error) {
 	if value == nil {
 		return "", nil
