@@ -1681,6 +1681,10 @@ func (s *Server) waitOperationOk(
 					}
 				}
 			case *pb.StartTaskRequest, *pb.UpdateTaskRequest, *pb.OperateTaskRequest:
+				fmt.Printf("query response: %+v\n", queryResp.Result)
+				if expect == pb.Stage_Stopped && !queryResp.Result {
+					continue
+				}
 				if expect == pb.Stage_Stopped && len(queryResp.SubTaskStatus) == 0 {
 					return true, "", queryResp, nil
 				}
