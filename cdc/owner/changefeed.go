@@ -279,8 +279,13 @@ LOOP:
 
 		s, err := sink.New(ctx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
+
+		if err := s.Initialize(ctx, c.schema.SinkTableInfos()); err != nil {
+			return errors.Trace(err)
+		}
+
 		a.attachSink(s)
 		return nil
 	})
