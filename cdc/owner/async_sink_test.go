@@ -75,15 +75,8 @@ func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, 
 		Info: &model.ChangeFeedInfo{SinkURI: "blackhole://", Config: config.GetDefaultReplicaConfig()},
 	})
 
-	var (
-		tableInfos = []*model.SimpleTableInfo{{Schema: "test"}}
-		mockSink   = &mockSink{}
-	)
+	mockSink := &mockSink{}
 	sink, err := newAsyncSink(ctx, func(a *asyncSinkImpl) error {
-		if err := mockSink.Initialize(ctx, tableInfos); err != nil {
-			return err
-		}
-		c.Assert(tableInfos, check.DeepEquals, mockSink.initTableInfo)
 		a.attachSink(mockSink)
 		return nil
 	})
