@@ -15,10 +15,12 @@ package dumpling
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/docker/go-units"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
@@ -46,6 +48,7 @@ type Dumpling struct {
 
 	dumpConfig *export.Config
 	closed     atomic.Bool
+	realdumper *export.Dumper
 }
 
 // NewDumpling creates a new Dumpling.
@@ -117,7 +120,9 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	newCtx, cancel := context.WithCancel(ctx)
 	var dumpling *export.Dumper
+
 	if dumpling, err = export.NewDumper(newCtx, m.dumpConfig); err == nil {
+		m.realdumper = dumpling
 		err = dumpling.Dump()
 		dumpling.Close()
 	}
@@ -196,7 +201,43 @@ func (m *Dumpling) Update(context.Context, *config.SubTaskConfig) error {
 // Status implements Unit.Status.
 func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 	// NOTE: try to add some status, like dumped file count
-	return &pb.DumpStatus{}
+	mid := &export.Midparams{}
+	mid = m.realdumper.GetParameters()
+	s := &pb.DumpStatus{
+		TotalTables:       mid.TotalTables,
+		CompletedTables:   mid.CompletedTables,
+		FinishedBytes:     mid.FinishedBytes,
+		FinishedRows:      mid.FinishedRows,
+		EstimateTotalRows: mid.EstimateTotalRows,
+	}
+	go m.printStatus()
+	return s
+}
+
+const logProgressTick = 2 * time.Minute
+
+func (m *Dumpling) printStatus() {
+
+	logProgressTicker := time.NewTicker(logProgressTick)
+	lastCheckpoint := time.Now()
+	lastBytes := float64(0)
+	defer logProgressTicker.Stop()
+	for {
+		select {
+		case <-logProgressTicker.C:
+			nanoseconds := float64(time.Since(lastCheckpoint).Nanoseconds())
+			mid := m.realdumper.GetParameters()
+			m.logger.Info("progress",
+				zap.String("tables", fmt.Sprintf("%.0f/%.0f (%.1f%%)", mid.CompletedTables, float64(mid.TotalTables), mid.CompletedTables/float64(mid.TotalTables)*100)),
+				zap.String("finished rows", fmt.Sprintf("%.0f", mid.FinishedRows)),
+				zap.String("estimate total rows", fmt.Sprintf("%.0f", mid.EstimateTotalRows)),
+				zap.String("finished size", units.HumanSize(mid.FinishedBytes)),
+				zap.Float64("average speed(MiB/s)", (mid.FinishedBytes-lastBytes)/(1048576e-9*nanoseconds)),
+			)
+			lastCheckpoint = time.Now()
+			lastBytes = mid.FinishedBytes
+		}
+	}
 }
 
 // Type implements Unit.Type.
