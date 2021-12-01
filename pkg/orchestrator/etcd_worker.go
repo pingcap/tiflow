@@ -35,12 +35,11 @@ import (
 
 const (
 	etcdRequestProgressDuration = 2 * time.Second
-	// etcdTxnTimeoutDuration represents timeout duration for commit a txn to etcd
+	// etcdTxnTimeoutDuration represents the timeout duration for committing a
+	// transaction to Etcd
 	etcdTxnTimeoutDuration = 30 * time.Second
-	// if no msg comes from a etcd watchCh for etcdWatchChTimeoutDuration long,
-	// the watchCh should be reset
-	etcdWatchChTimeoutDuration = 10 * time.Second
-	// etcdWorkerLogsWarnDuration use to output warning log for some key func call
+	// etcdWorkerLogsWarnDuration when EtcdWorker commits a txn to etcd or ticks
+	// it reactor takes more than etcdWorkerLogsWarnDuration, it will print a log
 	etcdWorkerLogsWarnDuration = 1 * time.Second
 	deletionCounterKey         = "/meta/ticdc-delete-etcd-key-count"
 )
@@ -72,7 +71,6 @@ type EtcdWorker struct {
 	// snapshot isolation for Reactor ticks.
 	deleteCounter int64
 
-	cancel  func()
 	metrics *etcdWorkerMetrics
 }
 
@@ -133,13 +131,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	ticker := time.NewTicker(timerInterval)
 	defer ticker.Stop()
 
-	watchTimer := time.NewTimer(etcdWatchChTimeoutDuration)
-	defer watchTimer.Stop()
-
 	ctx1, cancel := context.WithCancel(ctx)
-	worker.cancel = cancel
-	defer worker.cancel()
-	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
+	defer cancel()
+	watchCh := make(chan clientv3.WatchResponse)
+	go worker.client.WatchWithChan(ctx1, watchCh, worker.prefix.String(), worker.revision)
 
 	var (
 		pendingPatches [][]DataPatch
@@ -164,13 +159,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			return ctx.Err()
 		case <-sessionDone:
 			return cerrors.ErrEtcdSessionDone.GenWithStackByArgs()
-		case <-watchTimer.C:
-			log.Warn("watchCh blocking too long, reset watchCh", zap.Duration("duration", etcdWatchChTimeoutDuration))
-			// we should call cancel here to release the resources held by last watch
-			cancel()
-			ctx1, cancel = context.WithCancel(ctx)
-			worker.cancel = cancel
-			watchCh = worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 		case <-ticker.C:
 			// There is no new event to handle on timer ticks, so we have nothing here.
 			if time.Since(lastReceivedEventTime) > etcdRequestProgressDuration {
@@ -179,7 +167,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				}
 			}
 		case response := <-watchCh:
-			watchTimer.Reset(etcdWatchChTimeoutDuration)
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)

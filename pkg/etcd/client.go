@@ -15,6 +15,7 @@ package etcd
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -41,6 +42,9 @@ const (
 	backoffBaseDelayInMs = 500
 	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
 	backoffMaxDelayInMs = 60 * 1000
+	// if no msg comes from a etcd watchCh for etcdWatchChTimeoutDuration long,
+	// we should cancel the watchCh and request a new watchCh from etcd client
+	etcdWatchChTimeoutDuration = 10 * time.Second
 )
 
 // set to var instead of const for mocking the value to speedup test
@@ -166,6 +170,33 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 // Watch delegates request to clientv3.Watcher.Watch
 func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	return c.cli.Watch(ctx, key, opts...)
+}
+
+// WatchWithChan maintains a watchCh and send all msg from the watchCh to outCh
+func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchResponse, key string, revision int64) {
+	lastRevision := revision
+
+	ctx1, cancel := context.WithCancel(ctx)
+	defer cancel()
+	watchCh := c.cli.Watch(ctx1, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+
+	watchTimer := time.NewTimer(etcdWatchChTimeoutDuration)
+	defer watchTimer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case response := <-watchCh:
+			watchTimer.Reset(etcdWatchChTimeoutDuration)
+			outCh <- response
+		case <-watchTimer.C:
+			log.Warn("etcd watchCh blocking too long, reset the watchCh")
+			cancel()
+			ctx1, cancel = context.WithCancel(ctx)
+			watchCh = c.cli.Watch(ctx1, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+		}
+	}
 }
 
 // RequestProgress requests a progress notify response be sent in all watch channels.
