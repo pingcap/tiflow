@@ -192,8 +192,12 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 	return result
 }
 
+// canal-json would convert all value to string.
 func (b *canalEntryBuilder) formatValue(value interface{}, mysqlType string, javaType JavaSQLType) (result string, err error) {
-	// canal-json would convert all value to string.
+	if value == nil {
+		return "", nil
+	}
+
 	switch v := value.(type) {
 	case int64:
 		result = strconv.FormatInt(v, 10)
@@ -252,16 +256,9 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	mysqlType := getMySQLType(c, isBinary)
 	javaType := getJavaSQLType(c, mysqlType)
 
-	isNull := c.Value == nil
-	var (
-		value string
-		err   error
-	)
-	if !isNull {
-		value, err = b.formatValue(c.Value, mysqlType, javaType)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrCanalDecodeFailed, err)
-		}
+	value, err := b.formatValue(c.Value, mysqlType, javaType)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	canalColumn := &canal.Column{
@@ -269,7 +266,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		Name:          colName,
 		IsKey:         c.Flag.IsPrimaryKey(),
 		Updated:       updated,
-		IsNullPresent: &canal.Column_IsNull{IsNull: isNull},
+		IsNullPresent: &canal.Column_IsNull{IsNull: c.Value == nil},
 		Value:         value,
 		MysqlType:     mysqlType,
 	}
