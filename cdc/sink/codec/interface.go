@@ -62,7 +62,7 @@ type MQMessage struct {
 	Table     *string             // table
 	Type      model.MqMessageType // type
 	Protocol  Protocol            // protocol
-	RowsCount int                 // rows in one MQ Message
+	rowsCount int                 // rows in one MQ Message
 }
 
 // maximumRecordOverhead is used to calculate ProducerMessage's byteSize by sarama kafka client.
@@ -80,6 +80,19 @@ func (m *MQMessage) Length() int {
 // PhysicalTime returns physical time part of Ts in time.Time
 func (m *MQMessage) PhysicalTime() time.Time {
 	return oracle.GetTimeFromTS(m.Ts)
+}
+
+// return number of rows batched in one MQMessage
+func (m *MQMessage) GetRowsCount() int {
+	return m.rowsCount
+}
+
+func (m *MQMessage) SetRowsCount(cnt int) {
+	m.rowsCount = cnt
+}
+
+func (m *MQMessage) IncRowsCount() {
+	m.rowsCount++
 }
 
 func newDDLMQMessage(proto Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
@@ -101,7 +114,7 @@ func NewMQMessage(proto Protocol, key []byte, value []byte, ts uint64, ty model.
 		Table:     table,
 		Type:      ty,
 		Protocol:  proto,
-		RowsCount: 0,
+		rowsCount: 0,
 	}
 
 	if key != nil {
