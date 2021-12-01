@@ -47,4 +47,5 @@ var (
 	ErrExecutorConfigUnknownItem  = errors.Normalize("master config containes unknown configuration options: %s", errors.RFCCodeText("DFLOW:ErrExecutorConfigUnknownItem"))
 	ErrHeartbeat                  = errors.Normalize("heartbeat error type: %s", errors.RFCCodeText("DFLOW:ErrHeartbeat"))
 	ErrTaskNotFound               = errors.Normalize("task %d is not found", errors.RFCCodeText("DFLOW:ErrTaskNotFound"))
+	ErrExecutorUnknownOperator    = errors.Normalize("operator type %d is unknown", errors.RFCCodeText("DFLOW:ErrOperatorUnknown"))
 )

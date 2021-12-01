@@ -1,8 +1,6 @@
 package runtime
 
 import (
-	"encoding/json"
-
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
@@ -13,10 +11,10 @@ func (s *Runtime) newTaskContainer(task *model.Task) *taskContainer {
 	t := &taskContainer{
 		cfg: task,
 		id:  task.ID,
-		ctx: new(taskContext),
+		ctx: new(TaskContext),
 	}
-	t.ctx.testCtx = s.testCtx
-	t.ctx.wake = func() {
+	t.ctx.TestCtx = s.testCtx
+	t.ctx.Wake = func() {
 		// you can't wake or it is already been waked.
 		if !t.tryAwake() {
 			return
@@ -25,28 +23,6 @@ func (s *Runtime) newTaskContainer(task *model.Task) *taskContainer {
 		s.q.push(t)
 	}
 	return t
-}
-
-func newSyncOp(cfg *model.HashOp) operator {
-	return &opSyncer{}
-}
-
-func newReadTableOp(cfg *model.TableReaderOp) operator {
-	return &opReceive{
-		flowID: cfg.FlowID,
-		addr:   cfg.Addr,
-		data:   make(chan *Record, 1024),
-		errCh:  make(chan error, 10),
-	}
-}
-
-func newSinkOp(cfg *model.TableSinkOp) operator {
-	return &opSink{
-		writer: fileWriter{
-			filePath: cfg.File,
-			tid:      cfg.TableID,
-		},
-	}
 }
 
 func (s *Runtime) connectTasks(sender, receiver *taskContainer) {
@@ -59,37 +35,35 @@ func (s *Runtime) connectTasks(sender, receiver *taskContainer) {
 	receiver.inputs = append(receiver.inputs, ch)
 }
 
+type opBuilder interface {
+	Build(model.Operator) (Operator, bool, error)
+}
+
+var OpBuilders map[model.OperatorType]opBuilder
+
+func InitOpBuilders() {
+	OpBuilders = make(map[model.OperatorType]opBuilder)
+}
+
 func (s *Runtime) SubmitTasks(tasks []*model.Task) error {
 	taskSet := make(map[model.TaskID]*taskContainer)
 	taskToRun := make([]*taskContainer, 0)
 	for _, t := range tasks {
 		task := s.newTaskContainer(t)
 		log.L().Logger.Info("config", zap.ByteString("op", t.Op))
-		switch t.OpTp {
-		case model.TableReaderType:
-			op := &model.TableReaderOp{}
-			err := json.Unmarshal(t.Op, op)
-			if err != nil {
-				return err
-			}
-			task.op = newReadTableOp(op)
+		builder, ok := OpBuilders[t.OpTp]
+		if !ok {
+			return errors.ErrExecutorUnknownOperator.FastGenByArgs(t.OpTp)
+		}
+		op, runnable, err := builder.Build(t.Op)
+		if err != nil {
+			return err
+		}
+		task.op = op
+		if runnable {
 			task.setRunnable()
 			taskToRun = append(taskToRun, task)
-		case model.HashType:
-			op := &model.HashOp{}
-			err := json.Unmarshal(t.Op, op)
-			if err != nil {
-				return err
-			}
-			task.op = newSyncOp(op)
-			task.tryBlock()
-		case model.TableSinkType:
-			op := &model.TableSinkOp{}
-			err := json.Unmarshal(t.Op, op)
-			if err != nil {
-				return err
-			}
-			task.op = newSinkOp(op)
+		} else {
 			task.tryBlock()
 		}
 		taskSet[task.id] = task

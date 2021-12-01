@@ -22,19 +22,19 @@ const (
 type Record struct {
 	flowID  string
 	start   time.Time
-	end     time.Time
+	End     time.Time
 	Payload interface{}
 	Tid     int32
 }
 
-func (r *Record) toString() string {
-	return fmt.Sprintf("flowID %s start %s end %s\n", r.flowID, r.start.String(), r.end.String())
+func (r *Record) String() string {
+	return fmt.Sprintf("flowID %s start %s end %s\n", r.flowID, r.start.String(), r.End.String())
 }
 
 type Channel struct {
 	innerChan chan *Record
-	sendCtx   *taskContext
-	recvCtx   *taskContext
+	sendCtx   *TaskContext
+	recvCtx   *TaskContext
 }
 
 func (c *Channel) readBatch(batch int) []*Record {
@@ -48,7 +48,7 @@ func (c *Channel) readBatch(batch int) []*Record {
 		}
 	}
 	if len(records) > 0 {
-		c.sendCtx.wake()
+		c.sendCtx.Wake()
 	}
 	return records
 }
@@ -59,19 +59,19 @@ func (c *Channel) writeBatch(records []*Record) ([]*Record, bool) {
 		case c.innerChan <- record:
 		default:
 			if i > 0 {
-				c.recvCtx.wake()
+				c.recvCtx.Wake()
 			}
 			return records[i:], i == 0
 		}
 	}
-	c.recvCtx.wake()
+	c.recvCtx.Wake()
 	return nil, false
 }
 
-type taskContext struct {
-	wake func()
+type TaskContext struct {
+	Wake func()
 	// err error // record error during async job
-	testCtx *test.Context
+	TestCtx *test.Context
 }
 
 // a vector of records
@@ -83,16 +83,16 @@ type taskContainer struct {
 	status      int32
 	inputCache  []Chunk
 	outputCache []Chunk
-	op          operator
+	op          Operator
 	inputs      []*Channel
 	outputs     []*Channel
-	ctx         *taskContext
+	ctx         *TaskContext
 }
 
 func (t *taskContainer) prepare() error {
 	t.inputCache = make([]Chunk, len(t.inputs))
 	t.outputCache = make([]Chunk, len(t.outputs))
-	return t.op.prepare()
+	return t.op.Prepare()
 }
 
 func (t *taskContainer) tryAwake() bool {
@@ -148,7 +148,7 @@ func (t *taskContainer) Poll() TaskStatus {
 	if t.tryFlush() {
 		return Blocked
 	}
-	idx := t.op.nextWantedInputIdx()
+	idx := t.op.NextWantedInputIdx()
 	r := make(Chunk, 1, 128)
 	if idx == -1 {
 		for i := range t.inputs {
@@ -168,7 +168,7 @@ func (t *taskContainer) Poll() TaskStatus {
 	var outputs []Chunk
 	var err error
 	for i, record := range r {
-		outputs, blocked, err = t.op.next(t.ctx, record, idx)
+		outputs, blocked, err = t.op.Next(t.ctx, record, idx)
 		if err != nil {
 			// TODO: report error to job manager
 			panic(err)
