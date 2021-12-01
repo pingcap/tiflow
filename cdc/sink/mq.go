@@ -302,7 +302,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 				if err != nil {
 					return 0, err
 				}
-				thisBatchSize += msg.RowsCount
+				thisBatchSize += msg.GetRowsCount()
 			}
 
 			if op == codec.EncoderNeedSyncWrite {
