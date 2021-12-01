@@ -84,15 +84,17 @@ func (m *MQMessage) PhysicalTime() time.Time {
 	return oracle.GetTimeFromTS(m.Ts)
 }
 
-// return number of rows batched in one MQMessage
+// GetRowsCount returns the number of rows batched in one MQMessage
 func (m *MQMessage) GetRowsCount() int {
 	return m.rowsCount
 }
 
+// SetRowsCount set the number of rows
 func (m *MQMessage) SetRowsCount(cnt int) {
 	m.rowsCount = cnt
 }
 
+// IncRowsCount increase the number of rows
 func (m *MQMessage) IncRowsCount() {
 	m.rowsCount++
 }
