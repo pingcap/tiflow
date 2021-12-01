@@ -130,6 +130,11 @@ func (s *asyncSinkImpl) waitSinkInitialized(ctx cdcContext.Context) error {
 
 func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 	defer s.wg.Done()
+	if err := s.waitSinkInitialized(ctx); err != nil {
+		ctx.Throw(err)
+		return
+	}
+
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
