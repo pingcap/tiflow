@@ -17,6 +17,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -42,7 +43,7 @@ func newBufferSink(
 	errCh chan error,
 	checkpointTs model.Ts,
 	drawbackChan chan drawbackMsg,
-) Sink {
+) *bufferSink {
 	sink := &bufferSink{
 		Sink: backendSink,
 		// buffer shares the same flow control with table sink
@@ -169,5 +170,9 @@ func (b *bufferSink) getCheckpointTs(tableID model.TableID) uint64 {
 	if ok {
 		return checkPoints.(uint64)
 	}
-	return b.changeFeedCheckpointTs
+	return atomic.LoadUint64(&b.changeFeedCheckpointTs)
+}
+
+func (b *bufferSink) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
+	atomic.StoreUint64(&b.changeFeedCheckpointTs, checkpointTs)
 }
