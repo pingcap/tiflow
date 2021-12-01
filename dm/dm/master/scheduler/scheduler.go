@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/ha"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // Scheduler schedules tasks for DM-worker instances, including:
@@ -59,6 +60,25 @@ import (
 //   - remove source request from user.
 // TODO: try to handle the return `err` of etcd operations,
 //   because may put into etcd, but the response to the etcd client interrupted.
+// Relay scheduling:
+// - scheduled by source
+//   DM-worker will enable relay according to its bound source, in current implementation, it will read `enable-relay`
+//   of source config and decide whether to enable relay.
+//   turn on `enable-relay`:
+//   - use `enable-relay: true` when create source
+//   - `start-relay -s source` to dynamically change `enable-relay`
+//   turn off `enable-relay`:
+//   - use `enable-relay: false` when create source
+//   - `stop-relay -s source` to dynamically change `enable-relay`
+//   - found conflict schedule type with (source, worker) when scheduler bootstrap
+// - scheduled by (source, worker)
+//   DM-worker will check if relay is assigned to it no matter it's bound or not. In current implementation, it will
+//   read UpstreamRelayWorkerKeyAdapter in etcd.
+//   add UpstreamRelayWorkerKeyAdapter:
+//   - use `start-relay -s source -w worker`
+//   remove UpstreamRelayWorkerKeyAdapter:
+//   - use `stop-relay -s source -w worker`
+//   - remove worker by `offline-member`
 type Scheduler struct {
 	mu sync.RWMutex
 
@@ -892,6 +912,7 @@ func (s *Scheduler) GetSubTaskCfgsByTask(task string) map[string]*config.SubTask
 
 // GetSubTaskCfgs gets all subconfig, return nil when error happens.
 func (s *Scheduler) GetSubTaskCfgs() map[string]map[string]config.SubTaskConfig {
+	// taskName -> sourceName -> SubTaskConfig
 	clone := make(map[string]map[string]config.SubTaskConfig)
 	s.subTaskCfgs.Range(func(k, v interface{}) bool {
 		task := k.(string)
@@ -1052,10 +1073,37 @@ func (s *Scheduler) StartRelay(source string, workers []string) error {
 	}
 
 	// 1. precheck
-	if _, ok := s.sourceCfgs[source]; !ok {
+	sourceCfg, ok := s.sourceCfgs[source]
+	if !ok {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
 	startedWorkers := s.relayWorkers[source]
+
+	// quick path for `start-relay` without worker name
+	if len(workers) == 0 {
+		if len(startedWorkers) != 0 {
+			return terror.ErrSchedulerStartRelayOnSpecified.Generate(utils.SetToSlice(startedWorkers))
+		}
+		// update enable-relay in source config
+		sourceCfg.EnableRelay = true
+		_, err := ha.PutSourceCfg(s.etcdCli, sourceCfg)
+		if err != nil {
+			return err
+		}
+		s.sourceCfgs[source] = sourceCfg
+		// notify bound worker
+		w, ok2 := s.bounds[source]
+		if !ok2 {
+			return nil
+		}
+		stage := ha.NewRelayStage(pb.Stage_Running, source)
+		_, err = ha.PutRelayStageSourceBound(s.etcdCli, stage, w.Bound())
+		return err
+	} else if sourceCfg.EnableRelay {
+		// error when `enable-relay` and `start-relay` with worker name
+		return terror.ErrSchedulerStartRelayOnBound.Generate()
+	}
+
 	if startedWorkers == nil {
 		startedWorkers = map[string]struct{}{}
 		s.relayWorkers[source] = startedWorkers
@@ -1139,9 +1187,37 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 	}
 
 	// 1. precheck
-	if _, ok := s.sourceCfgs[source]; !ok {
+	sourceCfg, ok := s.sourceCfgs[source]
+	if !ok {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
+
+	// quick path for `stop-relay` without worker name
+	if len(workers) == 0 {
+		startedWorker := s.relayWorkers[source]
+		if len(startedWorker) != 0 {
+			return terror.ErrSchedulerStopRelayOnSpecified.Generate(utils.SetToSlice(startedWorker))
+		}
+		// update enable-relay in source config
+		sourceCfg.EnableRelay = false
+		_, err := ha.PutSourceCfg(s.etcdCli, sourceCfg)
+		if err != nil {
+			return err
+		}
+		s.sourceCfgs[source] = sourceCfg
+		// notify bound worker
+		w, ok2 := s.bounds[source]
+		if !ok2 {
+			return nil
+		}
+		// TODO: remove orphan relay stage
+		_, err = ha.PutSourceBound(s.etcdCli, w.Bound())
+		return err
+	} else if sourceCfg.EnableRelay {
+		// error when `enable-relay` and `stop-relay` with worker name
+		return terror.ErrSchedulerStopRelayOnBound.Generate()
+	}
+
 	var (
 		notExistWorkers                    []string
 		unmatchedWorkers, unmatchedSources []string
@@ -1469,11 +1545,31 @@ func (s *Scheduler) recoverSubTasks(cli *clientv3.Client) error {
 }
 
 // recoverRelayConfigs recovers history relay configs for each worker from etcd.
+// This function also removes conflicting relay schedule types, which means if a source has both `enable-relay` and
+// (source, worker) relay config, we remove the latter.
+// should be called after recoverSources.
 func (s *Scheduler) recoverRelayConfigs(cli *clientv3.Client) error {
 	relayWorkers, _, err := ha.GetAllRelayConfig(cli)
 	if err != nil {
 		return err
 	}
+
+	for source, workers := range relayWorkers {
+		sourceCfg, ok := s.sourceCfgs[source]
+		if !ok {
+			s.logger.Warn("found a not existing source by relay config", zap.String("source", source))
+			continue
+		}
+		if sourceCfg.EnableRelay {
+			// current etcd max-txn-op is 2048
+			_, err2 := ha.DeleteRelayConfig(cli, utils.SetToSlice(workers)...)
+			if err2 != nil {
+				return err2
+			}
+			delete(relayWorkers, source)
+		}
+	}
+
 	s.relayWorkers = relayWorkers
 	return nil
 }

@@ -81,7 +81,7 @@ func (t *testServer) testWorker(c *C) {
 	}()
 	w, err := NewSourceWorker(cfg, etcdCli, "")
 	c.Assert(err, IsNil)
-	c.Assert(w.EnableRelay(), ErrorMatches, "init error")
+	c.Assert(w.EnableRelay(false), ErrorMatches, "init error")
 
 	NewRelayHolder = NewDummyRelayHolder
 	w, err = NewSourceWorker(cfg, etcdCli, "")
@@ -187,7 +187,7 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 		w, err2 := s.getOrStartWorker(sourceConfig, true)
 		c.Assert(err2, IsNil)
 		// we set sourceConfig.EnableRelay = true above
-		c.Assert(w.EnableRelay(), IsNil)
+		c.Assert(w.EnableRelay(false), IsNil)
 		c.Assert(w.EnableHandleSubtasks(), IsNil)
 		return true
 	}), IsTrue)
@@ -363,7 +363,7 @@ func (t *testWorkerFunctionalities) TestWorkerFunctionalities(c *C) {
 
 func (t *testWorkerFunctionalities) testEnableRelay(c *C, w *SourceWorker, etcdCli *clientv3.Client,
 	sourceCfg *config.SourceConfig, cfg *Config) {
-	c.Assert(w.EnableRelay(), IsNil)
+	c.Assert(w.EnableRelay(false), IsNil)
 
 	c.Assert(w.relayEnabled.Load(), IsTrue)
 	c.Assert(w.relayHolder.Stage(), Equals, pb.Stage_New)
@@ -588,7 +588,7 @@ func (t *testWorkerEtcdCompact) TestWatchRelayStageEtcdCompact(c *C) {
 	defer cancel()
 	defer w.Close()
 	go func() {
-		c.Assert(w.EnableRelay(), IsNil)
+		c.Assert(w.EnableRelay(false), IsNil)
 		w.Start()
 	}()
 	c.Assert(utils.WaitSomething(50, 100*time.Millisecond, func() bool {
