@@ -137,8 +137,8 @@ func (w *DMLWorker) run() {
 				jobCh <- j
 				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
 			}
-			w.flushCh <- j
 			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
+			w.flushCh <- j
 		case conflict:
 			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
 

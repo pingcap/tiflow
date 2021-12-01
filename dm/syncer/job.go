@@ -106,7 +106,7 @@ func (j *job) String() string {
 	if j.dml != nil {
 		dmlStr = j.dml.String()
 	}
-	return fmt.Sprintf("tp: %s, dml: %s, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, dmlStr, j.ddls, j.location, j.startLocation, j.currentLocation)
+	return fmt.Sprintf("tp: %s, seq: %d, dml: %s, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, j.seq, dmlStr, j.ddls, j.location, j.startLocation, j.currentLocation)
 }
 
 func newDMLJob(tp opType, sourceTable, targetTable *filter.Table, dml *DML, ec *eventContext) *job {
