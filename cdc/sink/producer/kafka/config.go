@@ -58,8 +58,8 @@ func NewConfig() *Config {
 	}
 }
 
-// Initialize the kafka configuration
-func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
+// CompleteByOpts the kafka configuration.
+func (c *Config) CompleteByOpts(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
 	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
@@ -169,8 +169,8 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 	return nil
 }
 
-// adjust the partition-num by the topic's partition count
-func (c *Config) adjustPartitionNum(realPartitionCount int32) error {
+// set the partition-num by the topic's partition count.
+func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	// user does not specify the `partition-num` in the sink-uri
 	if c.PartitionNum == 0 {
 		c.PartitionNum = realPartitionCount

@@ -84,7 +84,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	c.Assert(cfg.Net.SASL.Mechanism, check.Equals, sarama.SASLMechanism("SCRAM-SHA-256"))
 }
 
-func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
+func (s *kafkaSuite) TestCompleteConfigByOpts(c *check.C) {
 	defer testleak.AfterTest(c)
 	cfg := NewConfig()
 
@@ -98,7 +98,7 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	c.Assert(err, check.IsNil)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	opts := make(map[string]string)
-	err = cfg.Initialize(sinkURI, replicaConfig, opts)
+	err = cfg.CompleteByOpts(sinkURI, replicaConfig, opts)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
 	c.Assert(cfg.ReplicationFactor, check.Equals, int16(3))
@@ -116,14 +116,14 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0"
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
-	err = cfg.Initialize(sinkURI, replicaConfig, opts)
+	err = cfg.CompleteByOpts(sinkURI, replicaConfig, opts)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid partition num.*")
 
 	// Use enable-tidb-extension on other protocols.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=1&enable-tidb-extension=true"
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
-	err = cfg.Initialize(sinkURI, replicaConfig, opts)
+	err = cfg.CompleteByOpts(sinkURI, replicaConfig, opts)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*enable-tidb-extension only support canal-json protocol.*")
 
 	// Test enable-tidb-extension.
@@ -131,7 +131,7 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	opts = make(map[string]string)
-	err = cfg.Initialize(sinkURI, replicaConfig, opts)
+	err = cfg.CompleteByOpts(sinkURI, replicaConfig, opts)
 	c.Assert(err, check.IsNil)
 	expectedOpts = map[string]string{
 		"enable-tidb-extension": "true",
@@ -141,19 +141,19 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	}
 }
 
-func (s *kafkaSuite) TestAdjustPartitionNum(c *check.C) {
+func (s *kafkaSuite) TestSetPartitionNum(c *check.C) {
 	defer testleak.AfterTest(c)()
 	cfg := NewConfig()
-	err := cfg.adjustPartitionNum(2)
+	err := cfg.setPartitionNum(2)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.PartitionNum, check.Equals, int32(2))
 
 	cfg.PartitionNum = 1
-	err = cfg.adjustPartitionNum(2)
+	err = cfg.setPartitionNum(2)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
 
 	cfg.PartitionNum = 3
-	err = cfg.adjustPartitionNum(2)
+	err = cfg.setPartitionNum(2)
 	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
 }

@@ -307,7 +307,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 				zap.String("topic", topic), zap.Any("detail", info))
 		}
 
-		if err := config.adjustPartitionNum(info.NumPartitions); err != nil {
+		if err := config.setPartitionNum(info.NumPartitions); err != nil {
 			return errors.Trace(err)
 		}
 
