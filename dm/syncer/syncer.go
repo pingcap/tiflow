@@ -1573,7 +1573,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 						return err2
 					}
 					if currentGTID != gtidStr {
-						s.tctx.L().Error("after recover GTID-based replication, the first GTID is not same as broken one. May meet duplicate entry or corrupt data if table has no PK/UK.")
+						s.tctx.L().Error("after recover GTID-based replication, the first GTID is not same as broken one. May meet duplicate entry or corrupt data if table has no PK/UK.",
+							zap.String("last GTID", currentGTID),
+							zap.String("GTID after reset", gtidStr),
+						)
 						return nil
 					}
 				case *replication.RowsEvent:

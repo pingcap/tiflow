@@ -37,7 +37,6 @@ import (
 	"github.com/pingcap/ticdc/dm/dm/unit"
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
 	binlogReader "github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
@@ -121,9 +120,6 @@ type Relay struct {
 	meta   Meta
 	closed atomic.Bool
 	sync.RWMutex
-
-	// TODO: move it inside meta, and seems meta is no need to be an interface
-	currentGTID string
 
 	logger log.Logger
 
@@ -313,8 +309,7 @@ func (r *Relay) process(ctx context.Context) error {
 	// handles binlog events with retry mechanism.
 	// it only do the retry for some binlog reader error now.
 	for {
-		eventIdx, err := r.handleEvents(ctx, reader2, parser2)
-	checkError:
+		err = r.handleEvents(ctx, reader2, parser2)
 		if err == nil {
 			return nil
 		} else if !readerRetry.Check(ctx, err) {
@@ -331,45 +326,6 @@ func (r *Relay) process(ctx context.Context) error {
 			return err
 		}
 		r.logger.Info("retrying to read binlog")
-		if r.cfg.EnableGTID && eventIdx > 0 {
-			// check if server has switched
-			isNew, err2 := isNewServer(ctx, r.meta.UUID(), r.db.DB, r.cfg.Flavor)
-			// should start from the transaction beginning when switch to a new server
-			if err2 != nil {
-				r.logger.Warn("check new server failed, continue outer loop", log.ShortError(err2))
-				err = err2
-				goto checkError
-			}
-			if !isNew {
-				for i := 0; i < eventIdx; {
-					res, err2 := reader2.GetEvent(ctx)
-					if err2 != nil {
-						err = err2
-						goto checkError
-					}
-					// only skip events of same GTID after recovering
-					if res.Event.Header.EventType == replication.GTID_EVENT ||
-						res.Event.Header.EventType == replication.MARIADB_GTID_EVENT {
-						gtidStr, err3 := event.GetGTIDStr(res.Event)
-						if err3 != nil {
-							return err3
-						}
-
-						if gtidStr != r.currentGTID {
-							return errors.New("after recover GTID-based replication, the first GTID is not same as broken one")
-						}
-					}
-					tResult := r.preprocessEvent(res.Event, parser2)
-					// do not count skip event
-					if !tResult.Ignore {
-						i++
-					}
-				}
-				if eventIdx > 0 {
-					r.logger.Info("discard duplicate event", zap.Int("count", eventIdx))
-				}
-			}
-		}
 	}
 }
 
@@ -576,12 +532,6 @@ func (r *Relay) preprocessEvent(e *replication.BinlogEvent, parser2 *parser.Pars
 			result.Ignore = true
 			result.IgnoreReason = ignoreReasonHeartbeat
 		}
-	case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
-		var err error
-		r.currentGTID, err = event.GetGTIDStr(e)
-		if err != nil {
-			r.logger.DPanic("failed to get GTID from binlog event", zap.Error(err))
-		}
 	default:
 		if e.Header.Flags&replication.LOG_EVENT_ARTIFICIAL_F != 0 {
 			// ignore events with LOG_EVENT_ARTIFICIAL_F flag(0x0020) set
@@ -603,16 +553,16 @@ func (r *Relay) handleEvents(
 	ctx context.Context,
 	reader2 Reader,
 	parser2 *parser.Parser,
-) (int, error) {
+) error {
 	var (
 		_, lastPos  = r.meta.Pos()
 		_, lastGTID = r.meta.GTID()
 		err         error
-		eventIndex  int
+		eventIndex  int // only for test
 	)
 	if lastGTID == nil {
 		if lastGTID, err = gtid.ParserGTID(r.cfg.Flavor, ""); err != nil {
-			return 0, err
+			return err
 		}
 	}
 
@@ -634,7 +584,7 @@ func (r *Relay) handleEvents(
 		if err != nil {
 			switch errors.Cause(err) {
 			case context.Canceled:
-				return 0, nil
+				return nil
 			case replication.ErrChecksumMismatch:
 				relayLogDataCorruptionCounter.Inc()
 			case replication.ErrSyncClosed, replication.ErrNeedSyncAgain:
@@ -653,7 +603,7 @@ func (r *Relay) handleEvents(
 				}
 				binlogReadErrorCounter.Inc()
 			}
-			return eventIndex, err
+			return err
 		}
 
 		binlogReadDurationHistogram.Observe(time.Since(readTimer).Seconds())
@@ -687,13 +637,13 @@ func (r *Relay) handleEvents(
 			isNew, err2 := isNewServer(ctx, r.meta.UUID(), r.db.DB, r.cfg.Flavor)
 			// should start from the transaction beginning when switch to a new server
 			if err2 != nil {
-				return 0, err2
+				return err2
 			}
 			// upstream database switch
 			// report an error, let outer logic handle it
 			// should start from the transaction beginning when switch to a new server
 			if isNew {
-				return 0, terror.ErrRotateEventWithDifferentServerID.Generate()
+				return terror.ErrRotateEventWithDifferentServerID.Generate()
 			}
 		}
 
@@ -704,7 +654,7 @@ func (r *Relay) handleEvents(
 			// and meta file is not created when relay resumed.
 			firstEvent = false
 			if err2 := r.saveAndFlushMeta(lastPos, lastGTID); err2 != nil {
-				return 0, err2
+				return err2
 			}
 		}
 
@@ -716,7 +666,7 @@ func (r *Relay) handleEvents(
 		wResult, err := r.writer.WriteEvent(e)
 		if err != nil {
 			relayLogWriteErrorCounter.Inc()
-			return eventIndex, err
+			return err
 		} else if wResult.Ignore {
 			r.logger.Info("ignore event by writer",
 				zap.Reflect("header", e.Header),
@@ -735,7 +685,7 @@ func (r *Relay) handleEvents(
 		lastPos.Pos = tResult.LogPos
 		err = lastGTID.Set(tResult.GTIDSet)
 		if err != nil {
-			return 0, terror.ErrRelayUpdateGTID.Delegate(err, lastGTID, tResult.GTIDSet)
+			return terror.ErrRelayUpdateGTID.Delegate(err, lastGTID, tResult.GTIDSet)
 		}
 		if !r.cfg.EnableGTID {
 			// if go-mysql set RawModeEnabled to true
@@ -760,7 +710,7 @@ func (r *Relay) handleEvents(
 		if needSavePos {
 			err = r.SaveMeta(lastPos, lastGTID)
 			if err != nil {
-				return 0, terror.Annotatef(err, "save position %s, GTID sets %v into meta", lastPos, lastGTID)
+				return terror.Annotatef(err, "save position %s, GTID sets %v into meta", lastPos, lastGTID)
 			}
 			eventIndex = 0
 		} else {
@@ -770,7 +720,7 @@ func (r *Relay) handleEvents(
 			// if the binlog is rotated, we need to save and flush the next binlog filename to meta
 			lastPos.Name = tResult.NextLogName
 			if err := r.saveAndFlushMeta(lastPos, lastGTID); err != nil {
-				return 0, err
+				return err
 			}
 		}
 	}
