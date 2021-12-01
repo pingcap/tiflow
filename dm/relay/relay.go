@@ -187,7 +187,7 @@ func (r *Relay) process(ctx context.Context) error {
 	}
 	r.db = db
 
-	if err2 := os.MkdirAll(r.cfg.RelayDir, 0o600); err2 != nil {
+	if err2 := os.MkdirAll(r.cfg.RelayDir, 0o700); err2 != nil {
 		return terror.ErrRelayMkdir.Delegate(err2)
 	}
 
