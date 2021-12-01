@@ -1,7 +1,7 @@
 # Enhanced pre-check Design
 
 ## Background
-Before the DM’s task starts, we should check some items to avoid start-task failures. You can see the details in our [document](https://docs.pingcap.com/zh/tidb-data-migration/stable/precheck#%E5%85%B3%E9%97%AD%E6%A3%80%E6%9F%A5%E9%A1%B9). In order to allow some users to use DM normally under certain circumstances, we can also set ignore-check-items in task.yaml to ignore some items that you don’t want to check. Now, we find some shortcomings in regard to check-items.
+Before the DM’s task starts, we should check some items to avoid start-task failures. You can see the details in our [document](https://docs.pingcap.com/zh/tidb-data-migration/stable/precheck#%E5%85%B3%E9%97%AD%E6%A3%80%E6%9F%A5%E9%A1%B9). In order to allow some users to use DM normally under certain circumstances, we can also set ignore-check-items in task config to ignore some items that you don’t want to check. Now, we find some shortcomings in regard to check-items.
 
 ### Bad user habits
 We allow users to ignore all check-items, in which case the user's authority is too large to perform unexpected operations. 
