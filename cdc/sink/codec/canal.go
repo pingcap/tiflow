@@ -275,6 +275,10 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	return canalColumn, nil
 }
 
+// int(11) -> mysql.TypeInt -> JavaSQLTypeINTEGER (4)
+// boolean -> mysql.TypeTinyINT -> JavaSQLTypeTINYINT (-6)
+//
+
 // build the RowData of a canal entry
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
 	var columns []*canal.Column
