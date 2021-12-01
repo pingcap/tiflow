@@ -20,8 +20,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/tidb/parser/mysql"
-
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
