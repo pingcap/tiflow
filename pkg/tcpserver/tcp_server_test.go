@@ -163,7 +163,7 @@ func makeCredential4Testing(t *testing.T) *security.Credential {
 	stat, err := find.Repo()
 	require.NoError(t, err)
 
-	tlsPath := fmt.Sprintf("%s/tests/_certificates/", stat.Path)
+	tlsPath := fmt.Sprintf("%s/tests/integration_tests/_certificates/", stat.Path)
 	return &security.Credential{
 		CAPath:        path.Join(tlsPath, "ca.pem"),
 		CertPath:      path.Join(tlsPath, "server.pem"),
