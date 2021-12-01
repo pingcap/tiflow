@@ -321,7 +321,7 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 
 	// when try to create the topic, we don't know how to set the `max.message.bytes` for the topic.
 	// Kafka would create the topic with broker's `message.max.bytes`,
-	// we have to make sure it's not greater than `max-message-bytes` for the default open protocol & craft
+	// we have to make sure it's not greater than `max-message-bytes` for the default open protocol & craft protocol.
 	if protocol == codec.ProtocolDefault || protocol == codec.ProtocolCraft {
 		brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
 		if err != nil {
