@@ -119,7 +119,7 @@ func (s *testDDLSuite) TestCommentQuote(c *C) {
 	c.Assert(syncer.genRouter(), IsNil)
 
 	for _, sql := range qec.splitDDLs {
-		sqls, err := syncer.processOneDDL(qec, sql, nil)
+		sqls, err := syncer.processOneDDL(qec, sql)
 		c.Assert(err, IsNil)
 		qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 	}
@@ -248,7 +248,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
 		for _, sql2 := range qec.splitDDLs {
-			sqls, err := syncer.processOneDDL(qec, sql2, statusVars)
+			sqls, err := syncer.processOneDDL(qec, sql2)
 			c.Assert(err, IsNil)
 			for _, sql3 := range sqls {
 				if len(sql3) == 0 {
@@ -396,7 +396,7 @@ func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *C) {
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
 		for _, sql := range qec.splitDDLs {
-			sqls, err := syncer.processOneDDL(qec, sql, nil)
+			sqls, err := syncer.processOneDDL(qec, sql)
 			c.Assert(err, IsNil)
 			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 		}
@@ -479,7 +479,7 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
 		for _, sql := range qec.splitDDLs {
-			sqls, err := syncer.processOneDDL(qec, sql, nil)
+			sqls, err := syncer.processOneDDL(qec, sql)
 			c.Assert(err, IsNil)
 			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 		}
@@ -553,7 +553,7 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 			ddlSchema:    "test",
 			p:            p,
 		}
-		sqls, err := syncer.processOneDDL(qec, sql, nil)
+		sqls, err := syncer.processOneDDL(qec, sql)
 		c.Assert(err, IsNil)
 		table := ca.ghostname
 		matchRules := config.ShadowTableRules
@@ -571,7 +571,7 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 			ddlSchema:    "test",
 			p:            p,
 		}
-		sqls, err = syncer.processOneDDL(qec, sql, nil)
+		sqls, err = syncer.processOneDDL(qec, sql)
 		c.Assert(terror.ErrConfigOnlineDDLMistakeRegex.Equal(err), IsTrue)
 		c.Assert(sqls, HasLen, 0)
 		c.Assert(err, ErrorMatches, ".*"+sql+".*"+table+".*"+matchRules+".*")
@@ -637,7 +637,7 @@ func (s *testDDLSuite) TestClearOnlineDDL(c *C) {
 	c.Assert(mock.toFinish, HasLen, 0)
 }
 
-func (s *testDDLSuite) TestAdjustTableCollation(c *C) {
+func (s *testDDLSuite) TestAdjustCollation(c *C) {
 	// duplicate with pkg/parser
 	sqls := []string{
 		"create table `test`.`t1` (id int) CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",

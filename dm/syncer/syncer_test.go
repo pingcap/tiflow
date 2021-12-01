@@ -1343,10 +1343,11 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 		switch ev := e.Event.(type) {
 		case *replication.QueryEvent:
 			qec := &queryEventContext{
-				eventContext: ec,
-				originSQL:    string(ev.Query),
-				ddlSchema:    string(ev.Schema),
-				p:            p,
+				eventContext:    ec,
+				originSQL:       string(ev.Query),
+				ddlSchema:       string(ev.Schema),
+				p:               p,
+				eventStatusVars: statusVars,
 			}
 			stmt, err := parseOneStmt(qec)
 			c.Assert(err, IsNil)
@@ -1357,7 +1358,7 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 			qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 			c.Assert(err, IsNil)
 			for _, sql := range qec.splitDDLs {
-				sqls, err := syncer.processOneDDL(qec, sql, statusVars)
+				sqls, err := syncer.processOneDDL(qec, sql)
 				c.Assert(err, IsNil)
 				qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 			}

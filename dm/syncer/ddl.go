@@ -52,8 +52,8 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 // 2. skip sql by skipQueryEvent;
 // 3. apply online ddl if onlineDDL is not nil:
 //    * specially, if skip, apply empty string;
-func (s *Syncer) processOneDDL(qec *queryEventContext, sql string, statusVars []byte) ([]string, error) {
-	ddlInfo, err := s.genDDLInfo(qec.p, qec.ddlSchema, sql, statusVars)
+func (s *Syncer) processOneDDL(qec *queryEventContext, sql string) ([]string, error) {
+	ddlInfo, err := s.genDDLInfo(qec.p, qec.ddlSchema, sql, qec.eventStatusVars)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 
 		// just has charset, can not add collation by server collation
 		if hasCharset {
-			tctx.L().Warn("detect create database risk which use implicit collation", zap.String("originSQL", ddlInfo.originDDL))
+			tctx.L().Warn("detect create database risk which use explicit charset and implicit collation", zap.String("originSQL", ddlInfo.originDDL))
 			return
 		}
 
@@ -238,6 +238,7 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 			tctx.L().Warn("found error when get collation_server from binlog status_vars", zap.Error(err))
 		}
 		// add collation
+		tctx.L().Warn("detect create database risk which use implicit charset and collation, we will add collation by binlog status_vars", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
 		createStmt.Options = append(createStmt.Options, &ast.DatabaseOption{Tp: ast.DatabaseOptionCollate, Value: collation})
 	}
 }
