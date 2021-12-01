@@ -46,7 +46,10 @@ func (e *CraftEventBatchEncoder) flush() {
 	ts := headers.GetTs(0)
 	schema := headers.GetSchema(0)
 	table := headers.GetTable(0)
-	e.messageBuf = append(e.messageBuf, NewMQMessage(ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MqMessageTypeRow, &schema, &table))
+	rowsCnt := e.rowChangedBuffer.RowsCount()
+	mqMessage := NewMQMessage(ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MqMessageTypeRow, &schema, &table)
+	mqMessage.SetRowsCount(rowsCnt)
+	e.messageBuf = append(e.messageBuf, mqMessage)
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
