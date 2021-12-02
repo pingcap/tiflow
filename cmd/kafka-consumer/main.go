@@ -117,7 +117,7 @@ func init() {
 		}
 		kafkaPartitionNum = partition
 	} else {
-		c, err := strconv.Atoi(s) // #nosec G109
+		c, err := strconv.Atoi(s) // #nosec G190
 		if err != nil {
 			log.Fatal("invalid partition-num of upstream-uri")
 		}

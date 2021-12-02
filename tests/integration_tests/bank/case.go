@@ -619,7 +619,7 @@ func getDownStreamSyncedEndTs(ctx context.Context, db *sql.DB, tableName string)
 }
 
 func tryGetEndTs(db *sql.DB, tableName string) (result string, ok bool) {
-	query := "admin show ddl jobs where table_name = "
+	query := "admin show ddl jobs where table_name = ?"
 	log.Info("try get end ts", zap.String("query", query))
 	var line dataRow
 	row := db.QueryRow(query, tableName)
