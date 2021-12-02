@@ -18,9 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/pingcap/ticdc/pkg/filter"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -36,11 +35,13 @@ const (
 	defaultErrChSize = 1024
 )
 
+type asyncSinkInitializer func(ctx cdcContext.Context) error
+
 // AsyncSink is an async sink design for owner
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
 type AsyncSink interface {
-	Run(ctx cdcContext.Context) error
+	Run(ctx cdcContext.Context, initializer asyncSinkInitializer) error
 	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
@@ -51,6 +52,8 @@ type AsyncSink interface {
 	EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
 	SinkSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
 	Close(ctx context.Context) error
+
+	initialize(ctx cdcContext.Context) error
 }
 
 type asyncSinkImpl struct {
@@ -65,8 +68,6 @@ type asyncSinkImpl struct {
 	ddlSentTs     model.Ts
 
 	errCh chan error
-
-	//newBackendSink func(ctx cdcContext.Context) error
 }
 
 func newAsyncSinkImpl(ctx cdcContext.Context) (AsyncSink, error) {
@@ -115,8 +116,8 @@ func (s *asyncSinkImpl) initialize(ctx cdcContext.Context) error {
 	return eg.Wait()
 }
 
-func (s *asyncSinkImpl) Run(ctx cdcContext.Context) error {
-	if err := s.initialize(ctx); err != nil {
+func (s *asyncSinkImpl) Run(ctx cdcContext.Context, initializer asyncSinkInitializer) error {
+	if err := initializer(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
