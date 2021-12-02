@@ -64,7 +64,7 @@ Since every checker is concurrent, we can split tables to **source_connection_co
         - LOCK TABLES (only dump table)
     - For TiDB downstream：
         - PROCESS (global)
-3. Add OnlineddlChecker to check if a ddl exists in online-ddl stage when DM task is all mode and online-ddl is true. It will be forced to check in all mode and not check in increment mode.
+3. Add OnlineDDLChecker to check if a ddl of tables in allow list exists in online-ddl stage when DM task is all mode and online-ddl is true. It will be forced to check in all mode and not checked in increment mode.
 4. Enhance schema_of_shard_tables. 
     - At first, if a machine exits the DM’s checkpoint, the DM’s subsequent task starts/resumes at the checkpoint. So we think the checkpoint guarantees consistency.
     - If not exit checkpoint:
