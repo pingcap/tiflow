@@ -251,6 +251,10 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
 	}
 
+	if err = c.Debug.ValidateAndAdjust(); err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 

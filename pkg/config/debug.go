@@ -13,6 +13,8 @@
 
 package config
 
+import "github.com/pingcap/errors"
+
 // DebugConfig represents config for ticdc unexposed feature configurations
 type DebugConfig struct {
 	// identify if the table actor is enabled for table pipeline
@@ -24,4 +26,10 @@ type DebugConfig struct {
 	// TODO: turn on after GA.
 	EnableDBSorter bool      `toml:"enable-db-sorter" json:"enable-db-sorter"`
 	DB             *DBConfig `toml:"db" json:"db"`
+}
+
+// ValidateAndAdjust validates and adjusts the debug configuration
+func (c *DebugConfig) ValidateAndAdjust() error {
+	err := c.DB.ValidateAndAdjust()
+	return errors.Trace(err)
 }

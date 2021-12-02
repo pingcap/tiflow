@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/cdc/processor"
 	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
+	ssystem "github.com/pingcap/ticdc/cdc/sorter/leveldb/system"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -64,6 +65,7 @@ type Capture struct {
 	grpcPool     kv.GrpcPool
 	regionCache  *tikv.RegionCache
 	TimeAcquirer pdtime.TimeAcquirer
+	sorterSystem *ssystem.System
 
 	tableActorSystem *system.System
 
@@ -113,9 +115,6 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
 
-	if c.grpcPool != nil {
-		c.grpcPool.Close()
-	}
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
 		if err != nil {
@@ -126,8 +125,31 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.tableActorSystem = system.NewSystem()
 		err = c.tableActorSystem.Start(ctx)
 		if err != nil {
-			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
+			return errors.Annotate(
+				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+				"create table actor system")
 		}
+	}
+	if c.sorterSystem != nil {
+		err := c.sorterSystem.Stop()
+		if err != nil {
+			log.Warn("stop sorter system failed", zap.Error(err))
+		}
+	}
+	if conf.Debug.EnableDBSorter {
+		// Sorter dir has been set and checked when server starts.
+		// See https://github.com/pingcap/ticdc/blob/674ac2/cdc/server.go#L280
+		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
+		c.sorterSystem = ssystem.NewSystem(sortDir, conf.Debug.DB)
+		err = c.sorterSystem.Start(ctx)
+		if err != nil {
+			return errors.Annotate(
+				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+				"create capture session")
+		}
+	}
+	if c.grpcPool != nil {
+		c.grpcPool.Close()
 	}
 	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
 	if c.regionCache != nil {
@@ -186,6 +208,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		RegionCache:      c.regionCache,
 		TimeAcquirer:     c.TimeAcquirer,
 		TableActorSystem: c.tableActorSystem,
+		SorterSystem:     c.sorterSystem,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -420,6 +443,13 @@ func (c *Capture) AsyncClose() {
 			log.Warn("stop table actor system failed", zap.Error(err))
 		}
 		c.tableActorSystem = nil
+	}
+	if c.sorterSystem != nil {
+		err := c.sorterSystem.Stop()
+		if err != nil {
+			log.Warn("stop sorter system failed", zap.Error(err))
+		}
+		c.sorterSystem = nil
 	}
 }
 
