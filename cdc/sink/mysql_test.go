@@ -54,7 +54,6 @@ func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
 }
 
 func TestPrepareDML(t *testing.T) {
-
 	testCases := []struct {
 		input    []*model.RowChangedEvent
 		expected *preparedDMLs
@@ -97,7 +96,6 @@ func TestPrepareDML(t *testing.T) {
 }
 
 func TestPrepareUpdate(t *testing.T) {
-
 	testCases := []struct {
 		quoteTable   string
 		preCols      []*model.Column
@@ -149,7 +147,6 @@ func TestPrepareUpdate(t *testing.T) {
 }
 
 func TestPrepareDelete(t *testing.T) {
-
 	testCases := []struct {
 		quoteTable   string
 		preCols      []*model.Column
@@ -190,7 +187,6 @@ func TestPrepareDelete(t *testing.T) {
 }
 
 func TestWhereSlice(t *testing.T) {
-
 	testCases := []struct {
 		cols             []*model.Column
 		forceReplicate   bool
@@ -448,7 +444,6 @@ func mockTestDB() (*sql.DB, error) {
 }
 
 func TestAdjustSQLMode(t *testing.T) {
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -552,7 +547,6 @@ func (s *mockUnavailableMySQL) Stop() {
 }
 
 func TestNewMySQLTimeout(t *testing.T) {
-
 	addr := "127.0.0.1:33333"
 	mockMySQL := newMockUnavailableMySQL(addr, t)
 	defer mockMySQL.Stop()
@@ -695,7 +689,6 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
-
 	rows := []*model.RowChangedEvent{
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -762,7 +755,6 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
-
 	rows := []*model.RowChangedEvent{
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -829,7 +821,6 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrRetryable(t *testing.T) {
-
 	rows := []*model.RowChangedEvent{
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
