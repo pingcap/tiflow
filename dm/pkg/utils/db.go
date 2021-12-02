@@ -412,8 +412,8 @@ func GetCharsetAndDefaultCollation(ctx context.Context, db *sql.DB) (map[string]
 		| binary   | Binary pseudo charset           | binary              |      1 |
 		| cp1250   | Windows Central European        | cp1250_general_ci   |      1 |
 		| cp1251   | Windows Cyrillic                | cp1251_general_ci   |      1 |
-	*/
-	if err != nil {
+		+----------+---------------------------------+---------------------+--------+
+	*/if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
 	if rows.Err() != nil {
