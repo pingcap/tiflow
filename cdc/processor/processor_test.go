@@ -29,6 +29,7 @@ import (
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/cdc/scheduler"
+	"github.com/pingcap/ticdc/cdc/sink"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -52,9 +53,10 @@ func newProcessor4Test(
 ) *processor {
 	p := newProcessor(ctx)
 	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
+	p.sinkManager = &sink.Manager{}
 	p.redoManager = redo.NewDisabledManager()
 	p.createTablePipeline = createTablePipeline
-	p.schemaStorage = &mockSchemaStorage{c: c}
+	p.schemaStorage = &mockSchemaStorage{c: c, resolvedTs: math.MaxUint64}
 	return p
 }
 
@@ -137,12 +139,13 @@ type mockSchemaStorage struct {
 	// as we only need ResolvedTs() and DoGC() in unit tests.
 	entry.SchemaStorage
 
-	c        *check.C
-	lastGcTs uint64
+	c          *check.C
+	lastGcTs   uint64
+	resolvedTs uint64
 }
 
 func (s *mockSchemaStorage) ResolvedTs() uint64 {
-	return math.MaxUint64
+	return s.resolvedTs
 }
 
 func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
@@ -934,4 +937,48 @@ func updateChangeFeedPosition(c *check.C, tester *orchestrator.ReactorStateTeste
 	c.Assert(err, check.IsNil)
 
 	tester.MustUpdate(keyStr, valueBytes)
+}
+
+func (s *processorSuite) TestUpdateBarrierTs(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(true)
+	p, tester := initProcessor4Test(ctx, c)
+	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		status.CheckpointTs = 5
+		status.ResolvedTs = 10
+		return status, true, nil
+	})
+	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		status.AddTable(1, &model.TableReplicaInfo{StartTs: 5}, 5)
+		return status, true, nil
+	})
+	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
+
+	// init tick, add table OperDispatched.
+	_, err := p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	tester.MustApplyPatches()
+	// tick again, add table OperProcessed.
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	tester.MustApplyPatches()
+
+	// Global resolved ts has advanced while schema storage stalls.
+	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		status.ResolvedTs = 20
+		return status, true, nil
+	})
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	tester.MustApplyPatches()
+	tb := p.tables[model.TableID(1)].(*mockTablePipeline)
+	c.Assert(tb.barrierTs, check.Equals, uint64(10))
+
+	// Schema storage has advanced too.
+	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 15
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	tester.MustApplyPatches()
+	tb = p.tables[model.TableID(1)].(*mockTablePipeline)
+	c.Assert(tb.barrierTs, check.Equals, uint64(15))
 }
