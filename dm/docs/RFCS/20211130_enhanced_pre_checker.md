@@ -77,4 +77,4 @@ Since every checker is concurrent, we can split tables to **source_connection_co
 
 ### Remove checker from tidb-tools to DM
 
-After this change, checker is deeply coupled to DM, both with dump Privilege and optimistic pessimistic coordination. And checker is only used by DM (TiCDC and TiDB all don't use it). So removing checker from tidb-tools to DM is more convenient for development work。
+After this change, checker is deeply coupled to DM, both with dump privilege and optimistic pessimistic coordination. And checker is only used by DM (TiCDC and TiDB all don't use it). So removing checker from tidb-tools to DM is more convenient for development work。
