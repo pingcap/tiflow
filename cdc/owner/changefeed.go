@@ -17,13 +17,12 @@ import (
 	"context"
 	"sync"
 
-	schedulerv2 "github.com/pingcap/ticdc/cdc/scheduler"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo"
+	schedulerv2 "github.com/pingcap/ticdc/cdc/scheduler"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
@@ -77,7 +76,8 @@ type changefeed struct {
 
 func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 	c := &changefeed{
-		id:               id,
+		id: id,
+		// TODO: creates a SchedulerV2 once it is ready.
 		scheduler:        newSchedulerV1(),
 		barriers:         newBarriers(),
 		feedStateManager: new(feedStateManager),
