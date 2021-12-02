@@ -40,6 +40,7 @@ const (
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
 type AsyncSink interface {
+	Run(ctx cdcContext.Context) error
 	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
@@ -115,7 +116,7 @@ func (s *asyncSinkImpl) Initialize(ctx cdcContext.Context) error {
 	return eg.Wait()
 }
 
-func (s *asyncSinkImpl) run(ctx cdcContext.Context) error {
+func (s *asyncSinkImpl) Run(ctx cdcContext.Context) error {
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -193,6 +194,5 @@ func (s *asyncSinkImpl) Close(ctx context.Context) (err error) {
 	if s.syncpointStore != nil {
 		err = s.syncpointStore.Close()
 	}
-	s.wg.Wait()
-	return
+	return err
 }
