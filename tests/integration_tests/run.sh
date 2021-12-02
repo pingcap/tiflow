@@ -6,8 +6,7 @@ OUT_DIR=/tmp/tidb_cdc_test
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 export PATH=$PATH:$CUR/_utils:$CUR/../bin
 echo $CUR
-ls bin
-ls $CUR/../bin
+pwd
 mkdir -p $OUT_DIR || true
 
 if [ "${1-}" = '--debug' ]; then
