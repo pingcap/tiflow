@@ -15,7 +15,6 @@ package owner
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -66,7 +65,6 @@ type asyncSinkImpl struct {
 	ddlSentTs     model.Ts
 
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
 	errCh  chan error
 
 	newBackendSink func(ctx cdcContext.Context) error
@@ -117,8 +115,7 @@ func (s *asyncSinkImpl) Initialize(ctx cdcContext.Context) error {
 	return eg.Wait()
 }
 
-func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
-	defer s.wg.Done()
+func (s *asyncSinkImpl) run(ctx cdcContext.Context) error {
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -126,10 +123,9 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case err := <-s.errCh:
-			ctx.Throw(err)
-			return
+			return err
 		case <-ticker.C:
 			checkpointTs := atomic.LoadUint64(&s.checkpointTs)
 			if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
@@ -137,8 +133,7 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 			}
 			lastCheckpointTs = checkpointTs
 			if err := s.sink.EmitCheckpointTs(ctx, checkpointTs); err != nil {
-				ctx.Throw(errors.Trace(err))
-				return
+				return errors.Trace(err)
 			}
 		case ddl := <-s.ddlCh:
 			err := s.sink.EmitDDLEvent(ctx, ddl)
@@ -148,15 +143,14 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 			if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
 				log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
 				atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
-			} else {
-				// If DDL executing failed, and the error can not be ignored, throw an error and pause the changefeed
-				log.Error("Execute DDL failed",
-					zap.String("ChangeFeedID", ctx.ChangefeedVars().ID),
-					zap.Error(err),
-					zap.Reflect("ddl", ddl))
-				ctx.Throw(errors.Trace(err))
-				return
+				continue
 			}
+			// If DDL executing failed, and the error can not be ignored, throw an error and pause the changefeed
+			log.Error("Execute DDL failed",
+				zap.String("ChangeFeedID", ctx.ChangefeedVars().ID),
+				zap.Error(err),
+				zap.Reflect("ddl", ddl))
+			return errors.Trace(err)
 		}
 	}
 }
