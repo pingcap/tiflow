@@ -36,8 +36,8 @@
 
 2. Run `make integration_test` to execute the integration tests. This command will
 
-    1. Check that all required executables exist.
-    2. Execute `tests/run.sh`
+   1. Check that all required executables exist.
+   2. Execute `tests/integration_tests/run.sh`
 
     > If want to run one integration test case only, just pass the CASE parameter, such as `make integration_test CASE=simple`.
 
@@ -50,4 +50,5 @@
 
 ## Writing new tests
 
-New integration tests can be written as shell scripts in `tests/TEST_NAME/run.sh`. The script should exit with a nonzero error code on failure.
+New integration tests can be written as shell scripts in `tests/integration_tests/TEST_NAME/run.sh`. The script should
+exit with a nonzero error code on failure.

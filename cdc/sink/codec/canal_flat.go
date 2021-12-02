@@ -30,6 +30,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const tidbWaterMarkType = "TIDB_WATERMARK"
+
 // CanalFlatEventBatchEncoder encodes Canal flat messages in JSON format
 type CanalFlatEventBatchEncoder struct {
 	builder       *canalEntryBuilder
@@ -39,8 +41,6 @@ type CanalFlatEventBatchEncoder struct {
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
 }
-
-const tidbWaterMarkType = "TIDB_WATERMARK"
 
 // NewCanalFlatEventBatchEncoder creates a new CanalFlatEventBatchEncoder
 func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
@@ -57,7 +57,7 @@ type canalFlatEventBatchEncoderBuilder struct {
 }
 
 // Build a `CanalFlatEventBatchEncoder`
-func (b *canalFlatEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *canalFlatEventBatchEncoderBuilder) Build(_ context.Context) (EventBatchEncoder, error) {
 	encoder := NewCanalFlatEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrKafkaInvalidConfig, err)
@@ -387,7 +387,7 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 }
 
 // MixedBuild is not used here
-func (c *CanalFlatEventBatchEncoder) MixedBuild(withVersion bool) []byte {
+func (c *CanalFlatEventBatchEncoder) MixedBuild(_ bool) []byte {
 	panic("MixedBuild not supported by CanalFlatEventBatchEncoder")
 }
 
