@@ -116,7 +116,7 @@ func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *or
 	gcManager := gc.NewManager(ctx.GlobalVars().PDClient)
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, gcManager, func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
-	}, func(ctx cdcContext.Context, initFunc asyncSinkInitFunc) (AsyncSink, error) {
+	}, func(ctx cdcContext.Context) (AsyncSink, error) {
 		return &mockAsyncSink{}, nil
 	})
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)

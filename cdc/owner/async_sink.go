@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/filter"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -47,6 +49,8 @@ type AsyncSink interface {
 	EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
 	SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error
 	Close(ctx context.Context) error
+
+	buildBackendSink(ctx cdcContext.Context) error
 }
 
 type asyncSinkImpl struct {
@@ -64,30 +68,18 @@ type asyncSinkImpl struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	errCh  chan error
-
-	initialized chan struct{}
-	sinkMu      sync.Mutex
 }
 
-type asyncSinkInitFunc func(a *asyncSinkImpl) error
-
-func newAsyncSink(ctx cdcContext.Context, initializer asyncSinkInitFunc) (AsyncSink, error) {
+func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 
 	errCh := make(chan error, defaultErrChSize)
 	asyncSink := &asyncSinkImpl{
-		sink:        nil,
-		ddlCh:       make(chan *model.DDLEvent, 1),
-		errCh:       errCh,
-		cancel:      cancel,
-		initialized: make(chan struct{}),
+		sink:   nil,
+		ddlCh:  make(chan *model.DDLEvent, 1),
+		errCh:  errCh,
+		cancel: cancel,
 	}
-
-	asyncSink.wg.Add(1)
-	go func() {
-		defer asyncSink.wg.Done()
-		errCh <- initializer(asyncSink)
-	}()
 
 	var (
 		err  error
@@ -108,29 +100,27 @@ func newAsyncSink(ctx cdcContext.Context, initializer asyncSinkInitFunc) (AsyncS
 	return asyncSink, nil
 }
 
-func (s *asyncSinkImpl) attachSink(backendSink sink.Sink) {
-	s.sinkMu.Lock()
-	defer s.sinkMu.Unlock()
-	s.sink = backendSink
-	close(s.initialized)
-}
-
-func (s *asyncSinkImpl) waitSinkInitialized(ctx cdcContext.Context) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case err := <-s.errCh:
-			return err
-		case <-s.initialized:
-			return nil
-		}
+func (s *asyncSinkImpl) buildBackendSink(ctx cdcContext.Context) error {
+	var (
+		id   = ctx.ChangefeedVars().ID
+		info = ctx.ChangefeedVars().Info
+	)
+	filter, err := filter.NewFilter(info.Config)
+	if err != nil {
+		return errors.Trace(err)
 	}
+
+	a, err := sink.New(ctx, id, info.SinkURI, filter, info.Config, info.Opts, s.errCh)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	s.sink = a
+	return nil
 }
 
 func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 	defer s.wg.Done()
-	if err := s.waitSinkInitialized(ctx); err != nil {
+	if err := s.buildBackendSink(ctx); err != nil {
 		ctx.Throw(err)
 		return
 	}

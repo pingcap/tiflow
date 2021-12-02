@@ -76,10 +76,7 @@ func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, 
 	})
 
 	mockSink := &mockSink{}
-	sink, err := newAsyncSink(ctx, func(a *asyncSinkImpl) error {
-		a.attachSink(mockSink)
-		return nil
-	})
+	sink, err := newAsyncSink(ctx)
 	c.Assert(err, check.IsNil)
 	return ctx, sink, mockSink
 }
@@ -88,12 +85,10 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
-	sink.(*asyncSinkImpl).wg.Add(1)
-	err := sink.(*asyncSinkImpl).waitSinkInitialized(ctx)
-	c.Assert(err, check.IsNil)
-	sink.(*asyncSinkImpl).wg.Done()
-
 	defer sink.Close(ctx)
+
+	time.Sleep(3 * time.Second)
+
 	waitCheckpointGrowingUp := func(m *mockSink, targetTs model.Ts) error {
 		return retry.Do(context.Background(), func() error {
 			if targetTs != atomic.LoadUint64(&m.checkpointTs) {
@@ -112,12 +107,10 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
-	sink.(*asyncSinkImpl).wg.Add(1)
-	err := sink.(*asyncSinkImpl).waitSinkInitialized(ctx)
-	c.Assert(err, check.IsNil)
-	sink.(*asyncSinkImpl).wg.Done()
-
 	defer sink.Close(ctx)
+
+	time.Sleep(3 * time.Second)
+
 	ddl1 := &model.DDLEvent{CommitTs: 1}
 	for {
 		done, err := sink.EmitDDLEvent(ctx, ddl1)
@@ -129,7 +122,7 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 	}
 	ddl2 := &model.DDLEvent{CommitTs: 2}
 	ddl3 := &model.DDLEvent{CommitTs: 3}
-	_, err = sink.EmitDDLEvent(ctx, ddl2)
+	_, err := sink.EmitDDLEvent(ctx, ddl2)
 	c.Assert(err, check.IsNil)
 	for {
 		done, err := sink.EmitDDLEvent(ctx, ddl2)
@@ -168,12 +161,9 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 		return nil
 	})
 	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
-	sink.(*asyncSinkImpl).wg.Add(1)
-	err := sink.(*asyncSinkImpl).waitSinkInitialized(ctx)
-	c.Assert(err, check.IsNil)
-	sink.(*asyncSinkImpl).wg.Done()
-
 	defer sink.Close(ctx)
+	time.Sleep(3 * time.Second)
+
 	mSink.ddlError = cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	ddl1 := &model.DDLEvent{CommitTs: 1}
 	for {
