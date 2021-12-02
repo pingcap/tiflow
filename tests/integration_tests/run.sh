@@ -8,7 +8,7 @@ export PATH=$PATH:$CUR/_utils:$CUR/../bin
 echo $CUR
 echo $PATH
 pwd
-where pd_server
+which pd_server
 mkdir -p $OUT_DIR || true
 
 if [ "${1-}" = '--debug' ]; then
