@@ -264,6 +264,10 @@ function run_dmctl_with_retry() {
 
 function ensure_start_relay() {
 	# manually enable relay for source1 after v2.0.2
+	if [[ "$PRE_VER" == "v2.0.0" ]] || [[ "$PRE_VER" == "v2.0.1" ]]; then
+		return
+	fi
+
 	dmctl_log="get-worker.txt"
 	# always use CUR_VER, because we might use tiup mirror in previous steps.
 	tiup dmctl:$CUR_VER --master-addr=master1:8261 operate-source show -s mysql-replica-01 >$dmctl_log 2>&1
@@ -276,6 +280,10 @@ function ensure_start_relay() {
 }
 
 function restart_relay() {
+	if [[ "$PRE_VER" == "v2.0.0" ]] || [[ "$PRE_VER" == "v2.0.1" ]]; then
+		return
+	fi
+
 	run_dmctl_with_retry $CUR_VER "stop-relay -s mysql-replica-01" "\"result\": true" 1
 	run_dmctl_with_retry $CUR_VER "query-status -s mysql-replica-01" "\"relayStatus\": null" 1
 	run_dmctl_with_retry $CUR_VER "start-relay -s mysql-replica-01" "\"result\": true" 1
