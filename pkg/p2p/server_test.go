@@ -40,7 +40,7 @@ const (
 
 // read only
 var defaultServerConfig4Testing = &MessageServerConfig{
-	MaxTopicPendingCount:                 256,
+	MaxPendingMessageCountPerTopic:       256,
 	MaxPendingTaskCount:                  102400,
 	SendChannelSize:                      16,
 	AckInterval:                          time.Millisecond * 200,
@@ -116,7 +116,7 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 	defer closer()
 
 	// Avoids server returning error due to congested topic.
-	server.config.MaxTopicPendingCount = math.MaxInt64
+	server.config.MaxPendingMessageCountPerTopic = math.MaxInt64
 
 	var wg sync.WaitGroup
 	wg.Add(1)

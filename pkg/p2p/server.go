@@ -39,7 +39,7 @@ import (
 // MessageServerConfig stores configurations for the MessageServer
 type MessageServerConfig struct {
 	// The maximum number of entries to be cached for topics with no handler registered
-	MaxTopicPendingCount int
+	MaxPendingMessageCountPerTopic int
 	// The maximum number of unhandled internal tasks for the main thread.
 	MaxPendingTaskCount int
 	// The size of the channel for pending messages before sending them to gRPC.
@@ -69,7 +69,12 @@ type MessageServerConfig struct {
 // cdcPeer is used to store information on one connected client.
 type cdcPeer struct {
 	PeerID string // unique ID of the client
-	Epoch  int64  // epoch is increased when the client retries.
+
+	// Epoch is increased when the client retries.
+	// It is used to avoid two streams from the same client racing with each other.
+	// This can happen because the MessageServer might not immediately know that
+	// a stream has become stale.
+	Epoch int64
 
 	// necessary information on the stream.
 	sender *streamHandle
@@ -111,7 +116,7 @@ type MessageServer struct {
 	// pendingMessages store messages for topics with NO registered handle.
 	// This can happen when the server is slow.
 	// The upper limit of pending messages is restricted by
-	// MaxTopicPendingCount in MessageServerConfig.
+	// MaxPendingMessageCountPerTopic in MessageServerConfig.
 	pendingMessages map[topicSenderPair][]pendingMessageEntry
 
 	acks *ackManager
@@ -727,7 +732,7 @@ func (m *MessageServer) handleMessage(ctx context.Context, streamMeta *p2p.Strea
 	if !ok {
 		// handler not found
 		pendingEntries := m.pendingMessages[pendingMessageKey]
-		if len(pendingEntries) > m.config.MaxTopicPendingCount {
+		if len(pendingEntries) > m.config.MaxPendingMessageCountPerTopic {
 			log.Warn("Topic congested because no handler has been registered", zap.String("topic", topic))
 			delete(m.pendingMessages, pendingMessageKey)
 			m.peerLock.RLock()
