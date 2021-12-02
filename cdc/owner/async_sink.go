@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/pingcap/ticdc/pkg/filter"
 
 	"github.com/pingcap/errors"
@@ -49,8 +51,6 @@ type AsyncSink interface {
 	EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
 	SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error
 	Close(ctx context.Context) error
-
-	buildBackendSink(ctx cdcContext.Context) error
 }
 
 type asyncSinkImpl struct {
@@ -69,65 +69,56 @@ type asyncSinkImpl struct {
 	wg     sync.WaitGroup
 	errCh  chan error
 
-	closeCh chan struct{}
+	newBackendSink func(ctx cdcContext.Context) error
 }
 
-func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
-	ctx, cancel := cdcContext.WithCancel(ctx)
+func newAsyncSinkImpl(ctx cdcContext.Context) (AsyncSink, error) {
+	return &asyncSinkImpl{
+		ddlCh: make(chan *model.DDLEvent, 1),
+		errCh: make(chan error, defaultErrChSize),
+	}, nil
+}
 
-	errCh := make(chan error, defaultErrChSize)
-	asyncSink := &asyncSinkImpl{
-		sink:    nil,
-		ddlCh:   make(chan *model.DDLEvent, 1),
-		errCh:   errCh,
-		closeCh: make(chan struct{}),
-		cancel:  cancel,
-	}
-
+func (s *asyncSinkImpl) Initialize(ctx cdcContext.Context) error {
 	var (
 		err  error
 		id   = ctx.ChangefeedVars().ID
 		info = ctx.ChangefeedVars().Info
 	)
-	if info.SyncPointEnabled {
-		asyncSink.syncpointStore, err = sink.NewSyncpointStore(ctx, id, info.SinkURI)
+
+	eg, ctx1 := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		if info.SyncPointEnabled {
+			s.syncpointStore, err = sink.NewSyncpointStore(ctx1, id, info.SinkURI)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if err := s.syncpointStore.CreateSynctable(ctx1); err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
+	})
+
+	eg.Go(func() error {
+		filter, err := filter.NewFilter(info.Config)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
-		if err := asyncSink.syncpointStore.CreateSynctable(ctx); err != nil {
-			return nil, errors.Trace(err)
+
+		sink, err := sink.New(ctx1, id, info.SinkURI, filter, info.Config, info.Opts, s.errCh)
+		if err != nil {
+			return errors.Trace(err)
 		}
-	}
-	asyncSink.wg.Add(1)
-	go asyncSink.run(ctx)
-	return asyncSink, nil
-}
+		s.sink = sink
+		return nil
+	})
 
-func (s *asyncSinkImpl) buildBackendSink(ctx cdcContext.Context) error {
-	var (
-		id   = ctx.ChangefeedVars().ID
-		info = ctx.ChangefeedVars().Info
-	)
-	filter, err := filter.NewFilter(info.Config)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	a, err := sink.New(ctx, id, info.SinkURI, filter, info.Config, info.Opts, s.errCh)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	s.sink = a
-	return nil
+	return eg.Wait()
 }
 
 func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 	defer s.wg.Done()
-	if err := s.buildBackendSink(ctx); err != nil {
-		ctx.Throw(err)
-		return
-	}
-
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -203,18 +194,11 @@ func (s *asyncSinkImpl) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint6
 }
 
 func (s *asyncSinkImpl) Close(ctx context.Context) (err error) {
-	if s.sink == nil {
-		return nil
-	}
 	s.cancel()
-	close(s.closeCh)
+	err = s.sink.Close(ctx)
+	if s.syncpointStore != nil {
+		err = s.syncpointStore.Close()
+	}
 	s.wg.Wait()
-	return nil
-	//s.cancel()
-	//err = s.sink.Close(ctx)
-	//if s.syncpointStore != nil {
-	//	err = s.syncpointStore.Close()
-	//}
-	//s.wg.Wait()
-	//return
+	return
 }

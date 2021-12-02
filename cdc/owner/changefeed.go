@@ -88,7 +88,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 
 		newDDLPuller: newDDLPuller,
 	}
-	c.newSink = newAsyncSink
+	c.newSink = newAsyncSinkImpl
 	return c
 }
 
@@ -267,6 +267,12 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	if err := c.sink.(*asyncSinkImpl).Initialize(cancelCtx); err != nil {
+		return errors.Trace(err)
+	}
+	c.wg.Add(1)
+	go c.sink.(*asyncSinkImpl).run(cancelCtx)
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
