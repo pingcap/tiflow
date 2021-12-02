@@ -15,7 +15,12 @@ package etcd
 
 import (
 	"context"
+	"os"
+	"strings"
 	"time"
+
+	"github.com/benbjohnson/clock"
+	"github.com/pingcap/ticdc/pkg/logutil"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -89,4 +94,48 @@ func (s *etcdSuite) TestDelegateLease(c *check.C) {
 	ttlResp, err = cli.TimeToLive(ctx, lease.ID)
 	c.Assert(err, check.IsNil)
 	c.Assert(ttlResp.TTL, check.Equals, int64(-1))
+}
+
+func (s *etcdSuite) TestWatchWithChan(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	logfile, err := os.CreateTemp("", "watch-test")
+	logConfig := &logutil.Config{}
+	logConfig.Adjust()
+	logConfig.File = logfile.Name()
+	logutil.InitLogger(logConfig)
+
+	c.Assert(err, check.IsNil)
+	cli, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{s.clientURL.String()},
+		DialTimeout: 3 * time.Second,
+	})
+	c.Assert(err, check.IsNil)
+	defer cli.Close()
+
+	mockClock := clock.NewMock()
+	watchCli := Wrap(cli, nil)
+	watchCli.clock = mockClock
+
+	key := "watch-test"
+	watchCh := make(chan clientv3.WatchResponse, 1)
+	revision := int64(1)
+	ctx, _ := context.WithTimeout(context.Background(), time.Second*2)
+
+	closeCh := make(chan struct{})
+	go func() {
+		watchCli.WatchWithChan(ctx, watchCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+		closeCh <- struct{}{}
+	}()
+	// wait for WatchWithChan set up
+	time.Sleep(1 * time.Second)
+	// move time forward
+	mockClock.Add(time.Second * 20)
+	<-closeCh
+
+	logOutPut, err := os.ReadFile(logfile.Name())
+	c.Assert(err, check.IsNil)
+	// make sure watchCh has been reset
+	c.Assert(strings.Contains(string(logOutPut), "etcd watchCh blocking too long"), check.IsTrue)
 }

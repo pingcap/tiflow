@@ -17,6 +17,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
@@ -45,6 +46,8 @@ const (
 	// if no msg comes from a etcd watchCh for etcdWatchChTimeoutDuration long,
 	// we should cancel the watchCh and request a new watchCh from etcd client
 	etcdWatchChTimeoutDuration = 10 * time.Second
+	// etcdWatchChBufferSize is arbitrarily specified, it be modified in the future
+	etcdWatchChBufferSize = 16
 )
 
 // set to var instead of const for mocking the value to speedup test
@@ -54,6 +57,7 @@ var maxTries int64 = 8
 type Client struct {
 	cli     *clientv3.Client
 	metrics map[string]prometheus.Counter
+	clock   clock.Clock
 }
 
 // Wrap warps a clientv3.Client that provides etcd APIs required by TiCDC.
@@ -169,23 +173,24 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 
 // Watch delegates request to clientv3.Watcher.Watch
 func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
-	return c.cli.Watch(ctx, key, opts...)
+	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
+	go c.WatchWithChan(ctx, watchCh, key, opts...)
+	return watchCh
 }
 
 // WatchWithChan maintains a watchCh and send all msg from the watchCh to outCh
-func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchResponse, key string, revision int64) {
-	lastRevision := revision
+func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchResponse, key string, opts ...clientv3.OpOption) {
+	var lastRevision int64
 
 	ctx1, cancel := context.WithCancel(ctx)
-	defer cancel()
-	watchCh := c.cli.Watch(ctx1, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+	watchCh := c.cli.Watch(ctx1, key, opts...)
+	watchTimer := c.clock.Timer(etcdWatchChTimeoutDuration)
 
-	watchTimer := time.NewTimer(etcdWatchChTimeoutDuration)
 	defer watchTimer.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
+			cancel()
 			return
 		case response := <-watchCh:
 			watchTimer.Reset(etcdWatchChTimeoutDuration)
@@ -194,6 +199,7 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 			}
 			select {
 			case <-ctx.Done():
+				cancel()
 				return
 			case outCh <- response: // it may blocking here
 			}
