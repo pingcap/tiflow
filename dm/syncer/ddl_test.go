@@ -236,11 +236,12 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for i, sql := range sqls {
 		qec := &queryEventContext{
-			eventContext: ec,
-			ddlSchema:    "test",
-			originSQL:    sql,
-			appliedDDLs:  make([]string, 0),
-			p:            parser.New(),
+			eventContext:    ec,
+			ddlSchema:       "test",
+			originSQL:       sql,
+			appliedDDLs:     make([]string, 0),
+			p:               parser.New(),
+			eventStatusVars: statusVars,
 		}
 		stmt, err := parseOneStmt(qec)
 		c.Assert(err, IsNil)
@@ -260,7 +261,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 		c.Assert(qec.appliedDDLs, DeepEquals, expectedSQLs[i])
 		c.Assert(targetSQLs[i], HasLen, len(qec.appliedDDLs))
 		for j, sql2 := range qec.appliedDDLs {
-			ddlInfo, err2 := syncer.genDDLInfo(qec.p, qec.ddlSchema, sql2, statusVars)
+			ddlInfo, err2 := syncer.genDDLInfo(qec, sql2)
 			c.Assert(err2, IsNil)
 			c.Assert(targetSQLs[i][j], Equals, ddlInfo.routedDDL)
 		}

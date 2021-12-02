@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"go.uber.org/zap"
 
@@ -53,7 +52,7 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 // 3. apply online ddl if onlineDDL is not nil:
 //    * specially, if skip, apply empty string;
 func (s *Syncer) processOneDDL(qec *queryEventContext, sql string) ([]string, error) {
-	ddlInfo, err := s.genDDLInfo(qec.p, qec.ddlSchema, sql, qec.eventStatusVars)
+	ddlInfo, err := s.genDDLInfo(qec, sql)
 	if err != nil {
 		return nil, err
 	}
@@ -103,14 +102,14 @@ func (s *Syncer) processOneDDL(qec *queryEventContext, sql string) ([]string, er
 }
 
 // genDDLInfo generates ddl info by given sql.
-func (s *Syncer) genDDLInfo(p *parser.Parser, schema, sql string, statusVars []byte) (*ddlInfo, error) {
+func (s *Syncer) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, error) {
 	s.tctx.L().Debug("begin generate ddl info", zap.String("event", "query"), zap.String("statement", sql))
-	stmt, err := p.ParseOneStmt(sql, "", "")
+	stmt, err := qec.p.ParseOneStmt(sql, "", "")
 	if err != nil {
 		return nil, terror.Annotatef(terror.ErrSyncerUnitParseStmt.New(err.Error()), "ddl %s", sql)
 	}
 
-	sourceTables, err := parserpkg.FetchDDLTables(schema, stmt, s.SourceTableNamesFlavor)
+	sourceTables, err := parserpkg.FetchDDLTables(qec.ddlSchema, stmt, s.SourceTableNamesFlavor)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +127,7 @@ func (s *Syncer) genDDLInfo(p *parser.Parser, schema, sql string, statusVars []b
 		targetTables: targetTables,
 	}
 
-	adjustCollation(s.tctx, ddlInfo, statusVars, s.charsetAndDefaultCollation)
+	adjustCollation(s.tctx, ddlInfo, qec.eventStatusVars, s.charsetAndDefaultCollation)
 	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
 	ddlInfo.routedDDL = routedDDL
 	return ddlInfo, err
@@ -200,8 +199,6 @@ func (s *Syncer) clearOnlineDDL(tctx *tcontext.Context, targetTable *filter.Tabl
 func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte, charsetAndDefaultCollationMap map[string]string) {
 	switch createStmt := ddlInfo.originStmt.(type) {
 	case *ast.CreateTableStmt:
-		// create table like old table has no table_options
-		// See https://dev.mysql.com/doc/refman/5.7/en/create-table.html
 		if createStmt.ReferTable != nil {
 			return
 		}
@@ -225,13 +222,13 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 			tctx.L().Error("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
 			return
 		}
-		tctx.L().Warn("detect create table risk which use explicit charset and implicit collation, we will add collation by SHOW CHARACTER SET", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
+		tctx.L().Info("detect create table risk which use explicit charset and implicit collation, we will add collation by SHOW CHARACTER SET", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
 		createStmt.Options = append(createStmt.Options, &ast.TableOption{Tp: ast.TableOptionCollate, StrValue: collation})
 
 	case *ast.CreateDatabaseStmt:
-		// collation is in create database syntax create_option
-		// See https://dev.mysql.com/doc/refman/8.0/en/create-database.html
 		var justCharset, collation string
+		var err error
+		var ok bool
 		for _, createOption := range createStmt.Options {
 			// already have 'Collation'
 			if createOption.Tp == ast.DatabaseOptionCollate {
@@ -244,23 +241,21 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 
 		// just has charset, can add collation by charset and default collation map
 		if justCharset != "" {
-			tmpCollation, ok := charsetAndDefaultCollationMap[strings.ToLower(justCharset)]
+			collation, ok = charsetAndDefaultCollationMap[strings.ToLower(justCharset)]
 			if !ok {
 				tctx.L().Error("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
 				return
 			}
-			collation = tmpCollation
-			tctx.L().Warn("detect create database risk which use explicit charset and implicit collation, we will add collation by SHOW CHARACTER SET", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
+			tctx.L().Info("detect create database risk which use explicit charset and implicit collation, we will add collation by SHOW CHARACTER SET", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
 		} else {
 			// has no charset and collation
 			// add collation by server collation from binlog statusVars
-			tmpCollation, err := event.GetServerCollationByStatusVars(statusVars)
+			collation, err = event.GetServerCollationByStatusVars(statusVars)
 			if err != nil {
-				tctx.L().Warn("found error when get collation_server from binlog status_vars", zap.Error(err))
+				tctx.L().Warn("found error when get collation_server from binlog status_vars, auto use default collation of mysql", zap.Error(err))
 			}
 			// add collation
-			collation = tmpCollation
-			tctx.L().Warn("detect create database risk which use implicit charset and collation, we will add collation by binlog status_vars", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
+			tctx.L().Info("detect create database risk which use implicit charset and collation, we will add collation by binlog status_vars", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
 		}
 		createStmt.Options = append(createStmt.Options, &ast.DatabaseOption{Tp: ast.DatabaseOptionCollate, Value: collation})
 	}

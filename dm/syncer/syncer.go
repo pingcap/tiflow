@@ -2325,7 +2325,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 			continue
 		}
 		// We use default parser because sqls are came from above *Syncer.splitAndFilterDDL, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
-		ddlInfo, err2 := s.genDDLInfo(qec.p, qec.ddlSchema, sql, qec.eventStatusVars)
+		ddlInfo, err2 := s.genDDLInfo(qec, sql)
 		if err2 != nil {
 			return err2
 		}

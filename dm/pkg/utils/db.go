@@ -394,7 +394,12 @@ func GetServerUnixTS(ctx context.Context, db *sql.DB) (int64, error) {
 // GetCharsetAndDefaultCollation gets charset and default collation map.
 func GetCharsetAndDefaultCollation(ctx context.Context, db *sql.DB) (map[string]string, error) {
 	charsetAndDefaultCollation := make(map[string]string)
-	rows, err := db.QueryContext(ctx, "SHOW CHARACTER SET")
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+	defer conn.Close()
+	rows, err := conn.QueryContext(ctx, "SHOW CHARACTER SET")
 	// Show an example.
 	/*
 		mysql> SHOW CHARACTER SET;
@@ -407,7 +412,8 @@ func GetCharsetAndDefaultCollation(ctx context.Context, db *sql.DB) (map[string]
 		| binary   | Binary pseudo charset           | binary              |      1 |
 		| cp1250   | Windows Central European        | cp1250_general_ci   |      1 |
 		| cp1251   | Windows Cyrillic                | cp1251_general_ci   |      1 |
-	*/if err != nil {
+	*/
+	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
 	if rows.Err() != nil {
