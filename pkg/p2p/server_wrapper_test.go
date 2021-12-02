@@ -15,12 +15,14 @@ package p2p
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/phayes/freeport"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/proto/p2p"
@@ -58,8 +60,9 @@ func (s *mockGrpcService) SendMessage(stream MessageServerStream) error {
 }
 
 func newServerWrapperForTesting(t *testing.T) (server *ServerWrapper, newClient func() (p2p.CDCPeerToPeerClient, func()), cancel func()) {
-	addr := t.TempDir() + "/p2p-testing.sock"
-	lis, err := net.Listen("unix", addr)
+	port := freeport.GetPort()
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	lis, err := net.Listen("tcp", addr)
 	require.NoError(t, err)
 
 	var opts []grpc.ServerOption
@@ -85,7 +88,7 @@ func newServerWrapperForTesting(t *testing.T) (server *ServerWrapper, newClient 
 			addr,
 			grpc.WithInsecure(),
 			grpc.WithContextDialer(func(_ context.Context, s string) (net.Conn, error) {
-				return net.Dial("unix", addr)
+				return net.Dial("tcp", addr)
 			}))
 		require.NoError(t, err)
 

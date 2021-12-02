@@ -105,11 +105,6 @@ func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.Re
 	return sink, nil
 }
 
-func (s *simpleMySQLSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	// do nothing
-	return nil
-}
-
 // EmitRowChangedEvents sends Row Changed Event to Sink
 // EmitRowChangedEvents may write rows to downstream directly;
 func (s *simpleMySQLSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -186,7 +181,7 @@ func (s *simpleMySQLSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent)
 
 // FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
 // TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
-func (s *simpleMySQLSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
+func (s *simpleMySQLSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {
 	s.rowsBufferLock.Lock()
 	defer s.rowsBufferLock.Unlock()
 	newBuffer := make([]*model.RowChangedEvent, 0, len(s.rowsBuffer))

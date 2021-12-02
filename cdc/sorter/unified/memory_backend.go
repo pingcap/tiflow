@@ -110,7 +110,7 @@ type memoryBackEndWriter struct {
 func (w *memoryBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 	w.backEnd.events = append(w.backEnd.events, event)
 	// 8 * 5 is for the 5 fields in PolymorphicEvent, each of which is thought of as a 64-bit pointer
-	w.bytesWritten += 8*5 + event.RawKV.ApproximateSize()
+	w.bytesWritten += 8*5 + event.RawKV.ApproximateDataSize()
 
 	failpoint.Inject("sorterDebug", func() {
 		if event.CRTs < w.maxTs {
