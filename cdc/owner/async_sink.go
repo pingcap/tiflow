@@ -68,6 +68,8 @@ type asyncSinkImpl struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	errCh  chan error
+
+	closeCh chan struct{}
 }
 
 func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
@@ -75,10 +77,11 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 
 	errCh := make(chan error, defaultErrChSize)
 	asyncSink := &asyncSinkImpl{
-		sink:   nil,
-		ddlCh:  make(chan *model.DDLEvent, 1),
-		errCh:  errCh,
-		cancel: cancel,
+		sink:    nil,
+		ddlCh:   make(chan *model.DDLEvent, 1),
+		errCh:   errCh,
+		closeCh: make(chan struct{}),
+		cancel:  cancel,
 	}
 
 	var (
@@ -201,10 +204,14 @@ func (s *asyncSinkImpl) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint6
 
 func (s *asyncSinkImpl) Close(ctx context.Context) (err error) {
 	s.cancel()
-	err = s.sink.Close(ctx)
-	if s.syncpointStore != nil {
-		err = s.syncpointStore.Close()
-	}
+	close(s.closeCh)
 	s.wg.Wait()
-	return
+	return nil
+	//s.cancel()
+	//err = s.sink.Close(ctx)
+	//if s.syncpointStore != nil {
+	//	err = s.syncpointStore.Close()
+	//}
+	//s.wg.Wait()
+	//return
 }
