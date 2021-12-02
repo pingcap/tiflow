@@ -37,7 +37,7 @@ type pebbleLogger struct{ id int }
 var _ pebble.Logger = (*pebbleLogger)(nil)
 
 func (logger *pebbleLogger) Infof(format string, args ...interface{}) {
-	// Do not output low-leveldb pebble log to TiCDC log.
+	// Do not output low-level pebble log to TiCDC log.
 	log.Debug(fmt.Sprintf(format, args...), zap.Int("db", logger.id))
 }
 
