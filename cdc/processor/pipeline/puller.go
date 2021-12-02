@@ -83,7 +83,7 @@ func (n *pullerNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/ticdc/issues/2301.
-	plr := puller.NewPuller(ctxC, vars.PDClient, vars.GrpcPool, vars.KVStorage,
+	plr := puller.NewPuller(ctxC, vars.PDClient, vars.GrpcPool, vars.RegionCache, vars.KVStorage,
 		n.replicaInfo.StartTs, n.tableSpan(info.Info.Config), true)
 	n.wg.Go(func() error {
 		err := plr.Run(ctxC)
