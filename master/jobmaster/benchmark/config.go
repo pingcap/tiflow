@@ -22,9 +22,11 @@ type Config struct {
 
 	// FlowID is a unique identifier of submitted job
 	FlowID   string   `toml:"flow-id" json:"flow-id"`
-	TableNum int      `toml:"table-num" json:"table-num"`
+	TableNum int32    `toml:"table-num" json:"table-num"`
 	Servers  []string `toml:"servers"   json:"servers"`
-	Timeout  int      `toml:"timeout"   json:"timeout"`
+
+	RecordCnt    int32 `toml:"rcd-cnt" json:"rcd-cnt"`
+	DDLFrequency int32 `toml:"ddl-freq" json:"ddl-freq"`
 
 	configFile string `json:"-"`
 }

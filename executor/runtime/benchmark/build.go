@@ -11,6 +11,8 @@ func RegisterBuilder() {
 	runtime.OpBuilders[model.TableReaderType] = &receiveBuilder{}
 	runtime.OpBuilders[model.HashType] = &syncBuilder{}
 	runtime.OpBuilders[model.TableSinkType] = &sinkBuilder{}
+	runtime.OpBuilders[model.ProducerType] = &producerBuild{}
+	runtime.OpBuilders[model.BinlogType] = &binlogBuild{}
 }
 
 type syncBuilder struct{}
@@ -49,5 +51,36 @@ func (r *sinkBuilder) Build(op model.Operator) (runtime.Operator, bool, error) {
 			filePath: cfg.File,
 			tid:      cfg.TableID,
 		},
+	}, false, nil
+}
+
+type producerBuild struct{}
+
+func (b *producerBuild) Build(op model.Operator) (runtime.Operator, bool, error) {
+	cfg := &model.ProducerOp{}
+	err := json.Unmarshal(op, cfg)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return &opProducer{
+		tid:          cfg.TableID,
+		dataCnt:      cfg.RecordCnt,
+		outputCnt:    cfg.OutputCnt,
+		ddlFrequency: cfg.DDLFrequency,
+	}, true, nil
+}
+
+type binlogBuild struct{}
+
+func (b *binlogBuild) Build(op model.Operator) (runtime.Operator, bool, error) {
+	cfg := &model.BinlogOp{}
+	err := json.Unmarshal(op, cfg)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return &opBinlog{
+		addr: cfg.Address,
 	}, false, nil
 }

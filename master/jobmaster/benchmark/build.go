@@ -12,11 +12,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/autoid"
 )
 
-type jobMaster struct {
-	*system.Master
-	config *Config
-}
-
 // BuildBenchmarkJobMaster for benchmark workload.
 func BuildBenchmarkJobMaster(
 	rawConfig string,
@@ -33,6 +28,56 @@ func BuildBenchmarkJobMaster(
 	job := &model.Job{
 		ID: model.JobID(idAllocator.AllocID()),
 	}
+
+	// build producers
+	produceTasks := make([]*model.Task, 0)
+	binlogTasks := make([]*model.Task, 0)
+	for id := int32(0); id < config.TableNum; id++ {
+		produceOp := &model.ProducerOp{
+			TableID:      id,
+			RecordCnt:    config.RecordCnt,
+			DDLFrequency: config.DDLFrequency,
+			OutputCnt:    len(config.Servers),
+		}
+		js, err := json.Marshal(produceOp)
+		if err != nil {
+			return nil, err
+		}
+		produceTasks = append(produceTasks, &model.Task{
+			FlowID: config.FlowID,
+			JobID:  job.ID,
+			ID:     model.TaskID(idAllocator.AllocID()),
+			Cost:   1,
+			OpTp:   model.ProducerType,
+			Op:     js,
+		})
+	}
+	for _, addr := range config.Servers {
+		binlogOp := &model.BinlogOp{
+			Address: addr,
+		}
+		js, err := json.Marshal(binlogOp)
+		if err != nil {
+			return nil, err
+		}
+		binlogTasks = append(binlogTasks, &model.Task{
+			FlowID: config.FlowID,
+			JobID:  job.ID,
+			ID:     model.TaskID(idAllocator.AllocID()),
+			Cost:   1,
+			OpTp:   model.BinlogType,
+			Op:     js,
+		})
+	}
+
+	for _, inputTask := range produceTasks {
+		for _, outputTask := range binlogTasks {
+			connectTwoTask(inputTask, outputTask)
+		}
+	}
+
+	job.Tasks = append(job.Tasks, binlogTasks...)
+	job.Tasks = append(job.Tasks, produceTasks...)
 
 	tableTasks := make([]*model.Task, 0)
 	hashTasks := make([]*model.Task, 0)
@@ -92,7 +137,7 @@ func BuildBenchmarkJobMaster(
 		connectTwoTask(hashTask, sinkTask)
 	}
 
-	job.Tasks = tableTasks
+	job.Tasks = append(job.Tasks, tableTasks...)
 	job.Tasks = append(job.Tasks, hashTasks...)
 	job.Tasks = append(job.Tasks, sinkTasks...)
 	systemJobMaster := system.New(context.Background(), job, resourceMgr, client, mClient)
@@ -100,6 +145,11 @@ func BuildBenchmarkJobMaster(
 		Master: systemJobMaster,
 		config: config,
 	}
+	master.stage1 = append(master.stage1, produceTasks...)
+	master.stage1 = append(master.stage1, binlogTasks...)
+	master.stage2 = append(master.stage2, tableTasks...)
+	master.stage2 = append(master.stage2, hashTasks...)
+	master.stage2 = append(master.stage2, sinkTasks...)
 	return master, nil
 }
 

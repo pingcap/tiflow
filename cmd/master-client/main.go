@@ -29,7 +29,6 @@ func main() {
 		fmt.Printf("submit-job --config configFile")
 		os.Exit(0)
 	}
-
 	conn, err := grpc.Dial(addr, grpc.WithInsecure())
 	if err != nil {
 		fmt.Printf("err: %v", err)

@@ -136,6 +136,23 @@ func (t *taskContainer) tryFlush() (blocked bool) {
 }
 
 func (t *taskContainer) readDataFromInput(idx int, batch int) Chunk {
+	switch idx {
+	case DontNeedData:
+		return make(Chunk, 1) // return a record to drive
+	case DontRequireIndex:
+		var ret Chunk
+		for i, cache := range t.inputCache {
+			ret = append(ret, cache...)
+			t.inputCache[i] = t.inputCache[i][:0]
+		}
+		if len(ret) != 0 {
+			return ret
+		}
+		for _, input := range t.inputs {
+			ret = append(ret, input.readBatch(32)...)
+		}
+		return ret
+	}
 	if len(t.inputCache[idx]) != 0 {
 		chk := t.inputCache[idx]
 		t.inputCache[idx] = t.inputCache[idx][:0]
@@ -144,19 +161,17 @@ func (t *taskContainer) readDataFromInput(idx int, batch int) Chunk {
 	return t.inputs[idx].readBatch(batch)
 }
 
+const (
+	DontNeedData     int = -1
+	DontRequireIndex int = -2
+)
+
 func (t *taskContainer) Poll() TaskStatus {
 	if t.tryFlush() {
 		return Blocked
 	}
 	idx := t.op.NextWantedInputIdx()
-	r := make(Chunk, 1, 128)
-	if idx == -1 {
-		for i := range t.inputs {
-			r = append(r, t.readDataFromInput(i, 128)...)
-		}
-	} else {
-		r = t.readDataFromInput(idx, 128)
-	}
+	r := t.readDataFromInput(idx, 128)
 
 	if len(r) == 0 && len(t.inputs) != 0 {
 		// we don't have any input data
@@ -179,7 +194,8 @@ func (t *taskContainer) Poll() TaskStatus {
 		// TODO: limit the amount of output records
 		if blocked {
 			if i+1 < len(r) {
-				if idx == -1 {
+				if idx == DontRequireIndex {
+					// If we didn't require an index, put them to position 0.
 					idx = 0
 				}
 				t.inputCache[idx] = append(t.inputCache[idx], r[i+1:]...)

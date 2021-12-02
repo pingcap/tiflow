@@ -84,7 +84,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 	log.L().Logger.Info("finished build job")
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	err = jobMaster.DispatchJob(ctx)
+	err = jobMaster.Start(ctx)
 	if err != nil {
 		resp.Err = errors.ToPBError(err)
 		return resp

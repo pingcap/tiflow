@@ -3,6 +3,8 @@ package benchmark
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -58,7 +60,7 @@ type opReceive struct {
 	binlogClient pb.TestService_FeedBinlogClient
 }
 
-func (o *opReceive) NextWantedInputIdx() int { return -1 }
+func (o *opReceive) NextWantedInputIdx() int { return runtime.DontNeedData }
 
 func (o *opReceive) Close() error {
 	return o.conn.Close()
@@ -123,12 +125,16 @@ func (o *opReceive) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([]
 	o.cache = o.cache[:0]
 	i := 0
 	for ; i < 1024; i++ {
+		noMoreData := false
 		select {
 		case r := <-o.data:
 			o.cache = append(o.cache, r)
 		case err := <-o.errCh:
 			return nil, true, err
 		default:
+			noMoreData = true
+		}
+		if noMoreData {
 			break
 		}
 	}
@@ -181,3 +187,148 @@ func (o *opSink) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]run
 }
 
 func (o *opSink) NextWantedInputIdx() int { return 0 }
+
+type opProducer struct {
+	tid       int32
+	pk        int32
+	schemaVer int32
+	dataCnt   int32
+
+	ddlFrequency int32
+	outputCnt    int
+}
+
+func (o *opProducer) Close() error { return nil }
+
+func (o *opProducer) Prepare() error { return nil }
+
+func (o *opProducer) NextWantedInputIdx() int { return runtime.DontNeedData }
+
+func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([]runtime.Chunk, bool, error) {
+	outputData := make([]runtime.Chunk, o.outputCnt)
+	binlogID := 0
+	for i := 0; i < 128; i++ {
+		if o.pk >= o.dataCnt {
+			return outputData, true, nil
+		}
+		o.pk++
+		if o.pk == 10000 {
+			log.L().Info("got 10000 data")
+		}
+		if o.pk%o.ddlFrequency == 0 {
+			o.schemaVer++
+			for i := range outputData {
+				payload := &pb.Record{
+					Tp:        pb.Record_DDL,
+					Tid:       o.tid,
+					SchemaVer: o.schemaVer,
+				}
+				r := runtime.Record{
+					Tid:     o.tid,
+					Payload: payload,
+				}
+				outputData[i] = append(outputData[i], &r)
+			}
+		}
+		payload := &pb.Record{
+			Tp:        pb.Record_Data,
+			Tid:       o.tid,
+			SchemaVer: o.schemaVer,
+			Pk:        o.pk,
+		}
+		r := runtime.Record{
+			Tid:     o.tid,
+			Payload: payload,
+		}
+		outputData[binlogID] = append(outputData[binlogID], &r)
+		binlogID = (binlogID + 1) % o.outputCnt
+	}
+	return outputData, false, nil
+}
+
+type opBinlog struct {
+	binlogChan chan *runtime.Record
+	wal        []*runtime.Record
+	addr       string
+
+	server      mock.GrpcServer
+	cacheRecord *runtime.Record
+	ctx         *runtime.TaskContext
+}
+
+func (o *opBinlog) Close() error {
+	o.server.Stop()
+	return nil
+}
+
+func (o *opBinlog) Prepare() (err error) {
+	o.binlogChan = make(chan *runtime.Record, 1024)
+	if test.GlobalTestFlag {
+		o.server, err = mock.NewTestServer(o.addr, o)
+	} else {
+		lis, err := net.Listen("tcp", o.addr)
+		if err != nil {
+			return err
+		}
+		s := grpc.NewServer()
+		pb.RegisterTestServiceServer(s, o)
+		go func() {
+			err1 := s.Serve(lis)
+			if err1 != nil {
+				log.L().Logger.Error("start grpc server failed", zap.Error(err))
+				panic(err1)
+			}
+		}()
+	}
+	return err
+}
+
+func (o *opBinlog) NextWantedInputIdx() int {
+	if o.cacheRecord != nil {
+		return runtime.DontNeedData
+	}
+	return runtime.DontRequireIndex
+}
+
+func (o *opBinlog) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]runtime.Chunk, bool, error) {
+	if o.ctx == nil {
+		o.ctx = ctx
+	}
+	if o.cacheRecord != nil {
+		r = o.cacheRecord
+	}
+	select {
+	case o.binlogChan <- r:
+		o.cacheRecord = nil
+		return nil, false, nil
+	default:
+		o.cacheRecord = r
+		return nil, true, nil
+	}
+}
+
+func (o *opBinlog) FeedBinlog(req *pb.TestBinlogRequest, server pb.TestService_FeedBinlogServer) error {
+	id := int(req.Gtid)
+	if id > len(o.wal) {
+		return server.Send(&pb.Record{
+			Err: &pb.Error{Message: fmt.Sprintf("invalid gtid %d", id)},
+		})
+	}
+	for id < len(o.wal) {
+		err := server.Send(o.wal[id].Payload.(*pb.Record))
+		id++
+		if err != nil {
+			return err
+		}
+	}
+	for record := range o.binlogChan {
+		o.wal = append(o.wal, record)
+		err := server.Send(o.wal[id].Payload.(*pb.Record))
+		if err != nil {
+			return err
+		}
+		id++
+		o.ctx.Wake()
+	}
+	return nil
+}

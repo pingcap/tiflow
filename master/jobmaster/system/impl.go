@@ -170,9 +170,9 @@ func (m *Master) reScheduleTask(group scheduleGroup) error {
 	return err
 }
 
-func (m *Master) scheduleJobImpl(ctx context.Context) error {
-	reqTasks := make([]*pb.ScheduleTask, 0, len(m.job.Tasks))
-	for _, task := range m.job.Tasks {
+func (m *Master) scheduleJobImpl(ctx context.Context, tasks []*model.Task) error {
+	reqTasks := make([]*pb.ScheduleTask, 0, len(tasks))
+	for _, task := range tasks {
 		reqTasks = append(reqTasks, task.ToScheduleTaskPB())
 	}
 	req := &pb.TaskSchedulerRequest{Tasks: reqTasks}
@@ -181,28 +181,27 @@ func (m *Master) scheduleJobImpl(ctx context.Context) error {
 		// TODO: convert grpc error to rfc error
 		return err
 	}
-	tasks := make([]*Task, 0, len(m.job.Tasks))
-	for _, task := range m.job.Tasks {
+	sysTasks := make([]*Task, 0, len(tasks))
+	for _, task := range tasks {
 		schedule, ok := resp.GetSchedule()[int32(task.ID)]
 		if !ok {
 			return errors.ErrMasterScheduleMissTask.GenWithStackByArgs(task.ID)
 		}
-		tasks = append(tasks, &Task{
+		sysTasks = append(sysTasks, &Task{
 			Task: task,
 			exec: model.ExecutorID(schedule.GetExecutorId()),
 		})
 	}
 
-	m.start() // go
-	err = m.dispatch(ctx, tasks)
+	err = m.dispatch(ctx, sysTasks)
 	return err
 }
 
 // DispatchJob implements JobMaster interface.
-func (m *Master) DispatchJob(ctx context.Context) error {
+func (m *Master) DispatchTasks(ctx context.Context, tasks []*model.Task) error {
 	retry := 1
 	for i := 1; i <= retry; i++ {
-		if err := m.scheduleJobImpl(ctx); err == nil {
+		if err := m.scheduleJobImpl(ctx, tasks); err == nil {
 			return nil
 		} else if i == retry {
 			return err
@@ -213,7 +212,7 @@ func (m *Master) DispatchJob(ctx context.Context) error {
 }
 
 // Listen the events from every tasks
-func (m *Master) start() {
+func (m *Master) StartInternal() {
 	// Register Listen Handler to Msg Servers
 
 	// Run watch goroutines
