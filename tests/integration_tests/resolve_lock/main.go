@@ -32,7 +32,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/tests/util"
+	"github.com/pingcap/ticdc/tests/integration_tests/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/tablecodec"
