@@ -77,7 +77,7 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
 	if s != "" {
-		a, err := strconv.Atoi(s)
+		a, err := strconv.Atoi(s) // #nosec G109
 		if err != nil {
 			return err
 		}
@@ -89,7 +89,7 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 
 	s = params.Get("replication-factor")
 	if s != "" {
-		a, err := strconv.Atoi(s)
+		a, err := strconv.Atoi(s) // #nosec G109
 		if err != nil {
 			return err
 		}
