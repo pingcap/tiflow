@@ -374,7 +374,7 @@ while ! curl -o /dev/null -sf http://127.0.0.1:17000/metrics 1>/dev/null 2>&1; d
 done
 
 echo "Starting CDC state checker..."
-cd $CUR/../../testing_utils/cdc_state_checker
+cd $CUR/../../../testing_utils/cdc_state_checker
 if [ ! -f ./cdc_state_checker ]; then
 	GO111MODULE=on go build
 fi
