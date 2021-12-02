@@ -57,7 +57,8 @@ type changefeed struct {
 	// After the DDL event has been executed, ddlEventCache will be set to nil.
 	ddlEventCache *model.DDLEvent
 
-	errCh  chan error
+	errCh chan error
+	// this will be used to cancel the running goroutine of `AsyncSink` and `DDLPuller`
 	cancel context.CancelFunc
 
 	// The changefeed will start some backend goroutines in the function `initialize`,
@@ -268,13 +269,10 @@ LOOP:
 		return errors.Trace(err)
 	}
 
-	if err := c.sink.(*asyncSinkImpl).Initialize(cancelCtx); err != nil {
-		return errors.Trace(err)
-	}
 	c.wg.Add(1)
 	defer func() {
 		defer c.wg.Done()
-		ctx.Throw(c.sink.(*asyncSinkImpl).run(cancelCtx))
+		ctx.Throw(c.sink.Run(cancelCtx))
 	}()
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
