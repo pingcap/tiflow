@@ -117,7 +117,7 @@ func (s *asyncSinkImpl) initialize(ctx cdcContext.Context) error {
 
 func (s *asyncSinkImpl) Run(ctx cdcContext.Context) error {
 	if err := s.initialize(ctx); err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	// TODO make the tick duration configurable
