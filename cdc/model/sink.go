@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"unsafe"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/quotes"
@@ -261,8 +262,9 @@ type RowChangedEvent struct {
 	PreColumns   []*Column `json:"pre-columns" msg:"-"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
 
-	// approximate size of this event, calculate by tikv proto bytes size
-	ApproximateSize int64 `json:"-" msg:"-"`
+	// ApproximateDataSize is the approximate size of protobuf binary
+	// representation of this event.
+	ApproximateDataSize int64 `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event
@@ -316,12 +318,44 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 	return pkeyCols
 }
 
+// ApproximateBytes returns approximate bytes in memory consumed by the event.
+func (r *RowChangedEvent) ApproximateBytes() int {
+	const sizeOfRowEvent = int(unsafe.Sizeof(*r))
+	const sizeOfTable = int(unsafe.Sizeof(*r.Table))
+	const sizeOfIndexes = int(unsafe.Sizeof(r.IndexColumns[0]))
+	const sizeOfInt = int(unsafe.Sizeof(int(0)))
+
+	// Size of table name
+	size := len(r.Table.Schema) + len(r.Table.Table) + sizeOfTable
+	// Size of cols
+	for i := range r.Columns {
+		size += r.Columns[i].ApproximateBytes
+	}
+	// Size of pre cols
+	for i := range r.PreColumns {
+		if r.PreColumns[i] != nil {
+			size += r.PreColumns[i].ApproximateBytes
+		}
+	}
+	// Size of index columns
+	for i := range r.IndexColumns {
+		size += len(r.IndexColumns[i]) * sizeOfInt
+		size += sizeOfIndexes
+	}
+	// Size of an empty row event
+	size += sizeOfRowEvent
+	return size
+}
+
 // Column represents a column value in row changed event
 type Column struct {
 	Name  string         `json:"name" msg:"name"`
 	Type  byte           `json:"type" msg:"type"`
 	Flag  ColumnFlagType `json:"flag" msg:"-"`
 	Value interface{}    `json:"value" msg:"value"`
+
+	// ApproximateBytes is approximate bytes consumed by the column.
+	ApproximateBytes int `json:"-"`
 }
 
 // RedoColumn stores Column change

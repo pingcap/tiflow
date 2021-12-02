@@ -216,11 +216,6 @@ error = '''
 decode row data to datum failed
 '''
 
-["CDC:ErrEmitCheckpointTsFailed"]
-error = '''
-emit checkpoint ts failed
-'''
-
 ["CDC:ErrEncodeFailed"]
 error = '''
 encode failed: %s
@@ -264,21 +259,6 @@ exec DDL failed
 ["CDC:ErrFetchHandleValue"]
 error = '''
 can't find handle column, please check if the pk is handle
-'''
-
-["CDC:ErrFileSinkCreateDir"]
-error = '''
-file sink create dir
-'''
-
-["CDC:ErrFileSinkFileOp"]
-error = '''
-file sink file operation
-'''
-
-["CDC:ErrFileSinkMetaAlreadyExists"]
-error = '''
-file sink meta file already exists
 '''
 
 ["CDC:ErrFileSizeExceed"]
@@ -779,21 +759,6 @@ regions not completely left cover span, span %v regions: %v
 ["CDC:ErrResolveLocks"]
 error = '''
 resolve locks failed
-'''
-
-["CDC:ErrS3SinkInitialize"]
-error = '''
-new s3 sink
-'''
-
-["CDC:ErrS3SinkStorageAPI"]
-error = '''
-s3 sink storage api
-'''
-
-["CDC:ErrS3SinkWriteStorage"]
-error = '''
-write to storage
 '''
 
 ["CDC:ErrS3StorageAPI"]
