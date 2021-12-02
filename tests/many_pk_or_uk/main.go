@@ -23,7 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/tests/util"
+	"github.com/pingcap/ticdc/tests/integration_tests//util"
 )
 
 func main() {
