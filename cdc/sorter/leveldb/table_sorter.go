@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/actor"
 	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/db"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -110,6 +111,7 @@ func (ls *Sorter) waitInputOutput(
 	appendInputEvent := func(ev *model.PolymorphicEvent) {
 		if ls.lastSentResolvedTs != 0 && ev.CRTs < ls.lastSentResolvedTs {
 			log.Panic("commit ts < resolved ts",
+				zap.Uint64("lastSentResolvedTs", ls.lastSentResolvedTs),
 				zap.Any("event", ev), zap.Uint64("regionID", ev.RegionID()))
 		}
 		if ev.RawKV.OpType == model.OpTypeResolved {
@@ -434,6 +436,7 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 		//   maxCommitTs
 		//                 exhaustedResolvedTs
 		//                                   maxResolvedTs
+		// maxResolvedTs may be 0 in the first poll.
 		if maxCommitTs <= state.exhaustedResolvedTs && maxResolvedTs != 0 &&
 			lenResolvedEvents == 0 {
 			ls.outputResolvedTs(maxResolvedTs)
@@ -449,16 +452,16 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 		return errors.Trace(ctx.Err())
 	case snap, ok = <-snapCh:
 	}
-	if !ok {
-		if needSnap {
-			log.Panic("need snapshot", zap.Uint64("tableID", ls.tableID))
-		}
+	if !ok && needSnap {
+		return cerrors.ErrUnexpectedSnapshot.GenWithStackByArgs(ls.tableID)
 	}
 	iter := snap.Iterator(
 		encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
 		encoding.EncodeTsKey(ls.uid, ls.tableID, maxResolvedTs+1),
 	)
 	defer func() {
+		// Release iter and snap should be fast, otherwise it may block
+		// the funcation.
 		if err := iter.Release(); err != nil {
 			log.Error("iterator release error",
 				zap.Error(err), zap.Uint64("tableID", ls.tableID))
