@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -60,7 +59,7 @@ type mysqlSink struct {
 
 	txnCache           *common.UnresolvedTxnCache
 	workers            []*mysqlSinkWorker
-	resolvedTs         uint64
+	tableCheckpointTs  sync.Map
 	tableMaxResolvedTs sync.Map
 
 	execWaitNotifier *notify.Notifier
@@ -212,9 +211,6 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	if !ok || v.(uint64) < resolvedTs {
 		s.tableMaxResolvedTs.Store(tableID, resolvedTs)
 	}
-	// resolvedTs can be fallen back, such as a new table is added into this sink
-	// with a smaller start-ts
-	atomic.StoreUint64(&s.resolvedTs, resolvedTs)
 	s.resolvedNotifier.Notify()
 
 	// check and throw error
@@ -241,9 +237,13 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			return
 		case <-receiver.C:
 		}
-		resolvedTs := atomic.LoadUint64(&s.resolvedTs)
+		resolvedTs := s.getMaxResolvedTs()
 		resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
 		if len(resolvedTxnsMap) == 0 {
+			s.tableMaxResolvedTs.Range(func(key, value interface{}) bool {
+				s.tableCheckpointTs.Store(key, value)
+				return true
+			})
 			continue
 		}
 
@@ -255,7 +255,32 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		}
 
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		s.updateTableCheckpointTs(resolvedTxnsMap)
 	}
+}
+
+func (s *mysqlSink) updateTableCheckpointTs(resolvedTxnsMap map[model.TableID][]*model.SingleTableTxn) {
+	for tableID, txns := range resolvedTxnsMap {
+		maxCommitTs := uint64(0)
+		for _, txn := range txns {
+			if maxCommitTs < txn.CommitTs {
+				maxCommitTs = txn.CommitTs
+			}
+		}
+		s.tableCheckpointTs.Store(tableID, maxCommitTs)
+	}
+}
+
+func (s *mysqlSink) getMaxResolvedTs() uint64 {
+	var resolvedTs uint64
+	s.tableMaxResolvedTs.Range(func(key, value interface{}) bool {
+		tableResolvedTs := value.(uint64)
+		if tableResolvedTs > resolvedTs {
+			resolvedTs = tableResolvedTs
+		}
+		return true
+	})
+	return resolvedTs
 }
 
 func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -499,17 +524,11 @@ func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
 }
 
 func (s *mysqlSink) checkpointTs(tableID model.TableID) uint64 {
-	checkpointTs := uint64(0)
-	for _, worker := range s.workers {
-		v, ok := worker.tableCheckpointTsMap.Load(tableID)
-		if ok {
-			workerCheckpointTs := v.(uint64)
-			if checkpointTs == 0 || workerCheckpointTs < checkpointTs {
-				checkpointTs = workerCheckpointTs
-			}
-		}
+	v, ok := s.tableCheckpointTs.Load(tableID)
+	if ok {
+		return v.(uint64)
 	}
-	return checkpointTs
+	return uint64(0)
 }
 
 func logDMLTxnErr(err error) error {
