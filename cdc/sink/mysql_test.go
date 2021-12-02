@@ -54,7 +54,6 @@ func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
 }
 
 func TestPrepareDML(t *testing.T) {
-	t.Parallel()
 
 	testCases := []struct {
 		input    []*model.RowChangedEvent
@@ -98,7 +97,6 @@ func TestPrepareDML(t *testing.T) {
 }
 
 func TestPrepareUpdate(t *testing.T) {
-	t.Parallel()
 
 	testCases := []struct {
 		quoteTable   string
@@ -151,7 +149,6 @@ func TestPrepareUpdate(t *testing.T) {
 }
 
 func TestPrepareDelete(t *testing.T) {
-	t.Parallel()
 
 	testCases := []struct {
 		quoteTable   string
@@ -193,7 +190,6 @@ func TestPrepareDelete(t *testing.T) {
 }
 
 func TestWhereSlice(t *testing.T) {
-	t.Parallel()
 
 	testCases := []struct {
 		cols             []*model.Column
@@ -279,7 +275,6 @@ func TestWhereSlice(t *testing.T) {
 }
 
 func TestMapReplace(t *testing.T) {
-	t.Parallel()
 	testCases := []struct {
 		quoteTable    string
 		cols          []*model.Column
@@ -326,7 +321,6 @@ func (a sqlArgs) Less(i, j int) bool { return fmt.Sprintf("%s", a[i]) < fmt.Spri
 func (a sqlArgs) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
 func TestReduceReplace(t *testing.T) {
-	t.Parallel()
 	testCases := []struct {
 		replaces   map[string][][]interface{}
 		batchSize  int
@@ -454,7 +448,6 @@ func mockTestDB() (*sql.DB, error) {
 }
 
 func TestAdjustSQLMode(t *testing.T) {
-	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -559,7 +552,6 @@ func (s *mockUnavailableMySQL) Stop() {
 }
 
 func TestNewMySQLTimeout(t *testing.T) {
-	t.Parallel()
 
 	addr := "127.0.0.1:33333"
 	mockMySQL := newMockUnavailableMySQL(addr, t)
@@ -578,8 +570,6 @@ func TestNewMySQLTimeout(t *testing.T) {
 }
 
 func TestNewMySQLSinkExecDML(t *testing.T) {
-	t.Parallel()
-
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
@@ -704,7 +694,6 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
-	t.Parallel()
 
 	rows := []*model.RowChangedEvent{
 		{
@@ -772,7 +761,6 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
-	t.Parallel()
 
 	rows := []*model.RowChangedEvent{
 		{
@@ -840,7 +828,6 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrRetryable(t *testing.T) {
-	t.Parallel()
 
 	rows := []*model.RowChangedEvent{
 		{
@@ -910,8 +897,6 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 }
 
 func TestNewMySQLSinkExecDDL(t *testing.T) {
-	t.Parallel()
-
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
@@ -994,7 +979,6 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 }
 
 func TestNeedSwitchDB(t *testing.T) {
-	t.Parallel()
 	testCases := []struct {
 		ddl        *model.DDLEvent
 		needSwitch bool
@@ -1043,8 +1027,6 @@ func TestNeedSwitchDB(t *testing.T) {
 }
 
 func TestNewMySQLSink(t *testing.T) {
-	t.Parallel()
-
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
@@ -1084,8 +1066,6 @@ func TestNewMySQLSink(t *testing.T) {
 }
 
 func TestMySQLSinkClose(t *testing.T) {
-	t.Parallel()
-
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
