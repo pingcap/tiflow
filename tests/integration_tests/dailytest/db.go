@@ -23,7 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/tests/util"
+	"github.com/pingcap/ticdc/tests/integration_tests/util"
 	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap/zapcore"
 )
