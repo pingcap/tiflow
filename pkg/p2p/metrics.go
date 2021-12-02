@@ -14,6 +14,7 @@
 package p2p
 
 import (
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -53,6 +54,32 @@ var (
 		Name:      "repeated_count",
 		Help:      "count of received repeated messages",
 	}, []string{"from", "topic"})
+
+	grpcClientMetrics = grpc_prometheus.NewClientMetrics(func(opts *prometheus.CounterOpts) {
+		opts.Namespace = "ticdc"
+		opts.Subsystem = "message_client"
+	})
+
+	clientCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "ticdc",
+		Subsystem: "message_client",
+		Name:      "client_count",
+		Help:      "count of messaging clients",
+	}, []string{"to"})
+
+	clientMessageCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "ticdc",
+		Subsystem: "message_client",
+		Name:      "message_count",
+		Help:      "count of messages sent",
+	}, []string{"to"})
+
+	clientAckCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "ticdc",
+		Subsystem: "message_client",
+		Name:      "ack_count",
+		Help:      "count of ack messages received",
+	}, []string{"from"})
 )
 
 // InitMetrics initializes metrics used by pkg/p2p
@@ -62,4 +89,8 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(serverMessageBatchHistogram)
 	registry.MustRegister(serverAckCount)
 	registry.MustRegister(serverRepeatedMessageCount)
+	registry.MustRegister(grpcClientMetrics)
+	registry.MustRegister(clientCount)
+	registry.MustRegister(clientMessageCount)
+	registry.MustRegister(clientAckCount)
 }
