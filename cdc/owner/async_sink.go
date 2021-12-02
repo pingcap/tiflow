@@ -49,26 +49,24 @@ type AsyncSink interface {
 	// the DDL event will be sent to another goroutine and execute to downstream
 	// the caller of this function can call again and again until a true returned
 	EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
-	SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error
+	SinkSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
 	Close(ctx context.Context) error
 }
 
 type asyncSinkImpl struct {
 	sink           sink.Sink
-	syncpointStore sink.SyncpointStore
+	syncPointStore sink.SyncpointStore
 
-	checkpointTs model.Ts
-
+	checkpointTs  model.Ts
 	lastSyncPoint model.Ts
 
 	ddlCh         chan *model.DDLEvent
 	ddlFinishedTs model.Ts
 	ddlSentTs     model.Ts
 
-	cancel context.CancelFunc
-	errCh  chan error
+	errCh chan error
 
-	newBackendSink func(ctx cdcContext.Context) error
+	//newBackendSink func(ctx cdcContext.Context) error
 }
 
 func newAsyncSinkImpl(ctx cdcContext.Context) (AsyncSink, error) {
@@ -78,27 +76,13 @@ func newAsyncSinkImpl(ctx cdcContext.Context) (AsyncSink, error) {
 	}, nil
 }
 
-func (s *asyncSinkImpl) Initialize(ctx cdcContext.Context) error {
+func (s *asyncSinkImpl) initialize(ctx cdcContext.Context) error {
 	var (
-		err  error
 		id   = ctx.ChangefeedVars().ID
 		info = ctx.ChangefeedVars().Info
 	)
 
 	eg, ctx1 := errgroup.WithContext(ctx)
-	eg.Go(func() error {
-		if info.SyncPointEnabled {
-			s.syncpointStore, err = sink.NewSyncpointStore(ctx1, id, info.SinkURI)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			if err := s.syncpointStore.CreateSynctable(ctx1); err != nil {
-				return errors.Trace(err)
-			}
-		}
-		return nil
-	})
-
 	eg.Go(func() error {
 		filter, err := filter.NewFilter(info.Config)
 		if err != nil {
@@ -113,10 +97,29 @@ func (s *asyncSinkImpl) Initialize(ctx cdcContext.Context) error {
 		return nil
 	})
 
+	eg.Go(func() error {
+		if info.SyncPointEnabled {
+			syncPointStore, err := sink.NewSyncpointStore(ctx1, id, info.SinkURI)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			s.syncPointStore = syncPointStore
+
+			if err := s.syncPointStore.CreateSynctable(ctx1); err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
+	})
+
 	return eg.Wait()
 }
 
 func (s *asyncSinkImpl) Run(ctx cdcContext.Context) error {
+	if err := s.initialize(ctx); err != nil {
+		return err
+	}
+
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -179,20 +182,19 @@ func (s *asyncSinkImpl) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent
 	return false, nil
 }
 
-func (s *asyncSinkImpl) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error {
+func (s *asyncSinkImpl) SinkSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
 	if checkpointTs == s.lastSyncPoint {
 		return nil
 	}
 	s.lastSyncPoint = checkpointTs
-	// TODO implement async sink syncpoint
-	return s.syncpointStore.SinkSyncpoint(ctx, ctx.ChangefeedVars().ID, checkpointTs)
+	// TODO implement async sink syncPoint
+	return s.syncPointStore.SinkSyncpoint(ctx, ctx.ChangefeedVars().ID, checkpointTs)
 }
 
 func (s *asyncSinkImpl) Close(ctx context.Context) (err error) {
-	s.cancel()
 	err = s.sink.Close(ctx)
-	if s.syncpointStore != nil {
-		err = s.syncpointStore.Close()
+	if s.syncPointStore != nil {
+		err = s.syncPointStore.Close()
 	}
 	return err
 }
