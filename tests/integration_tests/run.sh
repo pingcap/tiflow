@@ -4,6 +4,7 @@ set -eu
 
 OUT_DIR=/tmp/tidb_cdc_test
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+echo $PATH
 export PATH=$PATH:$CUR/_utils:$CUR/../bin
 echo $CUR
 echo $PATH
