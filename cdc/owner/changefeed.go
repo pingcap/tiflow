@@ -184,6 +184,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// CheckpointCannotProceed implies that not all tables are being replicated normally,
+	// so in that case there is no need to advance the global watermarks.
 	if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
 		pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
 		currentTs := oracle.GetPhysical(pdTime)
