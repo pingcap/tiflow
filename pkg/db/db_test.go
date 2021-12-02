@@ -31,7 +31,7 @@ func TestDB(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := OpenDB(ctx, 1, filepath.Join(t.TempDir(), "1"), cfg)
+	db, err := OpenLevelDB(ctx, 1, filepath.Join(t.TempDir(), "1"), cfg)
 	require.Nil(t, err)
 	testDB(t, db)
 
