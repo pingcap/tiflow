@@ -665,8 +665,9 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	err = sink.EmitRowChangedEvents(ctx, rows...)
 	require.Nil(t, err)
 
+	// retry to make sure event is flushed
 	err = retry.Do(context.Background(), func() error {
-		ts, err := sink.FlushRowChangedEvents(ctx, 2, uint64(2))
+		ts, err := sink.FlushRowChangedEvents(ctx, 1, uint64(2))
 		require.Nil(t, err)
 		if ts < uint64(2) {
 			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 2)

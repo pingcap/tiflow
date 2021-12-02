@@ -224,13 +224,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	default:
 	}
 
-	checkpointTs := resolvedTs
-	for _, worker := range s.workers {
-		v, ok := worker.tableCheckpointTsMap.Load(tableID)
-		if ok && v.(uint64) < checkpointTs {
-			checkpointTs = v.(uint64)
-		}
-	}
+	checkpointTs := s.checkpointTs(tableID)
 	s.statistics.PrintStatus(ctx)
 	return checkpointTs, nil
 }
