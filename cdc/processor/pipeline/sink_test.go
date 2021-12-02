@@ -568,7 +568,7 @@ func (s *outputSuite) TestHandleActorMessage(c *check.C) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(sink, 2, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 2, 10, &mockFlowController{})
 	c.Check(node.HandleActorMessage(ctx, message.TickMessage()), check.IsNil)
 	c.Check(node.barrierTs, check.Equals, model.Ts(2))
 	c.Check(node.HandleActorMessage(ctx, message.BarrierMessage(3)), check.IsNil)
@@ -588,7 +588,7 @@ func (s *outputSuite) TestTryHandleDataMessage(c *check.C) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(sink, 2, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 2, 10, &mockFlowController{})
 	ok, err := node.TryHandleDataMessage(ctx, pipeline.TickMessage())
 	c.Assert(ok, check.IsTrue)
 	c.Assert(err, check.IsNil)
