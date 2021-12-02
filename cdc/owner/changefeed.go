@@ -72,7 +72,7 @@ type changefeed struct {
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
-	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
+	newSink      func(ctx cdcContext.Context) AsyncSink
 }
 
 func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
@@ -96,7 +96,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 func newChangefeed4Test(
 	id model.ChangeFeedID, gcManager gc.Manager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
-	newSink func(ctx cdcContext.Context) (AsyncSink, error),
+	newSink func(ctx cdcContext.Context) AsyncSink,
 ) *changefeed {
 	c := newChangefeed(id, gcManager)
 	c.newDDLPuller = newDDLPuller
@@ -264,11 +264,7 @@ LOOP:
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
-	c.sink, err = c.newSink(cancelCtx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
+	c.sink = c.newSink(cancelCtx)
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()

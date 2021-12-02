@@ -70,11 +70,11 @@ type asyncSinkImpl struct {
 	errCh chan error
 }
 
-func newAsyncSinkImpl(ctx cdcContext.Context) (AsyncSink, error) {
+func newAsyncSinkImpl(ctx cdcContext.Context) AsyncSink {
 	return &asyncSinkImpl{
 		ddlCh: make(chan *model.DDLEvent, 1),
 		errCh: make(chan error, defaultErrChSize),
-	}, nil
+	}
 }
 
 func (s *asyncSinkImpl) initialize(ctx cdcContext.Context) error {
