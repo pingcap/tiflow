@@ -642,21 +642,11 @@ func (r *BinlogReader) parseFile(
 	}
 
 	err = r.parser.ParseReader(state.f, onEventFunc)
-	if err != nil {
-		if state.possibleLast && isIgnorableParseError(err) {
-			r.tctx.L().Warn("fail to parse relay log file, meet some ignorable error", zap.String("file", state.fullPath), zap.Int64("offset", offset), zap.Error(err))
-		} else {
-			r.tctx.L().Error("parse relay log file", zap.String("file", state.fullPath), zap.Int64("offset", offset), zap.Error(err))
-			return false, false, terror.ErrParserParseRelayLog.Delegate(err, state.fullPath)
-		}
+	if err != nil && (!state.possibleLast || !isIgnorableParseError(err)) {
+		r.tctx.L().Error("parse relay log file", zap.String("file", state.fullPath), zap.Int64("offset", offset), zap.Error(err))
+		return false, false, terror.ErrParserParseRelayLog.Delegate(err, state.fullPath)
 	}
 	r.tctx.L().Debug("parse relay log file", zap.String("file", state.fullPath), zap.Int64("offset", state.latestPos))
-
-	if !state.possibleLast {
-		// there are more relay log files in current sub directory, continue to re-collect them
-		r.tctx.L().Info("more relay log files need to parse", zap.String("directory", state.relayLogDir))
-		return false, false, nil
-	}
 
 	return r.waitBinlogChanged(ctx, state)
 }

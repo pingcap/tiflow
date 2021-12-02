@@ -547,8 +547,7 @@ func (r *Relay) preprocessEvent(e *replication.BinlogEvent, parser2 *parser.Pars
 //   1. read events from upstream
 //   2. transform events
 //   3. write events into relay log files
-//   4. update metadata if needed
-// the first return value is the index of last read rows event if the transaction is not finished.
+//   4. update metadata if needed.
 func (r *Relay) handleEvents(
 	ctx context.Context,
 	reader2 Reader,
