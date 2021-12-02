@@ -16,6 +16,7 @@ package etcd
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -100,13 +101,15 @@ func (s *etcdSuite) TestWatchWithChan(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
-	logfile, err := os.CreateTemp("", "watch-test")
-	logConfig := &logutil.Config{}
-	logConfig.Adjust()
-	logConfig.File = logfile.Name()
-	logutil.InitLogger(logConfig)
+	f := filepath.Join(c.MkDir(), "test")
+	cfg := &logutil.Config{
+		Level: "warning",
+		File:  f,
+	}
+	cfg.Adjust()
+	cfg.File = f
+	logutil.InitLogger(cfg)
 
-	c.Assert(err, check.IsNil)
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{s.clientURL.String()},
 		DialTimeout: 3 * time.Second,
@@ -134,7 +137,7 @@ func (s *etcdSuite) TestWatchWithChan(c *check.C) {
 	mockClock.Add(time.Second * 20)
 	<-closeCh
 
-	logOutPut, err := os.ReadFile(logfile.Name())
+	logOutPut, err := os.ReadFile(f)
 	c.Assert(err, check.IsNil)
 	// make sure watchCh has been reset
 	c.Assert(strings.Contains(string(logOutPut), "etcd watchCh blocking too long"), check.IsTrue)
