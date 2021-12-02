@@ -216,11 +216,6 @@ error = '''
 decode row data to datum failed
 '''
 
-["CDC:ErrEmitCheckpointTsFailed"]
-error = '''
-emit checkpoint ts failed
-'''
-
 ["CDC:ErrEncodeFailed"]
 error = '''
 encode failed: %s
@@ -269,21 +264,6 @@ exec DDL failed
 ["CDC:ErrFetchHandleValue"]
 error = '''
 can't find handle column, please check if the pk is handle
-'''
-
-["CDC:ErrFileSinkCreateDir"]
-error = '''
-file sink create dir
-'''
-
-["CDC:ErrFileSinkFileOp"]
-error = '''
-file sink file operation
-'''
-
-["CDC:ErrFileSinkMetaAlreadyExists"]
-error = '''
-file sink meta file already exists
 '''
 
 ["CDC:ErrFileSizeExceed"]
@@ -641,6 +621,26 @@ error = '''
 etcd api call error
 '''
 
+["CDC:ErrPeerMessageDataLost"]
+error = '''
+peer-to-peer message data lost, topic: %s, seq: %s
+'''
+
+["CDC:ErrPeerMessageDecodeError"]
+error = '''
+failed to decode peer-to-peer message
+'''
+
+["CDC:ErrPeerMessageDuplicateConnection"]
+error = '''
+peer-to-peer message duplicate connection: epoch %d
+'''
+
+["CDC:ErrPeerMessageIllegalClientVersion"]
+error = '''
+peer-to-peer message client reported illegal version: %s
+'''
+
 ["CDC:ErrPeerMessageIllegalMeta"]
 error = '''
 peer-to-peer message server received an RPC call with illegal metadata
@@ -649,6 +649,36 @@ peer-to-peer message server received an RPC call with illegal metadata
 ["CDC:ErrPeerMessageInternalSenderClosed"]
 error = '''
 peer-to-peer message server tries to send to a closed stream. Internal only.
+'''
+
+["CDC:ErrPeerMessageReceiverMismatch"]
+error = '''
+peer-to-peer message receiver is a mismatch: expected %s, got %s
+'''
+
+["CDC:ErrPeerMessageServerClosed"]
+error = '''
+peer-to-peer message server has closed connection: %s.
+'''
+
+["CDC:ErrPeerMessageStaleConnection"]
+error = '''
+peer-to-peer message stale connection: old-epoch %d, new-epoch %d
+'''
+
+["CDC:ErrPeerMessageTaskQueueCongested"]
+error = '''
+peer-to-peer message server has too many pending tasks
+'''
+
+["CDC:ErrPeerMessageToManyPeers"]
+error = '''
+peer-to-peer message server got too many peers: %d peers
+'''
+
+["CDC:ErrPeerMessageTopicCongested"]
+error = '''
+peer-to-peer message topic has congested, aborting all connections
 '''
 
 ["CDC:ErrPendingRegionCancel"]
@@ -759,21 +789,6 @@ regions not completely left cover span, span %v regions: %v
 ["CDC:ErrResolveLocks"]
 error = '''
 resolve locks failed
-'''
-
-["CDC:ErrS3SinkInitialize"]
-error = '''
-new s3 sink
-'''
-
-["CDC:ErrS3SinkStorageAPI"]
-error = '''
-s3 sink storage api
-'''
-
-["CDC:ErrS3SinkWriteStorage"]
-error = '''
-write to storage
 '''
 
 ["CDC:ErrS3StorageAPI"]
