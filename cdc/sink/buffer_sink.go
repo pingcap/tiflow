@@ -17,6 +17,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -42,7 +43,7 @@ func newBufferSink(
 	errCh chan error,
 	checkpointTs model.Ts,
 	drawbackChan chan drawbackMsg,
-) Sink {
+) *bufferSink {
 	sink := &bufferSink{
 		Sink: backendSink,
 		// buffer shares the same flow control with table sink
@@ -84,33 +85,34 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 		case flushEvent := <-b.flushTsChan:
 			b.bufferMu.Lock()
 			resolvedTs := flushEvent.resolvedTs
-			tableID := flushEvent.tableID
 			// find all rows before resolvedTs and emit to backend sink
-			rows := b.buffer[tableID]
-			i := sort.Search(len(rows), func(i int) bool {
-				return rows[i].CommitTs > resolvedTs
-			})
-			metricTotalRows.Add(float64(i))
+			for tableID, rows := range b.buffer {
+				i := sort.Search(len(rows), func(i int) bool {
+					return rows[i].CommitTs > resolvedTs
+				})
+				metricTotalRows.Add(float64(i))
 
-			start := time.Now()
-			err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)
-			if err != nil {
-				b.bufferMu.Unlock()
-				if errors.Cause(err) != context.Canceled {
-					errCh <- err
+				start := time.Now()
+				err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)
+				if err != nil {
+					b.bufferMu.Unlock()
+					if errors.Cause(err) != context.Canceled {
+						errCh <- err
+					}
+					return
 				}
-				return
-			}
-			dur := time.Since(start)
-			metricEmitRowDuration.Observe(dur.Seconds())
+				dur := time.Since(start)
+				metricEmitRowDuration.Observe(dur.Seconds())
 
-			// put remaining rows back to buffer
-			// append to a new, fixed slice to avoid lazy GC
-			b.buffer[tableID] = append(make([]*model.RowChangedEvent, 0, len(rows[i:])), rows[i:]...)
+				// put remaining rows back to buffer
+				// append to a new, fixed slice to avoid lazy GC
+				b.buffer[tableID] = append(make([]*model.RowChangedEvent, 0, len(rows[i:])), rows[i:]...)
+			}
 			b.bufferMu.Unlock()
 
-			start = time.Now()
-			checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+			start := time.Now()
+			tableID := flushEvent.tableID
+			checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, flushEvent.tableID, resolvedTs)
 			if err != nil {
 				if errors.Cause(err) != context.Canceled {
 					errCh <- err
@@ -119,7 +121,7 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 			}
 			b.tableCheckpointTsMap.Store(tableID, checkpointTs)
 
-			dur = time.Since(start)
+			dur := time.Since(start)
 			metricFlushDuration.Observe(dur.Seconds())
 			if dur > 3*time.Second {
 				log.Warn("flush row changed events too slow",
@@ -169,5 +171,9 @@ func (b *bufferSink) getCheckpointTs(tableID model.TableID) uint64 {
 	if ok {
 		return checkPoints.(uint64)
 	}
-	return b.changeFeedCheckpointTs
+	return atomic.LoadUint64(&b.changeFeedCheckpointTs)
+}
+
+func (b *bufferSink) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
+	atomic.StoreUint64(&b.changeFeedCheckpointTs, checkpointTs)
 }
