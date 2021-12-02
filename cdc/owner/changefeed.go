@@ -272,7 +272,10 @@ LOOP:
 		return errors.Trace(err)
 	}
 	c.wg.Add(1)
-	go c.sink.(*asyncSinkImpl).run(cancelCtx)
+	defer func() {
+		defer c.wg.Done()
+		ctx.Throw(c.sink.(*asyncSinkImpl).run(cancelCtx))
+	}()
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
