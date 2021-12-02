@@ -63,6 +63,7 @@ type tableActor struct {
 
 	info             *cdcContext.ChangefeedVars
 	vars             *cdcContext.GlobalVars
+	replConfig       *serverConfig.ReplicaConfig
 	tableActorRouter *actor.Router
 
 	actorMessageHandler ActorMessageHandler
@@ -106,6 +107,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
 		mounter:       mounter,
 		replicaInfo:   replicaInfo,
+		replConfig:    config,
 		sink:          sink,
 		targetTs:      targetTs,
 		started:       false,
@@ -182,7 +184,7 @@ func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePi
 	}
 
 	flowController := common.NewTableFlowController(t.memoryQuota)
-	actorSorterNode := tablePipelineNodeCreator.NewSorterNode(t.tableID, t.tableName, t.replicaInfo.StartTs, flowController, t.mounter)
+	actorSorterNode := tablePipelineNodeCreator.NewSorterNode(t.tableID, t.tableName, t.replicaInfo.StartTs, flowController, t.mounter, t.replConfig)
 	if err := actorSorterNode.StartActorNode(ctx, t.tableActorRouter, t.wg, t.info, t.vars); err != nil {
 		log.Error("sorter fails to start", zap.Error(err))
 		return err
@@ -205,7 +207,7 @@ func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePi
 		})
 	}
 
-	actorSinkNode := tablePipelineNodeCreator.NewSinkNode(t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
+	actorSinkNode := tablePipelineNodeCreator.NewSinkNode(t.tableID, t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
 	if err := actorSinkNode.StartActorNode(ctx, t.tableActorRouter, t.wg, t.info, t.vars); err != nil {
 		log.Error("sink fails to start", zap.Error(err))
 		return err
@@ -398,9 +400,9 @@ func (fn ActorMessageHandlerFunc) HandleActorMessage(ctx context.Context, msg me
 
 type TablePipelineNodeCreator interface {
 	NewPullerNode(tableID model.TableID, tableName string, replicaInfo *model.TableReplicaInfo) TableActorDataNode
-	NewSorterNode(tableID model.TableID, tableName string, startTs model.Ts, flowController tableFlowController, mounter entry.Mounter) TableActorDataNode
+	NewSorterNode(tableID model.TableID, tableName string, startTs model.Ts, flowController tableFlowController, mounter entry.Mounter, replConfig *serverConfig.ReplicaConfig) TableActorDataNode
 	NewCyclicNode(markTableID model.TableID) TableActorDataNode
-	NewSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) TableActorSinkNode
+	NewSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) TableActorSinkNode
 }
 
 type nodeCreatorImpl struct{}
@@ -409,16 +411,16 @@ func (n *nodeCreatorImpl) NewPullerNode(tableID model.TableID, tableName string,
 	return newPullerNode(tableID, replicaInfo, tableName).(*pullerNode)
 }
 
-func (n *nodeCreatorImpl) NewSorterNode(tableID model.TableID, tableName string, startTs model.Ts, flowController tableFlowController, mounter entry.Mounter) TableActorDataNode {
-	return newSorterNode(tableName, tableID, startTs, flowController, mounter)
+func (n *nodeCreatorImpl) NewSorterNode(tableID model.TableID, tableName string, startTs model.Ts, flowController tableFlowController, mounter entry.Mounter, replConfig *serverConfig.ReplicaConfig) TableActorDataNode {
+	return newSorterNode(tableName, tableID, startTs, flowController, mounter, replConfig)
 }
 
 func (n *nodeCreatorImpl) NewCyclicNode(markTableID model.TableID) TableActorDataNode {
 	return newCyclicMarkNode(markTableID).(*cyclicMarkNode)
 }
 
-func (n *nodeCreatorImpl) NewSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) TableActorSinkNode {
-	return newSinkNode(sink, startTs, targetTs, flowController)
+func (n *nodeCreatorImpl) NewSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) TableActorSinkNode {
+	return newSinkNode(tableID, sink, startTs, targetTs, flowController)
 }
 
 func NewTablePipelineNodeCreator() TablePipelineNodeCreator {

@@ -202,7 +202,15 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 					err := msg.WaitPrepare(ctx)
 					if err != nil {
 						if errors.Cause(err) != context.Canceled {
-							ctx.Throw(err)
+							if !n.isTableActorMode {
+								ctx.(pipeline.NodeContext).Throw(errors.Trace(sorter.Run(stdCtx)))
+							} else {
+								err := sorter.Run(stdCtx)
+								if err != nil {
+									log.Error("sorter stopped", zap.Error(err))
+								}
+								_ = n.tableActorRouter.SendB(stdCtx, n.tableActorID, message.StopMessage())
+							}
 						}
 						return errors.Trace(err)
 					}
