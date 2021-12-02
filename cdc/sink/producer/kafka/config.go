@@ -66,7 +66,7 @@ func NewConfig() *Config {
 	}
 }
 
-// CompleteByOpts the kafka configuration.
+// CompleteByOpts the kafka producer configuration.
 func (c *Config) CompleteByOpts(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
 	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
