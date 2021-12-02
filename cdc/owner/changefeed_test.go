@@ -71,6 +71,10 @@ type mockAsyncSink struct {
 	syncPointHis []model.Ts
 }
 
+func (m *mockAsyncSink) buildBackendSink(ctx cdcContext.Context) error {
+	return nil
+}
+
 func (m *mockAsyncSink) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	m.ddlExecuting = ddl
 	defer func() { m.ddlDone = false }()
@@ -83,10 +87,6 @@ func (m *mockAsyncSink) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint6
 	}
 	m.syncPoint = checkpointTs
 	m.syncPointHis = append(m.syncPointHis, checkpointTs)
-	return nil
-}
-
-func (m *mockAsyncSink) Initialize(ctx cdcContext.Context, tableInfo []*model.SimpleTableInfo) error {
 	return nil
 }
 
