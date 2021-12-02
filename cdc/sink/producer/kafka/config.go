@@ -270,7 +270,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// Time out in one minute(120 * 500ms).
 	config.Admin.Retry.Max = 120
 	config.Admin.Retry.Backoff = 500 * time.Millisecond
-	config.Admin.Timeout = 20 * time.Second
+	config.Admin.Timeout = 1 * time.Minute
 
 	if c.Credential != nil && len(c.Credential.CAPath) != 0 {
 		config.Net.TLS.Enable = true
