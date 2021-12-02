@@ -148,6 +148,10 @@ func (p *pebbleDB) Batch(cap int) Batch {
 	}
 }
 
+func (p *pebbleDB) Compact(start, end []byte) error {
+	return p.db.Compact(start, end)
+}
+
 func (p *pebbleDB) Close() error {
 	return p.db.Close()
 }

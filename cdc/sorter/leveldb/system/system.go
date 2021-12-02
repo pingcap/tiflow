@@ -45,15 +45,17 @@ const (
 
 // System manages db sorter resource.
 type System struct {
-	dbs         []db.DB
-	dbSystem    *actor.System
-	dbRouter    *actor.Router
-	cleanSystem *actor.System
-	cleanRouter *actor.Router
-	dir         string
-	cfg         *config.DBConfig
-	closedCh    chan struct{}
-	closedWg    *sync.WaitGroup
+	dbs           []db.DB
+	dbSystem      *actor.System
+	dbRouter      *actor.Router
+	cleanSystem   *actor.System
+	cleanRouter   *actor.Router
+	compactSystem *actor.System
+	compactRouter *actor.Router
+	dir           string
+	cfg           *config.DBConfig
+	closedCh      chan struct{}
+	closedWg      *sync.WaitGroup
 
 	state   sysState
 	stateMu *sync.Mutex
@@ -65,17 +67,21 @@ func NewSystem(dir string, cfg *config.DBConfig) *System {
 		WorkerNumber(cfg.Count).Build()
 	cleanSystem, cleanRouter := actor.NewSystemBuilder("cleaner").
 		WorkerNumber(cfg.Count).Build()
+	compactSystem, compactRouter := actor.NewSystemBuilder("compactor").
+		WorkerNumber(cfg.Count).Build()
 	return &System{
-		dbSystem:    dbSystem,
-		dbRouter:    dbRouter,
-		cleanSystem: cleanSystem,
-		cleanRouter: cleanRouter,
-		dir:         dir,
-		cfg:         cfg,
-		closedCh:    make(chan struct{}),
-		closedWg:    new(sync.WaitGroup),
-		state:       sysStateInit,
-		stateMu:     new(sync.Mutex),
+		dbSystem:      dbSystem,
+		dbRouter:      dbRouter,
+		cleanSystem:   cleanSystem,
+		cleanRouter:   cleanRouter,
+		compactSystem: compactSystem,
+		compactRouter: compactRouter,
+		dir:           dir,
+		cfg:           cfg,
+		closedCh:      make(chan struct{}),
+		closedWg:      new(sync.WaitGroup),
+		state:         sysStateInit,
+		stateMu:       new(sync.Mutex),
 	}
 }
 
@@ -123,6 +129,7 @@ func (s *System) Start(ctx context.Context) error {
 	}
 	s.state = sysStateStarted
 
+	s.compactSystem.Start(ctx)
 	s.dbSystem.Start(ctx)
 	s.cleanSystem.Start(ctx)
 	captureAddr := config.GetGlobalServerConfig().AdvertiseAddr
@@ -134,9 +141,20 @@ func (s *System) Start(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		s.dbs = append(s.dbs, db)
+		// Create and spawn compactor actor.
+		compactor, cmb, err :=
+			lsorter.NewCompactActor(id, db, s.cfg, s.closedWg, captureAddr)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = s.compactSystem.Spawn(cmb, compactor)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		compact := lsorter.NewCompactScheduler(s.compactRouter, s.cfg)
 		// Create and spawn db actor.
-		dbac, dbmb, err := lsorter.NewDBActor(
-			ctx, id, db, s.cfg, s.closedWg, captureAddr)
+		dbac, dbmb, err :=
+			lsorter.NewDBActor(id, db, s.cfg, compact, s.closedWg, captureAddr)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -146,7 +164,7 @@ func (s *System) Start(ctx context.Context) error {
 		}
 		// Create and spawn cleaner actor.
 		clac, clmb, err := lsorter.NewCleanerActor(
-			id, db, s.cleanRouter, s.cfg, s.closedWg)
+			id, db, s.cleanRouter, compact, s.cfg, s.closedWg)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -196,6 +214,7 @@ func (s *System) Stop() error {
 	// Close actors
 	s.broadcast(ctx, s.dbRouter, message.StopMessage())
 	s.broadcast(ctx, s.cleanRouter, message.StopMessage())
+	s.broadcast(ctx, s.compactRouter, message.StopMessage())
 	// Close metrics goroutine.
 	close(s.closedCh)
 	// Wait actors and metrics goroutine.
@@ -207,6 +226,10 @@ func (s *System) Stop() error {
 		return errors.Trace(err)
 	}
 	err = s.cleanSystem.Stop()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = s.compactSystem.Stop()
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -34,12 +34,16 @@ import (
 
 // DBActor is a db actor, it reads, writes and deletes key value pair in its db.
 type DBActor struct {
-	id       actor.ID
-	db       db.DB
-	wb       db.Batch
-	wbSize   int
-	wbCap    int
-	iterSema *semaphore.Weighted
+	id      actor.ID
+	db      db.DB
+	wb      db.Batch
+	wbSize  int
+	wbCap   int
+	snapSem *semaphore.Weighted
+
+	deleteCount int
+	compact     *CompactScheduler
+
 	closedWg *sync.WaitGroup
 
 	metricWriteDuration prometheus.Observer
@@ -50,7 +54,7 @@ var _ actor.Actor = (*DBActor)(nil)
 
 // NewDBActor returns a db actor.
 func NewDBActor(
-	ctx context.Context, id int, db db.DB, cfg *config.DBConfig,
+	id int, db db.DB, cfg *config.DBConfig, compact *CompactScheduler,
 	wg *sync.WaitGroup, captureAddr string,
 ) (*DBActor, actor.Mailbox, error) {
 	idTag := strconv.Itoa(id)
@@ -66,18 +70,31 @@ func NewDBActor(
 	iterSema := semaphore.NewWeighted(int64(cfg.Concurrency))
 	mb := actor.NewMailbox(actor.ID(id), cfg.Concurrency)
 	wg.Add(1)
-	return &DBActor{
-		id:       actor.ID(id),
-		db:       db,
-		wb:       wb,
-		iterSema: iterSema,
-		wbSize:   wbSize,
-		wbCap:    wbCap,
+
+	dba := &DBActor{
+		id:      actor.ID(id),
+		db:      db,
+		wb:      wb,
+		snapSem: iterSema,
+		wbSize:  wbSize,
+		wbCap:   wbCap,
+		compact: compact,
+
 		closedWg: wg,
 
 		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(captureAddr, idTag),
 		metricWriteBytes:    sorterWriteBytesHistogram.WithLabelValues(captureAddr, idTag),
-	}, mb, nil
+	}
+	return dba, mb, nil
+}
+
+// Schedule a compact task when there are too many deletion.
+func (ldb *DBActor) maybeScheduleCompact() {
+	if ldb.compact.maybeCompact(ldb.id, ldb.deleteCount) {
+		// Reset delete key count if schedule compaction successfully.
+		ldb.deleteCount = 0
+		return
+	}
 }
 
 func (ldb *DBActor) close(err error) {
@@ -85,13 +102,13 @@ func (ldb *DBActor) close(err error) {
 	ldb.closedWg.Done()
 }
 
-func (ldb *DBActor) maybeWrite(force bool) error {
+func (ldb *DBActor) maybeWrite(force bool) (bool, error) {
 	bytes := len(ldb.wb.Repr())
 	if bytes >= ldb.wbSize || (force && bytes != 0) {
 		startTime := time.Now()
 		err := ldb.wb.Commit()
 		if err != nil {
-			return cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
+			return false, cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
 		}
 		ldb.metricWriteDuration.Observe(time.Since(startTime).Seconds())
 		ldb.metricWriteBytes.Observe(float64(bytes))
@@ -102,8 +119,9 @@ func (ldb *DBActor) maybeWrite(force bool) error {
 		} else {
 			ldb.wb = ldb.db.Batch(ldb.wbCap)
 		}
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 // Poll implements actor.Actor.
@@ -136,10 +154,11 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 			} else {
 				// Delete the key if value is empty
 				ldb.wb.Delete([]byte(k))
+				ldb.deleteCount++
 			}
 
 			// Do not force write, batching for efficiency.
-			if err := ldb.maybeWrite(false); err != nil {
+			if _, err := ldb.maybeWrite(false); err != nil {
 				log.Panic("db error", zap.Error(err))
 			}
 		}
@@ -154,13 +173,18 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 
 	// Force write only if there is a task requires an iterator.
 	forceWrite := len(snapChs) != 0
-	if err := ldb.maybeWrite(forceWrite); err != nil {
+	wrote, err := ldb.maybeWrite(forceWrite)
+	if err != nil {
 		log.Panic("db error", zap.Error(err))
+	}
+	if wrote {
+		// Schedule compact if there are many deletion.
+		ldb.maybeScheduleCompact()
 	}
 	// Batch acquire iterators.
 	for i := range snapChs {
 		snapCh := snapChs[i]
-		err := ldb.iterSema.Acquire(ctx, 1)
+		err := ldb.snapSem.Acquire(ctx, 1)
 		if err != nil {
 			if errors.Cause(err) == context.Canceled ||
 				errors.Cause(err) == context.DeadlineExceeded {
@@ -174,7 +198,7 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 		}
 		snapCh <- message.LimitedSnapshot{
 			Snapshot: snap,
-			Sema:     ldb.iterSema,
+			Sema:     ldb.snapSem,
 		}
 		close(snapCh)
 	}

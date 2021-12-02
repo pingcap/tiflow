@@ -32,9 +32,13 @@ import (
 
 // CleanerActor is an actor that can clean up table data asynchronously.
 type CleanerActor struct {
-	id       actor.ID
-	db       db.DB
-	wbSize   int
+	id     actor.ID
+	db     db.DB
+	wbSize int
+
+	deleteCount int
+	compact     *CompactScheduler
+
 	closedWg *sync.WaitGroup
 
 	limiter *rate.Limiter
@@ -45,7 +49,7 @@ var _ actor.Actor = (*CleanerActor)(nil)
 
 // NewCleanerActor returns a cleaner actor.
 func NewCleanerActor(
-	id int, db db.DB, router *actor.Router,
+	id int, db db.DB, router *actor.Router, compact *CompactScheduler,
 	cfg *config.DBConfig, wg *sync.WaitGroup,
 ) (*CleanerActor, actor.Mailbox, error) {
 	wg.Add(1)
@@ -61,6 +65,7 @@ func NewCleanerActor(
 		id:       actor.ID(id),
 		db:       db,
 		wbSize:   wbSize,
+		compact:  compact,
 		closedWg: wg,
 		limiter:  limiter,
 		router:   router,
@@ -173,6 +178,15 @@ func (clean *CleanerActor) close(err error) {
 	clean.closedWg.Done()
 }
 
+// Schedule a compact task when there are too many deletion.
+func (clean *CleanerActor) maybeScheduleCompact() {
+	if clean.compact.maybeCompact(clean.id, clean.deleteCount) {
+		// Reset delete key count if schedule compaction successfully.
+		clean.deleteCount = 0
+		return
+	}
+}
+
 func (clean *CleanerActor) writeRateLimited(
 	batch db.Batch, force bool,
 ) (time.Duration, error) {
@@ -193,11 +207,13 @@ func (clean *CleanerActor) writeRateLimited(
 			}
 		}
 	}
+	clean.deleteCount += int(batch.Count())
 	err := batch.Commit()
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
 	batch.Reset()
+	clean.maybeScheduleCompact()
 	return 0, nil
 }
 

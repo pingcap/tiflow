@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
+	"github.com/pingcap/ticdc/pkg/actor"
 	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/db"
@@ -37,6 +38,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestMaybeWrite(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -46,29 +49,95 @@ func TestMaybeWrite(t *testing.T) {
 	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
+	compact := NewCompactScheduler(actor.NewRouter(t.Name()), cfg)
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
 	require.Nil(t, err)
 
+	var wrote bool
 	// Empty batch
-	require.Nil(t, ldb.maybeWrite(false))
+	wrote, err = ldb.maybeWrite(false)
+	require.Nil(t, err)
+	require.False(t, wrote)
 
 	// None empty batch
 	ldb.wb.Put([]byte("abc"), []byte("abc"))
-	require.Nil(t, ldb.maybeWrite(false))
+	wrote, err = ldb.maybeWrite(false)
+	require.Nil(t, err)
+	require.False(t, wrote)
 	require.EqualValues(t, ldb.wb.Count(), 1)
 
 	// None empty batch
-	require.Nil(t, ldb.maybeWrite(true))
+	wrote, err = ldb.maybeWrite(true)
+	require.Nil(t, err)
+	require.True(t, wrote)
 	require.EqualValues(t, ldb.wb.Count(), 0)
 
 	ldb.wb.Put([]byte("abc"), []byte("abc"))
 	ldb.wbSize = 1
 	require.Greater(t, len(ldb.wb.Repr()), ldb.wbSize)
-	require.Nil(t, ldb.maybeWrite(false))
+	wrote, err = ldb.maybeWrite(false)
+	require.Nil(t, err)
+	require.True(t, wrote)
 	require.EqualValues(t, ldb.wb.Count(), 0)
 
 	// Close db.
 	closed := !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
+	require.True(t, closed)
+	closedWg.Wait()
+	require.Nil(t, db.Close())
+}
+
+func TestCompact(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
+
+	id := 1
+	db, err := db.OpenLevelDB(ctx, id, t.TempDir(), cfg)
+	require.Nil(t, err)
+	closedWg := new(sync.WaitGroup)
+	compactRouter := actor.NewRouter(t.Name())
+	compactMB := actor.NewMailbox(actor.ID(id), 1)
+	compactRouter.InsertMailbox4Test(compactMB.ID(), compactMB)
+	compact := NewCompactScheduler(compactRouter, cfg)
+	ldb, _, err := NewDBActor(id, db, cfg, compact, closedWg, "")
+	require.Nil(t, err)
+
+	// Lower compactThreshold to speed up tests.
+	compact.compactThreshold = 2
+
+	// Empty task must not trigger compact.
+	task, snapCh := makeTask(make(map[message.Key][]byte), true)
+	closed := !ldb.Poll(ctx, task)
+	require.False(t, closed)
+	<-snapCh
+	_, ok := compactMB.Receive()
+	require.False(t, ok)
+
+	// Delete 3 keys must trigger compact.
+	dels := map[message.Key][]byte{"a": {}, "b": {}, "c": {}}
+	task, snapCh = makeTask(dels, true)
+	closed = !ldb.Poll(ctx, task)
+	require.False(t, closed)
+	<-snapCh
+	_, ok = compactMB.Receive()
+	require.True(t, ok)
+
+	// Delete 1 key must not trigger compact.
+	dels = map[message.Key][]byte{"a": {}}
+	task, snapCh = makeTask(dels, true)
+	closed = !ldb.Poll(ctx, task)
+	require.False(t, closed)
+	<-snapCh
+	_, ok = compactMB.Receive()
+	require.False(t, ok)
+
+	// Close db.
+	closed = !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
 	closedWg.Wait()
 	require.Nil(t, db.Close())
@@ -84,6 +153,8 @@ func makeTask(events map[message.Key][]byte, needSnap bool) ([]actormsg.Message,
 }
 
 func TestPutReadDelete(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
@@ -91,7 +162,8 @@ func TestPutReadDelete(t *testing.T) {
 	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
+	compact := NewCompactScheduler(actor.NewRouter(t.Name()), cfg)
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
 	require.Nil(t, err)
 
 	// Put only.
@@ -187,6 +259,8 @@ func (x sortableKeys) Less(i, j int) bool { return bytes.Compare([]byte(x[i]), [
 func (x sortableKeys) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 
 func TestModelChecking(t *testing.T) {
+	t.Parallel()
+
 	seed := time.Now().Unix()
 	rd := rand.New(rand.NewSource(seed))
 	ctx := context.Background()
@@ -196,7 +270,8 @@ func TestModelChecking(t *testing.T) {
 	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
+	compact := NewCompactScheduler(actor.NewRouter(t.Name()), cfg)
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
 	require.Nil(t, err)
 
 	minKey := message.Key("")
@@ -275,6 +350,8 @@ func TestModelChecking(t *testing.T) {
 }
 
 func TestContextCancel(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
@@ -282,7 +359,8 @@ func TestContextCancel(t *testing.T) {
 	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
+	compact := NewCompactScheduler(actor.NewRouter(t.Name()), cfg)
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
 	require.Nil(t, err)
 
 	cancel()

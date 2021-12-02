@@ -67,7 +67,8 @@ func TestCleanerPoll(t *testing.T) {
 	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	clean, _, err := NewCleanerActor(1, db, nil, cfg, closedWg)
+	compact := NewCompactScheduler(actor.NewRouter(t.Name()), cfg)
+	clean, _, err := NewCleanerActor(1, db, nil, compact, cfg, closedWg)
 	require.Nil(t, err)
 
 	// Put data to db.
@@ -163,12 +164,13 @@ func TestCleanerContextCancel(t *testing.T) {
 	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewCleanerActor(0, db, nil, cfg, closedWg)
+	compact := NewCompactScheduler(actor.NewRouter(t.Name()), cfg)
+	clean, _, err := NewCleanerActor(1, db, nil, compact, cfg, closedWg)
 	require.Nil(t, err)
 
 	cancel()
 	tasks := makeCleanTask(1, 1)
-	closed := !ldb.Poll(ctx, tasks)
+	closed := !clean.Poll(ctx, tasks)
 	require.True(t, closed)
 	closedWg.Wait()
 	require.Nil(t, db.Close())
@@ -185,7 +187,8 @@ func TestCleanerWriteRateLimited(t *testing.T) {
 	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	clean, _, err := NewCleanerActor(1, db, nil, cfg, closedWg)
+	compact := NewCompactScheduler(actor.NewRouter(t.Name()), cfg)
+	clean, _, err := NewCleanerActor(1, db, nil, compact, cfg, closedWg)
 	require.Nil(t, err)
 
 	// Put data to db.
@@ -262,8 +265,9 @@ func TestCleanerTaskRescheduled(t *testing.T) {
 	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	router := actor.NewRouter("test")
-	clean, mb, err := NewCleanerActor(1, db, router, cfg, closedWg)
+	router := actor.NewRouter(t.Name())
+	compact := NewCompactScheduler(actor.NewRouter(t.Name()), cfg)
+	clean, mb, err := NewCleanerActor(1, db, router, compact, cfg, closedWg)
 	require.Nil(t, err)
 	router.InsertMailbox4Test(actor.ID(1), mb)
 	require.Nil(t, router.SendB(ctx, actor.ID(1), actormsg.TickMessage()))
@@ -352,5 +356,63 @@ func TestCleanerTaskRescheduled(t *testing.T) {
 	// stats := leveldb.DBStats{}
 	// require.Nil(t, db.Stats(&stats))
 	// require.Zero(t, stats.AliveIterators)
+	require.Nil(t, db.Close())
+}
+
+func TestCleanerCompact(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
+
+	id := 1
+	db, err := db.OpenLevelDB(ctx, id, t.TempDir(), cfg)
+	require.Nil(t, err)
+	closedWg := new(sync.WaitGroup)
+	compactRouter := actor.NewRouter(t.Name())
+	compactMB := actor.NewMailbox(actor.ID(id), 1)
+	compactRouter.InsertMailbox4Test(compactMB.ID(), compactMB)
+	compact := NewCompactScheduler(compactRouter, cfg)
+	cleaner, _, err := NewCleanerActor(id, db, nil, compact, cfg, closedWg)
+	require.Nil(t, err)
+
+	// Lower compactThreshold to speed up tests.
+	compact.compactThreshold = 2
+	cleaner.wbSize = 1
+
+	// Put data to db.
+	// * 1 key of uid1 table1
+	// * 2 key of uid2 table1
+	data := [][]int{
+		{1, 1, 1},
+		{2, 2, 1},
+	}
+	prepareData(t, db, data)
+
+	// Empty task must not trigger compact.
+	closed := !cleaner.Poll(ctx, makeCleanTask(0, 0))
+	require.False(t, closed)
+	_, ok := compactMB.Receive()
+	require.False(t, ok)
+
+	// Delete 2 keys must trigger compact.
+	closed = !cleaner.Poll(ctx, makeCleanTask(2, 1))
+	require.False(t, closed)
+	_, ok = compactMB.Receive()
+	require.True(t, ok)
+
+	// Delete 1 key must not trigger compact.
+	closed = !cleaner.Poll(ctx, makeCleanTask(1, 1))
+	require.False(t, closed)
+	_, ok = compactMB.Receive()
+	require.False(t, ok)
+
+	// Close db.
+	closed = !cleaner.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
+	require.True(t, closed)
+	closedWg.Wait()
 	require.Nil(t, db.Close())
 }

@@ -114,6 +114,9 @@ func testDB(t *testing.T, db DB) {
 	lsnap.Release()
 	require.Nil(t, snap.Release())
 
+	// Compact
+	db.Compact([]byte{0x00}, []byte{0xff})
+
 	// Close
 	require.Nil(t, db.Close())
 	require.Nil(t, ldb.Close())
