@@ -28,6 +28,54 @@ type canalFlatSuite struct{}
 
 var _ = check.Suite(&canalFlatSuite{})
 
+var testCaseUpdate = &model.RowChangedEvent{
+	CommitTs: 417318403368288260,
+	Table: &model.TableName{
+		Schema: "cdc",
+		Table:  "person",
+	},
+	Columns: []*model.Column{
+		{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
+		{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
+		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
+		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
+		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
+	},
+	PreColumns: []*model.Column{
+		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
+		{Name: "name", Type: mysql.TypeVarchar, Value: "Alice"},
+		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
+		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
+		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
+	},
+}
+
+var testCaseDDL = &model.DDLEvent{
+	CommitTs: 417318403368288260,
+	TableInfo: &model.SimpleTableInfo{
+		Schema: "cdc", Table: "person",
+	},
+	Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+	Type:  mm.ActionCreateTable,
+}
+
+func (s *canalFlatSuite) TestSetParams(c *check.C) {
+	defer testleak.AfterTest(c)()
+	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
+	c.Assert(encoder, check.NotNil)
+	c.Assert(encoder.enableTiDBExtension, check.IsFalse)
+
+	params := make(map[string]string)
+	params["enable-tidb-extension"] = "true"
+	err := encoder.SetParams(params)
+	c.Assert(err, check.IsNil)
+	c.Assert(encoder.enableTiDBExtension, check.IsTrue)
+}
+
 func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
@@ -181,30 +229,30 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)
 
-	message := encoder.newFlatMessageForDDL(testCaseDdl)
+	message := encoder.newFlatMessageForDDL(testCaseDDL)
 	c.Assert(message, check.NotNil)
 
 	msg, ok := message.(*canalFlatMessage)
 	c.Assert(ok, check.IsTrue)
-	c.Assert(msg.tikvTs, check.Equals, testCaseDdl.CommitTs)
-	c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(testCaseDdl.CommitTs))
+	c.Assert(msg.tikvTs, check.Equals, testCaseDDL.CommitTs)
+	c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(testCaseDDL.CommitTs))
 	c.Assert(msg.IsDDL, check.IsTrue)
 	c.Assert(msg.Schema, check.Equals, "cdc")
 	c.Assert(msg.Table, check.Equals, "person")
-	c.Assert(msg.Query, check.Equals, testCaseDdl.Query)
+	c.Assert(msg.Query, check.Equals, testCaseDDL.Query)
 	c.Assert(msg.EventType, check.Equals, "CREATE")
 
 	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
 	c.Assert(encoder, check.NotNil)
 
-	message = encoder.newFlatMessageForDDL(testCaseDdl)
+	message = encoder.newFlatMessageForDDL(testCaseDDL)
 	c.Assert(message, check.NotNil)
 
 	withExtension, ok := message.(*canalFlatMessageWithTiDBExtension)
 	c.Assert(ok, check.IsTrue)
 
 	c.Assert(withExtension.Extensions, check.NotNil)
-	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseDdl.CommitTs)
+	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseDDL.CommitTs)
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C) {
@@ -213,7 +261,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
 		c.Assert(encoder, check.NotNil)
 
-		result, err := encoder.EncodeDDLEvent(testCaseDdl)
+		result, err := encoder.EncodeDDLEvent(testCaseDDL)
 		c.Assert(err, check.IsNil)
 		c.Assert(result, check.NotNil)
 
@@ -232,13 +280,13 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C
 			c.Assert(err, check.IsNil)
 
 			if encodeEnable && decodeEnable {
-				c.Assert(consumed.CommitTs, check.Equals, testCaseDdl.CommitTs)
+				c.Assert(consumed.CommitTs, check.Equals, testCaseDDL.CommitTs)
 			} else {
 				c.Assert(consumed.CommitTs, check.Equals, uint64(0))
 			}
 
-			c.Assert(consumed.TableInfo, check.DeepEquals, testCaseDdl.TableInfo)
-			c.Assert(consumed.Query, check.Equals, testCaseDdl.Query)
+			c.Assert(consumed.TableInfo, check.DeepEquals, testCaseDDL.TableInfo)
+			c.Assert(consumed.Query, check.Equals, testCaseDDL.Query)
 
 			ty, hasNext, err = decoder.HasNext()
 			c.Assert(err, check.IsNil)
@@ -335,39 +383,4 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 		c.Assert(hasNext, check.IsFalse)
 		c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
 	}
-}
-
-var testCaseUpdate = &model.RowChangedEvent{
-	CommitTs: 417318403368288260,
-	Table: &model.TableName{
-		Schema: "cdc",
-		Table:  "person",
-	},
-	Columns: []*model.Column{
-		{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
-		{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
-		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
-		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
-		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
-		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
-		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
-	},
-	PreColumns: []*model.Column{
-		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
-		{Name: "name", Type: mysql.TypeVarchar, Value: "Alice"},
-		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
-		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
-		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
-		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
-		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
-	},
-}
-
-var testCaseDdl = &model.DDLEvent{
-	CommitTs: 417318403368288260,
-	TableInfo: &model.SimpleTableInfo{
-		Schema: "cdc", Table: "person",
-	},
-	Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
-	Type:  mm.ActionCreateTable,
 }

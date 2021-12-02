@@ -67,7 +67,7 @@ func NewBinlogWriter(logger log.Logger, relayDir string) *BinlogWriter {
 
 func (w *BinlogWriter) Open(uuid, filename string) error {
 	fullName := filepath.Join(w.relayDir, uuid, filename)
-	f, err := os.OpenFile(fullName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(fullName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
 		return terror.ErrBinlogWriterOpenFile.Delegate(err)
 	}
