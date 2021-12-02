@@ -418,7 +418,7 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	needSnap = needSnap && state.exhaustedResolvedTs < maxCommitTs
 
 	// Write new events and delete sent keys.
-	iterCh, err :=
+	snapCh, err :=
 		ls.asyncWrite(ctx, newEvents, state.outputBuf.deleteKeys, needSnap)
 	if err != nil {
 		return errors.Trace(err)
@@ -447,7 +447,7 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case snap, ok = <-iterCh:
+	case snap, ok = <-snapCh:
 	}
 	if !ok {
 		if needSnap {
