@@ -270,7 +270,7 @@ LOOP:
 	}
 
 	c.wg.Add(1)
-	defer func() {
+	go func() {
 		defer c.wg.Done()
 		ctx.Throw(c.sink.Run(cancelCtx, c.sink.initialize))
 	}()
