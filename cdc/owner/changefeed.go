@@ -17,10 +17,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/pingcap/ticdc/pkg/filter"
-
-	"github.com/pingcap/ticdc/cdc/sink"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -75,7 +71,7 @@ type changefeed struct {
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
-	newSink      func(ctx cdcContext.Context, initFunc asyncSinkInitFunc) (AsyncSink, error)
+	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
 func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
@@ -99,7 +95,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 func newChangefeed4Test(
 	id model.ChangeFeedID, gcManager gc.Manager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
-	newSink func(ctx cdcContext.Context, initFunc asyncSinkInitFunc) (AsyncSink, error),
+	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
 	c := newChangefeed(id, gcManager)
 	c.newDDLPuller = newDDLPuller
@@ -267,23 +263,7 @@ LOOP:
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
-	c.sink, err = c.newSink(cancelCtx, func(a *asyncSinkImpl) error {
-		var (
-			id   = cancelCtx.ChangefeedVars().ID
-			info = cancelCtx.ChangefeedVars().Info
-		)
-		filter, err := filter.NewFilter(info.Config)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		s, err := sink.New(ctx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		a.attachSink(s)
-		return nil
-	})
+	c.sink, err = c.newSink(cancelCtx)
 	if err != nil {
 		return errors.Trace(err)
 	}
