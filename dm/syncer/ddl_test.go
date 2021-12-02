@@ -652,11 +652,11 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 
 	expectedSQLs := []string{
 		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
-		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT CHARACTER SET = UTF8MB4",
+		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
 		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
 		"CREATE TABLE `test`.`t` (`id` INT)",
 		"CREATE DATABASE `test` CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci",
-		"CREATE DATABASE `test` CHARACTER SET = utf8mb4",
+		"CREATE DATABASE `test` CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci",
 		"CREATE DATABASE `test` COLLATE = utf8mb4_general_ci",
 		"CREATE DATABASE IF NOT EXISTS `test` COLLATE = utf8mb4_bin",
 	}
@@ -670,6 +670,7 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 		Name:   "t",
 	}
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
+	charsetAndDefaultCollationMap := map[string]string{"utf8mb4": "utf8mb4_general_ci"}
 	for i, sql := range sqls {
 		ddlInfo := &ddlInfo{
 			originDDL:    sql,
@@ -681,7 +682,7 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 		c.Assert(err, IsNil)
 		c.Assert(stmt, NotNil)
 		ddlInfo.originStmt = stmt
-		adjustCollation(tctx, ddlInfo, statusVars)
+		adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap)
 		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
 		c.Assert(err, IsNil)
 		c.Assert(routedDDL, Equals, expectedSQLs[i])

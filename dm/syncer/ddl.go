@@ -128,7 +128,7 @@ func (s *Syncer) genDDLInfo(p *parser.Parser, schema, sql string, statusVars []b
 		targetTables: targetTables,
 	}
 
-	adjustCollation(s.tctx, ddlInfo, statusVars)
+	adjustCollation(s.tctx, ddlInfo, statusVars, s.charsetAndDefaultCollation)
 	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
 	ddlInfo.routedDDL = routedDDL
 	return ddlInfo, err
@@ -197,48 +197,71 @@ func (s *Syncer) clearOnlineDDL(tctx *tcontext.Context, targetTable *filter.Tabl
 }
 
 // adjustCollation adds collation for create database and check create table.
-func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte) {
-	// check create table has collation
-	if createStmt, ok := ddlInfo.originStmt.(*ast.CreateTableStmt); ok {
+func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte, charsetAndDefaultCollationMap map[string]string) {
+	switch createStmt := ddlInfo.originStmt.(type) {
+	case *ast.CreateTableStmt:
 		// create table like old table has no table_options
 		// See https://dev.mysql.com/doc/refman/5.7/en/create-table.html
 		if createStmt.ReferTable != nil {
 			return
 		}
+		var justCharset string
 		for _, tableOption := range createStmt.Options {
 			// already have 'Collation'
 			if tableOption.Tp == ast.TableOptionCollate {
 				return
 			}
+			if tableOption.Tp == ast.TableOptionCharset {
+				justCharset = tableOption.StrValue
+			}
 		}
-		tctx.L().Warn("detect create table risk which use implicit collation", zap.String("originSQL", ddlInfo.originDDL))
-	} else if createStmt, ok := ddlInfo.originStmt.(*ast.CreateDatabaseStmt); ok {
+		if justCharset == "" {
+			tctx.L().Warn("detect create table risk which use implicit charset and collation", zap.String("originSQL", ddlInfo.originDDL))
+			return
+		}
+		// just has charset, can add collation by charset and default collation map
+		collation, ok := charsetAndDefaultCollationMap[strings.ToLower(justCharset)]
+		if !ok {
+			tctx.L().Error("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
+			return
+		}
+		tctx.L().Warn("detect create table risk which use explicit charset and implicit collation, we will add collation by SHOW CHARACTER SET", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
+		createStmt.Options = append(createStmt.Options, &ast.TableOption{Tp: ast.TableOptionCollate, StrValue: collation})
+
+	case *ast.CreateDatabaseStmt:
 		// collation is in create database syntax create_option
 		// See https://dev.mysql.com/doc/refman/8.0/en/create-database.html
-		hasCharset := false
+		var justCharset, collation string
 		for _, createOption := range createStmt.Options {
 			// already have 'Collation'
 			if createOption.Tp == ast.DatabaseOptionCollate {
 				return
 			}
 			if createOption.Tp == ast.DatabaseOptionCharset {
-				hasCharset = true
+				justCharset = createOption.Value
 			}
 		}
 
-		// just has charset, can not add collation by server collation
-		if hasCharset {
-			tctx.L().Warn("detect create database risk which use explicit charset and implicit collation", zap.String("originSQL", ddlInfo.originDDL))
-			return
+		// just has charset, can add collation by charset and default collation map
+		if justCharset != "" {
+			tmpCollation, ok := charsetAndDefaultCollationMap[strings.ToLower(justCharset)]
+			if !ok {
+				tctx.L().Error("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
+				return
+			}
+			collation = tmpCollation
+			tctx.L().Warn("detect create database risk which use explicit charset and implicit collation, we will add collation by SHOW CHARACTER SET", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
+		} else {
+			// has no charset and collation
+			// add collation by server collation from binlog statusVars
+			tmpCollation, err := event.GetServerCollationByStatusVars(statusVars)
+			if err != nil {
+				tctx.L().Warn("found error when get collation_server from binlog status_vars", zap.Error(err))
+			}
+			// add collation
+			collation = tmpCollation
+			tctx.L().Warn("detect create database risk which use implicit charset and collation, we will add collation by binlog status_vars", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
 		}
-
-		// add collation by server collation from binlog statusVars
-		collation, err := event.GetServerCollationByStatusVars(statusVars)
-		if err != nil {
-			tctx.L().Warn("found error when get collation_server from binlog status_vars", zap.Error(err))
-		}
-		// add collation
-		tctx.L().Warn("detect create database risk which use implicit charset and collation, we will add collation by binlog status_vars", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
 		createStmt.Options = append(createStmt.Options, &ast.DatabaseOption{Tp: ast.DatabaseOptionCollate, Value: collation})
 	}
 }

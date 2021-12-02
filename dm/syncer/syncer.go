@@ -226,7 +226,8 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
-	relay relay.Process
+	relay                      relay.Process
+	charsetAndDefaultCollation map[string]string
 }
 
 // NewSyncer creates a new Syncer.
@@ -326,6 +327,10 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
+	s.charsetAndDefaultCollation, err = s.fromDB.GetCharsetAndDefaultCollation(ctx)
+	if err != nil {
+		return terror.ErrSyncerGetCharsetMap.Delegate(err)
+	}
 	s.streamerController = NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
 
 	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)

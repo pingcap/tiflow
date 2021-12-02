@@ -848,7 +848,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			nil,
 		}, {
 			ddl,
-			[]string{"CREATE DATABASE IF NOT EXISTS `test_1` COLLATE = utf8mb4_bin"},
+			[]string{"CREATE DATABASE IF NOT EXISTS `test_1` COLLATE = utf8mb4_general_ci"},
 			nil,
 		}, {
 			flush,
@@ -1119,7 +1119,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			nil,
 		}, {
 			ddl,
-			[]string{"CREATE DATABASE IF NOT EXISTS `test_1` COLLATE = utf8mb4_bin"},
+			[]string{"CREATE DATABASE IF NOT EXISTS `test_1` COLLATE = utf8mb4_general_ci"},
 			nil,
 		}, {
 			flush,
