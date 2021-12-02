@@ -158,7 +158,7 @@ func MustExecWithConn(ctx context.Context, conn *sql.Conn, sql string, args ...i
 }
 
 // CreateSourceDBs return source sql.DB for test
-// we create two TiDB instance now in tests/run.sh, change it if needed
+// we create two TiDB instance now in tests/integration_tests/run.sh, change it if needed
 func CreateSourceDBs() (dbs []*sql.DB, err error) {
 	cfg := DBConfig{
 		Host:     "127.0.0.1",
