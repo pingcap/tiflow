@@ -15,14 +15,9 @@ package etcd
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/benbjohnson/clock"
-	"github.com/pingcap/ticdc/pkg/logutil"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -48,6 +43,21 @@ func (m *mockClient) Get(ctx context.Context, key string, opts ...clientv3.OpOpt
 
 func (m *mockClient) Put(ctx context.Context, key, val string, opts ...clientv3.OpOption) (resp *clientv3.PutResponse, err error) {
 	return nil, errors.New("mock error")
+}
+
+type mockWatcher struct {
+	clientv3.Watcher
+	resetCount *int
+}
+
+func (m mockWatcher) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
+	watchCh := make(clientv3.WatchChan, 0)
+	*m.resetCount++
+	return watchCh
+}
+
+func (m mockWatcher) RequestProgress(ctx context.Context) error {
+	return nil
 }
 
 func (s *clientSuite) TestRetry(c *check.C) {
@@ -101,21 +111,11 @@ func (s *etcdSuite) TestWatchWithChan(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
-	f := filepath.Join(c.MkDir(), "test")
-	cfg := &logutil.Config{
-		Level: "warning",
-		File:  f,
-	}
-	cfg.Adjust()
-	cfg.File = f
-	logutil.InitLogger(cfg)
-
-	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{s.clientURL.String()},
-		DialTimeout: 3 * time.Second,
-	})
-	c.Assert(err, check.IsNil)
-	defer cli.Close()
+	cli := clientv3.NewCtxClient(context.TODO())
+	watcher := mockWatcher{}
+	resetCount := 0
+	watcher.resetCount = &resetCount
+	cli.Watcher = watcher
 
 	mockClock := clock.NewMock()
 	watchCli := Wrap(cli, nil)
@@ -136,9 +136,5 @@ func (s *etcdSuite) TestWatchWithChan(c *check.C) {
 	// move time forward
 	mockClock.Add(time.Second * 20)
 	<-closeCh
-
-	logOutPut, err := os.ReadFile(f)
-	c.Assert(err, check.IsNil)
-	// make sure watchCh has been reset
-	c.Assert(strings.Contains(string(logOutPut), "etcd watchCh blocking too long"), check.IsTrue)
+	c.Assert(*watcher.resetCount > 1, check.IsTrue)
 }

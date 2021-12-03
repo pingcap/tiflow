@@ -46,6 +46,9 @@ const (
 	// if no msg comes from a etcd watchCh for etcdWatchChTimeoutDuration long,
 	// we should cancel the watchCh and request a new watchCh from etcd client
 	etcdWatchChTimeoutDuration = 10 * time.Second
+	// if no msg comes from a etcd watchCh for etcdRequestProgressDuration long,
+	// we should call RequestProgress of etcd client
+	etcdRequestProgressDuration = 2 * time.Second
 	// etcdWatchChBufferSize is arbitrarily specified, it be modified in the future
 	etcdWatchChBufferSize = 16
 )
@@ -62,7 +65,7 @@ type Client struct {
 
 // Wrap warps a clientv3.Client that provides etcd APIs required by TiCDC.
 func Wrap(cli *clientv3.Client, metrics map[string]prometheus.Counter) *Client {
-	return &Client{cli: cli, metrics: metrics}
+	return &Client{cli: cli, metrics: metrics, clock: clock.New()}
 }
 
 // Unwrap returns a clientv3.Client
@@ -181,12 +184,14 @@ func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOptio
 // WatchWithChan maintains a watchCh and send all msg from the watchCh to outCh
 func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchResponse, key string, opts ...clientv3.OpOption) {
 	var lastRevision int64
-
 	ctx1, cancel := context.WithCancel(ctx)
+	defer cancel()
 	watchCh := c.cli.Watch(ctx1, key, opts...)
 	watchTimer := c.clock.Timer(etcdWatchChTimeoutDuration)
-
 	defer watchTimer.Stop()
+	requestTimer := c.clock.Timer(etcdRequestProgressDuration)
+	defer requestTimer.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -194,6 +199,7 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 			return
 		case response := <-watchCh:
 			watchTimer.Reset(etcdWatchChTimeoutDuration)
+			requestTimer.Reset(etcdRequestProgressDuration)
 			if response.Err() == nil {
 				lastRevision = response.Header.Revision
 			}
@@ -203,8 +209,14 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 				return
 			case outCh <- response: // it may blocking here
 			}
+		case <-requestTimer.C:
+			if err := c.RequestProgress(ctx); err != nil {
+				log.Warn("failed to request progress for etcd watcher", zap.Error(err))
+			}
+			requestTimer.Reset(etcdRequestProgressDuration)
 		case <-watchTimer.C:
 			log.Warn("etcd watchCh blocking too long, reset the watchCh")
+			// cancel the last cancel func an reset it
 			cancel()
 			ctx1, cancel = context.WithCancel(ctx)
 			watchCh = c.cli.Watch(ctx1, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))

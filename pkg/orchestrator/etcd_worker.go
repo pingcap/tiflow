@@ -146,7 +146,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		// should never be closed
 		sessionDone = make(chan struct{})
 	}
-	lastReceivedEventTime := time.Now()
 
 	// tickRate represents the number of times EtcdWorker can tick
 	// the reactor per second
@@ -160,17 +159,11 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			return cerrors.ErrEtcdSessionDone.GenWithStackByArgs()
 		case <-ticker.C:
 			// There is no new event to handle on timer ticks, so we have nothing here.
-			if time.Since(lastReceivedEventTime) > etcdRequestProgressDuration {
-				if err := worker.client.RequestProgress(ctx); err != nil {
-					log.Warn("failed to request progress for etcd watcher", zap.Error(err))
-				}
-			}
 		case response := <-watchCh:
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
 			}
-			lastReceivedEventTime = time.Now()
 			// Check whether the response is stale.
 			if worker.revision >= response.Header.GetRevision() {
 				continue
