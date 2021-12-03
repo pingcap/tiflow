@@ -22,7 +22,6 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
@@ -161,10 +160,6 @@ func newAsyncSink4Test() (AsyncSink, *mockSink) {
 func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
-	//ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-	//	ID:   "test-changefeed",
-	//	Info: &model.ChangeFeedInfo{SinkURI: "blackhole://", Config: config.GetDefaultReplicaConfig()},
-	//})
 	var resultErr error
 	var resultErrMu sync.Mutex
 	getResultErr := func() error {
@@ -195,7 +190,6 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 	go func() {
 		wg.Wait()
 		asyncSink.Close(ctx)
-		c.Assert(<-errCh, check.IsNil)
 	}()
 
 	mSink.ddlError = cerror.ErrDDLEventIgnored.GenWithStackByArgs()
@@ -215,10 +209,10 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 	for {
 		done, err := asyncSink.EmitDDLEvent(ctx, ddl2)
 		c.Assert(err, check.IsNil)
-		if done || getResultErr() != nil {
+		if done {
 			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl2)
 			break
 		}
 	}
-	c.Assert(cerror.ErrExecDDLFailed.Equal(errors.Cause(getResultErr())), check.IsTrue)
+	c.Assert(cerror.ErrExecDDLFailed.Equal(<-errCh), check.IsTrue)
 }
