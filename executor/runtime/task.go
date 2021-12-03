@@ -28,7 +28,7 @@ type Record struct {
 }
 
 func (r *Record) String() string {
-	return fmt.Sprintf("flowID %s start %s end %s\n", r.flowID, r.start.String(), r.End.String())
+	return fmt.Sprintf("flowID %s start %s end %s payload: %v\n", r.flowID, r.start.String(), r.End.String(), r.Payload)
 }
 
 type Channel struct {

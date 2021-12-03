@@ -31,13 +31,15 @@ type Server struct {
 
 	mockSrv mock.GrpcServer
 
-	cancel func()
+	cancel  func()
+	closeCh chan bool
 }
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
 	s := Server{
 		cfg:     cfg,
 		testCtx: ctx,
+		closeCh: make(chan bool, 1),
 	}
 	return &s
 }
@@ -127,6 +129,7 @@ func (s *Server) Start(ctx context.Context) error {
 	exitCh := make(chan struct{}, 1)
 
 	go func() {
+		defer s.close()
 		err1 := s.srv.Serve(rootLis)
 		if err1 != nil {
 			log.L().Logger.Error("start grpc server failed", zap.Error(err))
@@ -136,7 +139,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.sch = runtime.NewRuntime(nil)
 	go func() {
-		defer s.cancel()
+		defer s.close()
 		s.sch.Run(ctx1)
 	}()
 
@@ -147,11 +150,25 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start Heartbeat
 	go func() {
-		defer s.cancel()
+		defer s.close()
 		err := s.listenHeartbeat(ctx1)
 		log.L().Info("heartbeat quits", zap.Error(err))
 	}()
 	return nil
+}
+
+// close the executor server, this function can be executed reentrantly
+func (s *Server) close() {
+	s.cancel()
+	select {
+	case s.closeCh <- true:
+	default:
+	}
+}
+
+// CloseCh returns a bool chan to notify server closed event
+func (s *Server) CloseCh() chan bool {
+	return s.closeCh
 }
 
 func (s *Server) selfRegister(ctx context.Context) (err error) {

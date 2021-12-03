@@ -61,8 +61,11 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 	go func() {
-		sig := <-sc
-		log.L().Info("got signal to exit", zap.Stringer("signal", sig))
+		select {
+		case sig := <-sc:
+			log.L().Info("got signal to exit", zap.Stringer("signal", sig))
+		case <-server.CloseCh():
+		}
 		cancel()
 	}()
 	<-ctx.Done()
