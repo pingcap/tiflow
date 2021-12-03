@@ -18,17 +18,17 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
-
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/producer/kafka"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
+	kafkap "github.com/pingcap/ticdc/cdc/sink/producer/kafka"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/kafka"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
@@ -64,9 +64,9 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
-	kafka.NewSaramaAdminClientImpl = kafka.NewMockAdminClient
+	kafkap.NewSaramaAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		kafka.NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
+		kafkap.NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
@@ -171,9 +171,9 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
-	kafka.NewSaramaAdminClientImpl = kafka.NewMockAdminClient
+	kafkap.NewSaramaAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		kafka.NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
+		kafkap.NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)

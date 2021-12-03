@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/kafka"
+
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -36,14 +38,6 @@ import (
 const (
 	// defaultPartitionNum specifies the default number of partitions when we create the topic.
 	defaultPartitionNum = 3
-	// brokerMessageMaxBytesConfigName specifies the largest record batch size allowed by
-	// Kafka brokers.
-	// See: https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes
-	brokerMessageMaxBytesConfigName = "message.max.bytes"
-	// topicMaxMessageBytesConfigName specifies the largest record batch size allowed by
-	// Kafka topics.
-	// See: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
-	topicMaxMessageBytesConfigName = "max.message.bytes"
 )
 
 const (
@@ -263,8 +257,10 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
-var newSaramaConfigImpl = newSaramaConfig
-var NewSaramaAdminClientImpl clusterAdminClientCrater = NewSaramaAdminClient
+var (
+	newSaramaConfigImpl                                     = newSaramaConfig
+	NewSaramaAdminClientImpl kafka.ClusterAdminClientCrater = kafka.NewSaramaAdminClient
+)
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
@@ -349,7 +345,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-func createTopic(admin ClusterAdminClient, topic string, config *Config) error {
+func createTopic(admin kafka.ClusterAdminClient, topic string, config *Config) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -427,7 +423,7 @@ func createTopic(admin ClusterAdminClient, topic string, config *Config) error {
 	return nil
 }
 
-func getBrokerMessageMaxBytes(admin ClusterAdminClient) (int, error) {
+func getBrokerMessageMaxBytes(admin kafka.ClusterAdminClient) (int, error) {
 	_, controllerID, err := admin.DescribeCluster()
 	if err != nil {
 		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -436,13 +432,13 @@ func getBrokerMessageMaxBytes(admin ClusterAdminClient) (int, error) {
 	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
 		Type:        sarama.BrokerResource,
 		Name:        strconv.Itoa(int(controllerID)),
-		ConfigNames: []string{brokerMessageMaxBytesConfigName},
+		ConfigNames: []string{kafka.BrokerMessageMaxBytesConfigName},
 	})
 	if err != nil {
 		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	if len(configEntries) == 0 || configEntries[0].Name != brokerMessageMaxBytesConfigName {
+	if len(configEntries) == 0 || configEntries[0].Name != kafka.BrokerMessageMaxBytesConfigName {
 		return 0, cerror.ErrKafkaNewSaramaProducer.GenWithStack(
 			"since cannot find the `message.max.bytes` from the broker's configuration, " +
 				"ticdc decline to create the topic and changefeed to prevent potential error")
@@ -456,8 +452,8 @@ func getBrokerMessageMaxBytes(admin ClusterAdminClient) (int, error) {
 	return result, nil
 }
 
-func getTopicMaxMessageBytes(admin ClusterAdminClient, info sarama.TopicDetail) (int, error) {
-	if a, ok := info.ConfigEntries[topicMaxMessageBytesConfigName]; ok {
+func getTopicMaxMessageBytes(admin kafka.ClusterAdminClient, info sarama.TopicDetail) (int, error) {
+	if a, ok := info.ConfigEntries[kafka.TopicMaxMessageBytesConfigName]; ok {
 		result, err := strconv.Atoi(*a)
 		if err != nil {
 			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)

@@ -13,7 +13,9 @@
 
 package kafka
 
-import "github.com/Shopify/sarama"
+import (
+	"github.com/Shopify/sarama"
+)
 
 // ClusterAdminClient is the administrative client for Kafka, which supports managing and inspecting topics,
 // brokers, configurations and ACLs.
@@ -30,7 +32,7 @@ type ClusterAdminClient interface {
 	Close() error
 }
 
-type clusterAdminClientCrater func([]string, *sarama.Config) (ClusterAdminClient, error)
+type ClusterAdminClientCrater func([]string, *sarama.Config) (ClusterAdminClient, error)
 
 func NewSaramaAdminClient(addrs []string, conf *sarama.Config) (ClusterAdminClient, error) {
 	return sarama.NewClusterAdmin(addrs, conf)

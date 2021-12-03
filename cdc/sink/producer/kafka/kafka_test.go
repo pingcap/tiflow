@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
+	"github.com/pingcap/ticdc/pkg/kafka"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
@@ -64,7 +65,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
 
-	topic := DefaultMockTopicName
+	topic := kafka.DefaultMockTopicName
 	leader := sarama.NewMockBroker(c, 2)
 	defer leader.Close()
 	metadataResponse := new(sarama.MetadataResponse)
@@ -100,9 +101,9 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 		cfg.Producer.Flush.MaxMessages = 1
 		return cfg, err
 	}
-	NewSaramaAdminClientImpl = NewMockAdminClient
+	NewSaramaAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		NewSaramaAdminClientImpl = NewSaramaAdminClient
+		NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
@@ -190,20 +191,20 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 func (s *kafkaSuite) TestCreateTopic(c *check.C) {
 	defer testleak.AfterTest(c)
 	config := NewConfig()
-	adminClient := NewClusterAdminClientMockImpl()
+	adminClient := kafka.NewClusterAdminClientMockImpl()
 	defer func() {
 		_ = adminClient.Close()
 	}()
 
 	// When topic exists and max message bytes is set correctly.
-	config.MaxMessageBytes = adminClient.getDefaultMaxMessageBytes()
-	err := createTopic(adminClient, adminClient.getDefaultMockTopicName(), config)
+	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes()
+	err := createTopic(adminClient, adminClient.GetDefaultMockTopicName(), config)
 	c.Assert(err, check.IsNil)
 
 	// When topic exists and max message bytes is not set correctly.
 	// It is larger than the value of topic.
-	config.MaxMessageBytes = adminClient.getDefaultMaxMessageBytes() + 1024
-	err = createTopic(adminClient, adminClient.getDefaultMockTopicName(), config)
+	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
+	err = createTopic(adminClient, adminClient.GetDefaultMockTopicName(), config)
 	c.Assert(
 		errors.Cause(err),
 		check.ErrorMatches,
@@ -221,14 +222,14 @@ func (s *kafkaSuite) TestCreateTopic(c *check.C) {
 
 	// When the topic does not exist, use the broker's configuration to create the topic.
 	// It is less than the value of broker.
-	config.MaxMessageBytes = adminClient.getDefaultMaxMessageBytes() - 1024
+	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() - 1024
 	config.AutoCreate = true
 	err = createTopic(adminClient, "create-new-one", config)
 	c.Assert(err, check.IsNil)
 
 	// When the topic does not exist, use the broker's configuration to create the topic.
 	// It is larger than the value of broker.
-	config.MaxMessageBytes = adminClient.getDefaultMaxMessageBytes() + 1024
+	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
 	config.AutoCreate = true
 	err = createTopic(adminClient, "create-new-one", config)
 	c.Assert(
@@ -240,20 +241,20 @@ func (s *kafkaSuite) TestCreateTopic(c *check.C) {
 	// When the topic exists, but the topic does not store max message bytes info,
 	// the check of parameter succeeds.
 	// It is less than the value of broker.
-	config.MaxMessageBytes = adminClient.getDefaultMaxMessageBytes() - 1024
+	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() - 1024
 	detail := sarama.TopicDetail{
 		NumPartitions: 3,
 		// Does not contain max message bytes information.
 		ConfigEntries: make(map[string]*string),
 	}
-	adminClient.addTopic("test-topic", detail)
+	adminClient.AddTopic("test-topic", detail)
 	err = createTopic(adminClient, "test-topic", config)
 	c.Assert(err, check.IsNil)
 
 	// When the topic exists, but the topic does not store max message bytes info,
 	// the check of parameter fails.
 	// It is larger than the value of broker.
-	config.MaxMessageBytes = adminClient.getDefaultMaxMessageBytes() + 1024
+	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
 	err = createTopic(adminClient, "test-topic", config)
 	c.Assert(
 		errors.Cause(err),
@@ -270,9 +271,9 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.Version = "invalid"
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
 	topic := "topic"
-	NewSaramaAdminClientImpl = NewMockAdminClient
+	NewSaramaAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		NewSaramaAdminClientImpl = NewSaramaAdminClient
+		NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 	_, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
@@ -280,7 +281,7 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 
 func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	defer testleak.AfterTest(c)()
-	topic := DefaultMockTopicName
+	topic := kafka.DefaultMockTopicName
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -302,9 +303,9 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
-	NewSaramaAdminClientImpl = NewMockAdminClient
+	NewSaramaAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		NewSaramaAdminClientImpl = NewSaramaAdminClient
+		NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
@@ -360,7 +361,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 
 func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	defer testleak.AfterTest(c)()
-	topic := DefaultMockTopicName
+	topic := kafka.DefaultMockTopicName
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -382,9 +383,9 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
-	NewSaramaAdminClientImpl = NewMockAdminClient
+	NewSaramaAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		NewSaramaAdminClientImpl = NewSaramaAdminClient
+		NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	errCh := make(chan error, 1)

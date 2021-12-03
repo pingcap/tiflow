@@ -14,8 +14,9 @@
 package kafka
 
 import (
-	"github.com/Shopify/sarama"
 	"strconv"
+
+	"github.com/Shopify/sarama"
 )
 
 const (
@@ -23,9 +24,7 @@ const (
 	defaultMockControllerID = 1
 )
 
-var (
-	defaultTopicMaxMessage = "1048576"
-)
+var defaultTopicMaxMessage = "1048576"
 
 type ClusterAdminClientMockImpl struct {
 	topics        map[string]sarama.TopicDetail
@@ -36,14 +35,14 @@ type ClusterAdminClientMockImpl struct {
 func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	topics := make(map[string]sarama.TopicDetail)
 	configEntries := make(map[string]*string)
-	configEntries[topicMaxMessageBytesConfigName] = &defaultTopicMaxMessage
+	configEntries[TopicMaxMessageBytesConfigName] = &defaultTopicMaxMessage
 	topics[DefaultMockTopicName] = sarama.TopicDetail{
 		NumPartitions: 3,
 		ConfigEntries: configEntries,
 	}
 
 	brokerConfigs := []sarama.ConfigEntry{{
-		Name:  brokerMessageMaxBytesConfigName,
+		Name:  BrokerMessageMaxBytesConfigName,
 		Value: defaultTopicMaxMessage,
 	}}
 
@@ -74,23 +73,15 @@ func (c *ClusterAdminClientMockImpl) Close() error {
 	return nil
 }
 
-func (c *ClusterAdminClientMockImpl) setConfigs(configs []sarama.ConfigEntry) {
-	c.brokerConfigs = configs
-}
-
-func (c *ClusterAdminClientMockImpl) addTopic(topic string, detail sarama.TopicDetail) {
+func (c *ClusterAdminClientMockImpl) AddTopic(topic string, detail sarama.TopicDetail) {
 	c.topics[topic] = detail
 }
 
-func (c *ClusterAdminClientMockImpl) removeTopic(topic string) {
-	delete(c.topics, topic)
-}
-
-func (c *ClusterAdminClientMockImpl) getDefaultMockTopicName() string {
+func (c *ClusterAdminClientMockImpl) GetDefaultMockTopicName() string {
 	return DefaultMockTopicName
 }
 
-func (c *ClusterAdminClientMockImpl) getDefaultMaxMessageBytes() int {
+func (c *ClusterAdminClientMockImpl) GetDefaultMaxMessageBytes() int {
 	topicMaxMessage, _ := strconv.Atoi(defaultTopicMaxMessage)
 	return topicMaxMessage
 }
