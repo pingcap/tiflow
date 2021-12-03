@@ -268,7 +268,7 @@ LOOP:
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
-		ctx.Throw(c.sink.Run(cancelCtx, c.sink.initialize))
+		ctx.Throw(c.sink.Run(cancelCtx))
 	}()
 
 	// Refer to the previous comment on why we use (checkpointTs-1).

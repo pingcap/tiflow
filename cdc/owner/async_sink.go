@@ -41,7 +41,7 @@ type asyncSinkInitializer func(ctx cdcContext.Context) error
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
 type AsyncSink interface {
-	Run(ctx cdcContext.Context, initializer asyncSinkInitializer) error
+	Run(ctx cdcContext.Context) error
 	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
@@ -70,7 +70,7 @@ type asyncSinkImpl struct {
 	errCh chan error
 }
 
-func newAsyncSinkImpl(ctx cdcContext.Context) AsyncSink {
+func newAsyncSinkImpl(_ cdcContext.Context) AsyncSink {
 	return &asyncSinkImpl{
 		ddlCh: make(chan *model.DDLEvent, 1),
 		errCh: make(chan error, defaultErrChSize),
@@ -116,8 +116,8 @@ func (s *asyncSinkImpl) initialize(ctx cdcContext.Context) error {
 	return eg.Wait()
 }
 
-func (s *asyncSinkImpl) Run(ctx cdcContext.Context, initializer asyncSinkInitializer) error {
-	if err := initializer(ctx); err != nil {
+func (s *asyncSinkImpl) Run(ctx cdcContext.Context) error {
+	if err := s.initialize(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
