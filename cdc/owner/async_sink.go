@@ -52,8 +52,6 @@ type AsyncSink interface {
 	EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
 	SinkSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
 	Close(ctx context.Context) error
-
-	initialize(ctx cdcContext.Context) error
 }
 
 type asyncSinkImpl struct {
@@ -63,21 +61,25 @@ type asyncSinkImpl struct {
 	checkpointTs  model.Ts
 	lastSyncPoint model.Ts
 
-	ddlCh         chan *model.DDLEvent
 	ddlFinishedTs model.Ts
 	ddlSentTs     model.Ts
 
-	errCh chan error
+	ddlCh           chan *model.DDLEvent
+	errCh           chan error
+	sinkInitHandler asyncSinkInitHandler
 }
 
 func newAsyncSinkImpl(_ cdcContext.Context) AsyncSink {
 	return &asyncSinkImpl{
-		ddlCh: make(chan *model.DDLEvent, 1),
-		errCh: make(chan error, defaultErrChSize),
+		ddlCh:           make(chan *model.DDLEvent, 1),
+		errCh:           make(chan error, defaultErrChSize),
+		sinkInitHandler: asyncSinkInitializer,
 	}
 }
 
-func (s *asyncSinkImpl) initialize(ctx cdcContext.Context) error {
+type asyncSinkInitHandler func(ctx cdcContext.Context, a *asyncSinkImpl) error
+
+func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 	var (
 		id   = ctx.ChangefeedVars().ID
 		info = ctx.ChangefeedVars().Info
@@ -90,11 +92,11 @@ func (s *asyncSinkImpl) initialize(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 
-		sink, err := sink.New(ctx1, id, info.SinkURI, filter, info.Config, info.Opts, s.errCh)
+		sink, err := sink.New(ctx1, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		s.sink = sink
+		a.sink = sink
 		return nil
 	})
 
@@ -104,9 +106,9 @@ func (s *asyncSinkImpl) initialize(ctx cdcContext.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			s.syncPointStore = syncPointStore
+			a.syncPointStore = syncPointStore
 
-			if err := s.syncPointStore.CreateSynctable(ctx1); err != nil {
+			if err := a.syncPointStore.CreateSynctable(ctx1); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -117,7 +119,7 @@ func (s *asyncSinkImpl) initialize(ctx cdcContext.Context) error {
 }
 
 func (s *asyncSinkImpl) Run(ctx cdcContext.Context) error {
-	if err := s.initialize(ctx); err != nil {
+	if err := s.sinkInitHandler(ctx, s); err != nil {
 		return errors.Trace(err)
 	}
 
