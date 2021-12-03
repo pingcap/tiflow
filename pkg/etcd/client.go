@@ -43,13 +43,13 @@ const (
 	backoffBaseDelayInMs = 500
 	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
 	backoffMaxDelayInMs = 60 * 1000
-	// if no msg comes from a etcd watchCh for etcdWatchChTimeoutDuration long,
+	// If no msg comes from a etcd watchCh for etcdWatchChTimeoutDuration long,
 	// we should cancel the watchCh and request a new watchCh from etcd client
 	etcdWatchChTimeoutDuration = 10 * time.Second
-	// if no msg comes from a etcd watchCh for etcdRequestProgressDuration long,
+	// If no msg comes from a etcd watchCh for etcdRequestProgressDuration long,
 	// we should call RequestProgress of etcd client
 	etcdRequestProgressDuration = 2 * time.Second
-	// etcdWatchChBufferSize is arbitrarily specified, it be modified in the future
+	// etcdWatchChBufferSize is arbitrarily specified, it will be modified in the future
 	etcdWatchChBufferSize = 16
 )
 
@@ -60,7 +60,7 @@ var maxTries int64 = 8
 type Client struct {
 	cli     *clientv3.Client
 	metrics map[string]prometheus.Counter
-	// clock is for mocking in unit test
+	// clock is for making it easier to mock time-related data structures in unit tests
 	clock clock.Clock
 }
 
@@ -184,7 +184,7 @@ func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOptio
 
 // WatchWithChan maintains a watchCh and send all msg from the watchCh to outCh
 func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchResponse, key string, opts ...clientv3.OpOption) {
-	defer log.Info("WatchWithChan exit")
+	defer log.Info("WatchWithChan exited")
 	var lastRevision int64
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()

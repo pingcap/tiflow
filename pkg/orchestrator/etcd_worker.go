@@ -218,7 +218,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			costTime := time.Since(startTime)
 			if costTime > etcdWorkerLogsWarnDuration {
-				log.Warn("EtcdWorker ticks reactor took too long", zap.Duration("duration", costTime))
+				log.Warn("EtcdWorker reactor tick took too long", zap.Duration("duration", costTime))
 			}
 			worker.metrics.metricEtcdWorkerTickDuration.Observe(costTime.Seconds())
 			if err != nil {
