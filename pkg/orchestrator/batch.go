@@ -23,6 +23,8 @@ const (
 	// 1.25 MiB
 	// Ref: https://etcd.io/docs/v3.3/dev-guide/limit/
 	etcdTxnMaxSize = 1024 * (1024 + 256)
+	// Ref: https://etcd.io/docs/v3.3/op-guide/configuration/#--max-txn-ops
+	etcdTxnMaxOps = 128
 )
 
 // getBatchChangedState has 4 return values:
@@ -40,12 +42,22 @@ func getBatchChangedState(state map[util.EtcdKey][]byte, patchGroups [][]DataPat
 		if err != nil {
 			return nil, 0, 0, err
 		}
-		// if a changefeed's changedState size is large than etcdTxnMaxSize
+		// if a changefeed's changedState size is larger than etcdTxnMaxSize
+		// or the length of changedState is larger than etcdTxnMaxOps
 		// we should return an error instantly
-		if i == 0 && changedSize >= etcdTxnMaxSize {
-			return nil, 0, 0, cerrors.ErrEtcdTxnSizeExceed.GenWithStackByArgs()
+		if i == 0 {
+			if changedSize > etcdTxnMaxSize {
+				return nil, 0, 0, cerrors.ErrEtcdTxnSizeExceed.GenWithStackByArgs(changedSize, etcdTxnMaxSize)
+			}
+			if len(changedState) > etcdTxnMaxOps {
+				return nil, 0, 0, cerrors.ErrEtcdTxnOpsExceed.GenWithStackByArgs(len(changedState), etcdTxnMaxOps)
+			}
 		}
-		if totalSize+changedSize >= etcdTxnMaxSize {
+
+		// batchChangedState size should not exceeds the etcdTxnMaxSize limit
+		// and keys numbers should not exceeds the etcdTxnMaxOps limit
+		if totalSize+changedSize >= etcdTxnMaxSize ||
+			len(batchChangedState)+len(changedState) >= etcdTxnMaxOps {
 			break
 		}
 		for k, v := range changedState {
