@@ -160,18 +160,33 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 
+	var (
+		resultErr   error
+		resultErrMu sync.Mutex
+	)
+	readResultErr := func() error {
+		resultErrMu.Lock()
+		defer resultErrMu.Unlock()
+		return resultErr
+	}
+	writeResultErr := func(err error) {
+		resultErrMu.Lock()
+		defer resultErrMu.Unlock()
+		resultErr = err
+	}
+
 	asyncSink, mSink := newAsyncSink4Test()
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
-	var (
-		wg        sync.WaitGroup
-		resultErr error
-	)
+	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		resultErr = asyncSink.Run(ctx)
+		err := asyncSink.Run(ctx)
+		if err != nil {
+			writeResultErr(err)
+		}
 	}()
 
 	go func() {
@@ -197,10 +212,10 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 		done, err := asyncSink.EmitDDLEvent(ctx, ddl2)
 		c.Assert(err, check.IsNil)
 
-		if done || resultErr != nil {
+		if done || readResultErr() != nil {
 			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl2)
 			break
 		}
 	}
-	c.Assert(cerror.ErrExecDDLFailed.Equal(resultErr), check.IsTrue)
+	c.Assert(cerror.ErrExecDDLFailed.Equal(readResultErr()), check.IsTrue)
 }
