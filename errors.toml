@@ -196,9 +196,14 @@ error = '''
 the etcd txn should be aborted and retried immediately
 '''
 
+["CDC:ErrEtcdTxnOpsExceed"]
+error = '''
+patch ops:%d of a single changefeed exceed etcd txn max ops:%d
+'''
+
 ["CDC:ErrEtcdTxnSizeExceed"]
 error = '''
-patch size of a single changefeed exceed etcd txn max size
+patch size:%d of a single changefeed exceed etcd txn max size:%d
 '''
 
 ["CDC:ErrEventFeedAborted"]
