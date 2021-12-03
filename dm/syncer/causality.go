@@ -156,9 +156,7 @@ type rollingMap struct {
 }
 
 func newRollingMap() *rollingMap {
-	m := &rollingMap{
-		maps: make([]*versionedMap, 0),
-	}
+	m := &rollingMap{}
 	m.rotate()
 	return m
 }

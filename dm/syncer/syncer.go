@@ -1097,7 +1097,7 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 		// for async checkpoint flush, it waits all worker finish execute flush job
 		// for sync checkpoint flush, it skips waiting here because
 		// we waits all worker finish execute flush job before adding flushCPTask into flush worker
-		if task.asyncflushJob != nil {
+		if isAsyncFlush {
 			task.asyncflushJob.wg.Wait()
 			ctx.L().Info("async flush checkpoint snapshot job has been processed by dml worker, about to flush checkpoint snapshot", zap.Int64("job sequence", task.asyncflushJob.seq), zap.Int("snapshot_id", task.snapshotInfo.id))
 		} else {
