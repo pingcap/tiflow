@@ -35,8 +35,6 @@ const (
 	defaultErrChSize = 1024
 )
 
-//type asyncSinkInitializer func(ctx cdcContext.Context) error
-
 // AsyncSink is an async sink design for owner
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
