@@ -399,7 +399,7 @@ func GetCharsetAndDefaultCollation(ctx context.Context, db *sql.DB) (map[string]
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
 	defer conn.Close()
-	rows, err := conn.QueryContext(ctx, "SHOW CHARACTER SET")
+
 	// Show an example.
 	/*
 		mysql> SHOW CHARACTER SET;
@@ -413,12 +413,13 @@ func GetCharsetAndDefaultCollation(ctx context.Context, db *sql.DB) (map[string]
 		| cp1250   | Windows Central European        | cp1250_general_ci   |      1 |
 		| cp1251   | Windows Cyrillic                | cp1251_general_ci   |      1 |
 		+----------+---------------------------------+---------------------+--------+
-	*/if err != nil {
+	*/
+
+	rows, err := conn.QueryContext(ctx, "SHOW CHARACTER SET")
+	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
-	if rows.Err() != nil {
-		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
-	}
+
 	defer rows.Close()
 	for rows.Next() {
 		var charset, description, collation string
@@ -427,6 +428,10 @@ func GetCharsetAndDefaultCollation(ctx context.Context, db *sql.DB) (map[string]
 			return nil, terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
 		}
 		charsetAndDefaultCollation[strings.ToLower(charset)] = collation
+	}
+
+	if rows.Close() != nil {
+		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
 	}
 	return charsetAndDefaultCollation, err
 }

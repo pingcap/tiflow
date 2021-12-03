@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo"
+	schedulerv2 "github.com/pingcap/ticdc/cdc/scheduler"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
@@ -38,7 +39,7 @@ type changefeed struct {
 	id    model.ChangeFeedID
 	state *orchestrator.ChangefeedReactorState
 
-	scheduler        *scheduler
+	scheduler        scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
 	gcManager        gc.Manager
@@ -75,8 +76,9 @@ type changefeed struct {
 
 func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 	c := &changefeed{
-		id:               id,
-		scheduler:        newScheduler(),
+		id: id,
+		// TODO: creates a SchedulerV2 once it is ready.
+		scheduler:        newSchedulerV1(),
 		barriers:         newBarriers(),
 		feedStateManager: new(feedStateManager),
 		gcManager:        gcManager,
@@ -178,14 +180,22 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// So we return here.
 		return nil
 	}
-	shouldUpdateState, err := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
+	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if shouldUpdateState {
+	// CheckpointCannotProceed implies that not all tables are being replicated normally,
+	// so in that case there is no need to advance the global watermarks.
+	if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
 		pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
 		currentTs := oracle.GetPhysical(pdTime)
-		c.updateStatus(currentTs, barrierTs)
+		if newResolvedTs > barrierTs {
+			newResolvedTs = barrierTs
+		}
+		if newCheckpointTs > barrierTs {
+			newCheckpointTs = barrierTs
+		}
+		c.updateStatus(currentTs, newCheckpointTs, newResolvedTs)
 	}
 	return nil
 }
@@ -462,26 +472,7 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	return done, nil
 }
 
-func (c *changefeed) updateStatus(currentTs int64, barrierTs model.Ts) {
-	resolvedTs := barrierTs
-	for _, position := range c.state.TaskPositions {
-		if resolvedTs > position.ResolvedTs {
-			resolvedTs = position.ResolvedTs
-		}
-	}
-	for _, taskStatus := range c.state.TaskStatuses {
-		for _, opt := range taskStatus.Operation {
-			if resolvedTs > opt.BoundaryTs {
-				resolvedTs = opt.BoundaryTs
-			}
-		}
-	}
-	checkpointTs := resolvedTs
-	for _, position := range c.state.TaskPositions {
-		if checkpointTs > position.CheckPointTs {
-			checkpointTs = position.CheckPointTs
-		}
-	}
+func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs model.Ts) {
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
 		if status.ResolvedTs != resolvedTs {
