@@ -14,6 +14,7 @@
 package syncer
 
 import (
+	"math"
 	"time"
 
 	. "github.com/pingcap/check"
@@ -218,4 +219,84 @@ func (s *testSyncerSuite) TestCasualityWithPrefixIndex(c *C) {
 		}
 		c.Assert(job.tp, Equals, op)
 	}
+}
+
+func (s *testSyncerSuite) TestCasualityRollingMap(c *C) {
+	rm := newRollingMap()
+	c.Assert(rm.len(), Equals, 0)
+	c.Assert(len(rm.maps), Equals, 1)
+
+	testCases := []struct {
+		key     string
+		val     string
+		version int64
+	}{
+		{key: "1.key", val: "1.val", version: 1},
+		{key: "2.key", val: "2.val", version: 1},
+		{key: "3.key", val: "3.val", version: 1},
+		{key: "4.key", val: "4.val", version: 1},
+		{key: "5.key", val: "5.val", version: 2},
+		{key: "6.key", val: "6.val", version: 2},
+		{key: "7.key", val: "7.val", version: 2},
+		{key: "8.key", val: "8.val", version: 3},
+		{key: "9.key", val: "9.val", version: 4},
+		{key: "10.key", val: "10.val", version: 4},
+		{key: "11.key", val: "11.val", version: 5},
+	}
+
+	// test without rotate
+	for _, testcase := range testCases {
+		rm.set(testcase.key, testcase.val, testcase.version)
+	}
+
+	c.Assert(rm.len(), Equals, len(testCases))
+
+	for _, testcase := range testCases {
+		val, ok := rm.get(testcase.key)
+		c.Assert(ok, Equals, true)
+		c.Assert(val, Equals, testcase.val)
+	}
+
+	rm.gc(1)
+	for _, testcase := range testCases {
+		if testcase.version == 1 {
+			_, ok := rm.get(testcase.key)
+			c.Assert(ok, Equals, false)
+		}
+	}
+	rm.gc(2)
+	for _, testcase := range testCases {
+		if testcase.version == 2 {
+			_, ok := rm.get(testcase.key)
+			c.Assert(ok, Equals, false)
+		}
+	}
+
+	rm.gc(math.MaxInt64)
+	c.Assert(rm.len(), Equals, 0)
+
+	// test with rotate
+	for _, testcase := range testCases {
+		rm.set(testcase.key, testcase.val, testcase.version)
+		rm.rotate()
+	}
+
+	c.Assert(rm.len(), Equals, len(testCases))
+
+	for _, testcase := range testCases {
+		val, ok := rm.get(testcase.key)
+		c.Assert(ok, Equals, true)
+		c.Assert(val, Equals, testcase.val)
+	}
+
+	rm.gc(3)
+	for _, testcase := range testCases {
+		if testcase.version <= 3 {
+			_, ok := rm.get(testcase.key)
+			c.Assert(ok, Equals, false)
+		}
+	}
+
+	rm.clear()
+	c.Assert(rm.len(), Equals, 0)
 }
