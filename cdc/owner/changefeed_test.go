@@ -76,18 +76,9 @@ func (m *mockAsyncSink) Run(ctx cdcContext.Context) error {
 	panic("implement me")
 }
 
-func (m *mockAsyncSink) SinkSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
-	//TODO implement me
-	panic("implement me")
-}
-
 func (m *mockAsyncSink) initialize(ctx cdcContext.Context) error {
 	//TODO implement me
 	panic("implement me")
-}
-
-func (m *mockAsyncSink) buildBackendSink(ctx cdcContext.Context) error {
-	return nil
 }
 
 func (m *mockAsyncSink) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
@@ -96,7 +87,7 @@ func (m *mockAsyncSink) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent
 	return m.ddlDone, nil
 }
 
-func (m *mockAsyncSink) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error {
+func (m *mockAsyncSink) SinkSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
 	if checkpointTs == m.syncPoint {
 		return nil
 	}
