@@ -25,12 +25,15 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
+<<<<<<< HEAD
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+=======
+	"github.com/pingcap/ticdc/pkg/kafka"
+>>>>>>> edc997c6e (sink(ticdc): add tests for validateMaxMessageBytesAndCreateTopic (#3709))
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
@@ -67,6 +70,7 @@ func (s *kafkaSuite) TestClientID(c *check.C) {
 	}
 }
 
+<<<<<<< HEAD
 func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	defer testleak.AfterTest(c)
 	cfg := NewConfig()
@@ -107,10 +111,13 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 }
 
 func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
+=======
+func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
+>>>>>>> edc997c6e (sink(ticdc): add tests for validateMaxMessageBytesAndCreateTopic (#3709))
 	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
 
-	topic := "unit_test_1"
+	topic := kafka.DefaultMockTopicName
 	leader := sarama.NewMockBroker(c, 2)
 	defer leader.Close()
 	metadataResponse := new(sarama.MetadataResponse)
@@ -146,13 +153,12 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 		cfg.Producer.Flush.MaxMessages = 1
 		return cfg, err
 	}
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
+	NewSaramaAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		newSaramaConfigImpl = newSaramaConfigImplBak
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
+		NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
-	producer, err := NewKafkaSaramaProducer(ctx, topic, codec.ProtocolDefault, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
 	for i := 0; i < 100; i++ {
@@ -234,6 +240,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	}
 }
 
+<<<<<<< HEAD
 func (s *kafkaSuite) TestAdjustPartitionNum(c *check.C) {
 	defer testleak.AfterTest(c)()
 	config := NewConfig()
@@ -252,35 +259,82 @@ func (s *kafkaSuite) TestAdjustPartitionNum(c *check.C) {
 }
 
 func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
+=======
+func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
+>>>>>>> edc997c6e (sink(ticdc): add tests for validateMaxMessageBytesAndCreateTopic (#3709))
 	defer testleak.AfterTest(c)
-	topic := "unit_test_2"
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	broker := sarama.NewMockBroker(c, 1)
-	defer broker.Close()
-	metaResponse := sarama.NewMockMetadataResponse(c).
-		SetBroker(broker.Addr(), broker.BrokerID()).
-		SetLeader(topic, 0, broker.BrokerID()).
-		SetLeader(topic, 1, broker.BrokerID()).
-		SetController(broker.BrokerID())
-	broker.SetHandlerByMap(map[string]sarama.MockResponse{
-		"MetadataRequest":        metaResponse,
-		"DescribeConfigsRequest": sarama.NewMockDescribeConfigsResponse(c),
-	})
 	config := NewConfig()
-	config.PartitionNum = int32(0)
-	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
-	config.AutoCreate = false
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer func() {
+		_ = adminClient.Close()
+	}()
 
-	cfg, err := newSaramaConfigImpl(ctx, config)
+	// When topic exists and max message bytes is set correctly.
+	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes()
+	err := validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config)
 	c.Assert(err, check.IsNil)
 
-	config.BrokerEndpoints = []string{""}
-	cfg.Metadata.Retry.Max = 1
+	// When topic exists and max message bytes is not set correctly.
+	// It is larger than the value of topic.
+	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config)
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*Please make sure `max-message-bytes` not greater than topic's `max.message.bytes`.*",
+	)
 
-	err = topicPreProcess(topic, codec.ProtocolDefault, config, cfg)
-	c.Assert(errors.Cause(err), check.Equals, sarama.ErrOutOfBrokers)
+	// When topic does not exist and auto-create is not enabled.
+	config.AutoCreate = false
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "non-exist", config)
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*auto-create-topic` is false, and topic not found.*",
+	)
+
+	// When the topic does not exist, use the broker's configuration to create the topic.
+	// It is less than the value of broker.
+	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() - 1024
+	config.AutoCreate = true
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-success", config)
+	c.Assert(err, check.IsNil)
+
+	// When the topic does not exist, use the broker's configuration to create the topic.
+	// It is larger than the value of broker.
+	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
+	config.AutoCreate = true
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-fail", config)
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*Please make sure `max-message-bytes` not greater than broker's `message.max.bytes`.*",
+	)
+
+	// When the topic exists, but the topic does not store max message bytes info,
+	// the check of parameter succeeds.
+	// It is less than the value of broker.
+	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() - 1024
+	detail := &sarama.TopicDetail{
+		NumPartitions: 3,
+		// Does not contain max message bytes information.
+		ConfigEntries: make(map[string]*string),
+	}
+	err = adminClient.CreateTopic("test-topic", detail, false)
+	c.Assert(err, check.IsNil)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config)
+	c.Assert(err, check.IsNil)
+
+	// When the topic exists, but the topic does not store max message bytes info,
+	// the check of parameter fails.
+	// It is larger than the value of broker.
+	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config)
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*Please make sure `max-message-bytes` not greater than topic's `max.message.bytes`.*",
+	)
 }
 
 func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
@@ -347,15 +401,17 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.Version = "invalid"
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
 	topic := "topic"
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
-	_, err := NewKafkaSaramaProducer(ctx, topic, codec.ProtocolDefault, config, errCh)
+	NewSaramaAdminClientImpl = kafka.NewMockAdminClient
+	defer func() {
+		NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
+	}()
+	_, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
-	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 }
 
 func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	defer testleak.AfterTest(c)()
-	topic := "unit_test_4"
+	topic := kafka.DefaultMockTopicName
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -377,7 +433,10 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
+	NewSaramaAdminClientImpl = kafka.NewMockAdminClient
+	defer func() {
+		NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
+	}()
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
 	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
@@ -393,9 +452,8 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	}()
 
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, codec.ProtocolDefault, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
 	}()
@@ -433,7 +491,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 
 func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	defer testleak.AfterTest(c)()
-	topic := "unit_test_4"
+	topic := kafka.DefaultMockTopicName
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -455,14 +513,16 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
+	NewSaramaAdminClientImpl = kafka.NewMockAdminClient
+	defer func() {
+		NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
+	}()
 
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, codec.ProtocolDefault, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 	}()
 
 	c.Assert(err, check.IsNil)
