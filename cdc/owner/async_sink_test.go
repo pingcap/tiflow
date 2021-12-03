@@ -81,7 +81,7 @@ func newAsyncSink4Test() (AsyncSink, *mockSink) {
 func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, cancel := context.WithCancel(ctx)
+	ctx1, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	asyncSink, mSink := newAsyncSink4Test()
@@ -91,14 +91,14 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 		errCh chan error
 	)
 	defer func() {
-		asyncSink.Close(ctx)
+		asyncSink.Close(ctx1)
 		c.Assert(<-errCh, check.IsNil)
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- asyncSink.Run(ctx)
+		errCh <- asyncSink.Run(ctx1)
 	}()
 
 	waitCheckpointGrowingUp := func(m *mockSink, targetTs model.Ts) error {
