@@ -237,8 +237,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			return
 		case <-receiver.C:
 		}
-		resolvedTs := s.getMaxResolvedTs()
-		resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
+		maxCommitTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
 		if len(resolvedTxnsMap) == 0 {
 			s.tableMaxResolvedTs.Range(func(key, value interface{}) bool {
 				s.tableCheckpointTs.Store(key, value)
@@ -255,32 +254,14 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		}
 
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
-		s.updateTableCheckpointTs(resolvedTxnsMap)
+		s.updateTableCheckpointTs(maxCommitTsMap)
 	}
 }
 
-func (s *mysqlSink) updateTableCheckpointTs(resolvedTxnsMap map[model.TableID][]*model.SingleTableTxn) {
-	for tableID, txns := range resolvedTxnsMap {
-		maxCommitTs := uint64(0)
-		for _, txn := range txns {
-			if maxCommitTs < txn.CommitTs {
-				maxCommitTs = txn.CommitTs
-			}
-		}
+func (s *mysqlSink) updateTableCheckpointTs(resolvedTxnsMap map[model.TableID]uint64) {
+	for tableID, maxCommitTs := range resolvedTxnsMap {
 		s.tableCheckpointTs.Store(tableID, maxCommitTs)
 	}
-}
-
-func (s *mysqlSink) getMaxResolvedTs() uint64 {
-	var resolvedTs uint64
-	s.tableMaxResolvedTs.Range(func(key, value interface{}) bool {
-		tableResolvedTs := value.(uint64)
-		if tableResolvedTs > resolvedTs {
-			resolvedTs = tableResolvedTs
-		}
-		return true
-	})
-	return resolvedTs
 }
 
 func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
