@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	stdErrors "errors"
 	"sync"
 	"time"
 
@@ -126,7 +127,8 @@ func (m *Master) dispatch(ctx context.Context, tasks []*Task) error {
 		}
 		respPb := resp.Resp.(*pb.SubmitBatchTasksResponse)
 		if respPb.Err != nil {
-			return errors.ErrSubJobFailed.GenWithStackByArgs(execID, m.ID())
+			stdErr := stdErrors.New(respPb.Err.GetMessage())
+			return errors.Wrap(errors.ErrSubJobFailed, stdErr, execID, m.ID())
 		}
 	}
 
