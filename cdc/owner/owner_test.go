@@ -56,8 +56,8 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 	}
 	owner := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
-	}, func(ctx cdcContext.Context) (AsyncSink, error) {
-		return &mockAsyncSink{}, nil
+	}, func(ctx cdcContext.Context) AsyncSink {
+		return &mockAsyncSink{}
 	},
 		ctx.GlobalVars().PDClient,
 	)

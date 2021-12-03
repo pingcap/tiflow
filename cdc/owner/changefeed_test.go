@@ -71,6 +71,21 @@ type mockAsyncSink struct {
 	syncPointHis []model.Ts
 }
 
+func (m *mockAsyncSink) Run(ctx cdcContext.Context) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *mockAsyncSink) SinkSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *mockAsyncSink) initialize(ctx cdcContext.Context) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m *mockAsyncSink) buildBackendSink(ctx cdcContext.Context) error {
 	return nil
 }
@@ -116,8 +131,8 @@ func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *or
 	gcManager := gc.NewManager(ctx.GlobalVars().PDClient)
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, gcManager, func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
-	}, func(ctx cdcContext.Context) (AsyncSink, error) {
-		return &mockAsyncSink{}, nil
+	}, func(ctx cdcContext.Context) AsyncSink {
+		return &mockAsyncSink{}
 	})
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
