@@ -73,7 +73,8 @@ type mockAsyncSink struct {
 
 func (m *mockAsyncSink) Run(ctx cdcContext.Context) error {
 	//TODO implement me
-	panic("implement me")
+	return nil
+	//panic("implement me")
 }
 
 func (m *mockAsyncSink) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
