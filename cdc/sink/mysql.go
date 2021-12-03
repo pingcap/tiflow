@@ -220,7 +220,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	default:
 	}
 
-	checkpointTs := s.checkpointTs(tableID)
+	checkpointTs := s.getTableCheckpointTs(tableID)
 	s.statistics.PrintStatus(ctx)
 	return checkpointTs, nil
 }
@@ -480,15 +480,15 @@ func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
 				zap.Int64("table-id", tableID),
 				zap.Bool("has resolvedTs", ok),
 				zap.Any("resolved-ts", maxResolvedTs),
-				zap.Uint64("checkpoint-ts", s.checkpointTs(tableID)))
+				zap.Uint64("checkpoint-ts", s.getTableCheckpointTs(tableID)))
 		default:
 			v, ok := s.tableMaxResolvedTs.Load(tableID)
 			if !ok {
-				log.Info("No table resolvedTs is flushed", zap.Int64("table-id", tableID))
+				log.Info("No table resolvedTs is found", zap.Int64("table-id", tableID))
 				return nil
 			}
 			maxResolvedTs := v.(uint64)
-			if s.checkpointTs(tableID) >= maxResolvedTs {
+			if s.getTableCheckpointTs(tableID) >= maxResolvedTs {
 				return nil
 			}
 			checkpointTs, err := s.FlushRowChangedEvents(ctx, tableID, maxResolvedTs)
@@ -504,7 +504,7 @@ func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	}
 }
 
-func (s *mysqlSink) checkpointTs(tableID model.TableID) uint64 {
+func (s *mysqlSink) getTableCheckpointTs(tableID model.TableID) uint64 {
 	v, ok := s.tableCheckpointTs.Load(tableID)
 	if ok {
 		return v.(uint64)
