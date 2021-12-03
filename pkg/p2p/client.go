@@ -108,7 +108,6 @@ func (c *MessageClient) Run(
 	receiverID NodeID,
 	credential *security.Credential,
 ) (ret error) {
-
 	defer func() {
 		c.isClosed.Store(true)
 		close(c.closeCh)
@@ -311,7 +310,7 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 }
 
 func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
-	peerAddr := "unknown"
+	peerAddr := unknownPeerLabel
 	peer, ok := gRPCPeer.FromContext(stream.Context())
 	if ok {
 		peerAddr = peer.Addr.String()
