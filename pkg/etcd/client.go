@@ -48,7 +48,7 @@ const (
 	etcdWatchChTimeoutDuration = 10 * time.Second
 	// If no msg comes from a etcd watchCh for etcdRequestProgressDuration long,
 	// we should call RequestProgress of etcd client
-	etcdRequestProgressDuration = 2 * time.Second
+	etcdRequestProgressDuration = 1 * time.Second
 	// etcdWatchChBufferSize is arbitrarily specified, it will be modified in the future
 	etcdWatchChBufferSize = 16
 )
@@ -190,10 +190,9 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 	defer cancel()
 	watchCh := c.cli.Watch(watchCtx, key, opts...)
 
-	watchTicker := c.clock.Ticker(etcdWatchChTimeoutDuration)
-	defer watchTicker.Stop()
-	requestTicker := c.clock.Ticker(etcdRequestProgressDuration)
-	defer requestTicker.Stop()
+	ticker := c.clock.Ticker(etcdRequestProgressDuration)
+	defer ticker.Stop()
+	lastReceivedResponseTime := c.clock.Now()
 
 	for {
 		select {
@@ -201,7 +200,7 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 			cancel()
 			return
 		case response := <-watchCh:
-			start := c.clock.Now()
+			lastReceivedResponseTime = c.clock.Now()
 			if response.Err() == nil {
 				lastRevision = response.Header.Revision
 			}
@@ -214,23 +213,25 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 					return
 				case outCh <- response: // it may blocking here
 					break Loop
-				case <-watchTicker.C:
-					log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck", zap.Duration("duration", c.clock.Since(start)))
+				case <-ticker.C:
+					if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
+						log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)))
+					}
 				}
 			}
 
-			watchTicker.Reset(etcdWatchChTimeoutDuration)
-			requestTicker.Reset(etcdRequestProgressDuration)
-		case <-requestTicker.C:
+			ticker.Reset(etcdRequestProgressDuration)
+		case <-ticker.C:
 			if err := c.RequestProgress(ctx); err != nil {
 				log.Warn("failed to request progress for etcd watcher", zap.Error(err))
 			}
-		case <-watchTicker.C:
-			log.Warn("etcd client watchCh blocking too long, reset the watchCh", zap.Duration("duration", etcdWatchChTimeoutDuration), zap.Stack("stack"))
-			// cancel the last cancel func to reset it
-			cancel()
-			watchCtx, cancel = context.WithCancel(ctx)
-			watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+			if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
+				log.Warn("etcd client watchCh blocking too long, reset the watchCh", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)), zap.Stack("stack"))
+				// cancel the last cancel func to reset it
+				cancel()
+				watchCtx, cancel = context.WithCancel(ctx)
+				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+			}
 		}
 	}
 }
