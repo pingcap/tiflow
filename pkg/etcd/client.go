@@ -189,10 +189,11 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	watchCh := c.cli.Watch(watchCtx, key, opts...)
-	watchTimer := c.clock.Timer(etcdWatchChTimeoutDuration)
-	defer watchTimer.Stop()
-	requestTimer := c.clock.Timer(etcdRequestProgressDuration)
-	defer requestTimer.Stop()
+
+	watchTicker := c.clock.Ticker(etcdWatchChTimeoutDuration)
+	defer watchTicker.Stop()
+	requestTicker := c.clock.Ticker(etcdRequestProgressDuration)
+	defer requestTicker.Stop()
 
 	for {
 		select {
@@ -200,32 +201,34 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 			cancel()
 			return
 		case response := <-watchCh:
-			watchTimer.Reset(etcdWatchChTimeoutDuration)
-			requestTimer.Reset(etcdRequestProgressDuration)
+			start := c.clock.Now()
 			if response.Err() == nil {
 				lastRevision = response.Header.Revision
 			}
-			select {
-			case <-ctx.Done():
-				cancel()
-				return
-			case outCh <- response: // it may blocking here
-			case <-watchTimer.C:
-				log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck", zap.Duration("duration", etcdWatchChTimeoutDuration))
-				watchTimer.Reset(etcdWatchChTimeoutDuration)
+
+			for {
+				select {
+				case <-ctx.Done():
+					cancel()
+					return
+				case outCh <- response: // it may blocking here
+				case <-watchTicker.C:
+					log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck", zap.Duration("duration", c.clock.Since(start)))
+				}
 			}
-		case <-requestTimer.C:
+
+			watchTicker.Reset(etcdWatchChTimeoutDuration)
+			requestTicker.Reset(etcdRequestProgressDuration)
+		case <-requestTicker.C:
 			if err := c.RequestProgress(ctx); err != nil {
 				log.Warn("failed to request progress for etcd watcher", zap.Error(err))
 			}
-			requestTimer.Reset(etcdRequestProgressDuration)
-		case <-watchTimer.C:
+		case <-watchTicker.C:
 			log.Warn("etcd client watchCh blocking too long, reset the watchCh", zap.Duration("duration", etcdWatchChTimeoutDuration), zap.Stack("stack"))
 			// cancel the last cancel func to reset it
 			cancel()
 			watchCtx, cancel = context.WithCancel(ctx)
 			watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
-			watchTimer.Reset(etcdWatchChTimeoutDuration)
 		}
 	}
 }

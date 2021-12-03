@@ -47,7 +47,8 @@ func (m *mockClient) Put(ctx context.Context, key, val string, opts ...clientv3.
 
 type mockWatcher struct {
 	clientv3.Watcher
-	resetCount *int
+	resetCount   *int
+	requestCount *int
 }
 
 func (m mockWatcher) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
@@ -57,6 +58,7 @@ func (m mockWatcher) Watch(ctx context.Context, key string, opts ...clientv3.OpO
 }
 
 func (m mockWatcher) RequestProgress(ctx context.Context) error {
+	*m.requestCount++
 	return nil
 }
 
@@ -114,7 +116,9 @@ func (s *etcdSuite) TestWatchWithChan(c *check.C) {
 	cli := clientv3.NewCtxClient(context.TODO())
 	watcher := mockWatcher{}
 	resetCount := 0
+	requestCuount := 0
 	watcher.resetCount = &resetCount
+	watcher.requestCount = &requestCuount
 	cli.Watcher = watcher
 
 	mockClock := clock.NewMock()
@@ -136,6 +140,11 @@ func (s *etcdSuite) TestWatchWithChan(c *check.C) {
 	// move time forward
 	mockClock.Add(time.Second * 20)
 	<-closeCh
+
+	// make sure watchCh has been reset since timeout
 	c.Assert(*watcher.resetCount > 1, check.IsTrue)
+	// make sure RequestProgress has been call since timeout
+	c.Assert(*watcher.requestCount > 1, check.IsTrue)
+	// make sure etcdRequestProgressDuration is less than etcdWatchChTimeoutDuration
 	c.Assert(etcdRequestProgressDuration, check.Less, etcdWatchChTimeoutDuration)
 }

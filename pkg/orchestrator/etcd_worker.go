@@ -131,9 +131,9 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	ticker := time.NewTicker(timerInterval)
 	defer ticker.Stop()
 
-	ctx1, cancel := context.WithCancel(ctx)
+	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
+	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 
 	var (
 		pendingPatches [][]DataPatch
@@ -367,9 +367,9 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	worker.metrics.metricEtcdTxnSize.Observe(float64(size))
 	startTime := time.Now()
 
-	ctx1, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
-	defer cancel()
-	resp, err := worker.client.Txn(ctx1).If(cmps...).Then(ops...).Commit()
+	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
+	resp, err := worker.client.Txn(txnCtx).If(cmps...).Then(ops...).Commit()
+	cancel()
 	costTime := time.Since(startTime)
 	if costTime > etcdWorkerLogsWarnDuration {
 		log.Warn("Etcd transaction took too long", zap.Duration("duration", costTime))
