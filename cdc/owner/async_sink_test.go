@@ -69,7 +69,7 @@ func (m *mockSink) GetDDL() *model.DDLEvent {
 	return m.ddl
 }
 
-func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, AsyncSink, *mockSink) {
+func newAsyncSink4Test(ctx cdcContext.Context) (cdcContext.Context, AsyncSink, *mockSink) {
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   "test-changefeed",
 		Info: &model.ChangeFeedInfo{SinkURI: "blackhole://", Config: config.GetDefaultReplicaConfig()},
@@ -87,7 +87,11 @@ func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, 
 func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
+	ctx, cancel := context.WithCancel(ctx)
+	ctx, sink, mSink := newAsyncSink4Test(ctx)
+	go func() {
+
+	}()
 	defer sink.Close(ctx)
 	waitCheckpointGrowingUp := func(m *mockSink, targetTs model.Ts) error {
 		return retry.Do(context.Background(), func() error {
@@ -106,7 +110,7 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
+	ctx, sink, mSink := newAsyncSink4Test(ctx)
 	defer sink.Close(ctx)
 	ddl1 := &model.DDLEvent{CommitTs: 1}
 	for {
@@ -157,7 +161,7 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 		resultErr = err
 		return nil
 	})
-	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
+	ctx, sink, mSink := newAsyncSink4Test(ctx)
 	defer sink.Close(ctx)
 	mSink.ddlError = cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	ddl1 := &model.DDLEvent{CommitTs: 1}
