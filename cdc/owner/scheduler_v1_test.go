@@ -30,14 +30,14 @@ type schedulerSuite struct {
 	state        *orchestrator.ChangefeedReactorState
 	tester       *orchestrator.ReactorStateTester
 	captures     map[model.CaptureID]*model.CaptureInfo
-	scheduler    *scheduler
+	scheduler    *oldScheduler
 }
 
 func (s *schedulerSuite) reset(c *check.C) {
 	s.changefeedID = fmt.Sprintf("test-changefeed-%x", rand.Uint32())
 	s.state = orchestrator.NewChangefeedReactorState("test-changefeed")
 	s.tester = orchestrator.NewReactorStateTester(c, s.state, nil)
-	s.scheduler = newScheduler()
+	s.scheduler = newSchedulerV1().(*schedulerV1CompatWrapper).inner
 	s.captures = make(map[model.CaptureID]*model.CaptureInfo)
 	s.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return &model.ChangeFeedStatus{}, true, nil
