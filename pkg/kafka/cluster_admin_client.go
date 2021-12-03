@@ -32,12 +32,15 @@ type ClusterAdminClient interface {
 	Close() error
 }
 
-type ClusterAdminClientCrater func([]string, *sarama.Config) (ClusterAdminClient, error)
+// ClusterAdminClientCreator defines the type of cluster admin client crater.
+type ClusterAdminClientCreator func([]string, *sarama.Config) (ClusterAdminClient, error)
 
+// NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
 func NewSaramaAdminClient(addrs []string, conf *sarama.Config) (ClusterAdminClient, error) {
 	return sarama.NewClusterAdmin(addrs, conf)
 }
 
+// NewMockAdminClient constructs a ClusterAdminClient with mock implementation.
 func NewMockAdminClient(_ []string, _ *sarama.Config) (ClusterAdminClient, error) {
 	return NewClusterAdminClientMockImpl(), nil
 }

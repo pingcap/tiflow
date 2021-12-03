@@ -20,22 +20,28 @@ import (
 )
 
 const (
-	DefaultMockTopicName    = "mock_topic"
+	// DefaultMockTopicName specifies the default mock topic name.
+	DefaultMockTopicName = "mock_topic"
+	// defaultMockControllerID specifies the default mock controller ID.
 	defaultMockControllerID = 1
 )
 
-var defaultTopicMaxMessage = "1048576"
+// defaultMaxMessageBytes specifies the default max message bytes.
+var defaultMaxMessageBytes = "1048576"
 
+// ClusterAdminClientMockImpl mock implements the admin client interface.
 type ClusterAdminClientMockImpl struct {
-	topics        map[string]sarama.TopicDetail
+	topics map[string]sarama.TopicDetail
+	// Cluster controller ID.
 	controllerID  int32
 	brokerConfigs []sarama.ConfigEntry
 }
 
+// NewClusterAdminClientMockImpl news a ClusterAdminClientMockImpl struct with default configurations.
 func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	topics := make(map[string]sarama.TopicDetail)
 	configEntries := make(map[string]*string)
-	configEntries[TopicMaxMessageBytesConfigName] = &defaultTopicMaxMessage
+	configEntries[TopicMaxMessageBytesConfigName] = &defaultMaxMessageBytes
 	topics[DefaultMockTopicName] = sarama.TopicDetail{
 		NumPartitions: 3,
 		ConfigEntries: configEntries,
@@ -43,7 +49,7 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 
 	brokerConfigs := []sarama.ConfigEntry{{
 		Name:  BrokerMessageMaxBytesConfigName,
-		Value: defaultTopicMaxMessage,
+		Value: defaultMaxMessageBytes,
 	}}
 
 	return &ClusterAdminClientMockImpl{
@@ -53,35 +59,39 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	}
 }
 
+// ListTopics returns all topics directly.
 func (c *ClusterAdminClientMockImpl) ListTopics() (map[string]sarama.TopicDetail, error) {
 	return c.topics, nil
 }
 
+// DescribeCluster returns the controller ID.
 func (c *ClusterAdminClientMockImpl) DescribeCluster() (brokers []*sarama.Broker, controllerID int32, err error) {
 	return nil, c.controllerID, nil
 }
 
+// DescribeConfig return brokerConfigs directly.
 func (c *ClusterAdminClientMockImpl) DescribeConfig(_ sarama.ConfigResource) ([]sarama.ConfigEntry, error) {
 	return c.brokerConfigs, nil
 }
 
-func (c *ClusterAdminClientMockImpl) CreateTopic(_ string, _ *sarama.TopicDetail, _ bool) error {
+// CreateTopic adds topic into map.
+func (c *ClusterAdminClientMockImpl) CreateTopic(topic string, detail *sarama.TopicDetail, _ bool) error {
+	c.topics[topic] = *detail
 	return nil
 }
 
+// Close do nothing.
 func (c *ClusterAdminClientMockImpl) Close() error {
 	return nil
 }
 
-func (c *ClusterAdminClientMockImpl) AddTopic(topic string, detail sarama.TopicDetail) {
-	c.topics[topic] = detail
-}
-
+// GetDefaultMockTopicName returns the default topic name
 func (c *ClusterAdminClientMockImpl) GetDefaultMockTopicName() string {
 	return DefaultMockTopicName
 }
 
+// GetDefaultMaxMessageBytes returns defaultMaxMessageBytes as a number.
 func (c *ClusterAdminClientMockImpl) GetDefaultMaxMessageBytes() int {
-	topicMaxMessage, _ := strconv.Atoi(defaultTopicMaxMessage)
+	topicMaxMessage, _ := strconv.Atoi(defaultMaxMessageBytes)
 	return topicMaxMessage
 }

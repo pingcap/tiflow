@@ -258,8 +258,8 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 }
 
 var (
-	newSaramaConfigImpl                                     = newSaramaConfig
-	NewSaramaAdminClientImpl kafka.ClusterAdminClientCrater = kafka.NewSaramaAdminClient
+	newSaramaConfigImpl                                      = newSaramaConfig
+	NewSaramaAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
 )
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
