@@ -51,6 +51,9 @@ func (s *mockSendMessageClient) Recv() (*p2p.SendMessageResponse, error) {
 	if err := args.Error(1); err != nil {
 		return nil, err
 	}
+	if args.Get(0) != nil {
+		return args.Get(0).(*p2p.SendMessageResponse), nil
+	}
 	select {
 	case <-s.ctx.Done():
 		return nil, s.ctx.Err()

@@ -585,12 +585,7 @@ func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
 			},
 		},
 	}
-	exceptResp := &pb.QueryStatusResponse{SubTaskStatus: []*pb.SubTaskStatus{
-		{
-			Name: "task1",
-			Status: &pb.SubTaskStatus_Msg{Msg: common2.NoSubTaskMsg(taskName)},
-		},
-	}}
+	exceptResp := &pb.QueryStatusResponse{SubTaskStatus: []*pb.SubTaskStatus{}}
 
 	req := &pb.OperateTaskRequest{
 		Op:   pb.TaskOp_Stop,
@@ -599,21 +594,19 @@ func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
 	ctrl := gomock.NewController(c)
 	defer ctrl.Finish()
 	ctx := context.Background()
-	duration, _ := time.ParseDuration("1s")
-	s := &Server{cfg: &Config{RPCTimeout: duration}}
+	s := &Server{cfg: &Config{RPCTimeout: time.Second}}
 	mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
 	mockWorkerClient.EXPECT().QueryStatus(
 		gomock.Any(),
 		gomock.Any(),
-	).Return(notExceptResp, nil).Return(exceptResp, nil)
+	).Return(notExceptResp, nil).Return(exceptResp, nil).MaxTimes(2)
 	mockWorker := scheduler.NewMockWorker(newMockRPCClient(mockWorkerClient))
 
-	ok, msg, _, err := s.waitOperationOk(ctx, mockWorker, "", "", req)
+	ok, msg, _, err := s.waitOperationOk(ctx, mockWorker, taskName, "", req)
 	c.Assert(err, check.IsNil)
-	c.Assert(ok, check.Equals, "ok")
-	c.Assert(msg == "", check.Equals, "")
+	c.Assert(ok, check.IsTrue)
+	c.Assert(msg, check.HasLen, 0)
 }
-
 
 func (t *testMaster) TestFillUnsyncedStatus(c *check.C) {
 	var (
