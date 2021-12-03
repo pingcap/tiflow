@@ -206,12 +206,14 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 				lastRevision = response.Header.Revision
 			}
 
+		Loop:
 			for {
 				select {
 				case <-ctx.Done():
 					cancel()
 					return
 				case outCh <- response: // it may blocking here
+					break Loop
 				case <-watchTicker.C:
 					log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck", zap.Duration("duration", c.clock.Since(start)))
 				}
