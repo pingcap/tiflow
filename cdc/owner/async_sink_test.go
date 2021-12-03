@@ -69,16 +69,29 @@ func (m *mockSink) GetDDL() *model.DDLEvent {
 	return m.ddl
 }
 
+type mockAsyncSink4Test struct {
+	asyncSinkImpl
+}
+
+func (m *mockAsyncSink4Test) initialize(ctx cdcContext.Context) error {
+	m.sink = &mockSink{}
+	return nil
+}
+
 func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, AsyncSink, *mockSink) {
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   "test-changefeed",
 		Info: &model.ChangeFeedInfo{SinkURI: "blackhole://", Config: config.GetDefaultReplicaConfig()},
 	})
-	sink, err := newAsyncSink(ctx)
-	c.Assert(err, check.IsNil)
-	mockSink := &mockSink{}
-	sink.(*asyncSinkImpl).sink = mockSink
-	return ctx, sink, mockSink
+
+	asyncSink := &mockAsyncSink4Test{}
+	go func() {
+		err := asyncSink.Run(ctx)
+		c.Assert(err, check.IsNil)
+	}()
+
+	asyncSink.sink = &mockSink{}
+	return ctx, asyncSink, asyncSink.sink.(*mockSink)
 }
 
 func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
