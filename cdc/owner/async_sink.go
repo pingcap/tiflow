@@ -39,6 +39,7 @@ const (
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
 type AsyncSink interface {
+	// Run the asyncSink, should be called asynchronously.
 	Run(ctx cdcContext.Context) error
 	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
