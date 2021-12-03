@@ -69,7 +69,7 @@ type asyncSinkImpl struct {
 	sinkInitHandler asyncSinkInitHandler
 }
 
-func newAsyncSinkImpl(_ cdcContext.Context) AsyncSink {
+func newAsyncSinkImpl() AsyncSink {
 	return &asyncSinkImpl{
 		ddlCh:           make(chan *model.DDLEvent, 1),
 		errCh:           make(chan error, defaultErrChSize),
