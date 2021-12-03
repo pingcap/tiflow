@@ -90,8 +90,8 @@ type job struct {
 
 	eventHeader *replication.EventHeader
 	jobAddTime  time.Time       // job commit time
-	seq         int64           // sequence number for this job
-	wg          *sync.WaitGroup // wait group for flush job
+	flushSeq    int64           // sequence number for sync and async flush job
+	wg          *sync.WaitGroup // wait group for sync and async flush job
 }
 
 func (j *job) clone() *job {
@@ -106,7 +106,7 @@ func (j *job) String() string {
 	if j.dml != nil {
 		dmlStr = j.dml.String()
 	}
-	return fmt.Sprintf("tp: %s, seq: %d, dml: %s, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, j.seq, dmlStr, j.ddls, j.location, j.startLocation, j.currentLocation)
+	return fmt.Sprintf("tp: %s, flushSeq: %d, dml: %s, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, j.flushSeq, dmlStr, j.ddls, j.location, j.startLocation, j.currentLocation)
 }
 
 func newDMLJob(tp opType, sourceTable, targetTable *filter.Table, dml *DML, ec *eventContext) *job {
@@ -180,7 +180,7 @@ func newXIDJob(location, startLocation, currentLocation binlog.Location) *job {
 	}
 }
 
-func newFlushJob(workerCount int) *job {
+func newFlushJob(workerCount int, seq int64) *job {
 	wg := &sync.WaitGroup{}
 	wg.Add(workerCount)
 
@@ -189,6 +189,7 @@ func newFlushJob(workerCount int) *job {
 		targetTable: &filter.Table{},
 		jobAddTime:  time.Now(),
 		wg:          wg,
+		flushSeq:    seq,
 	}
 }
 
@@ -201,14 +202,14 @@ func newAsyncFlushJob(workerCount int, seq int64) *job {
 		targetTable: &filter.Table{},
 		jobAddTime:  time.Now(),
 		wg:          wg,
-		seq:         seq,
+		flushSeq:    seq,
 	}
 }
 
 func newGCJob(flushJobSeq int64) *job {
 	return &job{
-		tp:  gc,
-		seq: flushJobSeq,
+		tp:       gc,
+		flushSeq: flushJobSeq,
 	}
 }
 

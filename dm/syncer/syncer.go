@@ -934,8 +934,6 @@ func (s *Syncer) addJob(job *job) error {
 		return nil
 	}
 
-	// job sequence is incremental number used for dml job causality management
-	job.seq = s.getSeq()
 	// avoid job.type data race with compactor.run()
 	// simply copy the opType for performance, though copy a new job in compactor is better
 	tp := job.tp
@@ -977,8 +975,9 @@ func (s *Syncer) addJob(job *job) error {
 		}
 	})
 	if flushFirstJob {
+		flushJob := newFlushJob(s.cfg.WorkerCount, s.getSeq())
 		s.jobWg.Add(1)
-		s.dmlJobCh <- newFlushJob(s.cfg.WorkerCount)
+		s.dmlJobCh <- flushJob
 		s.jobWg.Wait()
 	}
 
@@ -1101,7 +1100,7 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 		// we waits all worker finish execute flush job before adding flushCPTask into flush worker
 		if isAsyncFlush {
 			task.asyncflushJob.wg.Wait()
-			ctx.L().Info("async flush checkpoint snapshot job has been processed by dml worker, about to flush checkpoint snapshot", zap.Int64("job sequence", task.asyncflushJob.seq), zap.Int("snapshot_id", task.snapshotInfo.id))
+			ctx.L().Info("async flush checkpoint snapshot job has been processed by dml worker, about to flush checkpoint snapshot", zap.Int64("job sequence", task.asyncflushJob.flushSeq), zap.Int("snapshot_id", task.snapshotInfo.id))
 		} else {
 			ctx.L().Info("about to sync flush checkpoint snapshot", zap.Int("snapshot_id", task.snapshotInfo.id))
 		}
@@ -1218,7 +1217,7 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(false)
 
 	if snapshotInfo == nil {
-		log.L().Info("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.seq))
+		log.L().Info("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
 		return
 	}
 
@@ -1262,7 +1261,7 @@ func (s *Syncer) createCheckpointSnapshot(isSyncFlush bool) (*SnapshotInfo, []*f
 func (s *Syncer) afterFlushCheckpoint(task *flushCpTask) error {
 	// add a gc job to let causality module gc outdated kvs.
 	if task.asyncflushJob != nil {
-		s.dmlJobCh <- newGCJob(task.asyncflushJob.seq)
+		s.dmlJobCh <- newGCJob(task.asyncflushJob.flushSeq)
 	} else {
 		s.dmlJobCh <- newGCJob(math.MaxInt64)
 	}
@@ -3178,7 +3177,7 @@ func (s *Syncer) recordSkipSQLsLocation(ec *eventContext) error {
 // NOTE: currently, flush job is always sync operation.
 func (s *Syncer) flushJobs() error {
 	s.tctx.L().Info("flush all jobs", zap.Stringer("global checkpoint", s.checkpoint))
-	job := newFlushJob(s.cfg.WorkerCount)
+	job := newFlushJob(s.cfg.WorkerCount, s.getSeq())
 	return s.addJobFunc(job)
 }
 

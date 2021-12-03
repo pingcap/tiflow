@@ -72,10 +72,10 @@ func (c *causality) run() {
 
 		switch j.tp {
 		case flush, asyncFlush:
-			c.relations.rotate()
+			c.relations.rotate(j.flushSeq)
 		case gc:
 			// gc is only used on inner-causality logic
-			c.relations.gc(j.seq)
+			c.relations.gc(j.flushSeq)
 			continue
 		default:
 			keys := j.dml.identifyKeys(c.sessCtx)
@@ -86,7 +86,7 @@ func (c *causality) run() {
 				c.outCh <- newConflictJob(c.workerCount)
 				c.relations.clear()
 			}
-			j.dml.key = c.add(keys, j.seq)
+			j.dml.key = c.add(keys)
 			c.logger.Debug("key for keys", zap.String("key", j.dml.key), zap.Strings("keys", keys))
 		}
 		metrics.ConflictDetectDurationHistogram.WithLabelValues(c.task, c.source).Observe(time.Since(startTime).Seconds())
@@ -101,7 +101,7 @@ func (c *causality) close() {
 }
 
 // add adds keys relation and return the relation. The keys must `detectConflict` first to ensure correctness.
-func (c *causality) add(keys []string, jobSeq int64) string {
+func (c *causality) add(keys []string) string {
 	if len(keys) == 0 {
 		return ""
 	}
@@ -118,7 +118,7 @@ func (c *causality) add(keys []string, jobSeq int64) string {
 	}
 	// set causal relations for those non-exist keys
 	for _, key := range nonExistKeys {
-		c.relations.set(key, selectedRelation, jobSeq)
+		c.relations.set(key, selectedRelation)
 	}
 
 	return selectedRelation
@@ -144,8 +144,8 @@ func (c *causality) detectConflict(keys []string) bool {
 }
 
 type versionedMap struct {
-	data   map[string]string
-	maxVer int64
+	data            map[string]string
+	prevFlushJobSeq int64
 }
 
 // rollingMap stores causality keys by "versions", where each version created on each flush and it helps to remove stale causality keys.
@@ -157,7 +157,7 @@ type rollingMap struct {
 
 func newRollingMap() *rollingMap {
 	m := &rollingMap{}
-	m.rotate()
+	m.rotate(-1)
 	return m
 }
 
@@ -170,11 +170,8 @@ func (m *rollingMap) get(key string) (string, bool) {
 	return "", false
 }
 
-func (m *rollingMap) set(key string, val string, version int64) {
+func (m *rollingMap) set(key string, val string) {
 	m.cur.data[key] = val
-	if m.cur.maxVer < version {
-		m.cur.maxVer = version
-	}
 }
 
 func (m *rollingMap) len() int {
@@ -185,10 +182,11 @@ func (m *rollingMap) len() int {
 	return cnt
 }
 
-func (m *rollingMap) rotate() {
+func (m *rollingMap) rotate(flushJobSeq int64) {
 	if len(m.maps) == 0 || len(m.maps[len(m.maps)-1].data) > 0 {
 		m.maps = append(m.maps, &versionedMap{
-			data: make(map[string]string),
+			data:            make(map[string]string),
+			prevFlushJobSeq: flushJobSeq,
 		})
 		m.cur = m.maps[len(m.maps)-1]
 	}
@@ -199,11 +197,12 @@ func (m *rollingMap) clear() {
 }
 
 // remove causality keys where its version is smaller than the given version.
-func (m *rollingMap) gc(version int64) {
+func (m *rollingMap) gc(flushJobSeq int64) {
 	// nolint:ifshort
 	idx := 0
+	// clean up stale keys
 	for i, d := range m.maps {
-		if d.maxVer > 0 && d.maxVer <= version {
+		if d.prevFlushJobSeq <= flushJobSeq {
 			// set nil value to trigger go gc
 			m.maps[i] = nil
 		} else {
@@ -212,9 +211,10 @@ func (m *rollingMap) gc(version int64) {
 		}
 	}
 
+	// clean up m.maps array
 	if idx == len(m.maps)-1 {
 		m.maps = m.maps[:0]
-		m.rotate()
+		m.rotate(-1)
 	} else if idx != 0 {
 		m.maps = m.maps[idx:]
 	}

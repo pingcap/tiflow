@@ -53,10 +53,10 @@ func (s *testSyncerSuite) TestDetectConflict(c *C) {
 	}
 
 	c.Assert(ca.detectConflict(caseData), IsFalse)
-	ca.add(caseData, 1)
+	ca.add(caseData)
 	assertRelationsEq(excepted)
 	c.Assert(ca.detectConflict([]string{"test_4"}), IsFalse)
-	ca.add([]string{"test_4"}, 2)
+	ca.add([]string{"test_4"})
 	excepted["test_4"] = "test_4"
 	assertRelationsEq(excepted)
 	conflictData := []string{"test_4", "test_3"}
@@ -231,22 +231,22 @@ func (s *testSyncerSuite) TestCasualityRollingMap(c *C) {
 		val     string
 		version int64
 	}{
-		{key: "1.key", val: "1.val", version: 1},
-		{key: "2.key", val: "2.val", version: 1},
-		{key: "3.key", val: "3.val", version: 1},
-		{key: "4.key", val: "4.val", version: 1},
-		{key: "5.key", val: "5.val", version: 2},
-		{key: "6.key", val: "6.val", version: 2},
-		{key: "7.key", val: "7.val", version: 2},
-		{key: "8.key", val: "8.val", version: 3},
-		{key: "9.key", val: "9.val", version: 4},
-		{key: "10.key", val: "10.val", version: 4},
-		{key: "11.key", val: "11.val", version: 5},
+		{key: "1.key", val: "1.val"},
+		{key: "2.key", val: "2.val"},
+		{key: "3.key", val: "3.val"},
+		{key: "4.key", val: "4.val"},
+		{key: "5.key", val: "5.val"},
+		{key: "6.key", val: "6.val"},
+		{key: "7.key", val: "7.val"},
+		{key: "8.key", val: "8.val"},
+		{key: "9.key", val: "9.val"},
+		{key: "10.key", val: "10.val"},
+		{key: "11.key", val: "11.val"},
 	}
 
 	// test without rotate
 	for _, testcase := range testCases {
-		rm.set(testcase.key, testcase.val, testcase.version)
+		rm.set(testcase.key, testcase.val)
 	}
 
 	c.Assert(rm.len(), Equals, len(testCases))
@@ -276,9 +276,9 @@ func (s *testSyncerSuite) TestCasualityRollingMap(c *C) {
 	c.Assert(rm.len(), Equals, 0)
 
 	// test with rotate
-	for _, testcase := range testCases {
-		rm.set(testcase.key, testcase.val, testcase.version)
-		rm.rotate()
+	for index, testcase := range testCases {
+		rm.set(testcase.key, testcase.val)
+		rm.rotate(int64(index))
 	}
 
 	c.Assert(rm.len(), Equals, len(testCases))
@@ -289,10 +289,15 @@ func (s *testSyncerSuite) TestCasualityRollingMap(c *C) {
 		c.Assert(val, Equals, testcase.val)
 	}
 
-	rm.gc(3)
-	for _, testcase := range testCases {
-		if testcase.version <= 3 {
-			_, ok := rm.get(testcase.key)
+	for index, _ := range testCases {
+		rm.gc(int64(index))
+
+		for _, rmMap := range rm.maps {
+			c.Assert(rmMap.prevFlushJobSeq, Not(Equals), int64(index))
+		}
+
+		for ti := 0; ti < index; ti++ {
+			_, ok := rm.get(testCases[ti].key)
 			c.Assert(ok, Equals, false)
 		}
 	}
