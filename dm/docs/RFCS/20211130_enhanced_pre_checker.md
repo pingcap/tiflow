@@ -81,6 +81,10 @@ Since every checker is concurrent, we can split tables to **source_connection_co
     - checkAutoIncrementKey
     - checkPK/UK
 
-### Remove checker from tidb-tools to DM
+### Move checker from [tidb-tools](https://github.com/pingcap/tidb-tools/tree/master/pkg/check) to DM
 
-After this change, checker is deeply coupled to DM, both with dump privilege and optimistic pessimistic coordination. And checker is only used by DM (TiCDC and TiDB all don't use it). So removing checker from tidb-tools to DM is more convenient for development work。
+After this change, checker is deeply coupled to DM, both with dump Privilege and optimistic pessimistic coordination. And checker is only used by DM (TiCDC and TiDB all don’t use it). So removing checkers from tidb-tools to DM is more convenient for development work。
+
+In detail, we do not take the initiative to submit pr to the tidb-tools repository. Instead, we will replace the checker in tidb-tools step by step during the development of this feature.
+
+So at last we will have two checker components in DM and tidb-tools. But DM will completely get rid of tidb-tools checker's ​​dependence or wrap our own checker layer on top of it.
