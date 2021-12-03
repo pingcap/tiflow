@@ -101,7 +101,7 @@ func (c *causality) close() {
 }
 
 // add adds keys relation and return the relation. The keys must `detectConflict` first to ensure correctness.
-func (c *causality) add(keys []string, version int64) string {
+func (c *causality) add(keys []string, jobSeq int64) string {
 	if len(keys) == 0 {
 		return ""
 	}
@@ -118,7 +118,7 @@ func (c *causality) add(keys []string, version int64) string {
 	}
 	// set causal relations for those non-exist keys
 	for _, key := range nonExistKeys {
-		c.relations.set(key, selectedRelation, version)
+		c.relations.set(key, selectedRelation, jobSeq)
 	}
 
 	return selectedRelation
@@ -148,7 +148,7 @@ type versionedMap struct {
 	maxVer int64
 }
 
-// rollingMap is a map this contains multi map instances.
+// rollingMap stores causality keys by "versions", where each version created on each flush and it helps to remove stale causality keys.
 type rollingMap struct {
 	maps []*versionedMap
 	// current map for write
@@ -198,6 +198,7 @@ func (m *rollingMap) clear() {
 	m.gc(math.MaxInt64)
 }
 
+// remove causality keys where its version is smaller than the given version.
 func (m *rollingMap) gc(version int64) {
 	// nolint:ifshort
 	idx := 0

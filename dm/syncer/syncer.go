@@ -933,6 +933,8 @@ func (s *Syncer) addJob(job *job) error {
 		s.tctx.L().Info("All jobs is completed before syncer close, the coming job will be reject", zap.Any("job", job))
 		return nil
 	}
+
+	// job sequence is incremental number used for dml job causality management
 	job.seq = s.getSeq()
 	// avoid job.type data race with compactor.run()
 	// simply copy the opType for performance, though copy a new job in compactor is better
@@ -1066,7 +1068,7 @@ func (s *Syncer) resetShardingGroup(table *filter.Table) {
 }
 
 type flushCpTask struct {
-	snapshotInfo SnapshotInfo
+	snapshotInfo *SnapshotInfo
 	// flush job, its job seq is used as causality gc max version
 	asyncflushJob *job
 	// extra sharding ddl sqls
@@ -1128,6 +1130,7 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 		err = w.cp.FlushPointsExcept(ctx, task.snapshotInfo.id, task.exceptTables, task.shardMetaSQLs, task.shardMetaArgs)
 		if err != nil {
 			ctx.L().Warn(fmt.Sprintf("%s checkpoint snapshot failed, ignore this error", flushLogMsg), zap.Any("flushCpTask", task), zap.Error(err))
+			// async flush error will be skipped here but sync flush error will raised up
 			if !isAsyncFlush {
 				task.syncFlushErrCh <- err
 			}
@@ -1140,6 +1143,7 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 			ctx.L().Warn(fmt.Sprintf("%s post-process(afterFlushFn) failed", flushLogMsg), zap.Error(err))
 		}
 
+		// async flush error will be skipped here but sync flush error will raised up
 		if !isAsyncFlush {
 			task.syncFlushErrCh <- err
 		}
@@ -1151,11 +1155,12 @@ func (w *checkpointFlushWorker) Close() {
 	close(w.input)
 }
 
-// flushCheckPoints flushes previous saved checkpoint in memory to persistent storage, like TiDB
+// flushCheckPoints synchronously flushes previous saved checkpoint in memory to persistent storage, like TiDB
 // we flush checkpoints in three cases:
 //   1. DDL executed
 //   2. pausing / stopping the sync (driven by `s.flushJobs`)
 //   3. IsFreshTask return true
+//   4. Heartbeat event received
 // but when error occurred, we can not flush checkpoint, otherwise data may lost
 // and except rejecting to flush the checkpoint, we also need to rollback the checkpoint saved before
 // this should be handled when `s.Run` returned
@@ -1174,11 +1179,9 @@ func (s *Syncer) flushCheckPoints() error {
 		return nil
 	}
 
-	exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot()
+	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(true)
 
-	snapshotInfo := s.checkpoint.Snapshot(true)
-
-	if snapshotInfo.id == 0 {
+	if snapshotInfo == nil {
 		log.L().Info("checkpoint has no change, skip sync flush checkpoint")
 		return nil
 	}
@@ -1198,6 +1201,7 @@ func (s *Syncer) flushCheckPoints() error {
 	return <-syncFlushErrCh
 }
 
+// flushCheckPointsAsync asynchronous flushes checkpoint.
 func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 	err := s.execError.Load()
 	// TODO: for now, if any error occurred (including user canceled), checkpoint won't be updated. But if we have put
@@ -1211,12 +1215,10 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 		return
 	}
 
-	exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot()
+	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(false)
 
-	snapshotInfo := s.checkpoint.Snapshot(false)
-
-	if snapshotInfo.id == 0 {
-		log.L().Info("checkpoint has no change, skip async flush checkpoint")
+	if snapshotInfo == nil {
+		log.L().Info("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.seq))
 		return
 	}
 
@@ -1231,7 +1233,12 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 	s.flushCpWorker.Add(task)
 }
 
-func (s *Syncer) createCheckpointSnapshot() ([]*filter.Table, []string, [][]interface{}) {
+func (s *Syncer) createCheckpointSnapshot(isSyncFlush bool) (*SnapshotInfo, []*filter.Table, []string, [][]interface{}) {
+	snapshotInfo := s.checkpoint.Snapshot(isSyncFlush)
+	if snapshotInfo == nil {
+		return nil, nil, nil, nil
+	}
+
 	var (
 		exceptTableIDs map[string]bool
 		exceptTables   []*filter.Table
@@ -1249,7 +1256,7 @@ func (s *Syncer) createCheckpointSnapshot() ([]*filter.Table, []string, [][]inte
 		s.tctx.L().Info("prepare flush sqls", zap.Strings("shard meta sqls", shardMetaSQLs), zap.Reflect("shard meta arguments", shardMetaArgs))
 	}
 
-	return exceptTables, shardMetaSQLs, shardMetaArgs
+	return snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs
 }
 
 func (s *Syncer) afterFlushCheckpoint(task *flushCpTask) error {

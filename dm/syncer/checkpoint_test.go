@@ -310,7 +310,7 @@ SHOW MASTER STATUS: /* AFTER CONNECTION POOL ESTABLISHED */
 
 	// should flush because exitSafeModeLocation is true
 	snapshot = cp.Snapshot(true)
-	c.Assert(snapshot.id, Greater, 0)
+	c.Assert(snapshot, NotNil)
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec("(202)?"+flushCheckPointSQL).WithArgs(cpid, "", "", pos1.Name, pos1.Pos, "", pos2.Name, pos2.Pos, "", "null", true).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
@@ -326,7 +326,7 @@ SHOW MASTER STATUS: /* AFTER CONNECTION POOL ESTABLISHED */
 	// when use async flush, even exitSafeModeLocation is true we won't flush
 	c.Assert(cp.LoadMeta(), IsNil)
 	snapshot = cp.Snapshot(false)
-	c.Assert(snapshot.id, Equals, 0)
+	c.Assert(snapshot, IsNil)
 }
 
 func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
@@ -424,7 +424,11 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec(flushCheckPointSQL).WithArgs(cpid, schemaName, tableName, pos1.Name, pos1.Pos, "", "", 0, "", string(tiBytes), false).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
+	lastGlobalPoint := cp.GlobalPoint()
+	lastGlobalPointSavedTime := cp.GlobalPointSaveTime()
 	c.Assert(cp.FlushPointsExcept(tctx, cp.Snapshot(true).id, nil, nil, nil), IsNil)
+	c.Assert(cp.GlobalPoint(), Equals, lastGlobalPoint)
+	c.Assert(cp.GlobalPointSaveTime(), Equals, lastGlobalPointSavedTime)
 	err = s.tracker.Exec(ctx, schemaName, "alter table "+tableName+" add c2 int;")
 	c.Assert(err, IsNil)
 	ti2, err := s.tracker.GetTableInfo(table)
@@ -459,7 +463,12 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec("(320)?"+flushCheckPointSQL).WithArgs(cpid, "", "", pos2.Name, pos2.Pos, "", "", 0, "", "null", true).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
+	lastGlobalPoint = cp.GlobalPoint()
+	lastGlobalPointSavedTime = cp.GlobalPointSaveTime()
 	err = cp.FlushPointsExcept(tctx, cp.Snapshot(true).id, []*filter.Table{table}, nil, nil)
+	fmt.Println(cp.GlobalPoint(), lastGlobalPoint)
+	c.Assert(cp.GlobalPoint(), Equals, lastGlobalPoint)
+	c.Assert(cp.GlobalPointSaveTime(), Not(Equals), lastGlobalPointSavedTime)
 	c.Assert(err, IsNil)
 	cp.Rollback(s.tracker)
 	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
