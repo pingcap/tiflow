@@ -443,6 +443,7 @@ ClaimMessages:
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
+				log.Info("Emit RowChangedEvent", zap.Any("row", row))
 			case model.MqMessageTypeResolved:
 				ts, err := batchDecoder.NextResolvedEvent()
 				if err != nil {
@@ -481,6 +482,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	}
 	c.ddlList = append(c.ddlList, ddl)
 	c.maxDDLReceivedTs = ddl.CommitTs
+	log.Info("append DDL", zap.Any("ddl", ddl))
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
@@ -560,6 +562,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			log.Info("Emit DDL", zap.Any("ddl", todoDDL))
 			c.popDDL()
 			continue
 		}
