@@ -232,7 +232,7 @@ type CheckPoint interface {
 	SaveGlobalPoint(point binlog.Location)
 
 	// Snapshot make a snapshot of current checkpoint and return its id
-	Snapshot() SnapshotInfo
+	Snapshot(isSyncFlush bool) SnapshotInfo
 
 	// FlushGlobalPointsExcept flushes the global checkpoint and tables'
 	// checkpoints except exceptTables, it also flushes SQLs with Args providing
@@ -286,11 +286,11 @@ type CheckPoint interface {
 }
 
 type remoteCheckpointSnapshot struct {
-	id                         int
-	globalPoint                *tablePoint
-	globalPointSaveTime        time.Time
-	needFlushSafeModeExitPoint bool
-	points                     map[string]map[string]tablePoint
+	id                  int
+	globalPoint         *tablePoint
+	globalPointSaveTime time.Time
+	flushGlobalPoint    bool
+	points              map[string]map[string]tablePoint
 }
 
 // RemoteCheckPoint implements CheckPoint
@@ -353,7 +353,7 @@ func NewRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id s
 }
 
 // Snapshot make a snapshot of checkpoint and return the snapshot info.
-func (cp *RemoteCheckPoint) Snapshot() SnapshotInfo {
+func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) SnapshotInfo {
 	cp.Lock()
 	defer cp.Unlock()
 
@@ -374,25 +374,26 @@ func (cp *RemoteCheckPoint) Snapshot() SnapshotInfo {
 		}
 	}
 
-	// if there is no change just return an empty snapshot
-	if len(tableCheckPoints) == 0 && !cp.globalPoint.outOfDate() && !cp.globalPointSaveTime.IsZero() && !cp.needFlushSafeModeExitPoint {
+	flushGlobalPoint := cp.globalPoint.outOfDate() || cp.globalPointSaveTime.IsZero() || (isSyncFlush && cp.needFlushSafeModeExitPoint)
+
+	// if there is no change on both table points and global point, just return an empty snapshot
+	if len(tableCheckPoints) == 0 && !flushGlobalPoint {
 		return SnapshotInfo{
 			id: 0,
 		}
 	}
 
 	snapshot := &remoteCheckpointSnapshot{
-		id:                         id,
-		globalPointSaveTime:        time.Now(),
-		needFlushSafeModeExitPoint: cp.needFlushSafeModeExitPoint,
-		points:                     tableCheckPoints,
+		id: id,
+		globalPoint: &tablePoint{
+			location: cp.globalPoint.savedPoint.location.Clone(),
+			ti:       cp.globalPoint.savedPoint.ti,
+		},
+		globalPointSaveTime: time.Now(),
+		flushGlobalPoint:    flushGlobalPoint,
+		points:              tableCheckPoints,
 	}
 
-	globalLocation := &tablePoint{
-		location: cp.globalPoint.savedPoint.location.Clone(),
-		ti:       cp.globalPoint.savedPoint.ti,
-	}
-	snapshot.globalPoint = globalLocation
 	cp.snapshots = append(cp.snapshots, snapshot)
 	cp.lastSnapshotCreationTime = time.Now()
 	return SnapshotInfo{
@@ -622,7 +623,7 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	sqls := make([]string, 0, 100)
 	args := make([][]interface{}, 0, 100)
 
-	if cp.globalPoint.outOfDateBy(snapshotCp.globalPoint.location) || cp.globalPointSaveTime.IsZero() || snapshotCp.needFlushSafeModeExitPoint {
+	if snapshotCp.flushGlobalPoint {
 		locationG := snapshotCp.globalPoint.location
 		sqlG, argG := cp.genUpdateSQL(globalCpSchema, globalCpTable, locationG, cp.safeModeExitPoint, nil, true)
 		sqls = append(sqls, sqlG)
@@ -1036,7 +1037,7 @@ func (cp *RemoteCheckPoint) CheckAndUpdate(ctx context.Context, schemas map[stri
 
 	if hasChange {
 		tctx := tcontext.NewContext(ctx, log.L())
-		cpID := cp.Snapshot()
+		cpID := cp.Snapshot(true)
 		return cp.FlushPointsExcept(tctx, cpID.id, nil, nil, nil)
 	}
 	return nil

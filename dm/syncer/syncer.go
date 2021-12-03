@@ -1174,7 +1174,9 @@ func (s *Syncer) flushCheckPoints() error {
 		return nil
 	}
 
-	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot()
+	exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot()
+
+	snapshotInfo := s.checkpoint.Snapshot(true)
 
 	if snapshotInfo.id == 0 {
 		log.L().Info("checkpoint has no change, skip sync flush checkpoint")
@@ -1209,7 +1211,9 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 		return
 	}
 
-	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot()
+	exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot()
+
+	snapshotInfo := s.checkpoint.Snapshot(false)
 
 	if snapshotInfo.id == 0 {
 		log.L().Info("checkpoint has no change, skip async flush checkpoint")
@@ -1227,7 +1231,7 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 	s.flushCpWorker.Add(task)
 }
 
-func (s *Syncer) createCheckpointSnapshot() (SnapshotInfo, []*filter.Table, []string, [][]interface{}) {
+func (s *Syncer) createCheckpointSnapshot() ([]*filter.Table, []string, [][]interface{}) {
 	var (
 		exceptTableIDs map[string]bool
 		exceptTables   []*filter.Table
@@ -1245,9 +1249,7 @@ func (s *Syncer) createCheckpointSnapshot() (SnapshotInfo, []*filter.Table, []st
 		s.tctx.L().Info("prepare flush sqls", zap.Strings("shard meta sqls", shardMetaSQLs), zap.Reflect("shard meta arguments", shardMetaArgs))
 	}
 
-	snapshotInfo := s.checkpoint.Snapshot()
-
-	return snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs
+	return exceptTables, shardMetaSQLs, shardMetaArgs
 }
 
 func (s *Syncer) afterFlushCheckpoint(task *flushCpTask) error {
