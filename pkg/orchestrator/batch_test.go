@@ -41,18 +41,35 @@ func TestGetBatchChangeState(t *testing.T) {
 	require.Nil(t, err)
 	require.LessOrEqual(t, n, len(patchGroup))
 	require.LessOrEqual(t, size, etcdTxnMaxSize)
+	require.LessOrEqual(t, len(changedState), etcdTxnMaxOps)
 	require.Equal(t, []byte(fmt.Sprintf("abc%d", 0)), changedState[util.NewEtcdKey("/key0")])
 
-	// test single patch exceed txn size
-	largePatches := []DataPatch{&SingleDataPatch{
+	// test single patch exceed txn max size
+	largeSizePatches := []DataPatch{&SingleDataPatch{
 		Key: util.NewEtcdKey("largePatch"),
 		Func: func(old []byte) (newValue []byte, changed bool, err error) {
 			newValue = make([]byte, etcdTxnMaxSize)
 			return newValue, true, nil
 		},
 	}}
-	patchGroup = [][]DataPatch{largePatches}
+	patchGroup = [][]DataPatch{largeSizePatches}
 	_, _, _, err = getBatchChangedState(rawState, patchGroup)
 	require.NotNil(t, err)
-	require.Contains(t, err.Error(), "patch size of a single changefeed exceed etcd txn max size")
+	require.Contains(t, err.Error(), "a single changefeed exceed etcd txn max size")
+
+	// test single patch exceed txn max ops
+	manyOpsPatches := make([]DataPatch, 0)
+	for i := 0; i <= etcdTxnMaxOps*2; i++ {
+		manyOpsPatches = append(manyOpsPatches, &SingleDataPatch{
+			Key: util.NewEtcdKey(fmt.Sprintf("/key%d", i)),
+			Func: func(old []byte) (newValue []byte, changed bool, err error) {
+				newValue = []byte(fmt.Sprintf("abc%d", i))
+				return newValue, true, nil
+			},
+		})
+	}
+	patchGroup = [][]DataPatch{manyOpsPatches}
+	_, _, _, err = getBatchChangedState(rawState, patchGroup)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "a single changefeed exceed etcd txn max ops")
 }
