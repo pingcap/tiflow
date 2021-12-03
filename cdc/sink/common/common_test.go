@@ -14,7 +14,6 @@
 package common
 
 import (
-	"fmt"
 	"sort"
 	"sync"
 	"testing"
@@ -175,7 +174,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				})
 				resolved[tableID] = txns
 			}
-			require.Equal(test, t.expected, resolved, fmt.Sprintf("%s", cmp.Diff(resolved, t.expected)))
+			require.Equal(test, t.expected, resolved, cmp.Diff(resolved, t.expected))
 		}
 	}
 }
