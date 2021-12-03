@@ -573,6 +573,48 @@ func (t *testMaster) TestWaitOperationOkRightResult(c *check.C) {
 	}
 }
 
+func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
+	taskName := "test-stop-task"
+	notExceptResp := &pb.QueryStatusResponse{
+		SubTaskStatus: []*pb.SubTaskStatus{
+			{
+				Name: "task1",
+				Status: &pb.SubTaskStatus_Sync{Sync: &pb.SyncStatus{
+					UnresolvedGroups: []*pb.ShardingGroup{{Target: "`db`.`tbl`", Unsynced: []string{"table1"}}},
+				}},
+			},
+		},
+	}
+	exceptResp := &pb.QueryStatusResponse{SubTaskStatus: []*pb.SubTaskStatus{
+		{
+			Name: "task1",
+			Status: &pb.SubTaskStatus_Msg{Msg: common2.NoSubTaskMsg(taskName)},
+		},
+	}}
+
+	req := &pb.OperateTaskRequest{
+		Op:   pb.TaskOp_Stop,
+		Name: "task-unittest",
+	}
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+	ctx := context.Background()
+	duration, _ := time.ParseDuration("1s")
+	s := &Server{cfg: &Config{RPCTimeout: duration}}
+	mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+	mockWorkerClient.EXPECT().QueryStatus(
+		gomock.Any(),
+		gomock.Any(),
+	).Return(notExceptResp, nil).Return(exceptResp, nil)
+	mockWorker := scheduler.NewMockWorker(newMockRPCClient(mockWorkerClient))
+
+	ok, msg, _, err := s.waitOperationOk(ctx, mockWorker, "", "", req)
+	c.Assert(err, check.IsNil)
+	c.Assert(ok, check.Equals, "ok")
+	c.Assert(msg == "", check.Equals, "")
+}
+
+
 func (t *testMaster) TestFillUnsyncedStatus(c *check.C) {
 	var (
 		logger  = log.L()
