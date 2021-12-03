@@ -411,7 +411,15 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
+<<<<<<< HEAD
 	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
+=======
+	if topic == "" {
+		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
+	}
+
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, topic, config, errCh)
+>>>>>>> edc997c6e (sink(ticdc): add tests for validateMaxMessageBytesAndCreateTopic (#3709))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
