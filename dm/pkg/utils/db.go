@@ -430,7 +430,7 @@ func GetCharsetAndDefaultCollation(ctx context.Context, db *sql.DB) (map[string]
 		charsetAndDefaultCollation[strings.ToLower(charset)] = collation
 	}
 
-	if rows.Close() != nil {
+	if err = rows.Close(); err != nil {
 		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
 	}
 	return charsetAndDefaultCollation, err
