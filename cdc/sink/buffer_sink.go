@@ -152,13 +152,13 @@ func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Ro
 func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	select {
 	case <-ctx.Done():
-		return b.getCheckpointTs(tableID), ctx.Err()
+		return b.getTableCheckpointTs(tableID), ctx.Err()
 	case b.flushTsChan <- flushMsg{
 		tableID:    tableID,
 		resolvedTs: resolvedTs,
 	}:
 	}
-	return b.getCheckpointTs(tableID), nil
+	return b.getTableCheckpointTs(tableID), nil
 }
 
 type flushMsg struct {
@@ -166,7 +166,7 @@ type flushMsg struct {
 	resolvedTs uint64
 }
 
-func (b *bufferSink) getCheckpointTs(tableID model.TableID) uint64 {
+func (b *bufferSink) getTableCheckpointTs(tableID model.TableID) uint64 {
 	checkPoints, ok := b.tableCheckpointTsMap.Load(tableID)
 	if ok {
 		return checkPoints.(uint64)
@@ -174,6 +174,7 @@ func (b *bufferSink) getCheckpointTs(tableID model.TableID) uint64 {
 	return atomic.LoadUint64(&b.changeFeedCheckpointTs)
 }
 
+// UpdateChangeFeedCheckpointTs update the changeFeedCheckpointTs every processor tick
 func (b *bufferSink) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
 	atomic.StoreUint64(&b.changeFeedCheckpointTs, checkpointTs)
 }
