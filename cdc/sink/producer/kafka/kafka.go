@@ -280,7 +280,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, e
 		}
 	}()
 
-	if err := createTopic(admin, topic, config); err != nil {
+	if err := validateMaxMessageBytesAndCreateTopic(admin, topic, config); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -345,7 +345,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-func createTopic(admin kafka.ClusterAdminClient, topic string, config *Config) error {
+func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
