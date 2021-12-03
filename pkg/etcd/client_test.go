@@ -52,9 +52,8 @@ type mockWatcher struct {
 }
 
 func (m mockWatcher) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
-	watchCh := make(clientv3.WatchChan, 0)
 	*m.resetCount++
-	return watchCh
+	return make(clientv3.WatchChan, 0)
 }
 
 func (m mockWatcher) RequestProgress(ctx context.Context) error {
@@ -116,9 +115,9 @@ func (s *etcdSuite) TestWatchWithChan(c *check.C) {
 	cli := clientv3.NewCtxClient(context.TODO())
 	watcher := mockWatcher{}
 	resetCount := 0
-	requestCuount := 0
+	requestCount := 0
 	watcher.resetCount = &resetCount
-	watcher.requestCount = &requestCuount
+	watcher.requestCount = &requestCount
 	cli.Watcher = watcher
 
 	mockClock := clock.NewMock()
@@ -126,13 +125,13 @@ func (s *etcdSuite) TestWatchWithChan(c *check.C) {
 	watchCli.clock = mockClock
 
 	key := "watch-test"
-	watchCh := make(chan clientv3.WatchResponse, 1)
+	outCh := make(chan clientv3.WatchResponse, 1)
 	revision := int64(1)
 	ctx, _ := context.WithTimeout(context.Background(), time.Second*2)
 
 	closeCh := make(chan struct{})
 	go func() {
-		watchCli.WatchWithChan(ctx, watchCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
 		closeCh <- struct{}{}
 	}()
 	// wait for WatchWithChan set up
