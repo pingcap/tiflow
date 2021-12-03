@@ -264,7 +264,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 }
 
 var newSaramaConfigImpl = newSaramaConfig
-var newSaramaAdminClientImpl = sarama.NewClusterAdmin
+var NewSaramaAdminClientImpl clusterAdminClientCrater = NewSaramaAdminClient
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
@@ -274,7 +274,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, e
 		return nil, err
 	}
 
-	admin, err := sarama.NewClusterAdmin(config.BrokerEndpoints, cfg)
+	admin, err := NewSaramaAdminClientImpl(config.BrokerEndpoints, cfg)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -350,10 +350,6 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 }
 
 func createTopic(admin ClusterAdminClient, topic string, config *Config) error {
-	// FIXME: find a way to remove this failpoint for workload the unit test
-	failpoint.Inject("SkipTopicAutoCreate", func() {
-		failpoint.Return(nil)
-	})
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	defaultMockTopicName    = "mock_topic"
+	DefaultMockTopicName    = "mock_topic"
 	defaultMockControllerID = 1
 )
 
@@ -37,7 +37,7 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	topics := make(map[string]sarama.TopicDetail)
 	configEntries := make(map[string]*string)
 	configEntries[topicMaxMessageBytesConfigName] = &defaultTopicMaxMessage
-	topics[defaultMockTopicName] = sarama.TopicDetail{
+	topics[DefaultMockTopicName] = sarama.TopicDetail{
 		NumPartitions: 3,
 		ConfigEntries: configEntries,
 	}
@@ -87,7 +87,7 @@ func (c *ClusterAdminClientMockImpl) removeTopic(topic string) {
 }
 
 func (c *ClusterAdminClientMockImpl) getDefaultMockTopicName() string {
-	return defaultMockTopicName
+	return DefaultMockTopicName
 }
 
 func (c *ClusterAdminClientMockImpl) getDefaultMaxMessageBytes() int {

@@ -29,3 +29,13 @@ type ClusterAdminClient interface {
 	// Close shuts down the admin and closes underlying client.
 	Close() error
 }
+
+type clusterAdminClientCrater func([]string, *sarama.Config) (ClusterAdminClient, error)
+
+func NewSaramaAdminClient(addrs []string, conf *sarama.Config) (ClusterAdminClient, error) {
+	return sarama.NewClusterAdmin(addrs, conf)
+}
+
+func NewMockAdminClient(_ []string, _ *sarama.Config) (ClusterAdminClient, error) {
+	return NewClusterAdminClientMockImpl(), nil
+}

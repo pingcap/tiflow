@@ -23,7 +23,6 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
@@ -65,7 +64,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
 
-	topic := "unit_test_1"
+	topic := DefaultMockTopicName
 	leader := sarama.NewMockBroker(c, 2)
 	defer leader.Close()
 	metadataResponse := new(sarama.MetadataResponse)
@@ -101,10 +100,9 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 		cfg.Producer.Flush.MaxMessages = 1
 		return cfg, err
 	}
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
+	NewSaramaAdminClientImpl = NewMockAdminClient
 	defer func() {
-		newSaramaConfigImpl = newSaramaConfigImplBak
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
+		NewSaramaAdminClientImpl = NewSaramaAdminClient
 	}()
 
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
@@ -193,6 +191,9 @@ func (s *kafkaSuite) TestCreateTopic(c *check.C) {
 	defer testleak.AfterTest(c)
 	config := NewConfig()
 	adminClient := NewClusterAdminClientMockImpl()
+	defer func() {
+		_ = adminClient.Close()
+	}()
 
 	// When topic exists and max message bytes is set correctly.
 	config.MaxMessageBytes = adminClient.getDefaultMaxMessageBytes()
@@ -269,15 +270,17 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.Version = "invalid"
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
 	topic := "topic"
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
+	NewSaramaAdminClientImpl = NewMockAdminClient
+	defer func() {
+		NewSaramaAdminClientImpl = NewSaramaAdminClient
+	}()
 	_, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
-	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 }
 
 func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	defer testleak.AfterTest(c)()
-	topic := "unit_test_4"
+	topic := DefaultMockTopicName
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -299,7 +302,10 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
+	NewSaramaAdminClientImpl = NewMockAdminClient
+	defer func() {
+		NewSaramaAdminClientImpl = NewSaramaAdminClient
+	}()
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
 	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
@@ -317,7 +323,6 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	errCh := make(chan error, 1)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
 	}()
@@ -355,7 +360,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 
 func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	defer testleak.AfterTest(c)()
-	topic := "unit_test_4"
+	topic := DefaultMockTopicName
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -377,14 +382,16 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
+	NewSaramaAdminClientImpl = NewMockAdminClient
+	defer func() {
+		NewSaramaAdminClientImpl = NewSaramaAdminClient
+	}()
 
 	errCh := make(chan error, 1)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 	}()
 
 	c.Assert(err, check.IsNil)
