@@ -160,31 +160,19 @@ func newAsyncSink4Test() (AsyncSink, *mockSink) {
 func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
-	var resultErr error
-	var resultErrMu sync.Mutex
-	getResultErr := func() error {
-		resultErrMu.Lock()
-		defer resultErrMu.Unlock()
-		return resultErr
-	}
-	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
-		resultErrMu.Lock()
-		defer resultErrMu.Unlock()
-		resultErr = err
-		return nil
-	})
 
 	asyncSink, mSink := newAsyncSink4Test()
-
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
-	var wg sync.WaitGroup
-	errCh := make(chan error, 1)
+	var (
+		wg  sync.WaitGroup
+		err error
+	)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- asyncSink.Run(ctx)
+		err = asyncSink.Run(ctx)
 	}()
 
 	go func() {
@@ -203,16 +191,17 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 		}
 	}
 
-	c.Assert(getResultErr(), check.IsNil)
+	c.Assert(err, check.IsNil)
 	mSink.ddlError = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 	ddl2 := &model.DDLEvent{CommitTs: 2}
 	for {
 		done, err := asyncSink.EmitDDLEvent(ctx, ddl2)
 		c.Assert(err, check.IsNil)
-		if done {
+
+		if done || err != nil {
 			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl2)
 			break
 		}
 	}
-	c.Assert(cerror.ErrExecDDLFailed.Equal(<-errCh), check.IsTrue)
+	c.Assert(cerror.ErrExecDDLFailed.Equal(err), check.IsTrue)
 }
