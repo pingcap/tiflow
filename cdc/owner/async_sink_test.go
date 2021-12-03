@@ -80,25 +80,24 @@ func newAsyncSink4Test() (AsyncSink, *mockSink) {
 
 func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx1, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	asyncSink, mSink := newAsyncSink4Test()
 
-	var (
-		wg    sync.WaitGroup
-		errCh chan error
-	)
-	defer func() {
-		asyncSink.Close(ctx1)
-		c.Assert(<-errCh, check.IsNil)
-	}()
+	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
 
+	var wg sync.WaitGroup
+	errCh := make(chan error, 1)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- asyncSink.Run(ctx1)
+		errCh <- asyncSink.Run(ctx)
+	}()
+
+	go func() {
+		wg.Wait()
+		asyncSink.Close(ctx)
+		c.Assert(<-errCh, check.IsNil)
 	}()
 
 	waitCheckpointGrowingUp := func(m *mockSink, targetTs model.Ts) error {
@@ -117,25 +116,24 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 
 func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	asyncSink, mSink := newAsyncSink4Test()
 
-	var (
-		wg    sync.WaitGroup
-		errCh chan error
-	)
-	defer func() {
-		asyncSink.Close(ctx)
-		c.Assert(<-errCh, check.IsNil)
-	}()
+	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
 
+	var wg sync.WaitGroup
+	errCh := make(chan error, 1)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		errCh <- asyncSink.Run(ctx)
+	}()
+
+	go func() {
+		wg.Wait()
+		asyncSink.Close(ctx)
+		c.Assert(<-errCh, check.IsNil)
 	}()
 
 	ddlEvents := []*model.DDLEvent{
@@ -173,24 +171,23 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 		return nil
 	})
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	asyncSink, mSink := newAsyncSink4Test()
 
-	var (
-		wg    sync.WaitGroup
-		errCh chan error
-	)
-	defer func() {
-		asyncSink.Close(ctx)
-		c.Assert(<-errCh, check.IsNil)
-	}()
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
 
+	var wg sync.WaitGroup
+	errCh := make(chan error, 1)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		errCh <- asyncSink.Run(ctx)
+	}()
+
+	go func() {
+		wg.Wait()
+		asyncSink.Close(ctx)
+		c.Assert(<-errCh, check.IsNil)
 	}()
 
 	mSink.ddlError = cerror.ErrDDLEventIgnored.GenWithStackByArgs()
