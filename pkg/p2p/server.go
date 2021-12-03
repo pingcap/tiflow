@@ -670,7 +670,7 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 }
 
 func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, streamHandle *streamHandle) error {
-	clientIP := "unknown"
+	clientIP := unknownPeerLabel
 	if p, ok := gRPCPeer.FromContext(stream.Context()); ok {
 		clientIP = p.Addr.String()
 	}

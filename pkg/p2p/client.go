@@ -207,7 +207,7 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 		return errors.Trace(err)
 	}
 
-	peerAddr := "unknown"
+	peerAddr := unknownPeerLabel
 	peer, ok := gRPCPeer.FromContext(stream.Context())
 	if ok {
 		peerAddr = peer.Addr.String()
