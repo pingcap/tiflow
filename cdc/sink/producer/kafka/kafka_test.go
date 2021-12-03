@@ -224,14 +224,14 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	// It is less than the value of broker.
 	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() - 1024
 	config.AutoCreate = true
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-one", config)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-success", config)
 	c.Assert(err, check.IsNil)
 
 	// When the topic does not exist, use the broker's configuration to create the topic.
 	// It is larger than the value of broker.
 	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
 	config.AutoCreate = true
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-one", config)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-fail", config)
 	c.Assert(
 		errors.Cause(err),
 		check.ErrorMatches,
