@@ -60,7 +60,8 @@ var maxTries int64 = 8
 type Client struct {
 	cli     *clientv3.Client
 	metrics map[string]prometheus.Counter
-	clock   clock.Clock
+	// clock is for mocking in unit test
+	clock clock.Clock
 }
 
 // Wrap warps a clientv3.Client that provides etcd APIs required by TiCDC.
@@ -183,10 +184,11 @@ func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOptio
 
 // WatchWithChan maintains a watchCh and send all msg from the watchCh to outCh
 func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchResponse, key string, opts ...clientv3.OpOption) {
+	defer log.Info("WatchWithChan exit")
 	var lastRevision int64
-	ctx1, cancel := context.WithCancel(ctx)
+	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	watchCh := c.cli.Watch(ctx1, key, opts...)
+	watchCh := c.cli.Watch(watchCtx, key, opts...)
 	watchTimer := c.clock.Timer(etcdWatchChTimeoutDuration)
 	defer watchTimer.Stop()
 	requestTimer := c.clock.Timer(etcdRequestProgressDuration)
@@ -208,6 +210,9 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 				cancel()
 				return
 			case outCh <- response: // it may blocking here
+			case <-watchTimer.C:
+				log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck", zap.Duration("duration", etcdWatchChTimeoutDuration))
+				watchTimer.Reset(etcdWatchChTimeoutDuration)
 			}
 		case <-requestTimer.C:
 			if err := c.RequestProgress(ctx); err != nil {
@@ -215,11 +220,11 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 			}
 			requestTimer.Reset(etcdRequestProgressDuration)
 		case <-watchTimer.C:
-			log.Warn("etcd watchCh blocking too long, reset the watchCh")
-			// cancel the last cancel func an reset it
+			log.Warn("etcd client watchCh blocking too long, reset the watchCh", zap.Duration("duration", etcdWatchChTimeoutDuration), zap.Stack("stack"))
+			// cancel the last cancel func to reset it
 			cancel()
-			ctx1, cancel = context.WithCancel(ctx)
-			watchCh = c.cli.Watch(ctx1, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+			watchCtx, cancel = context.WithCancel(ctx)
+			watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
 			watchTimer.Reset(etcdWatchChTimeoutDuration)
 		}
 	}

@@ -137,4 +137,5 @@ func (s *etcdSuite) TestWatchWithChan(c *check.C) {
 	mockClock.Add(time.Second * 20)
 	<-closeCh
 	c.Assert(*watcher.resetCount > 1, check.IsTrue)
+	c.Assert(etcdRequestProgressDuration, check.Less, etcdWatchChTimeoutDuration)
 }

@@ -216,11 +216,11 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			startTime := time.Now()
 			// it is safe that a batch of updates has been applied to worker.state before worker.reactor.Tick
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
-			costTime := time.Since(startTime).Seconds()
-			if costTime > etcdWorkerLogsWarnDuration.Seconds() {
-				log.Warn("EtcdWorker ticks reactor took too long", zap.Float64("duration", costTime))
+			costTime := time.Since(startTime)
+			if costTime > etcdWorkerLogsWarnDuration {
+				log.Warn("EtcdWorker ticks reactor took too long", zap.Duration("duration", costTime))
 			}
-			worker.metrics.metricEtcdWorkerTickDuration.Observe(costTime)
+			worker.metrics.metricEtcdWorkerTickDuration.Observe(costTime.Seconds())
 			if err != nil {
 				if !cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
 					return errors.Trace(err)
@@ -370,11 +370,11 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	ctx1, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
 	defer cancel()
 	resp, err := worker.client.Txn(ctx1).If(cmps...).Then(ops...).Commit()
-	costTime := time.Since(startTime).Seconds()
-	if costTime > etcdWorkerLogsWarnDuration.Seconds() {
-		log.Warn("Etcd transaction took too long", zap.Float64("duration", costTime))
+	costTime := time.Since(startTime)
+	if costTime > etcdWorkerLogsWarnDuration {
+		log.Warn("Etcd transaction took too long", zap.Duration("duration", costTime))
 	}
-	worker.metrics.metricEtcdTxnDuration.Observe(costTime)
+	worker.metrics.metricEtcdTxnDuration.Observe(costTime.Seconds())
 	if err != nil {
 		return errors.Trace(err)
 	}
