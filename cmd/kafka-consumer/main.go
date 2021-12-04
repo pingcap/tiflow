@@ -453,7 +453,7 @@ ClaimMessages:
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if resolvedTs < ts {
-					log.Debug("update sink resolved ts",
+					log.Info("update sink resolved ts",
 						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition))
 					atomic.StoreUint64(&sink.resolvedTs, ts)
