@@ -95,7 +95,7 @@ Some useful tips:
    the version of other dependencies that you want to download, such as tidb, tikv, pd, etc.
    > For example, you can change `RUN ./download-integration-test-binaries.sh master` to `RUN ./download-integration-test-binaries.sh release-5.2`
    > to use the release-5.2 dependency.
-   > Then rebuild the image with the [--no-cache](https://docs.docker.com/engine/reference/commandline/build/) flag.
+   > Then rebuild the image with the [--no-cache](https://docs.docker.com/compose/reference/build/) flag.
 
 ## Writing new tests
 
