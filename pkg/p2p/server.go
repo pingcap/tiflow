@@ -328,12 +328,12 @@ func (m *MessageServer) deregisterPeer(ctx context.Context, peer *cdcPeer, err e
 		zap.Error(err))
 
 	m.peerLock.Lock()
+	// TODO add a tombstone state to facilitate GC'ing the acks records associated with the peer.
 	delete(m.peers, peer.PeerID)
 	m.peerLock.Unlock()
 	if err != nil {
 		peer.abortWithError(ctx, err)
 	}
-	m.acks.RemoveNode(peer.PeerID)
 }
 
 // We use an empty interface to hold the information on the type of the object
