@@ -183,8 +183,8 @@ func (b *binlogPoint) String() string {
 }
 
 // SnapshotInfo contains:
-// - checkpoint snapshot id, it's for retriving checkpoint snapshot in flush phase
-// - global checkpoint position, it's for updating current active relay log after checkpoint flushed
+// - checkpoint snapshot id, it's for retrieving checkpoint snapshot in flush phase
+// - global checkpoint position, it's for updating current active relay log after checkpoint flush.
 type SnapshotInfo struct {
 	// the snapshot id
 	id int
@@ -291,7 +291,7 @@ type CheckPoint interface {
 	CheckAndUpdate(ctx context.Context, schemas map[string]string, tables map[string]map[string]string) error
 }
 
-// remoteCheckpointSnapshot contains info needed to flush checkpoint to downstream by FlushPointsExcept method
+// remoteCheckpointSnapshot contains info needed to flush checkpoint to downstream by FlushPointsExcept method.
 type remoteCheckpointSnapshot struct {
 	id                  int
 	globalPoint         *tablePoint

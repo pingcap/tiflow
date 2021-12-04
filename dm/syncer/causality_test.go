@@ -289,7 +289,7 @@ func (s *testSyncerSuite) TestCasualityRollingMap(c *C) {
 		c.Assert(val, Equals, testcase.val)
 	}
 
-	for index, _ := range testCases {
+	for index := range testCases {
 		rm.gc(int64(index))
 
 		for _, rmMap := range rm.maps {
