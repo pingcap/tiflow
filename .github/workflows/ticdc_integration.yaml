@@ -65,7 +65,7 @@ jobs:
         timeout-minutes: 45
         run: |
           cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
-          ./integration -protocol=mysql
+          ./mq_protocol_tests -protocol=mysql
 
       - name: Try to dump container logs
         if: ${{ failure() }}
@@ -127,7 +127,7 @@ jobs:
         timeout-minutes: 45
         run: |
           cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
-          ./integration -protocol=simple-mysql-checking-old-value
+          ./mq_protocol_tests -protocol=simple-mysql-checking-old-value
 
       - name: Try to dump container logs
         if: ${{ failure() }}
@@ -189,7 +189,7 @@ jobs:
         timeout-minutes: 45
         run: |
           cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
-          ./integration -protocol=canalJson
+          ./mq_protocol_tests -protocol=canalJson
 
       - name: Try to dump container logs
         if: ${{ failure() }}
