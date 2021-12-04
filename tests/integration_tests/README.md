@@ -25,7 +25,7 @@
 
 2. The following programs must be installed:
 
-   * `mysql` (the MySQL cli client,
+   * [mysql](https://dev.mysql.com/doc/mysql-installation-excerpt/5.7/en/) (the MySQL cli client,
      currently [mysql client 8.0 is not supported](https://github.com/pingcap/tidb/issues/14021))
 
 3. The user used to execute the tests must have permission to create the folder /tmp/tidb_cdc_test. All test artifacts
@@ -35,8 +35,8 @@
 
 The following programs must be installed:
 
-* [docker](https://www.docker.com/)
-* [docker-compose](https://docs.docker.com/compose/)
+* [docker](https://docs.docker.com/get-docker/)
+* [docker-compose](https://docs.docker.com/compose/install/)
 
 We recommend that you provide docker with at least 6+ cores and 8G+ memory. Of course, the more resources, the better.
 
