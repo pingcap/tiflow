@@ -84,8 +84,8 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 		info = ctx.ChangefeedVars().Info
 	)
 
-	eg, ctx1 := errgroup.WithContext(ctx)
-	eg.Go(func() error {
+	g, ctx1 := errgroup.WithContext(ctx)
+	g.Go(func() error {
 		filter, err := filter.NewFilter(info.Config)
 		if err != nil {
 			return errors.Trace(err)
@@ -99,7 +99,7 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 		return nil
 	})
 
-	eg.Go(func() error {
+	g.Go(func() error {
 		if info.SyncPointEnabled {
 			syncPointStore, err := sink.NewSyncpointStore(ctx1, id, info.SinkURI)
 			if err != nil {
@@ -114,13 +114,15 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 		return nil
 	})
 
-	return eg.Wait()
+	return g.Wait()
 }
 
 func (s *asyncSinkImpl) Run(ctx cdcContext.Context) error {
 	if err := s.sinkInitHandler(ctx, s); err != nil {
 		return errors.Trace(err)
 	}
+
+	log.Info("async sink initialized, start processing...")
 
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
