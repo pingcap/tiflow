@@ -224,6 +224,18 @@ func TestMessageClientRestartMultiTopics(t *testing.T) {
 	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 16)
 }
 
+func TestMessageClientSenderErrorsMultiTopics(t *testing.T) {
+	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ClientBatchSenderInjectError", "3*return(true)")
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ClientBatchSenderInjectError")
+	}()
+
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeSmall, 16)
+}
+
 func TestMessageClientBasicNonblocking(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
