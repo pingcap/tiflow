@@ -64,8 +64,6 @@ type changefeed struct {
 	// The changefeed will start some backend goroutines in the function `initialize`,
 	// such as DDLPuller, Sink, etc.
 	// `wg` is used to manage those backend goroutines.
-	// But it only manages the DDLPuller for now.
-	// TODO: manage the Sink and other backend goroutines.
 	wg sync.WaitGroup
 
 	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
@@ -264,13 +262,6 @@ LOOP:
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
-	c.sink = c.newSink()
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		ctx.Throw(c.sink.Run(cancelCtx))
-	}()
-
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
@@ -280,6 +271,13 @@ LOOP:
 	go func() {
 		defer c.wg.Done()
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
+	}()
+
+	c.sink = c.newSink()
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		ctx.Throw(c.sink.Run(cancelCtx))
 	}()
 
 	stdCtx := util.PutChangefeedIDInCtx(cancelCtx, c.id)
