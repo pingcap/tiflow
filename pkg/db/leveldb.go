@@ -53,8 +53,8 @@ func buildOption(cfg *config.DBConfig) opt.Options {
 	return option
 }
 
-// OpenDB opens a leveldb.
-func OpenDB(ctx context.Context, id int, path string, cfg *config.DBConfig) (DB, error) {
+// OpenLevelDB opens a leveldb.
+func OpenLevelDB(ctx context.Context, id int, path string, cfg *config.DBConfig) (DB, error) {
 	// TODO make sure path is under data dir.
 	dbDir := filepath.Join(path, fmt.Sprintf("%04d", id))
 	err := retry.Do(ctx, func() error {
