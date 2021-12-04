@@ -287,7 +287,10 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, e
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+	log.Debug("asyncClient initialized")
+
 	syncClient, err := sarama.NewSyncProducer(config.BrokerEndpoints, cfg)
+	log.Debug("syncClient initialized")
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}

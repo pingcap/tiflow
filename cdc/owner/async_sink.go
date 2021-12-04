@@ -118,11 +118,12 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 }
 
 func (s *asyncSinkImpl) Run(ctx cdcContext.Context) error {
+	start := time.Now()
 	if err := s.sinkInitHandler(ctx, s); err != nil {
 		return errors.Trace(err)
 	}
 
-	log.Info("async sink initialized, start processing...")
+	log.Info("async sink initialized, start processing...", zap.Duration("elapsed", time.Since(start)))
 
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
