@@ -58,13 +58,13 @@ jobs:
 
       - name: Build Integration Framework
         run: |
-          cd $GITHUB_WORKSPACE/integration
+          cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           go build
 
       - name: Run Integration Framework
         timeout-minutes: 45
         run: |
-          cd $GITHUB_WORKSPACE/integration
+          cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           ./integration -protocol=mysql
 
       - name: Try to dump container logs
@@ -120,13 +120,13 @@ jobs:
 
       - name: Build Integration Framework
         run: |
-          cd $GITHUB_WORKSPACE/integration
+          cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           go build
 
       - name: Run Integration Framework
         timeout-minutes: 45
         run: |
-          cd $GITHUB_WORKSPACE/integration
+          cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           ./integration -protocol=simple-mysql-checking-old-value
 
       - name: Try to dump container logs
@@ -182,13 +182,13 @@ jobs:
 
       - name: Build Integration Framework
         run: |
-          cd $GITHUB_WORKSPACE/integration
+          cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           go build
 
       - name: Run Integration Framework
         timeout-minutes: 45
         run: |
-          cd $GITHUB_WORKSPACE/integration
+          cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           ./integration -protocol=canalJson
 
       - name: Try to dump container logs
