@@ -74,7 +74,7 @@ function upgrade_to_current_v2() {
 
 	tiup dm upgrade --yes $CLUSTER_NAME $CUR_VER
 
-	ensure_start_relay
+	restart_relay
 }
 
 function migrate_in_v2() {

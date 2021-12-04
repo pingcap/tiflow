@@ -236,9 +236,14 @@ error = '''
 the etcd txn should be aborted and retried immediately
 '''
 
+["CDC:ErrEtcdTxnOpsExceed"]
+error = '''
+patch ops:%d of a single changefeed exceed etcd txn max ops:%d
+'''
+
 ["CDC:ErrEtcdTxnSizeExceed"]
 error = '''
-patch size of a single changefeed exceed etcd txn max size
+patch size:%d of a single changefeed exceed etcd txn max size:%d
 '''
 
 ["CDC:ErrEventFeedAborted"]
@@ -616,6 +621,16 @@ error = '''
 etcd api call error
 '''
 
+["CDC:ErrPeerMessageClientClosed"]
+error = '''
+peer-to-peer message client has been closed
+'''
+
+["CDC:ErrPeerMessageClientPermanentFail"]
+error = '''
+peer-to-peer message client has failed permanently, no need to reconnect: %s
+'''
+
 ["CDC:ErrPeerMessageDataLost"]
 error = '''
 peer-to-peer message data lost, topic: %s, seq: %s
@@ -629,6 +644,11 @@ failed to decode peer-to-peer message
 ["CDC:ErrPeerMessageDuplicateConnection"]
 error = '''
 peer-to-peer message duplicate connection: epoch %d
+'''
+
+["CDC:ErrPeerMessageEncodeError"]
+error = '''
+failed to encode peer-to-peer message
 '''
 
 ["CDC:ErrPeerMessageIllegalClientVersion"]
@@ -649,6 +669,11 @@ peer-to-peer message server tries to send to a closed stream. Internal only.
 ["CDC:ErrPeerMessageReceiverMismatch"]
 error = '''
 peer-to-peer message receiver is a mismatch: expected %s, got %s
+'''
+
+["CDC:ErrPeerMessageSendTryAgain"]
+error = '''
+peer-to-peer message client has too many pending messages to send, try again later
 '''
 
 ["CDC:ErrPeerMessageServerClosed"]
