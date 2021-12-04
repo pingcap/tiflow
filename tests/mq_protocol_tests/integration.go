@@ -17,11 +17,11 @@ import (
 	"flag"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
-	"github.com/pingcap/ticdc/integration/framework/mysql"
-	"github.com/pingcap/ticdc/integration/tests"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/avro"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/canal"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/mysql"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/tests"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

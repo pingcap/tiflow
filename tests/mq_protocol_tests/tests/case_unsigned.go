@@ -14,7 +14,7 @@
 package tests
 
 import (
-	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
 )
 
 // UnsignedCase is base impl of test case for unsigned int type data

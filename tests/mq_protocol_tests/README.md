@@ -1,7 +1,11 @@
 # Integration Framework
 
 ## Introduction
-The **Integration Framework** is designed to provide a flexible way for contributors to write integration tests for new sinks or MQ protocols. The core of the framework is stored in `{ticdc_root}/integration/framework`, and test cases should be stored in `{ticdc_root}/integration`. Currently, although the Framework is still under active development, it is capable of helping test Avro support and it is the only officially supported way for developers to run integration tests with Kafka connect.
+The **Integration Framework** is designed to provide a flexible way for contributors to write integration tests for new
+sinks or MQ protocols. The core of the framework is stored in `{ticdc_root}/tests/mq_protocol_tests/framework`, and test
+cases should be stored in `{ticdc_root}/integration`. Currently, although the Framework is still under active
+development, it is capable of helping test Avro support and it is the only officially supported way for developers to
+run integration tests with Kafka connect.
 
 ## Quick Start
 To create a test case, you need to:
