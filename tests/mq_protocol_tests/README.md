@@ -3,9 +3,9 @@
 ## Introduction
 The **Integration Framework** is designed to provide a flexible way for contributors to write integration tests for new
 sinks or MQ protocols. The core of the framework is stored in `{ticdc_root}/tests/mq_protocol_tests/framework`, and test
-cases should be stored in `{ticdc_root}/integration`. Currently, although the Framework is still under active
-development, it is capable of helping test Avro support and it is the only officially supported way for developers to
-run integration tests with Kafka connect.
+cases should be stored in `{ticdc_root}/tests/mq_protocol_tests/cases`. Currently, although the Framework is still under
+active development, it is capable of helping test Avro support and it is the only officially supported way for
+developers to run integration tests with Kafka connect.
 
 ## Quick Start
 To create a test case, you need to:
@@ -27,7 +27,7 @@ For the time being, if you would like to write a test case for Avro and Canal, i
 
 Example:
 ```go
-// tests/base_mycase.go
+// cases/base_mycase.go
 type MyCase struct {
 	framework.Task
 }
@@ -75,7 +75,7 @@ func (c *MyCase) Run(ctx *framework.TaskContext) error {
 }
 
 
-// tests/integration.go
+// main.go
 func main() {
     task := &canal.SingleTableTask{TableName: "test"}
     testCases := []framework.Task{
