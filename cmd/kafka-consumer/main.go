@@ -473,6 +473,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
 	if ddl.CommitTs <= c.maxDDLReceivedTs {
+		log.Info("ddl out of date", zap.Any("ddl", ddl), zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs))
 		return
 	}
 	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
