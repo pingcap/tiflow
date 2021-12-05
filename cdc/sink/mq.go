@@ -239,8 +239,11 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	k.statistics.AddDDLCount()
-	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs), zap.Int32("partition", partition))
-	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, 0)
+	if err := k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition); err != nil {
+		log.Warn("emit ddl to producer failed.", zap.Error(err))
+	}
+
+	log.Debug("emit ddl event success", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs), zap.Int32("partition", partition))
 	return errors.Trace(err)
 }
 
