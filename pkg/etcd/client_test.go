@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -47,13 +48,14 @@ func (m *mockClient) Put(ctx context.Context, key, val string, opts ...clientv3.
 
 type mockWatcher struct {
 	clientv3.Watcher
+	watchCh      chan clientv3.WatchResponse
 	resetCount   *int
 	requestCount *int
 }
 
 func (m mockWatcher) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	*m.resetCount++
-	return make(clientv3.WatchChan, 0)
+	return m.watchCh
 }
 
 func (m mockWatcher) RequestProgress(ctx context.Context) error {
@@ -108,42 +110,127 @@ func (s *etcdSuite) TestDelegateLease(c *check.C) {
 	c.Assert(ttlResp.TTL, check.Equals, int64(-1))
 }
 
-func (s *etcdSuite) TestWatchWithChan(c *check.C) {
+// test no data lost when WatchCh blocked
+func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
-
 	cli := clientv3.NewCtxClient(context.TODO())
-	watcher := mockWatcher{}
 	resetCount := 0
 	requestCount := 0
-	watcher.resetCount = &resetCount
-	watcher.requestCount = &requestCount
+	watchCh := make(chan clientv3.WatchResponse, 1)
+	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount}
 	cli.Watcher = watcher
+
+	sentRes := []clientv3.WatchResponse{
+		{CompactRevision: 1},
+		{CompactRevision: 2},
+		{CompactRevision: 3},
+		{CompactRevision: 4},
+		{CompactRevision: 5},
+		{CompactRevision: 6},
+	}
+
+	go func() {
+		for _, r := range sentRes {
+			watchCh <- r
+		}
+	}()
 
 	mockClock := clock.NewMock()
 	watchCli := Wrap(cli, nil)
 	watchCli.clock = mockClock
 
-	key := "watch-test"
-	outCh := make(chan clientv3.WatchResponse, 1)
+	key := "testWatchChBlocked"
+	outCh := make(chan clientv3.WatchResponse, 6)
 	revision := int64(1)
 	ctx, _ := context.WithTimeout(context.Background(), time.Second*2)
 
-	closeCh := make(chan struct{})
 	go func() {
 		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
-		closeCh <- struct{}{}
 	}()
+	receivedRes := make([]clientv3.WatchResponse, 0)
 	// wait for WatchWithChan set up
-	time.Sleep(1 * time.Second)
+	r := <-outCh
+	receivedRes = append(receivedRes, r)
 	// move time forward
-	mockClock.Add(time.Second * 20)
-	<-closeCh
+	mockClock.Add(time.Second * 30)
 
+Loop:
+	for {
+		select {
+		case r, ok := <-outCh:
+			if ok {
+				receivedRes = append(receivedRes, r)
+			} else {
+				break Loop
+			}
+		}
+	}
+
+	c.Check(sentRes, check.DeepEquals, receivedRes)
 	// make sure watchCh has been reset since timeout
 	c.Assert(*watcher.resetCount > 1, check.IsTrue)
 	// make sure RequestProgress has been call since timeout
 	c.Assert(*watcher.requestCount > 1, check.IsTrue)
 	// make sure etcdRequestProgressDuration is less than etcdWatchChTimeoutDuration
 	c.Assert(etcdRequestProgressDuration, check.Less, etcdWatchChTimeoutDuration)
+}
+
+// test no data lost when OutCh blocked
+func (s *etcdSuite) TestOutChBlocked(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	cli := clientv3.NewCtxClient(context.TODO())
+	resetCount := 0
+	requestCount := 0
+	watchCh := make(chan clientv3.WatchResponse, 1)
+	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount}
+	cli.Watcher = watcher
+
+	mockClock := clock.NewMock()
+	watchCli := Wrap(cli, nil)
+	watchCli.clock = mockClock
+
+	sentRes := []clientv3.WatchResponse{
+		{CompactRevision: 1},
+		{CompactRevision: 2},
+		{CompactRevision: 3},
+	}
+
+	go func() {
+		for _, r := range sentRes {
+			watchCh <- r
+		}
+	}()
+
+	key := "testOutChBlocked"
+	outCh := make(chan clientv3.WatchResponse, 1)
+	revision := int64(1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
+	go func() {
+		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+	}()
+	receivedRes := make([]clientv3.WatchResponse, 0)
+	// wait for WatchWithChan set up
+	r := <-outCh
+	receivedRes = append(receivedRes, r)
+	// move time forward
+	mockClock.Add(time.Second * 30)
+
+Loop:
+	for {
+		select {
+		case r, ok := <-outCh:
+			if ok {
+				receivedRes = append(receivedRes, r)
+			} else {
+				break Loop
+			}
+		}
+	}
+
+	c.Check(sentRes, check.DeepEquals, receivedRes)
 }
