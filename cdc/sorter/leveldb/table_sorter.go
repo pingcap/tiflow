@@ -88,26 +88,54 @@ func NewLevelDBSorter(
 	}
 }
 
-// waitInputOutput wait input or output becomes available.
+func (ls *Sorter) waitInput(ctx context.Context) (*model.PolymorphicEvent, error) {
+	select {
+	case <-ctx.Done():
+		return nil, errors.Trace(ctx.Err())
+	case ev := <-ls.inputCh:
+		return ev, nil
+	}
+}
+
+func (ls *Sorter) waitInputOutput(
+	ctx context.Context,
+) (*model.PolymorphicEvent, error) {
+	// A dummy event for detecting whether output is available.
+	dummyEvent := model.NewResolvedPolymorphicEvent(0, 0)
+	select {
+	// Prefer receiving input events.
+	case ev := <-ls.inputCh:
+		return ev, nil
+	default:
+		select {
+		case <-ctx.Done():
+			return nil, errors.Trace(ctx.Err())
+		case ev := <-ls.inputCh:
+			return ev, nil
+		case ls.outputCh <- dummyEvent:
+			return nil, nil
+		}
+	}
+}
+
+// wait input or output becomes available.
 // It returns
-//   1) a max commit ts of received new events,
-//   2) a max resolved ts of new resolvedTs events,
+//   1) the max commit ts of received new events,
+//   2) the max resolved ts of new resolvedTs events,
 //   3) number of received new events,
 //   4) error.
 //
 // If input is available, it batches newly received events.
-// If output available, it sends a resolved ts event and returns.
-func (ls *Sorter) waitInputOutput(
-	ctx context.Context,
-	events []*model.PolymorphicEvent, outputBuf *outputBuffer,
+// If output available, it sends a dummy resolved ts event and returns.
+func (ls *Sorter) wait(
+	ctx context.Context, waitOutput bool, events []*model.PolymorphicEvent,
 ) (uint64, uint64, int, error) {
 	batchSize := len(events)
 	if batchSize <= 0 {
 		log.Panic("batch size must be larger than 0")
 	}
 	maxCommitTs, maxResolvedTs := uint64(0), uint64(0)
-	inputN := 0
-	kvEventCount, resolvedEventCount := 0, 0
+	inputCount, kvEventCount, resolvedEventCount := 0, 0, 0
 	appendInputEvent := func(ev *model.PolymorphicEvent) {
 		if ls.lastSentResolvedTs != 0 && ev.CRTs < ls.lastSentResolvedTs {
 			log.Panic("commit ts < resolved ts",
@@ -123,41 +151,39 @@ func (ls *Sorter) waitInputOutput(
 			if maxCommitTs < ev.CRTs {
 				maxCommitTs = ev.CRTs
 			}
-			events[inputN] = ev
-			inputN++
+			events[inputCount] = ev
+			inputCount++
 			kvEventCount++
 		}
 	}
 
-	outputN := 0
-	outputEvent := model.NewResolvedPolymorphicEvent(0, ls.lastSentResolvedTs)
-	if len(outputBuf.resolvedEvents) > 0 {
-		outputEvent = outputBuf.resolvedEvents[0]
-		outputN = 1
-	}
-	// Wait input or output becomes available.
-	select {
-	// Prefer receiving input events.
-	case ev := <-ls.inputCh:
-		appendInputEvent(ev)
-	default:
-		select {
-		case <-ctx.Done():
+	if waitOutput {
+		// Wait intput and output.
+		ev, err := ls.waitInputOutput(ctx)
+		if err != nil {
 			atomic.StoreInt32(&ls.closed, 1)
 			close(ls.outputCh)
 			return 0, 0, 0, errors.Trace(ctx.Err())
-		case ls.outputCh <- outputEvent:
-			ls.lastEvent = outputEvent
-			outputBuf.shiftResolvedEvents(outputN)
-			return maxCommitTs, maxResolvedTs, 0, nil
-		case ev := <-ls.inputCh:
-			appendInputEvent(ev)
 		}
+		if ev == nil {
+			// No input event and output is available.
+			return maxCommitTs, maxResolvedTs, 0, nil
+		}
+		appendInputEvent(ev)
+	} else {
+		// Wait input only.
+		ev, err := ls.waitInput(ctx)
+		if err != nil {
+			atomic.StoreInt32(&ls.closed, 1)
+			close(ls.outputCh)
+			return 0, 0, 0, errors.Trace(ctx.Err())
+		}
+		appendInputEvent(ev)
 	}
 
 	// Batch receive events
 BATCH:
-	for inputN < batchSize {
+	for inputCount < batchSize {
 		select {
 		case ev := <-ls.inputCh:
 			appendInputEvent(ev)
@@ -169,10 +195,10 @@ BATCH:
 	ls.metricTotalEventsResolvedTs.Add(float64(resolvedEventCount))
 
 	// Release buffered events to help GC reclaim memory.
-	for i := inputN; i < batchSize; i++ {
+	for i := inputCount; i < batchSize; i++ {
 		events[i] = nil
 	}
-	return maxCommitTs, maxResolvedTs, inputN, nil
+	return maxCommitTs, maxResolvedTs, inputCount, nil
 }
 
 // asyncWrite writes events and delete keys asynchronously.
@@ -374,25 +400,55 @@ type pollState struct {
 	exhaustedResolvedTs uint64
 }
 
-func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
-	// Wait input or output becomes available.
-	maxCommitTs, maxResolvedTs, n, err :=
-		ls.waitInputOutput(ctx, state.eventsBuf, state.outputBuf)
-	if err != nil {
-		return errors.Trace(err)
+func (state *pollState) hasResolvedEvents() bool {
+	// It has resolved events, if 1) it has buffer resolved events,
+	lenResolvedEvents, _ := state.outputBuf.len()
+	if lenResolvedEvents > 0 {
+		return true
 	}
+	// or 2) there are some events that can be resolved.
+	// -------|-----------------|-------------|-------> time
+	// exhaustedResolvedTs
+	//                     maxCommitTs
+	//                                   maxResolvedTs
+	// -------|-----------------|-------------|-------> time
+	// exhaustedResolvedTs
+	//                     maxResolvedTs
+	//                                   maxCommitTs
+	if state.exhaustedResolvedTs < state.maxCommitTs &&
+		state.exhaustedResolvedTs < state.maxResolvedTs {
+		return true
+	}
+
+	// Otherwise, there is no event can be resolved.
+	// -------|-----------------|-------------|-------> time
+	//   maxCommitTs
+	//                 exhaustedResolvedTs
+	//                                   maxResolvedTs
+	return false
+}
+
+func (state *pollState) advanceMaxTs(maxCommitTs, maxResolvedTs uint64) {
 	// The max commit ts of all received events.
 	if maxCommitTs > state.maxCommitTs {
 		state.maxCommitTs = maxCommitTs
-	} else {
-		maxCommitTs = state.maxCommitTs
 	}
 	// The max resolved ts of all received resolvedTs events.
 	if maxResolvedTs > state.maxResolvedTs {
 		state.maxResolvedTs = maxResolvedTs
-	} else {
-		maxResolvedTs = state.maxResolvedTs
 	}
+}
+
+func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
+	// Wait input or output becomes available.
+	waitOutput := state.hasResolvedEvents()
+	maxCommitTs, maxResolvedTs, n, err :=
+		ls.wait(ctx, waitOutput, state.eventsBuf)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// The max commit ts and resolved ts of all received events.
+	state.advanceMaxTs(maxCommitTs, maxResolvedTs)
 	// Length of buffered resolved events.
 	lenResolvedEvents, _ := state.outputBuf.len()
 	if n == 0 && lenResolvedEvents != 0 {
@@ -409,15 +465,7 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	//    sending further resolved events from snapshot.
 	needSnap := lenResolvedEvents == 0
 	// 2. There are some events that can be resolved.
-	//    -------|-----------------|-------------|-------> time
-	//    exhaustedResolvedTs
-	//                        maxCommitTs
-	//                                    maxResolvedTs
-	//    -------|-----------------|-------------|-------> time
-	//    exhaustedResolvedTs
-	//                       maxResolvedTs
-	//                                      maxCommitTs
-	needSnap = needSnap && state.exhaustedResolvedTs < maxCommitTs
+	needSnap = needSnap && state.hasResolvedEvents()
 
 	// Write new events and delete sent keys.
 	snapCh, err :=
@@ -431,15 +479,9 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	state.outputBuf.maybeShrink()
 
 	if !needSnap {
-		// No new events and no buffered resolved events.
-		// -------|-----------------|-------------|-------> time
-		//   maxCommitTs
-		//                 exhaustedResolvedTs
-		//                                   maxResolvedTs
-		// maxResolvedTs may be 0 in the first poll.
-		if maxCommitTs <= state.exhaustedResolvedTs && maxResolvedTs != 0 &&
-			lenResolvedEvents == 0 {
-			ls.outputResolvedTs(maxResolvedTs)
+		// No new events and no resolved events.
+		if !state.hasResolvedEvents() && state.maxResolvedTs != 0 {
+			ls.outputResolvedTs(state.maxResolvedTs)
 		}
 		return nil
 	}
@@ -457,7 +499,7 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	}
 	iter := snap.Iterator(
 		encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
-		encoding.EncodeTsKey(ls.uid, ls.tableID, maxResolvedTs+1),
+		encoding.EncodeTsKey(ls.uid, ls.tableID, state.maxResolvedTs+1),
 	)
 	defer func() {
 		// Release iter and snap should be fast, otherwise it may block
@@ -474,7 +516,7 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 
 	// Read and send resolved events from iterator.
 	exhaustedResolvedTs, err :=
-		ls.outputIterEvents(iter, state.outputBuf, maxResolvedTs)
+		ls.outputIterEvents(iter, state.outputBuf, state.maxResolvedTs)
 	if err != nil {
 		return errors.Trace(err)
 	}

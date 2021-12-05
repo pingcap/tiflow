@@ -63,7 +63,6 @@ func TestWaitInput(t *testing.T) {
 			&model.RawKVEntry{CRTs: ls.lastSentResolvedTs, RegionID: uint64(i)})
 	}
 
-	outputBuf := newOutputBuffer(capacity)
 	eventsBuf := make([]*model.PolymorphicEvent, batchReceiveEventSize)
 
 	// Test message count <= batchReceiveEventSize.
@@ -72,7 +71,7 @@ func TestWaitInput(t *testing.T) {
 			ls.inputCh <- model.NewPolymorphicEvent(
 				&model.RawKVEntry{CRTs: ls.lastSentResolvedTs, RegionID: uint64(j)})
 		}
-		cts, rts, n, err := ls.waitInputOutput(ctx, eventsBuf, outputBuf)
+		cts, rts, n, err := ls.wait(ctx, false, eventsBuf)
 		require.Nil(t, err)
 		require.Equal(t, i, n)
 		require.EqualValues(t, 0, rts)
@@ -92,7 +91,7 @@ func TestWaitInput(t *testing.T) {
 
 		quotient, remainder := i/batchReceiveEventSize, i%batchReceiveEventSize
 		for q := 0; q < quotient; q++ {
-			cts, rts, n, err := ls.waitInputOutput(ctx, eventsBuf, outputBuf)
+			cts, rts, n, err := ls.wait(ctx, false, eventsBuf)
 			require.Nil(t, err)
 			require.Equal(t, batchReceiveEventSize, n)
 			require.EqualValues(t, 0, rts)
@@ -102,7 +101,7 @@ func TestWaitInput(t *testing.T) {
 				"%d, %d, %d, %d", i, quotient, remainder, n)
 		}
 		if remainder != 0 {
-			cts, rts, n, err := ls.waitInputOutput(ctx, eventsBuf, outputBuf)
+			cts, rts, n, err := ls.wait(ctx, false, eventsBuf)
 			require.Nil(t, err)
 			require.Equal(t, remainder, n)
 			require.EqualValues(t, 0, rts)
@@ -123,7 +122,7 @@ func TestWaitInput(t *testing.T) {
 		ls.inputCh <- model.NewPolymorphicEvent(
 			&model.RawKVEntry{CRTs: ls.lastSentResolvedTs, RegionID: uint64(i)})
 	}
-	_, rts, n, err := ls.waitInputOutput(ctx, eventsBuf, outputBuf)
+	_, rts, n, err := ls.wait(ctx, false, eventsBuf)
 	require.Nil(t, err)
 	require.EqualValues(t, batchReceiveEventSize/3, n)
 	require.EqualValues(t, batchReceiveEventSize/3, rts)
@@ -135,7 +134,7 @@ func TestWaitInput(t *testing.T) {
 		ls.inputCh <- model.NewPolymorphicEvent(
 			&model.RawKVEntry{CRTs: uint64(i), RegionID: uint64(i)})
 	}
-	cts, rts, n, err := ls.waitInputOutput(ctx, eventsBuf, outputBuf)
+	cts, rts, n, err := ls.wait(ctx, false, eventsBuf)
 	require.Nil(t, err)
 	require.EqualValues(t, batchReceiveEventSize/2, n)
 	require.EqualValues(t, batchReceiveEventSize/2, cts)
@@ -144,7 +143,7 @@ func TestWaitInput(t *testing.T) {
 	// Test input block on empty message.
 	dctx, dcancel := context.WithDeadline(ctx, time.Now().Add(100*time.Millisecond))
 	defer dcancel()
-	cts, rts, n, err = ls.waitInputOutput(dctx, eventsBuf, outputBuf)
+	cts, rts, n, err = ls.wait(dctx, false, eventsBuf)
 	require.Regexp(t, err, "context deadline exceeded")
 	require.Equal(t, 0, n)
 	require.EqualValues(t, 0, cts)
@@ -161,34 +160,23 @@ func TestWaitOutput(t *testing.T) {
 	require.Greater(t, batchReceiveEventSize, capacity)
 	ls, _ := newTestLeveldbSorter(ctx, capacity)
 
-	outputBuf := newOutputBuffer(capacity)
 	eventsBuf := make([]*model.PolymorphicEvent, batchReceiveEventSize)
 
-	// It sends a resolved event if there is no buffered event.
-	cts, rts, n, err := ls.waitInputOutput(ctx, eventsBuf, outputBuf)
+	waitOutput := true
+	// It sends a dummy event if there is no buffered event.
+	cts, rts, n, err := ls.wait(ctx, waitOutput, eventsBuf)
 	require.Nil(t, err)
 	require.EqualValues(t, 0, n)
 	require.EqualValues(t, 0, cts)
 	require.EqualValues(t, 0, rts)
 	require.EqualValues(t,
-		model.NewResolvedPolymorphicEvent(0, ls.lastSentResolvedTs), <-ls.outputCh)
+		model.NewResolvedPolymorphicEvent(0, 0), <-ls.outputCh)
 
-	// It sends a buffered event if output is available.
-	ev := model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: ls.lastSentResolvedTs + 1, RegionID: 1})
-	outputBuf.appendResolvedEvent(ev)
-	cts, rts, n, err = ls.waitInputOutput(ctx, eventsBuf, outputBuf)
-	require.Nil(t, err)
-	require.EqualValues(t, 0, n)
-	require.EqualValues(t, 0, cts)
-	require.EqualValues(t, 0, rts)
-	require.EqualValues(t, ev, <-ls.outputCh)
-
-	// Test input block on empty message.
-	// Nonbuffered channel is unavailable.
+	// Test wait block when output channel is unavailable.
 	ls.outputCh = make(chan *model.PolymorphicEvent)
 	dctx, dcancel := context.WithDeadline(ctx, time.Now().Add(100*time.Millisecond))
 	defer dcancel()
-	cts, rts, n, err = ls.waitInputOutput(dctx, eventsBuf, outputBuf)
+	cts, rts, n, err = ls.wait(dctx, waitOutput, eventsBuf)
 	require.Regexp(t, err, "context deadline exceeded")
 	require.Equal(t, 0, n)
 	require.EqualValues(t, 0, cts)
@@ -738,7 +726,9 @@ func TestPoll(t *testing.T) {
 		expectExhaustedRTs  uint64
 	}{
 		{
-			inputEvents: []*model.PolymorphicEvent{},
+			inputEvents: []*model.PolymorphicEvent{
+				model.NewResolvedPolymorphicEvent(0, 1),
+			},
 			state: &pollState{
 				eventsBuf: make([]*model.PolymorphicEvent, 1),
 				outputBuf: newOutputBuffer(1),
@@ -750,7 +740,7 @@ func TestPoll(t *testing.T) {
 			// It is initialized to 1 in the test.
 			expectOutputs:       []*model.PolymorphicEvent{model.NewResolvedPolymorphicEvent(0, 1)},
 			expectMaxCommitTs:   0,
-			expectMaxResolvedTs: 0,
+			expectMaxResolvedTs: 1,
 			expectExhaustedRTs:  0,
 		},
 		// maxCommitTs and maxResolvedTs must advance according to inputs.
@@ -847,6 +837,7 @@ func TestPoll(t *testing.T) {
 			expectEvents:     []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{},
 			expectOutputs: []*model.PolymorphicEvent{
+				model.NewResolvedPolymorphicEvent(0, 0), // A dummy events.
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
@@ -866,6 +857,7 @@ func TestPoll(t *testing.T) {
 		for i := range cs.inputEvents {
 			ls.AddEntry(ctx, cs.inputEvents[i])
 		}
+		t.Logf("test case #%d, %v", i, cs)
 		err := ls.poll(ctx, state)
 		require.Nil(t, err)
 		require.EqualValues(t, cs.expectEvents, state.outputBuf.resolvedEvents, "case #%d, %v", i, cs)
