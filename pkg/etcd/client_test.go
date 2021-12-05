@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -155,16 +154,8 @@ func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 	// move time forward
 	mockClock.Add(time.Second * 30)
 
-Loop:
-	for {
-		select {
-		case r, ok := <-outCh:
-			if ok {
-				receivedRes = append(receivedRes, r)
-			} else {
-				break Loop
-			}
-		}
+	for r := range outCh {
+		receivedRes = append(receivedRes, r)
 	}
 
 	c.Check(sentRes, check.DeepEquals, receivedRes)
@@ -220,16 +211,8 @@ func (s *etcdSuite) TestOutChBlocked(c *check.C) {
 	// move time forward
 	mockClock.Add(time.Second * 30)
 
-Loop:
-	for {
-		select {
-		case r, ok := <-outCh:
-			if ok {
-				receivedRes = append(receivedRes, r)
-			} else {
-				break Loop
-			}
-		}
+	for r := range outCh {
+		receivedRes = append(receivedRes, r)
 	}
 
 	c.Check(sentRes, check.DeepEquals, receivedRes)

@@ -17,8 +17,6 @@ import (
 	"context"
 	"time"
 
-	"golang.org/x/time/rate"
-
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -28,6 +26,7 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 )
 
@@ -197,7 +196,7 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan clientv3.WatchRes
 
 	ticker := c.clock.Ticker(etcdRequestProgressDuration)
 	defer ticker.Stop()
-	// limit the rate of reset Watch
+	// limit the rate to reset Watch
 	limiter := rate.NewLimiter(rate.Limit(1/etcdWatchChTimeoutDuration), 1)
 	lastReceivedResponseTime := c.clock.Now()
 
