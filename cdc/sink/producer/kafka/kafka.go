@@ -125,6 +125,7 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message 
 			Partition: int32(i),
 		}
 	}
+	log.Info("broadcast messages to all partitions", zap.Any("messages", msgs))
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
