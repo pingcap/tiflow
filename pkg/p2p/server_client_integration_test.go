@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/phayes/freeport"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -38,15 +39,16 @@ var clientConfig4Testing = &MessageClientConfig{
 	BatchSendInterval:       time.Millisecond * 200,
 	MaxBatchCount:           128,
 	MaxBatchBytes:           8192,
-	RetryRateLimitPerSecond: 1.0,
+	RetryRateLimitPerSecond: 10.0, // using 10.0 instead of 1.0 to accelerate testing
 	DialTimeout:             time.Second * 3,
 }
 
 type serverConfigOpt = func(config *MessageServerConfig)
 
 func newServerForIntegrationTesting(t *testing.T, serverID string, configOpts ...serverConfigOpt) (server *MessageServer, addr string, cancel func()) {
-	addr = t.TempDir() + "/p2p-testing.sock"
-	lis, err := net.Listen("unix", addr)
+	port := freeport.GetPort()
+	addr = fmt.Sprintf("127.0.0.1:%d", port)
+	lis, err := net.Listen("tcp", addr)
 	require.NoError(t, err)
 
 	var opts []grpc.ServerOption
@@ -125,7 +127,7 @@ func runP2PIntegrationTest(ctx context.Context, t *testing.T, size int, numTopic
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := client.Run(ctx, "unix", addr, "test-server-1", &security.Credential{})
+		err := client.Run(ctx, "tcp", addr, "test-server-1", &security.Credential{})
 		if err != nil {
 			log.Warn("client returned error", zap.Error(err))
 			require.Regexp(t, ".*context canceled.*", err.Error())
@@ -277,7 +279,7 @@ func TestMessageClientBasicNonblocking(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := client.Run(ctx, "unix", addr, "test-server-1", &security.Credential{})
+		err := client.Run(ctx, "tcp", addr, "test-server-1", &security.Credential{})
 		require.Error(t, err)
 		require.Regexp(t, ".*context canceled.*", err.Error())
 	}()
@@ -348,7 +350,7 @@ func TestMessageBackPressure(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := client.Run(ctx, "unix", addr, "test-server-1", &security.Credential{})
+		err := client.Run(ctx, "tcp", addr, "test-server-1", &security.Credential{})
 		require.Error(t, err)
 		require.Regexp(t, ".*context canceled.*", err.Error())
 	}()
