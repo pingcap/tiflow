@@ -24,7 +24,7 @@ import (
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
 	DispatchRules   []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
-	Protocol        string            `toml:"protocol" json:"protocol"`
+	Protocol        string            `toml:"expectedProtocol" json:"expectedProtocol"`
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
 }
 
@@ -40,15 +40,14 @@ type ColumnSelector struct {
 }
 
 func (s *SinkConfig) validate(enableOldValue bool) error {
-	var protocol Protocol
-	protocol.FromString(s.Protocol)
-	if (protocol == ProtocolCanal ||
-		protocol == ProtocolCanalJSON ||
-		protocol == ProtocolMaxwell) && !enableOldValue {
-		log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
-			"Please update changefeed config", s.Protocol))
+	protocol := s.Protocol
+	if (protocol == ProtocolCanal.String() ||
+		protocol == ProtocolCanalJSON.String() ||
+		protocol == ProtocolMaxwell.String()) && !enableOldValue {
+		log.Error(fmt.Sprintf("Old value is not enabled when using `%s` expectedProtocol. "+
+			"Please update changefeed config", protocol))
 		return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-			errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", s.Protocol)))
+			errors.New(fmt.Sprintf("%s expectedProtocol requires old value to be enabled", protocol)))
 	}
 
 	return nil

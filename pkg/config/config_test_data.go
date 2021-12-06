@@ -47,7 +47,7 @@ const (
         "rule": "r2"
       }
     ],
-    "protocol": "default"
+    "expectedProtocol": "default"
   },
   "cyclic-replication": {
     "enable": false,
@@ -142,7 +142,7 @@ const (
   },
   "sink": {
     "dispatchers": null,
-    "protocol": "default",
+    "expectedProtocol": "default",
     "column-selectors": [
       {
         "matcher": [
@@ -190,7 +190,7 @@ const (
   },
   "sink": {
     "dispatchers": null,
-    "protocol": "default",
+    "expectedProtocol": "default",
     "column-selectors": [
       {
         "matcher": [
