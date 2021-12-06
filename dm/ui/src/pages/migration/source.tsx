@@ -21,13 +21,13 @@ import {
   PlusSquareOutlined,
 } from '~/uikit/icons'
 import CreateOrUpdateSource from '~/components/CreateOrUpdateSource'
-import {
-  useCreateSourceMutation,
-  useGetSourcesQuery,
-  useRemoveSourceMutation,
-} from '~/services'
 import type { Source } from '~/models/source'
 import { unimplemented } from '~/utils/unimplemented'
+import {
+  useDmapiCreateSourceMutation,
+  useDmapiDeleteSourceMutation,
+  useDmapiGetSourceListQuery,
+} from '~/models/source'
 
 const { confirm } = Modal
 
@@ -37,9 +37,9 @@ const SourceList: React.FC = () => {
   const [currentSource, setCurrentSource] = useState<Source | null>(null)
   const [selectedSources, setSelectedSources] = useState<string[]>([])
 
-  const { data, isFetching } = useGetSourcesQuery({ with_status: false })
-  const [createSource] = useCreateSourceMutation()
-  const [removeSource] = useRemoveSourceMutation()
+  const { data, isFetching } = useDmapiGetSourceListQuery({ withStatus: false })
+  const [createSource] = useDmapiCreateSourceMutation()
+  const [removeSource] = useDmapiDeleteSourceMutation()
 
   const handleCancel = useCallback(() => {
     setShowModal(false)
@@ -73,12 +73,12 @@ const SourceList: React.FC = () => {
       icon: <ExclamationCircleOutlined />,
       onOk() {
         message.loading({ content: t('deleting'), key })
-        Promise.all(selectedSources.map(name => removeSource({ name }))).then(
-          () => {
-            message.success({ content: t('deleted'), key })
-            setSelectedSources([])
-          }
-        )
+        Promise.all(
+          selectedSources.map(name => removeSource({ sourceName: name }))
+        ).then(() => {
+          message.success({ content: t('deleted'), key })
+          setSelectedSources([])
+        })
       },
     })
   }, [selectedSources])

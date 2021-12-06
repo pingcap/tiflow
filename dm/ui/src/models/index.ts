@@ -6,7 +6,7 @@ import {
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux'
 import { createLogger } from 'redux-logger'
 
-import { api } from '~/services'
+import { api } from '~/models/api'
 import { message } from '~/uikit'
 
 const rtkQueryErrorLogger: Middleware = () => next => action => {
