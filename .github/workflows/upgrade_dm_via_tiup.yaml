@@ -36,11 +36,14 @@ jobs:
 
       - name: Check out code
         uses: actions/checkout@v2
+        with:
+          path: go/src/github.com/pingcap/ticdc
 
       - name: Check out code by workflow dispatch
         if: ${{ github.event.inputs.pr != '' }}
         uses: actions/checkout@v2
         with:
+          path: go/src/github.com/pingcap/ticdc
           ref: refs/pull/${{ github.event.inputs.pr }}/head
 
       - name: Setup containers
@@ -90,20 +93,23 @@ jobs:
 
       - name: Check out code
         uses: actions/checkout@v2
+        with:
+          path: go/src/github.com/pingcap/ticdc
       
       - name: Check out code by workflow dispatch
         if: ${{ github.event.inputs.pr != '' }}
         uses: actions/checkout@v2
         with:
+          path: go/src/github.com/pingcap/ticdc
           ref: refs/pull/${{ github.event.inputs.pr }}/head
 
       - name: Build
-        if: ${{ github.ref != 'refs/heads/master' }}
+        if: ${{ github.ref != 'refs/heads/master' || github.event.inputs.pr != '' }}
         working-directory: ${{ env.working-directory }}
         run: make dm
 
       - name: Package files
-        if: ${{ github.ref != 'refs/heads/master' }}
+        if: ${{ github.ref != 'refs/heads/master' ｜｜ github.event.inputs.pr != '' }}
         run: |
           mkdir ${{ github.workspace }}/package
           cd ${{ github.workspace }}/package
@@ -136,7 +142,7 @@ jobs:
           GOPATH=${GITHUB_WORKSPACE}/go docker-compose up -d
 
       - name: Copy package files
-        if: ${{ github.ref != 'refs/heads/master' }}
+        if: ${{ github.ref != 'refs/heads/master' || github.event.inputs.pr != '' }}
         run: |
           cd ${{ github.workspace }}/package
           docker cp dm-master-nightly-linux-amd64.tar.gz control:/tmp
