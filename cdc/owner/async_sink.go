@@ -201,15 +201,13 @@ func (s *asyncSinkImpl) SinkSyncPoint(ctx cdcContext.Context, checkpointTs uint6
 }
 
 func (s *asyncSinkImpl) Close(ctx context.Context) (err error) {
-	if s.sink != nil {
-		err = s.sink.Close(ctx)
-	}
+	s.cancel()
+	err = s.sink.Close(ctx)
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()
 	}
 	if err != nil {
 		log.Warn("close async sink meet error", zap.Error(err))
 	}
-	s.cancel()
 	return s.g.Wait()
 }
