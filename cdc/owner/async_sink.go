@@ -115,9 +115,12 @@ func (s *asyncSinkImpl) Run(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	s.cancel = cancel
 
+	start := time.Now()
 	if err := s.sinkInitHandler(ctx, s); err != nil {
 		return errors.Trace(err)
 	}
+
+	log.Info("async sink initialized, start processing...", zap.Duration("elapsed", time.Since(start)))
 
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
@@ -192,7 +195,9 @@ func (s *asyncSinkImpl) SinkSyncPoint(ctx cdcContext.Context, checkpointTs uint6
 
 func (s *asyncSinkImpl) Close(ctx context.Context) (err error) {
 	s.cancel()
-	err = s.sink.Close(ctx)
+	if s.sink != nil {
+		err = s.sink.Close(ctx)
+	}
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()
 	}
