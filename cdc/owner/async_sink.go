@@ -102,16 +102,17 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 	})
 
 	a.g.Go(func() error {
-		if info.SyncPointEnabled {
-			syncPointStore, err := sink.NewSyncpointStore(ctx, id, info.SinkURI)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			a.syncPointStore = syncPointStore
+		if !info.SyncPointEnabled {
+			return nil
+		}
+		syncPointStore, err := sink.NewSyncpointStore(ctx, id, info.SinkURI)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		a.syncPointStore = syncPointStore
 
-			if err := a.syncPointStore.CreateSynctable(ctx); err != nil {
-				return errors.Trace(err)
-			}
+		if err := a.syncPointStore.CreateSynctable(ctx); err != nil {
+			return errors.Trace(err)
 		}
 		return nil
 	})
