@@ -17,6 +17,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/atomic"
@@ -39,17 +41,8 @@ type MessageRouter interface {
 	Close()
 	// Wait waits for all clients to exit.
 	Wait()
-}
-
-// NewMessageRouter creates a new MessageRouter
-func NewMessageRouter(selfID NodeID, credentials *security.Credential, clientConfig *MessageClientConfig) MessageRouter {
-	return &messageRouterImpl{
-		addressMap:   make(map[NodeID]string),
-		clients:      make(map[NodeID]clientWrapper),
-		credentials:  credentials,
-		selfID:       selfID,
-		clientConfig: clientConfig,
-	}
+	// Err returns a channel to receive errors from.
+	Err() <-chan error
 }
 
 type messageRouterImpl struct {
@@ -57,14 +50,26 @@ type messageRouterImpl struct {
 	addressMap map[NodeID]string
 	clients    map[NodeID]clientWrapper
 
-	wg sync.WaitGroup
-
+	wg       sync.WaitGroup
 	isClosed atomic.Bool
+	errCh    chan error
 
 	// read only field
 	credentials  *security.Credential
 	selfID       NodeID
 	clientConfig *MessageClientConfig
+}
+
+// NewMessageRouter creates a new MessageRouter
+func NewMessageRouter(selfID NodeID, credentials *security.Credential, clientConfig *MessageClientConfig) MessageRouter {
+	return &messageRouterImpl{
+		addressMap:   make(map[NodeID]string),
+		clients:      make(map[NodeID]clientWrapper),
+		errCh:        make(chan error, 1), // one error at most
+		credentials:  credentials,
+		selfID:       selfID,
+		clientConfig: clientConfig,
+	}
 }
 
 type clientWrapper struct {
@@ -139,6 +144,15 @@ func (m *messageRouterImpl) GetClient(target NodeID) *MessageClient {
 			zap.String("target-capture", target),
 			zap.Error(err))
 
+		if errors.Cause(err) != context.Canceled {
+			// Send the error to the error channel.
+			select {
+			case m.errCh <- err:
+			default:
+				// We allow an error to be lost in case the channel is full.
+			}
+		}
+
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		delete(m.clients, target)
@@ -162,4 +176,8 @@ func (m *messageRouterImpl) Close() {
 
 func (m *messageRouterImpl) Wait() {
 	m.wg.Wait()
+}
+
+func (m *messageRouterImpl) Err() <-chan error {
+	return m.errCh
 }

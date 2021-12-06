@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/proto/p2p"
 	"github.com/stretchr/testify/require"
@@ -36,6 +37,16 @@ type messageRouterTestSuite struct {
 	wg            sync.WaitGroup
 }
 
+// read only
+var clientConfig4TestingMessageRouter = &MessageClientConfig{
+	SendChannelSize:         128,
+	BatchSendInterval:       time.Millisecond * 200,
+	MaxBatchCount:           128,
+	MaxBatchBytes:           8192,
+	RetryRateLimitPerSecond: 10.0, // using 10.0 instead of 1.0 to accelerate testing
+	DialTimeout:             time.Second * 3,
+}
+
 func newMessageRouterTestSuite() *messageRouterTestSuite {
 	return &messageRouterTestSuite{
 		servers: map[NodeID]*MessageServer{},
@@ -43,7 +54,7 @@ func newMessageRouterTestSuite() *messageRouterTestSuite {
 		messageRouter: NewMessageRouter(
 			"test-client-1",
 			&security.Credential{},
-			clientConfig4Testing),
+			clientConfig4TestingMessageRouter),
 	}
 }
 
@@ -244,6 +255,36 @@ func TestMessageRouterRemovePeer(t *testing.T) {
 	}()
 
 	wg.Wait()
+	suite.close()
+	suite.wait()
+}
+
+func TestMessageRouterClientFailure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	suite := newMessageRouterTestSuite()
+	suite.addServer(ctx, t, "server-1")
+
+	// FIXME remove the failpoint test, and use a mock client instead
+	// But we should make MessageClient an interface first.
+	err := failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/InjectClientPermanentFailure", "return(true)")
+	require.NoError(t, err)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/InjectClientPermanentFailure")
+	}()
+
+	client := suite.messageRouter.GetClient("server-1")
+	require.NotNil(t, client)
+
+	select {
+	case <-ctx.Done():
+		require.Fail(t, "TestMessageRouterClientFailure timed out")
+	case err := <-suite.messageRouter.Err():
+		require.NotNil(t, err)
+		require.Regexp(t, ".*ErrPeerMessageClientPermanentFail.*", err.Error())
+	}
+
 	suite.close()
 	suite.wait()
 }
