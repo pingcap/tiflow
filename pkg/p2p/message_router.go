@@ -18,7 +18,6 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/atomic"

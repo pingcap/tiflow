@@ -18,10 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/failpoint"
-
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
