@@ -51,7 +51,8 @@ jobs:
       - name: Check out code by workflow dispatch
         if: ${{ github.event.inputs.id != '' }}
         uses: actions/checkout@v2
-        ref: pull/${{ github.event.inputs.id }}/head
+        with:
+          ref: pull/${{ github.event.inputs.id }}/head
 
       - name: Cache go modules
         uses: actions/cache@v2
