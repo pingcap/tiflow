@@ -661,6 +661,11 @@ error = '''
 peer-to-peer message server received an RPC call with illegal metadata
 '''
 
+["CDC:ErrPeerMessageInjectedServerRestart"]
+error = '''
+peer-to-peer message server injected error
+'''
+
 ["CDC:ErrPeerMessageInternalSenderClosed"]
 error = '''
 peer-to-peer message server tries to send to a closed stream. Internal only.
@@ -974,6 +979,11 @@ generate tls config failed
 ["CDC:ErrURLFormatInvalid"]
 error = '''
 url format is invalid
+'''
+
+["CDC:ErrUnexpectedSnapshot"]
+error = '''
+unexpected snapshot, table %d
 '''
 
 ["CDC:ErrUnifiedSorterBackendTerminating"]

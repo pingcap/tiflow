@@ -11,17 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tests
+package cases
 
 import (
 	"errors"
 	"log"
 	"time"
 
-	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
-	"github.com/pingcap/ticdc/integration/framework/mysql"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/avro"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/canal"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/mysql"
 )
 
 // DateTimeCase is base impl of test case for different types data

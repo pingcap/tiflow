@@ -125,12 +125,14 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 		},
 	}
 	p := parser.New()
-	qec := &queryEventContext{
-		eventContext: &eventContext{tctx: tcontext.Background()},
-		p:            p,
-	}
+
 	for _, ca := range cases {
-		ddlInfo, err := syncer.genDDLInfo(p, ca.schema, ca.sql)
+		qec := &queryEventContext{
+			eventContext: &eventContext{tctx: tcontext.Background()},
+			p:            p,
+			ddlSchema:    ca.schema,
+		}
+		ddlInfo, err := syncer.genDDLInfo(qec, ca.sql)
 		c.Assert(err, IsNil)
 		qec.ddlSchema = ca.schema
 		qec.originSQL = ca.sql
