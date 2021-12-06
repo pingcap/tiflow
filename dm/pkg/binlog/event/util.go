@@ -365,9 +365,10 @@ func GetServerCollationByStatusVars(statusVars []byte) (string, error) {
 			err = fmt.Errorf("Q_CHARSET_CODE not found in status_vars %v", statusVars)
 		}
 		// mysql default 'latin1_swedish_ci'
-		return mysql.Collations[8], err
+		return "latin1_swedish_ci", err
 	}
-
+	// QCharsetCode 2-byte character_set_client + 2-byte collation_connection + 2-byte collation_server
+	// collation is less than 255 and we use the first byte.
 	return mysql.Collations[b[4]], err
 }
 

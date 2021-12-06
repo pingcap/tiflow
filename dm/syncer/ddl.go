@@ -219,7 +219,7 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 		// just has charset, can add collation by charset and default collation map
 		collation, ok := charsetAndDefaultCollationMap[strings.ToLower(justCharset)]
 		if !ok {
-			tctx.L().Error("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
+			tctx.L().Warn("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
 			return
 		}
 		tctx.L().Info("detect create table risk which use explicit charset and implicit collation, we will add collation by SHOW CHARACTER SET", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
@@ -227,7 +227,6 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 
 	case *ast.CreateDatabaseStmt:
 		var justCharset, collation string
-		var err error
 		var ok bool
 		for _, createOption := range createStmt.Options {
 			// already have 'Collation'
@@ -243,17 +242,14 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 		if justCharset != "" {
 			collation, ok = charsetAndDefaultCollationMap[strings.ToLower(justCharset)]
 			if !ok {
-				tctx.L().Error("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
+				tctx.L().Warn("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
 				return
 			}
 			tctx.L().Info("detect create database risk which use explicit charset and implicit collation, we will add collation by SHOW CHARACTER SET", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
 		} else {
 			// has no charset and collation
 			// add collation by server collation from binlog statusVars
-			collation, err = event.GetServerCollationByStatusVars(statusVars)
-			if err != nil {
-				tctx.L().Warn("found error when get collation_server from binlog status_vars, auto use default collation of mysql", zap.Error(err))
-			}
+			collation, _ = event.GetServerCollationByStatusVars(statusVars)
 			// add collation
 			tctx.L().Info("detect create database risk which use implicit charset and collation, we will add collation by binlog status_vars", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
 		}

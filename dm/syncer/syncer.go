@@ -329,7 +329,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 
 	s.charsetAndDefaultCollation, err = s.fromDB.GetCharsetAndDefaultCollation(ctx)
 	if err != nil {
-		return terror.ErrSyncerGetCharsetMap.Delegate(err)
+		return err
 	}
 	s.streamerController = NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
 
