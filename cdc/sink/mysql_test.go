@@ -23,6 +23,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
@@ -1093,6 +1094,92 @@ func TestMySQLSinkClose(t *testing.T) {
 	// test sink.Close will work correctly even if the ctx pass in has not been cancel
 	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
+	err = sink.Close(ctx)
+	require.Nil(t, err)
+}
+
+func TestMySQLSinkFlushResovledTs(t *testing.T) {
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB()
+			require.Nil(t, err)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?)").
+			WithArgs(1).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t2`(`a`) VALUES (?)").
+			WithArgs(1).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+		mock.ExpectClose()
+		require.Nil(t, err)
+		return db, nil
+	}
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
+	defer func() {
+		GetDBConnImpl = backupGetDBConn
+	}()
+
+	ctx := context.Background()
+
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	require.Nil(t, err)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	require.Nil(t, err)
+
+	// test sink.Close will work correctly even if the ctx pass in has not been cancel
+	si, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	sink := si.(*mysqlSink)
+	require.Nil(t, err)
+	checkpoint, err := sink.FlushRowChangedEvents(ctx, model.TableID(1), 1)
+	require.Nil(t, err)
+	require.Equal(t, uint64(0), checkpoint)
+	rows := []*model.RowChangedEvent{
+		{
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			CommitTs: 5,
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+			},
+		},
+	}
+	err = sink.EmitRowChangedEvents(ctx, rows...)
+	require.Nil(t, err)
+	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(1), 6)
+	require.True(t, checkpoint <= 5)
+	time.Sleep(500 * time.Millisecond)
+	require.Nil(t, err)
+	require.Equal(t, uint64(6), sink.getTableCheckpointTs(model.TableID(1)))
+	rows = []*model.RowChangedEvent{
+		{
+			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
+			CommitTs: 4,
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+			},
+		},
+	}
+	err = sink.EmitRowChangedEvents(ctx, rows...)
+	require.Nil(t, err)
+	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), 5)
+	require.True(t, checkpoint <= 5)
+	time.Sleep(500 * time.Millisecond)
+	require.Nil(t, err)
+	require.Equal(t, uint64(5), sink.getTableCheckpointTs(model.TableID(2)))
 	err = sink.Close(ctx)
 	require.Nil(t, err)
 }

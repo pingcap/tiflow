@@ -254,13 +254,9 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		}
 
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
-		s.updateTableCheckpointTs(maxCommitTsMap)
-	}
-}
-
-func (s *mysqlSink) updateTableCheckpointTs(resolvedTxnsMap map[model.TableID]uint64) {
-	for tableID, maxCommitTs := range resolvedTxnsMap {
-		s.tableCheckpointTs.Store(tableID, maxCommitTs)
+		for tableID, maxCommitTs := range maxCommitTsMap {
+			s.tableCheckpointTs.Store(tableID, maxCommitTs)
+		}
 	}
 }
 
