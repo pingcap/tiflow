@@ -73,7 +73,7 @@ questions: what changed and why. The subject line should feature the what and
 the body of the commit should describe the why.
 
 ```
-capture(ticdc): add comment for variable declaration
+worker(dm): add comment for variable declaration
 
 Improve documentation.
 ```
@@ -92,7 +92,7 @@ The first line is the subject and should be no longer than 70 characters, the se
 lines should be wrapped at 80 characters. This allows the message to be easier to read on GitHub as well as in various
 git tools.
 
-If the change affects more than one subsystem, you can use comma to separate them like ```capture,puller:```. If the
+If the change affects more than one subsystem, you can use comma to separate them like ```worker,syncer:```. If the
 change affects many subsystems, you can use ```*``` instead, like ```*:```.
 
 If this change affects ticdc, fill in ```<subsystem>(ticdc)```, if it affects dm, fill in ```<subsystem>(dm)```. If it
