@@ -3,7 +3,6 @@
 echo "generate canal & craft benchmark protocol code..."
 
 [ ! -d ./canal ] && mkdir ./canal
-[ ! -d ./cdclog ] && mkdir ./cdclog
 [ ! -d ./benchmark ] && mkdir ./benchmark
 
 protoc --gofast_out=./canal EntryProtocol.proto

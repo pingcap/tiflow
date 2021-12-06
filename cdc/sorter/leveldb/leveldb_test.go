@@ -43,7 +43,7 @@ func TestMaybeWrite(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
+	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
@@ -88,7 +88,7 @@ func TestPutReadDelete(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
+	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
@@ -193,7 +193,7 @@ func TestModelChecking(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
+	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
@@ -279,7 +279,7 @@ func TestContextCancel(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
+	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	ldb, _, err := NewDBActor(ctx, 0, db, cfg, closedWg, "")
