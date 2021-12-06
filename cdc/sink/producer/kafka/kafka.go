@@ -125,14 +125,19 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message 
 			Partition: int32(i),
 		}
 	}
+
+	log.Info("SyncBroadcastMessage messages batched", zap.String("topic", k.topic))
+
 	select {
 	case <-ctx.Done():
+		log.Info("SyncBroadcastMessage ctx Done", zap.Error(ctx.Err()))
 		return ctx.Err()
 	case <-k.closeCh:
+		log.Info("SyncBroadcastMessage closeCh shot.")
 		return nil
 	default:
 		if err := k.syncClient.SendMessages(msgs); err != nil {
-			log.Warn("broadcast messages failed", zap.Error(err))
+			log.Info("broadcast messages failed", zap.Error(err))
 			return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 		}
 
