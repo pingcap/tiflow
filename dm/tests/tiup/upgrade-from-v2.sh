@@ -61,7 +61,7 @@ function migrate_in_previous_v2() {
 }
 
 function upgrade_to_current_v2() {
-	if [[ "$CUR_VER" == "nightly" && "$ref" == "refs/pull"* ]]; then
+	if [[ "$CUR_VER" == "nightly" && ("$ref" == "refs/pull"* || "$id" != '') ]]; then
 		patch_nightly_with_tiup_mirror $PRE_VER
 	fi
 

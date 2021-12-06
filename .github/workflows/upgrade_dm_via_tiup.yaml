@@ -154,7 +154,7 @@ jobs:
         working-directory: ${{ env.working-directory }}
         run: |
           cd ${{ env.working-directory }}/dm/tests/tiup/docker
-          docker-compose exec -e ref=${{ github.ref }} -T control bash -c "cd /go/src/github.com/pingcap/ticdc/dm && ./tests/tiup/upgrade-from-v2.sh ${{ matrix.previous_v2 }} nightly"
+          docker-compose exec -e ref=${{ github.ref }} -e id=${{ github.event.inputs.pr }} -T control bash -c "cd /go/src/github.com/pingcap/ticdc/dm && ./tests/tiup/upgrade-from-v2.sh ${{ matrix.previous_v2 }} nightly"
 
       # if above step is passed, logs will be removed by tiup dm destroy
       - name: Copy logs to hack permission
