@@ -28,5 +28,8 @@ type EventSorter interface {
 	// Returns false if the entry can not be added; otherwise it returns true
 	// Returns error if the sorter is closed or context is done
 	TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) (bool, error)
+	// Output sorted events, orderd by commit ts.
+	// It may output a dummy event, a zero resolved ts event, to detect whether
+	// output is available.
 	Output() <-chan *model.PolymorphicEvent
 }
