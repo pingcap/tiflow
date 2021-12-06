@@ -17,11 +17,11 @@ import (
 	"flag"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
-	"github.com/pingcap/ticdc/integration/framework/mysql"
-	"github.com/pingcap/ticdc/integration/tests"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/cases"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/avro"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/canal"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/mysql"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -36,13 +36,13 @@ func testAvro() {
 	env.DockerComposeOperator.ExecEnv = []string{"CDC_TIME_ZONE=America/Los_Angeles"}
 	task := &avro.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
-		tests.NewAlterCase(task), // this case is slow, so put it last
-		tests.NewDateTimeCase(task),
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
-		tests.NewUnsignedCase(task),
-		tests.NewCompositePKeyCase(task),
+		cases.NewAlterCase(task), // this case is slow, so put it last
+		cases.NewDateTimeCase(task),
+		cases.NewSimpleCase(task),
+		cases.NewDeleteCase(task),
+		cases.NewManyTypesCase(task),
+		cases.NewUnsignedCase(task),
+		cases.NewCompositePKeyCase(task),
 	}
 
 	runTests(testCases, env)
@@ -53,11 +53,11 @@ func testCanal() {
 	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=false"}
 	task := &canal.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
+		cases.NewSimpleCase(task),
+		cases.NewDeleteCase(task),
+		cases.NewManyTypesCase(task),
 		// tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
-		tests.NewCompositePKeyCase(task),
+		cases.NewCompositePKeyCase(task),
 		// tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
 	}
 
@@ -69,12 +69,12 @@ func testCanalJSON() {
 	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
 	task := &canal.SingleTableTask{TableName: "test", UseJSON: true}
 	testCases := []framework.Task{
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
+		cases.NewSimpleCase(task),
+		cases.NewDeleteCase(task),
+		cases.NewManyTypesCase(task),
 		// tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
-		tests.NewCompositePKeyCase(task),
-		tests.NewAlterCase(task),
+		cases.NewCompositePKeyCase(task),
+		cases.NewAlterCase(task),
 	}
 
 	runTests(testCases, env)
@@ -85,12 +85,12 @@ func testCanalJSONWatermark() {
 	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
 	task := &canal.SingleTableTask{TableName: "test", UseJSON: true, EnableTiDBExtension: true}
 	testCases := []framework.Task{
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
+		cases.NewSimpleCase(task),
+		cases.NewDeleteCase(task),
+		cases.NewManyTypesCase(task),
 		// tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
-		tests.NewCompositePKeyCase(task),
-		tests.NewAlterCase(task),
+		cases.NewCompositePKeyCase(task),
+		cases.NewAlterCase(task),
 	}
 
 	runTests(testCases, env)
@@ -100,12 +100,12 @@ func testMySQL() {
 	env := mysql.NewDockerEnv(*dockerComposeFile)
 	task := &mysql.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
-		tests.NewUnsignedCase(task),
-		tests.NewCompositePKeyCase(task),
-		tests.NewAlterCase(task),
+		cases.NewSimpleCase(task),
+		cases.NewDeleteCase(task),
+		cases.NewManyTypesCase(task),
+		cases.NewUnsignedCase(task),
+		cases.NewCompositePKeyCase(task),
+		cases.NewAlterCase(task),
 	}
 
 	runTests(testCases, env)
@@ -116,12 +116,12 @@ func testMySQLWithCheckingOldvValue() {
 	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/ticdc/cdc/sink/SimpleMySQLSinkTester=return(ture)"}
 	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
 	testCases := []framework.Task{
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
-		tests.NewUnsignedCase(task),
-		tests.NewCompositePKeyCase(task),
-		tests.NewAlterCase(task),
+		cases.NewSimpleCase(task),
+		cases.NewDeleteCase(task),
+		cases.NewManyTypesCase(task),
+		cases.NewUnsignedCase(task),
+		cases.NewCompositePKeyCase(task),
+		cases.NewAlterCase(task),
 	}
 
 	runTests(testCases, env)
