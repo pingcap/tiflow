@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Protocol is the expectedProtocol of the mq message.
+// Protocol is the protocol of the mq message.
 type Protocol int
 
 // Enum types of the Protocol.
@@ -33,7 +33,7 @@ const (
 	ProtocolCraft
 )
 
-// FromString converts the expectedProtocol from string to Protocol enum type.
+// FromString converts the protocol from string to Protocol enum type.
 func (p *Protocol) FromString(protocol string) {
 	switch strings.ToLower(protocol) {
 	case "default":
@@ -50,7 +50,7 @@ func (p *Protocol) FromString(protocol string) {
 		*p = ProtocolCraft
 	default:
 		*p = ProtocolDefault
-		log.Warn("can't support codec expectedProtocol, using default expectedProtocol", zap.String("expectedProtocol", protocol))
+		log.Warn("can't support codec protocol, using default protocol", zap.String("protocol", protocol))
 	}
 }
 

@@ -39,7 +39,7 @@ func TestValidate(t *testing.T) {
 		{
 			protocol:       "canal-json",
 			enableOldValue: false,
-			expectedErr:    ".*canal-json expectedProtocol requires old value to be enabled.*",
+			expectedErr:    ".*canal-json protocol requires old value to be enabled.*",
 		},
 		{
 			protocol:       "canal-json",
@@ -49,7 +49,7 @@ func TestValidate(t *testing.T) {
 		{
 			protocol:       "canal",
 			enableOldValue: false,
-			expectedErr:    ".*canal expectedProtocol requires old value to be enabled.*",
+			expectedErr:    ".*canal protocol requires old value to be enabled.*",
 		},
 		{
 			protocol:       "canal",
@@ -59,7 +59,7 @@ func TestValidate(t *testing.T) {
 		{
 			protocol:       "maxwell",
 			enableOldValue: false,
-			expectedErr:    ".*maxwell expectedProtocol requires old value to be enabled.*",
+			expectedErr:    ".*maxwell protocol requires old value to be enabled.*",
 		},
 		{
 			protocol:       "maxwell",

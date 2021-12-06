@@ -91,5 +91,5 @@ func TestReplicaConfigValidate(t *testing.T) {
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.Protocol = "canal"
 	conf.EnableOldValue = false
-	require.Regexp(t, ".*canal expectedProtocol requires old value to be enabled.*", conf.Validate())
+	require.Regexp(t, ".*canal protocol requires old value to be enabled.*", conf.Validate())
 }
