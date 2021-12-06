@@ -210,7 +210,7 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 		}
 		for _, fp := range forceEnableOldValueProtocols {
 			if cfg.Sink.Protocol == fp {
-				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", protocol))
+				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", cfg.Sink.Protocol))
 				cfg.EnableOldValue = true
 				break
 			}
