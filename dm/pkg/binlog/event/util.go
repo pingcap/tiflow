@@ -478,9 +478,8 @@ func statusVarsToKV(statusVars []byte) (map[byte][]byte, error) {
 	return vars, nil
 }
 
-// GetGTIDStr gets GTID string representation from a GTID event ot MariaDB GTID evnets.
-// learn from: https://github.com/go-mysql-org/go-mysql/blob/c6ab05a85eb86dc51a27ceed6d2f366a32874a24/replication/binlogsyncer.go#L736
-// learn from: https://github.com/go-mysql-org/go-mysql/blob/c6ab05a85eb86dc51a27ceed6d2f366a32874a24/replication/binlogsyncer.go#L745
+// GetGTIDStr gets GTID string representation from a GTID event or MariaDB GTID evnets.
+// learn from: https://github.com/go-mysql-org/go-mysql/blob/c6ab05a85eb86dc51a27ceed6d2f366a32874a24/replication/binlogsyncer.go#L732-L749
 func GetGTIDStr(e *replication.BinlogEvent) (string, error) {
 	switch ev := e.Event.(type) {
 	case *replication.GTIDEvent:

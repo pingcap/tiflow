@@ -340,7 +340,7 @@ func (r *BinlogReader) parseRelay(ctx context.Context, s *LocalStreamer, pos mys
 		realPos.Pos = binlog.FileHeaderLen // start from pos 4 for next sub directory / file
 		r.tctx.L().Info("switching to next ready sub directory", zap.String("next uuid", r.currentUUID), zap.Stringer("position", pos))
 
-		// when switching sub directory, last binlog file may contain unfinished transaction, so we send a notification.
+		// when switching subdirectory, last binlog file may contain unfinished transaction, so we send a notification.
 		if !r.lastFileGracefulEnd {
 			s.ch <- &replication.BinlogEvent{
 				RawData: []byte(ErrorMaybeDuplicateEvent.Error()),
