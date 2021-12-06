@@ -40,12 +40,12 @@ func openAPITaskFromResp(resp *clientv3.GetResponse) (*openapi.Task, error) {
 	return task, nil
 }
 
-// PutTaskConfigTemplate puts the task config template of task-name.
-func PutTaskConfigTemplate(cli *clientv3.Client, task openapi.Task, overWrite bool) error {
+// PutOpenAPITaskConfig puts the openapi task config of task-name.
+func PutOpenAPITaskConfig(cli *clientv3.Client, task openapi.Task, overWrite bool) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	key := common.TaskConfigTemplateKeyAdapter.Encode(task.Name)
+	key := common.OpenAPITaskConfigKeyAdapter.Encode(task.Name)
 	taskJSON, err := task.ToJSON()
 	if err != nil {
 		return err // it should not happen.
@@ -60,17 +60,17 @@ func PutTaskConfigTemplate(cli *clientv3.Client, task openapi.Task, overWrite bo
 	}
 	// user don't want to overwrite and key already exists.
 	if !overWrite && !resp.Succeeded {
-		return terror.ErrTaskConfigTemplateExists.Generate(task.Name)
+		return terror.ErrOpenAPITaskConfigExists.Generate(task.Name)
 	}
 	return nil
 }
 
-// PutTaskConfigTemplate puts the task config template of task-name.
-func PutTaskConfigTemplateIfExist(cli *clientv3.Client, task openapi.Task) error {
+// PutOpenAPITaskConfig puts the openapi task config of task-name.
+func PutOpenAPITaskConfigIfExist(cli *clientv3.Client, task openapi.Task) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	key := common.TaskConfigTemplateKeyAdapter.Encode(task.Name)
+	key := common.OpenAPITaskConfigKeyAdapter.Encode(task.Name)
 	taskJSON, err := task.ToJSON()
 	if err != nil {
 		return err // it should not happen.
@@ -82,23 +82,23 @@ func PutTaskConfigTemplateIfExist(cli *clientv3.Client, task openapi.Task) error
 	}
 	// user want to update a key not exists.
 	if !resp.Succeeded {
-		return terror.ErrTaskConfigTemplateNotExists.Generate(task.Name)
+		return terror.ErrOpenAPITaskConfigNotExists.Generate(task.Name)
 	}
 	return nil
 }
 
-// DeleteTaskConfigTemplate deletes the task config template of task-name.
-func DeleteTaskConfigTemplate(cli *clientv3.Client, taskName string) error {
+// DeleteOpenAPITaskConfig deletes the openapi task config  of task-name.
+func DeleteOpenAPITaskConfig(cli *clientv3.Client, taskName string) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
-	if _, err := cli.Delete(ctx, common.TaskConfigTemplateKeyAdapter.Encode(taskName)); err != nil {
+	if _, err := cli.Delete(ctx, common.OpenAPITaskConfigKeyAdapter.Encode(taskName)); err != nil {
 		return err
 	}
 	return nil
 }
 
-// GetTaskConfigTemplate gets the task config template of task-name.
-func GetTaskConfigTemplate(cli *clientv3.Client, taskName string) (*openapi.Task, error) {
+// GetOpenAPITaskConfig gets the openapi task config  of task-name.
+func GetOpenAPITaskConfig(cli *clientv3.Client, taskName string) (*openapi.Task, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
@@ -107,7 +107,7 @@ func GetTaskConfigTemplate(cli *clientv3.Client, taskName string) (*openapi.Task
 		resp *clientv3.GetResponse
 		err  error
 	)
-	resp, err = cli.Get(ctx, common.TaskConfigTemplateKeyAdapter.Encode(taskName))
+	resp, err = cli.Get(ctx, common.OpenAPITaskConfigKeyAdapter.Encode(taskName))
 	if err != nil {
 		return task, err
 	}
@@ -118,12 +118,12 @@ func GetTaskConfigTemplate(cli *clientv3.Client, taskName string) (*openapi.Task
 	return task, nil
 }
 
-// GetAllTaskConfigTemplate gets all task config templates.
-func GetAllTaskConfigTemplate(cli *clientv3.Client) ([]*openapi.Task, error) {
+// GetAllOpenAPITaskConfig gets all openapi task config s.
+func GetAllOpenAPITaskConfig(cli *clientv3.Client) ([]*openapi.Task, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	resp, err := cli.Get(ctx, common.TaskConfigTemplateKeyAdapter.Path(), clientv3.WithPrefix())
+	resp, err := cli.Get(ctx, common.OpenAPITaskConfigKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}

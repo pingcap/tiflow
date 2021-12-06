@@ -83,8 +83,8 @@ func (t *testCommon) TestKeyAdapter(c *C) {
 		},
 		{
 			keys:    []string{"task-1"},
-			adapter: TaskConfigTemplateKeyAdapter,
-			want:    "/dm-master/task-config-template/7461736b2d31",
+			adapter: OpenAPITaskConfigKeyAdapter,
+			want:    "/dm-master/openapi-task-config/7461736b2d31",
 		},
 	}
 

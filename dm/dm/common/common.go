@@ -89,18 +89,18 @@ var (
 	// tb3:          +a +b +c
 	ShardDDLOptimismDroppedColumnsKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/shardddl-optimism/dropped-columns/")
 
-	// TaskConfigTemplateKeyAdapter is used to store the task config template(openapi.Task), now it's only used for WebUI.
+	// OpenAPITaskConfigKeyAdapter is used to store the openapi task config (openapi.Task), now it's only used for WebUI.
 	// openapi.Task is a struct that can be converted to config.StubTaskConfig so if any field of openapi.Task updated
-	// user should use ha.PutTaskConfigTemplate(key, openapi.Task,overwrite) to force update the content in etcd.
+	// user should use ha.PutOpenAPITaskConfig(key, openapi.Task,overwrite) to force update the content in etcd.
 	// k/v: Encode(task-name) -> openapi.Task.
-	TaskConfigTemplateKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/task-config-template/")
+	OpenAPITaskConfigKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/openapi-task-config/")
 )
 
 func keyAdapterKeysLen(s KeyAdapter) int {
 	switch s {
 	case WorkerRegisterKeyAdapter, UpstreamConfigKeyAdapter, UpstreamBoundWorkerKeyAdapter,
 		WorkerKeepAliveKeyAdapter, StageRelayKeyAdapter,
-		UpstreamLastBoundWorkerKeyAdapter, UpstreamRelayWorkerKeyAdapter, TaskConfigTemplateKeyAdapter:
+		UpstreamLastBoundWorkerKeyAdapter, UpstreamRelayWorkerKeyAdapter, OpenAPITaskConfigKeyAdapter:
 		return 1
 	case UpstreamSubTaskKeyAdapter, StageSubTaskKeyAdapter,
 		ShardDDLPessimismInfoKeyAdapter, ShardDDLPessimismOperationKeyAdapter,

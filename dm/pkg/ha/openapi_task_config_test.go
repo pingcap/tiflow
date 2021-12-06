@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
-func (t *testForEtcd) TestTaskConfigTemplateEtcd(c *C) {
+func (t *testForEtcd) TestOpenAPITaskConfigEtcd(c *C) {
 	defer clearTestInfoOperation(c)
 
 	task1, err := fixtures.GenNoShardOpenAPITaskForTest()
@@ -31,42 +31,42 @@ func (t *testForEtcd) TestTaskConfigTemplateEtcd(c *C) {
 	task2.Name = "test-2"
 	c.Assert(err, IsNil)
 
-	// no task config template exist.
-	task1InEtcd, err := GetTaskConfigTemplate(etcdTestCli, task1.Name)
+	// no openapi task config  exist.
+	task1InEtcd, err := GetOpenAPITaskConfig(etcdTestCli, task1.Name)
 	c.Assert(err, IsNil)
 	c.Assert(task1InEtcd, IsNil)
 
-	task2InEtcd, err := GetTaskConfigTemplate(etcdTestCli, task2.Name)
+	task2InEtcd, err := GetOpenAPITaskConfig(etcdTestCli, task2.Name)
 	c.Assert(err, IsNil)
 	c.Assert(task2InEtcd, IsNil)
 
-	tasks, err := GetAllTaskConfigTemplate(etcdTestCli)
+	tasks, err := GetAllOpenAPITaskConfig(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(tasks, HasLen, 0)
 
-	// put task config template.
-	c.Assert(PutTaskConfigTemplate(etcdTestCli, task1, false), IsNil)
-	c.Assert(PutTaskConfigTemplate(etcdTestCli, task2, false), IsNil)
+	// put openapi task config .
+	c.Assert(PutOpenAPITaskConfig(etcdTestCli, task1, false), IsNil)
+	c.Assert(PutOpenAPITaskConfig(etcdTestCli, task2, false), IsNil)
 
-	task1InEtcd, err = GetTaskConfigTemplate(etcdTestCli, task1.Name)
+	task1InEtcd, err = GetOpenAPITaskConfig(etcdTestCli, task1.Name)
 	c.Assert(err, IsNil)
 	c.Assert(*task1InEtcd, DeepEquals, task1)
 
-	task2InEtcd, err = GetTaskConfigTemplate(etcdTestCli, task2.Name)
+	task2InEtcd, err = GetOpenAPITaskConfig(etcdTestCli, task2.Name)
 	c.Assert(err, IsNil)
 	c.Assert(*task2InEtcd, DeepEquals, task2)
 
-	tasks, err = GetAllTaskConfigTemplate(etcdTestCli)
+	tasks, err = GetAllOpenAPITaskConfig(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(tasks, HasLen, 2)
 
-	// put task config template again without overwrite will fail
-	c.Assert(terror.ErrTaskConfigTemplateExists.Equal(PutTaskConfigTemplate(etcdTestCli, task1, false)), IsTrue)
+	// put openapi task config  again without overwrite will fail
+	c.Assert(terror.ErrOpenAPITaskConfigExists.Equal(PutOpenAPITaskConfig(etcdTestCli, task1, false)), IsTrue)
 
 	// in overwrite mode, it will overwrite the old one.
 	task1.TaskMode = openapi.TaskTaskModeFull
-	c.Assert(PutTaskConfigTemplate(etcdTestCli, task1, true), IsNil)
-	task1InEtcd, err = GetTaskConfigTemplate(etcdTestCli, task1.Name)
+	c.Assert(PutOpenAPITaskConfig(etcdTestCli, task1, true), IsNil)
+	task1InEtcd, err = GetOpenAPITaskConfig(etcdTestCli, task1.Name)
 	c.Assert(err, IsNil)
 	c.Assert(*task1InEtcd, DeepEquals, task1)
 
@@ -74,18 +74,18 @@ func (t *testForEtcd) TestTaskConfigTemplateEtcd(c *C) {
 	task3, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, IsNil)
 	task3.Name = "test-3"
-	c.Assert(terror.ErrTaskConfigTemplateNotExists.Equal(PutTaskConfigTemplateIfExist(etcdTestCli, task3)), IsTrue)
+	c.Assert(terror.ErrOpenAPITaskConfigNotExists.Equal(PutOpenAPITaskConfigIfExist(etcdTestCli, task3)), IsTrue)
 
-	// update exist task config template will success
+	// update exist openapi task config  will success
 	task1.TaskMode = openapi.TaskTaskModeAll
-	c.Assert(PutTaskConfigTemplateIfExist(etcdTestCli, task1), IsNil)
-	task1InEtcd, err = GetTaskConfigTemplate(etcdTestCli, task1.Name)
+	c.Assert(PutOpenAPITaskConfigIfExist(etcdTestCli, task1), IsNil)
+	task1InEtcd, err = GetOpenAPITaskConfig(etcdTestCli, task1.Name)
 	c.Assert(err, IsNil)
 	c.Assert(*task1InEtcd, DeepEquals, task1)
 
 	// delete task config
-	c.Assert(DeleteTaskConfigTemplate(etcdTestCli, task1.Name), IsNil)
-	tasks, err = GetAllTaskConfigTemplate(etcdTestCli)
+	c.Assert(DeleteOpenAPITaskConfig(etcdTestCli, task1.Name), IsNil)
+	tasks, err = GetAllOpenAPITaskConfig(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(tasks, HasLen, 1)
 }
