@@ -19,7 +19,7 @@ import (
 	"github.com/integralist/go-findroot/find"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
 	"go.uber.org/zap"
 )
 
