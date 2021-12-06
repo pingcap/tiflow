@@ -245,7 +245,7 @@ func (r *Relay) process(ctx context.Context) error {
 			}
 		} else {
 			_, metaPos := r.meta.Pos()
-			if neededBinlogName > metaPos.Name {
+			if mysql.CompareBinlogFileName(neededBinlogName, metaPos.Name) > 0 {
 				isRelayMetaOutdated = true
 			}
 		}
