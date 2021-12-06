@@ -11,13 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package canal
+package mysql
 
 import (
 	"database/sql"
 	"testing"
 
-	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +26,7 @@ type emptyCanalSingleTableTask struct {
 }
 
 func TestCanalSingleTableTest_Prepare(t *testing.T) {
-	env := NewKafkaDockerEnv("")
+	env := NewDockerEnv("")
 	require.NotNil(t, env)
 
 	env.Setup()
