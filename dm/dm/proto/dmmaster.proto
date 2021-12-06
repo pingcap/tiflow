@@ -452,6 +452,7 @@ message OperateRelayRequest {
 message OperateRelayResponse {
     bool result = 1;
     string msg = 2;
+    repeated CommonWorkerResponse sources = 3;
 }
 
 enum RelayOpV2 {

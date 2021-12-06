@@ -24,10 +24,10 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sorter"
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb"
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/system"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/actor"
+	"github.com/pingcap/ticdc/pkg/db"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
@@ -57,4 +57,5 @@ func init() {
 	leveldb.InitMetrics(registry)
 	redowriter.InitMetrics(registry)
 	system.InitMetrics(registry)
+	db.InitMetrics(registry)
 }

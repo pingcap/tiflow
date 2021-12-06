@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 type ownerJobType int
@@ -45,6 +46,10 @@ const (
 	ownerJobTypeDebugInfo
 	ownerJobTypeQuery
 )
+
+// versionInconsistentLogRate represents the rate of log output when there are
+// captures with versions different from that of the owner
+const versionInconsistentLogRate = 1
 
 type ownerJob struct {
 	tp           ownerJobType
@@ -77,10 +82,10 @@ type Owner struct {
 
 	ownerJobQueueMu sync.Mutex
 	ownerJobQueue   []*ownerJob
-
+	// logLimiter controls cluster version check log output rate
+	logLimiter   *rate.Limiter
 	lastTickTime time.Time
-
-	closed int32
+	closed       int32
 
 	newChangefeed func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed
 }
@@ -92,6 +97,7 @@ func NewOwner(pdClient pd.Client) *Owner {
 		gcManager:     gc.NewManager(pdClient),
 		lastTickTime:  time.Now(),
 		newChangefeed: newChangefeed,
+		logLimiter:    rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 	}
 }
 
@@ -118,12 +124,16 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	state := rawState.(*orchestrator.GlobalReactorState)
 	o.captures = state.Captures
 	o.updateMetrics(state)
+
+	// handleJobs() should be called before clusterVersionConsistent(), because
+	// when there are different versions of cdc nodes in the cluster,
+	// the admin job may not be processed all the time. And http api relies on
+	// admin job, which will cause all http api unavailable.
+	o.handleJobs()
+
 	if !o.clusterVersionConsistent(state.Captures) {
-		// sleep one second to avoid printing too much log
-		time.Sleep(1 * time.Second)
 		return state, nil
 	}
-
 	// Owner should update GC safepoint before initializing changefeed, so
 	// changefeed can remove its "ticdc-creating" service GC safepoint during
 	// initializing.
@@ -133,7 +143,6 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		return nil, errors.Trace(err)
 	}
 
-	o.handleJobs()
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
 			o.cleanUpChangefeed(changefeedState)
@@ -275,7 +284,9 @@ func (o *Owner) clusterVersionConsistent(captures map[model.CaptureID]*model.Cap
 	myVersion := version.ReleaseVersion
 	for _, capture := range captures {
 		if myVersion != capture.Version {
-			log.Warn("the capture version is different with the owner", zap.Reflect("capture", capture), zap.String("my-version", myVersion))
+			if o.logLimiter.Allow() {
+				log.Warn("the capture version is different with the owner", zap.Reflect("capture", capture), zap.String("owner-version", myVersion))
+			}
 			return false
 		}
 	}
