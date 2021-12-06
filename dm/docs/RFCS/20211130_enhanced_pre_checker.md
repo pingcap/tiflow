@@ -21,28 +21,6 @@ If we have a large number of tables in source, we will take too much time in che
 
 ## Proposal
 
-### Restrict user usage
-1. Remove the following settings from the [document](https://docs.pingcap.com/zh/tidb-data-migration/stable/precheck#%E5%85%B3%E9%97%AD%E6%A3%80%E6%9F%A5%E9%A1%B9). If the following items are detected to be set in the configuration, a warning will be reported.
-    - all
-    - dump_privilege
-    - replication_privilege
-    - server_id
-    - binlog_enable
-    - binlog_format
-    - binlog_row_image
-2. If task is full/all mode, the following items will be forced to check (correspondingly, it will not be check in increment mode):
-    - dump_privilege
-3. If task is increment/all mode, the following items will be forced to check (correspondingly, it will not be check in full mode):
-    - replication_privilege
-    - server_id
-    - binlog_enable
-    - binlog_format
-    - binlog_row_image
-4. Other checkers are the same as before. If you want to ignore them, you should set them in ignore_check_items.
-    - table_schema
-    - auto_increment_ID
-    - schema_of_shard_tables
-
 ### Speed ​​up check
 
 1. Support concurrent check
@@ -57,9 +35,7 @@ Since every checker is concurrent, we can split tables to **source_connection_co
 
 ### Optimize some check
 
-1. We needn’t check **auto_increment_ID** in following situation:
-    - If downstream creates tables manually and the new downstream’s auto increment ID is not the same as the upstream;
-    - If the column of auto increment ID in upstream does not has an unique constraint in downstream.
+1. We needn’t check **auto_increment_ID**, if the column of auto increment ID in upstream does not has an unique constraint in downstream.
 2. Dump_privilege will check different privileges according to different [consistency](https://docs.pingcap.com/zh/tidb/stable/dumpling-overview#%E8%B0%83%E6%95%B4-dumpling-%E7%9A%84%E6%95%B0%E6%8D%AE%E4%B8%80%E8%87%B4%E6%80%A7%E9%80%89%E9%A1%B9) and downstream on source.
     - For all consistency, we will check
         - REPLICATION CLIENT (global)
@@ -70,15 +46,31 @@ Since every checker is concurrent, we can split tables to **source_connection_co
         - LOCK TABLES (only dump table)
     - For TiDB downstream：
         - PROCESS (global)
-3. Add OnlineDDLChecker to check if a DDL of tables in allow list exists in online-ddl stage when DM task is all mode and online-ddl is true. It will be forced to check in all mode and not checked in increment mode.
+3. Add OnlineDDLChecker to check if a DDL of tables in allow list exists in online-ddl stage when DM task is all mode and online-ddl is true.
 4. Enhance schema_of_shard_tables. 
     - At first, if a machine exits the DM’s checkpoint and then DM start/resume task, we think the checkpoint guarantees consistency. So we don't check it.
     - If not exit checkpoint:
         - For all/full mode (pessimistic task): we keep the original check;
         - For all/full mode (optimistic task): we check whether the shard tables schema meets the definition of [Optimistic Schema Compatibility](20191209_optimistic_ddl.md). If that meets, we can create tables by the compatible schema in the dump stage.
         - For incremental mode: not check the sharding tables’ schema, because the table schema obtained from show create table is not the schema at the point of binlog.
+
+### Restrict user usage
+1. Remove all `ignore_check_items` settings from the [document](https://docs.pingcap.com/zh/tidb-data-migration/stable/precheck#%E5%85%B3%E9%97%AD%E6%A3%80%E6%9F%A5%E9%A1%B9). If the following items are detected to be set in the configuration, a warning will be reported.
+2. If task is full/all mode, the following items will be forced to check (correspondingly, it will not be check in increment mode):
+    - dump_privilege
+    - schema_of_shard_tables
+3. If task is increment/all mode, the following items will be forced to check (correspondingly, it will not be check in full mode):
+    - replication_privilege
+    - server_id
+    - binlog_enable
+    - binlog_format
+    - binlog_row_image
+    - online_ddl(new added)
+4. If task is full/increment/all mode, the following items will be forced to check:
+    - table_schema
+    - auto_increment_ID
 5. Make the fail state more gentle, which is from `StateFailure` to `StateWarning`.
-    - checkAutoIncrementKey
+    - checkAutoIncrementKey(same as auto_increment_ID)
     - checkPK/UK
 
 ### Move checker from [tidb-tools](https://github.com/pingcap/tidb-tools/tree/master/pkg/check) to DM
