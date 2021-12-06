@@ -48,7 +48,7 @@ Since every checker is concurrent, we can split tables to **source_connection_co
         - PROCESS (global)
 3. Add OnlineDDLChecker to check if a DDL of tables in allow list exists in online-ddl stage when DM task is all mode and online-ddl is true.
 4. Enhance schema_of_shard_tables. 
-    - At first, if a machine exits the DM’s checkpoint and then DM start/resume task, we think the checkpoint guarantees consistency. So we don't check it.
+    - If a task has passed the pre-checking when starting and exited, DM should keep the consistency during the task running. So we don't check it when restart the task.
     - If not exit checkpoint:
         - For all/full mode (pessimistic task): we keep the original check;
         - For all/full mode (optimistic task): we check whether the shard tables schema meets the definition of [Optimistic Schema Compatibility](20191209_optimistic_ddl.md). If that meets, we can create tables by the compatible schema in the dump stage.
