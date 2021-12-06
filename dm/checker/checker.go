@@ -35,7 +35,6 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
-	"github.com/pingcap/tidb-tools/pkg/check"
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -70,11 +69,11 @@ type Checker struct {
 
 	instances []*mysqlInstance
 
-	checkList     []check.Checker
+	checkList     []RealChecker
 	checkingItems map[string]string
 	result        struct {
 		sync.RWMutex
-		detail *check.Results
+		detail *Results
 	}
 	errCnt  int64
 	warnCnt int64
@@ -163,25 +162,25 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 
 		if _, ok := c.checkingItems[config.VersionChecking]; ok {
-			c.checkList = append(c.checkList, check.NewMySQLVersionChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			c.checkList = append(c.checkList, NewMySQLVersionChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 		if _, ok := c.checkingItems[config.ServerIDChecking]; ok {
-			c.checkList = append(c.checkList, check.NewMySQLServerIDChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			c.checkList = append(c.checkList, NewMySQLServerIDChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 		if _, ok := c.checkingItems[config.BinlogEnableChecking]; ok {
-			c.checkList = append(c.checkList, check.NewMySQLBinlogEnableChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			c.checkList = append(c.checkList, NewMySQLBinlogEnableChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 		if _, ok := c.checkingItems[config.BinlogFormatChecking]; ok {
-			c.checkList = append(c.checkList, check.NewMySQLBinlogFormatChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			c.checkList = append(c.checkList, NewMySQLBinlogFormatChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 		if _, ok := c.checkingItems[config.BinlogRowImageChecking]; ok {
-			c.checkList = append(c.checkList, check.NewMySQLBinlogRowImageChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			c.checkList = append(c.checkList, NewMySQLBinlogRowImageChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 		if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
-			c.checkList = append(c.checkList, check.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			c.checkList = append(c.checkList, NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 		if _, ok := c.checkingItems[config.ReplicationPrivilegeChecking]; ok {
-			c.checkList = append(c.checkList, check.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			c.checkList = append(c.checkList, NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 
 		if !checkingShard && !checkSchema {
@@ -219,7 +218,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
 
 		if checkSchema {
-			c.checkList = append(c.checkList, check.NewTablesChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables))
+			c.checkList = append(c.checkList, NewTablesChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables))
 		}
 	}
 
@@ -229,7 +228,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				continue
 			}
 
-			c.checkList = append(c.checkList, check.NewShardingTablesChecker(name, dbs, shardingSet, columnMapping, checkingShardID))
+			c.checkList = append(c.checkList, NewShardingTablesChecker(name, dbs, shardingSet, columnMapping, checkingShardID))
 		}
 	}
 
@@ -258,7 +257,7 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	isCanceled := false
 	errs := make([]*pb.ProcessError, 0, 1)
-	result, err := check.Do(cctx, c.checkList)
+	result, err := Do(cctx, c.checkList)
 	if err != nil {
 		errs = append(errs, unit.NewProcessError(err))
 	} else if !result.Summary.Passed {
@@ -268,20 +267,20 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		// remove success result if not pass
 		results := result.Results[:0]
 		for _, r := range result.Results {
-			if r.State == check.StateSuccess {
+			if r.State == StateSuccess {
 				continue
 			}
 
 			// handle results without r.Errors
 			if len(r.Errors) == 0 {
 				switch r.State {
-				case check.StateWarning:
+				case StateWarning:
 					if warnLeft == 0 {
 						continue
 					}
 					warnLeft--
 					results = append(results, r)
-				case check.StateFailure:
+				case StateFailure:
 					if errLeft == 0 {
 						continue
 					}
@@ -291,16 +290,16 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 				continue
 			}
 
-			subErrors := make([]*check.Error, 0, len(r.Errors))
+			subErrors := make([]*Error, 0, len(r.Errors))
 			for _, e := range r.Errors {
 				switch e.Severity {
-				case check.StateWarning:
+				case StateWarning:
 					if warnLeft == 0 {
 						continue
 					}
 					warnLeft--
 					subErrors = append(subErrors, e)
-				case check.StateFailure:
+				case StateFailure:
 					if errLeft == 0 {
 						continue
 					}
@@ -342,14 +341,14 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 }
 
 // updateInstruction updates the check result's Instruction.
-func (c *Checker) updateInstruction(result *check.Results) {
+func (c *Checker) updateInstruction(result *Results) {
 	for _, r := range result.Results {
-		if r.State == check.StateSuccess {
+		if r.State == StateSuccess {
 			continue
 		}
 
 		// can't judge by other field, maybe update it later
-		if r.Extra == check.AutoIncrementKeyChecking {
+		if r.Extra == AutoIncrementKeyChecking {
 			if strings.HasPrefix(r.Instruction, "please handle it by yourself") {
 				r.Instruction += ",  refer to https://docs.pingcap.com/tidb-data-migration/stable/shard-merge-best-practices#handle-conflicts-of-auto-increment-primary-key) for details."
 			}
