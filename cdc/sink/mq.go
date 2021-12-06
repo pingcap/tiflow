@@ -59,7 +59,6 @@ type mqSink struct {
 	partitionInput      []chan mqEvent
 	partitionResolvedTs []uint64
 	tableCheckpointTs   map[model.TableID]uint64
-	checkpointTs        uint64
 	resolvedNotifier    *notify.Notifier
 	resolvedReceiver    *notify.Receiver
 
