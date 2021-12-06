@@ -443,7 +443,6 @@ ClaimMessages:
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
-				log.Info("Emit RowChangedEvent", zap.Any("row", row))
 			case model.MqMessageTypeResolved:
 				ts, err := batchDecoder.NextResolvedEvent()
 				if err != nil {
