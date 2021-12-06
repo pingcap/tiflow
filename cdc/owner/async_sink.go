@@ -27,7 +27,6 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -66,7 +65,6 @@ type asyncSinkImpl struct {
 	sink            sink.Sink
 	sinkInitHandler asyncSinkInitHandler
 
-	g      errgroup.Group
 	cancel context.CancelFunc
 }
 
@@ -87,35 +85,29 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 		info = ctx.ChangefeedVars().Info
 	)
 
-	a.g.Go(func() error {
-		filter, err := filter.NewFilter(info.Config)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	filter, err := filter.NewFilter(info.Config)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
-		sink, err := sink.New(ctx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		a.sink = sink
+	s, err := sink.New(ctx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	a.sink = s
+
+	if !info.SyncPointEnabled {
 		return nil
-	})
+	}
+	syncPointStore, err := sink.NewSyncpointStore(ctx, id, info.SinkURI)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	a.syncPointStore = syncPointStore
 
-	a.g.Go(func() error {
-		if !info.SyncPointEnabled {
-			return nil
-		}
-		syncPointStore, err := sink.NewSyncpointStore(ctx, id, info.SinkURI)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		a.syncPointStore = syncPointStore
-
-		if err := a.syncPointStore.CreateSynctable(ctx); err != nil {
-			return errors.Trace(err)
-		}
-		return nil
-	})
+	if err := a.syncPointStore.CreateSynctable(ctx); err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 
@@ -204,8 +196,5 @@ func (s *asyncSinkImpl) Close(ctx context.Context) (err error) {
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()
 	}
-	if err != nil {
-		log.Warn("close async sink meet error", zap.Error(err))
-	}
-	return s.g.Wait()
+	return err
 }
