@@ -41,13 +41,14 @@ type ColumnSelector struct {
 
 func (s *SinkConfig) validate(enableOldValue bool) error {
 	protocol := s.Protocol
-	if (protocol == ProtocolCanal.String() ||
-		protocol == ProtocolCanalJSON.String() ||
-		protocol == ProtocolMaxwell.String()) && !enableOldValue {
-		log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
-			"Please update changefeed config", protocol))
-		return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-			errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", protocol)))
+	if !enableOldValue {
+		switch protocol {
+		case ProtocolCanal.String(), ProtocolCanalJSON.String(), ProtocolMaxwell.String():
+			log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
+				"Please update changefeed config", protocol))
+			return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
+				errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", protocol)))
+		}
 	}
 
 	return nil
