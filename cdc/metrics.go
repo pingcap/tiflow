@@ -56,6 +56,5 @@ func init() {
 	unified.InitMetrics(registry)
 	leveldb.InitMetrics(registry)
 	redowriter.InitMetrics(registry)
-	system.InitMetrics(registry)
 	db.InitMetrics(registry)
 }
