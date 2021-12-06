@@ -262,6 +262,13 @@ LOOP:
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
+	c.sink = c.newSink()
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		ctx.Throw(c.sink.Run(cancelCtx))
+	}()
+
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
@@ -271,13 +278,6 @@ LOOP:
 	go func() {
 		defer c.wg.Done()
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
-	}()
-
-	c.sink = c.newSink()
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		ctx.Throw(c.sink.Run(cancelCtx))
 	}()
 
 	stdCtx := util.PutChangefeedIDInCtx(cancelCtx, c.id)
