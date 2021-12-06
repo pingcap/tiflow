@@ -661,6 +661,11 @@ error = '''
 peer-to-peer message server received an RPC call with illegal metadata
 '''
 
+["CDC:ErrPeerMessageInjectedServerRestart"]
+error = '''
+peer-to-peer message server injected error
+'''
+
 ["CDC:ErrPeerMessageInternalSenderClosed"]
 error = '''
 peer-to-peer message server tries to send to a closed stream. Internal only.
