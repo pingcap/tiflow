@@ -5,7 +5,12 @@ on:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
 
   workflow_dispatch:
-    inputs: # TODO: use these inputs
+    inputs:
+      pr:
+        description: 'Which PR do you want to trigger'
+        required: true
+        default: ''
+      # TODO: use these inputs
       fromVer:
         dmVer: "v1.0.7"
       toVer:
@@ -28,10 +33,18 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: 1.16
+
       - name: Check out code
         uses: actions/checkout@v2
         with:
           path: go/src/github.com/pingcap/ticdc
+
+      - name: Check out code by workflow dispatch
+        if: ${{ github.event.inputs.pr != '' }}
+        uses: actions/checkout@v2
+        with:
+          path: go/src/github.com/pingcap/ticdc
+          ref: refs/pull/${{ github.event.inputs.pr }}/head
 
       - name: Setup containers
         working-directory: ${{ env.working-directory }}
@@ -77,18 +90,26 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: 1.16
+
       - name: Check out code
         uses: actions/checkout@v2
         with:
           path: go/src/github.com/pingcap/ticdc
+      
+      - name: Check out code by workflow dispatch
+        if: ${{ github.event.inputs.pr != '' }}
+        uses: actions/checkout@v2
+        with:
+          path: go/src/github.com/pingcap/ticdc
+          ref: refs/pull/${{ github.event.inputs.pr }}/head
 
       - name: Build
-        if: ${{ github.ref != 'refs/heads/master' }}
+        if: ${{ github.ref != 'refs/heads/master' || github.event.inputs.pr != '' }}
         working-directory: ${{ env.working-directory }}
         run: make dm
 
       - name: Package files
-        if: ${{ github.ref != 'refs/heads/master' }}
+        if: ${{ github.ref != 'refs/heads/master' || github.event.inputs.pr != '' }}
         run: |
           mkdir ${{ github.workspace }}/package
           cd ${{ github.workspace }}/package
@@ -121,7 +142,7 @@ jobs:
           GOPATH=${GITHUB_WORKSPACE}/go docker-compose up -d
 
       - name: Copy package files
-        if: ${{ github.ref != 'refs/heads/master' }}
+        if: ${{ github.ref != 'refs/heads/master' || github.event.inputs.pr != '' }}
         run: |
           cd ${{ github.workspace }}/package
           docker cp dm-master-nightly-linux-amd64.tar.gz control:/tmp
@@ -133,7 +154,7 @@ jobs:
         working-directory: ${{ env.working-directory }}
         run: |
           cd ${{ env.working-directory }}/dm/tests/tiup/docker
-          docker-compose exec -e ref=${{ github.ref }} -T control bash -c "cd /go/src/github.com/pingcap/ticdc/dm && ./tests/tiup/upgrade-from-v2.sh ${{ matrix.previous_v2 }} nightly"
+          docker-compose exec -e ref=${{ github.ref }} -e id=${{ github.event.inputs.pr }} -T control bash -c "cd /go/src/github.com/pingcap/ticdc/dm && ./tests/tiup/upgrade-from-v2.sh ${{ matrix.previous_v2 }} nightly"
 
       # if above step is passed, logs will be removed by tiup dm destroy
       - name: Copy logs to hack permission
