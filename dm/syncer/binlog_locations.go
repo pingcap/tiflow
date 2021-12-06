@@ -91,6 +91,7 @@ func shouldUpdatePos(e *replication.BinlogEvent) bool {
 		replication.PREVIOUS_GTIDS_EVENT, replication.MARIADB_GTID_LIST_EVENT:
 		return false
 	}
+	//nolint:gosimple
 	if e.Header.Flags&replication.LOG_EVENT_ARTIFICIAL_F != 0 {
 		// ignore events with LOG_EVENT_ARTIFICIAL_F flag(0x0020) set
 		// ref: https://dev.mysql.com/doc/internals/en/binlog-event-flag.html
