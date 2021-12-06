@@ -81,7 +81,7 @@ func (m *mockAsyncSink) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent
 	return m.ddlDone, nil
 }
 
-func (m *mockAsyncSink) SinkSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
+func (m *mockAsyncSink) EmitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
 	if checkpointTs == m.syncPoint {
 		return nil
 	}
