@@ -44,6 +44,9 @@ type GlobalVars struct {
 	RegionCache      *tikv.RegionCache
 	TimeAcquirer     pdtime.TimeAcquirer
 	TableActorSystem *system.System
+
+	// OwnerRevision is the Etcd revision when the owner got elected.
+	OwnerRevision int64
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline
