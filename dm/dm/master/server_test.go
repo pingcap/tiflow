@@ -600,7 +600,7 @@ func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
 		},
 		&pb.QueryStatusResponse{SubTaskStatus: []*pb.SubTaskStatus{
 			{
-				Name: taskName,
+				Name:   taskName,
 				Status: &pb.SubTaskStatus_Msg{Msg: common2.NoSubTaskMsg(taskName)},
 			},
 		}},
