@@ -180,7 +180,11 @@ func parseRowValues(str []byte, table *tableInfo, columnMapping *cm.Mapping) ([]
 			row = append(row, val)
 		}
 	}
-
+	if len(table.extendCol) > 0 {
+		for _, v := range table.extendVal {
+			row = append(row, "'"+v+"'")
+		}
+	}
 	return row, nil
 }
 
@@ -230,7 +234,7 @@ func tableName(schema, table string) string {
 	return fmt.Sprintf("`%s`.`%s`", schema, table)
 }
 
-func parseTable(ctx *tcontext.Context, r *router.Table, schema, table, file string, sqlMode string) (*tableInfo, error) {
+func parseTable(ctx *tcontext.Context, r *router.Table, schema, table, file, sqlMode, sourceID string) (*tableInfo, error) {
 	statement, err := exportStatement(file)
 	if err != nil {
 		return nil, err
@@ -278,6 +282,10 @@ func parseTable(ctx *tcontext.Context, r *router.Table, schema, table, file stri
 			columns = append(columns, col.Name.Name.O)
 		}
 	}
+	extendCol, extendVal := r.FetchExtendColumn(schema, table, sourceID)
+	if len(extendCol) > 0 {
+		columns = append(columns, extendCol...)
+	}
 	if hasGeneragedCols {
 		var escapeColumns []string
 		for _, column := range columns {
@@ -294,6 +302,8 @@ func parseTable(ctx *tcontext.Context, r *router.Table, schema, table, file stri
 		targetTable:    dstTable,
 		columnNameList: columns,
 		insertHeadStmt: fmt.Sprintf("INSERT INTO `%s` %sVALUES", dstTable, columnNameFields),
+		extendCol:      extendCol,
+		extendVal:      extendVal,
 	}, nil
 }
 

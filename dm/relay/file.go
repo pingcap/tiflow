@@ -14,14 +14,10 @@
 package relay
 
 import (
-	"context"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
-	"time"
 
-	"github.com/BurntSushi/toml"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
@@ -41,12 +37,6 @@ const (
 	FileCmpBiggerEqual
 	FileCmpBigger
 )
-
-// SwitchPath represents next binlog file path which should be switched.
-type SwitchPath struct {
-	nextUUID       string
-	nextBinlogName string
-}
 
 // EventNotifier notifies whether there is new binlog event written to the file.
 type EventNotifier interface {
@@ -205,123 +195,4 @@ func fileSizeUpdated(path string, latestSize int64) (int, error) {
 			zap.Int64("old size", latestSize), zap.Int64("size", curSize))
 		return -1, nil
 	}
-}
-
-type relayLogFileChecker struct {
-	notifier                                      EventNotifier
-	relayDir, currentUUID                         string
-	latestRelayLogDir, latestFilePath, latestFile string
-	beginOffset, endOffset                        int64
-}
-
-// relayLogUpdatedOrNewCreated checks whether current relay log file is updated or new relay log is created.
-func (r *relayLogFileChecker) relayLogUpdatedOrNewCreated(ctx context.Context, updatePathCh chan string, switchCh chan SwitchPath, errCh chan error) {
-	// binlog file may have rotated if we read nothing last time(either it's the first read or after notified)
-	lastReadCnt := r.endOffset - r.beginOffset
-	if lastReadCnt == 0 {
-		meta := &LocalMeta{}
-		_, err := toml.DecodeFile(filepath.Join(r.latestRelayLogDir, utils.MetaFilename), meta)
-		if err != nil {
-			errCh <- terror.Annotate(err, "decode relay meta toml file failed")
-			return
-		}
-		// current watched file size have no change means that no new writes have been made
-		// our relay meta file will be updated immediately after receive the rotate event,
-		// although we cannot ensure that the binlog filename in the meta is the next file after latestFile
-		// but if we return a different filename with latestFile, the outer logic (parseDirAsPossible)
-		// will find the right one
-		if meta.BinLogName != r.latestFile {
-			// we need check file size again, as the file may have been changed during our metafile check
-			cmp, err2 := fileSizeUpdated(r.latestFilePath, r.endOffset)
-			if err2 != nil {
-				errCh <- terror.Annotatef(err2, "latestFilePath=%s endOffset=%d", r.latestFilePath, r.endOffset)
-				return
-			}
-			switch {
-			case cmp < 0:
-				errCh <- terror.ErrRelayLogFileSizeSmaller.Generate(r.latestFilePath)
-			case cmp > 0:
-				updatePathCh <- r.latestFilePath
-			default:
-				nextFilePath := filepath.Join(r.latestRelayLogDir, meta.BinLogName)
-				log.L().Info("newer relay log file is already generated",
-					zap.String("now file path", r.latestFilePath),
-					zap.String("new file path", nextFilePath))
-				updatePathCh <- nextFilePath
-			}
-			return
-		}
-
-		// maybe UUID index file changed
-		switchPath, err := r.getSwitchPath()
-		if err != nil {
-			errCh <- err
-			return
-		}
-		if switchPath != nil {
-			// we need check file size again, as the file may have been changed during path check
-			cmp, err := fileSizeUpdated(r.latestFilePath, r.endOffset)
-			if err != nil {
-				errCh <- terror.Annotatef(err, "latestFilePath=%s endOffset=%d", r.latestFilePath, r.endOffset)
-				return
-			}
-			switch {
-			case cmp < 0:
-				errCh <- terror.ErrRelayLogFileSizeSmaller.Generate(r.latestFilePath)
-			case cmp > 0:
-				updatePathCh <- r.latestFilePath
-			default:
-				log.L().Info("newer relay uuid path is already generated",
-					zap.String("current path", r.latestRelayLogDir),
-					zap.Any("new path", switchPath))
-				switchCh <- *switchPath
-			}
-			return
-		}
-	}
-
-	timer := time.NewTimer(watcherInterval)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		errCh <- terror.Annotate(ctx.Err(), "context meet error")
-	case <-r.notifier.Notified():
-		// the notified event may not be the current relay file
-		// in that case we may read 0 bytes and check again
-		updatePathCh <- r.latestFilePath
-	case <-timer.C:
-		// for a task start after source shutdown or there's no new write, it'll not be notified,
-		// and if it's reading from dir 000001 and there's need to switch dir to 000002,
-		// after the task read files in dir 000001, the read size > 0, so it goes to the select directly,
-		// since there is no notify, it blocks, that'll leave dir 000002 un-synced.
-		// so we stop waiting after watcherInterval to give it a chance to check again
-		updatePathCh <- r.latestFilePath
-	}
-}
-
-func (r *relayLogFileChecker) getSwitchPath() (*SwitchPath, error) {
-	// reload uuid
-	uuids, err := utils.ParseUUIDIndex(path.Join(r.relayDir, utils.UUIDIndexFilename))
-	if err != nil {
-		return nil, err
-	}
-	nextUUID, _, err := getNextUUID(r.currentUUID, uuids)
-	if err != nil {
-		return nil, err
-	}
-	if len(nextUUID) == 0 {
-		return nil, nil
-	}
-
-	// try to get the first binlog file in next subdirectory
-	nextBinlogName, err := getFirstBinlogName(r.relayDir, nextUUID)
-	if err != nil {
-		// because creating subdirectory and writing relay log file are not atomic
-		if terror.ErrBinlogFilesNotFound.Equal(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return &SwitchPath{nextUUID, nextBinlogName}, nil
 }
