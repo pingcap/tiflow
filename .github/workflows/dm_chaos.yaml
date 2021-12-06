@@ -5,8 +5,9 @@ on:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
   workflow_dispatch:
     inputs:
-      name:
-        description: 'Why'
+      pr:
+        id: 'ID'
+        required: true
         default: ''
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
@@ -46,6 +47,11 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Check out code
         uses: actions/checkout@v2
+
+      - name: Check out code by workflow dispatch
+        if: ${{ github.event.inputs.id != '' }}
+        uses: actions/checkout@v2
+        ref: pull/${{ github.event.inputs.id }}/head
 
       - name: Cache go modules
         uses: actions/cache@v2
