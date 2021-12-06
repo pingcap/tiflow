@@ -42,9 +42,9 @@ Since every checker is concurrent, we can split tables to **source_connection_co
         - SELECT (only dump table)
     - For flush consistency：
         - RELOAD (global)
-    - For flush/lock consistency：
-        - LOCK TABLES (only dump table)
-    - For TiDB downstream：
+    - For flush/lock consistency:
+        - LOCK TABLES (only tables to dump)
+    - For TiDB source databases:
         - PROCESS (global)
 3. Add OnlineDDLChecker to check if a DDL of tables in allow list exists in online-ddl stage when DM task is all mode and online-ddl is true.
 4. Enhance schema_of_shard_tables. 
