@@ -58,7 +58,7 @@ type changefeed struct {
 	ddlEventCache *model.DDLEvent
 
 	errCh chan error
-	// this will be used to cancel the running goroutine of `AsyncSink` and `DDLPuller`
+	// cancel the running goroutine of `AsyncSink` and `DDLPuller`
 	cancel context.CancelFunc
 
 	// The changefeed will start some backend goroutines in the function `initialize`,

@@ -76,6 +76,7 @@ func newAsyncSinkImpl() AsyncSink {
 		ddlCh:           make(chan *model.DDLEvent, 1),
 		errCh:           make(chan error, defaultErrChSize),
 		sinkInitHandler: asyncSinkInitializer,
+		cancel:          func() {},
 	}
 }
 
@@ -87,16 +88,13 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 		info = ctx.ChangefeedVars().Info
 	)
 
-	sinkCtx, cancel := cdcContext.WithCancel(ctx)
-	a.cancel = cancel
-
 	a.g.Go(func() error {
 		filter, err := filter.NewFilter(info.Config)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		sink, err := sink.New(sinkCtx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
+		sink, err := sink.New(ctx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -106,13 +104,13 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 
 	a.g.Go(func() error {
 		if info.SyncPointEnabled {
-			syncPointStore, err := sink.NewSyncpointStore(sinkCtx, id, info.SinkURI)
+			syncPointStore, err := sink.NewSyncpointStore(ctx, id, info.SinkURI)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			a.syncPointStore = syncPointStore
 
-			if err := a.syncPointStore.CreateSynctable(sinkCtx); err != nil {
+			if err := a.syncPointStore.CreateSynctable(ctx); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -122,12 +120,12 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 }
 
 func (s *asyncSinkImpl) Run(ctx cdcContext.Context) error {
-	start := time.Now()
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	s.cancel = cancel
+
 	if err := s.sinkInitHandler(ctx, s); err != nil {
 		return errors.Trace(err)
 	}
-
-	log.Info("async sink initialized, start processing...", zap.Duration("elapsed", time.Since(start)))
 
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
