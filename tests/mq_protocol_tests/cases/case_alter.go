@@ -11,14 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tests
+package cases
 
 import (
 	"fmt"
 	"math/rand"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
 )
 
 // AlterCase is base impl of test case for alter operation

@@ -18,7 +18,7 @@ import (
 	"flag"
 	"math/rand"
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" // #nosec G108
 	"os"
 	"strings"
 
@@ -61,7 +61,7 @@ func main() {
 		_ = http.ListenAndServe("localhost:6060", nil)
 	}()
 
-	err = os.MkdirAll(*sorterDir, 0o755)
+	err = os.MkdirAll(*sorterDir, 0o700)
 	if err != nil {
 		log.Error("sorter_stress_test:", zap.Error(err))
 	}

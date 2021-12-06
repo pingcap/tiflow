@@ -262,7 +262,7 @@ func (s *Server) initDataDir(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	conf := config.GetGlobalServerConfig()
-	err := os.MkdirAll(conf.DataDir, 0o755)
+	err := os.MkdirAll(conf.DataDir, 0o700)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -316,7 +316,7 @@ func findBestDataDir(candidates []string) (result string, ok bool) {
 	var low uint64 = 0
 
 	checker := func(dir string) (*util.DiskInfo, error) {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, err
 		}
 		if err := util.IsDirReadWritable(dir); err != nil {
