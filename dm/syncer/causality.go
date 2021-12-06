@@ -151,8 +151,6 @@ type versionedMap struct {
 // rollingMap stores causality keys by "versions", where each version created on each flush and it helps to remove stale causality keys.
 type rollingMap struct {
 	maps []*versionedMap
-	// current map for write
-	cur *versionedMap
 }
 
 func newRollingMap() *rollingMap {
@@ -171,7 +169,7 @@ func (m *rollingMap) get(key string) (string, bool) {
 }
 
 func (m *rollingMap) set(key string, val string) {
-	m.cur.data[key] = val
+	m.maps[len(m.maps)-1].data[key] = val
 }
 
 func (m *rollingMap) len() int {
@@ -183,39 +181,33 @@ func (m *rollingMap) len() int {
 }
 
 func (m *rollingMap) rotate(flushJobSeq int64) {
-	if len(m.maps) == 0 || len(m.maps[len(m.maps)-1].data) > 0 {
-		m.maps = append(m.maps, &versionedMap{
-			data:            make(map[string]string),
-			prevFlushJobSeq: flushJobSeq,
-		})
-		m.cur = m.maps[len(m.maps)-1]
-	}
+	m.maps = append(m.maps, &versionedMap{
+		data:            make(map[string]string),
+		prevFlushJobSeq: flushJobSeq,
+	})
 }
 
 func (m *rollingMap) clear() {
 	m.gc(math.MaxInt64)
 }
 
-// remove causality keys where its version is smaller than the given version.
+// remove keys where its version is smaller than the given version.
 func (m *rollingMap) gc(flushJobSeq int64) {
+	if flushJobSeq == math.MaxInt64 {
+		m.maps = m.maps[:0]
+		m.rotate(-1)
+		return
+	}
+
 	// nolint:ifshort
 	idx := 0
-	// clean up stale keys
 	for i, d := range m.maps {
 		if d.prevFlushJobSeq <= flushJobSeq {
-			// set nil value to trigger go gc
-			m.maps[i] = nil
-		} else {
 			idx = i
+		} else {
 			break
 		}
 	}
 
-	// clean up m.maps array
-	if idx == len(m.maps)-1 {
-		m.maps = m.maps[:0]
-		m.rotate(-1)
-	} else if idx != 0 {
-		m.maps = m.maps[idx:]
-	}
+	m.maps = m.maps[idx:]
 }

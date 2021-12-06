@@ -292,7 +292,7 @@ func (s *testSyncerSuite) TestCasualityRollingMap(c *C) {
 	for index := range testCases {
 		rm.gc(int64(index))
 
-		for _, rmMap := range rm.maps {
+		for _, rmMap := range rm.maps[1:] {
 			c.Assert(rmMap.prevFlushJobSeq, Not(Equals), int64(index))
 		}
 

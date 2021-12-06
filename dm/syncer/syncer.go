@@ -1261,8 +1261,10 @@ func (s *Syncer) createCheckpointSnapshot(isSyncFlush bool) (*SnapshotInfo, []*f
 func (s *Syncer) afterFlushCheckpoint(task *flushCpTask) error {
 	// add a gc job to let causality module gc outdated kvs.
 	if task.asyncflushJob != nil {
+		s.tctx.L().Info("after async flushed checkpoint, gc stale causality keys", zap.Int64("flush job seq", task.asyncflushJob.flushSeq))
 		s.dmlJobCh <- newGCJob(task.asyncflushJob.flushSeq)
 	} else {
+		s.tctx.L().Info("after async flushed checkpoint, gc all causality keys")
 		s.dmlJobCh <- newGCJob(math.MaxInt64)
 	}
 
