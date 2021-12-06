@@ -453,7 +453,7 @@ ClaimMessages:
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if resolvedTs < ts {
-					log.Info("update sink resolved ts",
+					log.Debug("update sink resolved ts",
 						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition))
 					atomic.StoreUint64(&sink.resolvedTs, ts)
@@ -475,7 +475,6 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
 	if ddl.CommitTs <= c.maxDDLReceivedTs {
-		log.Info("ddl out of date", zap.Any("ddl", ddl), zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs))
 		return
 	}
 	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
@@ -485,7 +484,6 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	}
 	c.ddlList = append(c.ddlList, ddl)
 	c.maxDDLReceivedTs = ddl.CommitTs
-	log.Info("append DDL", zap.Any("ddl", ddl))
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
@@ -556,7 +554,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			log.Info("Emit DDL", zap.Any("ddl", todoDDL))
 			c.popDDL()
 			continue
 		}

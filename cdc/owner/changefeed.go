@@ -87,7 +87,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 
 		newDDLPuller: newDDLPuller,
 	}
-	c.newSink = newAsyncSinkImpl
+	c.newSink = newAsyncSink
 	return c
 }
 
