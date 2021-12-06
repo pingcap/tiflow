@@ -11,18 +11,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package canal
+package avro
 
 import (
 	"os/exec"
 	"testing"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
 	"github.com/stretchr/testify/require"
 )
 
-func TestKafkaDockerEnv_Basic(t *testing.T) {
+func TestAvroKafkaDockerEnv_Basic(t *testing.T) {
 	env := NewKafkaDockerEnv("")
 	require.NotNil(t, env)
 
@@ -52,10 +52,9 @@ func (t *dummyTask) Prepare(taskContext *framework.TaskContext) error {
 
 func (t *dummyTask) GetCDCProfile() *framework.CDCProfile {
 	return &framework.CDCProfile{
-		PDUri:      framework.UpstreamPD,
-		SinkURI:    "kafka://kafka:9092/testdb?protocol=canal",
-		Opts:       map[string]string{"force-handle-key-pkey": "true"},
-		ConfigFile: "/configs/canal-test-config.toml",
+		PDUri:   framework.UpstreamPD,
+		SinkURI: "kafka://kafka:9092/testdb_test?protocol=avro",
+		Opts:    map[string]string{"registry": "http://schema-registry:8081"},
 	}
 }
 
@@ -77,7 +76,7 @@ func (t *dummyTask) Run(taskContext *framework.TaskContext) error {
 	return nil
 }
 
-func TestCanalKafkaDockerEnv_RunTest(t *testing.T) {
+func TestAvroKafkaDockerEnv_RunTest(t *testing.T) {
 	env := NewKafkaDockerEnv("")
 	require.NotNil(t, env)
 
