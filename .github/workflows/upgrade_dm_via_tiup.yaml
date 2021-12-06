@@ -109,7 +109,7 @@ jobs:
         run: make dm
 
       - name: Package files
-        if: ${{ github.ref != 'refs/heads/master' ｜｜ github.event.inputs.pr != '' }}
+        if: ${{ github.ref != 'refs/heads/master' || github.event.inputs.pr != '' }}
         run: |
           mkdir ${{ github.workspace }}/package
           cd ${{ github.workspace }}/package
