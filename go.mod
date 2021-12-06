@@ -14,6 +14,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chaos-mesh/go-sqlsmith v0.0.0-20211025024535-03ae33408684
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
+	github.com/cockroachdb/pebble v0.0.0-20210719141320-8c3bd06debb5
 	github.com/coreos/go-semver v0.3.0
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
 	github.com/davecgh/go-spew v1.1.1
@@ -64,7 +65,7 @@ require (
 	github.com/rakyll/statik v0.1.7
 	github.com/shopspring/decimal v1.3.0
 	github.com/soheilhy/cmux v0.1.5
-	github.com/spf13/cobra v1.0.0
+	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
 	github.com/swaggo/files v0.0.0-20190704085106-630677cd5c14

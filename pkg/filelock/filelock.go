@@ -30,7 +30,7 @@ type FileLock struct {
 
 // NewFileLock creates a new file lock on the file described in filePath.
 func NewFileLock(filePath string) (*FileLock, error) {
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|syscall.O_NONBLOCK, 0o666)
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|syscall.O_NONBLOCK, 0o600)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
