@@ -7,7 +7,11 @@ export-fix-sql = true
 check-struct-only = false
 
 [task]
+<<<<<<< HEAD
 output-dir = "/tmp/ticdc_dm_test/output"
+=======
+    output-dir = "/tmp/tidb_cdc_test/new_ci_collation_without_old_value/sync_diff/output"
+>>>>>>> a4df08dda (tests(ticdc): set up the sync diff output directory correctly (#3725))
 
 source-instances = ["mysql1"]
 
