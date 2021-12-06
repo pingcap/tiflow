@@ -678,7 +678,7 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDML(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	err = retry.Do(context.Background(), func() error {
-		ts, err := sink.FlushRowChangedEvents(ctx, uint64(2))
+		ts, err := sink.FlushRowChangedEvents(ctx, 2, uint64(2))
 		c.Assert(err, check.IsNil)
 		if ts < uint64(2) {
 			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 2)
@@ -689,7 +689,7 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDML(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	err = retry.Do(context.Background(), func() error {
-		ts, err := sink.FlushRowChangedEvents(ctx, uint64(4))
+		ts, err := sink.FlushRowChangedEvents(ctx, 2, uint64(4))
 		c.Assert(err, check.IsNil)
 		if ts < uint64(4) {
 			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 4)
@@ -698,7 +698,7 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDML(c *check.C) {
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	c.Assert(err, check.IsNil)
 
-	err = sink.Barrier(ctx)
+	err = sink.Barrier(ctx, 2)
 	c.Assert(err, check.IsNil)
 
 	err = sink.Close(ctx)
