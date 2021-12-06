@@ -18,6 +18,8 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec/craft"
@@ -38,7 +40,7 @@ type CraftEventBatchEncoder struct {
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
-	return newResolvedMQMessage(ProtocolCraft, nil, craft.NewResolvedEventEncoder(e.allocator, ts).Encode(), ts), nil
+	return newResolvedMQMessage(config.ProtocolCraft, nil, craft.NewResolvedEventEncoder(e.allocator, ts).Encode(), ts), nil
 }
 
 func (e *CraftEventBatchEncoder) flush() {
@@ -46,7 +48,7 @@ func (e *CraftEventBatchEncoder) flush() {
 	ts := headers.GetTs(0)
 	schema := headers.GetSchema(0)
 	table := headers.GetTable(0)
-	e.messageBuf = append(e.messageBuf, NewMQMessage(ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MqMessageTypeRow, &schema, &table))
+	e.messageBuf = append(e.messageBuf, NewMQMessage(config.ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MqMessageTypeRow, &schema, &table))
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
@@ -65,7 +67,7 @@ func (e *CraftEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, 
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) EncodeDDLEvent(ev *model.DDLEvent) (*MQMessage, error) {
-	return newDDLMQMessage(ProtocolCraft, nil, craft.NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
+	return newDDLMQMessage(config.ProtocolCraft, nil, craft.NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
 }
 
 // Build implements the EventBatchEncoder interface

@@ -19,6 +19,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -287,7 +289,7 @@ func (d *MaxwellEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage
 		return nil, errors.Trace(err)
 	}
 
-	return newDDLMQMessage(ProtocolMaxwell, key, value, e), nil
+	return newDDLMQMessage(config.ProtocolMaxwell, key, value, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -296,7 +298,7 @@ func (d *MaxwellEventBatchEncoder) Build() []*MQMessage {
 		return nil
 	}
 
-	ret := NewMQMessage(ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeRow, nil, nil)
+	ret := NewMQMessage(config.ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeRow, nil, nil)
 	d.Reset()
 	return []*MQMessage{ret}
 }
