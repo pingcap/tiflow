@@ -70,7 +70,7 @@ func (m *mockSink) GetDDL() *model.DDLEvent {
 
 func newAsyncSink4Test() (AsyncSink, *mockSink) {
 	mockSink := &mockSink{}
-	asyncSink := newAsyncSinkImpl()
+	asyncSink := newAsyncSink()
 	asyncSink.(*asyncSinkImpl).sinkInitHandler = func(ctx cdcContext.Context, a *asyncSinkImpl) error {
 		a.sink = mockSink
 		return nil

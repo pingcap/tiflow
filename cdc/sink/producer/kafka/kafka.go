@@ -125,24 +125,14 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message 
 			Partition: int32(i),
 		}
 	}
-
-	log.Info("SyncBroadcastMessage messages batched", zap.String("topic", k.topic))
-
 	select {
 	case <-ctx.Done():
-		log.Info("SyncBroadcastMessage ctx Done", zap.Error(ctx.Err()))
 		return ctx.Err()
 	case <-k.closeCh:
-		log.Info("SyncBroadcastMessage closeCh shot.")
 		return nil
 	default:
-		if err := k.syncClient.SendMessages(msgs); err != nil {
-			log.Info("broadcast messages failed", zap.Error(err))
-			return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
-		}
-
-		log.Info("broadcast messages to all partitions", zap.Any("messages", msgs))
-		return nil
+		err := k.syncClient.SendMessages(msgs)
+		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
 
@@ -203,6 +193,7 @@ func (k *kafkaSaramaProducer) stop() {
 	if atomic.SwapInt32(&k.closing, kafkaProducerClosing) == kafkaProducerClosing {
 		return
 	}
+	log.Info("kafka producer closing...")
 	close(k.closeCh)
 }
 
