@@ -14,6 +14,8 @@
 package p2p
 
 import (
+	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	proto "github.com/pingcap/ticdc/proto/p2p"
 )
 
@@ -63,6 +65,10 @@ func newClientBatchSender(stream clientStream, maxEntryCount, maxSizeBytes int) 
 // maxEntryCount messages or the total size of messages exceeds maxSizeBytes,
 // the batch is flushed.
 func (s *clientBatchSenderImpl) Append(msg messageEntry) error {
+	failpoint.Inject("ClientBatchSenderInjectError", func() {
+		failpoint.Return(errors.New("injected error"))
+	})
+
 	s.buffer = append(s.buffer, msg)
 	s.sizeBytes += msg.Size()
 
@@ -74,6 +80,10 @@ func (s *clientBatchSenderImpl) Append(msg messageEntry) error {
 
 // Flush flushes the batch.
 func (s *clientBatchSenderImpl) Flush() error {
+	failpoint.Inject("ClientBatchSenderInjectError", func() {
+		failpoint.Return(errors.New("injected error"))
+	})
+
 	if len(s.buffer) == 0 {
 		return nil
 	}

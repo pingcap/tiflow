@@ -15,6 +15,7 @@ package db
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/pingcap/ticdc/pkg/config"
@@ -30,9 +31,17 @@ func TestDB(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	ldb, err := leveldb.Open(storage.NewMemStorage(), &opt.Options{})
+	db, err := OpenLevelDB(ctx, 1, filepath.Join(t.TempDir(), "1"), cfg)
 	require.Nil(t, err)
-	db, err := OpenDB(ctx, 1, t.TempDir(), cfg)
+	testDB(t, db)
+
+	db, err = OpenPebble(ctx, 1, filepath.Join(t.TempDir(), "2"), cfg)
+	require.Nil(t, err)
+	testDB(t, db)
+}
+
+func testDB(t *testing.T, db DB) {
+	ldb, err := leveldb.Open(storage.NewMemStorage(), &opt.Options{})
 	require.Nil(t, err)
 
 	// Collect metrics
