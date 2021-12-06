@@ -18,10 +18,9 @@ import (
 	"encoding/binary"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"

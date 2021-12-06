@@ -19,10 +19,9 @@ import (
 	"encoding/binary"
 	"encoding/json"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	model2 "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"

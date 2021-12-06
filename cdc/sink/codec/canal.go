@@ -20,11 +20,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	mm "github.com/pingcap/tidb/parser/model"

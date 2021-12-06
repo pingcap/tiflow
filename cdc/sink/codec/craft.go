@@ -18,11 +18,10 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec/craft"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
