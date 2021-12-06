@@ -2,20 +2,19 @@
 
 This repo implements a new prototype of distributed task scheduler.
 
-# Concepts
-
-## Job
-
-## Task
-
-## Operator
-
-# Components
+# Develop
 
 ## Build
 
-If this is the first time you build this repo, please run `cd tools && make`, which is to build the proto tools for further building.
-Then execute `make` can build every components of the repo.
+Please run `make check` to build tools and format the code.
+
+Simply run `make` to compile.
+
+## Run Test
+
+Use `make unit_test` to run unit test and integrated test.
+
+# Run it 
 
 ## Master
 
@@ -23,23 +22,23 @@ Master is set to process the requests from outside and to schedule and dispatch 
 
 ## Executor
 
-Executor executes the tasks.
+Executor is the worker process to run the tasks. It receives `submit tasks` request from Master.
 
 ## Master-Client
 
 Master-Client is set to interact with master. Right now it only supports `submit-job` command.
 
-## producer
+## Demo
 
-producer mimics TiKV and generates records repeatly. The default address is `127.0.0.1:50051`. After launching the producer, write the address to the `servers` in the config file. If you want to read from multiple grpc stream, just repeat the address in the `servers` array.
+the job of demo workload is devided to two parts:
 
-## playbook
-
-the workload is designed as three types of task
-
-- receive task. receives records from a single grpc stream. Assuming the task number is N, it recieves data belonging to M tables and dispatches a record to one of the M tasks according to the table id in the record.
-- hash task. do some simple computing task, fill the hash value in the record.
-- sink task. write the record to a local file, and records the ending time.
+- Producer
+  - **Producer task** produces data continously. Every record has a table-id, ddl-version and a mark indicating whether it is a ddl record or data record. `Producer Task` shuffles records to different `Binlog task` to downstream side.
+  - **Binlog task** serves as a server to provide recorder. It is only in charge to data transferring.
+- Consumer
+  - **receive task** receives records from a single grpc stream which connects to a **Binlog task**. It passes on data to `Syncer Task`.
+  - **Syncer task** processes `DDL` record. It is supposed to wait all the other DDL with same version compeleted.
+  - **Sink task** writes the record to a local file, and records the ending time.
 
 ### demonstration
 
@@ -56,12 +55,6 @@ the workload is designed as three types of task
 ```
 
 change the `worker-addr` field in toml, and start another executor.
-
-#### start producer
-
-```[shell]
-./bin/producer
-```
 
 #### submit a job
 
