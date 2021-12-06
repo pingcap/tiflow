@@ -257,6 +257,9 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 
 			metricsClientMessageCount.Inc()
 
+			log.Debug("Sending Message",
+				zap.String("topic", msg.Topic),
+				zap.Int64("seq", msg.Sequence))
 			if err := batchSender.Append(msg); err != nil {
 				return errors.Trace(err)
 			}
@@ -280,7 +283,7 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 	c.topicMu.RUnlock()
 
 	batcher := c.newSenderFn(stream)
-	for _, tpk := range topicsCloned {
+	for topic, tpk := range topicsCloned {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
@@ -288,6 +291,14 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 		}
 
 		tpk.sentMessageMu.Lock()
+
+		if !tpk.sentMessages.Empty() {
+			retryFromSeq := tpk.sentMessages.Front().(*p2p.MessageEntry).Sequence
+			log.Info("peer-to-peer client retrying",
+				zap.String("topic", topic),
+				zap.Int64("from-seq", retryFromSeq))
+		}
+
 		for i := 0; i < tpk.sentMessages.Len(); i++ {
 			msg := tpk.sentMessages.Peek(i).(*p2p.MessageEntry)
 			log.Debug("retry sending msg",
@@ -300,11 +311,13 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 				Sequence: msg.Sequence,
 			})
 			if err != nil {
+				tpk.sentMessageMu.Unlock()
 				return errors.Trace(err)
 			}
 		}
 
 		if err := batcher.Flush(); err != nil {
+			tpk.sentMessageMu.Unlock()
 			return errors.Trace(err)
 		}
 
