@@ -1,11 +1,6 @@
 name: CDC Integration Tests Cron
 
 on:
-  pull_request:
-    branches:
-      - master
-    paths-ignore:
-      - 'dm/**'
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
 
