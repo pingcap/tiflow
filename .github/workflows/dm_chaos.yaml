@@ -52,7 +52,7 @@ jobs:
         if: ${{ github.event.inputs.pr != '' }}
         uses: actions/checkout@v2
         with:
-          ref: pull/${{ github.event.inputs.pr }}/head
+          ref: refs/pull/${{ github.event.inputs.pr }}/head
 
       - name: Cache go modules
         uses: actions/cache@v2
