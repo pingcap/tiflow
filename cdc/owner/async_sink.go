@@ -67,7 +67,8 @@ type asyncSinkImpl struct {
 	errCh           chan error
 	sinkInitHandler asyncSinkInitHandler
 
-	g errgroup.Group
+	g      errgroup.Group
+	cancel context.CancelFunc
 }
 
 func newAsyncSinkImpl() AsyncSink {
@@ -86,13 +87,16 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 		info = ctx.ChangefeedVars().Info
 	)
 
+	sinkCtx, cancel := cdcContext.WithCancel(ctx)
+	a.cancel = cancel
+
 	a.g.Go(func() error {
 		filter, err := filter.NewFilter(info.Config)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		sink, err := sink.New(ctx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
+		sink, err := sink.New(sinkCtx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -102,13 +106,13 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 
 	a.g.Go(func() error {
 		if info.SyncPointEnabled {
-			syncPointStore, err := sink.NewSyncpointStore(ctx, id, info.SinkURI)
+			syncPointStore, err := sink.NewSyncpointStore(sinkCtx, id, info.SinkURI)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			a.syncPointStore = syncPointStore
 
-			if err := a.syncPointStore.CreateSynctable(ctx); err != nil {
+			if err := a.syncPointStore.CreateSynctable(sinkCtx); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -206,5 +210,6 @@ func (s *asyncSinkImpl) Close(ctx context.Context) (err error) {
 	if err != nil {
 		log.Warn("close async sink meet error", zap.Error(err))
 	}
+	s.cancel()
 	return s.g.Wait()
 }
