@@ -224,7 +224,12 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
+<<<<<<< HEAD
 	notifier streamer.EventNotifier
+=======
+	relay                      relay.Process
+	charsetAndDefaultCollation map[string]string
+>>>>>>> 383c7b5ff (syncer(dm) : fix default collation with upstream in create table statement (#3575))
 }
 
 // NewSyncer creates a new Syncer.
@@ -325,7 +330,15 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
+<<<<<<< HEAD
 	s.streamerController = NewStreamerController(s.notifier, s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.binlogType, s.cfg.RelayDir, s.timezone)
+=======
+	s.charsetAndDefaultCollation, err = s.fromDB.GetCharsetAndDefaultCollation(ctx)
+	if err != nil {
+		return err
+	}
+	s.streamerController = NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
+>>>>>>> 383c7b5ff (syncer(dm) : fix default collation with upstream in create table statement (#3575))
 
 	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
 	if err != nil {
@@ -2095,6 +2108,7 @@ type queryEventContext struct {
 	trackInfos      []*ddlInfo
 	sourceTbls      map[string]map[string]struct{} // db name -> tb name
 	onlineDDLTable  *filter.Table
+	eventStatusVars []byte // binlog StatusVars
 }
 
 func (qec *queryEventContext) String() string {
@@ -2135,12 +2149,13 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 	}
 
 	qec := &queryEventContext{
-		eventContext: &ec,
-		ddlSchema:    string(ev.Schema),
-		originSQL:    utils.TrimCtrlChars(originSQL),
-		splitDDLs:    make([]string, 0),
-		appliedDDLs:  make([]string, 0),
-		sourceTbls:   make(map[string]map[string]struct{}),
+		eventContext:    &ec,
+		ddlSchema:       string(ev.Schema),
+		originSQL:       utils.TrimCtrlChars(originSQL),
+		splitDDLs:       make([]string, 0),
+		appliedDDLs:     make([]string, 0),
+		sourceTbls:      make(map[string]map[string]struct{}),
+		eventStatusVars: ev.StatusVars,
 	}
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
 	if err != nil {
@@ -2248,7 +2263,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 			continue
 		}
 		// We use default parser because sqls are came from above *Syncer.splitAndFilterDDL, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
-		ddlInfo, err2 := s.genDDLInfo(qec.p, qec.ddlSchema, sql)
+		ddlInfo, err2 := s.genDDLInfo(qec, sql)
 		if err2 != nil {
 			return err2
 		}
