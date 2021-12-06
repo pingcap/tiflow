@@ -18,9 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/filter"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -28,7 +25,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -39,7 +38,7 @@ const (
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
 type AsyncSink interface {
-	// Run the asyncSink, should be called asynchronously.
+	// Run the asyncSink
 	Run(ctx cdcContext.Context) error
 	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
@@ -54,17 +53,17 @@ type AsyncSink interface {
 }
 
 type asyncSinkImpl struct {
-	sink           sink.Sink
+	lastSyncPoint  model.Ts
 	syncPointStore sink.SyncpointStore
 
 	checkpointTs  model.Ts
-	lastSyncPoint model.Ts
-
 	ddlFinishedTs model.Ts
 	ddlSentTs     model.Ts
 
-	ddlCh           chan *model.DDLEvent
-	errCh           chan error
+	ddlCh chan *model.DDLEvent
+	errCh chan error
+
+	sink            sink.Sink
 	sinkInitHandler asyncSinkInitHandler
 
 	g      errgroup.Group
