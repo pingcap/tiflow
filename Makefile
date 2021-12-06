@@ -49,7 +49,7 @@ FAILPOINT_DISABLE := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v5.2.0-master
+	RELEASE_VERSION := v5.4.0-master
 	release_version_regex := ^v5\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
 	ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
@@ -162,10 +162,10 @@ integration_test_build: check_failpoint_ctl
 integration_test: integration_test_mysql
 
 integration_test_mysql:
-	tests/run.sh mysql "$(CASE)"
+	tests/integration_tests/run.sh mysql "$(CASE)"
 
 integration_test_kafka: check_third_party_binary
-	tests/run.sh kafka "$(CASE)"
+	tests/integration_tests/run.sh kafka "$(CASE)"
 
 fmt: tools/bin/gofumports tools/bin/shfmt
 	@echo "gofmt (simplify)"

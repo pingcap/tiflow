@@ -187,7 +187,7 @@ func (r *Relay) process(ctx context.Context) error {
 	}
 	r.db = db
 
-	if err2 := os.MkdirAll(r.cfg.RelayDir, 0o755); err2 != nil {
+	if err2 := os.MkdirAll(r.cfg.RelayDir, 0o700); err2 != nil {
 		return terror.ErrRelayMkdir.Delegate(err2)
 	}
 
@@ -245,7 +245,7 @@ func (r *Relay) process(ctx context.Context) error {
 			}
 		} else {
 			_, metaPos := r.meta.Pos()
-			if neededBinlogName > metaPos.Name {
+			if mysql.CompareBinlogFileName(neededBinlogName, metaPos.Name) > 0 {
 				isRelayMetaOutdated = true
 			}
 		}
@@ -467,7 +467,7 @@ func (r *Relay) doRecovering(ctx context.Context, binlogDir, filename string, pa
 	failpoint.Label("bypass")
 
 	// truncate the file
-	f, err := os.OpenFile(fullName, os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(fullName, os.O_WRONLY, 0o600)
 	if err != nil {
 		return recoverResult{}, terror.Annotatef(terror.ErrRelayWriterFileOperate.New(err.Error()), "open %s", fullName)
 	}
