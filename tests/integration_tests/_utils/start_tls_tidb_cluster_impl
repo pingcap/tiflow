@@ -142,7 +142,7 @@ run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc
 	--ssl-key=$TLS_DIR/server-key.pem
 
 echo "Starting CDC state checker..."
-cd $CUR/../../../testing_utils/cdc_state_checker
+cd $CUR/../../utils/cdc_state_checker
 if [ ! -f ./cdc_state_checker ]; then
 	GO111MODULE=on go build
 fi
