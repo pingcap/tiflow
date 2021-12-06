@@ -560,6 +560,7 @@ func (c CDCEtcdClient) GetOwnerID(ctx context.Context, key string) (string, erro
 	return string(resp.Kvs[0].Value), nil
 }
 
+// GetOwnerRevision gets the Etcd revision for the elected owner.
 func (c CDCEtcdClient) GetOwnerRevision(ctx context.Context, captureID string) (rev int64, err error) {
 	resp, err := c.Client.Get(ctx, CaptureOwnerKey, clientv3.WithFirstCreate()...)
 	if err != nil {
@@ -568,6 +569,7 @@ func (c CDCEtcdClient) GetOwnerRevision(ctx context.Context, captureID string) (
 	if len(resp.Kvs) == 0 {
 		return 0, cerror.ErrOwnerNotFound.GenWithStackByArgs()
 	}
+	// Checks that the given capture is indeed the owner.
 	if string(resp.Kvs[0].Value) != captureID {
 		return 0, cerror.ErrNotOwner.GenWithStackByArgs()
 	}
