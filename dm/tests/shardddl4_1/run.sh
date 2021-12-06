@@ -566,7 +566,7 @@ function DM_147_CASE {
 		"add column c that wasn't fully dropped in downstream" 1
 
 	# try to fix data
-	echo 'create table tbl(a int primary key, b int, c int) engine=innodb default charset=latin1;' >${WORK_DIR}/schema.sql
+	echo 'create table tbl(a int primary key, b int, c int) engine=innodb default charset=latin1 default collate=latin1_bin;' >${WORK_DIR}/schema.sql
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog-schema update test ${shardddl1} ${tb1} ${WORK_DIR}/schema.sql -s mysql-replica-01" \
 		"\"result\": true" 2
@@ -583,9 +583,9 @@ function DM_147_CASE {
 # Add and Drop multiple fields and then rollback.
 function DM_147 {
 	run_case 147 "double-source-optimistic" \
-		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, c int) engine=innodb default charset=latin1;\"; \
-     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, c int) engine=innodb default charset=latin1;\"; \
-     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, c int) engine=innodb default charset=latin1;\"" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, c int) engine=innodb default charset=latin1 default collate=latin1_bin;\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, c int) engine=innodb default charset=latin1 default collate=latin1_bin;\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, c int) engine=innodb default charset=latin1 default collate=latin1_bin;\"" \
 		"clean_table" "optimistic"
 }
 
