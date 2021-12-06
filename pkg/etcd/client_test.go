@@ -142,7 +142,8 @@ func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 	key := "testWatchChBlocked"
 	outCh := make(chan clientv3.WatchResponse, 6)
 	revision := int64(1)
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*2)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
 
 	go func() {
 		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))

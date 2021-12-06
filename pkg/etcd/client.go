@@ -197,7 +197,7 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 	ticker := c.clock.Ticker(etcdRequestProgressDuration)
 	defer ticker.Stop()
 	// limit the rate to reset Watch
-	limit := float64(1) / float64(etcdWatchChTimeoutDuration)
+	limit := float64(1*time.Second) / float64(etcdWatchChTimeoutDuration)
 	limiter := rate.NewLimiter(rate.Limit(limit), 1)
 	lastReceivedResponseTime := c.clock.Now()
 
