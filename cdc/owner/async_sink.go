@@ -47,7 +47,7 @@ type AsyncSink interface {
 	// the DDL event will be sent to another goroutine and execute to downstream
 	// the caller of this function can call again and again until a true returned
 	EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
-	SinkSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
+	EmitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
 	Close(ctx context.Context) error
 }
 
@@ -131,7 +131,7 @@ func (s *asyncSinkImpl) Run(ctx cdcContext.Context) error {
 		case <-ctx.Done():
 			return nil
 		case err := <-s.errCh:
-			return err
+			return errors.Trace(err)
 		case <-ticker.C:
 			checkpointTs := atomic.LoadUint64(&s.checkpointTs)
 			if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
@@ -184,7 +184,7 @@ func (s *asyncSinkImpl) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent
 	return false, nil
 }
 
-func (s *asyncSinkImpl) SinkSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
+func (s *asyncSinkImpl) EmitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
 	if checkpointTs == s.lastSyncPoint {
 		return nil
 	}
