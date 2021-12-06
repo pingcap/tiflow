@@ -65,7 +65,7 @@ func main() {
 		_ = http.ListenAndServe("localhost:6060", nil)
 	}()
 
-	err = os.MkdirAll(*sorterDir, 0o755)
+	err = os.MkdirAll(*sorterDir, 0o700)
 	if err != nil {
 		log.Error("sorter_stress_test:", zap.Error(err))
 	}

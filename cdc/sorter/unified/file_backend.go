@@ -65,7 +65,7 @@ func newFileBackEnd(fileName string, serde encoding.SerializerDeserializer) (*fi
 }
 
 func (f *fileBackEnd) reader() (backEndReader, error) {
-	fd, err := os.OpenFile(f.fileName, os.O_RDWR, 0o644)
+	fd, err := os.OpenFile(f.fileName, os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, errors.Trace(wrapIOError(err))
 	}
@@ -103,7 +103,7 @@ func (f *fileBackEnd) reader() (backEndReader, error) {
 }
 
 func (f *fileBackEnd) writer() (backEndWriter, error) {
-	fd, err := os.OpenFile(f.fileName, os.O_TRUNC|os.O_RDWR, 0o644)
+	fd, err := os.OpenFile(f.fileName, os.O_TRUNC|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, errors.Trace(wrapIOError(err))
 	}
