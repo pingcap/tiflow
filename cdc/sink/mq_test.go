@@ -64,9 +64,9 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
-	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
+	kafkap.NewSaramaAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
+		kafkap.NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
@@ -171,9 +171,9 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
-	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
+	kafkap.NewSaramaAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
+		kafkap.NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)

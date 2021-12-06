@@ -84,7 +84,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	c.Assert(cfg.Net.SASL.Mechanism, check.Equals, sarama.SASLMechanism("SCRAM-SHA-256"))
 }
 
-func (s *kafkaSuite) TestCompleteConfig(c *check.C) {
+func (s *kafkaSuite) TestCompleteConfigByOpts(c *check.C) {
 	defer testleak.AfterTest(c)
 	cfg := NewConfig()
 
@@ -97,7 +97,7 @@ func (s *kafkaSuite) TestCompleteConfig(c *check.C) {
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	opts := make(map[string]string)
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	err = cfg.CompleteByOpts(sinkURI, config.GetDefaultReplicaConfig(), opts)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
 	c.Assert(cfg.ReplicationFactor, check.Equals, int16(3))
@@ -116,7 +116,7 @@ func (s *kafkaSuite) TestCompleteConfig(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	err = cfg.CompleteByOpts(sinkURI, config.GetDefaultReplicaConfig(), opts)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
 	// Illegal max-message-bytes.
@@ -124,7 +124,7 @@ func (s *kafkaSuite) TestCompleteConfig(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	err = cfg.CompleteByOpts(sinkURI, config.GetDefaultReplicaConfig(), opts)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
 	// Illegal enable-tidb-extension.
@@ -132,7 +132,7 @@ func (s *kafkaSuite) TestCompleteConfig(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	err = cfg.CompleteByOpts(sinkURI, config.GetDefaultReplicaConfig(), opts)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
 	// Illegal partition-num.
@@ -140,7 +140,7 @@ func (s *kafkaSuite) TestCompleteConfig(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	err = cfg.CompleteByOpts(sinkURI, config.GetDefaultReplicaConfig(), opts)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
 	// Out of range partition-num.
@@ -148,7 +148,7 @@ func (s *kafkaSuite) TestCompleteConfig(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	err = cfg.CompleteByOpts(sinkURI, config.GetDefaultReplicaConfig(), opts)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid partition num.*")
 
 	// Use enable-tidb-extension on other protocols.
@@ -156,7 +156,7 @@ func (s *kafkaSuite) TestCompleteConfig(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	err = cfg.CompleteByOpts(sinkURI, config.GetDefaultReplicaConfig(), opts)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*enable-tidb-extension only support canal-json protocol.*")
 
 	// Test enable-tidb-extension.
@@ -165,7 +165,7 @@ func (s *kafkaSuite) TestCompleteConfig(c *check.C) {
 	c.Assert(err, check.IsNil)
 	cfg = NewConfig()
 	opts = make(map[string]string)
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	err = cfg.CompleteByOpts(sinkURI, config.GetDefaultReplicaConfig(), opts)
 	c.Assert(err, check.IsNil)
 	expectedOpts = map[string]string{
 		"enable-tidb-extension": "true",
