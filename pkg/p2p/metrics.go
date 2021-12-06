@@ -18,6 +18,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+const unknownPeerLabel = "unknown"
+
 var (
 	serverStreamCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
