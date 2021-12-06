@@ -578,7 +578,7 @@ func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
 	notExceptResp := &pb.QueryStatusResponse{
 		SubTaskStatus: []*pb.SubTaskStatus{
 			{
-				Name: "task1",
+				Name: taskName,
 				Status: &pb.SubTaskStatus_Sync{Sync: &pb.SyncStatus{
 					UnresolvedGroups: []*pb.ShardingGroup{{Target: "`db`.`tbl`", Unsynced: []string{"table1"}}},
 				}},
@@ -589,7 +589,7 @@ func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
 
 	req := &pb.OperateTaskRequest{
 		Op:   pb.TaskOp_Stop,
-		Name: "task-unittest",
+		Name: taskName,
 	}
 	ctrl := gomock.NewController(c)
 	defer ctrl.Finish()
