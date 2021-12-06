@@ -11,26 +11,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mysql
+package avro
 
 import (
 	"database/sql"
 	"testing"
 
-	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
 	"github.com/stretchr/testify/require"
 )
 
-type emptyCanalSingleTableTask struct {
+type emptyAvroSingleTableTask struct {
 	SingleTableTask
 }
 
-func TestCanalSingleTableTest_Prepare(t *testing.T) {
-	env := NewDockerEnv("")
+func TestAvroSingleTableTest_Prepare(t *testing.T) {
+	env := NewKafkaDockerEnv("")
 	require.NotNil(t, env)
 
 	env.Setup()
-	env.RunTest(&emptyCanalSingleTableTask{SingleTableTask{TableName: "test"}})
+	env.RunTest(&emptyAvroSingleTableTask{SingleTableTask{TableName: "test"}})
 
 	_, err := sql.Open("mysql", framework.UpstreamDSN+"testdb")
 	require.NoError(t, err)
