@@ -222,6 +222,7 @@ var (
 
 	// leveldb sorter errors
 	ErrStartAStoppedLevelDBSystem = errors.Normalize("start a stopped leveldb system", errors.RFCCodeText("CDC:ErrStartAStoppedLevelDBSystem"))
+	ErrUnexpectedSnapshot         = errors.Normalize("unexpected snapshot, table %d", errors.RFCCodeText("CDC:ErrUnexpectedSnapshot"))
 
 	// workerpool errors
 	ErrWorkerPoolHandleCancelled            = errors.Normalize("workerpool handle is cancelled", errors.RFCCodeText("CDC:ErrWorkerPoolHandleCancelled"))

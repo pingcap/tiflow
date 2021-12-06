@@ -981,6 +981,11 @@ error = '''
 url format is invalid
 '''
 
+["CDC:ErrUnexpectedSnapshot"]
+error = '''
+unexpected snapshot, table %d
+'''
+
 ["CDC:ErrUnifiedSorterBackendTerminating"]
 error = '''
 unified sorter backend is terminating
