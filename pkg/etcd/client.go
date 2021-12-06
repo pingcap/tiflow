@@ -197,7 +197,8 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 	ticker := c.clock.Ticker(etcdRequestProgressDuration)
 	defer ticker.Stop()
 	// limit the rate to reset Watch
-	limiter := rate.NewLimiter(rate.Limit(1/etcdWatchChTimeoutDuration), 1)
+	limit := float64(1) / float64(etcdWatchChTimeoutDuration)
+	limiter := rate.NewLimiter(rate.Limit(limit), 1)
 	lastReceivedResponseTime := c.clock.Now()
 
 	for {
@@ -212,14 +213,14 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			}
 
 		Loop:
-			// we must loop here until response sent to outCh
-			// otherwise the response will lose
+			// we must loop here until the response is sent to outCh
+			// or otherwise the response will be lost
 			for {
 				select {
 				case <-ctx.Done():
 					cancel()
 					return
-				case outCh <- response: // it may blocking here
+				case outCh <- response: // it may block here
 					break Loop
 				case <-ticker.C:
 					if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
