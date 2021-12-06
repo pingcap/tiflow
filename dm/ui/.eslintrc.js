@@ -9,4 +9,9 @@ module.exports = {
   rules: {
     // Your custom rules.
   },
+  settings: {
+    react: {
+      version: 'detect',
+    },
+  },
 }
