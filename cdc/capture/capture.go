@@ -283,10 +283,28 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
 
-		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
+		ownerRev, err := c.etcdClient.GetOwnerRevision(ctx, c.info.ID)
+		if err != nil {
+			if errors.Cause(err) == context.Canceled {
+				return nil
+			}
+			return errors.Trace(err)
+		}
+
+		// We do a copy of the globalVars here to avoid
+		// accidental modifications and potential race conditions.
+		globalVars := *ctx.GlobalVars()
+		newGlobalVars := &globalVars
+		newGlobalVars.OwnerRevision = ownerRev
+		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
+
+		log.Info("campaign owner successfully",
+			zap.String("capture-id", c.info.ID),
+			zap.Int64("owner-rev", ownerRev))
+
 		owner := c.newOwner(c.pdClient)
 		c.setOwner(owner)
-		err = c.runEtcdWorker(ctx, owner, orchestrator.NewGlobalState(), ownerFlushInterval)
+		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval)
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
