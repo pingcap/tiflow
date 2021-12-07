@@ -1699,6 +1699,9 @@ func (s *Server) waitOperationOk(
 						if expect == pb.Stage_Stopped {
 							if st, ok2 := subtaskStatus.Status.(*pb.SubTaskStatus_Msg); ok2 && st.Msg == dmcommon.NoSubTaskMsg(taskName) {
 								ok = true
+							} else {
+								// make sure there is no subtask
+								continue
 							}
 						} else if subtaskStatus.Name == taskName && (subtaskStatus.Stage == expect || subtaskStatus.Stage == finished) {
 							ok = true
