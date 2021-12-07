@@ -11,17 +11,18 @@ PORT=$1
 PASSWORD=$2
 CONFIG=""
 
-rm $tmp_config || true
-cat >$tmp_config <<EOF
+if [ "$#" -ge 3 ]; then
+	cat $3 >$tmp_config
+else
+	# turn on collation framework https://docs.pingcap.com/tidb/stable/character-set-and-collation#new-framework-for-collations
+	rm $tmp_config || true
+	cat >$tmp_config <<EOF
 new_collations_enabled_on_first_bootstrap = true
 
 [experimental]
 enable-new-charset = true
 
 EOF
-
-if [ "$#" -ge 3 ]; then
-	cat $3 >>$tmp_config
 fi
 
 TEST_DIR=/tmp/dm_test
