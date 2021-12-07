@@ -38,7 +38,7 @@ function run() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	# join master3
 	run_dm_master $WORK_DIR/master3 $MASTER_PORT3 $cur/conf/dm-master3.toml
@@ -81,7 +81,7 @@ function run() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	sleep 8
 	echo "wait for the task to be scheduled and keep paused"

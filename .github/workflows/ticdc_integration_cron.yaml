@@ -48,14 +48,14 @@ jobs:
 
       - name: Build Integration Framework
         run: |
-          cd $GITHUB_WORKSPACE/integration
+          cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           go build
 
       - name: Run Integration Framework
         timeout-minutes: 45
         run: |
-          cd $GITHUB_WORKSPACE/integration
-          ./integration -protocol=canal
+          cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
+          ./mq_protocol_tests -protocol=canal
 
       - name: Try to dump container logs
         if: ${{ failure() }}
@@ -110,14 +110,14 @@ jobs:
 
       - name: Build Integration Framework
         run: |
-          cd $GITHUB_WORKSPACE/integration
+          cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           go build
 
       - name: Run Integration Framework
         timeout-minutes: 45
         run: |
-          cd $GITHUB_WORKSPACE/integration
-          ./integration
+          cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
+          ./mq_protocol_tests
 
       - name: Try to dump container logs
         if: ${{ failure() }}

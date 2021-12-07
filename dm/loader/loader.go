@@ -362,7 +362,8 @@ func (w *Worker) dispatchSQL(ctx context.Context, file string, offset int64, tab
 				continue
 			}
 
-			if w.loader.columnMapping != nil {
+			// extend column also need use reassemble to write SQL and the table name has been renamed
+			if w.loader.columnMapping != nil || len(table.extendCol) > 0 {
 				// column mapping and route table
 				query, err = reassemble(data, table, w.loader.columnMapping)
 				if err != nil {
@@ -407,6 +408,8 @@ type tableInfo struct {
 	targetTable    string
 	columnNameList []string
 	insertHeadStmt string
+	extendCol      []string
+	extendVal      []string
 }
 
 // Loader can load your mydumper data into TiDB database.
@@ -562,7 +565,7 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 
 	l.logger.Info("loader's sql_mode is", zap.String("sqlmode", lcfg.To.Session["sql_mode"]))
 
-	l.toDB, l.toDBConns, err = createConns(tctx, lcfg, l.cfg.PoolSize)
+	l.toDB, l.toDBConns, err = createConns(tctx, lcfg, lcfg.Name, lcfg.SourceID, l.cfg.PoolSize)
 	if err != nil {
 		return err
 	}
@@ -1328,7 +1331,8 @@ func (q *jobQueue) startConsumers(handler func(ctx context.Context, job *restore
 							}
 						}(baseConn)
 						session = &DBConn{
-							cfg:      job.loader.cfg,
+							name:     job.loader.cfg.Name,
+							sourceID: job.loader.cfg.SourceID,
 							baseConn: baseConn,
 							resetBaseConnFn: func(*tcontext.Context, *conn.BaseConn) (*conn.BaseConn, error) {
 								return nil, terror.ErrDBBadConn.Generate("bad connection error restoreData")
@@ -1421,7 +1425,7 @@ tblSchemaLoop:
 		for table := range l.db2Tables[db] {
 			schemaFile := l.cfg.Dir + "/" + db + "." + table + "-schema.sql" // cache friendly
 			if _, ok := l.tableInfos[tableName(db, table)]; !ok {
-				l.tableInfos[tableName(db, table)], err = parseTable(tctx, l.tableRouter, db, table, schemaFile, l.cfg.LoaderConfig.SQLMode)
+				l.tableInfos[tableName(db, table)], err = parseTable(tctx, l.tableRouter, db, table, schemaFile, l.cfg.LoaderConfig.SQLMode, l.cfg.SourceID)
 				if err != nil {
 					err = terror.Annotatef(err, "parse table %s/%s", db, table)
 					break tblSchemaLoop

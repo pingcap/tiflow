@@ -52,6 +52,13 @@ type column struct {
 	Value       interface{}          `json:"v"`
 }
 
+func NewColumn(value interface{}, tp byte) *column {
+	return &column{
+		Value: value,
+		Type:  tp,
+	}
+}
+
 func (c *column) FromSinkColumn(col *model.Column) {
 	c.Type = col.Type
 	c.Flag = col.Flag

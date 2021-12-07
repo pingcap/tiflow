@@ -1,0 +1,20 @@
+#!/bin/bash
+# $1: max retries
+# $2: command to run
+
+total=$1
+shift
+for ((i = 1; i <= $total; i++)); do
+	# run the command
+	echo $*
+	bash -c "$*"
+	if [ $? == 0 ]; then
+		echo "run task successfully"
+		exit 0
+	fi
+	echo "run task failed $i-th time, retry later"
+	sleep $((2 * $i))
+done
+
+echo "run task failed"
+exit 1

@@ -16,6 +16,7 @@ package relay
 import (
 	"bytes"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -35,6 +36,7 @@ type testFileWriterSuite struct{}
 func (t *testFileWriterSuite) TestInterfaceMethods(c *check.C) {
 	var (
 		relayDir = c.MkDir()
+		uuid     = "3ccc475b-2343-11e7-be21-6c0b84d59f30.000001"
 		filename = "test-mysql-bin.000001"
 		header   = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
@@ -45,14 +47,16 @@ func (t *testFileWriterSuite) TestInterfaceMethods(c *check.C) {
 		ev, _            = event.GenFormatDescriptionEvent(header, latestPos)
 	)
 
-	w := NewFileWriter(log.L())
+	c.Assert(os.MkdirAll(path.Join(relayDir, uuid), 0o755), check.IsNil)
+
+	w := NewFileWriter(log.L(), relayDir)
 	c.Assert(w, check.NotNil)
 
 	// not prepared
 	_, err := w.WriteEvent(ev)
 	c.Assert(err, check.ErrorMatches, ".*not valid.*")
 
-	w.Init(relayDir, filename)
+	w.Init(uuid, filename)
 
 	// write event
 	res, err := w.WriteEvent(ev)
@@ -65,7 +69,9 @@ func (t *testFileWriterSuite) TestInterfaceMethods(c *check.C) {
 
 func (t *testFileWriterSuite) TestRelayDir(c *check.C) {
 	var (
-		header = &replication.EventHeader{
+		relayDir = c.MkDir()
+		uuid     = "3ccc475b-2343-11e7-be21-6c0b84d59f30.000001"
+		header   = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
 			ServerID:  11,
 			Flags:     0x01,
@@ -76,37 +82,38 @@ func (t *testFileWriterSuite) TestRelayDir(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// not inited
-	w1 := NewFileWriter(log.L())
+	w1 := NewFileWriter(log.L(), relayDir)
 	defer w1.Close()
 	_, err = w1.WriteEvent(ev)
 	c.Assert(err, check.ErrorMatches, ".*not valid.*")
 
 	// invalid dir
-	w2 := NewFileWriter(log.L())
+	w2 := NewFileWriter(log.L(), relayDir)
 	defer w2.Close()
-	w2.Init("invalid\x00path", "bin.000001")
+	w2.Init("invalid\x00uuid", "bin.000001")
 	_, err = w2.WriteEvent(ev)
 	c.Assert(err, check.ErrorMatches, ".*invalid argument.*")
 
 	// valid directory, but no filename specified
-	tmpRelayDir := c.MkDir()
-	w3 := NewFileWriter(log.L())
+	w3 := NewFileWriter(log.L(), relayDir)
 	defer w3.Close()
-	w3.Init(tmpRelayDir, "")
+	w3.Init(uuid, "")
 	_, err = w3.WriteEvent(ev)
 	c.Assert(err, check.ErrorMatches, ".*not valid.*")
 
 	// valid directory, but invalid filename
-	w4 := NewFileWriter(log.L())
+	w4 := NewFileWriter(log.L(), relayDir)
 	defer w4.Close()
-	w4.Init(tmpRelayDir, "test-mysql-bin.666abc")
+	w4.Init(uuid, "test-mysql-bin.666abc")
 	_, err = w4.WriteEvent(ev)
 	c.Assert(err, check.ErrorMatches, ".*not valid.*")
 
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
+
 	// valid directory, valid filename
-	w5 := NewFileWriter(log.L())
+	w5 := NewFileWriter(log.L(), relayDir)
 	defer w5.Close()
-	w5.Init(tmpRelayDir, "test-mysql-bin.000001")
+	w5.Init(uuid, "test-mysql-bin.000001")
 	result, err := w5.WriteEvent(ev)
 	c.Assert(err, check.IsNil)
 	c.Assert(result.Ignore, check.IsFalse)
@@ -116,6 +123,7 @@ func (t *testFileWriterSuite) TestFormatDescriptionEvent(c *check.C) {
 	var (
 		relayDir = c.MkDir()
 		filename = "test-mysql-bin.000001"
+		uuid     = "3ccc475b-2343-11e7-be21-6c0b84d59f30.000001"
 		header   = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
 			ServerID:  11,
@@ -125,11 +133,12 @@ func (t *testFileWriterSuite) TestFormatDescriptionEvent(c *check.C) {
 	)
 	formatDescEv, err := event.GenFormatDescriptionEvent(header, latestPos)
 	c.Assert(err, check.IsNil)
+	c.Assert(os.Mkdir(path.Join(relayDir, uuid), 0o755), check.IsNil)
 
 	// write FormatDescriptionEvent to empty file
-	w := NewFileWriter(log.L())
+	w := NewFileWriter(log.L(), relayDir)
 	defer w.Close()
-	w.Init(relayDir, filename)
+	w.Init(uuid, filename)
 	result, err := w.WriteEvent(formatDescEv)
 	c.Assert(err, check.IsNil)
 	c.Assert(result.Ignore, check.IsFalse)
@@ -171,7 +180,7 @@ func (t *testFileWriterSuite) TestFormatDescriptionEvent(c *check.C) {
 		events = append(events, e)
 		return nil
 	}
-	fullName := filepath.Join(relayDir, filename)
+	fullName := filepath.Join(relayDir, uuid, filename)
 	err = replication.NewBinlogParser().ParseFile(fullName, 0, onEventFunc)
 	c.Assert(err, check.IsNil)
 	c.Assert(events, check.HasLen, 2)
@@ -189,6 +198,7 @@ func (t *testFileWriterSuite) verifyFilenameOffset(c *check.C, w Writer, filenam
 func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check.C) {
 	var (
 		relayDir            = c.MkDir()
+		uuid                = "3ccc475b-2343-11e7-be21-6c0b84d59f30.000001"
 		filename            = "test-mysql-bin.000001"
 		nextFilename        = "test-mysql-bin.000002"
 		nextFilePos  uint64 = 4
@@ -224,17 +234,18 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 	c.Assert(holeRotateEv, check.NotNil)
 
 	// 1: non-fake RotateEvent before FormatDescriptionEvent, invalid
-	w1 := NewFileWriter(log.L())
+	w1 := NewFileWriter(log.L(), relayDir)
 	defer w1.Close()
-	w1.Init(relayDir, filename)
+	w1.Init(uuid, filename)
 	_, err = w1.WriteEvent(rotateEv)
 	c.Assert(err, check.ErrorMatches, ".*file not opened.*")
 
 	// 2. fake RotateEvent before FormatDescriptionEvent
 	relayDir = c.MkDir() // use a new relay directory
-	w2 := NewFileWriter(log.L())
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
+	w2 := NewFileWriter(log.L(), relayDir)
 	defer w2.Close()
-	w2.Init(relayDir, filename)
+	w2.Init(uuid, filename)
 	result, err := w2.WriteEvent(fakeRotateEv)
 	c.Assert(err, check.IsNil)
 	c.Assert(result.Ignore, check.IsTrue) // ignore fake RotateEvent
@@ -248,8 +259,8 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 	t.verifyFilenameOffset(c, w2, nextFilename, fileSize)
 
 	// filename should be empty, next file should contain only one FormatDescriptionEvent
-	filename1 := filepath.Join(relayDir, filename)
-	filename2 := filepath.Join(relayDir, nextFilename)
+	filename1 := filepath.Join(relayDir, uuid, filename)
+	filename2 := filepath.Join(relayDir, uuid, nextFilename)
 	_, err = os.Stat(filename1)
 	c.Assert(os.IsNotExist(err), check.IsTrue)
 	data, err := os.ReadFile(filename2)
@@ -260,9 +271,10 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 
 	// 3. FormatDescriptionEvent before fake RotateEvent
 	relayDir = c.MkDir() // use a new relay directory
-	w3 := NewFileWriter(log.L())
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
+	w3 := NewFileWriter(log.L(), relayDir)
 	defer w3.Close()
-	w3.Init(relayDir, filename)
+	w3.Init(uuid, filename)
 	result, err = w3.WriteEvent(formatDescEv)
 	c.Assert(err, check.IsNil)
 	c.Assert(result, check.NotNil)
@@ -277,8 +289,8 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 	t.verifyFilenameOffset(c, w3, nextFilename, fileSize)
 
 	// filename should contain only one FormatDescriptionEvent, next file should be empty
-	filename1 = filepath.Join(relayDir, filename)
-	filename2 = filepath.Join(relayDir, nextFilename)
+	filename1 = filepath.Join(relayDir, uuid, filename)
+	filename2 = filepath.Join(relayDir, uuid, nextFilename)
 	_, err = os.Stat(filename2)
 	c.Assert(os.IsNotExist(err), check.IsTrue)
 	data, err = os.ReadFile(filename1)
@@ -288,9 +300,10 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 
 	// 4. FormatDescriptionEvent before non-fake RotateEvent
 	relayDir = c.MkDir() // use a new relay directory
-	w4 := NewFileWriter(log.L())
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
+	w4 := NewFileWriter(log.L(), relayDir)
 	defer w4.Close()
-	w4.Init(relayDir, filename)
+	w4.Init(uuid, filename)
 	result, err = w4.WriteEvent(formatDescEv)
 	c.Assert(err, check.IsNil)
 	c.Assert(result, check.NotNil)
@@ -312,8 +325,8 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 	c.Assert(err, check.ErrorMatches, ".*(no such file or directory|The system cannot find the file specified).*")
 
 	// filename should contain both one FormatDescriptionEvent and one RotateEvent, next file should be empty
-	filename1 = filepath.Join(relayDir, filename)
-	filename2 = filepath.Join(relayDir, nextFilename)
+	filename1 = filepath.Join(relayDir, uuid, filename)
+	filename2 = filepath.Join(relayDir, uuid, nextFilename)
 	_, err = os.Stat(filename2)
 	c.Assert(os.IsNotExist(err), check.IsTrue)
 	data, err = os.ReadFile(filename1)
@@ -333,6 +346,7 @@ func (t *testFileWriterSuite) TestWriteMultiEvents(c *check.C) {
 		latestXID          uint64 = 10
 
 		relayDir = c.MkDir()
+		uuid     = "3ccc475b-2343-11e7-be21-6c0b84d59f30.000001"
 		filename = "test-mysql-bin.000001"
 	)
 	previousGTIDSet, err := gtid.ParserGTID(flavor, previousGTIDSetStr)
@@ -375,9 +389,11 @@ func (t *testFileWriterSuite) TestWriteMultiEvents(c *check.C) {
 	allEvents = append(allEvents, events...)
 	allData.Write(data)
 
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
+
 	// write the events to the file
-	w := NewFileWriter(log.L())
-	w.Init(relayDir, filename)
+	w := NewFileWriter(log.L(), relayDir)
+	w.Init(uuid, filename)
 	for _, ev := range allEvents {
 		result, err2 := w.WriteEvent(ev)
 		c.Assert(err2, check.IsNil)
@@ -387,7 +403,7 @@ func (t *testFileWriterSuite) TestWriteMultiEvents(c *check.C) {
 	t.verifyFilenameOffset(c, w, filename, int64(allData.Len()))
 
 	// read the data back from the file
-	fullName := filepath.Join(relayDir, filename)
+	fullName := filepath.Join(relayDir, uuid, filename)
 	obtainData, err := os.ReadFile(fullName)
 	c.Assert(err, check.IsNil)
 	c.Assert(obtainData, check.DeepEquals, allData.Bytes())
@@ -396,6 +412,7 @@ func (t *testFileWriterSuite) TestWriteMultiEvents(c *check.C) {
 func (t *testFileWriterSuite) TestHandleFileHoleExist(c *check.C) {
 	var (
 		relayDir = c.MkDir()
+		uuid     = "3ccc475b-2343-11e7-be21-6c0b84d59f30.000001"
 		filename = "test-mysql-bin.000001"
 		header   = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
@@ -407,9 +424,11 @@ func (t *testFileWriterSuite) TestHandleFileHoleExist(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(formatDescEv, check.NotNil)
 
-	w := NewFileWriter(log.L())
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
+
+	w := NewFileWriter(log.L(), relayDir)
 	defer w.Close()
-	w.Init(relayDir, filename)
+	w.Init(uuid, filename)
 
 	// write the FormatDescriptionEvent, no hole exists
 	result, err := w.WriteEvent(formatDescEv)
@@ -444,7 +463,7 @@ func (t *testFileWriterSuite) TestHandleFileHoleExist(c *check.C) {
 		events = append(events, e)
 		return nil
 	}
-	fullName := filepath.Join(relayDir, filename)
+	fullName := filepath.Join(relayDir, uuid, filename)
 	err = replication.NewBinlogParser().ParseFile(fullName, 0, onEventFunc)
 	c.Assert(err, check.IsNil)
 	c.Assert(events, check.HasLen, 3)
@@ -462,6 +481,7 @@ func (t *testFileWriterSuite) TestHandleDuplicateEventsExist(c *check.C) {
 
 	var (
 		relayDir = c.MkDir()
+		uuid     = "3ccc475b-2343-11e7-be21-6c0b84d59f30.000001"
 		filename = "test-mysql-bin.000001"
 		header   = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
@@ -469,9 +489,10 @@ func (t *testFileWriterSuite) TestHandleDuplicateEventsExist(c *check.C) {
 		}
 		latestPos uint32 = 4
 	)
-	w := NewFileWriter(log.L())
+	c.Assert(os.MkdirAll(filepath.Join(relayDir, uuid), 0o755), check.IsNil)
+	w := NewFileWriter(log.L(), relayDir)
 	defer w.Close()
-	w.Init(relayDir, filename)
+	w.Init(uuid, filename)
 
 	// write a FormatDescriptionEvent, not duplicate
 	formatDescEv, err := event.GenFormatDescriptionEvent(header, latestPos)

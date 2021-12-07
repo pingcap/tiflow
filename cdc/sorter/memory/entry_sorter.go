@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
@@ -142,6 +143,14 @@ func (es *EntrySorter) AddEntry(_ context.Context, entry *model.PolymorphicEvent
 	} else {
 		es.unsorted = append(es.unsorted, entry)
 	}
+}
+
+func (es *EntrySorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) (bool, error) {
+	if atomic.LoadInt32(&es.closed) != 0 {
+		return false, cerror.ErrSorterClosed.GenWithStackByArgs()
+	}
+	es.AddEntry(ctx, entry)
+	return true, nil
 }
 
 // Output returns the sorted raw kv output channel

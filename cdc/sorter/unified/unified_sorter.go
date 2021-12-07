@@ -39,7 +39,6 @@ type Sorter struct {
 	inputCh     chan *model.PolymorphicEvent
 	outputCh    chan *model.PolymorphicEvent
 	dir         string
-	pool        *backEndPool
 	metricsInfo *metricsInfo
 
 	closeCh chan struct{}
@@ -70,7 +69,7 @@ func CheckDir(cfSortDir string) error {
 	err := util.IsDirAndWritable(dir)
 	if err != nil {
 		if os.IsNotExist(errors.Cause(err)) {
-			err = os.MkdirAll(dir, 0o755)
+			err = os.MkdirAll(dir, 0o700)
 			if err != nil {
 				return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
 			}
@@ -110,7 +109,6 @@ func NewUnifiedSorter(
 		inputCh:  make(chan *model.PolymorphicEvent, inputChSize),
 		outputCh: make(chan *model.PolymorphicEvent, outputChSize),
 		dir:      dir,
-		pool:     pool,
 		metricsInfo: &metricsInfo{
 			changeFeedID: changeFeedID,
 			tableName:    tableName,
@@ -278,6 +276,24 @@ func (s *Sorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 		return
 	case <-s.closeCh:
 	case s.inputCh <- entry:
+	}
+}
+
+// TryAddEntry implements the EventSorter interface
+func (s *Sorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) (bool, error) {
+	// add two select to guarantee the done/close condition is checked first.
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case <-s.closeCh:
+		return false, cerror.ErrSorterClosed.GenWithStackByArgs()
+	default:
+	}
+	select {
+	case s.inputCh <- entry:
+		return true, nil
+	default:
+		return false, nil
 	}
 }
 

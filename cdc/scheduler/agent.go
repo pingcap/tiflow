@@ -45,7 +45,7 @@ type Agent interface {
 // to adapt the current Processor implementation to it.
 // TODO find a way to make the semantics easier to understand.
 type TableExecutor interface {
-	AddTable(ctx context.Context, tableID model.TableID) error
+	AddTable(ctx context.Context, tableID model.TableID) (done bool, err error)
 	RemoveTable(ctx context.Context, tableID model.TableID) (done bool, err error)
 	IsAddTableFinished(ctx context.Context, tableID model.TableID) (done bool)
 	IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (done bool)
@@ -256,9 +256,9 @@ func (a *BaseAgent) sendSync(ctx context.Context) (bool, error) {
 
 	// We are sorting these so that there content can be predictable in tests.
 	// TODO try to find a better way.
-	util.SorterTableIDs(running)
-	util.SorterTableIDs(adding)
-	util.SorterTableIDs(removing)
+	util.SortTableIDs(running)
+	util.SortTableIDs(adding)
+	util.SortTableIDs(removing)
 	done, err := a.communicator.SyncTaskStatuses(ctx, running, adding, removing)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -274,8 +274,12 @@ func (a *BaseAgent) processOperations(ctx context.Context) error {
 		case operationReceived:
 			if !op.IsDelete {
 				// add table
-				if err := a.executor.AddTable(ctx, op.TableID); err != nil {
+				done, err := a.executor.AddTable(ctx, op.TableID)
+				if err != nil {
 					return errors.Trace(err)
+				}
+				if !done {
+					break
 				}
 			} else {
 				// delete table
