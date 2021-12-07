@@ -142,7 +142,7 @@ func getTableID(dbAddr, dbName, table string) (int64, error) {
 	dbStatusAddr := net.JoinHostPort(dbAddr, "10080")
 	url := fmt.Sprintf("http://%s/schema/%s/%s", dbStatusAddr, dbName, table)
 
-	resp, err := http.Get(url)
+	resp, err := http.Get(url) // #nosec G107
 	if err != nil {
 		return 0, errors.Trace(err)
 	}

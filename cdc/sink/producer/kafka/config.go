@@ -72,7 +72,7 @@ func (c *Config) CompleteByOpts(sinkURI *url.URL, replicaConfig *config.ReplicaC
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
 	if s != "" {
-		a, err := strconv.Atoi(s)
+		a, err := strconv.ParseInt(s, 10, 32)
 		if err != nil {
 			return err
 		}
@@ -84,7 +84,7 @@ func (c *Config) CompleteByOpts(sinkURI *url.URL, replicaConfig *config.ReplicaC
 
 	s = params.Get("replication-factor")
 	if s != "" {
-		a, err := strconv.Atoi(s)
+		a, err := strconv.ParseInt(s, 10, 16)
 		if err != nil {
 			return err
 		}
