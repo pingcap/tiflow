@@ -64,7 +64,7 @@ func TestCleanerPoll(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
+	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	clean, _, err := NewCleanerActor(1, db, nil, cfg, closedWg)
@@ -160,7 +160,7 @@ func TestCleanerContextCancel(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
+	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	ldb, _, err := NewCleanerActor(0, db, nil, cfg, closedWg)
@@ -182,7 +182,7 @@ func TestCleanerWriteRateLimited(t *testing.T) {
 	cfg.CleanupSpeedLimit = 4
 	// wbSize = cleanup speed limit / 2
 
-	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
+	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	clean, _, err := NewCleanerActor(1, db, nil, cfg, closedWg)
@@ -259,7 +259,7 @@ func TestCleanerTaskRescheduled(t *testing.T) {
 	cfg.CleanupSpeedLimit = 4
 	// wbSize = cleanup speed limit / 2
 
-	db, err := db.OpenDB(ctx, 1, t.TempDir(), cfg)
+	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	router := actor.NewRouter("test")

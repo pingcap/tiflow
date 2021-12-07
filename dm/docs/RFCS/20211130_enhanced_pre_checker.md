@@ -15,7 +15,7 @@ If we have a large number of tables in source, we will take too much time in che
 ### Inadequate check
 
 * If downstream creates tables manually and the new downstream’s auto increment ID is not the same as the upstream, we shouldn’t check **auto_increment_ID** for errors. Users should be responsible for what they set. PS: **auto_increment_ID** is only checked when **schema_of_shard_tables** is true.
-* Dump privilege only checks RELOAD and SELECT. However, Dumpling supports different [consistency configurations](https://docs.pingcap.com/tidb/stable/dumpling-overview#adjust-dumplings-data-consistency-options), which need more privilege.
+* Dump privilege only checks RELOAD and SELECT. However, Dumpling supports different [consistency configurations](https://docs.pingcap.com/tidb/stable/dumpling-overview#adjust-dumplings-data-consistency-options), which need more privileges.
 * If online-ddl is set by true and a DDL is in online-ddl stage, DM will have a problem in all mode. Specifically, ghost table has been created, is executing the DDL, but is not renamed yet. In this case, DM will report an error when the ghost table is renamed after the dump phase. You can learn more about online-ddl [here](https://docs.pingcap.com/tidb-data-migration/stable/feature-online-ddl).
 * For schema_of_shard_tables, whatever pessimistic task and optimistic task, we all check it by comparing all sharding tables’ structures for consistency simply. For optimistic mode, we can do better.
 
@@ -42,9 +42,9 @@ Since every checker is concurrent, we can split tables to **source_connection_co
         - SELECT (only dump table)
     - For flush consistency：
         - RELOAD (global)
-    - For flush/lock consistency：
-        - LOCK TABLES (only dump table)
-    - For TiDB downstream：
+    - For flush/lock consistency:
+        - LOCK TABLES (only tables to dump)
+    - For TiDB source databases:
         - PROCESS (global)
 3. Add OnlineDDLChecker to check if a DDL of tables in allow list exists in online-ddl stage when DM task is all mode and online-ddl is true.
 4. Enhance schema_of_shard_tables. 
