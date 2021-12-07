@@ -14,7 +14,7 @@ If we have a large number of tables in source, we will take too much time in che
 
 ### Inadequate check
 
-* If downstream creates tables manually and the new downstream’s auto increment ID is not the same as the upstream, we shouldn’t check **auto_increment_ID** for errors. Users should be responsible for what they set. PS: **auto_increment_ID** is only checked when **schema_of_shard_tables** is true.
+* Now we check it by `mapping` which is deprecated. If we don't set the `mapping` and don't ignore the **auto_increment_ID**, the pre-check will report an error. PS: **auto_increment_ID** is only checked when **schema_of_shard_tables** is true.
 * Dump privilege only checks RELOAD and SELECT. However, Dumpling supports different [consistency configurations](https://docs.pingcap.com/tidb/stable/dumpling-overview#adjust-dumplings-data-consistency-options), which need more privileges.
 * If online-ddl is set by true and a DDL is in online-ddl stage, DM will have a problem in all mode. Specifically, ghost table has been created, is executing the DDL, but is not renamed yet. In this case, DM will report an error when the ghost table is renamed after the dump phase. You can learn more about online-ddl [here](https://docs.pingcap.com/tidb-data-migration/stable/feature-online-ddl).
 * For schema_of_shard_tables, whatever pessimistic task and optimistic task, we all check it by comparing all sharding tables’ structures for consistency simply. For optimistic mode, we can do better.
@@ -26,7 +26,6 @@ If we have a large number of tables in source, we will take too much time in che
 1. Support concurrent check
     - table_schema
     - schema_of_shard_tables
-    - auto_increment_ID
 2. Use mydumper.threads as **source_connection_concurrency**, which should update in our document.
 
 #### How to speed up?
@@ -35,7 +34,11 @@ Since every checker is concurrent, we can split tables to **source_connection_co
 
 ### Optimize some check
 
-1. We needn’t check **auto_increment_ID**, if the column of auto increment ID in upstream does not has an unique constraint in downstream.
+1. Move **auto_increment_ID** from **schema_of_shard_tables** to **table_schema**.
+    - Only check if tables exist auto increment ID;
+    - If table exist, report a warning to user and tell them the method that can resolve the PK/UK conflict;
+        1. If you set PK to AUTO_INCREMENT, you must make sure that the primary key in sharding tables is not duplicated;
+        2. If sharding tables exit duplicated PK, you can refer to [document](https://docs.pingcap.com/tidb-data-migration/stable/shard-merge-best-practices#handle-conflicts-of-auto-increment-primary-key).
 2. Dump_privilege will check different privileges according to different [consistency](https://docs.pingcap.com/tidb/stable/dumpling-overview#adjust-dumplings-data-consistency-options) and downstream on source.
     - For all consistency, we will check
         - REPLICATION CLIENT (global)
@@ -67,8 +70,7 @@ Since every checker is concurrent, we can split tables to **source_connection_co
     - binlog_row_image
     - online_ddl(new added)
 4. If task is full/increment/all mode, the following items will be forced to check:
-    - table_schema
-    - auto_increment_ID
+    - table_schema(contain auto_increment_ID)
 5. Make the fail state more gentle, which is from `StateFailure` to `StateWarning`.
     - checkAutoIncrementKey(same as auto_increment_ID)
     - checkPK/UK
