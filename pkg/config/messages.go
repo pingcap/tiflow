@@ -44,13 +44,38 @@ var defaultMessageConfig = &MessagesConfig{
 }
 
 const (
-	defaultClientSendChannelSize   = 128
-	defaultClientDialTimeout       = time.Second * 3
-	defaultMaxTopicPendingCount    = 256
-	defaultServerSendChannelSize   = 16
-	defaultMaxPeerCount            = 1024
-	defaultUnregisterHandleTimeout = time.Second * 10
-	defaultServerSendRateLimit     = 1024.0
+	// These values are advanced parameters to MessageServer and MessageClient,
+	// and it is not necessary for users to modify them.
+
+	// clientSendChannelSize represents the size of an internal channel used to buffer
+	// unsent messages.
+	clientSendChannelSize = 128
+
+	// clientDialTimeout represents the timeout given to gRPC to dial. 5 seconds seems reasonable
+	// because it is unlikely that the latency between TiCDC nodes is larger than 5 seconds.
+	clientDialTimeout = time.Second * 5
+
+	// maxTopicPendingCount is the max allowed number of unhandled message for a message topic
+	// ** if there is NO registered handler for it **.
+	maxTopicPendingCount = 256
+
+	// serverSendChannelSize is the size of a channel used to buffer messages to be sent back to
+	// the client. Note that the traffic from the server to the client is minimal, as it consists
+	// only of ACK messages.
+	serverSendChannelSize = 16
+
+	// maxPeerCount is the maximum number of peers that can be connected to the server.
+	// 1024 is reasonable given the current scalability of TiCDC.
+	maxPeerCount = 1024
+
+	// unregisterHandleTimeout is the time to wait for a message handler to unregister.
+	// Only in extreme situations can unregistering take more than a second. We use a timeout
+	// to make deadlocking more detectable.
+	unregisterHandleTimeout = time.Second * 10
+
+	// serverSendRateLimit is the rate limit of sending messages from the server to the client.
+	// Since ACK messages are batched, 1024 should be more than enough.
+	serverSendRateLimit = 1024.0
 )
 
 func (c *MessagesConfig) ValidateAndAdjust() error {
@@ -111,24 +136,24 @@ func (c *MessagesConfig) Clone() *MessagesConfig {
 
 func (c *MessagesConfig) ToMessageClientConfig() *p2p.MessageClientConfig {
 	return &p2p.MessageClientConfig{
-		SendChannelSize:         defaultClientSendChannelSize,
+		SendChannelSize:         clientSendChannelSize,
 		BatchSendInterval:       time.Duration(c.ClientMaxBatchInterval),
 		MaxBatchBytes:           c.ClientMaxBatchSize,
 		MaxBatchCount:           c.ClientMaxBatchCount,
 		RetryRateLimitPerSecond: c.ClientRetryRateLimit,
-		DialTimeout:             defaultClientDialTimeout,
+		DialTimeout:             clientDialTimeout,
 	}
 }
 
 func (c *MessagesConfig) ToMessageServerConfig() *p2p.MessageServerConfig {
 	return &p2p.MessageServerConfig{
-		MaxPendingMessageCountPerTopic:       defaultMaxTopicPendingCount,
+		MaxPendingMessageCountPerTopic:       maxTopicPendingCount,
 		MaxPendingTaskCount:                  c.ServerMaxPendingMessageCount,
-		SendChannelSize:                      defaultServerSendChannelSize,
+		SendChannelSize:                      serverSendChannelSize,
 		AckInterval:                          time.Duration(c.ServerAckInterval),
 		WorkerPoolSize:                       c.ServerWorkerPoolSize,
-		MaxPeerCount:                         defaultMaxPeerCount,
-		WaitUnregisterHandleTimeoutThreshold: defaultUnregisterHandleTimeout,
-		SendRateLimitPerStream:               defaultServerSendRateLimit,
+		MaxPeerCount:                         maxPeerCount,
+		WaitUnregisterHandleTimeoutThreshold: unregisterHandleTimeout,
+		SendRateLimitPerStream:               serverSendRateLimit,
 	}
 }
