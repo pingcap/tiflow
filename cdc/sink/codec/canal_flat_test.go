@@ -513,4 +513,49 @@ func (s *canalFlatSuite) TestDDLEventWithExtensionValueMarshal(c *check.C) {
   }
 }`
 	c.Assert(string(rawBytes), check.Equals, expectedJSON)
+//var testCaseInsert = &model.RowChangedEvent{
+//	CommitTs: 429457251303161859,
+//	Table: &model.TableName{
+//		Schema: "cdc_tiflash_test",
+//		Table:  "multi_data_type",
+//	},
+//	Columns: []*model.Column{
+//		{Name: "id"},
+//	},
+//	PreColumns: nil,
+//}
+
+var testCaseUpdate = &model.RowChangedEvent{
+	CommitTs: 417318403368288260,
+	Table: &model.TableName{
+		Schema: "cdc",
+		Table:  "person",
+	},
+	Columns: []*model.Column{
+		{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
+		{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
+		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
+		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
+		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
+	},
+	PreColumns: []*model.Column{
+		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
+		{Name: "name", Type: mysql.TypeVarchar, Value: "Alice"},
+		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
+		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
+		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
+	},
+}
+
+var testCaseDDL = &model.DDLEvent{
+	CommitTs: 417318403368288260,
+	TableInfo: &model.SimpleTableInfo{
+		Schema: "cdc", Table: "person",
+	},
+	Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+	Type:  mm.ActionCreateTable,
 }
