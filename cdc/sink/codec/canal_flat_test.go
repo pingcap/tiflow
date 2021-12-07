@@ -428,7 +428,7 @@ func (s *canalFlatSuite) TestCheckpointEventValueMarshal(c *check.C) {
   "data": null,
   "old": null,
   "_tidb": {
-    "watermark-ts": 1024
+    "watermarkTs": 1024
   }
 }`
 	c.Assert(string(rawBytes), check.Equals, expectedJSON)
@@ -467,7 +467,7 @@ func (s *canalFlatSuite) TestDDLEventWithExtensionValueMarshal(c *check.C) {
   "data": null,
   "old": null,
   "_tidb": {
-    "commit-ts": 417318403368288260
+    "commitTs": 417318403368288260
   }
 }`
 	c.Assert(string(rawBytes), check.Equals, expectedJSON)
