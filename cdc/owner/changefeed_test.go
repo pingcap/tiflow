@@ -72,6 +72,8 @@ type mockAsyncSink struct {
 }
 
 func (m *mockAsyncSink) Run(ctx cdcContext.Context) error {
+	// mock async sink blocked
+	<-ctx.Done()
 	return nil
 }
 
