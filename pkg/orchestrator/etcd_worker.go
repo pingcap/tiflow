@@ -34,7 +34,6 @@ import (
 )
 
 const (
-	etcdRequestProgressDuration = 2 * time.Second
 	// etcdTxnTimeoutDuration represents the timeout duration for committing a
 	// transaction to Etcd
 	etcdTxnTimeoutDuration = 30 * time.Second
