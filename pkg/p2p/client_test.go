@@ -127,7 +127,6 @@ func TestMessageClientBasics(t *testing.T) {
 
 	connector.AssertExpectations(t)
 	grpcClient.AssertExpectations(t)
-	grpcStream.AssertExpectations(t)
 
 	// Test point 2: Send a message
 	sender.On("Append", &p2p.MessageEntry{
@@ -218,11 +217,10 @@ func TestMessageClientBasics(t *testing.T) {
 			LastSeq: 1,
 		}},
 	}
-	// We expect the connection to be closed
+	// We expect the message to be resent
 	require.Eventually(t, func() bool {
 		return atomic.LoadInt32(&sender.sendCnt) == 1
-	}, time.Second*1, time.Millisecond*10, "connection should have been closed")
-	grpcStream.AssertExpectations(t)
+	}, time.Second*1, time.Millisecond*10, "message should have been resent")
 	sender.AssertExpectations(t)
 
 	cancel()
