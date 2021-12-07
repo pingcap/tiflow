@@ -100,7 +100,7 @@ func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 	conf := config.GetGlobalServerConfig()
 	// DataDir is not set, and no changefeed exist, use the default
 	conf.DataDir = ""
-	err := s.server.setUpDataDir(s.ctx)
+	err := s.server.setUpDir(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(conf.DataDir, check.Equals, defaultDataDir)
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(defaultDataDir, config.DefaultSortDir))
@@ -114,7 +114,7 @@ func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx, &model.ChangeFeedInfo{}, "b")
 	c.Assert(err, check.IsNil)
 
-	err = s.server.setUpDataDir(s.ctx)
+	err = s.server.setUpDir(s.ctx)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(conf.DataDir, check.Equals, dir)
@@ -122,7 +122,7 @@ func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 
 	conf.DataDir = c.MkDir()
 	// DataDir has been set, just use it
-	err = s.server.setUpDataDir(s.ctx)
+	err = s.server.setUpDir(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(conf.DataDir, check.Not(check.Equals), "")
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, config.DefaultSortDir))

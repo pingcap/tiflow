@@ -139,7 +139,7 @@ func (s *Server) Run(ctx context.Context) error {
 	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)
 	s.etcdClient = &cdcEtcdClient
 
-	err = s.initDataDir(ctx)
+	err = s.initDir(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -257,13 +257,18 @@ func (s *Server) Close() {
 	}
 }
 
-func (s *Server) initDataDir(ctx context.Context) error {
-	if err := s.setUpDataDir(ctx); err != nil {
+func (s *Server) initDir(ctx context.Context) error {
+	if err := s.setUpDir(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	conf := config.GetGlobalServerConfig()
+	// Ensure data dir exists.
 	err := os.MkdirAll(conf.DataDir, 0o700)
 	if err != nil {
+		return errors.Trace(err)
+	}
+	// Ensure sort dir exists.
+	if err := os.MkdirAll(conf.Sorter.SortDir, 0o700); err != nil {
 		return errors.Trace(err)
 	}
 	diskInfo, err := util.GetDiskInfo(conf.DataDir)
@@ -272,12 +277,13 @@ func (s *Server) initDataDir(ctx context.Context) error {
 	}
 
 	log.Info(fmt.Sprintf("%s is set as data-dir (%dGB available), sort-dir=%s. "+
-		"It is recommended that the disk for data-dir at least have %dGB available space", conf.DataDir, diskInfo.Avail, conf.Sorter.SortDir, dataDirThreshold))
+		"It is recommended that the disk for data-dir at least have %dGB available space",
+		conf.DataDir, diskInfo.Avail, conf.Sorter.SortDir, dataDirThreshold))
 
 	return nil
 }
 
-func (s *Server) setUpDataDir(ctx context.Context) error {
+func (s *Server) setUpDir(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 	if conf.DataDir != "" {
 		conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
