@@ -20,6 +20,7 @@ import (
 
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -170,6 +171,10 @@ func (c *MessageClient) Run(
 }
 
 func (c *MessageClient) launchStream(ctx context.Context, gRPCClient p2p.CDCPeerToPeerClient, meta *p2p.StreamMeta) error {
+	failpoint.Inject("InjectClientPermanentFailure", func() {
+		failpoint.Return(cerrors.ErrPeerMessageClientPermanentFail.GenWithStackByArgs())
+	})
+
 	cancelCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 
