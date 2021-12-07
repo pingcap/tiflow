@@ -33,10 +33,10 @@ const (
 	defaultErrChSize = 1024
 )
 
-// AsyncSink is an async sink design for owner
+// asyncSink is an async sink design for owner
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
-type AsyncSink interface {
+type asyncSink interface {
 	// Run the asyncSink
 	Run(ctx cdcContext.Context) error
 	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
@@ -68,7 +68,7 @@ type asyncSinkImpl struct {
 	cancel context.CancelFunc
 }
 
-func newAsyncSink() AsyncSink {
+func newAsyncSink() asyncSink {
 	return &asyncSinkImpl{
 		ddlCh:           make(chan *model.DDLEvent, 1),
 		errCh:           make(chan error, defaultErrChSize),
