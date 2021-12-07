@@ -278,7 +278,7 @@ func (s *Server) getBaseDBBySourceName(sourceName string) (*conn.BaseDB, error) 
 		return nil, terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
 	}
 	dbCfg := sourceCfg.GenerateDBConfig()
-	return conn.DefaultDBProvider.Apply(*dbCfg)
+	return conn.DefaultDBProvider.Apply(dbCfg)
 }
 
 // DMAPIGetSourceSchemaList get source schema list url is: (GET /api/v1/sources/{source-name}/schemas).

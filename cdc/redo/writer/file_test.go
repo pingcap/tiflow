@@ -57,7 +57,7 @@ func TestWriterWrite(t *testing.T) {
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		},
 		uint64buf: make([]byte, 8),
-		state:     *atomic.NewBool(started),
+		running:   *atomic.NewBool(true),
 	}
 
 	w.eventCommitTS.Store(1)
@@ -89,13 +89,45 @@ func TestWriterWrite(t *testing.T) {
 	info, err = os.Stat(path)
 	require.Nil(t, err)
 	require.Equal(t, fileName, info.Name())
-	w.Close()
+	err = w.Close()
+	require.Nil(t, err)
+	require.False(t, w.IsRunning())
 	// safe close, rename to .log with max eventCommitTS as name
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 22, common.LogEXT)
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
 	require.Nil(t, err)
 	require.Equal(t, fileName, info.Name())
+
+	w1 := &Writer{
+		cfg: &FileWriterConfig{
+			MaxLogSize:   10,
+			Dir:          dir,
+			ChangeFeedID: "test-cf11",
+			CaptureID:    "cp",
+			FileType:     common.DefaultRowLogFileType,
+			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+		},
+		uint64buf: make([]byte, 8),
+		running:   *atomic.NewBool(true),
+	}
+
+	w1.eventCommitTS.Store(1)
+	_, err = w1.Write([]byte("tes1t11111"))
+	require.Nil(t, err)
+	// create a .tmp file
+	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w1.cfg.CaptureID, w1.cfg.ChangeFeedID, w1.cfg.CreateTime.Unix(), w1.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
+	path = filepath.Join(w1.cfg.Dir, fileName)
+	info, err = os.Stat(path)
+	require.Nil(t, err)
+	require.Equal(t, fileName, info.Name())
+	// change the file name, should cause CLose err
+	err = os.Rename(path, path+"new")
+	require.Nil(t, err)
+	err = w1.Close()
+	require.NotNil(t, err)
+	// closed anyway
+	require.False(t, w1.IsRunning())
 }
 
 func TestWriterGC(t *testing.T) {
@@ -136,7 +168,7 @@ func TestWriterGC(t *testing.T) {
 		uint64buf: make([]byte, 8),
 		storage:   mockStorage,
 	}
-	w.state.Store(started)
+	w.running.Store(true)
 	w.eventCommitTS.Store(1)
 	_, err = w.Write([]byte("t1111"))
 	require.Nil(t, err)
@@ -156,7 +188,7 @@ func TestWriterGC(t *testing.T) {
 
 	err = w.Close()
 	require.Nil(t, err)
-
+	require.False(t, w.IsRunning())
 	files, err = ioutil.ReadDir(w.cfg.Dir)
 	require.Nil(t, err)
 	require.Equal(t, 1, len(files), "should have 1 log left after GC")
@@ -179,8 +211,6 @@ func TestNewWriter(t *testing.T) {
 	_, err := NewWriter(context.Background(), nil)
 	require.NotNil(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
 	require.Nil(t, err)
 
@@ -188,13 +218,16 @@ func TestNewWriter(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	_, err = NewWriter(ctx, &FileWriterConfig{
+	w, err := NewWriter(context.Background(), &FileWriterConfig{
 		Dir:       "sdfsf",
 		S3Storage: true,
 		S3URI:     *s3URI,
 	})
 	require.Nil(t, err)
-	time.Sleep(time.Duration(defaultFlushIntervalInMs+1000) * time.Millisecond)
+	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
+	err = w.Close()
+	require.Nil(t, err)
+	require.False(t, w.IsRunning())
 
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
@@ -202,7 +235,7 @@ func TestNewWriter(t *testing.T) {
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_ddl_0.log", gomock.Any()).Return(nil).Times(1)
 	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_ddl_0.log.tmp").Return(nil).Times(1)
 
-	w := &Writer{
+	w = &Writer{
 		cfg: &FileWriterConfig{
 			Dir:          dir,
 			CaptureID:    "cp",
@@ -215,7 +248,7 @@ func TestNewWriter(t *testing.T) {
 		uint64buf: make([]byte, 8),
 		storage:   mockStorage,
 	}
-	w.state.Store(started)
+	w.running.Store(true)
 	_, err = w.Write([]byte("test"))
 	require.Nil(t, err)
 	//
@@ -224,5 +257,6 @@ func TestNewWriter(t *testing.T) {
 
 	err = w.Close()
 	require.Nil(t, err)
-	require.Equal(t, w.state.Load(), stopped)
+	require.Equal(t, w.running.Load(), false)
+	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
 }

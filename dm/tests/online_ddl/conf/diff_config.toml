@@ -15,7 +15,7 @@ check-struct-only = false
 
     target-check-tables = ["online_ddl.gho_t_target", "online_ddl.pt_t_target"]
 
-    target-configs= ["config1", "config2"]
+    target-configs= ["config1"]
 
 [routes.rule1]
 schema-pattern = "online_ddl"
@@ -31,13 +31,7 @@ target-table = "pt_t_target"
 
 [table-configs]
 [table-configs.config1]
-schema = "online_ddl"
-table = "gho_t_target"
-ignore-columns = ["id"]
-
-[table-configs.config2]
-schema = "online_ddl"
-table = "pt_t_target"
+target-tables = ["online_ddl.*"]
 ignore-columns = ["id"]
 
 [data-sources]

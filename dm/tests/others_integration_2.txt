@@ -7,5 +7,4 @@ case_sensitive
 sql_mode
 http_proxies
 openapi
-duplicate_event
 tracker_ignored_ddl

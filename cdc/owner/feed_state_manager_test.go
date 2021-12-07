@@ -71,6 +71,7 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
+	c.Assert(manager.ShouldRemoved(), check.IsFalse)
 	c.Assert(state.Info.State, check.Equals, model.StateStopped)
 	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminStop)
 	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminStop)
@@ -83,6 +84,7 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 	c.Assert(manager.ShouldRunning(), check.IsTrue)
+	c.Assert(manager.ShouldRemoved(), check.IsFalse)
 	c.Assert(state.Info.State, check.Equals, model.StateNormal)
 	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminNone)
 	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminNone)
@@ -95,6 +97,7 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
+	c.Assert(manager.ShouldRemoved(), check.IsTrue)
 	c.Assert(state.Exist(), check.IsFalse)
 }
 
@@ -217,6 +220,7 @@ func (s *feedStateManagerSuite) TestHandleError(c *check.C) {
 		tester.MustApplyPatches()
 	}
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
+	c.Assert(manager.ShouldRemoved(), check.IsFalse)
 	c.Assert(state.Info.State, check.Equals, model.StateError)
 	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminStop)
 	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminStop)
@@ -234,6 +238,7 @@ func (s *feedStateManagerSuite) TestChangefeedStatusNotExist(c *check.C) {
 	})
 	manager.Tick(state)
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
+	c.Assert(manager.ShouldRemoved(), check.IsFalse)
 	tester.MustApplyPatches()
 
 	manager.PushAdminJob(&model.AdminJob{
@@ -243,6 +248,7 @@ func (s *feedStateManagerSuite) TestChangefeedStatusNotExist(c *check.C) {
 	})
 	manager.Tick(state)
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
+	c.Assert(manager.ShouldRemoved(), check.IsTrue)
 	tester.MustApplyPatches()
 	c.Assert(state.Info, check.IsNil)
 	c.Assert(state.Exist(), check.IsFalse)

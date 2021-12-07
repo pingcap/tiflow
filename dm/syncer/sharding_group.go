@@ -431,7 +431,7 @@ func (k *ShardingGroupKeeper) Init() error {
 	k.clear()
 	sgkDB := k.cfg.To
 	sgkDB.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
-	db, dbConns, err := dbconn.CreateConns(k.tctx, k.cfg, sgkDB, 1)
+	db, dbConns, err := dbconn.CreateConns(k.tctx, k.cfg, &sgkDB, 1)
 	if err != nil {
 		return err
 	}

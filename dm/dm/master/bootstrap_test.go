@@ -93,6 +93,9 @@ func (t *testMaster) TestCollectSourceConfigFilesV1Import(c *C) {
 	// collect again, two configs exist.
 	cfgs, err = s.collectSourceConfigFilesV1Import(tctx)
 	c.Assert(err, IsNil)
+	for _, cfg := range cfgs {
+		cfg.From.Session = nil
+	}
 	c.Assert(cfgs, HasLen, 2)
 	c.Assert(cfgs[cfg1.SourceID], DeepEquals, cfg1)
 	c.Assert(cfgs[cfg2.SourceID], DeepEquals, cfg2)

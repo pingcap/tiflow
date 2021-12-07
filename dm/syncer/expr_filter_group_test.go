@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/schema"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 func (s *testFilterSuite) TestSkipDMLByExpression(c *C) {
@@ -107,17 +108,18 @@ create table t (
 				InsertValueExpr: ca.exprStr,
 			},
 		}
-		g := NewExprFilterGroup(exprConfig)
+		sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+		g := NewExprFilterGroup(sessCtx, exprConfig)
 		exprs, err := g.GetInsertExprs(table, ti)
 		c.Assert(err, IsNil)
 		c.Assert(exprs, HasLen, 1)
 		expr := exprs[0]
 
-		skip, err := SkipDMLByExpression(ca.skippedRow, expr, ti.Columns)
+		skip, err := SkipDMLByExpression(sessCtx, ca.skippedRow, expr, ti.Columns)
 		c.Assert(err, IsNil)
 		c.Assert(skip, Equals, true)
 
-		skip, err = SkipDMLByExpression(ca.passedRow, expr, ti.Columns)
+		skip, err = SkipDMLByExpression(sessCtx, ca.passedRow, expr, ti.Columns)
 		c.Assert(err, IsNil)
 		c.Assert(skip, Equals, false)
 
@@ -365,17 +367,18 @@ create table t (
 				InsertValueExpr: ca.exprStr,
 			},
 		}
-		g := NewExprFilterGroup(exprConfig)
+		sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+		g := NewExprFilterGroup(sessCtx, exprConfig)
 		exprs, err := g.GetInsertExprs(table, ti)
 		c.Assert(err, IsNil)
 		c.Assert(exprs, HasLen, 1)
 		expr := exprs[0]
 
-		skip, err := SkipDMLByExpression(ca.skippedRow, expr, ti.Columns)
+		skip, err := SkipDMLByExpression(sessCtx, ca.skippedRow, expr, ti.Columns)
 		c.Assert(err, IsNil)
 		c.Assert(skip, Equals, true)
 
-		skip, err = SkipDMLByExpression(ca.passedRow, expr, ti.Columns)
+		skip, err = SkipDMLByExpression(sessCtx, ca.passedRow, expr, ti.Columns)
 		c.Assert(err, IsNil)
 		c.Assert(skip, Equals, false)
 
@@ -413,7 +416,8 @@ create table t (
 			InsertValueExpr: exprStr,
 		},
 	}
-	g := NewExprFilterGroup(exprConfig)
+	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+	g := NewExprFilterGroup(sessCtx, exprConfig)
 	exprs, err := g.GetInsertExprs(table, ti)
 	c.Assert(err, IsNil)
 	c.Assert(exprs, HasLen, 1)
@@ -421,10 +425,10 @@ create table t (
 	c.Assert(expr.String(), Equals, "0")
 
 	// skip nothing
-	skip, err := SkipDMLByExpression([]interface{}{0}, expr, ti.Columns)
+	skip, err := SkipDMLByExpression(sessCtx, []interface{}{0}, expr, ti.Columns)
 	c.Assert(err, IsNil)
 	c.Assert(skip, Equals, false)
-	skip, err = SkipDMLByExpression([]interface{}{2}, expr, ti.Columns)
+	skip, err = SkipDMLByExpression(sessCtx, []interface{}{2}, expr, ti.Columns)
 	c.Assert(err, IsNil)
 	c.Assert(skip, Equals, false)
 }
