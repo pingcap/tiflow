@@ -74,6 +74,9 @@ func TestServerConfigValidateAndAdjust(t *testing.T) {
 	conf.PerTableMemoryQuota = 0
 	require.Nil(t, conf.ValidateAndAdjust())
 	require.EqualValues(t, GetDefaultServerConfig().PerTableMemoryQuota, conf.PerTableMemoryQuota)
+	conf.Messages.ServerWorkerPoolSize = 0
+	require.Nil(t, conf.ValidateAndAdjust())
+	require.EqualValues(t, GetDefaultServerConfig().Messages.ServerWorkerPoolSize, conf.Messages.ServerWorkerPoolSize)
 }
 
 func TestDBConfigValidateAndAdjust(t *testing.T) {
