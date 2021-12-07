@@ -19,14 +19,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/docker/go-units"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/br/pkg/lightning"
-	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
-	"github.com/pingcap/tidb/parser/mysql"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -94,6 +91,8 @@ func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 		lightningCfg.Security.CAPath = cfg.To.Security.SSLCA
 		lightningCfg.Security.CertPath = cfg.To.Security.SSLCert
 		lightningCfg.Security.KeyPath = cfg.To.Security.SSLKey
+		// use task name as tls config name to prevent multiple subtasks from conflicting with each other
+		lightningCfg.Security.TLSConfigName = cfg.Name
 	}
 	lightningCfg.TiDB.Host = cfg.To.Host
 	lightningCfg.TiDB.Psw = cfg.To.Password
@@ -108,8 +107,7 @@ func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 		lightningCfg.TikvImporter.SortedKVDir = cfg.Dir
 	}
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
-	lightningCfg.App.Config.Level = cfg.LogLevel
-	lightningCfg.App.Config.File = cfg.LogFile
+	lightningCfg.App.Config.File = "" // make lightning not init logger, see more in https://github.com/pingcap/tidb/pull/29291
 	return lightningCfg
 }
 
@@ -216,35 +214,25 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
 		cfg.Checkpoint.Schema = config.TiDBLightningCheckpointPrefix + dbutil.TableName(l.workerName, l.cfg.Name)
 		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
-		param := common.MySQLConnectParam{
-			Host:             cfg.TiDB.Host,
-			Port:             cfg.TiDB.Port,
-			User:             cfg.TiDB.User,
-			Password:         cfg.TiDB.Psw,
-			SQLMode:          mysql.DefaultSQLMode,
-			MaxAllowedPacket: 64 * units.MiB,
-			TLS:              cfg.TiDB.TLS,
-		}
-		cfg.Checkpoint.DSN = param.ToDSN()
 		cfg.TiDB.Vars = make(map[string]string)
 		if l.cfg.To.Session != nil {
 			for k, v := range l.cfg.To.Session {
 				cfg.TiDB.Vars[k] = v
 			}
 		}
-
 		cfg.TiDB.StrSQLMode = l.cfg.LoaderConfig.SQLMode
 		cfg.TiDB.Vars = map[string]string{"time_zone": l.timeZone}
-		if err = cfg.Adjust(ctx); err != nil {
-			return err
-		}
 		err = l.runLightning(ctx, cfg)
+		if err != nil {
+			println("in running error", err.Error())
+		}
 		if err == nil {
 			// lightning will auto deregister tls when task done, so we need to register it again for removing checkpoint
 			if l.cfg.To.Security != nil {
-				if registerErr := l.lightningGlobalConfig.Security.RegisterMySQL(); registerErr != nil {
+				if registerErr := cfg.Security.RegisterMySQL(); registerErr != nil {
 					return terror.ErrConnRegistryTLSConfig.Delegate(registerErr)
 				}
+				defer cfg.Security.DeregisterMySQL()
 			}
 			err = lightning.CheckpointRemove(ctx, cfg, "all")
 		}
