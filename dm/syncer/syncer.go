@@ -1426,6 +1426,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		currentLocation = s.checkpoint.GlobalPoint() // also init to global checkpoint
 		startLocation   = s.checkpoint.GlobalPoint()
 		lastLocation    = s.checkpoint.GlobalPoint()
+
+		currentGTID string
 	)
 	tctx.L().Info("replicate binlog from checkpoint", zap.Stringer("checkpoint", lastLocation))
 
@@ -1554,6 +1556,44 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		return nil
 	}
 
+<<<<<<< HEAD
+=======
+	maybeSkipNRowsEvent := func(n int) error {
+		if s.cfg.EnableGTID && n > 0 {
+			for i := 0; i < n; {
+				e, err1 := s.getEvent(tctx, currentLocation)
+				if err1 != nil {
+					return err
+				}
+				switch e.Event.(type) {
+				case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+					gtidStr, err2 := event.GetGTIDStr(e)
+					if err2 != nil {
+						return err2
+					}
+					if currentGTID != gtidStr {
+						s.tctx.L().Error("after recover GTID-based replication, the first GTID is not same as broken one. May meet duplicate entry or corrupt data if table has no PK/UK.",
+							zap.String("last GTID", currentGTID),
+							zap.String("GTID after reset", gtidStr),
+						)
+						return nil
+					}
+				case *replication.RowsEvent:
+					i++
+				}
+			}
+			log.L().Info("discard event already consumed", zap.Int("count", n),
+				zap.Any("cur_loc", currentLocation))
+		}
+		return nil
+	}
+
+	// eventIndex is the rows event index in this transaction, it's used to avoiding read duplicate event in gtid mode
+	eventIndex := 0
+	// the relay log file may be truncated(not end with an RotateEvent), in this situation, we may read some rows events
+	// and then read from the gtid again, so we force enter safe-mode for one more transaction to avoid failure due to
+	// conflict
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496))
 	for {
 		if s.execError.Load() != nil {
 			return nil
@@ -1825,6 +1865,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					tctx.L().Info("meet heartbeat event and then flush jobs")
 					err2 = s.flushJobs()
 				}
+			}
+		case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+			currentGTID, err2 = event.GetGTIDStr(e)
+			if err2 != nil {
+				return err2
 			}
 		}
 		if err2 != nil {

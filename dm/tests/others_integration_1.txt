@@ -8,3 +8,8 @@ only_dml
 adjust_gtid
 checkpoint_transaction
 lightning_mode
+<<<<<<< HEAD
+=======
+downstream_diff_index
+slow_relay_writer
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496))

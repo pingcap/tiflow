@@ -15,7 +15,11 @@ package streamer
 
 import (
 	"context"
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 	"fmt"
+=======
+	"io"
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/local_reader.go
 	"os"
 	"path"
 	"path/filepath"
@@ -25,7 +29,6 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
@@ -75,7 +78,17 @@ type BinlogReader struct {
 
 	usingGTID          bool
 	prevGset, currGset mysql.GTIDSet
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 	notifier           EventNotifier
+=======
+	// ch with size = 1, we only need to be notified whether binlog file of relay changed, not how many times
+	notifyCh chan interface{}
+	relay    Process
+
+	currentUUID string // current UUID(with suffix)
+
+	lastFileGracefulEnd bool
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/local_reader.go
 }
 
 // NewBinlogReader creates a new BinlogReader.
@@ -91,6 +104,7 @@ func NewBinlogReader(notifier EventNotifier, logger log.Logger, cfg *BinlogReade
 
 	newtctx := tcontext.NewContext(ctx, logger.WithFields(zap.String("component", "binlog reader")))
 
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 	return &BinlogReader{
 		cfg:       cfg,
 		parser:    parser,
@@ -98,6 +112,17 @@ func NewBinlogReader(notifier EventNotifier, logger log.Logger, cfg *BinlogReade
 		cancel:    cancel,
 		tctx:      newtctx,
 		notifier:  notifier,
+=======
+	binlogReader := &BinlogReader{
+		cfg:                 cfg,
+		parser:              parser,
+		indexPath:           path.Join(cfg.RelayDir, utils.UUIDIndexFilename),
+		cancel:              cancel,
+		tctx:                newtctx,
+		notifyCh:            make(chan interface{}, 1),
+		relay:               relay,
+		lastFileGracefulEnd: true,
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/local_reader.go
 	}
 }
 
@@ -292,7 +317,17 @@ func (r *BinlogReader) StartSyncByGTID(gset mysql.GTIDSet) (Streamer, error) {
 	return s, nil
 }
 
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 // parseRelay parses relay root directory, it support master-slave switch (switching to next sub directory).
+=======
+// SwitchPath represents next binlog file path which should be switched.
+type SwitchPath struct {
+	nextUUID       string
+	nextBinlogName string
+}
+
+// parseRelay parses relay root directory, it supports master-slave switch (switching to next sub directory).
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/local_reader.go
 func (r *BinlogReader) parseRelay(ctx context.Context, s *LocalStreamer, pos mysql.Position) error {
 	var (
 		needSwitch     bool
@@ -327,9 +362,25 @@ func (r *BinlogReader) parseRelay(ctx context.Context, s *LocalStreamer, pos mys
 		}
 
 		// update pos, so can switch to next sub directory
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 		pos.Name = binlog.ConstructFilenameWithUUIDSuffix(parsed, uuidSuffix)
 		pos.Pos = 4 // start from pos 4 for next sub directory / file
 		r.tctx.L().Info("switching to next ready sub directory", zap.String("next uuid", nextUUID), zap.Stringer("position", pos))
+=======
+		realPos.Name = switchPath.nextBinlogName
+		realPos.Pos = binlog.FileHeaderLen // start from pos 4 for next sub directory / file
+		r.tctx.L().Info("switching to next ready sub directory", zap.String("next uuid", r.currentUUID), zap.Stringer("position", pos))
+
+		// when switching subdirectory, last binlog file may contain unfinished transaction, so we send a notification.
+		if !r.lastFileGracefulEnd {
+			s.ch <- &replication.BinlogEvent{
+				RawData: []byte(ErrorMaybeDuplicateEvent.Error()),
+				Header: &replication.EventHeader{
+					EventType: replication.IGNORABLE_EVENT,
+				},
+			}
+		}
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/local_reader.go
 	}
 }
 
@@ -422,8 +473,7 @@ func (r *BinlogReader) parseFileAsPossible(ctx context.Context, s *LocalStreamer
 	}
 }
 
-// parseFile parses single relay log file from specified offset
-// TODO: move all stateful variables into a class, such as r.fileParser.
+// parseFile parses single relay log file from specified offset.
 func (r *BinlogReader) parseFile(
 	ctx context.Context,
 	s *LocalStreamer,
@@ -440,8 +490,13 @@ func (r *BinlogReader) parseFile(
 		return false, false, 0, "", "", false, err
 	}
 
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 	uuidSuffix := utils.SuffixIntToStr(suffixInt) // current UUID's suffix, which will be added to binlog name
 	latestPos = offset                            // set to argument passed in
+=======
+	offset := state.latestPos
+	r.lastFileGracefulEnd = false
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/local_reader.go
 
 	onEventFunc := func(e *replication.BinlogEvent) error {
 		r.tctx.L().Debug("read event", zap.Reflect("header", e.Header))
@@ -463,7 +518,12 @@ func (r *BinlogReader) parseFile(
 
 			if e.Header.Timestamp != 0 && e.Header.LogPos != 0 {
 				// not fake rotate event, update file pos
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 				latestPos = int64(e.Header.LogPos)
+=======
+				state.latestPos = int64(e.Header.LogPos)
+				r.lastFileGracefulEnd = true
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/local_reader.go
 			} else {
 				r.tctx.L().Debug("skip fake rotate event", zap.Reflect("header", e.Header))
 			}
@@ -482,8 +542,16 @@ func (r *BinlogReader) parseFile(
 				latestPos = int64(e.Header.LogPos)
 				break
 			}
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 			u, _ := uuid.FromBytes(ev.SID)
 			replaceWithHeartbeat, err = r.advanceCurrentGtidSet(fmt.Sprintf("%s:%d", u.String(), ev.GNO))
+=======
+			gtidStr, err2 := event.GetGTIDStr(e)
+			if err2 != nil {
+				return errors.Trace(err2)
+			}
+			state.replaceWithHeartbeat, err = r.advanceCurrentGtidSet(gtidStr)
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/local_reader.go
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -493,8 +561,16 @@ func (r *BinlogReader) parseFile(
 				latestPos = int64(e.Header.LogPos)
 				break
 			}
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 			GTID := ev.GTID
 			replaceWithHeartbeat, err = r.advanceCurrentGtidSet(fmt.Sprintf("%d-%d-%d", GTID.DomainID, GTID.ServerID, GTID.SequenceNumber))
+=======
+			gtidStr, err2 := event.GetGTIDStr(e)
+			if err2 != nil {
+				return errors.Trace(err2)
+			}
+			state.replaceWithHeartbeat, err = r.advanceCurrentGtidSet(gtidStr)
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/local_reader.go
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -551,6 +627,7 @@ func (r *BinlogReader) parseFile(
 		r.tctx.L().Debug("start parse relay log file", zap.String("file", fullPath), zap.Int64("offset", offset))
 	}
 
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 	// use parser.ParseFile directly now, if needed we can change to use FileReader.
 	err = r.parser.ParseFile(fullPath, offset, onEventFunc)
 	if err != nil {
@@ -560,9 +637,16 @@ func (r *BinlogReader) parseFile(
 			r.tctx.L().Error("parse relay log file", zap.String("file", fullPath), zap.Int64("offset", offset), zap.Error(err))
 			return false, false, 0, "", "", false, terror.ErrParserParseRelayLog.Delegate(err, fullPath)
 		}
+=======
+	err = r.parser.ParseReader(state.f, onEventFunc)
+	if err != nil && (!state.possibleLast || !isIgnorableParseError(err)) {
+		r.tctx.L().Error("parse relay log file", zap.String("file", state.fullPath), zap.Int64("offset", offset), zap.Error(err))
+		return false, false, terror.ErrParserParseRelayLog.Delegate(err, state.fullPath)
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/local_reader.go
 	}
 	r.tctx.L().Debug("parse relay log file", zap.String("file", fullPath), zap.Int64("offset", latestPos))
 
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 	if !possibleLast {
 		// there are more relay log files in current sub directory, continue to re-collect them
 		r.tctx.L().Info("more relay log files need to parse", zap.String("directory", relayLogDir))
@@ -578,6 +662,10 @@ func (r *BinlogReader) parseFile(
 		cancel()
 		wg.Wait()
 	}()
+=======
+	return r.waitBinlogChanged(ctx, state)
+}
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/local_reader.go
 
 	wg.Add(1)
 	go func(latestPos int64) {

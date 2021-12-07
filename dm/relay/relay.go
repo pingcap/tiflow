@@ -307,7 +307,11 @@ func (r *Relay) process(ctx context.Context) error {
 	// handles binlog events with retry mechanism.
 	// it only do the retry for some binlog reader error now.
 	for {
+<<<<<<< HEAD
 		err := r.handleEvents(ctx, reader2, transformer2, writer2)
+=======
+		err = r.handleEvents(ctx, reader2, parser2)
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496))
 		if err == nil {
 			return nil
 		} else if !readerRetry.Check(ctx, err) {
@@ -430,18 +434,26 @@ func (r *Relay) tryRecoverLatestFile(ctx context.Context, parser2 *parser.Parser
 //   1. read events from upstream
 //   2. transform events
 //   3. write events into relay log files
-//   4. update metadata if needed
-// the first return value is the index of last read rows event if the transaction is not finished.
+//   4. update metadata if needed.
 func (r *Relay) handleEvents(
 	ctx context.Context,
+<<<<<<< HEAD
 	reader2 reader.Reader,
 	transformer2 transformer.Transformer,
 	writer2 writer.Writer,
+=======
+	reader2 Reader,
+	parser2 *parser.Parser,
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496))
 ) error {
 	var (
 		_, lastPos  = r.meta.Pos()
 		_, lastGTID = r.meta.GTID()
 		err         error
+<<<<<<< HEAD
+=======
+		eventIndex  int // only for test
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496))
 	)
 	if lastGTID == nil {
 		if lastGTID, err = gtid.ParserGTID(r.cfg.Flavor, ""); err != nil {

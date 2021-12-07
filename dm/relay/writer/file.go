@@ -23,7 +23,10 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/failpoint"
+<<<<<<< HEAD:dm/relay/writer/file.go
 	"github.com/pingcap/tidb/parser"
+=======
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/relay_writer.go
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -295,8 +298,33 @@ func (w *FileWriter) handleEventDefault(ev *replication.BinlogEvent) (Result, er
 	}
 
 	// write the non-duplicate event
+	failpoint.Inject("SlowDownWriteDMLRelayLog", func(_ failpoint.Value) {
+		w.logger.Debug("enter SlowDownWriteDMLRelayLog")
+		switch ev.Header.EventType {
+		case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2,
+			replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2,
+			replication.UPDATE_ROWS_EVENTv0, replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
+			mid := len(ev.RawData) / 2
+			first, second := ev.RawData[:mid], ev.RawData[mid:]
+			err2 := w.out.Write(first)
+			if err2 != nil {
+				w.logger.DPanic("error in failpoint SlowDownWriteDMLRelayLog", zap.Error(err2))
+			}
+			time.Sleep(time.Second)
+			err = w.out.Write(second)
+			failpoint.Goto("afterWrite")
+		}
+	})
+
 	err = w.out.Write(ev.RawData)
+<<<<<<< HEAD:dm/relay/writer/file.go
 	return Result{
+=======
+
+	failpoint.Label("afterWrite")
+
+	return WResult{
+>>>>>>> 3eafa6d36 (relay, syncer(dm): stricter GTID check when retry replication (#3496)):dm/relay/relay_writer.go
 		Ignore: false,
 	}, terror.Annotatef(err, "write event %+v", ev.Header)
 }
