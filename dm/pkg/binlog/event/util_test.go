@@ -44,6 +44,14 @@ func (t *testUtilSuite) TestStatusVarsToKV(c *C) {
 			},
 			nil,
 		},
+		// only Q_CHARSET_CODE
+		{
+			[]byte{4, 33, 0, 33, 0, 8, 0},
+			map[byte][]byte{
+				4: {33, 0, 33, 0, 8, 0},
+			},
+			nil,
+		},
 		// copied from a integration test
 		{
 			[]byte{0, 0, 0, 0, 0, 1, 4, 0, 8, 0, 0, 0, 0, 0, 6, 3, 115, 116, 100, 4, 33, 0, 33, 0, 8, 0, 12, 1, 97, 108, 108, 95, 109, 111, 100, 101, 0},
