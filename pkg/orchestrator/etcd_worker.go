@@ -32,6 +32,19 @@ import (
 	"golang.org/x/time/rate"
 )
 
+<<<<<<< HEAD
+=======
+const (
+	// etcdTxnTimeoutDuration represents the timeout duration for committing a
+	// transaction to Etcd
+	etcdTxnTimeoutDuration = 30 * time.Second
+	// etcdWorkerLogsWarnDuration when EtcdWorker commits a txn to etcd or ticks
+	// it reactor takes more than etcdWorkerLogsWarnDuration, it will print a log
+	etcdWorkerLogsWarnDuration = 1 * time.Second
+	deletionCounterKey         = "/meta/ticdc-delete-etcd-key-count"
+)
+
+>>>>>>> 60479c898 (etcd_worker: add timeout for etcd txn and watchCh (#3667))
 // EtcdWorker handles all interactions with Etcd
 type EtcdWorker struct {
 	client  *etcd.Client
@@ -58,6 +71,18 @@ type EtcdWorker struct {
 	// a `compare-and-swap` semantics, which is essential for implementing
 	// snapshot isolation for Reactor ticks.
 	deleteCounter int64
+<<<<<<< HEAD
+=======
+
+	metrics *etcdWorkerMetrics
+}
+
+type etcdWorkerMetrics struct {
+	// kv events related metrics
+	metricEtcdTxnSize            prometheus.Observer
+	metricEtcdTxnDuration        prometheus.Observer
+	metricEtcdWorkerTickDuration prometheus.Observer
+>>>>>>> 60479c898 (etcd_worker: add timeout for etcd txn and watchCh (#3667))
 }
 
 type etcdUpdate struct {
@@ -102,13 +127,13 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		return errors.Trace(err)
 	}
 
-	ctx1, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	ticker := time.NewTicker(timerInterval)
 	defer ticker.Stop()
 
-	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
+	watchCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
+
 	var (
 		pendingPatches [][]DataPatch
 		exiting        bool
@@ -120,7 +145,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		// should never be closed
 		sessionDone = make(chan struct{})
 	}
-	lastReceivedEventTime := time.Now()
 
 	// tickRate represents the number of times EtcdWorker can tick
 	// the reactor per second
@@ -135,18 +159,25 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			return cerrors.ErrEtcdSessionDone.GenWithStackByArgs()
 		case <-ticker.C:
 			// There is no new event to handle on timer ticks, so we have nothing here.
+<<<<<<< HEAD
 			if time.Since(lastReceivedEventTime) > etcdRequestProgressDuration {
 				if err := worker.client.RequestProgress(ctx); err != nil {
 					log.Warn("failed to request progress for etcd watcher", zap.Error(err))
 				}
 			}
 		case response = <-watchCh:
+=======
+		case response := <-watchCh:
+>>>>>>> 60479c898 (etcd_worker: add timeout for etcd txn and watchCh (#3667))
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
 			}
+<<<<<<< HEAD
 			lastReceivedEventTime = time.Now()
 
+=======
+>>>>>>> 60479c898 (etcd_worker: add timeout for etcd txn and watchCh (#3667))
 			// Check whether the response is stale.
 			if worker.revision >= response.Header.GetRevision() {
 				continue
@@ -198,6 +229,14 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			}
 			// it is safe that a batch of updates has been applied to worker.state before worker.reactor.Tick
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
+<<<<<<< HEAD
+=======
+			costTime := time.Since(startTime)
+			if costTime > etcdWorkerLogsWarnDuration {
+				log.Warn("EtcdWorker reactor tick took too long", zap.Duration("duration", costTime))
+			}
+			worker.metrics.metricEtcdWorkerTickDuration.Observe(costTime.Seconds())
+>>>>>>> 60479c898 (etcd_worker: add timeout for etcd txn and watchCh (#3667))
 			if err != nil {
 				if !cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
 					return errors.Trace(err)
@@ -295,6 +334,7 @@ func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]
 	return patchGroups, nil
 }
 
+<<<<<<< HEAD
 func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch) error {
 	state := worker.cloneRawState()
 	changedSet := make(map[util.EtcdKey]struct{})
@@ -309,6 +349,15 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 	}
 	cmps := make([]clientv3.Cmp, 0, len(changedSet))
 	ops := make([]clientv3.Op, 0, len(changedSet))
+=======
+func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState map[util.EtcdKey][]byte, size int) error {
+	if len(changedState) == 0 {
+		return nil
+	}
+
+	cmps := make([]clientv3.Cmp, 0, len(changedState))
+	ops := make([]clientv3.Op, 0, len(changedState))
+>>>>>>> 60479c898 (etcd_worker: add timeout for etcd txn and watchCh (#3667))
 	hasDelete := false
 	for key := range changedSet {
 		// make sure someone else has not updated the key after the last snapshot
@@ -344,7 +393,21 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 		panic("unreachable")
 	}
 
+<<<<<<< HEAD
 	resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
+=======
+	worker.metrics.metricEtcdTxnSize.Observe(float64(size))
+	startTime := time.Now()
+
+	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
+	resp, err := worker.client.Txn(txnCtx).If(cmps...).Then(ops...).Commit()
+	cancel()
+	costTime := time.Since(startTime)
+	if costTime > etcdWorkerLogsWarnDuration {
+		log.Warn("Etcd transaction took too long", zap.Duration("duration", costTime))
+	}
+	worker.metrics.metricEtcdTxnDuration.Observe(costTime.Seconds())
+>>>>>>> 60479c898 (etcd_worker: add timeout for etcd txn and watchCh (#3667))
 	if err != nil {
 		return errors.Trace(err)
 	}
