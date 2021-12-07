@@ -143,8 +143,8 @@ func (c *canalFlatMessage) getMySQLType() map[string]string {
 }
 
 type tidbExtension struct {
-	CommitTs    uint64 `json:"commit-ts"`
-	WatermarkTs uint64 `json:"watermark-ts"`
+	CommitTs    uint64 `json:"commit-ts,omitempty"`
+	WatermarkTs uint64 `json:"watermark-ts,omitempty"`
 }
 
 type canalFlatMessageWithTiDBExtension struct {
