@@ -21,8 +21,9 @@ jobs:
         with:
           node-version: '12'
           cache: 'yarn'
+          cache-dependency-path: 'dm/ui/yarn.lock'
       - name: Install dependencies
-        run: yarn
+        run: yarn --ignore-scripts
       - name: Type check
         run: yarn type-check
       - name: Lint
