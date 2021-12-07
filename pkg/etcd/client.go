@@ -26,7 +26,6 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.uber.org/zap"
-	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 )
 
@@ -196,9 +195,6 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 
 	ticker := c.clock.Ticker(etcdRequestProgressDuration)
 	defer ticker.Stop()
-	// limit the rate to reset Watch
-	limit := float64(1*time.Second) / float64(etcdWatchChTimeoutDuration)
-	limiter := rate.NewLimiter(rate.Limit(limit), 1)
 	lastReceivedResponseTime := c.clock.Now()
 
 	for {
@@ -234,12 +230,14 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			if err := c.RequestProgress(ctx); err != nil {
 				log.Warn("failed to request progress for etcd watcher", zap.Error(err))
 			}
-			if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration && limiter.Allow() {
+			if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
 				// cancel the last cancel func to reset it
 				log.Warn("etcd client watchCh blocking too long, reset the watchCh", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)), zap.Stack("stack"))
 				cancel()
 				watchCtx, cancel = context.WithCancel(ctx)
 				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+				// we need to reset lastReceivedResponseTime after reset Watch
+				lastReceivedResponseTime = c.clock.Now()
 			}
 		}
 	}
