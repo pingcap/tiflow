@@ -118,37 +118,18 @@ func (w *DMLWorker) run() {
 		switch j.tp {
 		case flush:
 			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
-			// flush for every DML queue
-			for i, jobCh := range jobChs {
-				startTime := time.Now()
-				jobCh <- j
-				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
-			}
-
+			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
 			j.wg.Wait()
 			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
 			w.flushCh <- j
 		case asyncFlush:
 			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
-
-			// flush for every DML queue
-			for i, jobCh := range jobChs {
-				startTime := time.Now()
-				jobCh <- j
-				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
-			}
+			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
 			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
 			w.flushCh <- j
 		case conflict:
 			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
-
-			// flush for every DML queue
-			for i, jobCh := range jobChs {
-				startTime := time.Now()
-				jobCh <- j
-				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
-			}
-
+			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
 			j.wg.Wait()
 			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
 		default:
@@ -159,6 +140,15 @@ func (w *DMLWorker) run() {
 			jobChs[queueBucket] <- j
 			metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[queueBucket], w.source).Observe(time.Since(startTime).Seconds())
 		}
+	}
+}
+
+func (w *DMLWorker) sendJobToAllDmlQueue(j *job, jobChs []chan *job, queueBucketMapping []string) {
+	// flush for every DML queue
+	for i, jobCh := range jobChs {
+		startTime := time.Now()
+		jobCh <- j
+		metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
 	}
 }
 

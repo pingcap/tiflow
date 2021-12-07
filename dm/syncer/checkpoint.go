@@ -360,8 +360,8 @@ func NewRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id s
 
 // Snapshot make a snapshot of checkpoint and return the snapshot info.
 func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
-	cp.Lock()
-	defer cp.Unlock()
+	cp.RLock()
+	defer cp.RUnlock()
 
 	// make snapshot is visit in single thread, so depend on rlock should be enough
 	cp.snapshotSeq++
