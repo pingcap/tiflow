@@ -90,12 +90,15 @@ func (m *messageRouterImpl) RemovePeer(id NodeID) {
 	defer m.mu.Unlock()
 
 	delete(m.addressMap, id)
+	// The client is removed from m.clients only after it is successfully
+	// canceled, to prevent duplicate clients to the same target.
 	if clientWrapper, ok := m.clients[id]; ok {
 		clientWrapper.cancelFn()
 	}
 }
 
 // GetClient implements MessageRouter. The client will be created lazily.
+// It returns nil if the target peer does not exist.
 func (m *messageRouterImpl) GetClient(target NodeID) *MessageClient {
 	m.mu.RLock()
 	// fast path
@@ -118,10 +121,11 @@ func (m *messageRouterImpl) GetClient(target NodeID) *MessageClient {
 
 	addr, ok := m.addressMap[target]
 	if !ok {
-		log.Info("failed to create client, no peer",
+		log.Warn("failed to create client, no peer",
 			zap.String("target", target),
 			zap.StackSkip("stack", 1))
-		// there is no address for this target. We are not able to create a client.
+		// There is no address for this target. We are not able to create a client.
+		// The client is expected to retry if the target peer is added later.
 		return nil
 	}
 
