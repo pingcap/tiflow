@@ -338,4 +338,9 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 	checkpointTsOld, err := sink.FlushRowChangedEvents(ctx, tableID1, uint64(110))
 	c.Assert(err, check.IsNil)
 	c.Assert(checkpointTsOld, check.Equals, row1.CommitTs)
+
+	err = sink.Close(ctx)
+	if err != nil {
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+	}
 }
