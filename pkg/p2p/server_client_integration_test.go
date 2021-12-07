@@ -36,7 +36,7 @@ import (
 // read only
 var clientConfig4Testing = &MessageClientConfig{
 	SendChannelSize:         128,
-	BatchSendInterval:       time.Millisecond * 200,
+	BatchSendInterval:       time.Millisecond * 1, // to accelerate testing
 	MaxBatchCount:           128,
 	MaxBatchBytes:           8192,
 	RetryRateLimitPerSecond: 10.0, // using 10.0 instead of 1.0 to accelerate testing
@@ -175,7 +175,7 @@ func TestMessageClientBasicMultiTopics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
-	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 32)
+	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 4)
 }
 
 func TestMessageClientServerRestart(t *testing.T) {
@@ -191,7 +191,7 @@ func TestMessageClientServerRestart(t *testing.T) {
 }
 
 func TestMessageClientServerRestartMultiTopics(t *testing.T) {
-	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectServerRestart", "3%return(true)")
+	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectServerRestart", "1%return(true)")
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectServerRestart")
 	}()
@@ -223,7 +223,7 @@ func TestMessageClientRestartMultiTopics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
-	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 16)
+	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeSmall, 4)
 }
 
 func TestMessageClientSenderErrorsMultiTopics(t *testing.T) {
@@ -235,7 +235,7 @@ func TestMessageClientSenderErrorsMultiTopics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
-	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeSmall, 16)
+	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeSmall, 4)
 }
 
 func TestMessageClientBasicNonblocking(t *testing.T) {
