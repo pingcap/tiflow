@@ -80,14 +80,19 @@ func buildPebbleOption(id int, cfg *config.DBConfig) (pebble.Options, *writeStal
 	// Event listener for logging and metrics.
 	option.EventListener = pebble.MakeLoggingEventListener(&pebbleLogger{id: id})
 	ws := &writeStall{}
-	var start time.Time
+	var stallTimeStamp int64
 	option.EventListener.WriteStallBegin = func(_ pebble.WriteStallBeginInfo) {
 		atomic.AddInt64(&ws.counter, 1)
-		start = time.Now()
+		// If it's already stall, discard this time.
+		atomic.CompareAndSwapInt64(&stallTimeStamp, 0, time.Now().UnixNano())
 	}
 	option.EventListener.WriteStallEnd = func() {
-		duration := time.Since(start)
-		ws.duration.Store(duration)
+		start := atomic.LoadInt64(&stallTimeStamp)
+		if start == 0 {
+			return
+		}
+		atomic.StoreInt64(&stallTimeStamp, 0)
+		ws.duration.Store(time.Since(time.Unix(0, start)))
 	}
 	return option, ws
 }
@@ -167,8 +172,8 @@ func (p *pebbleDB) CollectMetrics(captureAddr string, i int) {
 		WithLabelValues(captureAddr, id).
 		Set(float64(atomic.LoadInt64(&p.metricWriteStall.counter)))
 	stallDuration := p.metricWriteStall.duration.Load()
-	if stallDuration != nil {
-		p.metricWriteStall.duration.Store(nil)
+	if stallDuration != nil && stallDuration.(time.Duration) != time.Duration(0) {
+		p.metricWriteStall.duration.Store(time.Duration(0))
 		dbWriteDelayDuration.
 			WithLabelValues(captureAddr, id).
 			Set(stallDuration.(time.Duration).Seconds())
