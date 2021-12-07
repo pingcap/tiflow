@@ -104,7 +104,7 @@ func NewOwner(pdClient pd.Client) *Owner {
 // NewOwner4Test creates a new Owner for test
 func NewOwner4Test(
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
-	newSink func() AsyncSink,
+	newSink func() asyncSink,
 	pdClient pd.Client,
 ) *Owner {
 	o := NewOwner(pdClient)
