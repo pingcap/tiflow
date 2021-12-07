@@ -224,12 +224,8 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
-<<<<<<< HEAD
-	notifier streamer.EventNotifier
-=======
-	relay                      relay.Process
+	notifier                   streamer.EventNotifier
 	charsetAndDefaultCollation map[string]string
->>>>>>> 383c7b5ff (syncer(dm) : fix default collation with upstream in create table statement (#3575))
 }
 
 // NewSyncer creates a new Syncer.
@@ -330,15 +326,11 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
-<<<<<<< HEAD
 	s.streamerController = NewStreamerController(s.notifier, s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.binlogType, s.cfg.RelayDir, s.timezone)
-=======
 	s.charsetAndDefaultCollation, err = s.fromDB.GetCharsetAndDefaultCollation(ctx)
 	if err != nil {
 		return err
 	}
-	s.streamerController = NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
->>>>>>> 383c7b5ff (syncer(dm) : fix default collation with upstream in create table statement (#3575))
 
 	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
 	if err != nil {
