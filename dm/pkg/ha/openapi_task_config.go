@@ -87,7 +87,7 @@ func PutOpenAPITaskConfigIfExist(cli *clientv3.Client, task openapi.Task) error 
 	return nil
 }
 
-// DeleteOpenAPITaskConfig deletes the openapi task config  of task-name.
+// DeleteOpenAPITaskConfig deletes the openapi task config of task-name.
 func DeleteOpenAPITaskConfig(cli *clientv3.Client, taskName string) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
@@ -97,7 +97,7 @@ func DeleteOpenAPITaskConfig(cli *clientv3.Client, taskName string) error {
 	return nil
 }
 
-// GetOpenAPITaskConfig gets the openapi task config  of task-name.
+// GetOpenAPITaskConfig gets the openapi task config of task-name.
 func GetOpenAPITaskConfig(cli *clientv3.Client, taskName string) (*openapi.Task, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
@@ -111,11 +111,7 @@ func GetOpenAPITaskConfig(cli *clientv3.Client, taskName string) (*openapi.Task,
 	if err != nil {
 		return task, err
 	}
-	task, err = openAPITaskFromResp(resp)
-	if err != nil {
-		return task, err
-	}
-	return task, nil
+	return openAPITaskFromResp(resp)
 }
 
 // GetAllOpenAPITaskConfig gets all openapi task config s.

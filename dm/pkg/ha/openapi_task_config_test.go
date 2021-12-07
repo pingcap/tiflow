@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ func (t *testForEtcd) TestOpenAPITaskConfigEtcd(c *C) {
 	task2.Name = "test-2"
 	c.Assert(err, IsNil)
 
-	// no openapi task config  exist.
+	// no openapi task config exist.
 	task1InEtcd, err := GetOpenAPITaskConfig(etcdTestCli, task1.Name)
 	c.Assert(err, IsNil)
 	c.Assert(task1InEtcd, IsNil)
@@ -60,7 +60,7 @@ func (t *testForEtcd) TestOpenAPITaskConfigEtcd(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(tasks, HasLen, 2)
 
-	// put openapi task config  again without overwrite will fail
+	// put openapi task config again without overwrite will fail
 	c.Assert(terror.ErrOpenAPITaskConfigExists.Equal(PutOpenAPITaskConfig(etcdTestCli, task1, false)), IsTrue)
 
 	// in overwrite mode, it will overwrite the old one.
@@ -76,7 +76,7 @@ func (t *testForEtcd) TestOpenAPITaskConfigEtcd(c *C) {
 	task3.Name = "test-3"
 	c.Assert(terror.ErrOpenAPITaskConfigNotExists.Equal(PutOpenAPITaskConfigIfExist(etcdTestCli, task3)), IsTrue)
 
-	// update exist openapi task config  will success
+	// update exist openapi task config will success
 	task1.TaskMode = openapi.TaskTaskModeAll
 	c.Assert(PutOpenAPITaskConfigIfExist(etcdTestCli, task1), IsNil)
 	task1InEtcd, err = GetOpenAPITaskConfig(etcdTestCli, task1.Name)

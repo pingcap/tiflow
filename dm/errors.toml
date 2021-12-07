@@ -1085,13 +1085,13 @@ workaround = "Please update your `shadow-table-rules` or `trash-table-rules` in 
 tags = ["internal", "high"]
 
 [error.DM-config-20050]
-message = "the openapi task config  for '%s' already exists"
+message = "the openapi task config for '%s' already exists"
 description = ""
 workaround = "If you want to override it, pleaset use the overwite flag."
 tags = ["internal", "low"]
 
 [error.DM-config-20051]
-message = "the openapi task config  for '%s' not exists"
+message = "the openapi task config for '%s' does not exists"
 description = ""
 workaround = ""
 tags = ["internal", "low"]
