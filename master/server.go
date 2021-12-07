@@ -7,7 +7,9 @@ import (
 
 	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
@@ -16,8 +18,6 @@ import (
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-
-	"github.com/hanfei1991/microcosm/pb"
 )
 
 // Server handles PRC requests for df master.
@@ -108,6 +108,38 @@ func (s *Server) DeleteExecutor() {
 	// To implement
 }
 
+// RegisterMetaStore registers backend metastore to server master,
+// but have not implemented yet.
+func (s *Server) RegisterMetaStore(
+	ctx context.Context, req *pb.RegisterMetaStoreRequest,
+) (*pb.RegisterMetaStoreResponse, error) {
+	return nil, nil
+}
+
+// QueryMetaStore implements gRPC interface
+func (s *Server) QueryMetaStore(
+	ctx context.Context, req *pb.QueryMetaStoreRequest,
+) (*pb.QueryMetaStoreResponse, error) {
+	switch req.Tp {
+	case pb.StoreType_ServiceDiscovery:
+		return &pb.QueryMetaStoreResponse{
+			Address: s.cfg.AdvertiseAddr,
+		}, nil
+	case pb.StoreType_SystemMetaStore:
+		// TODO: independent system metastore
+		return &pb.QueryMetaStoreResponse{
+			Address: s.cfg.AdvertiseAddr,
+		}, nil
+	default:
+		return &pb.QueryMetaStoreResponse{
+			Err: &pb.Error{
+				Code:    pb.ErrorCode_InvalidMetaStoreType,
+				Message: fmt.Sprintf("store type: %s", req.Tp),
+			},
+		}, nil
+	}
+}
+
 func (s *Server) startForTest(ctx context.Context) (err error) {
 	// TODO: implement mock-etcd and leader election
 
@@ -135,7 +167,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	if test.GlobalTestFlag {
 		return s.startForTest(ctx)
 	}
-	etcdCfg := genEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
+	etcdCfg := etcdutils.GenEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
 	// prepare to join an existing etcd cluster.
 	//err = prepareJoinEtcd(s.cfg)
 	//if err != nil {
@@ -150,7 +182,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	// no `String` method exists for embed.Config, and can not marshal it to join too.
 	// but when starting embed etcd server, the etcd pkg will log the config.
 	// https://github.com/etcd-io/etcd/blob/3cf2f69b5738fb702ba1a935590f36b52b18979b/embed/etcd.go#L299
-	etcdCfg, err = s.cfg.genEmbedEtcdConfig(etcdCfg)
+	etcdCfg, err = etcdutils.GenEmbedEtcdConfig(etcdCfg, s.cfg.MasterAddr, s.cfg.AdvertiseAddr, s.cfg.Etcd)
 	if err != nil {
 		return
 	}

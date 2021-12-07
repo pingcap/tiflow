@@ -10,6 +10,7 @@ import (
 	"github.com/hanfei1991/microcosm/master"
 	"github.com/hanfei1991/microcosm/master/jobmaster/benchmark"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
@@ -21,9 +22,11 @@ type testJobSuite struct{}
 
 func (t *testJobSuite) TestSubmit(c *C) {
 	masterCfg := &master.Config{
-		Name:              "master1",
+		Etcd: &etcdutils.ConfigParams{
+			Name:    "master1",
+			DataDir: "/tmp/df",
+		},
 		MasterAddr:        "127.0.0.1:1991",
-		DataDir:           "/tmp/df",
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,
 		RPCTimeout:        time.Second,

@@ -4,6 +4,7 @@ package pb;
 
 import "error.proto";
 import "executor.proto";
+import "metastore.proto";
 
 // I'm trying to phase out the communication protocal.
 // - system level
@@ -30,6 +31,15 @@ service Master {
     // - PutClusterConfig
 
     rpc ScheduleTask(TaskSchedulerRequest) returns(TaskSchedulerResponse) {}
+
+    /* Metastore manager API */
+    // RegisterMetaStore is called from backend metastore and
+    // registers to server master metastore manager
+    rpc RegisterMetaStore(RegisterMetaStoreRequest) returns(RegisterMetaStoreResponse) {}
+
+    // QueryMetaStore queries metastore manager and returns
+    // the information of a matching metastore
+    rpc QueryMetaStore(QueryMetaStoreRequest) returns(QueryMetaStoreResponse) {}
 }
 
 message HeartbeatRequest {

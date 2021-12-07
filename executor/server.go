@@ -11,21 +11,27 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 type Server struct {
 	cfg     *Config
 	testCtx *test.Context
 
-	srv *grpc.Server
-	cli *master.Client
-	sch *runtime.Runtime
-	ID  model.ExecutorID
+	srv  *grpc.Server
+	cli  *master.Client
+	sch  *runtime.Runtime
+	info *model.ExecutorInfo
 
 	lastHearbeatTime time.Time
 
@@ -33,6 +39,8 @@ type Server struct {
 
 	cancel  func()
 	closeCh chan bool
+
+	metastore metadata.MetaKV
 }
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
@@ -148,6 +156,14 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
+	// connects to metastore and maintains a etcd session
+	go func() {
+		err := s.keepalive(ctx)
+		if err != nil {
+			s.close()
+		}
+	}()
+
 	// Start Heartbeat
 	go func() {
 		defer s.close()
@@ -171,6 +187,66 @@ func (s *Server) CloseCh() chan bool {
 	return s.closeCh
 }
 
+func (s *Server) keepalive(ctx context.Context) error {
+	// query service discovery metastore, which is an embed etcd underlying
+	resp, err := s.cli.QueryMetaStore(
+		ctx,
+		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery},
+		s.cfg.RPCTimeout,
+	)
+	if err != nil {
+		return err
+	}
+	log.L().Info("update service discovery metastore", zap.String("addr", resp.Address))
+
+	logConfig := logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:   strings.Split(resp.GetAddress(), ","),
+		Context:     ctx,
+		LogConfig:   &logConfig,
+		DialTimeout: 5 * time.Second,
+		DialOptions: []grpc.DialOption{
+			grpc.WithInsecure(),
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	session, err := concurrency.NewSession(etcdCli, concurrency.WithTTL(s.cfg.SessionTTL))
+	if err != nil {
+		return err
+	}
+	// TODO: we share system metastore with service discovery etcd, in the future
+	// we could separate them
+	s.metastore = metadata.NewMetaEtcd(etcdCli)
+	value, err := s.info.ToJSON()
+	if err != nil {
+		return err
+	}
+	_, err = s.metastore.Put(ctx, s.info.EtcdKey(), value, clientv3.WithLease(session.Lease()))
+	if err != nil {
+		return err
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-session.Done():
+		return errors.ErrExecutorSessionDone.GenWithStackByArgs()
+	}
+}
+
 func (s *Server) selfRegister(ctx context.Context) (err error) {
 	// Register myself
 	s.cli, err = master.NewMasterClient(ctx, getJoinURLs(s.cfg.Join))
@@ -187,8 +263,11 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	s.ID = model.ExecutorID(resp.ExecutorId)
-	log.L().Logger.Info("register successful", zap.Int32("id", int32(s.ID)))
+	s.info = &model.ExecutorInfo{
+		ID:   model.ExecutorID(resp.ExecutorId),
+		Addr: s.cfg.WorkerAddr,
+	}
+	log.L().Logger.Info("register successful", zap.Any("info", s.info))
 	return nil
 }
 
@@ -214,7 +293,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				return errors.ErrHeartbeat.GenWithStack("heartbeat timeout")
 			}
 			req := &pb.HeartbeatRequest{
-				ExecutorId: int32(s.ID),
+				ExecutorId: int32(s.info.ID),
 				Status:     int32(model.Running),
 				Timestamp:  uint64(t.Unix()),
 				// We set longer ttl for master, which is "ttl + rpc timeout", to avoid that

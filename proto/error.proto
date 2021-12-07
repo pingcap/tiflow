@@ -18,6 +18,8 @@ enum ErrorCode {
     SubJobBuildFailed = 6;
     // create gRPC connection failed
     BuildGrpcConnFailed  = 7;
+    // unknown or upsupported metastore type
+    InvalidMetaStoreType = 8;
     UnknownError = 10001;
 }
 

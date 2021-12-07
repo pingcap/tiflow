@@ -78,6 +78,14 @@ func (c *Client) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp 
 	return c.client.SubmitJob(ctx, req)
 }
 
+func (c *Client) QueryMetaStore(
+	ctx context.Context, req *pb.QueryMetaStoreRequest, timeout time.Duration,
+) (*pb.QueryMetaStoreResponse, error) {
+	ctx1, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return c.client.QueryMetaStore(ctx1, req)
+}
+
 // RequestForSchedule sends TaskSchedulerRequest to server master and master
 // will ask resource manager for resource and allocates executors to given tasks
 func (c *Client) RequestForSchedule(

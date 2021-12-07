@@ -1,3 +1,4 @@
-name = "ip1"
 master-addr = "http://127.0.0.1:10240"
-data-dir = "/tmp/df"
+[etcd]
+name = "server-master-1"
+data-dir = "/tmp/df/master"

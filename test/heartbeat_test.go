@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/executor"
 	"github.com/hanfei1991/microcosm/master"
+	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/hanfei1991/microcosm/test"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/ticdc/dm/pkg/log"
@@ -40,9 +41,11 @@ func (t *testHeartbeatSuite) SetUpSuite(c *C) {
 
 func (t *testHeartbeatSuite) TestHeartbeatExecutorCrush(c *C) {
 	masterCfg := &master.Config{
-		Name:              "master1",
+		Etcd: &etcdutils.ConfigParams{
+			Name:    "master1",
+			DataDir: "/tmp/df",
+		},
 		MasterAddr:        "127.0.0.1:1991",
-		DataDir:           "/tmp/df",
 		KeepAliveTTL:      t.keepAliveTTL,
 		KeepAliveInterval: t.keepAliveInterval,
 		RPCTimeout:        t.rpcTimeout,

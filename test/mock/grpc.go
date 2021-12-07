@@ -86,6 +86,26 @@ func (c *masterServerClient) ScheduleTask(ctx context.Context, req *pb.TaskSched
 	return resp.(*pb.TaskSchedulerResponse), nil
 }
 
+func (c *masterServerClient) RegisterMetaStore(
+	ctx context.Context, req *pb.RegisterMetaStoreRequest, opts ...grpc.CallOption,
+) (*pb.RegisterMetaStoreResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.(*pb.RegisterMetaStoreResponse), nil
+}
+
+func (c *masterServerClient) QueryMetaStore(
+	ctx context.Context, req *pb.QueryMetaStoreRequest, opts ...grpc.CallOption,
+) (*pb.QueryMetaStoreResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.(*pb.QueryMetaStoreResponse), nil
+}
+
 func NewMasterClient(conn Conn) pb.MasterClient {
 	return &masterServerClient{conn}
 }
