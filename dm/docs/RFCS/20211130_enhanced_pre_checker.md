@@ -15,7 +15,7 @@ If we have a large number of tables in source, we will take too much time in che
 ### Inadequate check
 
 * If downstream creates tables manually and the new downstream’s auto increment ID is not the same as the upstream, we shouldn’t check **auto_increment_ID** for errors. Users should be responsible for what they set.
-* Dump privilege only checks RELOAD and SELECT. However, Dumpling supports different [consistency configurations](https://docs.pingcap.com/zh/tidb/stable/dumpling-overview#%E8%B0%83%E6%95%B4-dumpling-%E7%9A%84%E6%95%B0%E6%8D%AE%E4%B8%80%E8%87%B4%E6%80%A7%E9%80%89%E9%A1%B9), which need more privilege.
+* Dump privilege only checks RELOAD and SELECT. However, Dumpling supports different [consistency configurations](https://docs.pingcap.com/zh/tidb/stable/dumpling-overview#%E8%B0%83%E6%95%B4-dumpling-%E7%9A%84%E6%95%B0%E6%8D%AE%E4%B8%80%E8%87%B4%E6%80%A7%E9%80%89%E9%A1%B9), which need more privileges.
 * If online-ddl is set by true and a DDL is in online-ddl stage, DM will have a problem in all mode. Specifically, ghost table has been created, is executing the DDL, but is not renamed yet. In this case, DM will report an error when the ghost table is renamed after the dump phase. You can learn more about online-ddl [here](https://docs.pingcap.com/zh/tidb-data-migration/stable/feature-online-ddl).
 * For schema_of_shard_tables, whatever pessimistic task and optimistic task, we all check it by comparing all sharding tables’ structures for consistency simply. For optimistic mode, we can do better.
 
