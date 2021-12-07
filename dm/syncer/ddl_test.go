@@ -184,8 +184,8 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	}
 
 	targetSQLs := [][]string{
-		{"CREATE DATABASE IF NOT EXISTS `xs1`"},
-		{"CREATE DATABASE IF NOT EXISTS `xs1`"},
+		{"CREATE DATABASE IF NOT EXISTS `xs1` COLLATE = utf8mb4_bin"},
+		{"CREATE DATABASE IF NOT EXISTS `xs1` COLLATE = utf8mb4_bin"},
 		{"DROP DATABASE IF EXISTS `xs1`"},
 		{"DROP DATABASE IF EXISTS `xs1`"},
 		{"DROP TABLE IF EXISTS `xs1`.`t1`"},
@@ -233,14 +233,15 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	ec := &eventContext{
 		tctx: tctx,
 	}
-
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for i, sql := range sqls {
 		qec := &queryEventContext{
-			eventContext: ec,
-			ddlSchema:    "test",
-			originSQL:    sql,
-			appliedDDLs:  make([]string, 0),
-			p:            parser.New(),
+			eventContext:    ec,
+			ddlSchema:       "test",
+			originSQL:       sql,
+			appliedDDLs:     make([]string, 0),
+			p:               parser.New(),
+			eventStatusVars: statusVars,
 		}
 		stmt, err := parseOneStmt(qec)
 		c.Assert(err, IsNil)
@@ -260,7 +261,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 		c.Assert(qec.appliedDDLs, DeepEquals, expectedSQLs[i])
 		c.Assert(targetSQLs[i], HasLen, len(qec.appliedDDLs))
 		for j, sql2 := range qec.appliedDDLs {
-			ddlInfo, err2 := syncer.genDDLInfo(qec.p, qec.ddlSchema, sql2)
+			ddlInfo, err2 := syncer.genDDLInfo(qec, sql2)
 			c.Assert(err2, IsNil)
 			c.Assert(targetSQLs[i][j], Equals, ddlInfo.routedDDL)
 		}
@@ -635,6 +636,58 @@ func (s *testDDLSuite) TestClearOnlineDDL(c *C) {
 
 	c.Assert(syncer.clearOnlineDDL(tctx, targetTable), IsNil)
 	c.Assert(mock.toFinish, HasLen, 0)
+}
+
+func (s *testDDLSuite) TestAdjustCollation(c *C) {
+	// duplicate with pkg/parser
+	sqls := []string{
+		"create table `test`.`t1` (id int) CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+		"create table `test`.`t1` (id int) CHARSET=utf8mb4",
+		"create table `test`.`t1` (id int) COLLATE=utf8mb4_general_ci",
+		"create table `test`.`t1` (id int)",
+		"create database `test` CHARACTER SET=utf8mb4 COLLATE=utf8mb4_general_ci",
+		"create database `test` CHARACTER SET=utf8mb4",
+		"create database `test` COLLATE=utf8mb4_general_ci",
+		"create database if not exists `test`",
+	}
+
+	expectedSQLs := []string{
+		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT)",
+		"CREATE DATABASE `test` CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci",
+		"CREATE DATABASE `test` CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci",
+		"CREATE DATABASE `test` COLLATE = utf8mb4_general_ci",
+		"CREATE DATABASE IF NOT EXISTS `test` COLLATE = utf8mb4_bin",
+	}
+
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
+	syncer := NewSyncer(&config.SubTaskConfig{}, nil, nil)
+	syncer.tctx = tctx
+	p := parser.New()
+	tab := &filter.Table{
+		Schema: "test",
+		Name:   "t",
+	}
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
+	charsetAndDefaultCollationMap := map[string]string{"utf8mb4": "utf8mb4_general_ci"}
+	for i, sql := range sqls {
+		ddlInfo := &ddlInfo{
+			originDDL:    sql,
+			routedDDL:    sql,
+			sourceTables: []*filter.Table{tab},
+			targetTables: []*filter.Table{tab},
+		}
+		stmt, err := p.ParseOneStmt(sql, "", "")
+		c.Assert(err, IsNil)
+		c.Assert(stmt, NotNil)
+		ddlInfo.originStmt = stmt
+		adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap)
+		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+		c.Assert(err, IsNil)
+		c.Assert(routedDDL, Equals, expectedSQLs[i])
+	}
 }
 
 type mockOnlinePlugin struct {
