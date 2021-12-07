@@ -537,16 +537,11 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	}
 	config.Version = version
 	// See: https://kafka.apache.org/documentation/#replication
-<<<<<<< HEAD
-	// When one of the brokers in a Kafka cluster is down, the partition leaders in this broker is broken, Kafka will election a new partition leader and replication logs, this process will last from a few seconds to a few minutes. Kafka cluster will not provide a writing service in this process.
-	// Time out in one minute(120 * 500ms).
-=======
 	// When one of the brokers in a Kafka cluster is down, the partition leaders
 	// in this broker is broken, Kafka will election a new partition leader and
 	// replication logs, this process will last from a few seconds to a few minutes.
 	// Kafka cluster will not provide a writing service in this process.
 	// Time out in one minute.
->>>>>>> e402a7936 (sink(ticdc): Set config.Metadata.Timeout correctly (#3665))
 	config.Metadata.Retry.Max = 120
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 	// If it is not set, this means a metadata request against an unreachable
@@ -563,13 +558,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
-<<<<<<< HEAD
 
-=======
-	// Time out in five minutes(600 * 500ms).
-	config.Producer.Retry.Max = 600
-	config.Producer.Retry.Backoff = 500 * time.Millisecond
->>>>>>> e402a7936 (sink(ticdc): Set config.Metadata.Timeout correctly (#3665))
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
 	case "none":
 		config.Producer.Compression = sarama.CompressionNone
