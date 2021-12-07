@@ -135,11 +135,13 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 
 	// empty relay log file, got EOF when reading format description event separately and possibleLast = false
 	{
+		testCtx, testCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer testCancel()
 		cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
 		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
 		t.setActiveRelayLog(r.relay, currentUUID, filename, 0)
 		state := t.createBinlogFileParseState(c, relayDir, filename, 100, possibleLast)
-		needSwitch, needReParse, err := r.parseFile(ctx, s, true, state)
+		needSwitch, needReParse, err := r.parseFile(testCtx, s, true, state)
 		c.Assert(errors.Cause(err), Equals, io.EOF)
 		c.Assert(needSwitch, IsFalse)
 		c.Assert(needReParse, IsFalse)
@@ -161,11 +163,13 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 
 	// base test with only one valid binlog file
 	{
+		testCtx, testCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer testCancel()
 		cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
 		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
 		t.setActiveRelayLog(r.relay, currentUUID, filename, fileSize)
 		state := t.createBinlogFileParseState(c, relayDir, filename, 4, possibleLast)
-		needSwitch, needReParse, err := r.parseFile(ctx, s, true, state)
+		needSwitch, needReParse, err := r.parseFile(testCtx, s, true, state)
 		c.Assert(err, IsNil)
 		c.Assert(needSwitch, IsFalse)
 		c.Assert(needReParse, IsFalse)
@@ -197,11 +201,13 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 
 	// try get events back, since firstParse=false, should have no fake RotateEvent
 	{
+		testCtx, testCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer testCancel()
 		cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
 		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
 		t.setActiveRelayLog(r.relay, currentUUID, filename, fileSize)
 		state := t.createBinlogFileParseState(c, relayDir, filename, 4, possibleLast)
-		needSwitch, needReParse, err := r.parseFile(ctx, s, false, state)
+		needSwitch, needReParse, err := r.parseFile(testCtx, s, false, state)
 		c.Assert(err, IsNil)
 		c.Assert(needSwitch, IsFalse)
 		c.Assert(needReParse, IsFalse)
@@ -238,11 +244,13 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 
 	// latest is still the end_log_pos of the last event, not the next relay file log file's position
 	{
+		testCtx, testCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer testCancel()
 		cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
 		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
 		t.setActiveRelayLog(r.relay, currentUUID, filename, fileSize)
 		state := t.createBinlogFileParseState(c, relayDir, filename, 4, possibleLast)
-		needSwitch, needReParse, err := r.parseFile(ctx, s, true, state)
+		needSwitch, needReParse, err := r.parseFile(testCtx, s, true, state)
 		c.Assert(err, IsNil)
 		c.Assert(needSwitch, IsFalse)
 		c.Assert(needReParse, IsFalse)
@@ -254,12 +262,14 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 
 	// parse from offset > 4
 	{
+		testCtx, testCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer testCancel()
 		cfg := &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
 		r := newBinlogReaderForTest(log.L(), cfg, true, currentUUID)
 		t.setActiveRelayLog(r.relay, currentUUID, filename, fileSize)
 		offset := int64(rotateEv.Header.LogPos - rotateEv.Header.EventSize)
 		state := t.createBinlogFileParseState(c, relayDir, filename, offset, possibleLast)
-		needSwitch, needReParse, err := r.parseFile(ctx, s, false, state)
+		needSwitch, needReParse, err := r.parseFile(testCtx, s, false, state)
 		c.Assert(err, IsNil)
 		c.Assert(needSwitch, IsFalse)
 		c.Assert(needReParse, IsFalse)
