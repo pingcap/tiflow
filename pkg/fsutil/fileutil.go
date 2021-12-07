@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package fsutil
 
 import (
 	"fmt"
@@ -20,15 +20,11 @@ import (
 	"syscall"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 const (
-	gb                       = 1024 * 1024 * 1024
-	dataDirAvailLowThreshold = 10 // percentage
+	gb = 1024 * 1024 * 1024
 )
 
 // IsDirAndWritable checks a given path is directory and writable
@@ -108,24 +104,4 @@ func GetDiskInfo(dir string) (*DiskInfo, error) {
 	}
 
 	return info, nil
-}
-
-// CheckDataDirSatisfied check if the data-dir meet the requirement during server running
-// the caller should guarantee that dir exist
-func CheckDataDirSatisfied() error {
-	conf := config.GetGlobalServerConfig()
-	diskInfo, err := GetDiskInfo(conf.DataDir)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckDataDirSatisfied, err)
-	}
-	if diskInfo.AvailPercentage < dataDirAvailLowThreshold {
-		failpoint.Inject("InjectCheckDataDirSatisfied", func() {
-			log.Info("inject check data dir satisfied error")
-			failpoint.Return(nil)
-		})
-		return cerror.WrapError(cerror.ErrCheckDataDirSatisfied, errors.Errorf("disk is almost full, TiCDC require that the disk mount data-dir "+
-			"have 10%% available space, and the total amount has at least 500GB is preferred. disk info: %+v", diskInfo))
-	}
-
-	return nil
 }

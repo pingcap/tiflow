@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/fsutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
 )
@@ -66,7 +67,7 @@ func CheckDir(cfSortDir string) error {
 		dir = sorterConfig.SortDir
 	}
 
-	err := util.IsDirAndWritable(dir)
+	err := fsutil.IsDirAndWritable(dir)
 	if err != nil {
 		if os.IsNotExist(errors.Cause(err)) {
 			err = os.MkdirAll(dir, 0o700)

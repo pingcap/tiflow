@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package fsutil
 
 import (
 	"os"
@@ -20,8 +20,6 @@ import (
 	"runtime"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
@@ -88,17 +86,4 @@ func (s *fileUtilSuite) TestGetDiskInfo(c *check.C) {
 	info, err = GetDiskInfo(dir)
 	c.Assert(info, check.IsNil)
 	c.Assert(err, check.ErrorMatches, ".*no such file or directory")
-}
-
-func (s *fileUtilSuite) TestCheckDataDirSatisfied(c *check.C) {
-	defer testleak.AfterTest(c)()
-	dir := c.MkDir()
-	conf := config.GetGlobalServerConfig()
-	conf.DataDir = dir
-	config.StoreGlobalServerConfig(conf)
-
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied", ""), check.IsNil)
-	err := CheckDataDirSatisfied()
-	c.Assert(err, check.IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied"), check.IsNil)
 }
