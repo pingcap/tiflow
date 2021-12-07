@@ -172,6 +172,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 
 	// Some special cases handled in canal
 	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
+	// Todo (Ling Jin): type promotion for int related type is quite weired, figure out why.
 	shouldPromote := c.Flag.IsUnsigned() && checkIntNumberNegative(c.Value)
 	if !shouldPromote {
 		return javaType
@@ -274,10 +275,6 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	}
 	return canalColumn, nil
 }
-
-// int(11) -> mysql.TypeInt -> JavaSQLTypeINTEGER (4)
-// boolean -> mysql.TypeTinyINT -> JavaSQLTypeTINYINT (-6)
-//
 
 // build the RowData of a canal entry
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
