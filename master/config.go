@@ -169,25 +169,10 @@ func (c *Config) Parse(arguments []string) error {
 }
 
 func (c *Config) adjust() (err error) {
-	if c.Etcd.PeerUrls == "" {
-		c.Etcd.PeerUrls = defaultPeerUrls
-	}
+	c.Etcd.Adjust(defaultPeerUrls, defaultInitialClusterState)
+
 	if c.AdvertiseAddr == "" {
 		c.AdvertiseAddr = c.Etcd.PeerUrls
-	}
-	if c.Etcd.AdvertisePeerUrls == "" {
-		c.Etcd.AdvertisePeerUrls = c.Etcd.PeerUrls
-	}
-	if c.Etcd.InitialCluster == "" {
-		items := strings.Split(c.Etcd.AdvertisePeerUrls, ",")
-		for i, item := range items {
-			items[i] = fmt.Sprintf("%s=%s", c.Etcd.Name, item)
-		}
-		c.Etcd.InitialCluster = strings.Join(items, ",")
-	}
-
-	if c.Etcd.InitialClusterState == "" {
-		c.Etcd.InitialClusterState = defaultInitialClusterState
 	}
 
 	if c.KeepAliveIntervalStr == "" {

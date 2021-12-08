@@ -1,6 +1,7 @@
 package etcdutils
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 
@@ -21,6 +22,30 @@ type ConfigParams struct {
 	InitialCluster      string `toml:"initial-cluster" json:"initial-cluster"`
 	InitialClusterState string `toml:"initial-cluster-state" json:"initial-cluster-state"`
 	Join                string `toml:"join" json:"join"`
+}
+
+func (cp *ConfigParams) Adjust(
+	defaultPeerUrls string,
+	defaultInitialClusterState string,
+) *ConfigParams {
+	if cp.PeerUrls == "" {
+		cp.PeerUrls = defaultPeerUrls
+	}
+	if cp.AdvertisePeerUrls == "" {
+		cp.AdvertisePeerUrls = cp.PeerUrls
+	}
+	if cp.InitialCluster == "" {
+		items := strings.Split(cp.AdvertisePeerUrls, ",")
+		for i, item := range items {
+			items[i] = fmt.Sprintf("%s=%s", cp.Name, item)
+		}
+		cp.InitialCluster = strings.Join(items, ",")
+	}
+
+	if cp.InitialClusterState == "" {
+		cp.InitialClusterState = defaultInitialClusterState
+	}
+	return cp
 }
 
 // GenEmbedEtcdConfig generates the configuration needed by embed etcd.

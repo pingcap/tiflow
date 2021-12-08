@@ -160,6 +160,7 @@ func (s *Server) Start(ctx context.Context) error {
 	go func() {
 		err := s.keepalive(ctx)
 		if err != nil {
+			log.L().Error("master keepalive failed", zap.Error(err))
 			s.close()
 		}
 	}()

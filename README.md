@@ -48,6 +48,13 @@ the job of demo workload is devided to two parts:
 ./bin/master --config ./cmd/master/example.toml
 ```
 
+We can also start multiple masters
+
+```[shell]
+./bin/master --config ./cmd/master/example1.toml &
+./bin/master --config ./cmd/master/example2.toml &
+```
+
 #### Start Executor 1, 2
 
 ```[shell]

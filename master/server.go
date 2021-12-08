@@ -169,10 +169,10 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	}
 	etcdCfg := etcdutils.GenEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
 	// prepare to join an existing etcd cluster.
-	//err = prepareJoinEtcd(s.cfg)
-	//if err != nil {
-	//	return
-	//}
+	err = etcdutils.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
+	if err != nil {
+		return
+	}
 	log.L().Info("config after join prepared", zap.Stringer("config", s.cfg))
 
 	// generates embed etcd config before any concurrent gRPC calls.
