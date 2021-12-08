@@ -129,7 +129,18 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 	}
 }
 
-// GetDefaultReplicaConfig returns the default replica config
+// Validate verifies that each parameter is valid.
+func (c *ReplicaConfig) Validate() error {
+	if c.Sink != nil {
+		err := c.Sink.validate(c.EnableOldValue)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetDefaultReplicaConfig returns the default replica config.
 func GetDefaultReplicaConfig() *ReplicaConfig {
 	return defaultReplicaConfig.Clone()
 }
