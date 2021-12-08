@@ -91,6 +91,26 @@ func (s *DateTimeCase) Run(ctx *framework.TaskContext) error {
 		return err
 	}
 
+	_, err = ctx.Upstream.ExecContext(ctx.Ctx, "alter table test add t_date_1 date not null")
+	if err != nil {
+        return err
+    }
+
+	// Get a handle of an existing table
+	table = ctx.SQLHelper().GetTable("test")
+	data = map[string]interface{}{
+		"id":          1,
+		"t_date":      zeroValue,
+		"t_datetime":  zeroValue,
+		"t_timestamp": zeroValue.Add(time.Second),
+		"t_date_1":    zeroValue.AddDate(15, 0, 1),
+	}
+
+	err = table.Insert(data).Send().Wait().Check()
+	if err != nil {
+		return err
+	}
+
 	// Ancient date case. We DO NOT support it.
 	// TODO investigate why and find out a solution
 	/* ancientTime := time.Date(960, 1, 1, 15, 33, 0, 0, time.UTC)
