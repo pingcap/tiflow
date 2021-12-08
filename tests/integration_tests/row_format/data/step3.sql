@@ -28,9 +28,36 @@ create table tp_int
     c_mediumint mediumint null,
     c_int       int       null,
     c_bigint    bigint    null,
+
+    c_unsigned_tinyint   tinyint   unsigned null,
+    c_unsigned_smallint  smallint  unsigned null,
+    c_unsigned_mediumint mediumint unsigned null,
+    c_unsigned_int       int       unsigned null,
+    c_unsigned_bigint    bigint    unsigned null,
     constraint pk
         primary key (id)
 );
+
+insert into tp_int()
+values ();
+
+insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint,
+                   c_unsigned_tinyint, c_unsigned_smallint, c_unsigned_mediumint, c_unsigned_int, c_unsigned_bigint)
+values (1, 2, 3, 4, 5,
+        1, 2, 3, 4, 5);
+
+-- insert max value
+insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint,
+                   c_unsigned_tinyint, c_unsigned_smallint, c_unsigned_mediumint, c_unsigned_int, c_unsigned_bigint)
+values (127, 32767, 8388607, 2147483647, 9223372036854775807,
+        255, 65535, 16777215, 4294967295, 18446744073709551616);
+
+-- insert min value
+insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint,
+                   c_unsigned_tinyint, c_unsigned_smallint, c_unsigned_mediumint, c_unsigned_int, c_unsigned_bigint)
+values (-128, -32768, -8388608, -2147483648, -9223372036854775808,
+        0, 0, 0, 0, 0);
+
 
 create table tp_text
 (
@@ -102,20 +129,6 @@ create table tp_other
     constraint pk
         primary key (id)
 );
-
-insert into tp_int()
-values ();
-
-insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
-values (1, 2, 3, 4, 5);
-
--- insert max value
-insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
-values (127, 32767, 8388607, 2147483647, 9223372036854775807);
-
--- insert min value
-insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
-values (-128, -32768, -8388608, -2147483648, -9223372036854775808);
 
 insert into tp_text()
 values ();
