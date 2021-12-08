@@ -27,21 +27,21 @@ import (
 )
 
 type locationRecorder struct {
-	// - "Start location" means if we send this location to upstream, we will receive and see this event in first ones.
-	//   So for position-based replication, this is the binlog file offset of the first byte of event minus 1. The first
-	//   effective event after replication starts should be this event.
-	//   For GTID-based replication, this is the GTID set just added the last transaction, and the first transaction
-	//   after replication starts should contain this event. This behaviour of GTID means if we restart replication from
-	//   a point inside a transaction, we will receive duplicated events from the first event of the transaction to the
-	//   point where we restart.
-	// - "End location" acts similarly.
-	//   For position-based replication, this is the file offset of the last byte of event.
-	//   For GTID-based replication, this is the GTID set just added this GTID.
-	// - txnEndLocation is the end location of last transaction. If this event is the last event of a txn,
-	//   txnEndLocation will be assigned from curEndLocation
+	//            +-------------+
+	//        ... |current event| ...
+	//       ^    +-------------+    ^
+	//       |                       |
+	// curStartLocation        curEndLocation
+	// there may be more events between curStartLocation and curEndLocation due to the limitation of binlog or
+	// implementation of DM.
+	// TODO: we should unify the length of (curStartLocation, curEndLocation) to one event or one transaction when
+	// dealing both position and GTID.
 	curStartLocation binlog.Location
 	curEndLocation   binlog.Location
-	txnEndLocation   binlog.Location
+
+	// txnEndLocation is the end location of last transaction. If current event is the last event of a txn,
+	// txnEndLocation will be assigned from curEndLocation
+	txnEndLocation binlog.Location
 
 	// DML will also generate a query event if user set session binlog_format='statement', we use this field to
 	// distinguish DML query event.
