@@ -17,4 +17,11 @@ package config
 type DebugConfig struct {
 	// identify if the table actor is enabled for table pipeline
 	EnableTableActor bool `toml:"enable-table-actor" json:"enable-table-actor"`
+
+	// EnableDBSorter enables db sorter.
+	//
+	// The default value is false.
+	// TODO: turn on after GA.
+	EnableDBSorter bool      `toml:"enable-db-sorter" json:"enable-db-sorter"`
+	DB             *DBConfig `toml:"db" json:"db"`
 }

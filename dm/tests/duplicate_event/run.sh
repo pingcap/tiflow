@@ -68,9 +68,6 @@ function run() {
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
-	check_log_contain_with_retry "retrying to read binlog" $WORK_DIR/worker2/log/dm-worker.log
-	check_log_contain_with_retry "discard duplicate event" $WORK_DIR/worker2/log/dm-worker.log
-
 	check_sync_diff $WORK_DIR $cur/conf/diff_relay_config.toml
 
 	# check relay log binlog file size is the same as master size
