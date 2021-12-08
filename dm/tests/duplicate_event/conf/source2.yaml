@@ -2,7 +2,7 @@ source-id: mysql-replica-02
 server-id: 123456
 flavor: 'mysql'
 enable-gtid: true
-enable-relay: true
+enable-relay: false
 from:
   host: 127.0.0.1
   user: root
