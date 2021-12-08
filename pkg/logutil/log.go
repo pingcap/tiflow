@@ -91,6 +91,7 @@ func InitLogger(cfg *Config) error {
 			MaxDays:    cfg.FileMaxDays,
 			MaxBackups: cfg.FileMaxBackups,
 		},
+		ErrorOutputPath: "stderr",
 	}
 
 	var lg *zap.Logger

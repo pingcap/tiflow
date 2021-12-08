@@ -55,7 +55,7 @@ require (
 	github.com/pingcap/errors v0.11.5-0.20211009033009-93128226aaa3
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
 	github.com/pingcap/kvproto v0.0.0-20211202065422-a412f7a319c3
-	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
+	github.com/pingcap/log v0.0.0-20211207084639-71a2e5860834
 	github.com/pingcap/tidb v1.1.0-beta.0.20211204151954-e3e2e8d946f4
 	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20211204151954-e3e2e8d946f4
