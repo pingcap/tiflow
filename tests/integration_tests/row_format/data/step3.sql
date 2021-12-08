@@ -28,6 +28,12 @@ create table tp_int
     c_mediumint mediumint null,
     c_int       int       null,
     c_bigint    bigint    null,
+
+    c_unsigned_tinyint   tinyint   unsigned null,
+    c_unsigned_smallint  smallint  unsigned null,
+    c_unsigned_mediumint mediumint unsigned null,
+    c_unsigned_int       int       unsigned null,
+    c_unsigned_bigint    bigint    unsigned null,
     constraint pk
         primary key (id)
 );
