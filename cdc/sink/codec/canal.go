@@ -134,6 +134,9 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 }
 
 func checkIntNumberNegative(value interface{}) bool {
+	if value == nil {
+		return false
+	}
 	switch v := value.(type) {
 	case int:
 		return v < 0
@@ -145,12 +148,21 @@ func checkIntNumberNegative(value interface{}) bool {
 		return v < 0
 	case int64:
 		return v < 0
-	case uint64:
-		return v < 0
 	case float32:
 		return v < 0
 	case float64:
 		return v < 0
+
+	case uint64:
+		return false
+	case uint32:
+		return false
+	case uint16:
+		return false
+	case uint8:
+		return false
+	case uint:
+		return false
 	default:
 		log.Panic("get unexpected value type", zap.Any("type", v))
 	}
