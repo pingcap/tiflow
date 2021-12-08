@@ -14,6 +14,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chaos-mesh/go-sqlsmith v0.0.0-20211025024535-03ae33408684
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
+	github.com/cockroachdb/pebble v0.0.0-20210719141320-8c3bd06debb5
 	github.com/coreos/go-semver v0.3.0
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
 	github.com/davecgh/go-spew v1.1.1
@@ -53,11 +54,20 @@ require (
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20211009033009-93128226aaa3
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
+<<<<<<< HEAD
 	github.com/pingcap/kvproto v0.0.0-20211122024046-03abd340988f
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
 	github.com/pingcap/tidb v1.1.0-beta.0.20211208042556-27f7b592b1ce
 	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20211202160554-cec4acbf5ea9
+=======
+	github.com/pingcap/kvproto v0.0.0-20211202065422-a412f7a319c3
+	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
+	github.com/pingcap/tidb v1.1.0-beta.0.20211204151954-e3e2e8d946f4
+	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
+	github.com/pingcap/tidb/parser v0.0.0-20211204151954-e3e2e8d946f4
+	github.com/pingcap/tipb v0.0.0-20211201080053-bd104bb270ba // indirect
+>>>>>>> 1415a7a0e609bde95c086104a977bc548391540e
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -73,7 +83,11 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tidwall/gjson v1.9.1
 	github.com/tidwall/sjson v1.2.2
+<<<<<<< HEAD
 	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20211206072923-c0e876615440
+=======
+	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20211201083510-3a7675742ee5
+>>>>>>> 1415a7a0e609bde95c086104a977bc548391540e
 	github.com/tikv/pd v1.1.0-beta.0.20211118054146-02848d2660ee
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0

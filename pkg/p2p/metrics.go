@@ -18,7 +18,45 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+const unknownPeerLabel = "unknown"
+
 var (
+	serverStreamCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "ticdc",
+		Subsystem: "message_server",
+		Name:      "cur_stream_count",
+		Help:      "count of concurrent streams handled by the message server",
+	}, []string{"from"})
+
+	serverMessageCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "ticdc",
+		Subsystem: "message_server",
+		Name:      "message_count",
+		Help:      "count of messages received",
+	}, []string{"from"})
+
+	serverMessageBatchHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "ticdc",
+		Subsystem: "message_server",
+		Name:      "message_batch_size",
+		Help:      "size of message batches received",
+		Buckets:   prometheus.LinearBuckets(0, 5, 16),
+	}, []string{"from"})
+
+	serverAckCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "ticdc",
+		Subsystem: "message_server",
+		Name:      "ack_count",
+		Help:      "count of ack messages sent",
+	}, []string{"to"})
+
+	serverRepeatedMessageCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "ticdc",
+		Subsystem: "message_server",
+		Name:      "repeated_count",
+		Help:      "count of received repeated messages",
+	}, []string{"from", "topic"})
+
 	grpcClientMetrics = grpc_prometheus.NewClientMetrics(func(opts *prometheus.CounterOpts) {
 		opts.Namespace = "ticdc"
 		opts.Subsystem = "message_client"
@@ -48,6 +86,11 @@ var (
 
 // InitMetrics initializes metrics used by pkg/p2p
 func InitMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(serverStreamCount)
+	registry.MustRegister(serverMessageCount)
+	registry.MustRegister(serverMessageBatchHistogram)
+	registry.MustRegister(serverAckCount)
+	registry.MustRegister(serverRepeatedMessageCount)
 	registry.MustRegister(grpcClientMetrics)
 	registry.MustRegister(clientCount)
 	registry.MustRegister(clientMessageCount)
