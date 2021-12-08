@@ -283,11 +283,9 @@ func (s *testSyncerSuite) TestSelectDB(c *C) {
 		Flags:     0x01,
 	}
 
-	qec := &queryEventContext{
-		p: p,
-	}
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for _, cs := range cases {
-		e, err := event.GenQueryEvent(header, 123, 0, 0, 0, nil, cs.schema, cs.query)
+		e, err := event.GenQueryEvent(header, 123, 0, 0, 0, statusVars, cs.schema, cs.query)
 		c.Assert(err, IsNil)
 		c.Assert(e, NotNil)
 		ev, ok := e.Event.(*replication.QueryEvent)
@@ -295,10 +293,14 @@ func (s *testSyncerSuite) TestSelectDB(c *C) {
 
 		sql := string(ev.Query)
 		schema := string(ev.Schema)
-		ddlInfo, err := syncer.genDDLInfo(p, schema, sql)
+		qec := &queryEventContext{
+			p:               p,
+			ddlSchema:       schema,
+			eventStatusVars: ev.StatusVars,
+		}
+		ddlInfo, err := syncer.genDDLInfo(qec, sql)
 		c.Assert(err, IsNil)
 
-		qec.ddlSchema = schema
 		qec.originSQL = sql
 		needSkip, err := syncer.skipQueryEvent(qec, ddlInfo)
 		c.Assert(err, IsNil)
@@ -423,9 +425,7 @@ func (s *testSyncerSuite) TestIgnoreDB(c *C) {
 	c.Assert(syncer.genRouter(), IsNil)
 	i := 0
 
-	qec := &queryEventContext{
-		p: p,
-	}
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for _, e := range allEvents {
 		ev, ok := e.Event.(*replication.QueryEvent)
 		if !ok {
@@ -433,10 +433,14 @@ func (s *testSyncerSuite) TestIgnoreDB(c *C) {
 		}
 		sql := string(ev.Query)
 		schema := string(ev.Schema)
-		ddlInfo, err := syncer.genDDLInfo(p, schema, sql)
+		qec := &queryEventContext{
+			p:               p,
+			ddlSchema:       schema,
+			eventStatusVars: statusVars,
+		}
+		ddlInfo, err := syncer.genDDLInfo(qec, sql)
 		c.Assert(err, IsNil)
 
-		qec.ddlSchema = schema
 		qec.originSQL = sql
 		needSkip, err := syncer.skipQueryEvent(qec, ddlInfo)
 		c.Assert(err, IsNil)
@@ -802,7 +806,6 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
-
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
@@ -853,7 +856,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			nil,
 		}, {
 			ddl,
-			[]string{"CREATE DATABASE IF NOT EXISTS `test_1`"},
+			[]string{"CREATE DATABASE IF NOT EXISTS `test_1` COLLATE = latin1_swedish_ci"},
 			nil,
 		}, {
 			flush,
@@ -1124,7 +1127,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			nil,
 		}, {
 			ddl,
-			[]string{"CREATE DATABASE IF NOT EXISTS `test_1`"},
+			[]string{"CREATE DATABASE IF NOT EXISTS `test_1` COLLATE = latin1_swedish_ci"},
 			nil,
 		}, {
 			flush,
@@ -1222,9 +1225,10 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 		testTbl2 = "test_tbl2"
 		ec       = &eventContext{tctx: tcontext.Background()}
 		qec      = &queryEventContext{
-			eventContext: ec,
-			ddlSchema:    testDB,
-			p:            parser.New(),
+			eventContext:    ec,
+			ddlSchema:       testDB,
+			p:               parser.New(),
+			eventStatusVars: []byte{4, 0, 0, 0, 0, 46, 0},
 		}
 	)
 	db, mock, err := sqlmock.New()
@@ -1326,7 +1330,7 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 	}
 
 	for _, ca := range cases {
-		ddlInfo, err := syncer.genDDLInfo(qec.p, qec.ddlSchema, ca.sql)
+		ddlInfo, err := syncer.genDDLInfo(qec, ca.sql)
 		c.Assert(err, IsNil)
 		ca.callback()
 
@@ -1343,14 +1347,16 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 	ec := &eventContext{
 		tctx: tctx,
 	}
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for _, e := range allEvents {
 		switch ev := e.Event.(type) {
 		case *replication.QueryEvent:
 			qec := &queryEventContext{
-				eventContext: ec,
-				originSQL:    string(ev.Query),
-				ddlSchema:    string(ev.Schema),
-				p:            p,
+				eventContext:    ec,
+				originSQL:       string(ev.Query),
+				ddlSchema:       string(ev.Schema),
+				p:               p,
+				eventStatusVars: statusVars,
 			}
 			stmt, err := parseOneStmt(qec)
 			c.Assert(err, IsNil)
@@ -1373,7 +1379,7 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 			}
 
 			for j, sql := range qec.appliedDDLs {
-				ddlInfo, err := syncer.genDDLInfo(p, string(ev.Schema), sql)
+				ddlInfo, err := syncer.genDDLInfo(qec, sql)
 				c.Assert(err, IsNil)
 
 				needSkip, err := syncer.skipQueryEvent(qec, ddlInfo)

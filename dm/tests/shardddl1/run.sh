@@ -153,7 +153,7 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 
 	# third, set schema to be same with upstream
 	# TODO: support set schema automatically base on upstream schema
-	echo 'CREATE TABLE `tb1` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1' >${WORK_DIR}/schema1.sql
+	echo 'CREATE TABLE `tb1` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema1.sql
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog-schema update -s mysql-replica-01 test ${shardddl1} ${tb1} ${WORK_DIR}/schema1.sql --flush --sync" \
 		"\"result\": true" 2
@@ -175,7 +175,7 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 	# Actually it should be tb2(a,b), dml is {a: 9, b: 'iii'}
 	# Now we set it to tb2(c,b), dml become {c: 9, b: 'iii'}
 	# This may only work for a "rename ddl"
-	echo 'CREATE TABLE `tb2` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1' >${WORK_DIR}/schema2.sql
+	echo 'CREATE TABLE `tb2` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema2.sql
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog-schema update -s mysql-replica-02 test ${shardddl1} ${tb2} ${WORK_DIR}/schema2.sql --flush --sync" \
 		"\"result\": true" 2
@@ -228,9 +228,9 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 # maybe also work for some other unsupported ddls in optimistic mode
 function DM_RENAME_COLUMN_OPTIMISTIC() {
 	run_case RENAME_COLUMN_OPTIMISTIC "double-source-optimistic" \
-		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b varchar(10)) DEFAULT CHARSET=latin1;\"; \
-     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b varchar(10)) DEFAULT CHARSET=latin1;\"; \
-     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10)) DEFAULT CHARSET=latin1;\"" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b varchar(10)) DEFAULT CHARSET=latin1 COLLATE=latin1_bin;\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b varchar(10)) DEFAULT CHARSET=latin1 COLLATE=latin1_bin;\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10)) DEFAULT CHARSET=latin1 COLLATE=latin1_bin;\"" \
 		"clean_table" "optimistic"
 }
 

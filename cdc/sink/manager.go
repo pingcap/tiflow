@@ -34,7 +34,7 @@ const (
 
 // Manager manages table sinks, maintains the relationship between table sinks and backendSink.
 type Manager struct {
-	backendSink            Sink
+	backendSink            *bufferSink
 	tableCheckpointTsMap   sync.Map
 	tableSinks             map[model.TableID]*tableSink
 	tableSinksMu           sync.Mutex
@@ -161,6 +161,9 @@ func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
 
 func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
 	atomic.StoreUint64(&m.changeFeedCheckpointTs, checkpointTs)
+	if m.backendSink != nil {
+		m.backendSink.UpdateChangeFeedCheckpointTs(checkpointTs)
+	}
 }
 
 type drawbackMsg struct {
