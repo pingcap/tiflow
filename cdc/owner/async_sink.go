@@ -37,8 +37,8 @@ const (
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
 type asyncSink interface {
-	// Run the asyncSink
-	Run(ctx cdcContext.Context) error
+	// run the asyncSink
+	run(ctx cdcContext.Context) error
 	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
@@ -111,7 +111,7 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
 	return nil
 }
 
-func (s *asyncSinkImpl) Run(ctx cdcContext.Context) error {
+func (s *asyncSinkImpl) run(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	s.cancel = cancel
 

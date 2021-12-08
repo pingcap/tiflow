@@ -91,7 +91,7 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- asyncSink.Run(ctx)
+		errCh <- asyncSink.run(ctx)
 	}()
 
 	go func() {
@@ -127,7 +127,7 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- asyncSink.Run(ctx)
+		errCh <- asyncSink.run(ctx)
 	}()
 
 	go func() {
@@ -181,7 +181,7 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := asyncSink.Run(ctx)
+		err := asyncSink.run(ctx)
 		if err != nil {
 			writeResultErr(err)
 		}
