@@ -117,7 +117,7 @@ func init() {
 		}
 		kafkaPartitionNum = partition
 	} else {
-		c, err := strconv.Atoi(s)
+		c, err := strconv.ParseInt(s, 10, 32)
 		if err != nil {
 			log.Fatal("invalid partition-num of upstream-uri")
 		}
@@ -593,7 +593,8 @@ func syncFlushRowChangedEvents(ctx context.Context, sink sink.Sink, resolvedTs u
 			return ctx.Err()
 		default:
 		}
-		checkpointTs, err := sink.FlushRowChangedEvents(ctx, resolvedTs)
+		// todo: use real table id
+		checkpointTs, err := sink.FlushRowChangedEvents(ctx, 0, resolvedTs)
 		if err != nil {
 			return err
 		}

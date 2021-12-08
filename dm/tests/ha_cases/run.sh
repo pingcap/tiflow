@@ -138,7 +138,8 @@ function test_standalone_running() {
 	# test running, test2 fail
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status" \
-		"\"taskStatus\": \"Running\"" 1
+		"\"stage\": \"Running\"" 1 \
+		"\"worker\": \"source not bound\"" 1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test2" \
