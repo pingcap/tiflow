@@ -242,10 +242,6 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 				data[rowData.AfterColumns[i].Name] = nil
 			}
 		}
-	} else {
-		// The event type is DELETE
-		// The following line is important because Alibaba's adapter expects this, and so does Flink.
-		data = oldData
 	}
 
 	flatMessage := &canalFlatMessage{
@@ -261,14 +257,19 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		SQLType:       sqlType,
 		MySQLType:     mysqlType,
 		Data:          make([]map[string]interface{}, 0),
-		Old:           make([]map[string]interface{}, 0),
+		Old:           nil,
 		tikvTs:        e.CommitTs,
 	}
 
-	// We need to ensure that both Data and Old have exactly one element,
-	// even if the element could be nil. Changing this could break Alibaba's adapter
-	flatMessage.Data = append(flatMessage.Data, data)
-	flatMessage.Old = append(flatMessage.Old, oldData)
+	if e.IsDelete() {
+		flatMessage.Data = append(flatMessage.Data, oldData)
+	} else if e.IsInsert() {
+		flatMessage.Data = append(flatMessage.Data, data)
+	} else if e.IsUpdate() {
+		flatMessage.Old = make([]map[string]interface{}, 0)
+		flatMessage.Old = append(flatMessage.Old, oldData)
+		flatMessage.Data = append(flatMessage.Data, data)
+	}
 
 	if !c.enableTiDBExtension {
 		return flatMessage, nil
