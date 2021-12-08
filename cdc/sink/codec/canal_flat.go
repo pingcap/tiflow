@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	"github.com/pingcap/tidb/parser/types"
@@ -121,7 +122,7 @@ func (c *canalFlatMessage) getTable() *string {
 	return &c.Table
 }
 
-// for canalFlatMessage, we lost the commit-ts
+// for canalFlatMessage, we lost the commitTs.
 func (c *canalFlatMessage) getCommitTs() uint64 {
 	return 0
 }
@@ -143,8 +144,8 @@ func (c *canalFlatMessage) getMySQLType() map[string]string {
 }
 
 type tidbExtension struct {
-	CommitTs    uint64 `json:"commit-ts"`
-	WatermarkTs uint64 `json:"watermark-ts"`
+	CommitTs    uint64 `json:"commitTs,omitempty"`
+	WatermarkTs uint64 `json:"watermarkTs,omitempty"`
 }
 
 type canalFlatMessageWithTiDBExtension struct {
@@ -327,7 +328,7 @@ func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessag
 	if err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
 	}
-	return newResolvedMQMessage(ProtocolCanalJSON, nil, value, ts), nil
+	return newResolvedMQMessage(config.ProtocolCanalJSON, nil, value, ts), nil
 }
 
 // AppendRowChangedEvent implements the interface EventBatchEncoder
@@ -365,7 +366,7 @@ func (c *CanalFlatEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessa
 	if err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
 	}
-	return newDDLMQMessage(ProtocolCanalJSON, nil, value, e), nil
+	return newDDLMQMessage(config.ProtocolCanalJSON, nil, value, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -380,7 +381,7 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 			log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
 			return nil
 		}
-		ret[i] = NewMQMessage(ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MqMessageTypeRow, msg.getSchema(), msg.getTable())
+		ret[i] = NewMQMessage(config.ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MqMessageTypeRow, msg.getSchema(), msg.getTable())
 	}
 	c.resolvedBuf = c.resolvedBuf[0:0]
 	return ret
