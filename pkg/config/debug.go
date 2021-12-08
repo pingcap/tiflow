@@ -24,4 +24,6 @@ type DebugConfig struct {
 	// TODO: turn on after GA.
 	EnableDBSorter bool      `toml:"enable-db-sorter" json:"enable-db-sorter"`
 	DB             *DBConfig `toml:"db" json:"db"`
+
+	Messages *MessagesConfig `toml:"messages" json:"messages"`
 }
