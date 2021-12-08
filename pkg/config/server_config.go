@@ -119,8 +119,8 @@ var defaultServerConfig = &ServerConfig{
 			WriteL0PauseTrigger:    math.MaxInt32,
 			CleanupSpeedLimit:      10000,
 		},
+		Messages: defaultMessageConfig.Clone(),
 	},
-	Messages: defaultMessageConfig.Clone(),
 }
 
 // ServerConfig represents a config for server
@@ -147,7 +147,6 @@ type ServerConfig struct {
 	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
 	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
 	Debug               *DebugConfig    `toml:"debug" json:"debug"`
-	Messages            *MessagesConfig `toml:"messages" json:"messages"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
@@ -253,10 +252,10 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
 	}
 
-	if c.Messages == nil {
-		c.Messages = defaultCfg.Messages
+	if c.Debug == nil {
+		c.Debug = defaultCfg.Debug
 	}
-	if err := c.Messages.ValidateAndAdjust(); err != nil {
+	if err := c.Debug.Messages.ValidateAndAdjust(); err != nil {
 		return errors.Trace(err)
 	}
 
