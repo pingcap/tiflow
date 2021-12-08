@@ -101,6 +101,7 @@ func testMySQL() {
 	task := &mysql.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
 		cases.NewSimpleCase(task),
+		cases.NewDateTimeCase(task),
 		cases.NewDeleteCase(task),
 		cases.NewManyTypesCase(task),
 		cases.NewUnsignedCase(task),
@@ -117,6 +118,7 @@ func testMySQLWithCheckingOldvValue() {
 	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
 	testCases := []framework.Task{
 		cases.NewSimpleCase(task),
+		cases.NewDateTimeCase(task),
 		cases.NewDeleteCase(task),
 		cases.NewManyTypesCase(task),
 		cases.NewUnsignedCase(task),
