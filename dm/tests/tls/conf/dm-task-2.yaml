@@ -1,5 +1,5 @@
 ---
-name: test-2
+name: test2
 task-mode: all
 is-sharding: false
 meta-schema: "dm_meta"

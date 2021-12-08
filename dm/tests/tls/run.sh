@@ -123,16 +123,19 @@ function test_worker_handle_multi_tls_tasks() {
 		"query-status test" \
 		"\"result\": true" 2
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
-		"query-status test-2" \
+		"query-status test2" \
 		"\"result\": true" 2
 
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	check_sync_diff $WORK_DIR $cur/conf/diff_config-2.toml
+
+	echo "============================== test_worker_handle_multi_tls_tasks success =================================="
 }
 
 function test_worker_download_certs_from_master() {
 	cleanup_data tls
+	cleanup_data tls2
 	cleanup_process
 
 	setup_mysql_tls
@@ -200,6 +203,7 @@ function test_worker_download_certs_from_master() {
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	mv "$cur/conf/task-ca.pem.bak" "$cur/conf/task-ca.pem"
+	echo "============================== test_worker_download_certs_from_master success =================================="
 }
 
 function test_worker_ha_when_enable_source_tls() {
@@ -293,6 +297,8 @@ function test_worker_ha_when_enable_source_tls() {
 
 	# resume ca.pem
 	mv "$mysql_data_path/ca.pem.bak" "$mysql_data_path/ca.pem"
+
+	echo "============================== test_worker_ha_when_enable_source_tls success =================================="
 }
 
 function test_master_ha_when_enable_tidb_tls() {
@@ -366,6 +372,8 @@ function test_master_ha_when_enable_tidb_tls() {
 
 	# https://github.com/pingcap/dm/issues/1458
 	check_log_not_contains $WORK_DIR/master1/log/dm-master.log "remote error: tls: bad certificate"
+
+	echo "============================== test_master_ha_when_enable_tidb_tls success =================================="
 }
 
 function run() {
