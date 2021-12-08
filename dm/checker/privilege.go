@@ -122,7 +122,7 @@ func (pc *SourceReplicatePrivilegeChecker) Name() string {
 	return "source db replication privilege checker"
 }
 
-// TODO: if we add more privilege in future, we might add special checks (globally granted?) for that new privilege
+// TODO: if we add more privilege in future, we might add special checks (globally granted?) for that new privilege.
 func verifyPrivileges(result *Result, grants []string, expectedGrants map[mysql.PrivilegeType]struct{}) {
 	result.State = StateFailure
 	if len(grants) == 0 {
@@ -139,7 +139,6 @@ func verifyPrivileges(result *Result, grants []string, expectedGrants map[mysql.
 	}
 
 	for i, grant := range grants {
-
 		// get username and hostname
 		node, err := parser.New().ParseOneStmt(grant, "", "")
 		if err != nil {
@@ -170,29 +169,26 @@ func verifyPrivileges(result *Result, grants []string, expectedGrants map[mysql.
 				if grantStmt.Level.Level == ast.GrantLevelGlobal {
 					result.State = StateSuccess
 					return
-				} else {
-					// REPLICATION CLIENT, REPLICATION SLAVE, RELOAD should be global privileges,
-					// thus a non-global GRANT ALL is not enough
-					for expectedGrant := range lackGrants {
-						if _, ok := privNeedGlobal[expectedGrant]; !ok {
-							delete(lackGrants, expectedGrant)
-						}
+				}
+				// REPLICATION CLIENT, REPLICATION SLAVE, RELOAD should be global privileges,
+				// thus a non-global GRANT ALL is not enough
+				for expectedGrant := range lackGrants {
+					if _, ok := privNeedGlobal[expectedGrant]; !ok {
+						delete(lackGrants, expectedGrant)
 					}
 				}
-			} else {
+			} else if _, ok := lackGrants[privElem.Priv]; ok {
 				// check every privilege and remove it from expectedGrants
-				if _, ok := lackGrants[privElem.Priv]; ok {
-					if _, ok := privNeedGlobal[privElem.Priv]; ok {
-						if grantStmt.Level.Level == ast.GrantLevelGlobal {
-							delete(lackGrants, privElem.Priv)
-						}
-					} else {
-						// currently, only SELECT privilege goes here. we didn't require SELECT to be granted globally,
-						// dumpling could report error if an allow-list table is lack of privilege.
-						// we only check that SELECT is granted on all columns, otherwise we can't SHOW CREATE TABLE
-						if len(privElem.Cols) == 0 {
-							delete(lackGrants, privElem.Priv)
-						}
+				if _, ok := privNeedGlobal[privElem.Priv]; ok {
+					if grantStmt.Level.Level == ast.GrantLevelGlobal {
+						delete(lackGrants, privElem.Priv)
+					}
+				} else {
+					// currently, only SELECT privilege goes here. we didn't require SELECT to be granted globally,
+					// dumpling could report error if an allow-list table is lack of privilege.
+					// we only check that SELECT is granted on all columns, otherwise we can't SHOW CREATE TABLE
+					if len(privElem.Cols) == 0 {
+						delete(lackGrants, privElem.Priv)
 					}
 				}
 			}
@@ -211,5 +207,4 @@ func verifyPrivileges(result *Result, grants []string, expectedGrants map[mysql.
 	}
 
 	result.State = StateSuccess
-	return
 }

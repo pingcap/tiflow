@@ -26,15 +26,15 @@ type RealChecker interface {
 	Check(ctx context.Context) *Result
 }
 
-// State is state of check
+// State is state of check.
 type State string
 
 const (
-	// StateSuccess indicates that the check was successful
+	// StateSuccess indicates that the check was successful.
 	StateSuccess State = "success"
-	// StateFailure indicates that the check was failed
+	// StateFailure indicates that the check was failed.
 	StateFailure State = "fail"
-	// StateWarning indicates that the check had warnings
+	// StateWarning indicates that the check had warnings.
 	StateWarning State = "warn"
 )
 
@@ -103,24 +103,22 @@ func Do(ctx context.Context, checkers []RealChecker) (*Results, error) {
 	go func() {
 		defer wg.Done()
 		for {
-			select {
-			case result := <-resultCh:
-				switch result.State {
-				case StateSuccess:
-					successful++
-				case StateFailure:
-					failed++
-				case StateWarning:
-					warning++
-				}
+			result := <-resultCh
+			switch result.State {
+			case StateSuccess:
+				successful++
+			case StateFailure:
+				failed++
+			case StateWarning:
+				warning++
+			}
 
-				// if total == successful + warning + failed, it's finished
-				finished = total == successful+warning+failed
-				results.Results = append(results.Results, result)
+			// if total == successful + warning + failed, it's finished
+			finished = total == successful+warning+failed
+			results.Results = append(results.Results, result)
 
-				if finished {
-					return
-				}
+			if finished {
+				return
 			}
 		}
 	}()

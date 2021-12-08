@@ -35,7 +35,7 @@ func NewMySQLVersionChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 
 // SupportedVersion defines the MySQL/MariaDB version that DM/syncer supports
 // * 5.6.0 <= MySQL Version
-// * 10.1.2 <= Mariadb Version
+// * 10.1.2 <= Mariadb Version.
 var SupportedVersion = map[string]struct {
 	Min MySQLVersion
 	Max MySQLVersion
@@ -51,7 +51,7 @@ var SupportedVersion = map[string]struct {
 }
 
 // Check implements the RealChecker interface.
-// we only support version >= 5.6
+// we only support version >= 5.6.
 func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),

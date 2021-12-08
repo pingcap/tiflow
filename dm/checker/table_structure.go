@@ -29,17 +29,17 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 )
 
-// AutoIncrementKeyChecking is an identification for auto increment key checking
+// AutoIncrementKeyChecking is an identification for auto increment key checking.
 const AutoIncrementKeyChecking = "auto-increment key checking"
 
-// hold information of incompatibility option
+// hold information of incompatibility option.
 type incompatibilityOption struct {
 	state       State
 	instruction string
 	errMessage  string
 }
 
-// String returns raw text of this incompatibility option
+// String returns raw text of this incompatibility option.
 func (o *incompatibilityOption) String() string {
 	var text bytes.Buffer
 
@@ -209,8 +209,8 @@ func (c *TablesChecker) checkAST(stmt ast.StmtNode) []*incompatibilityOption {
 	if !hasUnique {
 		options = append(options, &incompatibilityOption{
 			state:       StateFailure,
-			instruction: fmt.Sprintf("please set primary/unique key for the table"),
-			errMessage:  fmt.Sprintf("primary/unique key does not exist"),
+			instruction: "please set primary/unique key for the table",
+			errMessage:  "primary/unique key does not exist",
 		})
 	}
 
@@ -229,11 +229,10 @@ func (c *TablesChecker) checkColumnDef(def *ast.ColumnDef) *incompatibilityOptio
 }
 
 func (c *TablesChecker) checkConstraint(cst *ast.Constraint) *incompatibilityOption {
-	switch cst.Tp {
-	case ast.ConstraintForeignKey:
+	if cst.Tp == ast.ConstraintForeignKey {
 		return &incompatibilityOption{
 			state:       StateWarning,
-			instruction: fmt.Sprintf("please ref document: https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features"),
+			instruction: "please ref document: https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features",
 			errMessage:  fmt.Sprintf("Foreign Key %s is parsed but ignored by TiDB.", cst.Name),
 		}
 	}
@@ -250,14 +249,13 @@ func (c *TablesChecker) checkUnique(cst *ast.Constraint) bool {
 }
 
 func (c *TablesChecker) checkTableOption(opt *ast.TableOption) *incompatibilityOption {
-	switch opt.Tp {
-	case ast.TableOptionCharset:
+	if opt.Tp == ast.TableOptionCharset {
 		// Check charset
 		cs := strings.ToLower(opt.StrValue)
 		if cs != "binary" && !charset.ValidCharsetAndCollation(cs, "") {
 			return &incompatibilityOption{
 				state:       StateFailure,
-				instruction: fmt.Sprintf("https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features"),
+				instruction: "https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features",
 				errMessage:  fmt.Sprintf("unsupport charset %s", opt.StrValue),
 			}
 		}
@@ -267,7 +265,7 @@ func (c *TablesChecker) checkTableOption(opt *ast.TableOption) *incompatibilityO
 
 // ShardingTablesChecker checks consistency of table structures of one sharding group
 // * check whether they have same column list
-// * check whether they have auto_increment key
+// * check whether they have auto_increment key.
 type ShardingTablesChecker struct {
 	name string
 
@@ -542,7 +540,7 @@ func getBriefColumnList(stmt *ast.CreateTableStmt) briefColumnInfos {
 	return columnList
 }
 
-// Name implements Checker interface
+// Name implements Checker interface.
 func (c *ShardingTablesChecker) Name() string {
 	return fmt.Sprintf("sharding table %s consistency checking", c.name)
 }

@@ -110,13 +110,13 @@ var (
 	mariadbBinlogRowImageRequired MySQLVersion = [3]uint{10, 1, 6}
 )
 
-// MySQLBinlogRowImageChecker checks mysql binlog_row_image
+// MySQLBinlogRowImageChecker checks mysql binlog_row_image.
 type MySQLBinlogRowImageChecker struct {
 	db     *sql.DB
 	dbinfo *dbutil.DBConfig
 }
 
-// NewMySQLBinlogRowImageChecker returns a RealChecker
+// NewMySQLBinlogRowImageChecker returns a RealChecker.
 func NewMySQLBinlogRowImageChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 	return &MySQLBinlogRowImageChecker{db: db, dbinfo: dbinfo}
 }

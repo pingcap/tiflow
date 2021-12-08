@@ -29,7 +29,7 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	c.Assert(err, tc.IsNil)
 	ctx := context.Background()
 
-	printJson := func(r *Result) {
+	printJSON := func(r *Result) {
 		rawResult, _ := json.MarshalIndent(r, "", "\t")
 		fmt.Println("\n" + string(rawResult))
 	}
@@ -62,7 +62,7 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 
 	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJson(result)
+	printJSON(result)
 
 	// 2. check different column number
 
@@ -87,7 +87,7 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJson(result)
+	printJSON(result)
 
 	// 3. check different column def
 
@@ -111,7 +111,7 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJson(result)
+	printJSON(result)
 }
 
 func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
@@ -119,7 +119,7 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 	c.Assert(err, tc.IsNil)
 	ctx := context.Background()
 
-	printJson := func(r *Result) {
+	printJSON := func(r *Result) {
 		rawResult, _ := json.MarshalIndent(r, "", "\t")
 		fmt.Println("\n" + string(rawResult))
 	}
@@ -143,7 +143,7 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 
 	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJson(result)
+	printJSON(result)
 
 	// 2. check many errors
 
@@ -162,7 +162,7 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 2) // no PK/UK + has FK
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJson(result)
+	printJSON(result)
 
 	// 3. unsupported charset
 
@@ -181,5 +181,5 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJson(result)
+	printJSON(result)
 }
