@@ -5,7 +5,7 @@ export-fix-sql = true
 [task]
 output-dir = "/tmp/ticdc_dm_test/output"
 source-instances = ["mysql1"]
-target-check-tables = ["tls-2.t"]
+target-check-tables = ["tls2.t"]
 target-instance = "tidb0"
 
 [data-sources.mysql1]

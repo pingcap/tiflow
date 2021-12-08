@@ -29,7 +29,7 @@ black-white-list:
 routes:
   route-rule-1:
     schema-pattern: "tls"
-    target-schema: "tls-2"
+    target-schema: "tls2"
 
 mydumpers:
   global:
