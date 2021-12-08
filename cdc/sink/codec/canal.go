@@ -252,7 +252,7 @@ func (b *canalEntryBuilder) formatValue(value interface{}, mysqlType string, jav
 func getMySQLType(c *model.Column) string {
 	mysqlType := types.TypeStr(c.Type)
 	// make `mysqlType` representation keep the same as the canal official implementation
-	if c.Flag.IsUnsigned() {
+	if mysqlType != "bit" && mysqlType != "year" && c.Flag.IsUnsigned() {
 		mysqlType = mysqlType + " " + "unsigned"
 	}
 	if !c.Flag.IsBinary() {
