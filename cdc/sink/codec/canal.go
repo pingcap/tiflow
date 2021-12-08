@@ -210,7 +210,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L276-L1147
 // all value will be represented in string type
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L760-L855
-func (b *canalEntryBuilder) formatValue(value interface{}, mysqlType string, javaType JavaSQLType) (result string, err error) {
+func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType) (result string, err error) {
 	if value == nil {
 		return "", nil
 	}
@@ -234,9 +234,6 @@ func (b *canalEntryBuilder) formatValue(value interface{}, mysqlType string, jav
 			result = string(v)
 		default:
 			// for `JavaSQLTypeBINARY`, `JavaSQLTypeVARBINARY`, `JavaSQLTypeLONGVARBINARY`
-			if isText(mysqlType) {
-				return string(v), nil
-			}
 			decoded, err := b.bytesDecoder.Bytes(v)
 			if err != nil {
 				return "", err
@@ -276,7 +273,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	mysqlType := getMySQLType(c)
 	javaType := getJavaSQLType(c, mysqlType)
 
-	value, err := b.formatValue(c.Value, mysqlType, javaType)
+	value, err := b.formatValue(c.Value, javaType)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
