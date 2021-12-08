@@ -370,7 +370,6 @@ function test_master_ha_when_enable_tidb_tls() {
 
 function run() {
 	test_worker_handle_multi_tls_tasks
-	exit 1
 	test_worker_download_certs_from_master
 	test_worker_ha_when_enable_source_tls
 	test_master_ha_when_enable_tidb_tls
