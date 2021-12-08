@@ -28,7 +28,6 @@ create table tp_int
     c_mediumint mediumint null,
     c_int       int       null,
     c_bigint    bigint    null,
-
     constraint pk
         primary key (id)
 );
@@ -58,7 +57,6 @@ create table tp_unsigned_int (
      c_unsigned_mediumint mediumint unsigned null,
      c_unsigned_int       int       unsigned null,
      c_unsigned_bigint    bigint    unsigned null,
-
      constraint pk
          primary key (id)
 );
@@ -84,7 +82,6 @@ values (0, 0, 0,
         0, 0);
 
 update tp_unsigned_int set c_unsigned_int = 0, c_unsigned_tinyint = 0 where c_unsigned_smallint = 2;
-
 delete from tp_unsigned_int where c_unsigned_int = 0;
 
 create table tp_text
@@ -144,7 +141,6 @@ create table tp_real
     c_double  double  null,
     c_decimal decimal null,
     c_decimal_2 decimal(10, 4) null,
-
     constraint pk
         primary key (id)
 );
@@ -164,7 +160,6 @@ create table tp_unsigned_real (
       c_unsigned_double    double unsigned  null,
       c_unsigned_decimal   decimal unsigned null,
       c_unsigned_decimal_2 decimal(10, 4) unsigned null,
-
       constraint pk
           primary key (id)
 )
