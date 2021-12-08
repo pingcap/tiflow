@@ -121,7 +121,7 @@ func (c *canalFlatMessage) getTable() *string {
 	return &c.Table
 }
 
-// for canalFlatMessage, we lost the commit-ts
+// for canalFlatMessage, we lost the commitTs.
 func (c *canalFlatMessage) getCommitTs() uint64 {
 	return 0
 }
@@ -143,8 +143,8 @@ func (c *canalFlatMessage) getMySQLType() map[string]string {
 }
 
 type tidbExtension struct {
-	CommitTs    uint64 `json:"commit-ts"`
-	WatermarkTs uint64 `json:"watermark-ts"`
+	CommitTs    uint64 `json:"commitTs,omitempty"`
+	WatermarkTs uint64 `json:"watermarkTs,omitempty"`
 }
 
 type canalFlatMessageWithTiDBExtension struct {
