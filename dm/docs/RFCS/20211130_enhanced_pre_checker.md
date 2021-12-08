@@ -70,8 +70,10 @@ Since every checker is concurrent, we can split tables to **source_connection_co
     - binlog_row_image
     - online_ddl(new added)
 4. If task is full/increment/all mode, the following items will be forced to check:
+    - version
     - table_schema(contain auto_increment_ID)
 5. Make the fail state more gentle, which is from `StateFailure` to `StateWarning`.
+    - checkVersion(same as version)
     - checkAutoIncrementKey(same as auto_increment_ID)
     - checkPK/UK
 
