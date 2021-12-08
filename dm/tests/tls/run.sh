@@ -15,7 +15,7 @@ function get_mysql_ssl_data_path() {
 	echo "$mysql_data_path"
 }
 
-function run_tidb_with_tls() {
+function setup_tidb_with_tls() {
 	echo "run a new tidb server with tls"
 	cat - >"$WORK_DIR/tidb-tls-config.toml" <<EOF
 
@@ -73,13 +73,24 @@ function setup_mysql_tls() {
 	echo "add dm_tls_test user done $mysql_data_path"
 }
 
-function test_worker_handle_multi_tls_tasks() {
-	cleanup_data tls
+function prepare_test() {
 	cleanup_process
 
+	# clena test dir
+	rm -rf $WORK_DIR
+	mkdir $WORK_DIR
+
+	# kill the old tidb with tls
+	pkill -hup tidb-server 2>/dev/null || true
+	wait_process_exit tidb-server
+
 	setup_mysql_tls
-	run_tidb_with_tls
+	setup_tidb_with_tls
 	prepare_data
+}
+
+function test_worker_handle_multi_tls_tasks() {
+	prepare_test
 
 	cp $cur/conf/dm-master1.toml $WORK_DIR/
 	cp $cur/conf/dm-master2.toml $WORK_DIR/
@@ -134,13 +145,7 @@ function test_worker_handle_multi_tls_tasks() {
 }
 
 function test_worker_download_certs_from_master() {
-	cleanup_data tls
-	cleanup_data tls2
-	cleanup_process
-
-	setup_mysql_tls
-	run_tidb_with_tls
-	prepare_data
+	prepare_test
 
 	cp $cur/conf/dm-master1.toml $WORK_DIR/
 	cp $cur/conf/dm-master2.toml $WORK_DIR/
@@ -207,12 +212,7 @@ function test_worker_download_certs_from_master() {
 }
 
 function test_worker_ha_when_enable_source_tls() {
-	cleanup_data tls
-	cleanup_process
-
-	setup_mysql_tls
-	run_tidb_with_tls
-	prepare_data
+	prepare_test
 
 	cp $cur/conf/dm-master1.toml $WORK_DIR/
 	cp $cur/conf/dm-master2.toml $WORK_DIR/
@@ -302,12 +302,7 @@ function test_worker_ha_when_enable_source_tls() {
 }
 
 function test_master_ha_when_enable_tidb_tls() {
-	cleanup_data tls
-	cleanup_process
-
-	setup_mysql_tls
-	run_tidb_with_tls
-	prepare_data
+	prepare_test
 
 	cp $cur/conf/dm-master1.toml $WORK_DIR/
 	cp $cur/conf/dm-master2.toml $WORK_DIR/
