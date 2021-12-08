@@ -16,6 +16,11 @@ package processor
 import (
 	"context"
 	"fmt"
+	"io"
+	"math"
+	"strconv"
+	"sync"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -36,10 +41,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
-	"io"
-	"math"
-	"strconv"
-	"sync"
 )
 
 const (
