@@ -169,16 +169,12 @@ func checkIntNumberNegative(value interface{}) bool {
 	return false
 }
 
-func isText(mysqlType string) bool {
-	return strings.Contains(mysqlType, "text")
-}
-
 func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 	javaType := MySQLType2JavaType(c.Type, c.Flag.IsBinary())
 
 	switch javaType {
 	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
-		if isText(mysqlType) {
+		if strings.Contains(mysqlType, "text") {
 			return JavaSQLTypeCLOB
 		}
 		return JavaSQLTypeBLOB
@@ -211,6 +207,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 // all value will be represented in string type
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L760-L855
 func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType) (result string, err error) {
+	// value would be nil, if no value insert for the column.
 	if value == nil {
 		return "", nil
 	}
