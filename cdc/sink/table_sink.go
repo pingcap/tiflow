@@ -32,11 +32,6 @@ type tableSink struct {
 	redoManager redo.LogManager
 }
 
-func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	// do nothing
-	return nil
-}
-
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.buffer = append(t.buffer, rows...)
 	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
@@ -71,7 +66,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 
 	err := t.manager.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
-		return t.manager.getCheckpointTs(), errors.Trace(err)
+		return t.manager.getCheckpointTs(tableID), errors.Trace(err)
 	}
 	atomic.StoreUint64(&t.emittedTs, resolvedTs)
 	ckpt, err := t.flushRedoLogs(ctx, resolvedTs)
@@ -85,7 +80,7 @@ func (t *tableSink) flushRedoLogs(ctx context.Context, resolvedTs uint64) (uint6
 	if t.redoManager.Enabled() {
 		err := t.redoManager.FlushLog(ctx, t.tableID, resolvedTs)
 		if err != nil {
-			return t.manager.getCheckpointTs(), err
+			return t.manager.getCheckpointTs(t.tableID), err
 		}
 	}
 	return 0, nil
