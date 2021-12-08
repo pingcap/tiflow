@@ -18,10 +18,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/tikv/client-go/v2/oracle"
+	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
+
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 )
+
+func TestSuite(t *testing.T) { check.TestingT(t) }
+
+type pdTimeSuite struct{}
+
+var _ = check.Suite(&pdTimeSuite{})
 
 // MockPDClient mocks pd.Client to facilitate unit testing.
 type MockPDClient struct {
@@ -33,8 +41,8 @@ func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 	return oracle.GetPhysical(time.Now()), 0, nil
 }
 
-func TestTimeFromPD(t *testing.T) {
-	t.Parallel()
+func (s *pdTimeSuite) TestTimeFromPD(c *check.C) {
+	defer testleak.AfterTest(c)()
 	mockPDClient := &MockPDClient{}
 	TimeAcquirer := NewTimeAcquirer(mockPDClient)
 	go TimeAcquirer.Run(context.Background())
@@ -42,12 +50,12 @@ func TestTimeFromPD(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	t1, err := TimeAcquirer.CurrentTimeFromCached()
-	require.Nil(t, err)
+	c.Assert(err, check.IsNil)
 
 	time.Sleep(400 * time.Millisecond)
 	// assume that the gc safe point updated one hour ago
 	t2, err := TimeAcquirer.CurrentTimeFromCached()
-	require.Nil(t, err)
+	c.Assert(err, check.IsNil)
 	// should return new time
-	require.NotEqual(t, t1, t2)
+	c.Assert(t1, check.Less, t2)
 }
