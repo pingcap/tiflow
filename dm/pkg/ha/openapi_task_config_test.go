@@ -61,7 +61,7 @@ func (t *testForEtcd) TestOpenAPITaskConfigEtcd(c *C) {
 	c.Assert(tasks, HasLen, 2)
 
 	// put openapi task config again without overwrite will fail
-	c.Assert(terror.ErrOpenAPITaskConfigExists.Equal(PutOpenAPITaskConfig(etcdTestCli, task1, false)), IsTrue)
+	c.Assert(terror.ErrOpenAPITaskConfigExist.Equal(PutOpenAPITaskConfig(etcdTestCli, task1, false)), IsTrue)
 
 	// in overwrite mode, it will overwrite the old one.
 	task1.TaskMode = openapi.TaskTaskModeFull
@@ -74,7 +74,7 @@ func (t *testForEtcd) TestOpenAPITaskConfigEtcd(c *C) {
 	task3, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, IsNil)
 	task3.Name = "test-3"
-	c.Assert(terror.ErrOpenAPITaskConfigNotExists.Equal(PutOpenAPITaskConfigIfExist(etcdTestCli, task3)), IsTrue)
+	c.Assert(terror.ErrOpenAPITaskConfigNotExist.Equal(PutOpenAPITaskConfigIfExist(etcdTestCli, task3)), IsTrue)
 
 	// update exist openapi task config will success
 	task1.TaskMode = openapi.TaskTaskModeAll

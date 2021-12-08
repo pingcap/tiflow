@@ -60,7 +60,7 @@ func PutOpenAPITaskConfig(cli *clientv3.Client, task openapi.Task, overWrite boo
 	}
 	// user don't want to overwrite and key already exists.
 	if !overWrite && !resp.Succeeded {
-		return terror.ErrOpenAPITaskConfigExists.Generate(task.Name)
+		return terror.ErrOpenAPITaskConfigExist.Generate(task.Name)
 	}
 	return nil
 }
@@ -82,7 +82,7 @@ func PutOpenAPITaskConfigIfExist(cli *clientv3.Client, task openapi.Task) error 
 	}
 	// user want to update a key not exists.
 	if !resp.Succeeded {
-		return terror.ErrOpenAPITaskConfigNotExists.Generate(task.Name)
+		return terror.ErrOpenAPITaskConfigNotExist.Generate(task.Name)
 	}
 	return nil
 }
