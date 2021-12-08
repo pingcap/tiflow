@@ -226,7 +226,8 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
-	relay relay.Process
+	relay                      relay.Process
+	charsetAndDefaultCollation map[string]string
 }
 
 // NewSyncer creates a new Syncer.
@@ -326,6 +327,10 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
+	s.charsetAndDefaultCollation, err = s.fromDB.GetCharsetAndDefaultCollation(ctx)
+	if err != nil {
+		return err
+	}
 	s.streamerController = NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
 
 	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
@@ -1429,6 +1434,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		currentLocation = s.checkpoint.GlobalPoint() // also init to global checkpoint
 		startLocation   = s.checkpoint.GlobalPoint()
 		lastLocation    = s.checkpoint.GlobalPoint()
+
+		currentGTID string
 	)
 	tctx.L().Info("replicate binlog from checkpoint", zap.Stringer("checkpoint", lastLocation))
 
@@ -1564,7 +1571,20 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				if err1 != nil {
 					return err
 				}
-				if _, ok := e.Event.(*replication.RowsEvent); ok {
+				switch e.Event.(type) {
+				case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+					gtidStr, err2 := event.GetGTIDStr(e)
+					if err2 != nil {
+						return err2
+					}
+					if currentGTID != gtidStr {
+						s.tctx.L().Error("after recover GTID-based replication, the first GTID is not same as broken one. May meet duplicate entry or corrupt data if table has no PK/UK.",
+							zap.String("last GTID", currentGTID),
+							zap.String("GTID after reset", gtidStr),
+						)
+						return nil
+					}
+				case *replication.RowsEvent:
 					i++
 				}
 			}
@@ -1872,6 +1892,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					err2 = s.flushJobs()
 				}
 			}
+		case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+			currentGTID, err2 = event.GetGTIDStr(e)
+			if err2 != nil {
+				return err2
+			}
 		}
 		if err2 != nil {
 			if err := s.handleEventError(err2, startLocation, currentLocation, e.Header.EventType == replication.QUERY_EVENT, originSQL); err != nil {
@@ -2148,6 +2173,7 @@ type queryEventContext struct {
 	trackInfos      []*ddlInfo
 	sourceTbls      map[string]map[string]struct{} // db name -> tb name
 	onlineDDLTable  *filter.Table
+	eventStatusVars []byte // binlog StatusVars
 }
 
 func (qec *queryEventContext) String() string {
@@ -2205,12 +2231,13 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 	}
 
 	qec := &queryEventContext{
-		eventContext: &ec,
-		ddlSchema:    string(ev.Schema),
-		originSQL:    utils.TrimCtrlChars(originSQL),
-		splitDDLs:    make([]string, 0),
-		appliedDDLs:  make([]string, 0),
-		sourceTbls:   make(map[string]map[string]struct{}),
+		eventContext:    &ec,
+		ddlSchema:       string(ev.Schema),
+		originSQL:       utils.TrimCtrlChars(originSQL),
+		splitDDLs:       make([]string, 0),
+		appliedDDLs:     make([]string, 0),
+		sourceTbls:      make(map[string]map[string]struct{}),
+		eventStatusVars: ev.StatusVars,
 	}
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
 	if err != nil {
@@ -2318,7 +2345,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 			continue
 		}
 		// We use default parser because sqls are came from above *Syncer.splitAndFilterDDL, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
-		ddlInfo, err2 := s.genDDLInfo(qec.p, qec.ddlSchema, sql)
+		ddlInfo, err2 := s.genDDLInfo(qec, sql)
 		if err2 != nil {
 			return err2
 		}
