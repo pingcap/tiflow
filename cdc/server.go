@@ -262,24 +262,20 @@ func (s *Server) initDir(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	conf := config.GetGlobalServerConfig()
-	// Ensure data dir exists.
-	err := os.MkdirAll(conf.DataDir, 0o700)
+	// Ensure data dir exists and read-writable.
+	diskInfo, err := checkDir(conf.DataDir)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// Ensure sort dir exists.
-	if err := os.MkdirAll(conf.Sorter.SortDir, 0o700); err != nil {
-		return errors.Trace(err)
-	}
-	diskInfo, err := util.GetDiskInfo(conf.DataDir)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	log.Info(fmt.Sprintf("%s is set as data-dir (%dGB available), sort-dir=%s. "+
 		"It is recommended that the disk for data-dir at least have %dGB available space",
 		conf.DataDir, diskInfo.Avail, conf.Sorter.SortDir, dataDirThreshold))
 
+	// Ensure sorter dir exists and read-writable.
+	_, err = checkDir(conf.Sorter.SortDir)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 
@@ -316,27 +312,24 @@ func (s *Server) setUpDir(ctx context.Context) error {
 	return nil
 }
 
+func checkDir(dir string) (*util.DiskInfo, error) {
+	err := os.MkdirAll(dir, 0o700)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if err := util.IsDirReadWritable(dir); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return util.GetDiskInfo(dir)
+}
+
 // try to find the best data dir by rules
 // at the moment, only consider available disk space
 func findBestDataDir(candidates []string) (result string, ok bool) {
 	var low uint64 = 0
 
-	checker := func(dir string) (*util.DiskInfo, error) {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, err
-		}
-		if err := util.IsDirReadWritable(dir); err != nil {
-			return nil, err
-		}
-		info, err := util.GetDiskInfo(dir)
-		if err != nil {
-			return nil, err
-		}
-		return info, err
-	}
-
 	for _, dir := range candidates {
-		info, err := checker(dir)
+		info, err := checkDir(dir)
 		if err != nil {
 			log.Warn("check the availability of dir", zap.String("dir", dir), zap.Error(err))
 			continue
