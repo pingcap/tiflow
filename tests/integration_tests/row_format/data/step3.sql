@@ -182,7 +182,11 @@ create table tp_real
     c_float   float   null,
     c_double  double  null,
     c_decimal decimal null,
-    c_decimal_2 decimal(10, 4) null,
+
+    c_unsigned_float   float unsigned   null,
+    c_unsigned_double  double unsigned  null,
+    c_unsigned_decimal decimal unsigned null,
+
     constraint pk
         primary key (id)
 );
