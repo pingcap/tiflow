@@ -11,8 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !windows && !freebsd
-// +build !windows,!freebsd
+//go:build freebsd
+// +build freebsd
 
 package utils
 
@@ -49,7 +49,7 @@ func GetStorageSize(dir string) (size StorageSize, err error) {
 	}
 
 	// Available blocks * size per block = available space in bytes
-	size.Available = stat.Bavail * bSize
+	size.Available = uint64(stat.Bavail) * bSize
 	size.Capacity = stat.Blocks * bSize
 
 	return
