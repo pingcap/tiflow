@@ -1087,7 +1087,7 @@ tags = ["internal", "high"]
 [error.DM-config-20050]
 message = "the openapi task config for '%s' already exist"
 description = ""
-workaround = "If you want to override it, pleaset use the overwite flag."
+workaround = "If you want to override it, pleaset use the overwrite flag."
 tags = ["internal", "low"]
 
 [error.DM-config-20051]
