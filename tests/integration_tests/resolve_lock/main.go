@@ -32,7 +32,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/tests/util"
+	"github.com/pingcap/ticdc/tests/integration_tests/util"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
