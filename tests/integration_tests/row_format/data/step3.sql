@@ -187,6 +187,8 @@ create table tp_real
     c_unsigned_double  double unsigned  null,
     c_unsigned_decimal decimal unsigned null,
 
+    c_decimal_2 decimal(10,4) null,
+    c_unsigned_deciaml_2 decimal(10, 4) null,
     constraint pk
         primary key (id)
 );
