@@ -249,9 +249,13 @@ func (b *canalEntryBuilder) formatValue(value interface{}, mysqlType string, jav
 	return result, nil
 }
 
-func getMySQLType(c *model.Column, isBinary bool) string {
+func getMySQLType(c *model.Column) string {
 	mysqlType := types.TypeStr(c.Type)
-	if !isBinary {
+	// make `mysqlType` representation keep the same as the canal official implementation
+	if c.Flag.IsUnsigned() {
+		mysqlType = mysqlType + " " + "unsigned"
+	}
+	if !c.Flag.IsBinary() {
 		return mysqlType
 	}
 
@@ -269,8 +273,7 @@ func getMySQLType(c *model.Column, isBinary bool) string {
 // build the Column in the canal RowData
 // reference: https://github.com/alibaba/canal/blob/master/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
-	isBinary := c.Flag.IsBinary()
-	mysqlType := getMySQLType(c, isBinary)
+	mysqlType := getMySQLType(c)
 	javaType := getJavaSQLType(c, mysqlType)
 
 	value, err := b.formatValue(c.Value, mysqlType, javaType)
