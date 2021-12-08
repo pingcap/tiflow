@@ -145,6 +145,8 @@ func checkIntNumberNegative(value interface{}) bool {
 		return v < 0
 	case int64:
 		return v < 0
+	case uint64:
+		return v < 0
 	case float32:
 		return v < 0
 	case float64:
@@ -221,7 +223,7 @@ func (b *canalEntryBuilder) formatValue(value interface{}, mysqlType string, jav
 		default:
 			// for `JavaSQLTypeBINARY`, `JavaSQLTypeVARBINARY`, `JavaSQLTypeLONGVARBINARY`
 			if isText(mysqlType) {
-				result = ""
+				return string(v), nil
 			}
 			decoded, err := b.bytesDecoder.Bytes(v)
 			if err != nil {
