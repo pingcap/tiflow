@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
+	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/actor"
@@ -68,6 +69,7 @@ type tableActor struct {
 
 	actorMessageHandler ActorMessageHandler
 	sinkNode            TableActorSinkNode
+	sortNode            *sorterNode
 
 	nodes   []*Node
 	actorID actor.ID
@@ -139,7 +141,15 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 		}
 
 		switch msgs[i].Tp {
-		case message.TypeTick, message.TypeBarrier:
+		case message.TypeBarrier:
+			if _, err := t.sortNode.TryHandleDataMessage(ctx, pipeline.BarrierMessage(msgs[i].BarrierTs)); err != nil {
+				t.stop(err)
+			}
+			err := t.actorMessageHandler.HandleActorMessage(ctx, msgs[i])
+			if err != nil {
+				t.stop(err)
+			}
+		case message.TypeTick:
 			err := t.actorMessageHandler.HandleActorMessage(ctx, msgs[i])
 			if err != nil {
 				t.stop(err)
@@ -189,6 +199,7 @@ func (t *tableActor) start(ctx context.Context, tablePipelineNodeCreator TablePi
 		log.Error("sorter fails to start", zap.Error(err))
 		return err
 	}
+	t.sortNode = actorSorterNode.(*sorterNode)
 	t.nodes = append(t.nodes, &Node{
 		parentNode:    actorPullerNode,
 		dataProcessor: actorSorterNode,
@@ -248,7 +259,14 @@ func (t *tableActor) checkError() {
 
 // ResolvedTs returns the resolved ts in this table pipeline
 func (t *tableActor) ResolvedTs() model.Ts {
-	return t.sinkNode.ResolvedTs()
+	// TODO: after TiCDC introduces p2p based resolved ts mechanism, TiCDC nodes
+	// will be able to cooperate replication status directly. Then we will add
+	// another replication barrier for consistent replication instead of reusing
+	// the global resolved-ts.
+	if redo.IsConsistentEnabled(t.replConfig.Consistent.Level) {
+		return t.sinkNode.ResolvedTs()
+	}
+	return t.sortNode.ResolvedTs()
 }
 
 // CheckpointTs returns the checkpoint ts in this table pipeline
