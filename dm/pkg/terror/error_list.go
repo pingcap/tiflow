@@ -899,7 +899,7 @@ var (
 		"config '%s' regex pattern '%s' invalid, reason: %s", "Please check if params is correctly in the configuration file.")
 	ErrConfigOnlineDDLMistakeRegex = New(codeConfigOnlineDDLMistakeRegex, ClassConfig, ScopeInternal, LevelHigh,
 		"online ddl sql '%s' invalid, table %s fail to match '%s' online ddl regex", "Please update your `shadow-table-rules` or `trash-table-rules` in the configuration file.")
-	ErrOpenAPITaskConfigExist    = New(codeConfigOpenAPITaskConfigExists, ClassConfig, ScopeInternal, LevelLow, "the openapi task config for '%s' already exist", "If you want to override it, pleaset use the overwrite flag.")
+	pleaset -> pleaseErrOpenAPITaskConfigExist    = New(codeConfigOpenAPITaskConfigExists, ClassConfig, ScopeInternal, LevelLow, "the openapi task config for '%s' already exist", "If you want to override it, please use the overwrite flag.")
 	ErrOpenAPITaskConfigNotExist = New(codeConfigOpenAPITaskConfigNotExists, ClassConfig, ScopeInternal, LevelLow, "the openapi task config for '%s' does not exist", "")
 
 	// Binlog operation error.
