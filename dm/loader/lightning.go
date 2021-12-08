@@ -223,9 +223,6 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		cfg.TiDB.StrSQLMode = l.cfg.LoaderConfig.SQLMode
 		cfg.TiDB.Vars = map[string]string{"time_zone": l.timeZone}
 		err = l.runLightning(ctx, cfg)
-		if err != nil {
-			println("in running error", err.Error())
-		}
 		if err == nil {
 			// lightning will auto deregister tls when task done, so we need to register it again for removing checkpoint
 			if l.cfg.To.Security != nil {
