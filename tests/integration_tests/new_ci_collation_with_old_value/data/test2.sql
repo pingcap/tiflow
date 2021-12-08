@@ -1,4 +1,4 @@
-use `new_ci_collation_test`;
+use `new_ci_collation_with_old_value_test`;
 delete from t1;
 delete from t2;
 delete from t3;
