@@ -28,7 +28,7 @@ type MySQLVersionChecker struct {
 	dbinfo *dbutil.DBConfig
 }
 
-// NewMySQLVersionChecker returns a Checker
+// NewMySQLVersionChecker returns a RealChecker.
 func NewMySQLVersionChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 	return &MySQLVersionChecker{db: db, dbinfo: dbinfo}
 }
@@ -50,7 +50,7 @@ var SupportedVersion = map[string]struct {
 	},
 }
 
-// Check implements the Checker interface.
+// Check implements the RealChecker interface.
 // we only support version >= 5.6
 func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 	result := &Result{
@@ -96,7 +96,7 @@ func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) {
 	result.State = StateSuccess
 }
 
-// Name implements the Checker interface.
+// Name implements the RealChecker interface.
 func (pc *MySQLVersionChecker) Name() string {
 	return "mysql_version"
 }
@@ -109,12 +109,12 @@ type MySQLServerIDChecker struct {
 	dbinfo *dbutil.DBConfig
 }
 
-// NewMySQLServerIDChecker returns a Checker
+// NewMySQLServerIDChecker returns a RealChecker.
 func NewMySQLServerIDChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 	return &MySQLServerIDChecker{db: db, dbinfo: dbinfo}
 }
 
-// Check implements the Checker interface.
+// Check implements the RealChecker interface.
 func (pc *MySQLServerIDChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
@@ -144,7 +144,7 @@ func (pc *MySQLServerIDChecker) Check(ctx context.Context) *Result {
 	return result
 }
 
-// Name implements the Checker interface.
+// Name implements the RealChecker interface.
 func (pc *MySQLServerIDChecker) Name() string {
 	return "mysql_server_id"
 }

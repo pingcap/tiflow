@@ -46,12 +46,12 @@ type Error struct {
 	Instruction string `json:"instruction,omitempty"`
 }
 
-// NewError creates a pointer to Error, the parameters could be used as in Sprintf
+// NewError creates a pointer to Error, the parameters could be used as in Sprintf.
 func NewError(description string, args ...interface{}) *Error {
 	return &Error{Severity: StateFailure, ShortErr: fmt.Sprintf(description, args...)}
 }
 
-// Result is result of check
+// Result is result of check.
 type Result struct {
 	ID          uint64   `json:"id"`
 	Name        string   `json:"name"`
@@ -62,7 +62,7 @@ type Result struct {
 	Extra       string   `json:"extra,omitempty"`
 }
 
-// ResultSummary is summary of all check results
+// ResultSummary is summary of all check results.
 type ResultSummary struct {
 	Passed     bool  `json:"passed"`
 	Total      int64 `json:"total"`
@@ -71,7 +71,7 @@ type ResultSummary struct {
 	Warning    int64 `json:"warning"`
 }
 
-// Results contains all check results and summary
+// Results contains all check results and summary.
 type Results struct {
 	Results []*Result      `json:"results"`
 	Summary *ResultSummary `json:"summary"`

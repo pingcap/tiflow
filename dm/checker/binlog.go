@@ -28,12 +28,12 @@ type MySQLBinlogEnableChecker struct {
 	dbinfo *dbutil.DBConfig
 }
 
-// NewMySQLBinlogEnableChecker returns a Checker.
+// NewMySQLBinlogEnableChecker returns a RealChecker.
 func NewMySQLBinlogEnableChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 	return &MySQLBinlogEnableChecker{db: db, dbinfo: dbinfo}
 }
 
-// Check implements the Checker interface.
+// Check implements the RealChecker interface.
 func (pc *MySQLBinlogEnableChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
@@ -56,7 +56,7 @@ func (pc *MySQLBinlogEnableChecker) Check(ctx context.Context) *Result {
 	return result
 }
 
-// Name implements the Checker interface.
+// Name implements the RealChecker interface.
 func (pc *MySQLBinlogEnableChecker) Name() string {
 	return "mysql_binlog_enable"
 }
@@ -69,12 +69,12 @@ type MySQLBinlogFormatChecker struct {
 	dbinfo *dbutil.DBConfig
 }
 
-// NewMySQLBinlogFormatChecker returns a Checker.
+// NewMySQLBinlogFormatChecker returns a RealChecker.
 func NewMySQLBinlogFormatChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 	return &MySQLBinlogFormatChecker{db: db, dbinfo: dbinfo}
 }
 
-// Check implements the Checker interface.
+// Check implements the RealChecker interface.
 func (pc *MySQLBinlogFormatChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
@@ -98,7 +98,7 @@ func (pc *MySQLBinlogFormatChecker) Check(ctx context.Context) *Result {
 	return result
 }
 
-// Name implements the Checker interface.
+// Name implements the RealChecker interface.
 func (pc *MySQLBinlogFormatChecker) Name() string {
 	return "mysql_binlog_format"
 }
@@ -116,12 +116,12 @@ type MySQLBinlogRowImageChecker struct {
 	dbinfo *dbutil.DBConfig
 }
 
-// NewMySQLBinlogRowImageChecker returns a Checker
+// NewMySQLBinlogRowImageChecker returns a RealChecker
 func NewMySQLBinlogRowImageChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 	return &MySQLBinlogRowImageChecker{db: db, dbinfo: dbinfo}
 }
 
-// Check implements the Checker interface.
+// Check implements the RealChecker interface.
 // 'binlog_row_image' is introduced since mysql 5.6.2, and mariadb 10.1.6.
 // > In MySQL 5.5 and earlier, full row images are always used for both before images and after images.
 // So we need check 'binlog_row_image' after mysql 5.6.2 version and mariadb 10.1.6.
@@ -168,7 +168,7 @@ func (pc *MySQLBinlogRowImageChecker) Check(ctx context.Context) *Result {
 	return result
 }
 
-// Name implements the Checker interface.
+// Name implements the RealChecker interface.
 func (pc *MySQLBinlogRowImageChecker) Name() string {
 	return "mysql_binlog_row_image"
 }

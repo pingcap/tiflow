@@ -63,7 +63,7 @@ type TablesChecker struct {
 	tables map[string][]string // schema => []table; if []table is empty, query tables from db
 }
 
-// NewTablesChecker returns a Checker
+// NewTablesChecker returns a RealChecker.
 func NewTablesChecker(db *sql.DB, dbinfo *dbutil.DBConfig, tables map[string][]string) RealChecker {
 	return &TablesChecker{
 		db:     db,
@@ -72,7 +72,7 @@ func NewTablesChecker(db *sql.DB, dbinfo *dbutil.DBConfig, tables map[string][]s
 	}
 }
 
-// Check implements Checker interface
+// Check implements RealChecker interface.
 func (c *TablesChecker) Check(ctx context.Context) *Result {
 	r := &Result{
 		Name:  c.Name(),
@@ -143,7 +143,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	return r
 }
 
-// Name implements Checker interface
+// Name implements RealChecker interface.
 func (c *TablesChecker) Name() string {
 	return "table structure compatibility check"
 }
@@ -277,7 +277,7 @@ type ShardingTablesChecker struct {
 	checkAutoIncrementPrimaryKey bool
 }
 
-// NewShardingTablesChecker returns a Checker
+// NewShardingTablesChecker returns a RealChecker.
 func NewShardingTablesChecker(name string, dbs map[string]*sql.DB, tables map[string]map[string][]string, mapping map[string]*column.Mapping, checkAutoIncrementPrimaryKey bool) RealChecker {
 	return &ShardingTablesChecker{
 		name:                         name,
@@ -288,7 +288,7 @@ func NewShardingTablesChecker(name string, dbs map[string]*sql.DB, tables map[st
 	}
 }
 
-// Check implements Checker interface
+// Check implements RealChecker interface.
 func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	r := &Result{
 		Name:  c.Name(),
@@ -480,7 +480,7 @@ func (c *briefColumnInfo) String() string {
 type briefColumnInfos []*briefColumnInfo
 
 func (cs briefColumnInfos) String() string {
-	var colStrs = make([]string, 0, len(cs))
+	colStrs := make([]string, 0, len(cs))
 	for _, col := range cs {
 		colStrs = append(colStrs, col.String())
 	}

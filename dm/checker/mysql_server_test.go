@@ -18,7 +18,7 @@ import (
 )
 
 func (t *testCheckSuite) TestMysqlVersion(c *tc.C) {
-	var versionChecker = &MySQLVersionChecker{}
+	versionChecker := &MySQLVersionChecker{}
 
 	cases := []struct {
 		rawVersion string

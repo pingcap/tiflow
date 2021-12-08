@@ -54,12 +54,12 @@ type SourceDumpPrivilegeChecker struct {
 	dbinfo *dbutil.DBConfig
 }
 
-// NewSourceDumpPrivilegeChecker returns a Checker.
+// NewSourceDumpPrivilegeChecker returns a RealChecker.
 func NewSourceDumpPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 	return &SourceDumpPrivilegeChecker{db: db, dbinfo: dbinfo}
 }
 
-// Check implements the Checker interface.
+// Check implements the RealChecker interface.
 // We only check RELOAD, SELECT privileges.
 func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 	result := &Result{
@@ -79,7 +79,7 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 	return result
 }
 
-// Name implements the Checker interface.
+// Name implements the RealChecker interface.
 func (pc *SourceDumpPrivilegeChecker) Name() string {
 	return "source db dump privilege checker"
 }
@@ -92,12 +92,12 @@ type SourceReplicatePrivilegeChecker struct {
 	dbinfo *dbutil.DBConfig
 }
 
-// NewSourceReplicationPrivilegeChecker returns a Checker.
+// NewSourceReplicationPrivilegeChecker returns a RealChecker.
 func NewSourceReplicationPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 	return &SourceReplicatePrivilegeChecker{db: db, dbinfo: dbinfo}
 }
 
-// Check implements the Checker interface.
+// Check implements the RealChecker interface.
 // We only check REPLICATION SLAVE, REPLICATION CLIENT privileges.
 func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 	result := &Result{
@@ -117,7 +117,7 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 	return result
 }
 
-// Name implements the Checker interface.
+// Name implements the RealChecker interface.
 func (pc *SourceReplicatePrivilegeChecker) Name() string {
 	return "source db replication privilege checker"
 }
