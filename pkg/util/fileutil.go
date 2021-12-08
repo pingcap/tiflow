@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -78,36 +77,6 @@ type DiskInfo struct {
 func (d *DiskInfo) String() string {
 	return fmt.Sprintf("{All: %+vGB; Used: %+vGB; Free: %+vGB; Available: %+vGB; Available Percentage: %+v%%}",
 		d.All, d.Used, d.Free, d.Avail, d.AvailPercentage)
-}
-
-// GetDiskInfo return the disk space information of the given directory
-// the caller should guarantee that dir exist
-func GetDiskInfo(dir string) (*DiskInfo, error) {
-	f := filepath.Join(dir, "file.test")
-	if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
-		return nil, cerror.WrapError(cerror.ErrGetDiskInfo, err)
-	}
-
-	fs := syscall.Statfs_t{}
-	if err := syscall.Statfs(dir, &fs); err != nil {
-		return nil, cerror.WrapError(cerror.ErrGetDiskInfo, err)
-	}
-
-	info := &DiskInfo{
-		All:   fs.Blocks * uint64(fs.Bsize) / gb,
-		Avail: fs.Bavail * uint64(fs.Bsize) / gb,
-		Free:  fs.Bfree * uint64(fs.Bsize) / gb,
-	}
-	info.Used = info.All - info.Free
-	info.AvailPercentage = float32(info.Avail) / float32(info.All) * 100
-
-	if err := os.Remove(f); err != nil {
-		if !os.IsNotExist(err) {
-			return info, cerror.WrapError(cerror.ErrGetDiskInfo, err)
-		}
-	}
-
-	return info, nil
 }
 
 // CheckDataDirSatisfied check if the data-dir meet the requirement during server running
