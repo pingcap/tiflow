@@ -50,7 +50,7 @@ values (1, 2, 3, 4, 5,
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint,
                    c_unsigned_tinyint, c_unsigned_smallint, c_unsigned_mediumint, c_unsigned_int, c_unsigned_bigint)
 values (127, 32767, 8388607, 2147483647, 9223372036854775807,
-        255, 65535, 16777215, 4294967295, 18446744073709551616);
+        255, 65535, 16777215, 4294967295, 18446744073709551615);
 
 -- insert min value
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint,
@@ -115,7 +115,11 @@ create table tp_real
     c_float   float   null,
     c_double  double  null,
     c_decimal decimal null,
-    c_decimal_2 decimal(10, 4) null,
+
+    c_unsigned_float   float unsigned   null,
+    c_unsigned_double  double unsigned  null,
+    c_unsigned_decimal decimal unsigned null,
+
     constraint pk
         primary key (id)
 );
@@ -123,27 +127,10 @@ create table tp_real
 insert into tp_real()
 values ();
 
-insert into tp_real(c_float, c_double, c_decimal, c_decimal_2)
-values (2020.0202, 2020.0303, 2020.0404, 2021.1208);
-
-insert into tp_real(c_float, c_double, c_decimal, c_decimal_2)
-values (-2.7182818284, -3.1415926, -8000, -179394.233);
-
-create table tp_unsigned_real (
-      id                   int auto_increment,
-      c_unsigned_float     float unsigned   null,
-      c_unsigned_double    double unsigned  null,
-      c_unsigned_decimal   decimal unsigned null,
-      c_unsigned_decimal_2 decimal(10, 4) unsigned null,
-      constraint pk
-          primary key (id)
-);
-
-insert into tp_unsigned_real()
-values ();
-
-insert into tp_unsigned_real(c_unsigned_float, c_unsigned_double, c_unsigned_decimal, c_unsigned_decimal_2)
-values (2020.0202, 2020.0303, 2020.0404, 2021.1208);
+insert into tp_real(c_float, c_double, c_decimal,
+                    c_unsigned_float, c_unsigned_double, c_unsigned_decimal)
+values (-2.33, -3.1415926, -8000
+        ,2020.0202, 2020.0303, 2020.0404);
 
 create table tp_other
 (
