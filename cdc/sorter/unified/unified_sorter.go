@@ -69,7 +69,7 @@ func CheckDir(cfSortDir string) error {
 	err := util.IsDirAndWritable(dir)
 	if err != nil {
 		if os.IsNotExist(errors.Cause(err)) {
-			err = os.MkdirAll(dir, 0o755)
+			err = os.MkdirAll(dir, 0o700)
 			if err != nil {
 				return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
 			}
