@@ -129,7 +129,7 @@ values ();
 
 insert into tp_real(c_float, c_double, c_decimal,
                     c_unsigned_float, c_unsigned_double, c_unsigned_decimal)
-values (-2.33, -3.1415926, -8000
+values (-2.7182818284, -3.1415926, -8000
         ,2020.0202, 2020.0303, 2020.0404);
 
 create table tp_other
