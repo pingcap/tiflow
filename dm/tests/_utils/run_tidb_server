@@ -5,11 +5,24 @@
 
 set -eu
 
+tmp_config="/tmp/dm_test/tidb.toml"
+
 PORT=$1
 PASSWORD=$2
 CONFIG=""
+
 if [ "$#" -ge 3 ]; then
-	CONFIG=$3
+	cat $3 >$tmp_config
+else
+	# turn on collation framework https://docs.pingcap.com/tidb/stable/character-set-and-collation#new-framework-for-collations
+	rm $tmp_config || true
+	cat >$tmp_config <<EOF
+new_collations_enabled_on_first_bootstrap = true
+
+[experimental]
+enable-new-charset = true
+
+EOF
 fi
 
 TEST_DIR=/tmp/dm_test
@@ -17,8 +30,7 @@ TEST_DIR=/tmp/dm_test
 echo "Starting TiDB on port ${PORT}"
 bin/tidb-server \
 	-P ${PORT} \
-	--store mocktikv \
-	--config "$CONFIG" \
+	--config "$tmp_config" \
 	--log-file "$TEST_DIR/tidb.log" &
 
 echo "Verifying TiDB is started..."
