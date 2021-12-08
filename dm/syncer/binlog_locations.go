@@ -33,14 +33,22 @@ type locationRecorder struct {
 	//       |                       |
 	// curStartLocation        curEndLocation
 	// there may be more events between curStartLocation and curEndLocation due to the limitation of binlog or
-	// implementation of DM.
-	// TODO: we should unify the length of (curStartLocation, curEndLocation) to one event or one transaction when
-	// dealing both position and GTID.
+	// implementation of DM, but those events should always belong to one transaction.
+	//
+	// curStartLocation is used when
+	// - display a meaningful location
+	// - match the injected location by handle-error
+	// - save table checkpoint of DML
+	// curEndLocation is used when
+	// - handle end location of DDL, when save table checkpoint or shard-resync
 	curStartLocation binlog.Location
 	curEndLocation   binlog.Location
 
 	// txnEndLocation is the end location of last transaction. If current event is the last event of a txn,
 	// txnEndLocation will be assigned from curEndLocation
+	// it is used when
+	// - reset binlog replication for a finer granularity
+	// - save global checkpoint
 	txnEndLocation binlog.Location
 
 	// DML will also generate a query event if user set session binlog_format='statement', we use this field to
@@ -72,13 +80,7 @@ func (l *locationRecorder) setCurEndLocation(location binlog.Location) {
 	l.curEndLocation = location
 }
 
-// NOTE only locationRecorder should call this.
-func (l *locationRecorder) saveTxnEndLocation(needLock bool) {
-	if needLock {
-		l.mu.Lock()
-		defer l.mu.Unlock()
-	}
-
+func (l *locationRecorder) saveTxnEndLocation() {
 	l.txnEndLocation = l.curEndLocation
 	_ = l.txnEndLocation.SetGTID(l.curEndLocation.GetGTID().Origin().Clone())
 }
@@ -130,7 +132,7 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 		if l.curEndLocation.Position.Name != nextName {
 			l.curEndLocation.Position.Name = nextName
 			l.curEndLocation.Position.Pos = 4
-			l.saveTxnEndLocation(false)
+			l.saveTxnEndLocation()
 		}
 		return
 	}
@@ -141,7 +143,7 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 	case *replication.XIDEvent:
 		// for transactional engines like InnoDB, COMMIT is xid event
 		l.setCurrentGTID(ev.GSet)
-		l.saveTxnEndLocation(false)
+		l.saveTxnEndLocation()
 		l.inDML = false
 	case *replication.QueryEvent:
 		query := strings.TrimSpace(string(ev.Query))
@@ -161,7 +163,7 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 		}
 
 		l.setCurrentGTID(ev.GSet)
-		l.saveTxnEndLocation(false)
+		l.saveTxnEndLocation()
 	case *replication.MariadbGTIDEvent:
 		if !ev.IsDDL() {
 			l.inDML = true
