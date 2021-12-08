@@ -15,7 +15,6 @@ package workerpool
 
 import (
 	"context"
-	"golang.org/x/time/rate"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/notify"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -299,6 +299,9 @@ type worker struct {
 	isRunning int32
 	// notifies exits of run()
 	stopNotifier notify.Notifier
+
+	slowSynchronizeThreshold time.Duration
+	slowSynchronizeLimiter   *rate.Limiter
 }
 
 func newWorker() *worker {
@@ -306,6 +309,9 @@ func newWorker() *worker {
 		taskCh:         make(chan task, 128),
 		handles:        make(map[*defaultEventHandle]struct{}),
 		handleCancelCh: make(chan struct{}), // this channel must be unbuffered, i.e. blocking
+
+		slowSynchronizeThreshold: 10 * time.Second,
+		slowSynchronizeLimiter:   rate.NewLimiter(rate.Every(time.Second*5), 1),
 	}
 }
 
@@ -387,7 +393,6 @@ func (w *worker) synchronize() {
 	}
 	defer receiver.Stop()
 
-	rl := rate.NewLimiter(rate.Every(time.Second * 5), 1)
 	startTime := time.Now()
 	for {
 		workerHasFinishedLoop := false
@@ -400,12 +405,18 @@ func (w *worker) synchronize() {
 			break
 		}
 
-		if time.Since(startTime) > time.Second*10 && rl.Allow(){
-			// likely the workerpool has deadlocked, or there is a bug in the event handlers.
-			log.Warn("synchronize is taking too long, report a bug", zap.Duration("elapsed", time.Since(startTime)))
+		if time.Since(startTime) > w.slowSynchronizeThreshold &&
+			w.slowSynchronizeLimiter.Allow() {
+			// likely the workerpool has deadlocked, or there is a bug
+			// in the event handlers.
+			logWarn("synchronize is taking too long, report a bug",
+				zap.Duration("elapsed", time.Since(startTime)))
 		}
 	}
 }
+
+// A delegate to log.Warn. It exists only for testing.
+var logWarn = log.Warn
 
 func (w *worker) addHandle(handle *defaultEventHandle) {
 	w.handleRWLock.Lock()
