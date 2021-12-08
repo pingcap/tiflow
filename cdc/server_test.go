@@ -148,12 +148,14 @@ func TestCheckDir(t *testing.T) {
 	require.Nil(t, err)
 
 	readOnly := filepath.Join(dir, "readOnly")
-	os.MkdirAll(readOnly, 0o400)
+	err = os.MkdirAll(readOnly, 0o400)
+	require.Nil(t, err)
 	_, err = checkDir(readOnly)
 	require.Error(t, err)
 
 	writeOnly := filepath.Join(dir, "writeOnly")
-	os.MkdirAll(writeOnly, 0o200)
+	err = os.MkdirAll(writeOnly, 0o200)
+	require.Nil(t, err)
 	_, err = checkDir(writeOnly)
 	require.Error(t, err)
 
