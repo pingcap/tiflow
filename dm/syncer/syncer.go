@@ -227,7 +227,7 @@ type Syncer struct {
 	lastCheckpointFlushedTime time.Time
 
 	locations *locationRecorder
-	
+
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
 }
