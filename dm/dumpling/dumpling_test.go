@@ -24,7 +24,9 @@ import (
 
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/stretchr/testify/require"
 
 	. "github.com/pingcap/check"
 )
@@ -123,4 +125,27 @@ func (d *testDumplingSuite) TestDefaultConfig(c *C) {
 	c.Assert(dumpling.Init(ctx), IsNil)
 	c.Assert(dumpling.dumpConfig.StatementSize, Not(Equals), export.UnspecifiedSize)
 	c.Assert(dumpling.dumpConfig.Rows, Not(Equals), export.UnspecifiedSize)
+}
+
+func TestCallStatus(t *testing.T) {
+	conf := export.DefaultConfig()
+	cfg := &config.SubTaskConfig{}
+	m := &Dumpling{cfg: cfg}
+	ctx := context.Background()
+
+	dumpling, err := export.NewDumper(ctx, conf)
+	if err != nil {
+		m.realdumper = dumpling
+	}
+
+	export.InitMetricsVector(conf.Labels)
+
+	m.Close()
+	ss := &binlog.SourceStatus{}
+	m.Status(ss)
+	s := &pb.DumpStatus{}
+	require.EqualValues(t, float64(0), s.CompletedTables)
+	require.EqualValues(t, float64(0), s.FinishedBytes)
+	require.EqualValues(t, float64(0), s.FinishedRows)
+	require.EqualValues(t, float64(0), s.EstimateTotalRows)
 }
