@@ -16,7 +16,11 @@ package cdc
 import (
 	"context"
 	"net/url"
+	"os"
+	"os/user"
 	"path/filepath"
+	"runtime"
+	"testing"
 	"time"
 
 	"github.com/pingcap/check"
@@ -25,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
@@ -128,4 +133,34 @@ func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, config.DefaultSortDir))
 
 	s.cancel()
+}
+
+func TestCheckDir(t *testing.T) {
+	t.Parallel()
+	me, err := user.Current()
+	require.Nil(t, err)
+	if me.Name == "root" || runtime.GOOS == "windows" {
+		t.Skip("test case is running as a superuser or in windows")
+	}
+
+	dir := t.TempDir()
+	_, err = checkDir(dir)
+	require.Nil(t, err)
+
+	readOnly := filepath.Join(dir, "readOnly")
+	os.MkdirAll(readOnly, 0o400)
+	_, err = checkDir(readOnly)
+	require.Error(t, err)
+
+	writeOnly := filepath.Join(dir, "writeOnly")
+	os.MkdirAll(writeOnly, 0o200)
+	_, err = checkDir(writeOnly)
+	require.Error(t, err)
+
+	file := filepath.Join(dir, "file")
+	f, err := os.Create(file)
+	require.Nil(t, err)
+	require.Nil(t, f.Close())
+	_, err = checkDir(file)
+	require.Error(t, err)
 }
