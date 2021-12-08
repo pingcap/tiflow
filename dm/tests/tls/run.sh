@@ -115,9 +115,9 @@ function test_worker_handle_multi_tls_tasks() {
 
 	echo "start task and check stage"
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
-		"start-task $WORK_DIR/dm-task.yaml"
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta=true"
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
-		"start-task $WORK_DIR/dm-task-2.yaml"
+		"start-task $WORK_DIR/dm-task-2.yaml --remove-meta=true"
 
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
@@ -176,7 +176,7 @@ function test_worker_download_certs_from_master() {
 
 	echo "start task and check stage"
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
-		"start-task $WORK_DIR/dm-task.yaml"
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta=true"
 
 	# task should be paused.
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
@@ -247,7 +247,7 @@ function test_worker_ha_when_enable_source_tls() {
 	#  start task
 	echo "start task and check stage"
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
-		"start-task $WORK_DIR/dm-task.yaml" \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta=true" \
 		"\"result\": true" 2
 
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
@@ -344,7 +344,7 @@ function test_master_ha_when_enable_tidb_tls() {
 
 	echo "start task and check stage"
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
-		"start-task $WORK_DIR/dm-task.yaml" \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta=true" \
 		"\"result\": true" 2
 
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
