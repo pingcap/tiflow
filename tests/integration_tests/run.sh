@@ -4,8 +4,8 @@ set -eu
 
 OUT_DIR=/tmp/tidb_cdc_test
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-export PATH=$PATH:$CUR/_utils:$CUR/../bin
-
+echo $PATH
+export PATH=$PATH:$CUR/_utils:$CUR/../../bin
 mkdir -p $OUT_DIR || true
 
 if [ "${1-}" = '--debug' ]; then
@@ -14,8 +14,8 @@ if [ "${1-}" = '--debug' ]; then
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-	PATH="$CUR/../bin:$CUR/_utils:$PATH" \
-		LD_LIBRARY_PATH="$CUR/../bin:$CUR/_utils:$PATH" \
+	PATH="$CUR/../../../bin:$CUR/_utils:$PATH" \
+		LD_LIBRARY_PATH="$CUR/../../../bin:$CUR/_utils:$PATH" \
 		OUT_DIR=$OUT_DIR \
 		TEST_NAME="debug" \
 		start_tidb_cluster --workdir $WORK_DIR
@@ -37,8 +37,8 @@ run_case() {
 	local script=$2
 	local sink_type=$3
 	echo "=================>> Running test $script using Sink-Type: $sink_type... <<================="
-	PATH="$CUR/../bin:$CUR/_utils:$PATH" \
-		LD_LIBRARY_PATH="$CUR/../bin:$CUR/_utils:$PATH" \
+	PATH="$CUR/../../../bin:$CUR/_utils:$PATH" \
+		LD_LIBRARY_PATH="$CUR/../../../bin:$CUR/_utils:$PATH" \
 		OUT_DIR=$OUT_DIR \
 		TEST_NAME=$case \
 		bash "$script" "$sink_type"
