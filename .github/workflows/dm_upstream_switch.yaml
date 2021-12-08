@@ -1,24 +1,14 @@
 name: Upstream Database Switch
 
 on:
-  push:
-    branches:
-      - master
-    paths:
-      - "dm/**"
-      - "go.mod"
-      - "go.sum"
-      - "Makefile"
-      - ".github/**"
-  pull_request:
-    branches:
-      - master
-    paths:
-      - "dm/**"
-      - "go.mod"
-      - "go.sum"
-      - "Makefile"
-      - ".github/**"
+  schedule:
+    - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Which PR do you want to trigger'
+        required: true
+        default: ''
 
 jobs:
   upstream-database-switch:
@@ -33,6 +23,12 @@ jobs:
 
       - name: Check out code
         uses: actions/checkout@v2
+
+      - name: Check out code by workflow dispatch
+        if: ${{ github.event.inputs.pr != '' }}
+        uses: actions/checkout@v2
+        with:
+          ref: refs/pull/${{ github.event.inputs.pr }}/head
 
       - name: Cache go modules
         uses: actions/cache@v2

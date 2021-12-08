@@ -384,3 +384,91 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 		c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
 	}
 }
+
+func (s *canalFlatSuite) TestCheckpointEventValueMarshal(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	var watermark uint64 = 1024
+	encoder := &CanalFlatEventBatchEncoder{
+		builder:             NewCanalEntryBuilder(),
+		enableTiDBExtension: true,
+	}
+	c.Assert(encoder, check.NotNil)
+	msg, err := encoder.EncodeCheckpointEvent(watermark)
+	c.Assert(err, check.IsNil)
+	c.Assert(msg, check.NotNil)
+
+	// Unmarshal from the data we have encoded.
+	flatMsg := canalFlatMessageWithTiDBExtension{
+		&canalFlatMessage{},
+		&tidbExtension{},
+	}
+	err = json.Unmarshal(msg.Value, &flatMsg)
+	c.Assert(err, check.IsNil)
+	c.Assert(flatMsg.Extensions.WatermarkTs, check.Equals, watermark)
+	// Hack the build time.
+	// Otherwise, the timing will be inconsistent.
+	flatMsg.BuildTime = 1469579899
+	rawBytes, err := json.MarshalIndent(flatMsg, "", "  ")
+	c.Assert(err, check.IsNil)
+
+	// No commit ts will be output.
+	expectedJSON := `{
+  "id": 0,
+  "database": "",
+  "table": "",
+  "pkNames": null,
+  "isDdl": false,
+  "type": "TIDB_WATERMARK",
+  "es": 0,
+  "ts": 1469579899,
+  "sql": "",
+  "sqlType": null,
+  "mysqlType": null,
+  "data": null,
+  "old": null,
+  "_tidb": {
+    "watermarkTs": 1024
+  }
+}`
+	c.Assert(string(rawBytes), check.Equals, expectedJSON)
+}
+
+func (s *canalFlatSuite) TestDDLEventWithExtensionValueMarshal(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
+	c.Assert(encoder, check.NotNil)
+
+	message := encoder.newFlatMessageForDDL(testCaseDDL)
+	c.Assert(message, check.NotNil)
+
+	msg, ok := message.(*canalFlatMessageWithTiDBExtension)
+	c.Assert(ok, check.IsTrue)
+	// Hack the build time.
+	// Otherwise, the timing will be inconsistent.
+	msg.BuildTime = 1469579899
+	rawBytes, err := json.MarshalIndent(msg, "", "  ")
+	c.Assert(err, check.IsNil)
+
+	// No watermark ts will be output.
+	expectedJSON := `{
+  "id": 0,
+  "database": "cdc",
+  "table": "person",
+  "pkNames": null,
+  "isDdl": true,
+  "type": "CREATE",
+  "es": 1591943372224,
+  "ts": 1469579899,
+  "sql": "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+  "sqlType": null,
+  "mysqlType": null,
+  "data": null,
+  "old": null,
+  "_tidb": {
+    "commitTs": 417318403368288260
+  }
+}`
+	c.Assert(string(rawBytes), check.Equals, expectedJSON)
+}
