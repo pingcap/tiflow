@@ -28,6 +28,7 @@ import (
 
 const pdTimeUpdateInterval = 200 * time.Millisecond
 
+// TimeAcquirer cache time get from PD periodically
 type TimeAcquirer interface {
 	// Run run the TimeAcquirer
 	Run(ctx context.Context)
@@ -97,22 +98,28 @@ func (c *TimeAcquirerImpl) CurrentTimeFromCached() (time.Time, error) {
 	return cacheTime, errors.Trace(err)
 }
 
+// Stop stop TimeAcquirer
 func (c *TimeAcquirerImpl) Stop() {
 	c.cancel()
 }
 
+// TimeAcquirer4Test only for test
 type TimeAcquirer4Test struct{}
 
+// NewTimeAcquirer4Test return a TimeAcquirer for test
 func NewTimeAcquirer4Test() TimeAcquirer {
 	return &TimeAcquirer4Test{}
 }
 
+// CurrentTimeFromCached return current time
 func (c *TimeAcquirer4Test) CurrentTimeFromCached() (time.Time, error) {
 	return time.Now(), nil
 }
 
+// Run implements TimeAcquirer
 func (c *TimeAcquirer4Test) Run(ctx context.Context) {
 }
 
+// Stop implements TimeAcquirer
 func (c *TimeAcquirer4Test) Stop() {
 }
