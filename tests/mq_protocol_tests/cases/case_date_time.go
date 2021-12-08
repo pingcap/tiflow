@@ -14,14 +14,10 @@
 package cases
 
 import (
-	"errors"
-	"log"
 	"time"
 
 	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
 	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/avro"
-	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/canal"
-	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/mysql"
 )
 
 // DateTimeCase is base impl of test case for different types data
@@ -43,21 +39,13 @@ func (s *DateTimeCase) Name() string {
 
 // Run impl framework.Task interface
 func (s *DateTimeCase) Run(ctx *framework.TaskContext) error {
-	var createDBQuery string
-	switch s.Task.(type) {
-	case *avro.SingleTableTask:
-		createDBQuery = `create table test (
+	createDBQuery := `create table test (
 						id          INT,
 						t_date      DATE,
 						t_datetime  DATETIME,
 						t_timestamp TIMESTAMP NULL,
 						PRIMARY KEY (id)
 					)`
-	case *canal.SingleTableTask, *mysql.SingleTableTask:
-		log.Panic("DateTimeCase does not support downstreams other than Avro")
-	default:
-		return errors.New("unknown test case type")
-	}
 
 	_, err := ctx.Upstream.ExecContext(ctx.Ctx, createDBQuery)
 	if err != nil {
