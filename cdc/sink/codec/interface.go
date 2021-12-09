@@ -55,6 +55,7 @@ type EventBatchEncoder interface {
 
 // MQMessage represents an MQ message to the mqSink
 type MQMessage struct {
+<<<<<<< HEAD
 	Key      []byte
 	Value    []byte
 	Ts       uint64              // reserved for possible output sorting
@@ -62,6 +63,16 @@ type MQMessage struct {
 	Table    *string             // table
 	Type     model.MqMessageType // type
 	Protocol Protocol            // protocol
+=======
+	Key       []byte
+	Value     []byte
+	Ts        uint64              // reserved for possible output sorting
+	Schema    *string             // schema
+	Table     *string             // table
+	Type      model.MqMessageType // type
+	Protocol  config.Protocol     // protocol
+	rowsCount int                 // rows in one MQ Message
+>>>>>>> b531f145b (ticdc/mq: accurately demonstrate txn_batch_size metric for MQ sink (#3609))
 }
 
 // maximumRecordOverhead is used to calculate ProducerMessage's byteSize by sarama kafka client.
@@ -81,7 +92,26 @@ func (m *MQMessage) PhysicalTime() time.Time {
 	return oracle.GetTimeFromTS(m.Ts)
 }
 
+<<<<<<< HEAD
 func newDDLMQMessage(proto Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
+=======
+// GetRowsCount returns the number of rows batched in one MQMessage
+func (m *MQMessage) GetRowsCount() int {
+	return m.rowsCount
+}
+
+// SetRowsCount set the number of rows
+func (m *MQMessage) SetRowsCount(cnt int) {
+	m.rowsCount = cnt
+}
+
+// IncRowsCount increase the number of rows
+func (m *MQMessage) IncRowsCount() {
+	m.rowsCount++
+}
+
+func newDDLMQMessage(proto config.Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
+>>>>>>> b531f145b (ticdc/mq: accurately demonstrate txn_batch_size metric for MQ sink (#3609))
 	return NewMQMessage(proto, key, value, event.CommitTs, model.MqMessageTypeDDL, &event.TableInfo.Schema, &event.TableInfo.Table)
 }
 
@@ -93,13 +123,14 @@ func newResolvedMQMessage(proto Protocol, key, value []byte, ts uint64) *MQMessa
 // It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
 func NewMQMessage(proto Protocol, key []byte, value []byte, ts uint64, ty model.MqMessageType, schema, table *string) *MQMessage {
 	ret := &MQMessage{
-		Key:      nil,
-		Value:    nil,
-		Ts:       ts,
-		Schema:   schema,
-		Table:    table,
-		Type:     ty,
-		Protocol: proto,
+		Key:       nil,
+		Value:     nil,
+		Ts:        ts,
+		Schema:    schema,
+		Table:     table,
+		Type:      ty,
+		Protocol:  proto,
+		rowsCount: 0,
 	}
 
 	if key != nil {
