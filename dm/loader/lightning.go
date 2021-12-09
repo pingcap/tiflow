@@ -293,8 +293,8 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		isCanceled = true
 	default:
 	}
-	pr <- pb.ProcessResult{IsCanceled: isCanceled, Errors: errs}
 	l.logger.Info("lightning load end", zap.Bool("IsCanceled", isCanceled))
+	pr <- pb.ProcessResult{IsCanceled: isCanceled, Errors: errs}
 }
 
 func (l *LightningLoader) isClosed() bool {
