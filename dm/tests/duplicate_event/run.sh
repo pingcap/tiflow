@@ -61,15 +61,12 @@ function run() {
 	run_sql_source2 "flush logs;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID2" \
 		"\"relayCatchUpMaster\": true" 1
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-
-	check_log_contain_with_retry "retrying to read binlog" $WORK_DIR/worker2/log/dm-worker.log
-	check_log_contain_with_retry "discard duplicate event" $WORK_DIR/worker2/log/dm-worker.log
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_relay_config.toml
 

@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
@@ -61,6 +62,7 @@ type Capture struct {
 	kvStorage    tidbkv.Storage
 	etcdClient   *etcd.CDCEtcdClient
 	grpcPool     kv.GrpcPool
+	regionCache  *tikv.RegionCache
 	TimeAcquirer pdtime.TimeAcquirer
 
 	tableActorSystem *system.System
@@ -128,6 +130,10 @@ func (c *Capture) reset(ctx context.Context) error {
 		}
 	}
 	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
+	if c.regionCache != nil {
+		c.regionCache.Close()
+	}
+	c.regionCache = tikv.NewRegionCache(c.pdClient)
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
@@ -177,6 +183,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		CaptureInfo:      c.info,
 		EtcdClient:       c.etcdClient,
 		GrpcPool:         c.grpcPool,
+		RegionCache:      c.regionCache,
 		TimeAcquirer:     c.TimeAcquirer,
 		TableActorSystem: c.tableActorSystem,
 	})
@@ -276,10 +283,28 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
 
-		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
+		ownerRev, err := c.etcdClient.GetOwnerRevision(ctx, c.info.ID)
+		if err != nil {
+			if errors.Cause(err) == context.Canceled {
+				return nil
+			}
+			return errors.Trace(err)
+		}
+
+		// We do a copy of the globalVars here to avoid
+		// accidental modifications and potential race conditions.
+		globalVars := *ctx.GlobalVars()
+		newGlobalVars := &globalVars
+		newGlobalVars.OwnerRevision = ownerRev
+		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
+
+		log.Info("campaign owner successfully",
+			zap.String("capture-id", c.info.ID),
+			zap.Int64("owner-rev", ownerRev))
+
 		owner := c.newOwner(c.pdClient)
 		c.setOwner(owner)
-		err = c.runEtcdWorker(ctx, owner, orchestrator.NewGlobalState(), ownerFlushInterval)
+		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval)
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -368,6 +393,7 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 }
 
 // AsyncClose closes the capture by unregistering it from etcd
+// Note: this function should be reentrant
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
 	// Safety: Here we mainly want to stop the owner
@@ -383,6 +409,10 @@ func (c *Capture) AsyncClose() {
 	}
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
+	}
+	if c.regionCache != nil {
+		c.regionCache.Close()
+		c.regionCache = nil
 	}
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()

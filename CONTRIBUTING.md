@@ -25,7 +25,8 @@ make
 
 ### Running tests
 
-This project contains unit tests and integration tests with coverage collection. See [tests/README.md](./tests/README.md) for how to execute and add tests.
+This project contains unit tests and integration tests with coverage collection.
+See [tests/integration_tests/README.md](./tests/integration_tests/README.md) for how to execute and add tests.
 
 For more information on how to trigger these tests, please see the [command help](./docs/ci/command.md).
 
