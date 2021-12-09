@@ -132,42 +132,6 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 	return h
 }
 
-//func checkIntNumberNegative(value interface{}) bool {
-//	if value == nil {
-//		return false
-//	}
-//	switch v := value.(type) {
-//	case int:
-//		return v < 0
-//	case int8:
-//		return v < 0
-//	case int16:
-//		return v < 0
-//	case int32:
-//		return v < 0
-//	case int64:
-//		return v < 0
-//	case float32:
-//		return v < 0
-//	case float64:
-//		return v < 0
-//
-//	case uint64:
-//		return false
-//	case uint32:
-//		return false
-//	case uint16:
-//		return false
-//	case uint8:
-//		return false
-//	case uint:
-//		return false
-//	default:
-//		log.Panic("get unexpected value type", zap.Any("type", v))
-//	}
-//	return false
-//}
-
 func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 	javaType := mySQLType2JavaType(c.Type, c.Flag.IsBinary())
 
@@ -210,7 +174,6 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType)
 		case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR:
 			result = string(v)
 		default:
-			// for `JavaSQLTypeBINARY`, `JavaSQLTypeVARBINARY`, `JavaSQLTypeLONGVARBINARY`
 			decoded, err := b.bytesDecoder.Bytes(v)
 			if err != nil {
 				return "", err
