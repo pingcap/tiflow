@@ -595,7 +595,7 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 			if err != nil {
 				return false
 			}
-			if checkpointTs >= resolvedTs {
+			if checkpointTs < resolvedTs {
 				flushedResolvedTs = false
 			}
 			return true
