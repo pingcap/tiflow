@@ -25,7 +25,7 @@ socket = "/tmp/tidb-tls.sock"
 status-port = 10090
 
 [security]
-# set the path for certificates. Empty string means disabling secure connectoins.
+# set the path for certificates. Empty string means disabling secure connections.
 ssl-ca = "$cur/conf/ca.pem"
 ssl-cert = "$cur/conf/dm.pem"
 ssl-key = "$cur/conf/dm.key"
@@ -61,7 +61,7 @@ function setup_mysql_tls() {
 	echo "mysql_ssl_setup at=$mysql_data_path"
 
 	# NOTE we can use ` mysql_ssl_rsa_setup --datadir "$mysql_data_path"` to create a new cert in datadir
-	# in ci, mysql in other contianer, so we can't use the mysql_ssl_rsa_setup
+	# in ci, mysql in other container, so we can't use the mysql_ssl_rsa_setup
 	# only mysql 8.0 support use `ALTER INSTANCE RELOAD TLS` to reload cert
 	# when use mysql 5.7 we need to restart mysql-server manually if your local server do not enable ssl
 
@@ -76,7 +76,7 @@ function setup_mysql_tls() {
 function prepare_test() {
 	cleanup_process
 
-	# clena test dir
+	# clean test dir
 	rm -rf $WORK_DIR
 	mkdir $WORK_DIR
 
@@ -132,10 +132,12 @@ function test_worker_handle_multi_tls_tasks() {
 
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
-		"\"result\": true" 2
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test2" \
-		"\"result\": true" 2
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
 
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -203,7 +205,8 @@ function test_worker_download_certs_from_master() {
 	# let's try use this file to connect dm-master
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" /tmp/dm_test/tls/worker1/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
-		"\"result\": true" 2
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
 
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -252,7 +255,8 @@ function test_worker_ha_when_enable_source_tls() {
 
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
-		"\"result\": true" 2
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
 
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -288,7 +292,8 @@ function test_worker_ha_when_enable_source_tls() {
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
 		"\"result\": true" 2 \
-		"worker2" 1
+		"\"unit\": \"Sync\"" 1
+	"worker2" 1
 
 	# incr data
 	run_sql 'INSERT INTO tls.t VALUES (99,9999999);' $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -344,7 +349,8 @@ function test_master_ha_when_enable_tidb_tls() {
 
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
-		"\"result\": true" 2
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
 
 	echo "test http and api interface"
 	check_rpc_alive $cur/../bin/check_master_online_http 127.0.0.1:$MASTER_PORT1 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
