@@ -27,7 +27,6 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	mm "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
@@ -133,44 +132,44 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 	return h
 }
 
-func checkIntNumberNegative(value interface{}) bool {
-	if value == nil {
-		return false
-	}
-	switch v := value.(type) {
-	case int:
-		return v < 0
-	case int8:
-		return v < 0
-	case int16:
-		return v < 0
-	case int32:
-		return v < 0
-	case int64:
-		return v < 0
-	case float32:
-		return v < 0
-	case float64:
-		return v < 0
-
-	case uint64:
-		return false
-	case uint32:
-		return false
-	case uint16:
-		return false
-	case uint8:
-		return false
-	case uint:
-		return false
-	default:
-		log.Panic("get unexpected value type", zap.Any("type", v))
-	}
-	return false
-}
+//func checkIntNumberNegative(value interface{}) bool {
+//	if value == nil {
+//		return false
+//	}
+//	switch v := value.(type) {
+//	case int:
+//		return v < 0
+//	case int8:
+//		return v < 0
+//	case int16:
+//		return v < 0
+//	case int32:
+//		return v < 0
+//	case int64:
+//		return v < 0
+//	case float32:
+//		return v < 0
+//	case float64:
+//		return v < 0
+//
+//	case uint64:
+//		return false
+//	case uint32:
+//		return false
+//	case uint16:
+//		return false
+//	case uint8:
+//		return false
+//	case uint:
+//		return false
+//	default:
+//		log.Panic("get unexpected value type", zap.Any("type", v))
+//	}
+//	return false
+//}
 
 func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
-	javaType := MySQLType2JavaType(c.Type, c.Flag.IsBinary())
+	javaType := mySQLType2JavaType(c.Type, c.Flag.IsBinary())
 
 	switch javaType {
 	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
@@ -180,26 +179,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 		return JavaSQLTypeBLOB
 	}
 
-	// Some special cases handled in canal
-	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
-	// Todo (Ling Jin): type promotion for int related type is quite weired, figure out why.
-	shouldPromote := c.Flag.IsUnsigned() && checkIntNumberNegative(c.Value)
-	if !shouldPromote {
-		return javaType
-	}
-
-	switch c.Type {
-	case mysql.TypeTiny:
-		result = JavaSQLTypeSMALLINT
-	case mysql.TypeShort, mysql.TypeInt24:
-		result = JavaSQLTypeINTEGER
-	case mysql.TypeLong:
-		result = JavaSQLTypeBIGINT
-	case mysql.TypeLonglong:
-		result = JavaSQLTypeDECIMAL
-	}
-
-	return result
+	return javaType
 }
 
 // In the official canal-json implementation, value were extracted from binlog buffer.
