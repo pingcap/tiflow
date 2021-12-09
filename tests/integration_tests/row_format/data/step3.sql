@@ -46,8 +46,7 @@ values (127, 32767, 8388607, 2147483647, 9223372036854775807);
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (-128, -32768, -8388608, -2147483648, -9223372036854775808);
 
-update tp_int set c_int = 0, c_unsigned_tinyint = 0 where c_smallint = 2;
-
+update tp_int set c_int = 0, c_tinyint = 0 where c_smallint = 2;
 delete from tp_int where c_int = 0;
 
 create table tp_unsigned_int (
