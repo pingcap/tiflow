@@ -1660,16 +1660,9 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	// NOTICE: eventCh may block the main logic of EventFeed
 	eventCh := make(chan model.RegionFeedEvent, 128)
->>>>>>> 82c4d68de (kvclient(ticdc): fix kvclient takes too long time to recover (#3612))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
