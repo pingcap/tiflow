@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/fsutil"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -312,15 +313,15 @@ func (s *Server) setUpDir(ctx context.Context) error {
 	return nil
 }
 
-func checkDir(dir string) (*util.DiskInfo, error) {
+func checkDir(dir string) (*fsutil.DiskInfo, error) {
 	err := os.MkdirAll(dir, 0o700)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if err := util.IsDirReadWritable(dir); err != nil {
+	if err := fsutil.IsDirReadWritable(dir); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return util.GetDiskInfo(dir)
+	return fsutil.GetDiskInfo(dir)
 }
 
 // try to find the best data dir by rules
