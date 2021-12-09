@@ -71,7 +71,7 @@ type mockAsyncSink struct {
 	syncPointHis []model.Ts
 }
 
-func (m *mockAsyncSink) run(ctx cdcContext.Context) error {
+func (m *mockAsyncSink) run(ctx cdcContext.Context, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) error {
 	// mock async sink blocked
 	<-ctx.Done()
 	return nil

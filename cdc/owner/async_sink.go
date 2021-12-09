@@ -38,7 +38,7 @@ const (
 // Other functions are still synchronization
 type asyncSink interface {
 	// run the asyncSink
-	run(ctx cdcContext.Context) error
+	run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) error
 	// emitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
@@ -107,12 +107,12 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl, id model.Cha
 	return nil
 }
 
-func (s *asyncSinkImpl) run(ctx cdcContext.Context) error {
+func (s *asyncSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	s.cancel = cancel
 
 	start := time.Now()
-	if err := s.sinkInitHandler(ctx, s, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info); err != nil {
+	if err := s.sinkInitHandler(ctx, s, id, info); err != nil {
 		return errors.Trace(err)
 	}
 
