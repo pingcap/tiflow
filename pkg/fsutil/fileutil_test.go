@@ -18,72 +18,73 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"testing"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/ticdc/pkg/leakutil"
+	"github.com/stretchr/testify/require"
 )
 
-type fileUtilSuite struct{}
-
-var _ = check.Suite(&fileUtilSuite{})
-
-func (s *fileUtilSuite) TestIsDirWritable(c *check.C) {
-	defer testleak.AfterTest(c)()
-	dir := c.MkDir()
-	err := IsDirWritable(dir)
-	c.Assert(err, check.IsNil)
-
-	err = os.Chmod(dir, 0o400)
-	c.Assert(err, check.IsNil)
-	me, err := user.Current()
-	c.Assert(err, check.IsNil)
-	if me.Name == "root" || runtime.GOOS == "windows" {
-		// chmod is not supported under windows.
-		c.Skip("test case is running as a superuser or in windows")
-	}
-	err = IsDirWritable(dir)
-	c.Assert(err, check.ErrorMatches, ".*permission denied")
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }
 
-func (s *fileUtilSuite) TestIsDirAndWritable(c *check.C) {
-	defer testleak.AfterTest(c)()
-	dir := c.MkDir()
+func TestIsDirWritable(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	err := IsDirWritable(dir)
+	require.Nil(t, err)
+
+	err = os.Chmod(dir, 0o400)
+	require.Nil(t, err)
+	me, err := user.Current()
+	require.Nil(t, err)
+	if me.Name == "root" || runtime.GOOS == "windows" {
+		// chmod is not supported under windows.
+		t.Skip("test case is running as a superuser or in windows")
+	}
+	err = IsDirWritable(dir)
+	require.Regexp(t, ".*permission denied", err)
+}
+
+func TestIsDirAndWritable(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
 	path := filepath.Join(dir, "file.test")
 
 	err := IsDirAndWritable(path)
-	c.Assert(err, check.ErrorMatches, ".*no such file or directory")
+	require.Regexp(t, ".*no such file or directory", err)
 
 	err = os.WriteFile(path, nil, 0o600)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = IsDirAndWritable(path)
-	c.Assert(err, check.ErrorMatches, ".*is not a directory")
+	require.Regexp(t, ".*is not a directory", err)
 
 	err = IsDirAndWritable(dir)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 }
 
-func (s *fileUtilSuite) TestIsDirReadWritable(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestIsDirReadWritable(t *testing.T) {
+	t.Parallel()
 
-	dir := c.MkDir()
+	dir := t.TempDir()
 	err := IsDirReadWritable(dir)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	path := filepath.Join(dir, "/foo")
 	err = IsDirReadWritable(path)
-	c.Assert(err, check.ErrorMatches, ".*no such file or directory")
+	require.Regexp(t, ".*no such file or directory", err)
 }
 
-func (s *fileUtilSuite) TestGetDiskInfo(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestGetDiskInfo(t *testing.T) {
+	t.Parallel()
 
-	dir := c.MkDir()
+	dir := t.TempDir()
 	info, err := GetDiskInfo(dir)
-	c.Assert(err, check.IsNil)
-	c.Assert(info, check.NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, info)
 
 	dir = filepath.Join(dir, "/tmp/sorter")
 	info, err = GetDiskInfo(dir)
-	c.Assert(info, check.IsNil)
-	c.Assert(err, check.ErrorMatches, ".*no such file or directory")
+	require.Nil(t, info)
+	require.Regexp(t, ".*no such file or directory", err)
 }
