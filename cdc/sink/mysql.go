@@ -237,7 +237,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			return
 		case <-receiver.C:
 		}
-		maxCommitTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
+		flushedResolvedTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
 		if len(resolvedTxnsMap) == 0 {
 			s.tableMaxResolvedTs.Range(func(key, value interface{}) bool {
 				s.tableCheckpointTs.Store(key, value)
@@ -254,7 +254,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		}
 
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
-		for tableID, maxCommitTs := range maxCommitTsMap {
+		for tableID, maxCommitTs := range flushedResolvedTsMap {
 			s.tableCheckpointTs.Store(tableID, maxCommitTs)
 		}
 	}

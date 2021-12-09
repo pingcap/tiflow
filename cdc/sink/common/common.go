@@ -113,9 +113,9 @@ func (c *UnresolvedTxnCache) Resolved(resolvedTsMap *sync.Map) (map[model.TableI
 
 func splitResolvedTxn(
 	resolvedTsMap *sync.Map, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
-) (maxCommitTsMap map[model.TableID]uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
+) (flushedResolvedTsMap map[model.TableID]uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
 	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
-	maxCommitTsMap = make(map[model.TableID]uint64, len(unresolvedTxns))
+	flushedResolvedTsMap = make(map[model.TableID]uint64, len(unresolvedTxns))
 	for tableID, txns := range unresolvedTxns {
 		v, ok := resolvedTsMap.Load(tableID)
 		if !ok {
@@ -147,9 +147,7 @@ func splitResolvedTxn(
 			}
 		}
 		resolvedRowsMap[tableID] = resolvedTxns
-		if len(resolvedTxnsWithTheSameCommitTs) > 0 {
-			maxCommitTsMap[tableID] = resolvedTxnsWithTheSameCommitTs[len(resolvedTxnsWithTheSameCommitTs)-1].commitTs
-		}
+		flushedResolvedTsMap[tableID] = resolvedTs
 	}
 	return
 }
