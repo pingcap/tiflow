@@ -368,3 +368,19 @@ func testDdl(c *check.C) {
 	c.Assert(rc.GetIsDdl(), check.IsTrue)
 	c.Assert(rc.GetDdlSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
 }
+
+func (s *canalEntrySuite) TestFormatValue(c *check.C) {
+	decoder := charmap.ISO8859_1.NewDecoder()
+
+	javaResult := []byte("\u0089PNG\r\n\u001A\n")
+	result, err := decoder.Bytes(javaResult)
+	c.Assert(err, check.IsNil)
+	a := string(result)
+
+	golangResult := []byte("PNG\r\n\u001a\n")
+	result, err = decoder.Bytes(golangResult)
+	c.Assert(err, check.IsNil)
+	b := string(result)
+
+	c.Assert(a, check.Equals, b)
+}
