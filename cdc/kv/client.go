@@ -1002,12 +1002,8 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		innerErr := eerr.err
 		if notLeader := innerErr.GetNotLeader(); notLeader != nil {
 			metricFeedNotLeaderCounter.Inc()
-<<<<<<< HEAD
 			// TODO: Handle the case that notleader.GetLeader() is nil.
 			s.regionCache.UpdateLeader(errInfo.verID, notLeader.GetLeader().GetStoreId(), errInfo.rpcCtx.AccessIdx)
-=======
-			s.regionCache.UpdateLeader(errInfo.verID, notLeader.GetLeader(), errInfo.rpcCtx.AccessIdx)
->>>>>>> 82c4d68de (kvclient(ticdc): fix kvclient takes too long time to recover (#3612))
 		} else if innerErr.GetEpochNotMatch() != nil {
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
 			metricFeedEpochNotMatchCounter.Inc()
