@@ -344,9 +344,9 @@ func shouldRunning(info *model.ChangeFeedInfo) (bool, model.FeedState, bool) {
 	needsPatch := state != info.State
 
 	switch state {
-	case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished, model.StateRemoved:
+	case model.StateFailed, model.StateStopped, model.StateFinished, model.StateRemoved:
 		return false, state, needsPatch
-	case model.StateNormal:
+	case model.StateNormal, model.StateError:
 		return true, state, needsPatch
 	default:
 		panic("unreachable")
