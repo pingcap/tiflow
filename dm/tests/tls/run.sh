@@ -292,8 +292,8 @@ function test_worker_ha_when_enable_source_tls() {
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
 		"\"result\": true" 2 \
-		"\"unit\": \"Sync\"" 1
-	"worker2" 1
+		"\"unit\": \"Sync\"" 1 \
+		"worker2" 1
 
 	# incr data
 	run_sql 'INSERT INTO tls.t VALUES (99,9999999);' $MYSQL_PORT1 $MYSQL_PASSWORD1
