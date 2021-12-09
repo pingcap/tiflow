@@ -47,7 +47,7 @@ func (e *CraftEventBatchEncoder) flush() {
 	schema := headers.GetSchema(0)
 	table := headers.GetTable(0)
 	rowsCnt := e.rowChangedBuffer.RowsCount()
-	mqMessage := NewMQMessage(ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MqMessageTypeRow, &schema, &table)
+	mqMessage := NewMQMessage(config.ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MqMessageTypeRow, &schema, &table)
 	mqMessage.SetRowsCount(rowsCnt)
 	e.messageBuf = append(e.messageBuf, mqMessage)
 }
