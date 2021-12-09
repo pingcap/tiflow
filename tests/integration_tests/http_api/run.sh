@@ -9,28 +9,6 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 TLS_DIR=$(cd $CUR/../_certificates && pwd)
 
-function check_changefeed_state() {
-	endpoints=$1
-	changefeedid=$2
-	expected=$3
-	error_msg=$4
-	tls_dir=$5
-	info=$(cdc cli changefeed query --ca="$tls_dir/ca.pem" --cert="$tls_dir/client.pem" --key="$tls_dir/client-key.pem" --pd=$endpoints -c $changefeedid -s)
-	echo "$info"
-	state=$(echo $info | jq -r '.state')
-	if [[ ! "$state" == "$expected" ]]; then
-		echo "changefeed state $state does not equal to $expected"
-		exit 1
-	fi
-	message=$(echo $info | jq -r '.error.message')
-	if [[ ! "$message" =~ "$error_msg" ]]; then
-		echo "error message '$message' is not as expected '$error_msg'"
-		exit 1
-	fi
-}
-
-export -f check_changefeed_state
-
 function run() {
 	# mysql and kafka are the same
 	if [ "$SINK_TYPE" == "kafka" ]; then
@@ -86,7 +64,7 @@ function run() {
 
 	python $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
 	# wait for changefeed created
-	ensure 20 check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" "changefeed-test1" "normal" "null" "$TLS_DIR"
+	ensure 20 check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" "changefeed-test1" "normal" "null"
 
 	run_sql "CREATE table test.simple0(id int primary key, val int);"
 	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"

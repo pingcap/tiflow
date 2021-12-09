@@ -1,0 +1,31 @@
+#!/bin/bash
+
+set -eux
+
+# parameter 1: pd endpoints
+# parameter 2: changefeed id
+# parameter 3: expected state
+# parameter 4: error msg
+
+endpoints=${1}
+changefeed_id=${2}
+expected_state=${3}
+error_msg=${4}
+
+if [["$endpoints" =~ "https"]]; then
+	info=$(cdc.test cli changefeed query --ca="${TLS_DIR}/ca.pem" --cert="${TLS_DIR}/client.pem" --key="${TLS_DIR}/client-key.pem" --pd=$endpoints -c $changefeed_id -s)
+else
+	info=$(cdc.test cli changefeed query --pd=$endpoints -c $changefeed_id -s)
+fi
+
+echo "$info"
+state=$(echo $info | jq -r '.state')
+if [[ ! "$state" == "$expected" ]]; then
+	echo "changefeed state $state does not equal to $expected"
+	exit 1
+fi
+message=$(echo $info | jq -r '.error.message')
+if [[ ! "$message" =~ "$error_msg" ]]; then
+	echo "error message '$message' is not as expected '$error_msg'"
+	exit 1
+fi
