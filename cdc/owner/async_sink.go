@@ -62,7 +62,8 @@ type asyncSinkImpl struct {
 	ddlCh chan *model.DDLEvent
 	errCh chan error
 
-	sink            sink.Sink
+	sink sink.Sink
+	// `sinkInitHandler` can be helpful in unit testing.
 	sinkInitHandler asyncSinkInitHandler
 
 	cancel context.CancelFunc
@@ -77,14 +78,9 @@ func newAsyncSink() asyncSink {
 	}
 }
 
-type asyncSinkInitHandler func(ctx cdcContext.Context, a *asyncSinkImpl) error
+type asyncSinkInitHandler func(ctx cdcContext.Context, a *asyncSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error
 
-func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl) error {
-	var (
-		id   = ctx.ChangefeedVars().ID
-		info = ctx.ChangefeedVars().Info
-	)
-
+func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error {
 	filter, err := filter.NewFilter(info.Config)
 	if err != nil {
 		return errors.Trace(err)
@@ -116,7 +112,7 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) error {
 	s.cancel = cancel
 
 	start := time.Now()
-	if err := s.sinkInitHandler(ctx, s); err != nil {
+	if err := s.sinkInitHandler(ctx, s, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info); err != nil {
 		return errors.Trace(err)
 	}
 
