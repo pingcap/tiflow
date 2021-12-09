@@ -8,6 +8,7 @@ import {
   ExportOutlined,
   ClusterOutlined,
 } from '~/uikit/icons'
+import logo from '~/assets/logo.png'
 
 const { SubMenu } = Menu
 
@@ -62,11 +63,7 @@ const SiderMenu: React.FC<{
   return (
     <div>
       <div className="flex p-4 justify-center">
-        <img
-          src="https://internals.tidb.io/uploads/default/original/1X/4fde143c268ccde514d0c93e420b8a2304fc2033.png"
-          alt=""
-          className="h-[36px]"
-        />
+        <img src={logo} alt="" className="h-[36px]" />
         {!collapsed && (
           <h1 className="font-extrabold text-lg ml-2 leading-[36px]">
             Data Sync Platform
