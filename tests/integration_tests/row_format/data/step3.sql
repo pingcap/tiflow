@@ -161,7 +161,7 @@ create table tp_unsigned_real (
       c_unsigned_decimal_2 decimal(10, 4) unsigned null,
       constraint pk
           primary key (id)
-)
+);
 
 insert into tp_unsigned_real()
 values ();
