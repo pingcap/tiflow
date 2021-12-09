@@ -14,14 +14,10 @@
 package tests
 
 import (
-	"errors"
-	"log"
 	"time"
 
 	"github.com/pingcap/ticdc/integration/framework"
 	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
-	"github.com/pingcap/ticdc/integration/framework/mysql"
 )
 
 // DateTimeCase is base impl of test case for different types data
@@ -43,21 +39,13 @@ func (s *DateTimeCase) Name() string {
 
 // Run impl framework.Task interface
 func (s *DateTimeCase) Run(ctx *framework.TaskContext) error {
-	var createDBQuery string
-	switch s.Task.(type) {
-	case *avro.SingleTableTask:
-		createDBQuery = `create table test (
+	createDBQuery := `create table test (
 						id          INT,
 						t_date      DATE,
 						t_datetime  DATETIME,
 						t_timestamp TIMESTAMP NULL,
 						PRIMARY KEY (id)
 					)`
-	case *canal.SingleTableTask, *mysql.SingleTableTask:
-		log.Panic("DateTimeCase does not support downstreams other than Avro")
-	default:
-		return errors.New("unknown test case type")
-	}
 
 	_, err := ctx.Upstream.ExecContext(ctx.Ctx, createDBQuery)
 	if err != nil {
@@ -86,6 +74,26 @@ func (s *DateTimeCase) Run(ctx *framework.TaskContext) error {
 		"t_datetime":  zeroValue,
 		"t_timestamp": zeroValue.Add(time.Second),
 	}
+	err = table.Insert(data).Send().Wait().Check()
+	if err != nil {
+		return err
+	}
+
+	_, err = ctx.Upstream.ExecContext(ctx.Ctx, "alter table test add t_date_1 date not null")
+	if err != nil {
+		return err
+	}
+
+	// Get a handle of an existing table
+	table = ctx.SQLHelper().GetTable("test")
+	data = map[string]interface{}{
+		"id":          1,
+		"t_date":      zeroValue,
+		"t_datetime":  zeroValue,
+		"t_timestamp": zeroValue.Add(time.Second),
+		"t_date_1":    zeroValue.AddDate(15, 0, 1),
+	}
+
 	err = table.Insert(data).Send().Wait().Check()
 	if err != nil {
 		return err
