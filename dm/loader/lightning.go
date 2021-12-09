@@ -22,7 +22,6 @@ import (
 	"github.com/docker/go-units"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
@@ -42,9 +41,9 @@ import (
 )
 
 const (
-	lightningCheckpointFile  = "lightning.checkpoint.0.sql"
-	lightningCheckpointDB    = "lightning"
-	lightningCheckpointTable = "checkpoint"
+	// checkpoint file name for lightning loader
+	// this file is used to store the real checkpoint data for lightning
+	lightningCheckpointFileName = "tidb_lightning_checkpoint.pb"
 )
 
 // LightningLoader can load your mydumper data into TiDB database.
@@ -53,7 +52,6 @@ type LightningLoader struct {
 
 	cfg             *config.SubTaskConfig
 	cli             *clientv3.Client
-	checkPoint      CheckPoint
 	checkPointList  *LightningCheckpointList
 	workerName      string
 	logger          log.Logger
@@ -125,15 +123,10 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		return err
 	}
 
-	checkpoint, err := newRemoteCheckPoint(tctx, l.cfg, l.checkpointID())
+	checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.Name, l.cfg.MetaSchema)
+	err = checkpointList.Prepare(ctx)
 	if err == nil {
-		l.checkPoint = checkpoint
-		checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.MetaSchema)
-		err1 := checkpointList.Prepare(ctx)
-		if err1 == nil {
-			l.checkPointList = checkpointList
-		}
-		err = err1
+		l.checkPointList = checkpointList
 	}
 	failpoint.Inject("ignoreLoadCheckpointErr", func(_ failpoint.Value) {
 		l.logger.Info("", zap.String("failpoint", "ignoreLoadCheckpointErr"))
@@ -177,39 +170,27 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 }
 
 func (l *LightningLoader) restore(ctx context.Context) error {
-	tctx := tcontext.NewContext(ctx, l.logger)
 	if err := putLoadTask(l.cli, l.cfg, l.workerName); err != nil {
 		return err
 	}
-	if err := l.checkPoint.Init(tctx, lightningCheckpointFile, 1); err != nil {
+
+	status, err := l.checkPointList.TaskStatus(ctx, l.cfg.Name, l.cfg.SourceID)
+	if err != nil {
 		return err
 	}
-	if err := l.checkPoint.Load(tctx); err != nil {
-		return err
-	}
-	db2Tables := make(map[string]Tables2DataFiles)
-	tables := make(Tables2DataFiles)
-	files := make(DataFiles, 0, 1)
-	files = append(files, lightningCheckpointFile)
-	tables[lightningCheckpointTable] = files
-	db2Tables[lightningCheckpointDB] = tables
-	var err error
-	if err = l.checkPoint.CalcProgress(db2Tables); err != nil {
-		return err
-	}
-	if !l.checkPoint.IsTableFinished(lightningCheckpointDB, lightningCheckpointTable) {
-		if l.checkPointList != nil {
-			if err = l.checkPointList.RegisterCheckPoint(ctx, l.workerName, l.cfg.Name); err != nil {
-				return err
-			}
+
+	if status < lightningStatusFinished {
+		if err = l.checkPointList.RegisterCheckPoint(ctx, l.workerName, l.cfg.Name); err != nil {
+			return err
 		}
 		cfg := lcfg.NewConfig()
 		if err = cfg.LoadFromGlobal(l.lightningConfig); err != nil {
 			return err
 		}
 		cfg.Routes = l.cfg.RouteRules
-		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
-		cfg.Checkpoint.Schema = config.TiDBLightningCheckpointPrefix + dbutil.TableName(l.workerName, l.cfg.Name)
+		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
+		cpPath := filepath.Join(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName)
+		cfg.Checkpoint.DSN = cpPath
 		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 		param := common.MySQLConnectParam{
 			Host:             cfg.TiDB.Host,
@@ -237,13 +218,8 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		}
 		err = l.runLightning(ctx, cfg)
 		if err == nil {
-			err = lightning.CheckpointRemove(ctx, cfg, "all")
-		}
-		if err == nil {
 			l.finish.Store(true)
-			offsetSQL := l.checkPoint.GenSQL(lightningCheckpointFile, 1)
-			err = l.toDBConns[0].executeSQL(tctx, []string{offsetSQL})
-			_ = l.checkPoint.UpdateOffset(lightningCheckpointFile, 1)
+			err = l.checkPointList.UpdateStatus(ctx, l.cfg.Name, l.cfg.SourceID, lightningStatusFinished)
 		} else {
 			l.logger.Error("failed to runlightning", zap.Error(err))
 		}
@@ -312,14 +288,13 @@ func (l *LightningLoader) isClosed() bool {
 
 // IsFreshTask implements Unit.IsFreshTask.
 func (l *LightningLoader) IsFreshTask(ctx context.Context) (bool, error) {
-	count, err := l.checkPoint.Count(tcontext.NewContext(ctx, l.logger))
-	return count == 0, err
+	status, err := l.checkPointList.TaskStatus(ctx, l.cfg.Name, l.cfg.SourceID)
+	return status == lightningStatusInit, err
 }
 
 // Close does graceful shutdown.
 func (l *LightningLoader) Close() {
 	l.Pause()
-	l.checkPoint.Close()
 	l.checkPointList.Close()
 	l.closed.Store(true)
 }
