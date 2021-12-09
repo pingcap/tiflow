@@ -168,7 +168,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	default:
 	}
 
-	c.sink.EmitCheckpointTs(ctx, checkpointTs)
+	c.sink.emitCheckpointTs(ctx, checkpointTs)
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -314,7 +314,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
-	if err := c.sink.Close(ctx); err != nil {
+	if err := c.sink.close(ctx); err != nil {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
@@ -417,7 +417,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			return barrierTs, nil
 		}
 		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval))
-		if err := c.sink.EmitSyncPoint(ctx, barrierTs); err != nil {
+		if err := c.sink.emitSyncPoint(ctx, barrierTs); err != nil {
 			return 0, errors.Trace(err)
 		}
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
@@ -464,7 +464,7 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		log.Warn("ignore the DDL job of ineligible table", zap.Reflect("job", job))
 		return true, nil
 	}
-	done, err = c.sink.EmitDDLEvent(ctx, c.ddlEventCache)
+	done, err = c.sink.emitDDLEvent(ctx, c.ddlEventCache)
 	if err != nil {
 		return false, err
 	}

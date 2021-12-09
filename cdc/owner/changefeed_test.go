@@ -77,13 +77,13 @@ func (m *mockAsyncSink) run(ctx cdcContext.Context) error {
 	return nil
 }
 
-func (m *mockAsyncSink) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
+func (m *mockAsyncSink) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	m.ddlExecuting = ddl
 	defer func() { m.ddlDone = false }()
 	return m.ddlDone, nil
 }
 
-func (m *mockAsyncSink) EmitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
+func (m *mockAsyncSink) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
 	if checkpointTs == m.syncPoint {
 		return nil
 	}
@@ -92,11 +92,11 @@ func (m *mockAsyncSink) EmitSyncPoint(ctx cdcContext.Context, checkpointTs uint6
 	return nil
 }
 
-func (m *mockAsyncSink) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) {
+func (m *mockAsyncSink) emitCheckpointTs(ctx cdcContext.Context, ts uint64) {
 	atomic.StoreUint64(&m.checkpointTs, ts)
 }
 
-func (m *mockAsyncSink) Close(ctx context.Context) error {
+func (m *mockAsyncSink) close(ctx context.Context) error {
 	return nil
 }
 

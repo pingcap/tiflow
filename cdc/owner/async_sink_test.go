@@ -96,7 +96,7 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 
 	go func() {
 		wg.Wait()
-		asyncSink.Close(ctx)
+		asyncSink.close(ctx)
 		c.Assert(<-errCh, check.IsNil)
 	}()
 
@@ -108,9 +108,9 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 			return nil
 		}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(30))
 	}
-	asyncSink.EmitCheckpointTs(ctx, 1)
+	asyncSink.emitCheckpointTs(ctx, 1)
 	c.Assert(waitCheckpointGrowingUp(mSink, 1), check.IsNil)
-	asyncSink.EmitCheckpointTs(ctx, 10)
+	asyncSink.emitCheckpointTs(ctx, 10)
 	c.Assert(waitCheckpointGrowingUp(mSink, 10), check.IsNil)
 }
 
@@ -132,7 +132,7 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 
 	go func() {
 		wg.Wait()
-		asyncSink.Close(ctx)
+		asyncSink.close(ctx)
 		c.Assert(<-errCh, check.IsNil)
 	}()
 
@@ -144,7 +144,7 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 
 	for _, event := range ddlEvents {
 		for {
-			done, err := asyncSink.EmitDDLEvent(ctx, event)
+			done, err := asyncSink.emitDDLEvent(ctx, event)
 			c.Assert(err, check.IsNil)
 			if done {
 				c.Assert(mSink.GetDDL(), check.DeepEquals, event)
@@ -189,13 +189,13 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 
 	go func() {
 		wg.Wait()
-		asyncSink.Close(ctx)
+		asyncSink.close(ctx)
 	}()
 
 	mSink.ddlError = cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	ddl1 := &model.DDLEvent{CommitTs: 1}
 	for {
-		done, err := asyncSink.EmitDDLEvent(ctx, ddl1)
+		done, err := asyncSink.emitDDLEvent(ctx, ddl1)
 		c.Assert(err, check.IsNil)
 		if done {
 			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl1)
@@ -207,7 +207,7 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 	mSink.ddlError = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 	ddl2 := &model.DDLEvent{CommitTs: 2}
 	for {
-		done, err := asyncSink.EmitDDLEvent(ctx, ddl2)
+		done, err := asyncSink.emitDDLEvent(ctx, ddl2)
 		c.Assert(err, check.IsNil)
 
 		if done || readResultErr() != nil {

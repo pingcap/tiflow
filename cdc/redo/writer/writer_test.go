@@ -387,7 +387,7 @@ func TestLogWriterEmitCheckpointTs(t *testing.T) {
 		},
 	}
 
-	dir, err := ioutil.TempDir("", "redo-EmitCheckpointTs")
+	dir, err := ioutil.TempDir("", "redo-emitCheckpointTs")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
