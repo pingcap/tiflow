@@ -266,7 +266,7 @@ LOOP:
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
-		ctx.Throw(c.sink.run(cancelCtx))
+		ctx.Throw(c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info))
 	}()
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
