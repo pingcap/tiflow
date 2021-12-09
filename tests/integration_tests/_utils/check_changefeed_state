@@ -6,16 +6,16 @@ set -eux
 # parameter 2: changefeed id
 # parameter 3: expected state
 # parameter 4: error msg
-
-TLS_DIR="../_certificates"
+# parameter last: tls dir
 
 endpoints=${1}
 changefeed_id=${2}
 expected_state=${3}
 error_msg=${4}
+tls_dir=${!#}
 
 if [[ "$endpoints" =~ "https" ]]; then
-	info=$(cdc.test cli changefeed query --ca="${TLS_DIR}/ca.pem" --cert="${TLS_DIR}/client.pem" --key="${TLS_DIR}/client-key.pem" --pd=$endpoints -c $changefeed_id -s)
+	info=$(cdc.test cli changefeed query --ca="${tls_dir}/ca.pem" --cert="${tls_dir}/client.pem" --key="${tls_dir}/client-key.pem" --pd=$endpoints -c $changefeed_id -s)
 else
 	info=$(cdc.test cli changefeed query --pd=$endpoints -c $changefeed_id -s)
 fi
