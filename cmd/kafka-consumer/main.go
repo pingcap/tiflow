@@ -588,17 +588,12 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 			err          error
 			checkpointTs uint64
 		)
-		allFlushed := true
 		flushedResolvedTs := false
 		sink.tablesMap.Range(func(key, value interface{}) bool {
 			tableID := key.(int64)
-			lastCommitTs := value.(uint64)
 			checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
 			if err != nil {
 				return false
-			}
-			if lastCommitTs > checkpointTs {
-				allFlushed = false
 			}
 			if checkpointTs >= resolvedTs {
 				flushedResolvedTs = true
@@ -608,7 +603,7 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 		if err != nil {
 			return err
 		}
-		if allFlushed && flushedResolvedTs {
+		if flushedResolvedTs {
 			return nil
 		}
 	}
