@@ -89,11 +89,10 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
 				zap.String("changefeed-id", ctx.ChangefeedVars().ID), zap.String("table-name", n.tableName))
 		}
-		sortDir := ctx.ChangefeedVars().Info.SortDir
-		err := unified.CheckDir(sortDir)
-		if err != nil {
-			return errors.Trace(err)
-		}
+		// Sorter dir has been set and checked when server starts.
+		// See https://github.com/pingcap/ticdc/blob/674ac2/cdc/server.go#L280
+		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
+		var err error
 		sorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 		if err != nil {
 			return errors.Trace(err)
