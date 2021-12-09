@@ -56,7 +56,7 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
 	github.com/pingcap/kvproto v0.0.0-20211202065422-a412f7a319c3
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
-	github.com/pingcap/tidb v1.1.0-beta.0.20211208110757-e15e457f3eb6
+	github.com/pingcap/tidb v1.1.0-beta.0.20211204151954-e3e2e8d946f4
 	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20211204151954-e3e2e8d946f4
 	github.com/pingcap/tipb v0.0.0-20211201080053-bd104bb270ba // indirect
@@ -75,7 +75,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tidwall/gjson v1.9.1
 	github.com/tidwall/sjson v1.2.2
-	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20211206072923-c0e876615440
+	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20211201083510-3a7675742ee5
 	github.com/tikv/pd v1.1.0-beta.0.20211118054146-02848d2660ee
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
