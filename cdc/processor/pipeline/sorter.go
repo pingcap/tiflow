@@ -107,11 +107,10 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			n.cleanRouter = ctx.GlobalVars().SorterSystem.CleanerRouter()
 			sorter = levelSorter
 		} else {
-			sortDir := ctx.ChangefeedVars().Info.SortDir
-			err := unified.CheckDir(sortDir)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			// Sorter dir has been set and checked when server starts.
+			// See https://github.com/pingcap/ticdc/blob/9dad09/cdc/server.go#L275
+			sortDir := config.GetGlobalServerConfig().Sorter.SortDir
+			var err error
 			sorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 			if err != nil {
 				return errors.Trace(err)

@@ -138,7 +138,7 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 	if conf.Debug.EnableDBSorter {
 		// Sorter dir has been set and checked when server starts.
-		// See https://github.com/pingcap/ticdc/blob/674ac2/cdc/server.go#L280
+		// See https://github.com/pingcap/ticdc/blob/9dad09/cdc/server.go#L275
 		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
 		c.sorterSystem = ssystem.NewSystem(sortDir, conf.Debug.DB)
 		err = c.sorterSystem.Start(ctx)
