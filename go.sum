@@ -834,6 +834,8 @@ github.com/pingcap/sysutil v0.0.0-20210730114356-fcd8a63f68c5/go.mod h1:XsOaV712
 github.com/pingcap/tidb v1.1.0-beta.0.20211023132847-efa94595c071/go.mod h1:Ci7ABF58a4jn6YtaHi7655jP409edqC2JxWWFRqOubg=
 github.com/pingcap/tidb v1.1.0-beta.0.20211204151954-e3e2e8d946f4 h1:axJl34ZMFxOGkobA7+O+fk2uIXU255pcgFu5HPKeh2I=
 github.com/pingcap/tidb v1.1.0-beta.0.20211204151954-e3e2e8d946f4/go.mod h1:XBf5r8z1gxV9gQlaiikJ9B9xea4BKdcoUKx/QOZoq8Q=
+github.com/pingcap/tidb v1.1.0-beta.0.20211208042556-27f7b592b1ce h1:CB5wlsZYB5Lx6hY/Qi2rFQip9cydzmKosu73COFzFCE=
+github.com/pingcap/tidb v1.1.0-beta.0.20211208042556-27f7b592b1ce/go.mod h1:R2E0ZlYqy7GLnRUmW5uqbi+jM3pRhtseEPqBuQZrmmA=
 github.com/pingcap/tidb-dashboard v0.0.0-20210312062513-eef5d6404638/go.mod h1:OzFN8H0EDMMqeulPhPMw2i2JaiZWOKFQ7zdRPhENNgo=
 github.com/pingcap/tidb-dashboard v0.0.0-20210716172320-2226872e3296/go.mod h1:OCXbZTBTIMRcIt0jFsuCakZP+goYRv6IjawKbwLS2TQ=
 github.com/pingcap/tidb-dashboard v0.0.0-20211008050453-a25c25809529/go.mod h1:OCXbZTBTIMRcIt0jFsuCakZP+goYRv6IjawKbwLS2TQ=
