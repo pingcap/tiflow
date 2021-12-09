@@ -41,9 +41,9 @@ const (
 	JavaSQLTypeBLOB          JavaSQLType = 2004
 	JavaSQLTypeCLOB          JavaSQLType = 2005
 
-	JavaSQLTypeOTHER JavaSQLType = 1111
 	// unused
 	// JavaSQLTypeFLOAT                   JavaSQLType = 6
+	// JavaSQLTypeOTHER                   JavaSQLType = 1111
 	// JavaSQLTypeNUMERIC                 JavaSQLType = 2
 	// JavaSQLTypeJAVA_OBJECT             JavaSQLType = 2000
 	// JavaSQLTypeDISTINCT                JavaSQLType = 2001
@@ -64,10 +64,10 @@ const (
 	// JavaSQLTypeTIMESTAMP_WITH_TIMEZONE JavaSQLType = 2014
 )
 
-// MySQLType2JavaType converts the mysql protocol types to java sql types
+// mySQLType2JavaType converts the mysql protocol types to java sql types
 // take https://github.com/alibaba/canal/blob/b54bea5e3/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L1 as reference
 // for official `meta` related logic, it's not supported.
-func MySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
+func mySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
 	// see https://github.com/mysql/mysql-connector-j/blob/5.1.49/src/com/mysql/jdbc/MysqlDefs.java
 	switch mysqlType {
 	case mysql.TypeTiny:
@@ -113,19 +113,13 @@ func MySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
 		return JavaSQLTypeINTEGER
 
 	case mysql.TypeSet:
-		return JavaSQLTypeBINARY
+		return JavaSQLTypeBIT
 
 	// Blob related is not identical to the official implementation, since we do not know `meta` at the moment.
 	case mysql.TypeTinyBlob:
 		return JavaSQLTypeVARBINARY
 
-	case mysql.TypeMediumBlob:
-		return JavaSQLTypeLONGVARBINARY
-
-	case mysql.TypeLongBlob:
-		return JavaSQLTypeLONGVARBINARY
-
-	case mysql.TypeBlob:
+	case mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		return JavaSQLTypeLONGVARBINARY
 
 	case mysql.TypeVarString, mysql.TypeVarchar:
@@ -146,7 +140,11 @@ func MySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
 	case mysql.TypeBit:
 		return JavaSQLTypeBIT
 
+	case mysql.TypeJSON:
+		// json: see jdbc 8.0, https://github.com/mysql/mysql-connector-j/blob/8.0.20/src/main/core-api/java/com/mysql/cj/MysqlType.java
+		return JavaSQLTypeVARCHAR
+
 	default:
-		return JavaSQLTypeOTHER
+		return JavaSQLTypeVARCHAR
 	}
 }
