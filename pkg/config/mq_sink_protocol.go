@@ -31,6 +31,7 @@ const (
 	ProtocolMaxwell
 	ProtocolCanalJSON
 	ProtocolCraft
+	ProtocolOpenProtocol
 )
 
 // FromString converts the protocol from string to Protocol enum type.
@@ -48,6 +49,8 @@ func (p *Protocol) FromString(protocol string) {
 		*p = ProtocolCanalJSON
 	case "craft":
 		*p = ProtocolCraft
+	case "open-protocol":
+		*p = ProtocolOpenProtocol
 	default:
 		*p = ProtocolDefault
 		log.Warn("can't support codec protocol, using default protocol", zap.String("protocol", protocol))
@@ -69,6 +72,8 @@ func (p Protocol) String() string {
 		return "canal-json"
 	case ProtocolCraft:
 		return "craft"
+	case ProtocolOpenProtocol:
+		return "open-protocol"
 	default:
 		panic("unreachable")
 	}

@@ -150,7 +150,7 @@ type EncoderBuilder interface {
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
 func NewEventBatchEncoderBuilder(p config.Protocol, credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
 	switch p {
-	case config.ProtocolDefault:
+	case config.ProtocolDefault, config.ProtocolOpenProtocol:
 		return newJSONEventBatchEncoderBuilder(opts), nil
 	case config.ProtocolCanal:
 		return newCanalEventBatchEncoderBuilder(opts), nil

@@ -53,6 +53,10 @@ func TestFromString(t *testing.T) {
 			protocol:             "craft",
 			expectedProtocolEnum: ProtocolCraft,
 		},
+		{
+			protocol:             "open-protocol",
+			expectedProtocolEnum: ProtocolOpenProtocol,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -91,6 +95,10 @@ func TestString(t *testing.T) {
 		{
 			protocolEnum:     ProtocolCraft,
 			expectedProtocol: "craft",
+		},
+		{
+			protocolEnum:     ProtocolOpenProtocol,
+			expectedProtocol: "open-protocol",
 		},
 	}
 
