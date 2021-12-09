@@ -205,9 +205,12 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 		}
 
 		protocol := sinkURIParsed.Query().Get("protocol")
+		if protocol != "" {
+			cfg.Sink.Protocol = protocol
+		}
 		for _, fp := range forceEnableOldValueProtocols {
-			if protocol == fp {
-				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", protocol))
+			if cfg.Sink.Protocol == fp {
+				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", cfg.Sink.Protocol))
 				cfg.EnableOldValue = true
 				break
 			}
@@ -259,7 +262,6 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 			// TODO(neil) enable ID bucket.
 		}
 	}
-
 	// Complete cfg.
 	o.cfg = cfg
 
@@ -270,6 +272,11 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Command) error {
 	if o.commonChangefeedOptions.sinkURI == "" {
 		return errors.New("Creating changefeed without a sink-uri")
+	}
+
+	err := o.cfg.Validate()
+	if err != nil {
+		return err
 	}
 
 	if err := o.validateStartTs(ctx); err != nil {
