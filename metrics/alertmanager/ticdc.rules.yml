@@ -14,12 +14,12 @@ groups:
       summary: cdc cluster has multiple owners
 
   - alert: cdc_no_owner
-    expr: sum(rate(ticdc_owner_ownership_counter[30s])) < 1
+    expr: sum(rate(ticdc_owner_ownership_counter[30s])) < 0.5
     for: 10m
     labels:
       env: ENV_LABELS_ENV
       level: warning
-      expr: sum(rate(ticdc_owner_ownership_counter[30s])) < 1
+      expr: sum(rate(ticdc_owner_ownership_counter[30s])) < 0.5
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
