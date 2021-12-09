@@ -39,16 +39,16 @@ const (
 type asyncSink interface {
 	// run the asyncSink
 	run(ctx cdcContext.Context) error
-	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
+	// emitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
-	EmitCheckpointTs(ctx cdcContext.Context, ts uint64)
-	// EmitDDLEvent emits DDL event asynchronously and return true if the DDL is executed
+	emitCheckpointTs(ctx cdcContext.Context, ts uint64)
+	// emitDDLEvent emits DDL event asynchronously and return true if the DDL is executed
 	// the DDL event will be sent to another goroutine and execute to downstream
 	// the caller of this function can call again and again until a true returned
-	EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
-	EmitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
-	Close(ctx context.Context) error
+	emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
+	emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
+	close(ctx context.Context) error
 }
 
 type asyncSinkImpl struct {
@@ -161,11 +161,11 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) error {
 	}
 }
 
-func (s *asyncSinkImpl) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) {
+func (s *asyncSinkImpl) emitCheckpointTs(ctx cdcContext.Context, ts uint64) {
 	atomic.StoreUint64(&s.checkpointTs, ts)
 }
 
-func (s *asyncSinkImpl) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
+func (s *asyncSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	ddlFinishedTs := atomic.LoadUint64(&s.ddlFinishedTs)
 	if ddl.CommitTs <= ddlFinishedTs {
 		// the DDL event is executed successfully, and done is true
@@ -184,7 +184,7 @@ func (s *asyncSinkImpl) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent
 	return false, nil
 }
 
-func (s *asyncSinkImpl) EmitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
+func (s *asyncSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
 	if checkpointTs == s.lastSyncPoint {
 		return nil
 	}
@@ -193,7 +193,7 @@ func (s *asyncSinkImpl) EmitSyncPoint(ctx cdcContext.Context, checkpointTs uint6
 	return s.syncPointStore.SinkSyncpoint(ctx, ctx.ChangefeedVars().ID, checkpointTs)
 }
 
-func (s *asyncSinkImpl) Close(ctx context.Context) (err error) {
+func (s *asyncSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
 	if s.sink != nil {
 		err = s.sink.Close(ctx)
