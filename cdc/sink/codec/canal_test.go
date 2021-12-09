@@ -369,6 +369,14 @@ func testDdl(c *check.C) {
 	c.Assert(rc.GetDdlSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
 }
 
+func (s *canalEntrySuite) TestGetMySQLType(c *check.C) {
+
+}
+
+func (s *canalEntrySuite) TestGetJavaSQLType(c *check.C) {
+
+}
+
 func (s *canalEntrySuite) TestFormatValue(c *check.C) {
 	decoder := charmap.ISO8859_1.NewDecoder()
 
