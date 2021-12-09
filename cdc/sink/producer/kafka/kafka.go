@@ -257,8 +257,8 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 }
 
 var (
-	newSaramaConfigImpl                                      = newSaramaConfig
-	NewSaramaAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
+	newSaramaConfigImpl                                 = newSaramaConfig
+	NewAdminClientImpl  kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
 )
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
@@ -269,7 +269,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, e
 		return nil, err
 	}
 
-	admin, err := NewSaramaAdminClientImpl(config.BrokerEndpoints, cfg)
+	admin, err := NewAdminClientImpl(config.BrokerEndpoints, cfg)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
