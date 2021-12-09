@@ -40,10 +40,10 @@ const (
 	JavaSQLTypeBLOB          JavaSQLType = 2004
 	JavaSQLTypeCLOB          JavaSQLType = 2005
 
-	JavaSQLTypeOTHER JavaSQLType = 1111
 	// unused
 	// JavaSQLTypeLONGVARCHAR             JavaSQLType = -1
 	// JavaSQLTypeFLOAT                   JavaSQLType = 6
+	// JavaSQLTypeOTHER                   JavaSQLType = 1111
 	// JavaSQLTypeNUMERIC                 JavaSQLType = 2
 	// JavaSQLTypeJAVA_OBJECT             JavaSQLType = 2000
 	// JavaSQLTypeDISTINCT                JavaSQLType = 2001
@@ -64,8 +64,15 @@ const (
 )
 
 // mySQLType2JavaType converts the mysql protocol types to java sql types
+<<<<<<< HEAD
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L132-L269
 func mySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
+=======
+// take https://github.com/alibaba/canal/blob/b54bea5e3/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L1 as reference
+// for official `meta` related logic, it's not supported.
+func mySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
+	// see https://github.com/mysql/mysql-connector-j/blob/5.1.49/src/com/mysql/jdbc/MysqlDefs.java
+>>>>>>> c3f514083 (type fix.)
 	switch mysqlType {
 	case mysql.TypeTiny:
 		return JavaSQLTypeTINYINT
@@ -140,9 +147,13 @@ func mySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
 		return JavaSQLTypeBIT
 
 	case mysql.TypeJSON:
+<<<<<<< HEAD
+=======
+		// json: see jdbc 8.0, https://github.com/mysql/mysql-connector-j/blob/8.0.20/src/main/core-api/java/com/mysql/cj/MysqlType.java
+>>>>>>> c3f514083 (type fix.)
 		return JavaSQLTypeVARCHAR
 
 	default:
-		return JavaSQLTypeOTHER
+		return JavaSQLTypeVARCHAR
 	}
 }
