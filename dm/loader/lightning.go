@@ -42,7 +42,7 @@ import (
 
 const (
 	// checkpoint file name for lightning loader
-	// this file is used to store the real checkpoint data for lightning
+	// this file is used to store the real checkpoint data for lightning.
 	lightningCheckpointFileName = "tidb_lightning_checkpoint.pb"
 )
 
@@ -349,17 +349,4 @@ func (l *LightningLoader) Status(_ *binlog.SourceStatus) interface{} {
 		MetaBinlogGTID: l.metaBinlogGTID.Load(),
 	}
 	return s
-}
-
-// checkpointID returns ID which used for checkpoint table.
-func (l *LightningLoader) checkpointID() string {
-	if len(l.cfg.SourceID) > 0 {
-		return l.cfg.SourceID
-	}
-	dir, err := filepath.Abs(l.cfg.Dir)
-	if err != nil {
-		l.logger.Warn("get abs dir", zap.String("directory", l.cfg.Dir), log.ShortError(err))
-		return l.cfg.Dir
-	}
-	return shortSha1(dir)
 }
