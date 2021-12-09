@@ -878,7 +878,7 @@ func TestDeleteAllLogs(t *testing.T) {
 }
 
 func TestPreCleanUpS3(t *testing.T) {
-	tests := []struct {
+	testCases := []struct {
 		name               string
 		fileExistsErr      error
 		fileExists         bool
@@ -914,16 +914,16 @@ func TestPreCleanUpS3(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tc := range testCases {
 		origin := getAllFilesInS3
 		getAllFilesInS3 = func(ctx context.Context, l *LogWriter) ([]string, error) {
-			return []string{"1", "11", "delete_test-cf"}, tt.getAllFilesInS3Err
+			return []string{"1", "11", "delete_test-cf"}, tc.getAllFilesInS3Err
 		}
 		controller := gomock.NewController(t)
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 
-		mockStorage.EXPECT().FileExists(gomock.Any(), gomock.Any()).Return(tt.fileExists, tt.fileExistsErr)
-		mockStorage.EXPECT().DeleteFile(gomock.Any(), gomock.Any()).Return(tt.deleteFileErr).MaxTimes(3)
+		mockStorage.EXPECT().FileExists(gomock.Any(), gomock.Any()).Return(tc.fileExists, tc.fileExistsErr)
+		mockStorage.EXPECT().DeleteFile(gomock.Any(), gomock.Any()).Return(tc.deleteFileErr).MaxTimes(3)
 
 		cfg := &LogWriterConfig{
 			Dir:               "dir",
@@ -938,10 +938,10 @@ func TestPreCleanUpS3(t *testing.T) {
 			storage: mockStorage,
 		}
 		ret := writer.preCleanUpS3(context.Background())
-		if tt.wantErr != "" {
-			require.Regexp(t, tt.wantErr, ret.Error(), tt.name)
+		if tc.wantErr != "" {
+			require.Regexp(t, tc.wantErr, ret.Error(), tc.name)
 		} else {
-			require.Nil(t, ret, tt.name)
+			require.Nil(t, ret, tc.name)
 		}
 		getAllFilesInS3 = origin
 	}
