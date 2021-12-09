@@ -1661,16 +1661,9 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	// NOTICE: eventCh may block the main logic of EventFeed
 	eventCh := make(chan model.RegionFeedEvent, 128)
->>>>>>> 82c4d68de (kvclient(ticdc): fix kvclient takes too long time to recover (#3612))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2531,25 +2524,6 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	cancel()
 }
 
-<<<<<<< HEAD
-func (s *clientSuite) TestSingleRegionInfoClone(c *check.C) {
-	defer testleak.AfterTest(c)()
-	sri := newSingleRegionInfo(
-		tikv.RegionVerID{},
-		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-		1000, &tikv.RPCContext{})
-	sri2 := sri.partialClone()
-	sri2.ts = 2000
-	sri2.span.End[0] = 'b'
-	c.Assert(sri.ts, check.Equals, uint64(1000))
-	c.Assert(sri.span.String(), check.Equals, "[61, 63)")
-	c.Assert(sri2.ts, check.Equals, uint64(2000))
-	c.Assert(sri2.span.String(), check.Equals, "[61, 62)")
-	c.Assert(sri2.rpcCtx, check.DeepEquals, &tikv.RPCContext{})
-}
-
-=======
->>>>>>> 82c4d68de (kvclient(ticdc): fix kvclient takes too long time to recover (#3612))
 // TestResolveLockNoCandidate tests the resolved ts manager can work normally
 // when no region exceeds reslove lock interval, that is what candidate means.
 func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
