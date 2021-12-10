@@ -82,7 +82,7 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 	defer testleak.AfterTest(c)()
 	asyncSink, mSink := newAsyncSink4Test()
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
