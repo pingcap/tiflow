@@ -384,6 +384,7 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 		return nil
 	}
 
+	logEtcdCmps(cmps)
 	return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 }
 
@@ -412,6 +413,14 @@ func logEtcdOps(ops []clientv3.Op, commited bool) {
 		}
 	}
 	log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
+}
+
+func logEtcdCmps(cmps []clientv3.Cmp) {
+	log.Info("[etcd worker] ==========Failed Etcd Txn Cmps==========")
+	for _, cmp := range cmps {
+		log.Info("[etcd worker] compare", zap.Any("cmp", cmp))
+	}
+	log.Info("[etcd worker] ============End Failed Etcd Txn Cmps=============")
 }
 
 func (worker *EtcdWorker) cleanUp() {
