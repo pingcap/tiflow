@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/ticdc/dm/dm/pb"
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/stretchr/testify/require"
 
 	. "github.com/pingcap/check"
 )
@@ -127,11 +126,18 @@ func (d *testDumplingSuite) TestDefaultConfig(c *C) {
 	c.Assert(dumpling.dumpConfig.Rows, Not(Equals), export.UnspecifiedSize)
 }
 
-func TestCallStatus(t *testing.T) {
+func (d *testDumplingSuite) TestCallStatus(c *C) {
 	conf := export.DefaultConfig()
 	cfg := &config.SubTaskConfig{}
 	m := &Dumpling{cfg: cfg}
 	ctx := context.Background()
+
+	ss := &binlog.SourceStatus{}
+	s := m.Status(ss).(*pb.DumpStatus)
+	c.Assert(s.CompletedTables, Equals, float64(0))
+	c.Assert(s.FinishedBytes, Equals, float64(0))
+	c.Assert(s.FinishedRows, Equals, float64(0))
+	c.Assert(s.EstimateTotalRows, Equals, float64(0))
 
 	dumpling, err := export.NewDumper(ctx, conf)
 	if err != nil {
@@ -141,11 +147,10 @@ func TestCallStatus(t *testing.T) {
 	export.InitMetricsVector(conf.Labels)
 
 	m.Close()
-	ss := &binlog.SourceStatus{}
-	m.Status(ss)
-	s := &pb.DumpStatus{}
-	require.EqualValues(t, float64(0), s.CompletedTables)
-	require.EqualValues(t, float64(0), s.FinishedBytes)
-	require.EqualValues(t, float64(0), s.FinishedRows)
-	require.EqualValues(t, float64(0), s.EstimateTotalRows)
+	ss = &binlog.SourceStatus{}
+	s = m.Status(ss).(*pb.DumpStatus)
+	c.Assert(s.CompletedTables, Equals, float64(0))
+	c.Assert(s.FinishedBytes, Equals, float64(0))
+	c.Assert(s.FinishedRows, Equals, float64(0))
+	c.Assert(s.EstimateTotalRows, Equals, float64(0))
 }
