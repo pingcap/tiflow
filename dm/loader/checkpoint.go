@@ -513,8 +513,8 @@ func (cp *LightningCheckpointList) Prepare(ctx context.Context) error {
 		return terror.WithScope(terror.Annotate(err, "initialize connection when prepare"), terror.ScopeDownstream)
 	}
 	defer func() {
-		if err := cp.db.CloseBaseConn(connection); err != nil {
-			log.L().Warn("close db connection failed", zap.Error(err))
+		if err1 := cp.db.CloseBaseConn(connection); err1 != nil {
+			log.L().Warn("close db connection failed", zap.Error(err1))
 		}
 	}()
 
@@ -542,8 +542,8 @@ func (cp *LightningCheckpointList) RegisterCheckPoint(ctx context.Context) error
 		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
 	}
 	defer func() {
-		if err := cp.db.CloseBaseConn(connection); err != nil {
-			log.L().Warn("close db connection failed", zap.Error(err))
+		if err1 := cp.db.CloseBaseConn(connection); err1 != nil {
+			log.L().Warn("close db connection failed", zap.Error(err1))
 		}
 	}()
 
@@ -566,8 +566,8 @@ func (cp *LightningCheckpointList) UpdateStatus(ctx context.Context, status ligh
 		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
 	}
 	defer func() {
-		if err := cp.db.CloseBaseConn(connection); err != nil {
-			log.L().Warn("close db connection failed", zap.Error(err))
+		if err1 := cp.db.CloseBaseConn(connection); err1 != nil {
+			log.L().Warn("close db connection failed", zap.Error(err1))
 		}
 	}()
 
@@ -590,8 +590,8 @@ func (cp *LightningCheckpointList) taskStatus(ctx context.Context) (lightingLoad
 		return lightningStatusInit, terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
 	}
 	defer func() {
-		if err := cp.db.CloseBaseConn(connection); err != nil {
-			log.L().Warn("close db connection failed", zap.Error(err))
+		if err1 := cp.db.CloseBaseConn(connection); err1 != nil {
+			log.L().Warn("close db connection failed", zap.Error(err1))
 		}
 	}()
 
@@ -619,8 +619,8 @@ func (cp *LightningCheckpointList) RemoveTaskCheckPoint(ctx context.Context) err
 		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
 	}
 	defer func() {
-		if err := cp.db.CloseBaseConn(connection); err != nil {
-			log.L().Warn("close db connection failed", zap.Error(err))
+		if err1 := cp.db.CloseBaseConn(connection); err1 != nil {
+			log.L().Warn("close db connection failed", zap.Error(err1))
 		}
 	}()
 

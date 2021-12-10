@@ -286,12 +286,6 @@ func (s *lightningCpListSuite) TearDownTest(c *C) {
 	c.Assert(s.mock.ExpectationsWereMet(), IsNil)
 }
 
-func (s *lightningCpListSuite) expect(f func()) {
-	s.mock.ExpectBegin()
-	f()
-	s.mock.ExpectCommit()
-}
-
 func (s *lightningCpListSuite) TestLightningCheckpointListPrepare(c *C) {
 	ctx := context.Background()
 	s.mock.ExpectBegin()
