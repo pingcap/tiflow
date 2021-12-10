@@ -19,13 +19,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/docker/go-units"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/br/pkg/lightning"
-	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
-	"github.com/pingcap/tidb/parser/mysql"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -192,16 +189,6 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		cpPath := filepath.Join(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName)
 		cfg.Checkpoint.DSN = cpPath
 		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
-		param := common.MySQLConnectParam{
-			Host:             cfg.TiDB.Host,
-			Port:             cfg.TiDB.Port,
-			User:             cfg.TiDB.User,
-			Password:         cfg.TiDB.Psw,
-			SQLMode:          mysql.DefaultSQLMode,
-			MaxAllowedPacket: 64 * units.MiB,
-			TLS:              cfg.TiDB.TLS,
-		}
-		cfg.Checkpoint.DSN = param.ToDSN()
 		cfg.TiDB.Vars = make(map[string]string)
 		if l.cfg.To.Session != nil {
 			for k, v := range l.cfg.To.Session {
