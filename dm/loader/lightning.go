@@ -120,7 +120,7 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		return err
 	}
 
-	checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.Name, l.cfg.MetaSchema)
+	checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.Name, l.cfg.SourceID, l.cfg.MetaSchema)
 	err = checkpointList.Prepare(ctx)
 	if err == nil {
 		l.checkPointList = checkpointList
@@ -171,13 +171,13 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		return err
 	}
 
-	status, err := l.checkPointList.TaskStatus(ctx, l.cfg.Name, l.cfg.SourceID)
+	status, err := l.checkPointList.taskStatus(ctx)
 	if err != nil {
 		return err
 	}
 
 	if status < lightningStatusFinished {
-		if err = l.checkPointList.RegisterCheckPoint(ctx, l.workerName, l.cfg.Name); err != nil {
+		if err = l.checkPointList.RegisterCheckPoint(ctx); err != nil {
 			return err
 		}
 		cfg := lcfg.NewConfig()
@@ -206,7 +206,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		err = l.runLightning(ctx, cfg)
 		if err == nil {
 			l.finish.Store(true)
-			err = l.checkPointList.UpdateStatus(ctx, l.cfg.Name, l.cfg.SourceID, lightningStatusFinished)
+			err = l.checkPointList.UpdateStatus(ctx, lightningStatusFinished)
 		} else {
 			l.logger.Error("failed to runlightning", zap.Error(err))
 		}
@@ -275,7 +275,7 @@ func (l *LightningLoader) isClosed() bool {
 
 // IsFreshTask implements Unit.IsFreshTask.
 func (l *LightningLoader) IsFreshTask(ctx context.Context) (bool, error) {
-	status, err := l.checkPointList.TaskStatus(ctx, l.cfg.Name, l.cfg.SourceID)
+	status, err := l.checkPointList.taskStatus(ctx)
 	return status == lightningStatusInit, err
 }
 

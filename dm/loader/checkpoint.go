@@ -488,18 +488,22 @@ func (s lightingLoadStatus) String() string {
 }
 
 type LightningCheckpointList struct {
-	db        *conn.BaseDB
-	schema    string
-	tableName string
-	logger    log.Logger
+	db         *conn.BaseDB
+	schema     string
+	tableName  string
+	taskName   string
+	sourceName string
+	logger     log.Logger
 }
 
-func NewLightningCheckpointList(db *conn.BaseDB, taskName, metaSchema string) *LightningCheckpointList {
+func NewLightningCheckpointList(db *conn.BaseDB, taskName, sourceName, metaSchema string) *LightningCheckpointList {
 	return &LightningCheckpointList{
-		db:        db,
-		schema:    dbutil.ColumnName(metaSchema),
-		tableName: dbutil.TableName(metaSchema, cputil.LightningCheckpoint(taskName)),
-		logger:    log.L().WithFields(zap.String("component", "lightning checkpoint database list")),
+		db:         db,
+		schema:     dbutil.ColumnName(metaSchema),
+		tableName:  dbutil.TableName(metaSchema, cputil.LightningCheckpoint(taskName)),
+		taskName:   taskName,
+		sourceName: sourceName,
+		logger:     log.L().WithFields(zap.String("component", "lightning checkpoint database list")),
 	}
 }
 
@@ -532,7 +536,7 @@ func (cp *LightningCheckpointList) Prepare(ctx context.Context) error {
 	return terror.WithScope(err, terror.ScopeDownstream)
 }
 
-func (cp *LightningCheckpointList) RegisterCheckPoint(ctx context.Context, taskName, sourceName string) error {
+func (cp *LightningCheckpointList) RegisterCheckPoint(ctx context.Context) error {
 	connection, err := cp.db.GetBaseConn(ctx)
 	if err != nil {
 		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
@@ -543,12 +547,11 @@ func (cp *LightningCheckpointList) RegisterCheckPoint(ctx context.Context, taskN
 		}
 	}()
 
-	sql := fmt.Sprintf("INSERT IGNORE INTO %s (`task_name`, `source_name`) VALUES(?,?)", cp.tableName)
+	sql := fmt.Sprintf("INSERT IGNORE INTO %s (`task_name`, `source_name`) VALUES (?, ?)", cp.tableName)
 	cp.logger.Info("initial checkpoint record",
-		zap.String("sql", sql),
-		zap.String("task", taskName),
-		zap.String("source", sourceName))
-	args := []interface{}{taskName, sourceName}
+		zap.String("task", cp.taskName),
+		zap.String("source", cp.sourceName))
+	args := []interface{}{cp.taskName, cp.sourceName}
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
 	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{sql}, args)
 	if err != nil {
@@ -557,7 +560,7 @@ func (cp *LightningCheckpointList) RegisterCheckPoint(ctx context.Context, taskN
 	return nil
 }
 
-func (cp *LightningCheckpointList) UpdateStatus(ctx context.Context, taskName, sourceName string, status lightingLoadStatus) error {
+func (cp *LightningCheckpointList) UpdateStatus(ctx context.Context, status lightingLoadStatus) error {
 	connection, err := cp.db.GetBaseConn(ctx)
 	if err != nil {
 		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
@@ -570,18 +573,18 @@ func (cp *LightningCheckpointList) UpdateStatus(ctx context.Context, taskName, s
 
 	sql := fmt.Sprintf("UPDATE %s set status = ? WHERE `task_name` = ? AND `source_name` = ?", cp.tableName)
 	cp.logger.Info("update lightning loader status",
-		zap.String("task", taskName), zap.String("source", sourceName),
+		zap.String("task", cp.taskName), zap.String("source", cp.sourceName),
 		zap.Stringer("status", status))
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
 	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{sql},
-		[]interface{}{status, taskName, sourceName})
+		[]interface{}{status, cp.taskName, cp.sourceName})
 	if err != nil {
 		return terror.WithScope(terror.Annotate(err, "update lightning status"), terror.ScopeDownstream)
 	}
 	return nil
 }
 
-func (cp *LightningCheckpointList) TaskStatus(ctx context.Context, taskName, sourceName string) (lightingLoadStatus, error) {
+func (cp *LightningCheckpointList) taskStatus(ctx context.Context) (lightingLoadStatus, error) {
 	connection, err := cp.db.GetBaseConn(ctx)
 	if err != nil {
 		return lightningStatusInit, terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
@@ -594,7 +597,7 @@ func (cp *LightningCheckpointList) TaskStatus(ctx context.Context, taskName, sou
 
 	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", cp.tableName)
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
-	rows, err := connection.QuerySQL(tctx, query, taskName, sourceName)
+	rows, err := connection.QuerySQL(tctx, query, cp.taskName, cp.sourceName)
 	if err != nil {
 		return lightningStatusInit, err
 	}
@@ -610,16 +613,20 @@ func (cp *LightningCheckpointList) TaskStatus(ctx context.Context, taskName, sou
 	return lightningStatusInit, nil
 }
 
-func (cp *LightningCheckpointList) RemoveTaskCheckPoint(ctx context.Context, taskName string) error {
+func (cp *LightningCheckpointList) RemoveTaskCheckPoint(ctx context.Context) error {
 	connection, err := cp.db.GetBaseConn(ctx)
 	if err != nil {
 		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
 	}
-	defer cp.db.CloseBaseConn(connection)
+	defer func() {
+		if err := cp.db.CloseBaseConn(connection); err != nil {
+			log.L().Warn("close db connection failed", zap.Error(err))
+		}
+	}()
 
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
 	query := fmt.Sprintf("DELETE from %s where `task_name`=?", cp.tableName)
-	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{query}, []interface{}{taskName})
+	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{query}, []interface{}{cp.taskName})
 	return terror.WithScope(err, terror.ScopeDownstream)
 }
 
