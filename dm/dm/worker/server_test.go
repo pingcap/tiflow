@@ -58,7 +58,7 @@ func TestServer(t *testing.T) {
 
 type testServer struct{}
 
-var _ = SerialSuites(&testServer{})
+var _ = Suite(&testServer{})
 
 func (t *testServer) SetUpSuite(c *C) {
 	err := log.InitLogger(&log.Config{})
