@@ -6,18 +6,18 @@ Before the DM’s task starts, we should check some items to avoid start-task fa
 
 ### Bad user habits
 
-We allow users to ignore all check-items, in which case the user's authority is too large to perform unexpected operations. 
+We allow users to ignore all check-items, in which case the user's privilege is too large to perform unexpected operations. 
 
 ### Too much time overhead
 
-If we have a large number of tables in source, we will take too much time in checking table schema, sharding table consistency and sharding table auto increment key.
+If we have a large number of tables in source, we will take too much time in checking table schema, sharding table consistency and sharding table auto increment ID.
 
 ### Inadequate check
 
-* Now we check it by `mapping` which is deprecated. If we don't set the `mapping` and don't ignore the **auto_increment_ID**, the pre-check will report an error. PS: **auto_increment_ID** is only checked when **schema_of_shard_tables** is true.
+* Now we check auto increment ID by `column-mapping` which is deprecated. If we don't set the `column-mapping` and don't ignore the **auto_increment_ID**, the pre-check will report an error. PS: **auto_increment_ID** is only checked when **schema_of_shard_tables** is true.
 * Dump privilege only checks RELOAD and SELECT. However, Dumpling supports different [consistency configurations](https://docs.pingcap.com/tidb/stable/dumpling-overview#adjust-dumplings-data-consistency-options), which need more privileges.
-* If online-ddl is set by true and a DDL is in online-ddl stage, DM will have a problem in all mode. Specifically, ghost table has been created, is executing the DDL, but is not renamed yet. In this case, DM will report an error when the ghost table is renamed after the dump phase. You can learn more about online-ddl [here](https://docs.pingcap.com/tidb-data-migration/stable/feature-online-ddl).
-* For schema_of_shard_tables, whatever pessimistic task and optimistic task, we all check it by comparing all sharding tables’ structures for consistency simply. For optimistic mode, we can do better.
+* If online-ddl is set by true and a DDL is in online-ddl stage, DM will have a problem in all mode. Specifically, when ghost table has been created but not been renamed, DM will report an error when the ghost table is renamed during the incremental phase. You can learn more about online-ddl [here](https://docs.pingcap.com/tidb-data-migration/stable/feature-online-ddl).
+* For schema_of_shard_tables, whether it's a pessimistic task or an optimistic task, we all simply check consistency of schema by comparing all sharding tables’ structures. For optimistic mode, we can do better.
 
 ## Proposal
 
@@ -38,7 +38,7 @@ Since every checker is concurrent, we can split tables to **source_connection_co
     - Only check if tables exist auto increment ID;
     - If table exist, report a warning to user and tell them the method that can resolve the PK/UK conflict;
         1. If you set PK to AUTO_INCREMENT, you must make sure that the primary key in sharding tables is not duplicated;
-        2. If sharding tables exit duplicated PK, you can refer to [document](https://docs.pingcap.com/tidb-data-migration/stable/shard-merge-best-practices#handle-conflicts-of-auto-increment-primary-key).
+        2. If sharding tables have duplicated PK, you can refer to [document](https://docs.pingcap.com/tidb-data-migration/stable/shard-merge-best-practices#handle-conflicts-of-auto-increment-primary-key).
 2. Dump_privilege will check different privileges according to different [consistency](https://docs.pingcap.com/tidb/stable/dumpling-overview#adjust-dumplings-data-consistency-options) and downstream on source.
     - For all consistency, we will check
         - REPLICATION CLIENT (global)
