@@ -42,8 +42,10 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) {
 	m.shouldBeRunning = true
 	defer func() {
 		if m.shouldBeRunning {
+			log.Info("admin job should be running")
 			m.patchState(model.StateNormal)
 		} else {
+			log.Info("admin job clean up infos")
 			m.cleanUpInfos()
 		}
 	}()
