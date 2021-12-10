@@ -54,6 +54,8 @@ function run() {
 
 	cd $WORK_DIR
 
+	echo "test unified sorter"
+
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	reset_and_prepare_data
 
@@ -72,8 +74,10 @@ function run() {
 	fi
 
 	run_test
-	run_cdc_cli changefeed remove -c $CF_NAME
 	cleanup_process $CDC_BINARY
+	run_cdc_cli unsafe reset --no-confirm
+
+	echo "test leveldb sorter"
 
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	reset_and_prepare_data
@@ -93,8 +97,6 @@ function run() {
 	fi
 
 	run_test
-
-	run_cdc_cli changefeed remove -c $CF_NAME
 	cleanup_process $CDC_BINARY
 }
 
