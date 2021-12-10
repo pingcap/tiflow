@@ -15,15 +15,15 @@ error_msg=${4}
 tls_dir=${!#}
 
 if [[ "$endpoints" =~ "https" ]]; then
-	info=$(cdc.test cli changefeed query --ca="${tls_dir}/ca.pem" --cert="${tls_dir}/client.pem" --key="${tls_dir}/client-key.pem" --pd=$endpoints -c $changefeed_id -s)
+	info=$(cdc cli changefeed query --ca="${tls_dir}/ca.pem" --cert="${tls_dir}/client.pem" --key="${tls_dir}/client-key.pem" --pd=$endpoints -c $changefeed_id -s)
 else
-	info=$(cdc.test cli changefeed query --pd=$endpoints -c $changefeed_id -s)
+	info=$(cdc cli changefeed query --pd=$endpoints -c $changefeed_id -s)
 fi
 
 echo "$info"
 state=$(echo $info | jq -r '.state')
-if [[ ! "$state" == "$expected" ]]; then
-	echo "changefeed state $state does not equal to $expected"
+if [[ ! "$state" == "$expected_state" ]]; then
+	echo "changefeed state $state does not equal to $expected_state"
 	exit 1
 fi
 message=$(echo $info | jq -r '.error.message')
@@ -31,3 +31,4 @@ if [[ ! "$message" =~ "$error_msg" ]]; then
 	echo "error message '$message' is not as expected '$error_msg'"
 	exit 1
 fi
+
