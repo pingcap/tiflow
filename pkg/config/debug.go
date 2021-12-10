@@ -13,6 +13,8 @@
 
 package config
 
+import "github.com/pingcap/errors"
+
 // DebugConfig represents config for ticdc unexposed feature configurations
 type DebugConfig struct {
 	// identify if the table actor is enabled for table pipeline
@@ -26,4 +28,15 @@ type DebugConfig struct {
 	DB             *DBConfig `toml:"db" json:"db"`
 
 	Messages *MessagesConfig `toml:"messages" json:"messages"`
+}
+
+// ValidateAndAdjust validates and adjusts the debug configuration
+func (c *DebugConfig) ValidateAndAdjust() error {
+	if err := c.Messages.ValidateAndAdjust(); err != nil {
+		return errors.Trace(err)
+	}
+	if err := c.DB.ValidateAndAdjust(); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
