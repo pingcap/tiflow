@@ -282,7 +282,7 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
 	if n.cleanRouter != nil {
-		// Clean up date when the table sorter is canceled.
+		// Clean up data when the table sorter is canceled.
 		err := n.cleanRouter.SendB(ctx, n.cleanID, n.cleanTask)
 		if err != nil {
 			log.Warn("schedule table cleanup task failed", zap.Error(err))

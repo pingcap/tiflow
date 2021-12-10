@@ -105,7 +105,9 @@ func (c *Capture) reset(ctx context.Context) error {
 	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
 		concurrency.WithTTL(conf.CaptureSessionTTL))
 	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"create capture session")
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
@@ -130,13 +132,13 @@ func (c *Capture) reset(ctx context.Context) error {
 				"create table actor system")
 		}
 	}
-	if c.sorterSystem != nil {
-		err := c.sorterSystem.Stop()
-		if err != nil {
-			log.Warn("stop sorter system failed", zap.Error(err))
-		}
-	}
 	if conf.Debug.EnableDBSorter {
+		if c.sorterSystem != nil {
+			err := c.sorterSystem.Stop()
+			if err != nil {
+				log.Warn("stop sorter system failed", zap.Error(err))
+			}
+		}
 		// Sorter dir has been set and checked when server starts.
 		// See https://github.com/pingcap/ticdc/blob/9dad09/cdc/server.go#L275
 		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
@@ -145,7 +147,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		if err != nil {
 			return errors.Annotate(
 				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-				"create capture session")
+				"create sorter system")
 		}
 	}
 	if c.grpcPool != nil {
@@ -156,7 +158,9 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.regionCache.Close()
 	}
 	c.regionCache = tikv.NewRegionCache(c.pdClient)
-	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
+	log.Info("init capture",
+		zap.String("capture-id", c.info.ID),
+		zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
 
