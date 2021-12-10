@@ -1585,7 +1585,7 @@
               "refId": "A"
             },
             {
-              "expr": "sum(ticdc_processor_resolved_ts_lag{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture,changefeed)",
+              "expr": "sum(ticdc_processor_checkpoint_ts_lag{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture,changefeed)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -3195,7 +3195,6 @@
           }
         },
         {
-          "columns": [],
           "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {
@@ -3249,12 +3248,11 @@
               }
             ]
           },
-          "fontSize": "100%",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 76
+            "y": 69
           },
           "id": 200,
           "options": {
