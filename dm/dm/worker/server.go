@@ -111,6 +111,7 @@ func (s *Server) Start() error {
 		DialKeepAliveTime:    keepaliveTime,
 		DialKeepAliveTimeout: keepaliveTimeout,
 		TLS:                  tls.TLSConfig(),
+		AutoSyncInterval:     syncMasterEndpointsTime,
 	})
 	if err != nil {
 		return err
@@ -121,12 +122,6 @@ func (s *Server) Start() error {
 	s.wg.Add(1)
 	go func() {
 		s.runBackgroundJob(s.ctx)
-		s.wg.Done()
-	}()
-
-	s.wg.Add(1)
-	go func() {
-		s.syncMasterEndpoints(s.ctx)
 		s.wg.Done()
 	}()
 
