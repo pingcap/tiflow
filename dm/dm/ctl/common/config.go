@@ -42,9 +42,9 @@ const (
 	// Worker specifies member worker type.
 	Worker = "worker"
 
-	dialTimeout             = 3 * time.Second
-	keepaliveTimeout        = 3 * time.Second
-	keepaliveTime           = 3 * time.Second
+	dialTimeout      = 3 * time.Second
+	keepaliveTimeout = 3 * time.Second
+	keepaliveTime    = 3 * time.Second
 
 	// DefaultErrorCnt represents default count of errors to display for check-task.
 	DefaultErrorCnt = 10
