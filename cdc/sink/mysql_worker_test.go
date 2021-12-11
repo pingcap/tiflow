@@ -15,20 +15,28 @@ package sink
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
-func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMysqlSinkWorker(t *testing.T) {
+	defer testleak.AfterTestT(t)()
+	tbl := &model.TableName{
+		Schema:      "test",
+		Table:       "user",
+		TableID:     1,
+		IsPartition: false,
+	}
 	testCases := []struct {
 		txns                     []*model.SingleTableTxn
 		expectedOutputRows       [][]*model.RowChangedEvent
@@ -41,6 +49,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		}, {
 			txns: []*model.SingleTableTxn{
 				{
+					Table:     tbl,
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
 					ReplicaID: 1,
@@ -52,6 +61,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		}, {
 			txns: []*model.SingleTableTxn{
 				{
+					Table:     tbl,
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
 					ReplicaID: 1,
@@ -65,16 +75,19 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		}, {
 			txns: []*model.SingleTableTxn{
 				{
+					Table:     tbl,
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}},
 					ReplicaID: 1,
 				},
 				{
+					Table:     tbl,
 					CommitTs:  2,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 2}},
 					ReplicaID: 1,
 				},
 				{
+					Table:     tbl,
 					CommitTs:  3,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 3}, {CommitTs: 3}},
 					ReplicaID: 1,
@@ -89,16 +102,19 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		}, {
 			txns: []*model.SingleTableTxn{
 				{
+					Table:     tbl,
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
 					ReplicaID: 1,
 				},
 				{
+					Table:     tbl,
 					CommitTs:  2,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 2}},
 					ReplicaID: 2,
 				},
 				{
+					Table:     tbl,
 					CommitTs:  3,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
 					ReplicaID: 3,
@@ -114,21 +130,25 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		}, {
 			txns: []*model.SingleTableTxn{
 				{
+					Table:     tbl,
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
 					ReplicaID: 1,
 				},
 				{
+					Table:     tbl,
 					CommitTs:  2,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
 					ReplicaID: 1,
 				},
 				{
+					Table:     tbl,
 					CommitTs:  3,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
 					ReplicaID: 1,
 				},
 				{
+					Table:     tbl,
 					CommitTs:  4,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 4}},
 					ReplicaID: 1,
@@ -151,7 +171,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		var outputRows [][]*model.RowChangedEvent
 		var outputReplicaIDs []uint64
 		receiver, err := notifier.NewReceiver(-1)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		w := newMySQLSinkWorker(tc.maxTxnRow, 1,
 			bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
 			receiver,
@@ -174,40 +194,52 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		notifier.Notify()
 		wg.Wait()
 		cancel()
-		c.Assert(errors.Cause(errg.Wait()), check.Equals, context.Canceled)
-		c.Assert(outputRows, check.DeepEquals, tc.expectedOutputRows,
-			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputRows), spew.Sdump(tc.expectedOutputRows)))
-		c.Assert(outputReplicaIDs, check.DeepEquals, tc.exportedOutputReplicaIDs,
-			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputReplicaIDs), spew.Sdump(tc.exportedOutputReplicaIDs)))
+		require.Equal(t, context.Canceled, errors.Cause(errg.Wait()))
+		require.Equal(t, tc.expectedOutputRows, outputRows,
+			fmt.Sprintf("case %v, %s, %s", i, spew.Sdump(outputRows), spew.Sdump(tc.expectedOutputRows)))
+		require.Equal(t, tc.exportedOutputReplicaIDs, outputReplicaIDs, tc.exportedOutputReplicaIDs,
+			fmt.Sprintf("case %v, %s, %s", i, spew.Sdump(outputReplicaIDs), spew.Sdump(tc.exportedOutputReplicaIDs)))
 	}
 }
 
-func (s MySQLSinkSuite) TestMySQLSinkWorkerExitWithError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMySQLSinkWorkerExitWithError(t *testing.T) {
+	defer testleak.AfterTestT(t)()
+	tbl := &model.TableName{
+		Schema:      "test",
+		Table:       "user",
+		TableID:     1,
+		IsPartition: false,
+	}
 	txns1 := []*model.SingleTableTxn{
 		{
+			Table:    tbl,
 			CommitTs: 1,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
 		},
 		{
+			Table:    tbl,
 			CommitTs: 2,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
 		},
 		{
+			Table:    tbl,
 			CommitTs: 3,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 3}},
 		},
 		{
+			Table:    tbl,
 			CommitTs: 4,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 4}},
 		},
 	}
 	txns2 := []*model.SingleTableTxn{
 		{
+			Table:    tbl,
 			CommitTs: 5,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
 		},
 		{
+			Table:    tbl,
 			CommitTs: 6,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 6}},
 		},
@@ -219,7 +251,7 @@ func (s MySQLSinkSuite) TestMySQLSinkWorkerExitWithError(c *check.C) {
 	notifier := new(notify.Notifier)
 	cctx, cancel := context.WithCancel(ctx)
 	receiver, err := notifier.NewReceiver(-1)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	w := newMySQLSinkWorker(maxTxnRow, 1, /*bucket*/
 		bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
 		receiver,
@@ -253,23 +285,32 @@ func (s MySQLSinkSuite) TestMySQLSinkWorkerExitWithError(c *check.C) {
 	wg.Wait()
 
 	cancel()
-	c.Assert(errg.Wait(), check.Equals, errExecFailed)
+	require.Equal(t, errExecFailed, errg.Wait())
 }
 
-func (s MySQLSinkSuite) TestMySQLSinkWorkerExitCleanup(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
+	defer testleak.AfterTestT(t)()
+	tbl := &model.TableName{
+		Schema:      "test",
+		Table:       "user",
+		TableID:     1,
+		IsPartition: false,
+	}
 	txns1 := []*model.SingleTableTxn{
 		{
+			Table:    tbl,
 			CommitTs: 1,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
 		},
 		{
+			Table:    tbl,
 			CommitTs: 2,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
 		},
 	}
 	txns2 := []*model.SingleTableTxn{
 		{
+			Table:    tbl,
 			CommitTs: 5,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
 		},
@@ -282,7 +323,7 @@ func (s MySQLSinkSuite) TestMySQLSinkWorkerExitCleanup(c *check.C) {
 	notifier := new(notify.Notifier)
 	cctx, cancel := context.WithCancel(ctx)
 	receiver, err := notifier.NewReceiver(-1)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	w := newMySQLSinkWorker(maxTxnRow, 1, /*bucket*/
 		bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
 		receiver,
@@ -317,5 +358,5 @@ func (s MySQLSinkSuite) TestMySQLSinkWorkerExitCleanup(c *check.C) {
 	wg.Wait()
 
 	cancel()
-	c.Assert(errg.Wait(), check.Equals, errExecFailed)
+	require.Equal(t, errExecFailed, errg.Wait())
 }
