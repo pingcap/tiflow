@@ -174,8 +174,11 @@ func VerifyAndGetTiCDCClusterVersion(
 	if err != nil {
 		return version.TiCDCClusterVersion{}, err
 	}
-
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+	var captureVersions []string
+	for _, ci := range captureInfos {
+		captureVersions = append(captureVersions, ci.Version)
+	}
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureVersions)
 	if err != nil {
 		return version.TiCDCClusterVersion{}, err
 	}

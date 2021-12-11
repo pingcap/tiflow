@@ -190,6 +190,47 @@ func TestVerifyAndComplete(t *testing.T) {
 	require.Equal(t, marshalConfig2, marshalConfig1)
 }
 
+func TestFixIncompatible(t *testing.T) {
+	// Test to fix incompatible states.
+	testCases := []struct {
+		info          *ChangeFeedInfo
+		expectedState FeedState
+	}{
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateNormal,
+				Error:          nil,
+				CreatorVersion: "",
+			},
+			expectedState: StateStopped,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateNormal,
+				Error:          nil,
+				CreatorVersion: "4.0.14",
+			},
+			expectedState: StateStopped,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateNormal,
+				Error:          nil,
+				CreatorVersion: "5.0.5",
+			},
+			expectedState: StateStopped,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.info.FixIncompatible()
+		require.Equal(t, tc.expectedState, tc.info.State)
+	}
+}
+
 func TestFixState(t *testing.T) {
 	t.Parallel()
 
@@ -288,7 +329,7 @@ func TestFixState(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc.info.FixState()
+		tc.info.fixState()
 		require.Equal(t, tc.expectedState, tc.info.State)
 	}
 }

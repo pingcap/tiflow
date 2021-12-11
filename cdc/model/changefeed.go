@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -256,8 +257,16 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	return nil
 }
 
-// FixState attempts to fix state loss from upgrading the old owner to the new owner.
-func (info *ChangeFeedInfo) FixState() {
+// FixIncompatible fixes incompatible changefeed meta info.
+func (info *ChangeFeedInfo) FixIncompatible() {
+	creatorVersionGate := version.NewCreatorVersionGate(info.CreatorVersion)
+	if creatorVersionGate.ChangefeedStateFromAdminJob() {
+		info.fixState()
+	}
+}
+
+// fixState attempts to fix state loss from upgrading the old owner to the new owner.
+func (info *ChangeFeedInfo) fixState() {
 	// Notice: In the old owner we used AdminJobType field to determine if the task was paused or not,
 	// we need to handle this field in the new owner.
 	// Otherwise, we will see that the old version of the task is paused and then upgraded,

@@ -196,10 +196,11 @@ func (s *ownerSuite) TestFixChangefeedInfos(c *check.C) {
 	changefeedID := "test-changefeed"
 	// Mismatched state and admin job.
 	changefeedInfo := &model.ChangeFeedInfo{
-		State:        model.StateNormal,
-		AdminJobType: model.AdminStop,
-		StartTs:      oracle.GoTimeToTS(time.Now()),
-		Config:       config.GetDefaultReplicaConfig(),
+		State:          model.StateNormal,
+		AdminJobType:   model.AdminStop,
+		StartTs:        oracle.GoTimeToTS(time.Now()),
+		Config:         config.GetDefaultReplicaConfig(),
+		CreatorVersion: "4.0.14",
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
 	c.Assert(err, check.IsNil)
