@@ -234,6 +234,12 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 }
 
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) {
+	log.Debug("handleEvent",
+		zap.Int32("type", int32(event.Type)),
+		zap.ByteString("key", event.Kv.Key),
+		zap.ByteString("value", event.Kv.Value),
+		zap.Int64("revision", event.Kv.ModRevision))
+
 	if worker.isDeleteCounterKey(event.Kv.Key) {
 		switch event.Type {
 		case mvccpb.PUT:
