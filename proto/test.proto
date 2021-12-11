@@ -13,7 +13,10 @@ message Record {
     int32 tid = 3;
     int32 gtid = 4;
     int32 pk = 5;
-    Error err = 6;
+    // for record time
+    repeated int64 time_tracer = 6;
+    // error
+    Error err = 7;
 }
 
 message TestBinlogRequest {

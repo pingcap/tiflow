@@ -82,11 +82,15 @@ func (s *Runtime) SubmitTasks(tasks []*model.Task) error {
 		}
 	}
 
+	if s.tasks == nil {
+		s.tasks = make(map[model.TaskID]*taskContainer)
+	}
 	for _, t := range taskSet {
 		err := t.prepare()
 		if err != nil {
 			return err
 		}
+		s.tasks[t.id] = t
 	}
 
 	log.L().Logger.Info("begin to push")

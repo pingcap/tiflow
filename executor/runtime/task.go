@@ -1,9 +1,7 @@
 package runtime
 
 import (
-	//	"fmt"
-	//"log"
-	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -17,18 +15,14 @@ const (
 	Runnable TaskStatus = iota
 	Blocked
 	Waking
+	Stop
 )
 
 type Record struct {
-	flowID  string
-	start   time.Time
+	FlowID  string
 	End     time.Time
 	Payload interface{}
 	Tid     int32
-}
-
-func (r *Record) String() string {
-	return fmt.Sprintf("flowID %s start %s end %s payload: %v\n", r.flowID, r.start.String(), r.End.String(), r.Payload)
 }
 
 type Channel struct {
@@ -87,6 +81,8 @@ type taskContainer struct {
 	inputs      []*Channel
 	outputs     []*Channel
 	ctx         *TaskContext
+
+	stopLock sync.Mutex
 }
 
 func (t *taskContainer) prepare() error {
@@ -97,6 +93,9 @@ func (t *taskContainer) prepare() error {
 
 func (t *taskContainer) tryAwake() bool {
 	for {
+		if atomic.LoadInt32(&t.status) == int32(Stop) {
+			return false
+		}
 		//		log.Printf("try wake task %d", t.id)
 		if atomic.CompareAndSwapInt32(&t.status, int32(Blocked), int32(Waking)) {
 			// log.Printf("wake task %d successful", t.id)
@@ -120,7 +119,7 @@ func (t *taskContainer) tryBlock() bool {
 }
 
 func (t *taskContainer) setRunnable() {
-	atomic.StoreInt32(&t.status, int32(Runnable))
+	atomic.CompareAndSwapInt32(&t.status, int32(Waking), int32(Runnable))
 }
 
 func (t *taskContainer) tryFlush() (blocked bool) {
@@ -166,7 +165,33 @@ const (
 	DontRequireIndex int = -2
 )
 
+func (t *taskContainer) Stop() error {
+	for {
+		if atomic.LoadInt32(&t.status) == int32(Stop) {
+			return nil
+		}
+
+		if atomic.CompareAndSwapInt32(&t.status, int32(Runnable), int32(Stop)) {
+			break
+		}
+
+		if atomic.CompareAndSwapInt32(&t.status, int32(Blocked), int32(Stop)) {
+			break
+		}
+	}
+
+	t.stopLock.Lock()
+	defer t.stopLock.Unlock()
+
+	return t.op.Close()
+}
+
 func (t *taskContainer) Poll() TaskStatus {
+	t.stopLock.Lock()
+	defer t.stopLock.Unlock()
+	if atomic.LoadInt32(&t.status) == int32(Stop) {
+		return Stop
+	}
 	if t.tryFlush() {
 		return Blocked
 	}

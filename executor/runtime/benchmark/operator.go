@@ -16,6 +16,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 type fileWriter struct {
@@ -35,11 +36,30 @@ func (f *fileWriter) Prepare() error {
 	return err
 }
 
-func (f *fileWriter) write(_ *runtime.TaskContext, r *runtime.Record) error {
-	r.End = time.Now()
-	str := []byte(r.String())
-	// ctx.stats[f.tid].recordCnt ++
-	// ctx.stats[f.tid].totalLag += r.end.Sub(r.start)
+func sprintPayload(r *pb.Record) string {
+	str := fmt.Sprintf("tid %d, pk %d, time tracer ", r.Tid, r.Pk)
+	for _, ts := range r.TimeTracer {
+		str += fmt.Sprintf("%s ", time.Unix(0, ts))
+	}
+	return str
+}
+
+func sprintRecord(r *runtime.Record) string {
+	start := time.Unix(0, r.Payload.(*pb.Record).TimeTracer[0])
+	return fmt.Sprintf("flowID %s start %s end %s payload: %s\n", r.FlowID, start.String(), r.End.String(), sprintPayload(r.Payload.(*pb.Record)))
+}
+
+func (f *fileWriter) writeStats(s *recordStats) error {
+	str := []byte(s.String())
+	_, err := f.fd.Write(str)
+	return err
+}
+
+func (f *fileWriter) write(s *recordStats, r *runtime.Record) error {
+	str := []byte(sprintRecord(r))
+	start := time.Unix(0, r.Payload.(*pb.Record).TimeTracer[0])
+	s.cnt++
+	s.totalLag += r.End.Sub(start)
 	_, err := f.fd.Write(str)
 	return err
 }
@@ -77,7 +97,7 @@ func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 		}
 		client = mock.NewTestClient(conn)
 	} else {
-		conn, err := grpc.Dial(o.addr, grpc.WithInsecure(), grpc.WithBlock())
+		conn, err := grpc.Dial(o.addr, grpc.WithInsecure(), grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoff.DefaultConfig}))
 		o.conn = conn
 		if err != nil {
 			return nil, errors.New("conn failed")
@@ -88,6 +108,10 @@ func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 }
 
 func (o *opReceive) Prepare() error {
+	return nil
+}
+
+func (o *opReceive) connect() error {
 	client, err := o.dial()
 	if err != nil {
 		return errors.New("conn failed")
@@ -106,6 +130,12 @@ func (o *opReceive) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([]
 	if !o.running {
 		o.running = true
 		go func() {
+			err := o.connect()
+			if err != nil {
+				o.errCh <- err
+				log.L().Error("opReceive meet error", zap.Error(err))
+				return
+			}
 			for {
 				record, err := o.binlogClient.Recv()
 				if err != nil {
@@ -128,6 +158,8 @@ func (o *opReceive) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([]
 		noMoreData := false
 		select {
 		case r := <-o.data:
+			payload := r.Payload.(*pb.Record)
+			payload.TimeTracer = append(payload.TimeTracer, time.Now().UnixNano())
 			o.cache = append(o.cache, r)
 		case err := <-o.errCh:
 			return nil, true, err
@@ -158,6 +190,7 @@ func (o *opSyncer) syncDDL(ctx *runtime.TaskContext) {
 
 func (o *opSyncer) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]runtime.Chunk, bool, error) {
 	record := r.Payload.(*pb.Record)
+	record.TimeTracer = append(record.TimeTracer, time.Now().UnixNano())
 	if record.Tp == pb.Record_DDL {
 		go o.syncDDL(ctx)
 		return nil, true, nil
@@ -167,23 +200,37 @@ func (o *opSyncer) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]r
 
 func (o *opSyncer) NextWantedInputIdx() int { return 0 }
 
-type opSink struct {
-	writer fileWriter
+type recordStats struct {
+	totalLag time.Duration
+	cnt      int64
 }
 
-func (o *opSink) Close() error { return nil }
+func (s *recordStats) String() string {
+	return fmt.Sprintf("total record %d, average lantency %.3f ms", s.cnt, float64(s.totalLag.Milliseconds())/float64(s.cnt))
+}
+
+type opSink struct {
+	writer fileWriter
+	stats  *recordStats
+}
+
+func (o *opSink) Close() error {
+	return o.writer.writeStats(o.stats)
+}
 
 func (o *opSink) Prepare() error {
+	o.stats = new(recordStats)
 	return o.writer.Prepare()
 }
 
 func (o *opSink) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]runtime.Chunk, bool, error) {
+	r.End = time.Now()
 	if test.GlobalTestFlag {
 		//	log.L().Info("send record", zap.Int32("table", r.Tid), zap.Int32("pk", r.payload.(*pb.Record).Pk))
 		ctx.TestCtx.SendRecord(r)
 		return nil, false, nil
 	}
-	return nil, false, o.writer.write(ctx, r)
+	return nil, false, o.writer.write(o.stats, r)
 }
 
 func (o *opSink) NextWantedInputIdx() int { return 0 }
@@ -196,6 +243,8 @@ type opProducer struct {
 
 	ddlFrequency int32
 	outputCnt    int
+
+	checkpoint time.Time
 }
 
 func (o *opProducer) Close() error { return nil }
@@ -207,21 +256,23 @@ func (o *opProducer) NextWantedInputIdx() int { return runtime.DontNeedData }
 func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([]runtime.Chunk, bool, error) {
 	outputData := make([]runtime.Chunk, o.outputCnt)
 	binlogID := 0
+	if o.checkpoint.Add(50 * time.Millisecond).After(time.Now()) {
+		return nil, true, nil
+	}
 	for i := 0; i < 128; i++ {
 		if o.pk >= o.dataCnt {
 			return outputData, true, nil
 		}
 		o.pk++
-		if o.pk == 10000 {
-			log.L().Info("got 10000 data")
-		}
+		start := time.Now()
 		if o.pk%o.ddlFrequency == 0 {
 			o.schemaVer++
 			for i := range outputData {
 				payload := &pb.Record{
-					Tp:        pb.Record_DDL,
-					Tid:       o.tid,
-					SchemaVer: o.schemaVer,
+					Tp:         pb.Record_DDL,
+					Tid:        o.tid,
+					SchemaVer:  o.schemaVer,
+					TimeTracer: []int64{start.UnixNano()},
 				}
 				r := runtime.Record{
 					Tid:     o.tid,
@@ -231,10 +282,11 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 			}
 		}
 		payload := &pb.Record{
-			Tp:        pb.Record_Data,
-			Tid:       o.tid,
-			SchemaVer: o.schemaVer,
-			Pk:        o.pk,
+			Tp:         pb.Record_Data,
+			Tid:        o.tid,
+			SchemaVer:  o.schemaVer,
+			Pk:         o.pk,
+			TimeTracer: []int64{start.UnixNano()},
 		}
 		r := runtime.Record{
 			Tid:     o.tid,
@@ -243,7 +295,19 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 		outputData[binlogID] = append(outputData[binlogID], &r)
 		binlogID = (binlogID + 1) % o.outputCnt
 	}
+	if !test.GlobalTestFlag {
+		o.checkpoint = time.Now()
+		go func() {
+			time.Sleep(55 * time.Millisecond)
+			ctx.Wake()
+		}()
+		return outputData, true, nil
+	}
 	return outputData, false, nil
+}
+
+type stoppable interface {
+	Stop()
 }
 
 type opBinlog struct {
@@ -251,7 +315,7 @@ type opBinlog struct {
 	wal        []*runtime.Record
 	addr       string
 
-	server      mock.GrpcServer
+	server      stoppable
 	cacheRecord *runtime.Record
 	ctx         *runtime.TaskContext
 }
@@ -271,6 +335,7 @@ func (o *opBinlog) Prepare() (err error) {
 			return err
 		}
 		s := grpc.NewServer()
+		o.server = s
 		pb.RegisterTestServiceServer(s, o)
 		go func() {
 			err1 := s.Serve(lis)
@@ -322,8 +387,10 @@ func (o *opBinlog) FeedBinlog(req *pb.TestBinlogRequest, server pb.TestService_F
 		}
 	}
 	for record := range o.binlogChan {
+		r := record.Payload.(*pb.Record)
+		r.TimeTracer = append(r.TimeTracer, time.Now().UnixNano())
 		o.wal = append(o.wal, record)
-		err := server.Send(o.wal[id].Payload.(*pb.Record))
+		err := server.Send(r)
 		if err != nil {
 			return err
 		}

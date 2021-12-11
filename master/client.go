@@ -78,6 +78,10 @@ func (c *Client) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp 
 	return c.client.SubmitJob(ctx, req)
 }
 
+func (c *Client) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error) {
+	return c.client.CancelJob(ctx, req)
+}
+
 func (c *Client) QueryMetaStore(
 	ctx context.Context, req *pb.QueryMetaStoreRequest, timeout time.Duration,
 ) (*pb.QueryMetaStoreResponse, error) {

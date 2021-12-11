@@ -30,3 +30,16 @@ func (m *jobMaster) Start(ctx context.Context) error {
 	// TODO: Start the tasks manager to communicate.
 	return nil
 }
+
+func (m *jobMaster) Stop(ctx context.Context) error {
+	err := m.StopTasks(ctx, m.stage2)
+	if err != nil {
+		return err
+	}
+	err = m.StopTasks(ctx, m.stage1)
+	if err != nil {
+		return err
+	}
+	m.Cancel()
+	return nil
+}

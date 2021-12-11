@@ -55,6 +55,8 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 		return s.server.Heartbeat(ctx, x)
 	case *pb.TaskSchedulerRequest:
 		return s.server.ScheduleTask(ctx, x)
+	case *pb.CancelJobRequest:
+		return s.server.CancelJob(ctx, x)
 	}
 	return nil, errors.New("unknown request")
 }
@@ -71,6 +73,11 @@ func (c *masterServerClient) RegisterExecutor(ctx context.Context, req *pb.Regis
 func (c *masterServerClient) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest, opts ...grpc.CallOption) (*pb.SubmitJobResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.SubmitJobResponse), err
+}
+
+func (c *masterServerClient) CancelJob(ctx context.Context, req *pb.CancelJobRequest, opts ...grpc.CallOption) (*pb.CancelJobResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	return resp.(*pb.CancelJobResponse), err
 }
 
 func (c *masterServerClient) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, opts ...grpc.CallOption) (*pb.HeartbeatResponse, error) {

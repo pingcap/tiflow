@@ -213,6 +213,42 @@ func (m *Master) DispatchTasks(ctx context.Context, tasks []*model.Task) error {
 	return nil
 }
 
+func (m *Master) StopTasks(ctx context.Context, tasks []*model.Task) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	arrange := make(map[model.ExecutorID][]int32)
+	for _, task := range tasks {
+		runningTask := m.runningTasks[task.ID]
+		li, ok := arrange[runningTask.exec]
+		if !ok {
+			arrange[runningTask.exec] = []int32{int32(task.ID)}
+		} else {
+			li = append(li, int32(task.ID))
+			arrange[runningTask.exec] = li
+		}
+	}
+	var retErr error
+	for exec, taskList := range arrange {
+		req := &pb.CancelBatchTasksRequest{
+			TaskIdList: taskList,
+		}
+		log.L().Info("begin to cancel tasks", zap.Int32("exec", int32(exec)), zap.Any("task", taskList))
+		resp, err := m.client.Send(ctx, exec, &cluster.ExecutorRequest{
+			Cmd: cluster.CmdCancelBatchTasks,
+			Req: req,
+		})
+		if err != nil {
+			retErr = err
+		} else {
+			respErr := resp.Resp.(*pb.CancelBatchTasksResponse).Err
+			if respErr != nil {
+				retErr = stdErrors.New(respErr.Message)
+			}
+		}
+	}
+	return retErr
+}
+
 // Listen the events from every tasks
 func (m *Master) StartInternal() {
 	// Register Listen Handler to Msg Servers

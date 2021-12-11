@@ -22,6 +22,8 @@ service Master {
         //};
     }
 
+    rpc CancelJob(CancelJobRequest) returns(CancelJobResponse) {}
+
     //GetMembers returns the available master members
     //rpc GetMembers(GetMembersRequest) {}
 
@@ -69,9 +71,17 @@ message SubmitJobRequest {
     // TODO: Resource Limit
 }
 
+message CancelJobRequest {
+    int32 job_id = 1;
+}
+
 message SubmitJobResponse {
     Error err = 1;
     int32 job_id = 2;
+}
+
+message CancelJobResponse {
+    Error err = 1;
 }
 
 message RegisterExecutorRequest {

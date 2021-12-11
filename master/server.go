@@ -69,6 +69,10 @@ func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.S
 	return s.jobManager.SubmitJob(ctx, req), nil
 }
 
+func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
+	return s.jobManager.CancelJob(ctx, req), nil
+}
+
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	// register executor to scheduler

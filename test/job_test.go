@@ -57,7 +57,7 @@ func (t *testJobSuite) TestSubmit(c *C) {
 	c.Assert(err, IsNil)
 	testJobConfig := benchmark.Config{
 		Servers:      []string{"127.0.0.1:9999", "127.0.0.1:9998", "127.0.0.1:9997"},
-		FlowID:       "job test",
+		FlowID:       "jobtest",
 		TableNum:     10,
 		RecordCnt:    10000,
 		DDLFrequency: 100,
@@ -81,4 +81,9 @@ func (t *testJobSuite) TestSubmit(c *C) {
 	for _, cnt := range tablesCnt {
 		c.Assert(cnt, Equals, testJobConfig.RecordCnt)
 	}
+	resp1, err := client.CancelJob(context.Background(), &pb.CancelJobRequest{
+		JobId: resp.JobId,
+	})
+	c.Assert(err, IsNil)
+	c.Assert(resp1.Err, IsNil)
 }

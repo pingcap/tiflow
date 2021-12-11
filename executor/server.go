@@ -81,6 +81,15 @@ func (s *Server) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksR
 
 // CancelBatchTasks implements pb interface.
 func (s *Server) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksRequest) (*pb.CancelBatchTasksResponse, error) {
+	log.L().Info("cancel tasks", zap.String("req", req.String()))
+	err := s.sch.Stop(req.TaskIdList)
+	if err != nil {
+		return &pb.CancelBatchTasksResponse{
+			Err: &pb.Error{
+				Message: err.Error(),
+			},
+		}, nil
+	}
 	return &pb.CancelBatchTasksResponse{}, nil
 }
 
@@ -102,7 +111,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	s.sch = runtime.NewRuntime(s.testCtx)
 	go func() {
 		defer s.cancel()
-		s.sch.Run(ctx)
+		s.sch.Run(ctx, 10)
 	}()
 
 	err = s.selfRegister(ctx)
@@ -148,7 +157,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.sch = runtime.NewRuntime(nil)
 	go func() {
 		defer s.close()
-		s.sch.Run(ctx1)
+		s.sch.Run(ctx1, 10)
 	}()
 
 	err = s.selfRegister(ctx1)

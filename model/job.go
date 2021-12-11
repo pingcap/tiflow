@@ -26,6 +26,7 @@ type Task struct {
 
 	ID      TaskID
 	JobID   JobID
+	Stage   int
 	Outputs []TaskID
 	Inputs  []TaskID
 

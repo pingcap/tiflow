@@ -49,6 +49,21 @@ func (j *JobManager) startImpl(ctx context.Context) {
 	}
 }
 
+func (j *JobManager) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	job, ok := j.jobMasters[model.JobID(req.JobId)]
+	if !ok {
+		return &pb.CancelJobResponse{Err: &pb.Error{Message: "No such job"}}
+	}
+	err := job.Stop(ctx)
+	if err != nil {
+		return &pb.CancelJobResponse{Err: &pb.Error{Message: err.Error()}}
+	}
+	delete(j.jobMasters, model.JobID(req.JobId))
+	return &pb.CancelJobResponse{}
+}
+
 // SubmitJob processes "SubmitJobRequest".
 func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
 	info := model.JobInfo{
