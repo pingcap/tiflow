@@ -47,8 +47,16 @@ func (m *feedStateManager) Tick(state *model.ChangefeedReactorState) {
 		// skip to the next tick until all the admin jobs is handled
 		return
 	}
-	switch m.state.Info.State {
-	case model.StateStopped, model.StateFailed, model.StateRemoved, model.StateFinished:
+	shouldBeRunning, s, needsPatch := shouldRunning(m.state.Info)
+	// When upgrading from the old owner to the new owner, the state and admin job type will be inconsistent.
+	if needsPatch {
+		log.Info("handle old owner inconsistent state",
+			zap.String("old state", string(m.state.Info.State)),
+			zap.String("admin job type", m.state.Info.AdminJobType.String()),
+			zap.String("new state", string(s)))
+		m.patchState(s)
+	}
+	if !shouldBeRunning {
 		m.shouldBeRunning = false
 		return
 	}
@@ -288,5 +296,46 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		m.shouldBeRunning = false
 		m.patchState(model.StateError)
 		return
+	}
+}
+
+// shouldRunning returns whether the current changefeed should run.
+// It will also handle compatibility issues for upgrading from an old owner to new owner.
+func shouldRunning(info *model.ChangeFeedInfo) (bool, model.FeedState, bool) {
+	// Notice: In the old owner we used AdminJobType field to determine if the task was paused or not,
+	// we need to handle this field in the new owner.
+	// Otherwise, we will see that the old version of the task is paused and then upgraded,
+	// and the task is automatically resumed after the upgrade.
+	state := info.State
+	// Upgrading from an old owner, we need to deal with cases where the state is normal,
+	// but actually contains errors and does not match the admin job type.
+	if state == model.StateNormal {
+		switch info.AdminJobType {
+		// This corresponds to the case of failure or error.
+		case model.AdminNone, model.AdminResume:
+			if info.Error != nil {
+				if cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
+					state = model.StateFailed
+				} else {
+					state = model.StateError
+				}
+			}
+		case model.AdminStop:
+			state = model.StateStopped
+		case model.AdminFinish:
+			state = model.StateFinished
+		case model.AdminRemove:
+			state = model.StateRemoved
+		}
+	}
+	needsPatch := state != info.State
+
+	switch state {
+	case model.StateFailed, model.StateStopped, model.StateFinished, model.StateRemoved:
+		return false, state, needsPatch
+	case model.StateNormal, model.StateError:
+		return true, state, needsPatch
+	default:
+		panic("unreachable")
 	}
 }

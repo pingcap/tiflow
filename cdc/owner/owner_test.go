@@ -83,6 +83,7 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0),
 		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
 	c.Assert(err, check.IsNil)
@@ -149,6 +150,7 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0),
 		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
 	c.Assert(err, check.IsNil)
@@ -196,6 +198,7 @@ func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0),
 		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
 	c.Assert(err, check.IsNil)

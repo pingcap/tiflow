@@ -18,6 +18,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
@@ -34,7 +35,7 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
-		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}, State: model.StateNormal}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		c.Assert(status, check.IsNil)
@@ -106,7 +107,7 @@ func (s *feedStateManagerSuite) TestMarkFinished(c *check.C) {
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
-		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}, State: model.StateNormal}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		c.Assert(status, check.IsNil)
@@ -134,7 +135,7 @@ func (s *feedStateManagerSuite) TestCleanUpInfos(c *check.C) {
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
-		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}, State: model.StateNormal}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		c.Assert(status, check.IsNil)
@@ -177,7 +178,7 @@ func (s *feedStateManagerSuite) TestHandleError(c *check.C) {
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
-		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}, State: model.StateNormal}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		c.Assert(status, check.IsNil)
@@ -246,4 +247,130 @@ func (s *feedStateManagerSuite) TestChangefeedStatusNotExist(c *check.C) {
 	tester.MustApplyPatches()
 	c.Assert(state.Info, check.IsNil)
 	c.Assert(state.Exist(), check.IsFalse)
+}
+
+func (s *feedStateManagerSuite) TestShouldRunning(c *check.C) {
+	defer testleak.AfterTest(c)()
+	testCases := []struct {
+		info                    *model.ChangeFeedInfo
+		expectedShouldBeRunning bool
+		expectedState           model.FeedState
+		expectedNeedsPatch      bool
+	}{
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminNone,
+				State:        model.StateNormal,
+				Error:        nil,
+			},
+			expectedShouldBeRunning: true,
+			expectedState:           model.StateNormal,
+			expectedNeedsPatch:      false,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminResume,
+				State:        model.StateNormal,
+				Error:        nil,
+			},
+			expectedShouldBeRunning: true,
+			expectedState:           model.StateNormal,
+			expectedNeedsPatch:      false,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminNone,
+				State:        model.StateNormal,
+				Error: &model.RunningError{
+					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+				},
+			},
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateFailed,
+			expectedNeedsPatch:      true,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminResume,
+				State:        model.StateNormal,
+				Error: &model.RunningError{
+					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+				},
+			},
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateFailed,
+			expectedNeedsPatch:      true,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminNone,
+				State:        model.StateNormal,
+				Error: &model.RunningError{
+					Code: string(cerrors.ErrServeHTTP.RFCCode()),
+				},
+			},
+			expectedShouldBeRunning: true,
+			expectedState:           model.StateError,
+			expectedNeedsPatch:      true,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminResume,
+				State:        model.StateNormal,
+				Error: &model.RunningError{
+					Code: string(cerrors.ErrServeHTTP.RFCCode()),
+				},
+			},
+			expectedShouldBeRunning: true,
+			expectedState:           model.StateError,
+			expectedNeedsPatch:      true,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminStop,
+				State:        model.StateNormal,
+				Error:        nil,
+			},
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateStopped,
+			expectedNeedsPatch:      true,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminFinish,
+				State:        model.StateNormal,
+				Error:        nil,
+			},
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateFinished,
+			expectedNeedsPatch:      true,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminRemove,
+				State:        model.StateNormal,
+				Error:        nil,
+			},
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateRemoved,
+			expectedNeedsPatch:      true,
+		},
+		{
+			info: &model.ChangeFeedInfo{
+				AdminJobType: model.AdminRemove,
+				State:        model.StateNormal,
+				Error:        nil,
+			},
+			expectedShouldBeRunning: false,
+			expectedState:           model.StateRemoved,
+			expectedNeedsPatch:      true,
+		},
+	}
+
+	for _, tc := range testCases {
+		shouldBeRunning, state, needsPatch := shouldRunning(tc.info)
+		c.Assert(shouldBeRunning, check.Equals, tc.expectedShouldBeRunning)
+		c.Assert(state, check.Equals, tc.expectedState)
+		c.Assert(needsPatch, check.Equals, tc.expectedNeedsPatch)
+	}
 }

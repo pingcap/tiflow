@@ -48,7 +48,7 @@ const (
 	StateError    FeedState = "error"
 	StateFailed   FeedState = "failed"
 	StateStopped  FeedState = "stopped"
-	StateRemoved  FeedState = "removed" // deprecated, will be removed in the next version
+	StateRemoved  FeedState = "removed"
 	StateFinished FeedState = "finished"
 )
 

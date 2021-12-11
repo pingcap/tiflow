@@ -193,6 +193,7 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 			Info: &model.ChangeFeedInfo{
 				StartTs: oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0),
 				Config:  config.GetDefaultReplicaConfig(),
+				State:   model.StateNormal,
 			},
 		})
 	}
