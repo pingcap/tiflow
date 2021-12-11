@@ -25,6 +25,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
 	cmdconetxt "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/logutil"
@@ -174,11 +175,8 @@ func VerifyAndGetTiCDCClusterVersion(
 	if err != nil {
 		return version.TiCDCClusterVersion{}, err
 	}
-	var captureVersions []string
-	for _, ci := range captureInfos {
-		captureVersions = append(captureVersions, ci.Version)
-	}
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureVersions)
+
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListCaptureInfosVersions(captureInfos))
 	if err != nil {
 		return version.TiCDCClusterVersion{}, err
 	}

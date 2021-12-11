@@ -180,11 +180,7 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 		return err
 	}
 
-	var captureVersions []string
-	for _, ci := range captureInfos {
-		captureVersions = append(captureVersions, ci.Version)
-	}
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureVersions)
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListCaptureInfosVersions(captureInfos))
 	if err != nil {
 		return errors.Trace(err)
 	}

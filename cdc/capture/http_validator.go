@@ -99,11 +99,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		return nil, err
 	}
 	// set sortEngine and EnableOldValue
-	var captureVersions []string
-	for _, ci := range captureInfos {
-		captureVersions = append(captureVersions, ci.Version)
-	}
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureVersions)
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListCaptureInfosVersions(captureInfos))
 	if err != nil {
 		return nil, err
 	}
