@@ -274,7 +274,6 @@ func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
 func (o *Owner) Bootstrap(state *orchestrator.GlobalReactorState) {
 	log.Info("Start bootstrapping", zap.Any("state", state))
 	fixChangefeedInfos(state)
-	log.Info("Bootstrap finished")
 }
 
 // fixChangefeedInfos attempts to fix incompatible or incorrect meta information in changefeed state.
