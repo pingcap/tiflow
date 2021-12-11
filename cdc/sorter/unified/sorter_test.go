@@ -229,36 +229,6 @@ func testSorter(ctx context.Context, c *check.C, sorter sorter.EventSorter, coun
 	return errg.Wait()
 }
 
-func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer CleanUp()
-
-	poolMu.Lock()
-	// Clean up the back-end pool if one has been created
-	pool = nil
-	poolMu.Unlock()
-
-	baseDir := c.MkDir()
-	dir := filepath.Join(baseDir, "sorter_local")
-	err := os.MkdirAll(dir, 0o755)
-	c.Assert(err, check.IsNil)
-	// We expect the local setting to override the changefeed setting
-	config.GetGlobalServerConfig().Sorter.SortDir = dir
-
-	_, err = NewUnifiedSorter(filepath.Join(baseDir, "sorter"), /* the changefeed setting */
-		"test-cf",
-		"test",
-		0,
-		"0.0.0.0:0")
-	c.Assert(err, check.IsNil)
-
-	poolMu.Lock()
-	defer poolMu.Unlock()
-
-	c.Assert(pool, check.NotNil)
-	c.Assert(pool.dir, check.Equals, dir)
-}
-
 func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer CleanUp()
