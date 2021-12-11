@@ -218,6 +218,7 @@ func (s *ownerSuite) TestFixChangefeedInfos(c *check.C) {
 	// Start tick normally.
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
 	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
 	// The meta information is fixed correctly.
 	c.Assert(owner.changefeeds[changefeedID].state.Info.State, check.Equals, model.StateStopped)
