@@ -261,7 +261,9 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 func (info *ChangeFeedInfo) FixIncompatible() {
 	creatorVersionGate := version.NewCreatorVersionGate(info.CreatorVersion)
 	if creatorVersionGate.ChangefeedStateFromAdminJob() {
+		log.Info("Start fixing incompatible changefeed state", zap.Any("changefeed", info))
 		info.fixState()
+		log.Info("Fix incompatibility changefeed state completed", zap.Any("changefeed", info))
 	}
 }
 
