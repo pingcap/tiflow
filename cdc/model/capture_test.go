@@ -37,7 +37,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 	require.Equal(t, info, decodedInfo)
 }
 
-func TestListCaptureInfosVersions(t *testing.T) {
+func TestListVersionsFromCaptureInfos(t *testing.T) {
 	infos := []*CaptureInfo{
 		{
 			ID:            "9ff52aca-aea6-4022-8ec4-fbee3f2c7891",
@@ -51,5 +51,5 @@ func TestListCaptureInfosVersions(t *testing.T) {
 		},
 	}
 
-	require.ElementsMatch(t, []string{"dev", ""}, ListCaptureInfosVersions(infos))
+	require.ElementsMatch(t, []string{"dev", ""}, ListVersionsFromCaptureInfos(infos))
 }

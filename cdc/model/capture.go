@@ -44,8 +44,8 @@ func (c *CaptureInfo) Unmarshal(data []byte) error {
 		"unmarshal data: %v", data)
 }
 
-// ListCaptureInfosVersions returns the version list of the CaptureInfo list.
-func ListCaptureInfosVersions(captureInfos []*CaptureInfo) []string {
+// ListVersionsFromCaptureInfos returns the version list of the CaptureInfo list.
+func ListVersionsFromCaptureInfos(captureInfos []*CaptureInfo) []string {
 	var captureVersions []string
 	for _, ci := range captureInfos {
 		captureVersions = append(captureVersions, ci.Version)

@@ -180,7 +180,7 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 		return err
 	}
 
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListCaptureInfosVersions(captureInfos))
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
 	if err != nil {
 		return errors.Trace(err)
 	}
