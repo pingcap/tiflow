@@ -170,6 +170,9 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			worker.revision = response.Header.GetRevision()
 			// ProgressNotify implies no new events.
 			if response.IsProgressNotify() {
+				log.Debug("Progress notification received",
+					zap.Int64("revision", worker.revision),
+					zap.Stack("stack"))
 				continue
 			}
 
