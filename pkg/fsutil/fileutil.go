@@ -11,24 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package fsutil
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 const (
-	gb                       = 1024 * 1024 * 1024
-	dataDirAvailLowThreshold = 10 // percentage
+	gb = 1024 * 1024 * 1024
 )
 
 // IsDirAndWritable checks a given path is directory and writable
@@ -78,54 +73,4 @@ type DiskInfo struct {
 func (d *DiskInfo) String() string {
 	return fmt.Sprintf("{All: %+vGB; Used: %+vGB; Free: %+vGB; Available: %+vGB; Available Percentage: %+v%%}",
 		d.All, d.Used, d.Free, d.Avail, d.AvailPercentage)
-}
-
-// GetDiskInfo return the disk space information of the given directory
-// the caller should guarantee that dir exist
-func GetDiskInfo(dir string) (*DiskInfo, error) {
-	f := filepath.Join(dir, "file.test")
-	if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
-		return nil, cerror.WrapError(cerror.ErrGetDiskInfo, err)
-	}
-
-	fs := syscall.Statfs_t{}
-	if err := syscall.Statfs(dir, &fs); err != nil {
-		return nil, cerror.WrapError(cerror.ErrGetDiskInfo, err)
-	}
-
-	info := &DiskInfo{
-		All:   fs.Blocks * uint64(fs.Bsize) / gb,
-		Avail: fs.Bavail * uint64(fs.Bsize) / gb,
-		Free:  fs.Bfree * uint64(fs.Bsize) / gb,
-	}
-	info.Used = info.All - info.Free
-	info.AvailPercentage = float32(info.Avail) / float32(info.All) * 100
-
-	if err := os.Remove(f); err != nil {
-		if !os.IsNotExist(err) {
-			return info, cerror.WrapError(cerror.ErrGetDiskInfo, err)
-		}
-	}
-
-	return info, nil
-}
-
-// CheckDataDirSatisfied check if the data-dir meet the requirement during server running
-// the caller should guarantee that dir exist
-func CheckDataDirSatisfied() error {
-	conf := config.GetGlobalServerConfig()
-	diskInfo, err := GetDiskInfo(conf.DataDir)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckDataDirSatisfied, err)
-	}
-	if diskInfo.AvailPercentage < dataDirAvailLowThreshold {
-		failpoint.Inject("InjectCheckDataDirSatisfied", func() {
-			log.Info("inject check data dir satisfied error")
-			failpoint.Return(nil)
-		})
-		return cerror.WrapError(cerror.ErrCheckDataDirSatisfied, errors.Errorf("disk is almost full, TiCDC require that the disk mount data-dir "+
-			"have 10%% available space, and the total amount has at least 500GB is preferred. disk info: %+v", diskInfo))
-	}
-
-	return nil
 }
