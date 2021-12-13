@@ -186,7 +186,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["t_mediumint"] = 8388607
 		data["t_int"] = 2147483647
 
-		data["t_year"] = "2021"
+		data["t_year"] = 2021
 		data["t_binary"] = []byte{0x1, 0x2, 0x0, 0x3}
 		data["t_varbinary"] = []byte{0x1, 0x2, 0x0, 0x3}
 
