@@ -28,12 +28,6 @@ create table tp_int
     c_mediumint mediumint null,
     c_int       int       null,
     c_bigint    bigint    null,
-
-    c_unsigned_tinyint   tinyint   unsigned null,
-    c_unsigned_smallint  smallint  unsigned null,
-    c_unsigned_mediumint mediumint unsigned null,
-    c_unsigned_int       int       unsigned null,
-    c_unsigned_bigint    bigint    unsigned null,
     constraint pk
         primary key (id)
 );
@@ -182,13 +176,7 @@ create table tp_real
     c_float   float   null,
     c_double  double  null,
     c_decimal decimal null,
-
-    c_unsigned_float   float unsigned   null,
-    c_unsigned_double  double unsigned  null,
-    c_unsigned_decimal decimal unsigned null,
-
-    c_decimal_2 decimal(10,4) null,
-    c_unsigned_decimal_2 decimal(10, 4) null,
+    c_decimal_2 decimal(10, 4) null,
     constraint pk
         primary key (id)
 );
