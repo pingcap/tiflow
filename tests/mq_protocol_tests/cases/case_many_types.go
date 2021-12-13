@@ -158,5 +158,11 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["t_year"] = 2019
 		data["t_bit"] = 0b1001001
 	}
+
+	_, ok = s.Task.(*canal.SingleTableTask)
+	if ok {
+		data["t_year"] = 2019
+	}
+
 	return table.Insert(data).Send().Wait().Check()
 }
