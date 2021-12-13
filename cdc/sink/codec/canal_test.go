@@ -31,56 +31,73 @@ type canalBatchSuite struct {
 }
 
 var _ = check.Suite(&canalBatchSuite{
-	rowCases: [][]*model.RowChangedEvent{{{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-	}}, {{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-	}, {
-		CommitTs: 2,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-	}, {
-		CommitTs: 3,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-	}, {
-		CommitTs: 4,
-		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
-	}}, {}},
-	ddlCases: [][]*model.DDLEvent{{{
-		CommitTs: 1,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
+	rowCases: [][]*model.RowChangedEvent{
+		{{
+			CommitTs: 1,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		}},
+		{
+			{
+				CommitTs: 1,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+			},
+			{
+				CommitTs: 2,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+			},
+			{
+				CommitTs: 3,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+			},
+			{
+				CommitTs: 4,
+				Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+			},
 		},
-		Query: "create table a",
-		Type:  1,
-	}}, {{
-		CommitTs: 1,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
+		{},
+	},
+	ddlCases: [][]*model.DDLEvent{
+		{{
+			CommitTs: 1,
+			TableInfo: &model.SimpleTableInfo{
+				Schema: "a", Table: "b",
+			},
+			Query: "create table a",
+			Type:  1,
+		}},
+		{
+			{
+				CommitTs: 1,
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "a", Table: "b",
+				},
+				Query: "create table a",
+				Type:  1,
+			},
+			{
+				CommitTs: 2,
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "a", Table: "b",
+				},
+				Query: "create table b",
+				Type:  2,
+			},
+			{
+				CommitTs: 3,
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "a", Table: "b",
+				},
+				Query: "create table c",
+				Type:  3,
+			},
 		},
-		Query: "create table a",
-		Type:  1,
-	}, {
-		CommitTs: 2,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table b",
-		Type:  2,
-	}, {
-		CommitTs: 3,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table c",
-		Type:  3,
-	}}, {}},
+		{},
+	},
 })
 
 func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
@@ -187,7 +204,7 @@ func testInsert(c *check.C) {
 		c.Assert(col.GetUpdated(), check.IsTrue)
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeINTEGER))
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
