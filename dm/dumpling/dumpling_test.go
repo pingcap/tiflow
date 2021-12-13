@@ -24,7 +24,6 @@ import (
 
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 
 	. "github.com/pingcap/check"
@@ -127,28 +126,26 @@ func (d *testDumplingSuite) TestDefaultConfig(c *C) {
 }
 
 func (d *testDumplingSuite) TestCallStatus(c *C) {
-	conf := export.DefaultConfig()
-	cfg := &config.SubTaskConfig{}
-	m := &Dumpling{cfg: cfg}
+	dumpConf := export.DefaultConfig()
+	taskCfg := &config.SubTaskConfig{}
+	m := &Dumpling{cfg: taskCfg}
 	ctx := context.Background()
 
-	ss := &binlog.SourceStatus{}
-	s := m.Status(ss).(*pb.DumpStatus)
+	s := m.Status(nil).(*pb.DumpStatus)
 	c.Assert(s.CompletedTables, Equals, float64(0))
 	c.Assert(s.FinishedBytes, Equals, float64(0))
 	c.Assert(s.FinishedRows, Equals, float64(0))
 	c.Assert(s.EstimateTotalRows, Equals, float64(0))
 
-	dumpling, err := export.NewDumper(ctx, conf)
-	if err != nil {
-		m.realdumper = dumpling
-	}
+	dumpling, err := export.NewDumper(ctx, dumpConf)
+	c.Assert(err, NotNil)
+	m.core = dumpling
 
-	export.InitMetricsVector(conf.Labels)
+	export.InitMetricsVector(dumpConf.Labels)
 
 	m.Close()
-	ss = &binlog.SourceStatus{}
-	s = m.Status(ss).(*pb.DumpStatus)
+
+	s = m.Status(nil).(*pb.DumpStatus)
 	c.Assert(s.CompletedTables, Equals, float64(0))
 	c.Assert(s.FinishedBytes, Equals, float64(0))
 	c.Assert(s.FinishedRows, Equals, float64(0))

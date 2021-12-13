@@ -47,7 +47,7 @@ type Dumpling struct {
 
 	dumpConfig *export.Config
 	closed     atomic.Bool
-	realdumper *export.Dumper
+	core       *export.Dumper
 	mu         sync.Mutex
 }
 
@@ -123,7 +123,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	if dumpling, err = export.NewDumper(newCtx, m.dumpConfig); err == nil {
 		m.mu.Lock()
-		m.realdumper = dumpling
+		m.core = dumpling
 		m.mu.Unlock()
 		err = dumpling.Dump()
 		dumpling.Close()
@@ -205,10 +205,10 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 	// NOTE: try to add some status, like dumped file count
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.realdumper == nil {
+	if m.core == nil {
 		return &pb.DumpStatus{}
 	}
-	mid := m.realdumper.GetParameters()
+	mid := m.core.GetParameters()
 	s := &pb.DumpStatus{
 		TotalTables:       mid.TotalTables,
 		CompletedTables:   mid.CompletedTables,
