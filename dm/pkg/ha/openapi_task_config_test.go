@@ -74,11 +74,11 @@ func (t *testForEtcd) TestOpenAPITaskConfigEtcd(c *C) {
 	task3, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, IsNil)
 	task3.Name = "test-3"
-	c.Assert(terror.ErrOpenAPITaskConfigNotExist.Equal(PutOpenAPITaskConfigIfExist(etcdTestCli, task3)), IsTrue)
+	c.Assert(terror.ErrOpenAPITaskConfigNotExist.Equal(UpdateOpenAPITaskConfig(etcdTestCli, task3)), IsTrue)
 
 	// update exist openapi task config will success
 	task1.TaskMode = openapi.TaskTaskModeAll
-	c.Assert(PutOpenAPITaskConfigIfExist(etcdTestCli, task1), IsNil)
+	c.Assert(UpdateOpenAPITaskConfig(etcdTestCli, task1), IsNil)
 	task1InEtcd, err = GetOpenAPITaskConfig(etcdTestCli, task1.Name)
 	c.Assert(err, IsNil)
 	c.Assert(*task1InEtcd, DeepEquals, task1)

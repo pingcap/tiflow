@@ -65,8 +65,8 @@ func PutOpenAPITaskConfig(cli *clientv3.Client, task openapi.Task, overWrite boo
 	return nil
 }
 
-// PutOpenAPITaskConfig puts the openapi task config of task-name.
-func PutOpenAPITaskConfigIfExist(cli *clientv3.Client, task openapi.Task) error {
+// UpdateOpenAPITaskConfig puts the openapi task config of task-name.
+func UpdateOpenAPITaskConfig(cli *clientv3.Client, task openapi.Task) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
