@@ -272,7 +272,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickThreeTime()
 	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
-	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "create database test1")
+	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "CREATE DATABASE test1")
 
 	// executing the ddl finished
 	mockAsyncSink.ddlDone = true
@@ -287,7 +287,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickThreeTime()
 	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
-	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "create table test1.test1(id int primary key)")
+	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "CREATE TABLE test1.test1(id int primary key)")
 
 	// executing the ddl finished
 	mockAsyncSink.ddlDone = true
