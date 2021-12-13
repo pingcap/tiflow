@@ -19,9 +19,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -187,6 +186,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 			// Check whether the response is stale.
 			if worker.revision >= response.Header.GetRevision() {
+				log.Info("Stale Etcd event dropped",
+					zap.Int64("event-revision", response.Header.GetRevision()),
+					zap.Int64("previous-revision", worker.revision),
+					zap.Any("events", response.Events))
 				continue
 			}
 			worker.revision = response.Header.GetRevision()
@@ -388,6 +391,8 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	resp, err := worker.client.Txn(txnCtx).If(cmps...).Then(ops...).Commit()
 	cancel()
 
+	// For testing the situation where we have a progress notification that
+	// has the same revision as the committed Etcd transaction.
 	failpoint.Inject("InjectProgressRequestAfterCommit", func() {
 		if err := worker.client.RequestProgress(ctx); err != nil {
 			failpoint.Return(errors.Trace(err))
