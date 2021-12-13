@@ -234,6 +234,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 		tctx: tctx,
 	}
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
+	syncer.idAndCollationMap = map[int]string{46: "utf8mb4_bin"}
 	for i, sql := range sqls {
 		qec := &queryEventContext{
 			eventContext:    ec,
@@ -696,6 +697,7 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 	}
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	charsetAndDefaultCollationMap := map[string]string{"utf8mb4": "utf8mb4_general_ci"}
+	idAndCollationMap := map[int]string{46: "utf8mb4_bin"}
 	for i, sql := range sqls {
 		ddlInfo := &ddlInfo{
 			originDDL:    sql,
@@ -707,7 +709,7 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 		c.Assert(err, IsNil)
 		c.Assert(stmt, NotNil)
 		ddlInfo.originStmt = stmt
-		adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap)
+		adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
 		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
 		c.Assert(err, IsNil)
 		c.Assert(routedDDL, Equals, expectedSQLs[i])

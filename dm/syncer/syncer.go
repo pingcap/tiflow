@@ -228,6 +228,7 @@ type Syncer struct {
 
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
+	idAndCollationMap          map[int]string
 }
 
 // NewSyncer creates a new Syncer.
@@ -327,7 +328,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
-	s.charsetAndDefaultCollation, err = s.fromDB.GetCharsetAndDefaultCollation(ctx)
+	s.charsetAndDefaultCollation, s.idAndCollationMap, err = s.fromDB.GetCharsetAndCollationInfo(ctx)
 	if err != nil {
 		return err
 	}

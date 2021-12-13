@@ -391,49 +391,55 @@ func GetServerUnixTS(ctx context.Context, db *sql.DB) (int64, error) {
 	return ts, err
 }
 
-// GetCharsetAndDefaultCollation gets charset and default collation map.
-func GetCharsetAndDefaultCollation(ctx context.Context, db *sql.DB) (map[string]string, error) {
+// GetCharsetAndCollationInfo gets charset and collation info.
+func GetCharsetAndCollationInfo(ctx context.Context, db *sql.DB) (map[string]string, map[int]string, error) {
 	charsetAndDefaultCollation := make(map[string]string)
+	idAndCollationMap := make(map[int]string)
+
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
 	defer conn.Close()
 
 	// Show an example.
 	/*
-		mysql> SHOW CHARACTER SET;
-		+----------+---------------------------------+---------------------+--------+
-		| Charset  | Description                     | Default collation   | Maxlen |
-		+----------+---------------------------------+---------------------+--------+
-		| armscii8 | ARMSCII-8 Armenian              | armscii8_general_ci |      1 |
-		| ascii    | US ASCII                        | ascii_general_ci    |      1 |
-		| big5     | Big5 Traditional Chinese        | big5_chinese_ci     |      2 |
-		| binary   | Binary pseudo charset           | binary              |      1 |
-		| cp1250   | Windows Central European        | cp1250_general_ci   |      1 |
-		| cp1251   | Windows Cyrillic                | cp1251_general_ci   |      1 |
-		+----------+---------------------------------+---------------------+--------+
+		mysql> SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS;
+		+----------------------------+--------------------+-----+------------+
+		| COLLATION_NAME             | CHARACTER_SET_NAME | ID  | IS_DEFAULT |
+		+----------------------------+--------------------+-----+------------+
+		| armscii8_general_ci        | armscii8           |  32 | Yes        |
+		| armscii8_bin               | armscii8           |  64 |            |
+		| ascii_general_ci           | ascii              |  11 | Yes        |
+		| ascii_bin                  | ascii              |  65 |            |
+		| big5_chinese_ci            | big5               |   1 | Yes        |
+		| big5_bin                   | big5               |  84 |            |
+		| binary                     | binary             |  63 | Yes        |
+		+----------------------------+--------------------+-----+------------+
 	*/
 
-	rows, err := conn.QueryContext(ctx, "SHOW CHARACTER SET")
+	rows, err := conn.QueryContext(ctx, "SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS")
 	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
 
 	defer rows.Close()
 	for rows.Next() {
-		var charset, description, collation string
-		var maxlen int
-		if scanErr := rows.Scan(&charset, &description, &collation, &maxlen); scanErr != nil {
-			return nil, terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
+		var collation, charset, isDefault string
+		var id int
+		if scanErr := rows.Scan(&collation, &charset, &id, &isDefault); scanErr != nil {
+			return nil, nil, terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
 		}
-		charsetAndDefaultCollation[strings.ToLower(charset)] = collation
+		idAndCollationMap[id] = strings.ToLower(collation)
+		if strings.ToLower(isDefault) == "yes" {
+			charsetAndDefaultCollation[strings.ToLower(charset)] = collation
+		}
 	}
 
 	if err = rows.Close(); err != nil {
-		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+		return nil, nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
 	}
-	return charsetAndDefaultCollation, err
+	return charsetAndDefaultCollation, idAndCollationMap, err
 }
 
 // GetSchemaList gets db schema list with `SHOW DATABASES`.

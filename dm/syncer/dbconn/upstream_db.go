@@ -71,9 +71,9 @@ func (conn *UpStreamConn) GetServerUnixTS(ctx context.Context) (int64, error) {
 	return utils.GetServerUnixTS(ctx, conn.BaseDB.DB)
 }
 
-// GetCharsetAndDefaultCollation returns charset and default collation map.
-func (conn *UpStreamConn) GetCharsetAndDefaultCollation(ctx context.Context) (map[string]string, error) {
-	return utils.GetCharsetAndDefaultCollation(ctx, conn.BaseDB.DB)
+// GetCharsetAndDefaultCollation returns charset and collation info.
+func (conn *UpStreamConn) GetCharsetAndCollationInfo(ctx context.Context) (map[string]string, map[int]string, error) {
+	return utils.GetCharsetAndCollationInfo(ctx, conn.BaseDB.DB)
 }
 
 // GetParser returns the parser with correct flag for upstream.
