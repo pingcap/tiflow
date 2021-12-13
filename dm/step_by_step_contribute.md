@@ -203,7 +203,7 @@ Edit some code on the `new-branch-name` branch and save your changes to fix the 
 
     ```sh
     docker run --rm --name mysql-3306 -p 3306:3306 -e MYSQL_ROOT_PASSWORD=123456 mysql:5.7.22 --log-bin=mysql-bin --port=3306 --bind-address=0.0.0.0 --binlog-format=ROW --server-id=1 --gtid_mode=ON --enforce-gtid-consistency=true > mysql.3306.log 2>&1 &
-    docker run --rm --name mysql-3307 -p 3307:3307 -e MYSQL_ROOT_PASSWORD=123456 mysql:5.7.22 --log-bin=mysql-bin --port=3307 --bind-address=0.0.0.0 --binlog-format=ROW --server-id=1 --gtid_mode=ON --enforce-gtid-consistency=true > mysql.3307.log 2>&1 &
+    docker run --rm --name mysql-3307 -p 3307:3307 -e MYSQL_ROOT_PASSWORD=123456 mysql:8.0.21 --log-bin=mysql-bin --port=3307 --bind-address=0.0.0.0 --binlog-format=ROW --server-id=1 --gtid_mode=ON --enforce-gtid-consistency=true > mysql.3307.log 2>&1 &
     ```
 
 3. Run integration test

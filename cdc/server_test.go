@@ -16,7 +16,11 @@ package cdc
 import (
 	"context"
 	"net/url"
+	"os"
+	"os/user"
 	"path/filepath"
+	"runtime"
+	"testing"
 	"time"
 
 	"github.com/pingcap/check"
@@ -25,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
@@ -100,7 +105,7 @@ func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 	conf := config.GetGlobalServerConfig()
 	// DataDir is not set, and no changefeed exist, use the default
 	conf.DataDir = ""
-	err := s.server.setUpDataDir(s.ctx)
+	err := s.server.setUpDir(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(conf.DataDir, check.Equals, defaultDataDir)
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(defaultDataDir, config.DefaultSortDir))
@@ -114,7 +119,7 @@ func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx, &model.ChangeFeedInfo{}, "b")
 	c.Assert(err, check.IsNil)
 
-	err = s.server.setUpDataDir(s.ctx)
+	err = s.server.setUpDir(s.ctx)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(conf.DataDir, check.Equals, dir)
@@ -122,10 +127,42 @@ func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 
 	conf.DataDir = c.MkDir()
 	// DataDir has been set, just use it
-	err = s.server.setUpDataDir(s.ctx)
+	err = s.server.setUpDir(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(conf.DataDir, check.Not(check.Equals), "")
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, config.DefaultSortDir))
 
 	s.cancel()
+}
+
+func TestCheckDir(t *testing.T) {
+	t.Parallel()
+	me, err := user.Current()
+	require.Nil(t, err)
+	if me.Name == "root" || runtime.GOOS == "windows" {
+		t.Skip("test case is running as a superuser or in windows")
+	}
+
+	dir := t.TempDir()
+	_, err = checkDir(dir)
+	require.Nil(t, err)
+
+	readOnly := filepath.Join(dir, "readOnly")
+	err = os.MkdirAll(readOnly, 0o400)
+	require.Nil(t, err)
+	_, err = checkDir(readOnly)
+	require.Error(t, err)
+
+	writeOnly := filepath.Join(dir, "writeOnly")
+	err = os.MkdirAll(writeOnly, 0o200)
+	require.Nil(t, err)
+	_, err = checkDir(writeOnly)
+	require.Error(t, err)
+
+	file := filepath.Join(dir, "file")
+	f, err := os.Create(file)
+	require.Nil(t, err)
+	require.Nil(t, f.Close())
+	_, err = checkDir(file)
+	require.Error(t, err)
 }
