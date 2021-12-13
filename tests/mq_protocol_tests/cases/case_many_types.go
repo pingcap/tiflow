@@ -187,8 +187,8 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 
 	_, ok = s.Task.(*canal.SingleTableTask)
 	if ok {
-		data["t_tinyint"] = math.MaxInt8
-		data["t_smallint"] = math.MaxInt16
+		data["t_tinyint"] = 255
+		data["t_smallint"] = 65535
 		data["t_mediumint"] = 16777215
 
 		data["t_unsigned_tinyint"] = 128
