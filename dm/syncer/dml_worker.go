@@ -125,7 +125,6 @@ func (w *DMLWorker) run() {
 		case asyncFlush:
 			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
 			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
-			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
 			w.flushCh <- j
 		case conflict:
 			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)

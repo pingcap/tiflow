@@ -41,6 +41,7 @@ type checkpointFlushWorker struct {
 	cp           CheckPoint
 	execError    *atomic.Error
 	afterFlushFn func(task *checkpointFlushTask) error
+	addCountFunc func(bool, string, opType, int64, *filter.Table)
 }
 
 // Add add a new flush checkpoint job.
@@ -59,6 +60,7 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 		if isAsyncFlush {
 			task.asyncflushJob.flushWg.Wait()
 
+			w.addCountFunc(true, adminQueueName, task.asyncflushJob.tp, 1, task.asyncflushJob.targetTable)
 			ctx.L().Info("async flush checkpoint snapshot job has been processed by dml worker, about to flush checkpoint snapshot", zap.Int64("job sequence", task.asyncflushJob.flushSeq), zap.Int("snapshot_id", task.snapshotInfo.id))
 		} else {
 			ctx.L().Info("about to sync flush checkpoint snapshot", zap.Int("snapshot_id", task.snapshotInfo.id))

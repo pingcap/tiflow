@@ -428,6 +428,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		cp:           s.checkpoint,
 		execError:    &s.execError,
 		afterFlushFn: s.afterFlushCheckpoint,
+		addCountFunc: s.addCount,
 	}
 
 	// when Init syncer, set active relay log info
