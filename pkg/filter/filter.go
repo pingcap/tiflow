@@ -161,6 +161,7 @@ func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bo
 		model.ActionTruncateTable,
 		model.ActionModifyColumn,
 		model.ActionRenameTable,
+		model.ActionRenameTables,
 		model.ActionSetDefaultValue,
 		model.ActionModifyTableComment,
 		model.ActionRenameIndex,
