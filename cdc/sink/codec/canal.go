@@ -27,6 +27,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	mm "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
@@ -141,6 +142,25 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 			return JavaSQLTypeCLOB
 		}
 		return JavaSQLTypeBLOB
+	}
+
+	// Some special cases handled in canal
+	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
+	// Todo (Ling Jin): type promotion for int related type is quite weired, figure out why.
+	shouldPromote := c.Flag.IsUnsigned()
+	if !shouldPromote {
+		return javaType
+	}
+
+	switch c.Type {
+	case mysql.TypeTiny:
+		javaType = JavaSQLTypeSMALLINT
+	case mysql.TypeShort, mysql.TypeInt24:
+		javaType = JavaSQLTypeINTEGER
+	case mysql.TypeLong:
+		javaType = JavaSQLTypeBIGINT
+	case mysql.TypeLonglong:
+		javaType = JavaSQLTypeDECIMAL
 	}
 
 	return javaType
