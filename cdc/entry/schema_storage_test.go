@@ -623,7 +623,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *check.C) {
 	c.Assert(exist, check.IsFalse)
 
 	lastSchemaTs := storage.DoGC(0)
-	require.Equal(t, uint64(0), lastSchemaTs)
+	c.Assert(lastSchemaTs, check.Equals, uint64(0))
 
 	snap, err = storage.GetSnapshot(ctx, 100)
 	c.Assert(err, check.IsNil)
@@ -646,7 +646,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *check.C) {
 	c.Assert(exist, check.IsFalse)
 
 	lastSchemaTs = storage.DoGC(155)
-	require.Equal(t, uint64(140), lastSchemaTs)
+	c.Assert(lastSchemaTs, check.Equals, uint64(140))
 
 	storage.AdvanceResolvedTs(185)
 
