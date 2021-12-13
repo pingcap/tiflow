@@ -25,11 +25,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	ticonfig "github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
-<<<<<<< HEAD
-	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/util/testkit"
-=======
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/session"
@@ -39,7 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
->>>>>>> 566581819 (mounter(ticdc): fix mounter add default value type unsupported (#3846))
 )
 
 type mountTxnsSuite struct{}
@@ -65,17 +59,9 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 		createTableDDL: "create table many_index(id int not null unique key, c1 int unique key, c2 int, INDEX (c2))",
 		values:         [][]interface{}{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}, {4, 4, 4}, {5, 5, 5}},
 	}, {
-<<<<<<< HEAD
 		tableName:      "default_value",
 		createTableDDL: "create table default_value(id int primary key, c1 int, c2 int not null default 5, c3 varchar(20), c4 varchar(20) not null default '666')",
 		values:         [][]interface{}{{1}, {2}, {3}, {4}, {5}},
-=======
-		tableName:           "default_value",
-		createTableDDL:      "create table default_value(id int primary key, c1 int, c2 int not null default 5, c3 varchar(20), c4 varchar(20) not null default '666')",
-		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
-		putApproximateBytes: [][]int{{676, 676, 676, 676, 676}},
-		delApproximateBytes: [][]int{{353, 353, 353, 353, 353}},
->>>>>>> 566581819 (mounter(ticdc): fix mounter add default value type unsupported (#3846))
 	}, {
 		tableName: "partition_table",
 		createTableDDL: `CREATE TABLE partition_table  (
@@ -120,11 +106,6 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 			{4, 127, 32767, 8388607, 2147483647, 9223372036854775807},
 			{5, -128, -32768, -8388608, -2147483648, -9223372036854775808},
 		},
-<<<<<<< HEAD
-=======
-		putApproximateBytes: [][]int{{986, 626, 986, 986, 986}},
-		delApproximateBytes: [][]int{{346, 346, 346, 346, 346}},
->>>>>>> 566581819 (mounter(ticdc): fix mounter add default value type unsupported (#3846))
 	}, {
 		tableName: "tp_text",
 		createTableDDL: `create table tp_text
@@ -165,11 +146,6 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 			{5, "你好", "我好", "大家好", "道路", "千万条", "安全", "第一条", "行车", "不规范", "亲人", "两行泪", "！"},
 			{6, "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "☺️", "😊", "😇", "🙂"},
 		},
-<<<<<<< HEAD
-=======
-		putApproximateBytes: [][]int{{1019, 1459, 1411, 1323, 1398, 1369}},
-		delApproximateBytes: [][]int{{347, 347, 347, 347, 347, 347}},
->>>>>>> 566581819 (mounter(ticdc): fix mounter add default value type unsupported (#3846))
 	}, {
 		tableName: "tp_time",
 		createTableDDL: `create table tp_time
@@ -187,11 +163,6 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 			{1},
 			{2, "2020-02-20", "2020-02-20 02:20:20", "2020-02-20 02:20:20", "02:20:20", "2020"},
 		},
-<<<<<<< HEAD
-=======
-		putApproximateBytes: [][]int{{627, 819}},
-		delApproximateBytes: [][]int{{347, 347}},
->>>>>>> 566581819 (mounter(ticdc): fix mounter add default value type unsupported (#3846))
 	}, {
 		tableName: "tp_real",
 		createTableDDL: `create table tp_real
@@ -288,12 +259,7 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 	mounter.tz = time.Local
 	ctx := context.Background()
 
-<<<<<<< HEAD
 	mountAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) int {
-=======
-	// [TODO] check size and readd rowBytes
-	mountAndCheckRowInTable := func(tableID int64, _ []int, f func(key []byte, value []byte) *model.RawKVEntry) int {
->>>>>>> 566581819 (mounter(ticdc): fix mounter add default value type unsupported (#3846))
 		var rows int
 		walkTableSpanInStore(c, store, tableID, func(key []byte, value []byte) {
 			rawKV := f(key, value)
@@ -303,16 +269,8 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 				return
 			}
 			rows++
-<<<<<<< HEAD
 			c.Assert(row.Table.Table, check.Equals, tc.tableName)
 			c.Assert(row.Table.Schema, check.Equals, "test")
-=======
-			require.Equal(t, row.Table.Table, tc.tableName)
-			require.Equal(t, row.Table.Schema, "test")
-			// [TODO] check size and reopen this check
-			// require.Equal(t, rowBytes[rows-1], row.ApproximateBytes(), row)
-			t.Log("ApproximateBytes", tc.tableName, rows-1, row.ApproximateBytes())
->>>>>>> 566581819 (mounter(ticdc): fix mounter add default value type unsupported (#3846))
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
 				checkSQL, params := prepareCheckSQL(c, tc.tableName, row.Columns)
