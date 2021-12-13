@@ -97,7 +97,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 
 						t_char      CHAR,
 						t_varchar   VARCHAR(10),
-						t_binary    BINARY,
+						t_binary    BINARY(16),
 						t_varbinary VARBINARY(16),
 
 						t_tinytext   TINYTEXT,
@@ -198,8 +198,8 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["t_unsigned_bigint"] = uint64(9223372036854775808)
 
 		data["t_year"] = 2021
-		data["t_binary"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
-		data["t_varbinary"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
+		data["t_binary"] = []byte{0x1, 0x2, 0x0, 0x3}
+		data["t_varbinary"] = []byte{0x1, 0x2, 0x0, 0x3}
 
 		data["t_tinytext"] = "测试tinytext"
 		data["t_mediumtext"] = "测试mediumtext"
