@@ -16,6 +16,7 @@ package entry
 import (
 	"context"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/pingcap/check"
@@ -25,15 +26,12 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	ticonfig "github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
 	"github.com/stretchr/testify/require"
-	"github.com/tikv/client-go/v2/oracle"
-	"go.uber.org/zap"
 )
 
 type mountTxnsSuite struct{}
@@ -692,7 +690,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 
 func testGetDefaultZeroValue(t *testing.T, colAndRess []columnInfoAndResult) {
 	for _, colAndRes := range colAndRess {
-		val, _, _, _ := getDefaultOrZeroValue(&colAndRes.ColInfo)
+		val, _, _ := getDefaultOrZeroValue(&colAndRes.ColInfo)
 		require.Equal(t, colAndRes.Res, val)
 	}
 }
