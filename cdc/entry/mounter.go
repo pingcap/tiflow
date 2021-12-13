@@ -315,11 +315,10 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		}
 		var err error
 		var warn string
-		var size int
 		if exist {
-			colValue, size, warn, err = formatColVal(colDatums, colInfo.Tp)
+			colValue, warn, err = formatColVal(colDatums, colInfo.Tp)
 		} else if fillWithDefaultValue {
-			colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+			colValue, warn, err = getDefaultOrZeroValue(colInfo)
 		}
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -327,7 +326,6 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		if warn != "" {
 			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
 		}
-		colSize += size
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:  colName,
 			Type:  colInfo.Tp,
