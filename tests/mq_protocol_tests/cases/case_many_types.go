@@ -79,12 +79,6 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_int       INT,
 						t_bigint    BIGINT,
 
-						t_unsigned_tinyint   TINYINT UNSIGNED,
-						t_unsigned_smallint  SMALLINT UNSIGNED,
-						t_unsigned_mediumint MEDIUMINT UNSIGNED,
-						t_unsigned_int       INT UNSIGNED,
-						t_unsigned_bigint    BIGINT UNSIGNED,
-
 						t_double    DOUBLE,
 						t_float     FLOAT,
 						t_decimal   DECIMAL(38, 19),
@@ -191,12 +185,6 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["t_smallint"] = 32767
 		data["t_mediumint"] = 8388607
 		data["t_int"] = 2147483647
-
-		data["t_unsigned_tinyint"] = 255
-		data["t_unsigned_smallint"] = 65535
-		data["t_unsigned_mediumint"] = 16777215
-		data["t_unsigned_int"] = 4294967295
-		data["t_unsigned_bigint"] = uint64(9223372036854775808)
 
 		data["t_year"] = 2021
 		data["t_binary"] = []byte{0x1, 0x2, 0x0, 0x3}
