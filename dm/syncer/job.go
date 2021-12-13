@@ -91,7 +91,7 @@ type job struct {
 	eventHeader *replication.EventHeader
 	jobAddTime  time.Time       // job commit time
 	flushSeq    int64           // sequence number for sync and async flush job
-	wg          *sync.WaitGroup // wait group for sync and async flush job
+	flushWg     *sync.WaitGroup // wait group for sync, async and conflict job
 }
 
 func (j *job) clone() *job {
@@ -188,7 +188,7 @@ func newFlushJob(workerCount int, seq int64) *job {
 		tp:          flush,
 		targetTable: &filter.Table{},
 		jobAddTime:  time.Now(),
-		wg:          wg,
+		flushWg:     wg,
 		flushSeq:    seq,
 	}
 }
@@ -201,7 +201,7 @@ func newAsyncFlushJob(workerCount int, seq int64) *job {
 		tp:          asyncFlush,
 		targetTable: &filter.Table{},
 		jobAddTime:  time.Now(),
-		wg:          wg,
+		flushWg:     wg,
 		flushSeq:    seq,
 	}
 }
@@ -221,7 +221,7 @@ func newConflictJob(workerCount int) *job {
 		tp:          conflict,
 		targetTable: &filter.Table{},
 		jobAddTime:  time.Now(),
-		wg:          wg,
+		flushWg:     wg,
 	}
 }
 

@@ -119,7 +119,7 @@ func (w *DMLWorker) run() {
 		case flush:
 			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
 			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
-			j.wg.Wait()
+			j.flushWg.Wait()
 			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
 			w.flushCh <- j
 		case asyncFlush:
@@ -130,7 +130,7 @@ func (w *DMLWorker) run() {
 		case conflict:
 			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
 			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
-			j.wg.Wait()
+			j.flushWg.Wait()
 			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
 		default:
 			queueBucket := int(utils.GenHashKey(j.dml.key)) % w.workerCount
@@ -180,7 +180,7 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 
 		w.executeBatchJobs(queueID, jobs)
 		if j.tp == conflict || j.tp == flush || j.tp == asyncFlush {
-			j.wg.Done()
+			j.flushWg.Done()
 		}
 
 		jobs = jobs[0:0]
