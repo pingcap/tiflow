@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"time"
 
+	"go.etcd.io/etcd/etcdserver/etcdserverpb"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -414,6 +416,8 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 		return nil
 	}
 
+	// Logs the conditions for the failed Etcd transaction.
+	worker.logEtcdCmps(cmps)
 	return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 }
 
@@ -429,19 +433,34 @@ func (worker *EtcdWorker) applyUpdates() error {
 	return nil
 }
 
-func logEtcdOps(ops []clientv3.Op, commited bool) {
-	if log.GetLevel() != zapcore.DebugLevel || len(ops) == 0 {
+func logEtcdOps(ops []clientv3.Op, committed bool) {
+	if committed && (log.GetLevel() != zapcore.DebugLevel || len(ops) == 0) {
 		return
 	}
-	log.Debug("[etcd worker] ==========Update State to ETCD==========")
+	logFn := log.Debug
+	if !committed {
+		logFn = log.Info
+	}
+
+	logFn("[etcd worker] ==========Update State to ETCD==========")
 	for _, op := range ops {
 		if op.IsDelete() {
-			log.Debug("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
+			logFn("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
 		} else {
-			log.Debug("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
+			logFn("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
 		}
 	}
-	log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
+	logFn("[etcd worker] ============State Commit=============", zap.Bool("committed", committed))
+}
+
+func (worker *EtcdWorker) logEtcdCmps(cmps []clientv3.Cmp) {
+	log.Info("[etcd worker] ==========Failed Etcd Txn Cmps==========")
+	for _, cmp := range cmps {
+		cmp := etcdserverpb.Compare(cmp)
+		log.Info("[etcd worker] compare",
+			zap.String("cmp", cmp.String()))
+	}
+	log.Info("[etcd worker] ============End Failed Etcd Txn Cmps=============")
 }
 
 func (worker *EtcdWorker) cleanUp() {
