@@ -115,7 +115,7 @@ func (m *Master) dispatch(ctx context.Context, tasks []*Task) error {
 			Tasks: taskList,
 		}
 		reqPb := job.ToPB()
-		log.L().Logger.Info("submit sub job", zap.Int32("exec id", int32(execID)), zap.String("req pb", reqPb.String()))
+		log.L().Logger.Info("submit sub job", zap.String("exec id", string(execID)), zap.String("req pb", reqPb.String()))
 		request := &cluster.ExecutorRequest{
 			Cmd: cluster.CmdSubmitBatchTasks,
 			Req: reqPb,
@@ -232,7 +232,7 @@ func (m *Master) StopTasks(ctx context.Context, tasks []*model.Task) error {
 		req := &pb.CancelBatchTasksRequest{
 			TaskIdList: taskList,
 		}
-		log.L().Info("begin to cancel tasks", zap.Int32("exec", int32(exec)), zap.Any("task", taskList))
+		log.L().Info("begin to cancel tasks", zap.String("exec", string(exec)), zap.Any("task", taskList))
 		resp, err := m.client.Send(ctx, exec, &cluster.ExecutorRequest{
 			Cmd: cluster.CmdCancelBatchTasks,
 			Req: req,
@@ -305,19 +305,19 @@ func (m *Master) monitorSchedulingTasks() {
 // OfflineExecutor implements JobMaster interface.
 func (m *Master) OfflineExecutor(id model.ExecutorID) {
 	m.offExecutors <- id
-	log.L().Logger.Info("executor is offlined", zap.Int32("eid", int32(id)))
+	log.L().Logger.Info("executor is offlined", zap.String("eid", string(id)))
 }
 
 func (m *Master) monitorExecutorOffline() {
 	for {
 		select {
 		case execID := <-m.offExecutors:
-			log.L().Logger.Info("executor is offlined", zap.Int32("eid", int32(execID)))
+			log.L().Logger.Info("executor is offlined", zap.String("eid", string(execID)))
 			m.mu.Lock()
 			taskList, ok := m.execTasks[execID]
 			if !ok {
 				m.mu.Unlock()
-				log.L().Logger.Info("executor has been removed, nothing todo", zap.Int32("id", int32(execID)))
+				log.L().Logger.Info("executor has been removed, nothing todo", zap.String("id", string(execID)))
 				continue
 			}
 			delete(m.execTasks, execID)

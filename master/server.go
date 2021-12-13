@@ -85,7 +85,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 		}, nil
 	}
 	return &pb.RegisterExecutorResponse{
-		ExecutorId: int32(execInfo.ID),
+		ExecutorId: string(execInfo.ID),
 	}, nil
 }
 

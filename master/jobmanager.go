@@ -20,7 +20,7 @@ type JobManager struct {
 	mu         sync.Mutex
 	jobMasters map[model.JobID]system.JobMaster
 
-	idAllocater    *autoid.Allocator
+	idAllocater    *autoid.IDAllocator
 	resourceMgr    cluster.ResourceMgr
 	executorClient cluster.ExecutorClient
 

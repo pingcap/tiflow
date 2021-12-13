@@ -28,7 +28,7 @@ type ExecutorManager struct {
 	executors   map[model.ExecutorID]*Executor
 	offExecutor chan model.ExecutorID
 
-	idAllocator       *autoid.Allocator
+	idAllocator       *autoid.UUIDAllocator
 	initHeartbeatTTL  time.Duration
 	keepAliveInterval time.Duration
 
@@ -40,7 +40,7 @@ func NewExecutorManager(offExec chan model.ExecutorID, initHeartbeatTTL, keepAli
 	return &ExecutorManager{
 		testContext:       ctx,
 		executors:         make(map[model.ExecutorID]*Executor),
-		idAllocator:       autoid.NewAllocator(),
+		idAllocator:       autoid.NewUUIDAllocator(),
 		offExecutor:       offExec,
 		initHeartbeatTTL:  initHeartbeatTTL,
 		keepAliveInterval: keepAliveInterval,
@@ -50,7 +50,7 @@ func NewExecutorManager(offExec chan model.ExecutorID, initHeartbeatTTL, keepAli
 func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	log.L().Logger.Info("begin to remove executor", zap.Int32("id", int32(id)))
+	log.L().Logger.Info("begin to remove executor", zap.String("id", string(id)))
 	exec, ok := e.executors[id]
 	if !ok {
 		// This executor has been removed
@@ -74,7 +74,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 
 // HandleHeartbeat implements pb interface,
 func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	log.L().Logger.Info("handle heart beat", zap.Int32("id", req.ExecutorId))
+	log.L().Logger.Info("handle heart beat", zap.String("id", req.ExecutorId))
 	e.mu.Lock()
 	exec, ok := e.executors[model.ExecutorID(req.ExecutorId)]
 
@@ -166,7 +166,7 @@ func (e *Executor) close() error {
 }
 
 func (e *Executor) checkAlive() bool {
-	log.L().Logger.Info("check alive", zap.Int32("exec", int32(e.ExecutorInfo.ID)))
+	log.L().Logger.Info("check alive", zap.String("exec", string(e.ExecutorInfo.ID)))
 
 	e.mu.Lock()
 	defer e.mu.Unlock()

@@ -45,7 +45,7 @@ service Master {
 }
 
 message HeartbeatRequest {
-    int32 executor_id = 1;
+    string executor_id = 1;
     int32 resource_usage = 2;
     int32 status = 3;
     
@@ -94,7 +94,7 @@ message RegisterExecutorRequest {
 
 message RegisterExecutorResponse {
     Error err = 1;
-    int32  executor_id = 2;
+    string  executor_id = 2;
 }
 
 message ScheduleTask{
@@ -113,7 +113,7 @@ message TaskSchedulerRequest {
 // ScheduleResult represents the where the task(sub job) will be running.
 // Currently it contains an executor id.
 message ScheduleResult {
-    int32 executor_id = 1;
+    string executor_id = 1;
 }
 
 message TaskSchedulerResponse {

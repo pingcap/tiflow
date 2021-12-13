@@ -2,12 +2,11 @@ package model
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 )
 
-type ExecutorID int32
+type ExecutorID string
 
 // ExecutorInfo describes an Executor.
 type ExecutorInfo struct {
@@ -24,7 +23,7 @@ type ExecutorInfo struct {
 }
 
 func (e *ExecutorInfo) EtcdKey() string {
-	return adapter.ExecutorKeyAdapter.Encode(fmt.Sprintf("%d", e.ID))
+	return adapter.ExecutorKeyAdapter.Encode(string(e.ID))
 }
 
 type JobType int

@@ -15,7 +15,7 @@ import (
 // BuildBenchmarkJobMaster for benchmark workload.
 func BuildBenchmarkJobMaster(
 	rawConfig string,
-	idAllocator *autoid.Allocator,
+	idAllocator *autoid.IDAllocator,
 	resourceMgr cluster.ResourceMgr,
 	client cluster.ExecutorClient,
 	mClient cluster.JobMasterClient,

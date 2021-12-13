@@ -19,6 +19,7 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/grpc v1.40.0
+	github.com/google/uuid v1.1.2
 )
 
 // cloud.google.com/go/storage will upgrade grpc to v1.40.0

@@ -303,7 +303,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				return errors.ErrHeartbeat.GenWithStack("heartbeat timeout")
 			}
 			req := &pb.HeartbeatRequest{
-				ExecutorId: int32(s.info.ID),
+				ExecutorId: string(s.info.ID),
 				Status:     int32(model.Running),
 				Timestamp:  uint64(t.Unix()),
 				// We set longer ttl for master, which is "ttl + rpc timeout", to avoid that
