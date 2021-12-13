@@ -74,7 +74,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_boolean   BOOLEAN,
 
 						t_tinyint   TINYINT,
-						t_smallint  SMALLINT ,
+						t_smallint  SMALLINT,
 						t_mediumint MEDIUMINT,
 						t_int       INT,
 						t_bigint    BIGINT,
@@ -187,14 +187,15 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 
 	_, ok = s.Task.(*canal.SingleTableTask)
 	if ok {
-		data["t_tinyint"] = 255
-		data["t_smallint"] = 65535
-		data["t_mediumint"] = 16777215
+		data["t_tinyint"] = 127
+		data["t_smallint"] = 32767
+		data["t_mediumint"] = 8388607
+		data["t_int"] = 2147483647
 
-		data["t_unsigned_tinyint"] = 128
-		data["t_unsigned_smallint"] = 32768
-		data["t_unsigned_mediumint"] = 8388608
-		data["t_unsigned_int"] = 2147483648
+		data["t_unsigned_tinyint"] = 255
+		data["t_unsigned_smallint"] = 65535
+		data["t_unsigned_mediumint"] = 16777215
+		data["t_unsigned_int"] = 4294967295
 		data["t_unsigned_bigint"] = uint64(9223372036854775808)
 
 		data["t_year"] = 2021
