@@ -15,6 +15,9 @@ package owner
 
 import (
 	"context"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/format"
+	"strings"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -29,7 +32,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -449,7 +451,11 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
+		ddlEvent.Query, err = addSpecialComment(ddlEvent.Query)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+
 		c.ddlEventCache = ddlEvent
 		if c.redoManager.Enabled() {
 			err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
@@ -493,4 +499,20 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 
 func (c *changefeed) Close(ctx context.Context) {
 	c.releaseResources(ctx)
+}
+
+// addSpecialComment translate tidb feature to comment
+func addSpecialComment(ddlQuery string) (string, error) {
+	stms, _, err := parser.New().ParseSQL(ddlQuery)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	if len(stms) != 1 {
+		log.Panic("invalid ddlQuery statement size", zap.String("ddlQuery", ddlQuery))
+	}
+	var sb strings.Builder
+	if err = stms[0].Restore(format.NewRestoreCtx(format.RestoreTiDBSpecialComment, &sb)); err != nil {
+		return "", errors.Trace(err)
+	}
+	return sb.String(), nil
 }

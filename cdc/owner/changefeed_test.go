@@ -15,7 +15,9 @@ package owner
 
 import (
 	"context"
+	"github.com/stretchr/testify/require"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/pingcap/check"
@@ -351,4 +353,145 @@ func (s *changefeedSuite) TestFinished(c *check.C) {
 
 	c.Assert(state.Status.CheckpointTs, check.Equals, state.Info.TargetTs)
 	c.Assert(state.Info.State, check.Equals, model.StateFinished)
+}
+
+func TestAddSpecialComment(t *testing.T) {
+	testCase := []struct {
+		input  string
+		result string
+	}{
+		{
+			"create table t1 (id int ) shard_row_id_bits=2;",
+			"CREATE TABLE t1 (id int) /*T! SHARD_ROW_ID_BITS = 2 */",
+		},
+		{
+			"create table t1 (id int ) shard_row_id_bits=2 pre_split_regions=2;",
+			"CREATE TABLE t1 (id int) /*T! SHARD_ROW_ID_BITS = 2 */ /*T! PRE_SPLIT_REGIONS = 2 */",
+		},
+		{
+			"create table t1 (id int ) shard_row_id_bits=2     pre_split_regions=2;",
+			"CREATE TABLE t1 (id int) /*T! SHARD_ROW_ID_BITS = 2 */ /*T! PRE_SPLIT_REGIONS = 2 */",
+		},
+
+		{
+			"create table t1 (id int ) shard_row_id_bits=2 engine=innodb pre_split_regions=2;",
+			"CREATE TABLE t1 (id int) /*T! SHARD_ROW_ID_BITS = 2 */ ENGINE = innodb /*T! PRE_SPLIT_REGIONS = 2 */",
+		},
+		{
+			"create table t1 (id int ) pre_split_regions=2 shard_row_id_bits=2;",
+			"CREATE TABLE t1 (id int) /*T! PRE_SPLIT_REGIONS = 2 */ /*T! SHARD_ROW_ID_BITS = 2 */",
+		},
+		{
+			"create table t6 (id int ) shard_row_id_bits=2 shard_row_id_bits=3 pre_split_regions=2;",
+			"CREATE TABLE t6 (id int) /*T! SHARD_ROW_ID_BITS = 2 */ /*T! SHARD_ROW_ID_BITS = 3 */ /*T! PRE_SPLIT_REGIONS = 2 */",
+		},
+		{
+			"create table t1 (id int primary key auto_random(2));",
+			"CREATE TABLE t1 (id int PRIMARY KEY /*T![auto_rand] AUTO_RANDOM(2) */)",
+		},
+		{
+			"create table t1 (id int primary key auto_random);",
+			"CREATE TABLE t1 (id int PRIMARY KEY /*T![auto_rand] AUTO_RANDOM */)",
+		},
+		{
+			"create table t1 (id int auto_random ( 4 ) primary key);",
+			"CREATE TABLE t1 (id int /*T![auto_rand] AUTO_RANDOM(4) */ PRIMARY KEY)",
+		},
+		{
+			"create table t1 (id int  auto_random  (   4    ) primary key);",
+			"CREATE TABLE t1 (id int /*T![auto_rand] AUTO_RANDOM(4) */ PRIMARY KEY)",
+		},
+		{
+			"create table t1 (id int auto_random ( 3 ) primary key) auto_random_base = 100;",
+			"CREATE TABLE t1 (id int /*T![auto_rand] AUTO_RANDOM(3) */ PRIMARY KEY) /*T![auto_rand_base] AUTO_RANDOM_BASE = 100 */",
+		},
+		{
+			"create table t1 (id int auto_random primary key) auto_random_base = 50;",
+			"CREATE TABLE t1 (id int /*T![auto_rand] AUTO_RANDOM */ PRIMARY KEY) /*T![auto_rand_base] AUTO_RANDOM_BASE = 50 */",
+		},
+		{
+			"create table t1 (id int auto_increment key) auto_id_cache 100;",
+			"CREATE TABLE t1 (id int AUTO_INCREMENT PRIMARY KEY) /*T![auto_id_cache] AUTO_ID_CACHE = 100 */",
+		},
+		{
+			"create table t1 (id int auto_increment unique) auto_id_cache 10;",
+			"CREATE TABLE t1 (id int AUTO_INCREMENT UNIQUE KEY) /*T![auto_id_cache] AUTO_ID_CACHE = 10 */",
+		},
+		{
+			"create table t1 (id int) auto_id_cache = 5;",
+			"CREATE TABLE t1 (id int) /*T![auto_id_cache] AUTO_ID_CACHE = 5 */",
+		},
+		{
+			"create table t1 (id int) auto_id_cache=5;",
+			"CREATE TABLE t1 (id int) /*T![auto_id_cache] AUTO_ID_CACHE = 5 */",
+		},
+		{
+			"create table t1 (id int) /*T![auto_id_cache] auto_id_cache=5 */ ;",
+			"CREATE TABLE t1 (id int) /*T![auto_id_cache] AUTO_ID_CACHE = 5 */",
+		},
+		{
+			"create table t1 (id int, a varchar(255), primary key (a, b) clustered);",
+			"CREATE TABLE t1 (id int,a varchar(255),PRIMARY KEY(a, b) /*T![clustered_index] CLUSTERED */)",
+		},
+		{
+			"create table t1(id int, v int, primary key(a) clustered);",
+			"CREATE TABLE t1 (id int,v int,PRIMARY KEY(a) /*T![clustered_index] CLUSTERED */)",
+		},
+		{
+			"create table t1(id int primary key clustered, v int);",
+			"CREATE TABLE t1 (id int PRIMARY KEY /*T![clustered_index] CLUSTERED */,v int)",
+		},
+		{
+			"alter table t add primary key(a) clustered;",
+			"ALTER TABLE t ADD PRIMARY KEY(a) /*T![clustered_index] CLUSTERED */",
+		},
+		{
+			"create table t1 (id int, a varchar(255), primary key (a, b) nonclustered);",
+			"CREATE TABLE t1 (id int,a varchar(255),PRIMARY KEY(a, b) /*T![clustered_index] NONCLUSTERED */)",
+		},
+		{
+			"create table t1 (id int, a varchar(255), primary key (a, b) /*T![clustered_index] nonclustered */);",
+			"CREATE TABLE t1 (id int,a varchar(255),PRIMARY KEY(a, b) /*T![clustered_index] NONCLUSTERED */)",
+		},
+		{
+			"create table clustered_test(id int)",
+			"CREATE TABLE clustered_test (id int)",
+		},
+		{
+			"create database clustered_test",
+			"CREATE DATABASE clustered_test",
+		},
+		{
+			"create database clustered",
+			"CREATE DATABASE clustered",
+		},
+		{
+			"create table clustered (id int)",
+			"CREATE TABLE clustered (id int)",
+		},
+		{
+			"create table t1 (id int, a varchar(255) key clustered);",
+			"CREATE TABLE t1 (id int,a varchar(255) PRIMARY KEY /*T![clustered_index] CLUSTERED */)",
+		},
+		{
+			"alter table t force auto_increment = 12;",
+			"ALTER TABLE t /*T![force_inc] FORCE */ AUTO_INCREMENT = 12",
+		},
+		{
+			"alter table t force, auto_increment = 12;",
+			"ALTER TABLE t FORCE /* AlterTableForce is not supported */ , AUTO_INCREMENT = 12",
+		},
+		{
+			"create table cdc_test (id varchar(10) primary key ,c1 varchar(10)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin/*!90000  SHARD_ROW_ID_BITS=4 PRE_SPLIT_REGIONS=3 */",
+			"CREATE TABLE cdc_test (id varchar(10) PRIMARY KEY,c1 varchar(10)) ENGINE = InnoDB DEFAULT CHARACTER SET = utf8mb4 DEFAULT COLLATE = utf8mb4_bin /*T! SHARD_ROW_ID_BITS = 4 */ /*T! PRE_SPLIT_REGIONS = 3 */",
+		},
+	}
+	for _, ca := range testCase {
+		re, err := addSpecialComment(ca.input)
+		require.Nil(t, err)
+		require.Equal(t, ca.result, re)
+	}
+	require.Panics(t, func() {
+		_, _ = addSpecialComment("alter table t force, auto_increment = 12;alter table t force, auto_increment = 12;")
+	})
 }
