@@ -1,0 +1,3 @@
+# TODO: remove this file once leveldb sorter is enabled by default.
+[debug]
+enable-db-sorter=true
