@@ -38,7 +38,7 @@ function run() {
 	dmctl_start_task $WORK_DIR/dm-task.yaml
 
 	# check table
-	run_sql_tidb_with_retry_times "select count(1) from ${db}.${tb} where name = 'aa';" "count(1): 2" 20
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where name = 'aa';" "count(1): 2"
 	run_sql_tidb_with_retry "select count(1) from ${db2}.${tb} where name = 'aa';" "count(1): 2"
 
 	# check column
@@ -92,7 +92,7 @@ function run() {
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
 	# check table
-	run_sql_tidb_with_retry_times "select count(1) from ${db}.${tb} where name = 'aa';" "count(1): 2" 20
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where name = 'aa';" "count(1): 2"
 	run_sql_tidb_with_retry "select count(1) from ${db2}.${tb} where name = 'aa';" "count(1): 2"
 
 	# check column
