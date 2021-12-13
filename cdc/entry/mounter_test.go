@@ -290,7 +290,8 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	mounter.tz = time.Local
 	ctx := context.Background()
 
-	mountAndCheckRowInTable := func(tableID int64, rowBytes []int, f func(key []byte, value []byte) *model.RawKVEntry) int {
+	// [TODO] check size and readd rowBytes
+	mountAndCheckRowInTable := func(tableID int64, _ []int, f func(key []byte, value []byte) *model.RawKVEntry) int {
 		var rows int
 		walkTableSpanInStore(t, store, tableID, func(key []byte, value []byte) {
 			rawKV := f(key, value)
@@ -303,7 +304,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			require.Equal(t, row.Table.Table, tc.tableName)
 			require.Equal(t, row.Table.Schema, "test")
 			// [TODO] check size and reopen this check
-			//require.Equal(t, rowBytes[rows-1], row.ApproximateBytes(), row)
+			// require.Equal(t, rowBytes[rows-1], row.ApproximateBytes(), row)
 			t.Log("ApproximateBytes", tc.tableName, rows-1, row.ApproximateBytes())
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
