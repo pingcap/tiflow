@@ -12,4 +12,4 @@ if [[ "$2" = $TIDB_PORT ]]; then
 fi
 
 echo "[$(date)] Executing SQL: $1" >"$TEST_DIR/sql_res.$TEST_NAME.txt"
-mysql -u$user -h127.0.0.1 -P$2 -p$3 --default-character-set utf8 -E -e "$1" >>"$TEST_DIR/sql_res.$TEST_NAME.txt" 2>&1
+mysql -u$user -h127.0.0.1 -P$2 -p$3 --default-character-set utf8 -E -e "$1" >>"$TEST_DIR/sql_res.$TEST_NAME.txt"

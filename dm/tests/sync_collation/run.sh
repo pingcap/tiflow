@@ -37,6 +37,10 @@ function run() {
 	sed -i "s/task-name-placeholder/${TASK_NAME}/g" $WORK_DIR/dm-task.yaml
 	dmctl_start_task $WORK_DIR/dm-task.yaml
 
+	# wait 
+	run_sql_tidb_with_retry " select count(1) from information_schema.tables where TABLE_SCHEMA='${db}' and TABLE_NAME = '${tb}';" "count(1): 1"
+	run_sql_tidb_with_retry " select count(1) from information_schema.tables where TABLE_SCHEMA='${db2}' and TABLE_NAME = '${tb}';" "count(1): 1"
+
 	# check table
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where name = 'aa';" "count(1): 2"
 	run_sql_tidb_with_retry "select count(1) from ${db2}.${tb} where name = 'aa';" "count(1): 2"
@@ -90,6 +94,10 @@ function run() {
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	# wait 
+	run_sql_tidb_with_retry " select count(1) from information_schema.tables where TABLE_SCHEMA='${db}' and TABLE_NAME = '${tb}';" "count(1): 1"
+	run_sql_tidb_with_retry " select count(1) from information_schema.tables where TABLE_SCHEMA='${db2}' and TABLE_NAME = '${tb}';" "count(1): 1"
 
 	# check table
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where name = 'aa';" "count(1): 2"
