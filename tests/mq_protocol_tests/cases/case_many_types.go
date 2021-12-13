@@ -189,7 +189,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 	if ok {
 		data["t_tinyint"] = math.MaxInt8
 		data["t_smallint"] = math.MaxInt16
-		data["t_mediumint"] = math.MaxInt32
+		data["t_mediumint"] = 16777215
 
 		data["t_unsigned_tinyint"] = 128
 		data["t_unsigned_smallint"] = 32768
