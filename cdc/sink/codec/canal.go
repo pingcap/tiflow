@@ -160,7 +160,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 	// for unsigned type, should have value typed in `uint64`
 	number, ok := c.Value.(uint64)
 	if !ok {
-		log.Panic("unsigned value not in type uint64")
+		log.Panic("unsigned value not in type uint64", zap.Any("column", c))
 	}
 
 	switch c.Type {
