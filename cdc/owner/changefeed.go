@@ -86,8 +86,8 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		cancel: func() {},
 
 		newDDLPuller: newDDLPuller,
+		newSink:      newDDLSink,
 	}
-	c.newSink = newAsyncSink
 	return c
 }
 

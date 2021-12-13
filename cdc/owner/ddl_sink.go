@@ -71,7 +71,7 @@ type ddlSinkImpl struct {
 	cancel context.CancelFunc
 }
 
-func newAsyncSink() DDLSink {
+func newDDLSink() DDLSink {
 	return &ddlSinkImpl{
 		ddlCh:           make(chan *model.DDLEvent, 1),
 		errCh:           make(chan error, defaultErrChSize),
