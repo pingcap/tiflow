@@ -688,18 +688,17 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: "null",
 		},
-		/*
-			// mysql.TypeEnum, panic, need fix
-			{
-				ColInfo: timodel.ColumnInfo{
-					FieldType: types.FieldType{
-						Tp:   mysql.TypeEnum,
-						Flag: mysql.NotNullFlag,
-					},
+		// mysql.TypeEnum
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:    mysql.TypeEnum,
+					Flag:  mysql.NotNullFlag,
+					Elems: []string{"e0", "e1"},
 				},
-				Res: int64(0),
 			},
-		*/
+			Res: uint64(0),
+		},
 		// mysql.TypeSet
 		{
 			ColInfo: timodel.ColumnInfo{
