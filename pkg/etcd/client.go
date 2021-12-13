@@ -195,7 +195,7 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 		opt(op)
 	}
 	lastRevision := op.Rev()
-	log.Info("lastRevision", zap.Int64("rev", op.Rev()))
+
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	watchCh := c.cli.Watch(watchCtx, key, opts...)
