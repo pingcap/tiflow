@@ -652,7 +652,8 @@ func (s *schemaSnapshot) Tables() map[model.TableID]*model.TableInfo {
 
 // SchemaStorage stores the schema information with multi-version
 type SchemaStorage interface {
-	// GetSnapshot returns the snapshot which of ts is specified
+	// GetSnapshot returns the snapshot which of ts is specified.
+	// It may block caller when ts is larger than ResolvedTs.
 	GetSnapshot(ctx context.Context, ts uint64) (*SingleSchemaSnapshot, error)
 	// GetLastSnapshot returns the last snapshot
 	GetLastSnapshot() *schemaSnapshot
@@ -701,10 +702,12 @@ func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, 
 func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 	gcTs := atomic.LoadUint64(&s.gcTs)
 	if ts < gcTs {
+		// Unexpected error, caller should fail immediately.
 		return nil, cerror.ErrSchemaStorageGCed.GenWithStackByArgs(ts, gcTs)
 	}
 	resolvedTs := atomic.LoadUint64(&s.resolvedTs)
 	if ts > resolvedTs {
+		// Caller should retry.
 		return nil, cerror.ErrSchemaStorageUnresolved.GenWithStackByArgs(ts, resolvedTs)
 	}
 	s.snapsMu.RLock()
@@ -713,6 +716,7 @@ func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 		return s.snaps[i].currentTs > ts
 	})
 	if i <= 0 {
+		// Unexpected error, caller should fail immediately.
 		return nil, cerror.ErrSchemaSnapshotNotFound.GenWithStackByArgs(ts)
 	}
 	return s.snaps[i-1], nil

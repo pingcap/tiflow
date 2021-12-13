@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/cdc/processor"
 	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
+	ssystem "github.com/pingcap/ticdc/cdc/sorter/leveldb/system"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -37,6 +38,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
@@ -61,7 +63,9 @@ type Capture struct {
 	kvStorage    tidbkv.Storage
 	etcdClient   *etcd.CDCEtcdClient
 	grpcPool     kv.GrpcPool
+	regionCache  *tikv.RegionCache
 	TimeAcquirer pdtime.TimeAcquirer
+	sorterSystem *ssystem.System
 
 	tableActorSystem *system.System
 
@@ -101,7 +105,9 @@ func (c *Capture) reset(ctx context.Context) error {
 	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
 		concurrency.WithTTL(conf.CaptureSessionTTL))
 	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"create capture session")
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
@@ -111,9 +117,6 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
 
-	if c.grpcPool != nil {
-		c.grpcPool.Close()
-	}
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
 		if err != nil {
@@ -124,11 +127,40 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.tableActorSystem = system.NewSystem()
 		err = c.tableActorSystem.Start(ctx)
 		if err != nil {
-			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
+			return errors.Annotate(
+				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+				"create table actor system")
 		}
 	}
+	if conf.Debug.EnableDBSorter {
+		if c.sorterSystem != nil {
+			err := c.sorterSystem.Stop()
+			if err != nil {
+				log.Warn("stop sorter system failed", zap.Error(err))
+			}
+		}
+		// Sorter dir has been set and checked when server starts.
+		// See https://github.com/pingcap/ticdc/blob/9dad09/cdc/server.go#L275
+		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
+		c.sorterSystem = ssystem.NewSystem(sortDir, conf.Debug.DB)
+		err = c.sorterSystem.Start(ctx)
+		if err != nil {
+			return errors.Annotate(
+				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+				"create sorter system")
+		}
+	}
+	if c.grpcPool != nil {
+		c.grpcPool.Close()
+	}
 	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
-	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
+	if c.regionCache != nil {
+		c.regionCache.Close()
+	}
+	c.regionCache = tikv.NewRegionCache(c.pdClient)
+	log.Info("init capture",
+		zap.String("capture-id", c.info.ID),
+		zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
 
@@ -177,8 +209,10 @@ func (c *Capture) run(stdCtx context.Context) error {
 		CaptureInfo:      c.info,
 		EtcdClient:       c.etcdClient,
 		GrpcPool:         c.grpcPool,
+		RegionCache:      c.regionCache,
 		TimeAcquirer:     c.TimeAcquirer,
 		TableActorSystem: c.tableActorSystem,
+		SorterSystem:     c.sorterSystem,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -276,10 +310,28 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
 
-		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
+		ownerRev, err := c.etcdClient.GetOwnerRevision(ctx, c.info.ID)
+		if err != nil {
+			if errors.Cause(err) == context.Canceled {
+				return nil
+			}
+			return errors.Trace(err)
+		}
+
+		// We do a copy of the globalVars here to avoid
+		// accidental modifications and potential race conditions.
+		globalVars := *ctx.GlobalVars()
+		newGlobalVars := &globalVars
+		newGlobalVars.OwnerRevision = ownerRev
+		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
+
+		log.Info("campaign owner successfully",
+			zap.String("capture-id", c.info.ID),
+			zap.Int64("owner-rev", ownerRev))
+
 		owner := c.newOwner(c.pdClient)
 		c.setOwner(owner)
-		err = c.runEtcdWorker(ctx, owner, orchestrator.NewGlobalState(), ownerFlushInterval)
+		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval)
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -368,6 +420,7 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 }
 
 // AsyncClose closes the capture by unregistering it from etcd
+// Note: this function should be reentrant
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
 	// Safety: Here we mainly want to stop the owner
@@ -384,12 +437,23 @@ func (c *Capture) AsyncClose() {
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
 	}
+	if c.regionCache != nil {
+		c.regionCache.Close()
+		c.regionCache = nil
+	}
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
 		if err != nil {
 			log.Warn("stop table actor system failed", zap.Error(err))
 		}
 		c.tableActorSystem = nil
+	}
+	if c.sorterSystem != nil {
+		err := c.sorterSystem.Stop()
+		if err != nil {
+			log.Warn("stop sorter system failed", zap.Error(err))
+		}
+		c.sorterSystem = nil
 	}
 }
 

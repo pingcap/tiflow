@@ -23,11 +23,11 @@ import (
 // as cause error.
 // If given `err` is nil, returns a nil error, which a the different behavior
 // against `Wrap` function in pingcap/errors.
-func WrapError(rfcError *errors.Error, err error) error {
+func WrapError(rfcError *errors.Error, err error, args ...interface{}) error {
 	if err == nil {
 		return nil
 	}
-	return rfcError.Wrap(err).GenWithStackByCause()
+	return rfcError.Wrap(err).GenWithStackByArgs(args...)
 }
 
 // ChangeFeedFastFailError is read only.

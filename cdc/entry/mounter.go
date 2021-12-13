@@ -21,6 +21,7 @@ import (
 	"math"
 	"math/rand"
 	"time"
+	"unsafe"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -211,7 +212,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			if rowKV == nil {
 				return nil, nil
 			}
-			return m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateSize())
+			return m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
 		}
 		return nil, nil
 	}()
@@ -305,32 +306,38 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	for _, colInfo := range tableInfo.Columns {
+		colSize := 0
 		if !model.IsColCDCVisible(colInfo) {
 			continue
 		}
 		colName := colInfo.Name.O
 		colDatums, exist := datums[colInfo.ID]
 		var colValue interface{}
-		if exist {
-			var err error
-			var warn string
-			colValue, warn, err = formatColVal(colDatums, colInfo.Tp)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			if warn != "" {
-				log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
-			}
-		} else if fillWithDefaultValue {
-			colValue = getDefaultOrZeroValue(colInfo)
-		} else {
+		if !exist && !fillWithDefaultValue {
 			continue
 		}
+		var err error
+		var warn string
+		var size int
+		if exist {
+			colValue, size, warn, err = formatColVal(colDatums, colInfo.Tp)
+		} else if fillWithDefaultValue {
+			colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+		}
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if warn != "" {
+			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
+		}
+		colSize += size
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:  colName,
 			Type:  colInfo.Tp,
 			Value: colValue,
 			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
+			// ApproximateBytes = column data size + column struct size
+			ApproximateBytes: colSize + sizeOfEmptyColumn,
 		}
 	}
 	return cols, nil
@@ -399,84 +406,123 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 			TableID:     row.PhysicalTableID,
 			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
-		Columns:         cols,
-		PreColumns:      preCols,
-		IndexColumns:    tableInfo.IndexColumnsOffset,
-		ApproximateSize: dataSize,
+		Columns:             cols,
+		PreColumns:          preCols,
+		IndexColumns:        tableInfo.IndexColumnsOffset,
+		ApproximateDataSize: dataSize,
 	}, nil
 }
 
 var emptyBytes = make([]byte, 0)
 
-func formatColVal(datum types.Datum, tp byte) (value interface{}, warn string, err error) {
+const (
+	sizeOfEmptyColumn = int(unsafe.Sizeof(model.Column{}))
+	sizeOfEmptyBytes  = int(unsafe.Sizeof(emptyBytes))
+	sizeOfEmptyString = int(unsafe.Sizeof(""))
+)
+
+func sizeOfDatum(d types.Datum) int {
+	array := [...]types.Datum{d}
+	return int(types.EstimatedMemUsage(array[:], 1))
+}
+
+func sizeOfString(s string) int {
+	// string data size + string struct size.
+	return len(s) + sizeOfEmptyString
+}
+
+func sizeOfBytes(b []byte) int {
+	// bytes data size + bytes struct size.
+	return len(b) + sizeOfEmptyBytes
+}
+
+// formatColVal return interface{} need to meet the same requirement as getDefaultOrZeroValue
+func formatColVal(datum types.Datum, tp byte) (
+	value interface{}, size int, warn string, err error,
+) {
 	if datum.IsNull() {
-		return nil, "", nil
+		return nil, 0, "", nil
 	}
 	switch tp {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
-		return datum.GetMysqlTime().String(), "", nil
+		v := datum.GetMysqlTime().String()
+		return v, sizeOfString(v), "", nil
 	case mysql.TypeDuration:
-		return datum.GetMysqlDuration().String(), "", nil
+		v := datum.GetMysqlDuration().String()
+		return v, sizeOfString(v), "", nil
 	case mysql.TypeJSON:
-		return datum.GetMysqlJSON().String(), "", nil
+		v := datum.GetMysqlJSON().String()
+		return v, sizeOfString(v), "", nil
 	case mysql.TypeNewDecimal:
-		v := datum.GetMysqlDecimal()
-		if v == nil {
-			return nil, "", nil
+		d := datum.GetMysqlDecimal()
+		if d == nil {
+			// nil takes 0 byte.
+			return nil, 0, "", nil
 		}
-		return v.String(), "", nil
+		v := d.String()
+		return v, sizeOfString(v), "", nil
 	case mysql.TypeEnum:
-		return datum.GetMysqlEnum().Value, "", nil
+		v := datum.GetMysqlEnum().Value
+		const sizeOfV = unsafe.Sizeof(v)
+		return v, int(sizeOfV), "", nil
 	case mysql.TypeSet:
-		return datum.GetMysqlSet().Value, "", nil
+		v := datum.GetMysqlSet().Value
+		const sizeOfV = unsafe.Sizeof(v)
+		return v, int(sizeOfV), "", nil
 	case mysql.TypeBit:
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
 		v, err := datum.GetBinaryLiteral().ToInt(nil)
-		return v, "", err
+		const sizeOfV = unsafe.Sizeof(v)
+		return v, int(sizeOfV), "", err
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
 		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		b := datum.GetBytes()
 		if b == nil {
 			b = emptyBytes
 		}
-		return b, "", nil
+		return b, sizeOfBytes(b), "", nil
 	case mysql.TypeFloat, mysql.TypeDouble:
 		v := datum.GetFloat64()
 		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
 			warn = fmt.Sprintf("the value is invalid in column: %f", v)
 			v = 0
 		}
-		return v, warn, nil
+		const sizeOfV = unsafe.Sizeof(v)
+		return v, int(sizeOfV), warn, nil
 	default:
-		return datum.GetValue(), "", nil
+		// FIXME: GetValue() may return some types that go sql not support, which will cause sink DML fail
+		// Make specified convert upper if you need
+		// Go sql support type ref to: https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
+		return datum.GetValue(), sizeOfDatum(datum), "", nil
 	}
 }
 
-func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
-	// see https://github.com/pingcap/tidb/issues/9304
-	// must use null if TiDB not write the column value when default value is null
-	// and the value is null
+// getDefaultOrZeroValue return interface{} need to meet to require type in
+// https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
+// Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
+func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, error) {
+	var d types.Datum
 	if !mysql.HasNotNullFlag(col.Flag) {
-		d := types.NewDatum(nil)
-		return d.GetValue()
+		// see https://github.com/pingcap/tidb/issues/9304
+		// must use null if TiDB not write the column value when default value is null
+		// and the value is null
+		d = types.NewDatum(nil)
+	} else if col.GetDefaultValue() != nil {
+		d = types.NewDatum(col.GetDefaultValue())
+	} else {
+		switch col.Tp {
+		case mysql.TypeEnum:
+			// For enum type, if no default value and not null is set,
+			// the default value is the first element of the enum list
+			d = types.NewDatum(col.FieldType.Elems[0])
+		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+			return emptyBytes, sizeOfEmptyBytes, "", nil
+		default:
+			d = table.GetZeroValue(col)
+		}
 	}
 
-	if col.GetDefaultValue() != nil {
-		d := types.NewDatum(col.GetDefaultValue())
-		return d.GetValue()
-	}
-	switch col.Tp {
-	case mysql.TypeEnum:
-		// For enum type, if no default value and not null is set,
-		// the default value is the first element of the enum list
-		d := types.NewDatum(col.FieldType.Elems[0])
-		return d.GetValue()
-	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-		return emptyBytes
-	}
-
-	d := table.GetZeroValue(col)
-	return d.GetValue()
+	return formatColVal(d, col.Tp)
 }
 
 // DecodeTableID decodes the raw key to a table ID
