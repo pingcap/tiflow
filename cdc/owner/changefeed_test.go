@@ -15,7 +15,6 @@ package owner
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,6 +31,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/ticdc/pkg/version"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
 

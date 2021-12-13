@@ -15,8 +15,6 @@ package owner
 
 import (
 	"context"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/format"
 	"strings"
 	"sync"
 
@@ -31,6 +29,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/format"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
