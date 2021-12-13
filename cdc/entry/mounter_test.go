@@ -426,7 +426,7 @@ func walkTableSpanInStore(t *testing.T, store tidbkv.Storage, tableID int64, f f
 	}
 }
 
-// Check following MySQL type, ref to :
+// Check following MySQL type, ref to:
 // https://github.com/pingcap/tidb/blob/master/parser/mysql/type.go
 type columnInfoAndResult struct {
 	ColInfo timodel.ColumnInfo

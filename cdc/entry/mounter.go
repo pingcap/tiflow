@@ -436,6 +436,7 @@ func sizeOfBytes(b []byte) int {
 	return len(b) + sizeOfEmptyBytes
 }
 
+// formatColVal return interface{} need to meet the same requirement as getDefaultOrZeroValue
 func formatColVal(datum types.Datum, tp byte) (
 	value interface{}, size int, warn string, err error,
 ) {
@@ -496,6 +497,9 @@ func formatColVal(datum types.Datum, tp byte) (
 	}
 }
 
+// getDefaultOrZeroValue return interface{} need to meet to require type in
+// https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
+// Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
 func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, error) {
 	var d types.Datum
 	if !mysql.HasNotNullFlag(col.Flag) {
