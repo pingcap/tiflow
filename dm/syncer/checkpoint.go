@@ -43,6 +43,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
 
@@ -334,7 +335,7 @@ type RemoteCheckPoint struct {
 	//  - init safe mode
 	//  - checking in sync and if passed, unset it
 	safeModeExitPoint          *binlog.Location
-	needFlushSafeModeExitPoint bool
+	needFlushSafeModeExitPoint atomic.Bool
 
 	logCtx *tcontext.Context
 	// these fields are used for async flush checkpoint
@@ -380,7 +381,7 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 		}
 	}
 
-	flushGlobalPoint := cp.globalPoint.outOfDate() || cp.globalPointSaveTime.IsZero() || (isSyncFlush && cp.needFlushSafeModeExitPoint)
+	flushGlobalPoint := cp.globalPoint.outOfDate() || cp.globalPointSaveTime.IsZero() || (isSyncFlush && cp.needFlushSafeModeExitPoint.Load())
 
 	// if there is no change on both table points and global point, just return an empty snapshot
 	if len(tableCheckPoints) == 0 && !flushGlobalPoint {
@@ -495,7 +496,7 @@ func (cp *RemoteCheckPoint) SaveSafeModeExitPoint(point *binlog.Location) {
 	if cp.safeModeExitPoint == nil || point == nil ||
 		binlog.CompareLocation(*point, *cp.safeModeExitPoint, cp.cfg.EnableGTID) > 0 {
 		cp.safeModeExitPoint = point
-		cp.needFlushSafeModeExitPoint = true
+		cp.needFlushSafeModeExitPoint.Store(true)
 	}
 }
 
@@ -693,7 +694,7 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	for _, point := range points {
 		point.tableCp.flushBy(point.snapshotTableCP)
 	}
-	cp.needFlushSafeModeExitPoint = false
+	cp.needFlushSafeModeExitPoint.Store(false)
 	return nil
 }
 
@@ -759,7 +760,7 @@ func (cp *RemoteCheckPoint) FlushSafeModeExitPoint(tctx *tcontext.Context) error
 		return err
 	}
 
-	cp.needFlushSafeModeExitPoint = false
+	cp.needFlushSafeModeExitPoint.Store(false)
 	return nil
 }
 
