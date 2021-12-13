@@ -162,16 +162,18 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
 			}
+
+			// ProgressNotify implies no new events.
+			if response.IsProgressNotify() {
+				continue
+			}
+
 			// Check whether the response is stale.
 			if worker.revision >= response.Header.GetRevision() {
 				continue
 			}
 			worker.revision = response.Header.GetRevision()
 
-			// ProgressNotify implies no new events.
-			if response.IsProgressNotify() {
-				continue
-			}
 			for _, event := range response.Events {
 				// handleEvent will apply the event to our internal `rawState`.
 				worker.handleEvent(ctx, event)
