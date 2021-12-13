@@ -108,7 +108,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_tinyblob   TINYBLOB,
 						t_blob       BLOB,
 						t_mediumblob MEDIUMBLOB,
-						t_longblob   LONBBLOB,
+						t_longblob   LONGBLOB,
 
 						t_enum      ENUM ('enum1', 'enum2', 'enum3'),
 						t_set       SET ('a', 'b', 'c'),
