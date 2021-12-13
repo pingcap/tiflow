@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/pingcap/failpoint"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
@@ -69,7 +71,8 @@ type EtcdWorker struct {
 	// a `compare-and-swap` semantics, which is essential for implementing
 	// snapshot isolation for Reactor ticks.
 	deleteCounter int64
-	metrics       *etcdWorkerMetrics
+
+	metrics *etcdWorkerMetrics
 }
 
 type etcdWorkerMetrics struct {
@@ -165,6 +168,20 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 			// ProgressNotify implies no new events.
 			if response.IsProgressNotify() {
+				log.Debug("Etcd progress notification",
+					zap.Int64("revision", response.Header.GetRevision()))
+				// Note that we don't need to update the revision here, and we
+				// should not do so, because the revision of the progress notification
+				// may not satisfy the strict monotonicity we have expected.
+				//
+				// Updating `worker.revision` can cause a useful event with the
+				// same revision to be dropped erroneous.
+				//
+				// Refer to https://etcd.io/docs/v3.3/dev-guide/interacting_v3/#watch-progress
+				// "Note: The revision number in the progress notify response is the revision
+				// from the local etcd server node that the watch stream is connected to. [...]"
+				// This implies that the progress notification will NOT go through the raft
+				// consensus, thereby NOT affecting the revision (index).
 				continue
 			}
 
@@ -178,6 +195,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				// handleEvent will apply the event to our internal `rawState`.
 				worker.handleEvent(ctx, event)
 			}
+
 		}
 
 		if len(pendingPatches) > 0 {
@@ -322,6 +340,10 @@ func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]
 }
 
 func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState map[util.EtcdKey][]byte, size int) error {
+	if len(changedState) == 0 {
+		return nil
+	}
+
 	cmps := make([]clientv3.Cmp, 0, len(changedState))
 	ops := make([]clientv3.Op, 0, len(changedState))
 	hasDelete := false
@@ -365,6 +387,13 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
 	resp, err := worker.client.Txn(txnCtx).If(cmps...).Then(ops...).Commit()
 	cancel()
+
+	failpoint.Inject("InjectProgressRequestAfterCommit", func() {
+		if err := worker.client.RequestProgress(ctx); err != nil {
+			failpoint.Return(errors.Trace(err))
+		}
+	})
+
 	costTime := time.Since(startTime)
 	if costTime > etcdWorkerLogsWarnDuration {
 		log.Warn("Etcd transaction took too long", zap.Duration("duration", costTime))
