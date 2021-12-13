@@ -174,7 +174,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				// may not satisfy the strict monotonicity we have expected.
 				//
 				// Updating `worker.revision` can cause a useful event with the
-				// same revision to be dropped erroneous.
+				// same revision to be dropped erroneously.
 				//
 				// Refer to https://etcd.io/docs/v3.3/dev-guide/interacting_v3/#watch-progress
 				// "Note: The revision number in the progress notify response is the revision
