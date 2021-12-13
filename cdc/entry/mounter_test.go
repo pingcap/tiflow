@@ -67,7 +67,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 		tableName:           "default_value",
 		createTableDDL:      "create table default_value(id int primary key, c1 int, c2 int not null default 5, c3 varchar(20), c4 varchar(20) not null default '666')",
 		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
-		putApproximateBytes: [][]int{{708, 708, 708, 708, 708}},
+		putApproximateBytes: [][]int{{676, 676, 676, 676, 676}},
 		delApproximateBytes: [][]int{{353, 353, 353, 353, 353}},
 	}, {
 		tableName: "partition_table",
