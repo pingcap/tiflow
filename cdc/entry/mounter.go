@@ -490,7 +490,7 @@ func formatColVal(datum types.Datum, tp byte) (
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), warn, nil
 	default:
-		// NOTICE: GetValue() may return some types that go sql not support, which will cause sink DML fail
+		// FIXME: GetValue() may return some types that go sql not support, which will cause sink DML fail
 		// Make specified convert upper if you need
 		// Go sql support type ref to: https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
 		return datum.GetValue(), sizeOfDatum(datum), "", nil
