@@ -72,18 +72,44 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		createDBQuery = `create table test (
 						id          INT,
 						t_boolean   BOOLEAN,
+
+						t_tinyint   TINYINT,
+						t_smallint  SMALLINT ,
+						t_mediumint MEDIUMINT,
+						t_int       INT,
 						t_bigint    BIGINT,
+
+						t_unsigned_tinyint   TINYINT UNSIGNED,
+						t_unsigned_smallint  SMALLINT UNSIGNED,
+						t_unsigned_mediumint MEDIUMINT UNSIGNED,
+						t_unsigned_int       INT UNSIGNED,
+						t_unsigned_bigint    BIGINT UNSIGNED,
+
 						t_double    DOUBLE,
 						t_float     FLOAT,
 						t_decimal   DECIMAL(38, 19),
+
 						t_date      DATE,
 						t_datetime  DATETIME,
 						t_timestamp TIMESTAMP NULL,
 						t_time      TIME,
+						t_year      YEAR,
+
 						t_char      CHAR,
 						t_varchar   VARCHAR(10),
-						t_blob      BLOB,
-						t_text      TEXT,
+						t_binary    BINARY,
+						t_varbinary VARBINARY(16),
+
+						t_tinytext   TINYTEXT,
+						t_text       TEXT,
+						t_mediumtext MEDIUMTEXT,
+						t_longtext   LONGTEXT,
+
+						t_tinyblob   TINYBLOB,
+						t_blob       BLOB,
+						t_mediumblob MEDIUMBLOB,
+						t_longblob   LONBBLOB,
+
 						t_enum      ENUM ('enum1', 'enum2', 'enum3'),
 						t_set       SET ('a', 'b', 'c'),
 						t_json      JSON,
@@ -158,5 +184,31 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["t_year"] = 2019
 		data["t_bit"] = 0b1001001
 	}
+
+	_, ok = s.Task.(*canal.SingleTableTask)
+	if ok {
+		data["t_tinyint"] = math.MaxInt8
+		data["t_smallint"] = math.MaxInt16
+		data["t_mediumint"] = math.MaxInt32
+
+		data["t_unsigned_tinyint"] = 128
+		data["t_unsigned_smallint"] = 32768
+		data["t_unsigned_mediumint"] = 8388608
+		data["t_unsigned_int"] = 2147483648
+		data["t_unsigned_bigint"] = uint64(9223372036854775808)
+
+		data["t_year"] = 2021
+		data["t_binary"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
+		data["t_varbinary"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
+
+		data["t_tinytext"] = "测试tinytext"
+		data["t_mediumtext"] = "测试mediumtext"
+		data["t_longtext"] = "测试longtext"
+
+		data["t_tinyblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
+		data["t_mediumblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
+		data["t_longblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
+	}
+
 	return table.Insert(data).Send().Wait().Check()
 }
