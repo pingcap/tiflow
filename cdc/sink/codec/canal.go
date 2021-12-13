@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"strings"
 
@@ -144,23 +145,41 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 		return JavaSQLTypeBLOB
 	}
 
+	if !c.Flag.IsUnsigned() {
+		return javaType
+	}
+
 	// Some special cases handled in canal
 	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
-	// Todo (Ling Jin): type promotion for int related type is quite weired, figure out why.
-	shouldPromote := c.Flag.IsUnsigned()
-	if !shouldPromote {
-		return javaType
+	// For unsigned type, promote by the following rule:
+	// TinyInt,  1byte, [-128, 127], [0, 255], if a > 127
+	// SmallInt, 2byte, [-32768, 32767], [0, 65535], if a > 32767
+	// Int,      4byte, [-2147483648, 2147483647], [0, 4294967295], if a > 2147483647
+	// BigInt,   8byte, [-2<<63, 2 << 63 - 1], [0, 2 << 64 - 1], if a > 2 << 63 - 1
+
+	// for unsigned type, should have value typed in `uint64`
+	number, ok := c.Value.(uint64)
+	if !ok {
+		log.Panic("unsigned value not in type uint64")
 	}
 
 	switch c.Type {
 	case mysql.TypeTiny:
-		javaType = JavaSQLTypeSMALLINT
+		if number > math.MaxInt8 {
+			javaType = JavaSQLTypeSMALLINT
+		}
 	case mysql.TypeShort, mysql.TypeInt24:
-		javaType = JavaSQLTypeINTEGER
+		if number > math.MaxInt16 {
+			javaType = JavaSQLTypeINTEGER
+		}
 	case mysql.TypeLong:
-		javaType = JavaSQLTypeBIGINT
+		if number > math.MaxInt32 {
+			javaType = JavaSQLTypeBIGINT
+		}
 	case mysql.TypeLonglong:
-		javaType = JavaSQLTypeDECIMAL
+		if number > math.MaxInt64 {
+			javaType = JavaSQLTypeDECIMAL
+		}
 	}
 
 	return javaType
