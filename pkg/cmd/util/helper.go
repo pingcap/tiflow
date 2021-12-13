@@ -158,7 +158,7 @@ func VerifyAndGetTiCDCClusterVersion(
 		return version.TiCDCClusterVersion{}, err
 	}
 
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
 	if err != nil {
 		return version.TiCDCClusterVersion{}, err
 	}

@@ -43,3 +43,13 @@ func (c *CaptureInfo) Unmarshal(data []byte) error {
 	return errors.Annotatef(cerror.WrapError(cerror.ErrUnmarshalFailed, err),
 		"unmarshal data: %v", data)
 }
+
+// ListVersionsFromCaptureInfos returns the version list of the CaptureInfo list.
+func ListVersionsFromCaptureInfos(captureInfos []*CaptureInfo) []string {
+	var captureVersions []string
+	for _, ci := range captureInfos {
+		captureVersions = append(captureVersions, ci.Version)
+	}
+
+	return captureVersions
+}

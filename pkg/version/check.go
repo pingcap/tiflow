@@ -223,16 +223,16 @@ func (v *TiCDCClusterVersion) ShouldEnableUnifiedSorterByDefault() bool {
 var TiCDCClusterVersionUnknown = TiCDCClusterVersion{}
 
 // GetTiCDCClusterVersion returns the version of ticdc cluster
-func GetTiCDCClusterVersion(captureInfos []*model.CaptureInfo) (TiCDCClusterVersion, error) {
-	if len(captureInfos) == 0 {
+func GetTiCDCClusterVersion(captureVersion []string) (TiCDCClusterVersion, error) {
+	if len(captureVersion) == 0 {
 		return TiCDCClusterVersionUnknown, nil
 	}
 	var minVer *semver.Version
-	for _, captureInfo := range captureInfos {
+	for _, versionStr := range captureVersion {
 		var ver *semver.Version
 		var err error
-		if captureInfo.Version != "" {
-			ver, err = semver.NewVersion(removeVAndHash(captureInfo.Version))
+		if versionStr != "" {
+			ver, err = semver.NewVersion(removeVAndHash(versionStr))
 		} else {
 			ver = defaultTiCDCVersion
 		}
