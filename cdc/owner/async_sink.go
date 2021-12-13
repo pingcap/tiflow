@@ -33,11 +33,13 @@ const (
 	defaultErrChSize = 1024
 )
 
-// asyncSink is an async sink design for owner
+// DDLSink is a wrapper of the `Sink` interface for the owner
+// DDLSink should send `DDLEvent` and `CheckpointTs` to downstream sink,
+// If `SyncPointEnabled`, also send `syncPoint` to downstream.
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
-// Other functions are still synchronization
-type asyncSink interface {
-	// run the asyncSink
+// Other functions are still in a synchronized way.
+type DDLSink interface {
+	// run the DDLSink
 	run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) error
 	// emitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
@@ -51,7 +53,7 @@ type asyncSink interface {
 	close(ctx context.Context) error
 }
 
-type asyncSinkImpl struct {
+type ddlSinkImpl struct {
 	lastSyncPoint  model.Ts
 	syncPointStore sink.SyncpointStore
 
@@ -64,23 +66,23 @@ type asyncSinkImpl struct {
 
 	sink sink.Sink
 	// `sinkInitHandler` can be helpful in unit testing.
-	sinkInitHandler asyncSinkInitHandler
+	sinkInitHandler ddlSinkInitHandler
 
 	cancel context.CancelFunc
 }
 
-func newAsyncSink() asyncSink {
-	return &asyncSinkImpl{
+func newAsyncSink() DDLSink {
+	return &ddlSinkImpl{
 		ddlCh:           make(chan *model.DDLEvent, 1),
 		errCh:           make(chan error, defaultErrChSize),
-		sinkInitHandler: asyncSinkInitializer,
+		sinkInitHandler: ddlSinkInitializer,
 		cancel:          func() {},
 	}
 }
 
-type asyncSinkInitHandler func(ctx cdcContext.Context, a *asyncSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error
+type ddlSinkInitHandler func(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error
 
-func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error {
+func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error {
 	filter, err := filter.NewFilter(info.Config)
 	if err != nil {
 		return errors.Trace(err)
@@ -107,7 +109,7 @@ func asyncSinkInitializer(ctx cdcContext.Context, a *asyncSinkImpl, id model.Cha
 	return nil
 }
 
-func (s *asyncSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) error {
+func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	s.cancel = cancel
 
@@ -116,7 +118,7 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info 
 		return errors.Trace(err)
 	}
 
-	log.Info("async sink initialized, start processing...", zap.Duration("elapsed", time.Since(start)))
+	log.Info("ddl sink initialized, start processing...", zap.Duration("elapsed", time.Since(start)))
 
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
@@ -157,11 +159,11 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info 
 	}
 }
 
-func (s *asyncSinkImpl) emitCheckpointTs(ctx cdcContext.Context, ts uint64) {
+func (s *ddlSinkImpl) emitCheckpointTs(ctx cdcContext.Context, ts uint64) {
 	atomic.StoreUint64(&s.checkpointTs, ts)
 }
 
-func (s *asyncSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
+func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	ddlFinishedTs := atomic.LoadUint64(&s.ddlFinishedTs)
 	if ddl.CommitTs <= ddlFinishedTs {
 		// the DDL event is executed successfully, and done is true
@@ -180,7 +182,7 @@ func (s *asyncSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent
 	return false, nil
 }
 
-func (s *asyncSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
+func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
 	if checkpointTs == s.lastSyncPoint {
 		return nil
 	}
@@ -189,7 +191,7 @@ func (s *asyncSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint6
 	return s.syncPointStore.SinkSyncpoint(ctx, ctx.ChangefeedVars().ID, checkpointTs)
 }
 
-func (s *asyncSinkImpl) close(ctx context.Context) (err error) {
+func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
 	if s.sink != nil {
 		err = s.sink.Close(ctx)

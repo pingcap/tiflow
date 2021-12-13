@@ -46,7 +46,7 @@ type changefeed struct {
 	redoManager      redo.LogManager
 
 	schema      *schemaWrap4Owner
-	sink        asyncSink
+	sink        DDLSink
 	ddlPuller   DDLPuller
 	initialized bool
 	// isRemoved is true if the changefeed is removed
@@ -58,7 +58,7 @@ type changefeed struct {
 	ddlEventCache *model.DDLEvent
 
 	errCh chan error
-	// cancel the running goroutine of `asyncSink` and `DDLPuller`
+	// cancel the running goroutine of `DDLSink` and `DDLPuller`
 	cancel context.CancelFunc
 
 	// The changefeed will start some backend goroutines in the function `initialize`,
@@ -70,7 +70,7 @@ type changefeed struct {
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
-	newSink      func() asyncSink
+	newSink      func() DDLSink
 }
 
 func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
@@ -94,7 +94,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 func newChangefeed4Test(
 	id model.ChangeFeedID, gcManager gc.Manager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
-	newSink func() asyncSink,
+	newSink func() DDLSink,
 ) *changefeed {
 	c := newChangefeed(id, gcManager)
 	c.newDDLPuller = newDDLPuller
