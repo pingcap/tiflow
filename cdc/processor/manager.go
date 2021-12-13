@@ -19,6 +19,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -85,17 +87,23 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		})
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState() {
-				continue
+			if config.SchedulerV2Enabled {
+				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
+				processor = m.newProcessor(ctx)
+				m.processors[changefeedID] = processor
+			} else {
+				if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState() {
+					continue
+				}
+				// the processor should start after at least one table has been added to this capture
+				taskStatus := changefeedState.TaskStatuses[captureID]
+				if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
+					continue
+				}
+				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
+				processor = m.newProcessor(ctx)
+				m.processors[changefeedID] = processor
 			}
-			// the processor should start after at least one table has been added to this capture
-			taskStatus := changefeedState.TaskStatuses[captureID]
-			if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
-				continue
-			}
-			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = m.newProcessor(ctx)
-			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {
 			m.closeProcessor(changefeedID)
