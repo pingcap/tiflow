@@ -19,8 +19,6 @@ import (
 	"strconv"
 	"time"
 
-	"go.etcd.io/etcd/etcdserver/etcdserverpb"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -30,6 +28,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/etcdserver/etcdserverpb"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
