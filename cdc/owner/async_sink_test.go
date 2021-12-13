@@ -130,12 +130,6 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 		errCh <- asyncSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
 	}()
 
-	go func() {
-		wg.Wait()
-		asyncSink.close(ctx)
-		c.Assert(<-errCh, check.IsNil)
-	}()
-
 	ddlEvents := []*model.DDLEvent{
 		{CommitTs: 1},
 		{CommitTs: 2},
@@ -152,6 +146,10 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 			}
 		}
 	}
+
+	asyncSink.close(ctx)
+	wg.Wait()
+	c.Assert(<-errCh, check.IsNil)
 }
 
 func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
@@ -187,11 +185,6 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 		}
 	}()
 
-	go func() {
-		wg.Wait()
-		asyncSink.close(ctx)
-	}()
-
 	mSink.ddlError = cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	ddl1 := &model.DDLEvent{CommitTs: 1}
 	for {
@@ -216,4 +209,7 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 		}
 	}
 	c.Assert(cerror.ErrExecDDLFailed.Equal(readResultErr()), check.IsTrue)
+
+	wg.Wait()
+	asyncSink.close(ctx)
 }
