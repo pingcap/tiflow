@@ -16,19 +16,23 @@ package entry
 import (
 	"context"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	ticonfig "github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -393,5 +397,309 @@ func walkTableSpanInStore(c *check.C, store tidbkv.Storage, tableID int64, f fun
 		f(kvIter.Key(), kvIter.Value())
 		err = kvIter.Next()
 		c.Assert(err, check.IsNil)
+	}
+}
+
+// Check following MySQL type, ref to:
+// https://github.com/pingcap/tidb/blob/master/parser/mysql/type.go
+type columnInfoAndResult struct {
+	ColInfo timodel.ColumnInfo
+	Res     interface{}
+}
+
+func TestFormatColVal(t *testing.T) {}
+
+func TestGetDefaultZeroValue(t *testing.T) {
+	colAndRess := []columnInfoAndResult{
+		// mysql flag null
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Flag: uint(0),
+				},
+			},
+			Res: nil,
+		},
+		// mysql.TypeTiny
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTiny,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(0),
+		},
+		// mysql.TypeShort
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeShort,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(0),
+		},
+		// mysql.TypeLong
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeLong,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(0),
+		},
+		// mysql.TypeLonglong
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeLonglong,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(0),
+		},
+		// mysql.TypeInt24
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeInt24,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(0),
+		},
+		// mysql.TypeFloat
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeFloat,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: float64(0),
+		},
+		// mysql.TypeDouble
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeDouble,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: float64(0),
+		},
+		// mysql.TypeNewDecimal
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:      mysql.TypeNewDecimal,
+					Flag:    mysql.NotNullFlag,
+					Flen:    5,
+					Decimal: 2,
+				},
+			},
+			Res: "0", // related with Flen and Decimal, [TODO] need check default
+		},
+		// mysql.TypeNull
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeNull,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: nil,
+		},
+		// mysql.TypeTimestamp
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTimestamp,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "0000-00-00 00:00:00",
+		},
+		// mysql.TypeDate
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeDate,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "0000-00-00",
+		},
+		// mysql.TypeDuration
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeDuration,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "00:00:00",
+		},
+		// mysql.TypeDatetime
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeDatetime,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "0000-00-00 00:00:00",
+		},
+		// mysql.TypeYear
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeYear,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(0),
+		},
+		// mysql.TypeNewDate
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeNewDate,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: nil, // [TODO] seems not support by TiDB, need check
+		},
+		// mysql.TypeVarchar
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeVarchar,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeTinyBlob
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTinyBlob,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeMediumBlob
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeMediumBlob,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeLongBlob
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeLongBlob,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeBlob
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeBlob,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeVarString
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeVarString,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeString
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeString,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeBit
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Flag: mysql.NotNullFlag,
+					Tp:   mysql.TypeBit,
+				},
+			},
+			Res: uint64(0),
+		},
+		// mysql.TypeJSON
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeJSON,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "null",
+		},
+		// mysql.TypeEnum
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:    mysql.TypeEnum,
+					Flag:  mysql.NotNullFlag,
+					Elems: []string{"e0", "e1"},
+				},
+			},
+			Res: uint64(0),
+		},
+		// mysql.TypeSet
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeSet,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: uint64(0),
+		},
+		// mysql.TypeGeometry
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeGeometry,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: nil,
+		},
+	}
+	testGetDefaultZeroValue(t, colAndRess)
+}
+
+func testGetDefaultZeroValue(t *testing.T, colAndRess []columnInfoAndResult) {
+	for _, colAndRes := range colAndRess {
+		val, _, _ := getDefaultOrZeroValue(&colAndRes.ColInfo)
+		require.Equal(t, colAndRes.Res, val)
 	}
 }
