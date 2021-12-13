@@ -145,8 +145,23 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 		return JavaSQLTypeBLOB
 	}
 
+	// flag `isUnsigned` only for `Int`, `Real` related and `bit`, `year` data type.
 	if !c.Flag.IsUnsigned() {
 		return javaType
+	}
+
+	// for year, to `int64`, others to `uint64`.
+	// no need to promote type for `year` and `bit`
+	if c.Type == mysql.TypeYear || c.Type == mysql.TypeBit {
+		return javaType
+	}
+
+	// for **unsigned** `Int` related data type, should have type in `uint64`. see reference:
+	// https://github.com/pingcap/ticdc/blob/f0a38a7aaf9f3b11a4d807da275b567642733f58/cdc/entry/mounter.go#L493
+	// https://github.com/pingcap/tidb/blob/6495a5a116a016a3e077d181b8c8ad81f76ac31b/types/datum.go#L423-L455
+	number, ok := c.Value.(uint64)
+	if !ok {
+		log.Panic("unsigned value not in type uint64", zap.Any("column", c))
 	}
 
 	// Some special cases handled in canal
@@ -156,13 +171,6 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 	// SmallInt, 2byte, [-32768, 32767], [0, 65535], if a > 32767
 	// Int,      4byte, [-2147483648, 2147483647], [0, 4294967295], if a > 2147483647
 	// BigInt,   8byte, [-2<<63, 2 << 63 - 1], [0, 2 << 64 - 1], if a > 2 << 63 - 1
-
-	// for unsigned type, should have value typed in `uint64`
-	number, ok := c.Value.(uint64)
-	if !ok {
-		log.Panic("unsigned value not in type uint64", zap.Any("column", c))
-	}
-
 	switch c.Type {
 	case mysql.TypeTiny:
 		if number > math.MaxInt8 {
