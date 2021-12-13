@@ -1073,7 +1073,7 @@ func (s *Syncer) resetShardingGroup(table *filter.Table) {
 }
 
 // flushCheckPoints synchronously flushes previous saved checkpoint in memory to persistent storage, like TiDB
-// we flush checkpoints in three cases:
+// we flush checkpoints in four cases:
 //   1. DDL executed
 //   2. pausing / stopping the sync (driven by `s.flushJobs`)
 //   3. IsFreshTask return true

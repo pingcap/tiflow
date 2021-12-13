@@ -34,7 +34,7 @@ import (
 
 func (s *testSyncerSuite) TestDetectConflict(c *C) {
 	ca := &causality{
-		relations: newRollingMap(),
+		relation: newCausalityRelation(),
 	}
 	caseData := []string{"test_1", "test_2", "test_3"}
 	excepted := map[string]string{
@@ -44,9 +44,9 @@ func (s *testSyncerSuite) TestDetectConflict(c *C) {
 	}
 
 	assertRelationsEq := func(expectMap map[string]string) {
-		c.Assert(ca.relations.len(), Equals, len(expectMap))
+		c.Assert(ca.relation.len(), Equals, len(expectMap))
 		for k, expV := range expectMap {
-			v, ok := ca.relations.get(k)
+			v, ok := ca.relation.get(k)
 			c.Assert(ok, IsTrue)
 			c.Assert(v, Equals, expV)
 		}
@@ -61,8 +61,8 @@ func (s *testSyncerSuite) TestDetectConflict(c *C) {
 	assertRelationsEq(excepted)
 	conflictData := []string{"test_4", "test_3"}
 	c.Assert(ca.detectConflict(conflictData), IsTrue)
-	ca.relations.clear()
-	c.Assert(ca.relations.len(), Equals, 0)
+	ca.relation.clear()
+	c.Assert(ca.relation.len(), Equals, 0)
 }
 
 func (s *testSyncerSuite) TestCasuality(c *C) {
@@ -221,15 +221,14 @@ func (s *testSyncerSuite) TestCasualityWithPrefixIndex(c *C) {
 	}
 }
 
-func (s *testSyncerSuite) TestCasualityRollingMap(c *C) {
-	rm := newRollingMap()
+func (s *testSyncerSuite) TestCasualityRelation(c *C) {
+	rm := newCausalityRelation()
 	c.Assert(rm.len(), Equals, 0)
-	c.Assert(len(rm.maps), Equals, 1)
+	c.Assert(len(rm.groups), Equals, 1)
 
 	testCases := []struct {
-		key     string
-		val     string
-		version int64
+		key string
+		val string
 	}{
 		{key: "1.key", val: "1.val"},
 		{key: "2.key", val: "2.val"},
@@ -257,19 +256,13 @@ func (s *testSyncerSuite) TestCasualityRollingMap(c *C) {
 		c.Assert(val, Equals, testcase.val)
 	}
 
+	rm.rotate(1)
 	rm.gc(1)
+	c.Assert(rm.len(), Equals, 0)
+
+	// test gc max
 	for _, testcase := range testCases {
-		if testcase.version == 1 {
-			_, ok := rm.get(testcase.key)
-			c.Assert(ok, Equals, false)
-		}
-	}
-	rm.gc(2)
-	for _, testcase := range testCases {
-		if testcase.version == 2 {
-			_, ok := rm.get(testcase.key)
-			c.Assert(ok, Equals, false)
-		}
+		rm.set(testcase.key, testcase.val)
 	}
 
 	rm.gc(math.MaxInt64)
@@ -292,7 +285,7 @@ func (s *testSyncerSuite) TestCasualityRollingMap(c *C) {
 	for index := range testCases {
 		rm.gc(int64(index))
 
-		for _, rmMap := range rm.maps[1:] {
+		for _, rmMap := range rm.groups[1:] {
 			c.Assert(rmMap.prevFlushJobSeq, Not(Equals), int64(index))
 		}
 
