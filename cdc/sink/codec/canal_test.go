@@ -48,18 +48,7 @@ var _ = check.Suite(&canalBatchSuite{
 				Table:    &model.TableName{Schema: "a", Table: "b"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 			},
-			{
-				CommitTs: 3,
-				Table:    &model.TableName{Schema: "a", Table: "b"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-			},
-			{
-				CommitTs: 4,
-				Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
-			},
 		},
-		{},
 	},
 	ddlCases: [][]*model.DDLEvent{
 		{{
@@ -72,20 +61,12 @@ var _ = check.Suite(&canalBatchSuite{
 		}},
 		{
 			{
-				CommitTs: 1,
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "a", Table: "b",
-				},
-				Query: "create table a",
-				Type:  1,
-			},
-			{
 				CommitTs: 2,
 				TableInfo: &model.SimpleTableInfo{
 					Schema: "a", Table: "b",
 				},
 				Query: "create table b",
-				Type:  2,
+				Type:  3,
 			},
 			{
 				CommitTs: 3,
@@ -96,7 +77,6 @@ var _ = check.Suite(&canalBatchSuite{
 				Type:  3,
 			},
 		},
-		{},
 	},
 })
 
@@ -385,6 +365,57 @@ func testDdl(c *check.C) {
 	c.Assert(rc.GetIsDdl(), check.IsTrue)
 	c.Assert(rc.GetDdlSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
 }
+
+type testCanalColumnGroup struct {
+	c                 *model.Column
+	expectedMySQLType byte
+}
+
+//var testColumns = []*model.Column{
+//	,
+//	{Name: "b", Type: mysql.TypeShort, Value: 2}, //
+//}
+//
+var testColumns = []*struct {
+	c                 *model.Column
+	expectedMySQLType string
+	expectedJavaType  JavaSQLType
+}{
+	{&model.Column{Type: mysql.TypeTiny, Value: 1}, "tinyint", JavaSQLTypeTINYINT}, // Boolean / TinyInt
+	{&model.Column{Type: mysql.TypeShort, Value: 2}, "smallint", JavaSQLTypeSMALLINT},
+	{&model.Column{Type: mysql.TypeUnspecified}},
+}
+
+//type Column struct {
+//	Name  string         `json:"name" msg:"name"`
+//	Type  byte           `json:"type" msg:"type"`
+//	Flag  ColumnFlagType `json:"flag" msg:"-"`
+//	Value interface{}    `json:"value" msg:"value"`
+//
+//	// ApproximateBytes is approximate bytes consumed by the column.
+//	ApproximateBytes int `json:"-"`
+//}
+
+//func getMySQLType(c *model.Column) string {
+//	mysqlType := types.TypeStr(c.Type)
+//	// make `mysqlType` representation keep the same as the canal official implementation
+//	if c.Flag.IsUnsigned() && mysqlType != "bit" && mysqlType != "year" {
+//		mysqlType = mysqlType + " " + "unsigned"
+//	}
+//	if !c.Flag.IsBinary() {
+//		return mysqlType
+//	}
+//
+//	if types.IsTypeBlob(c.Type) {
+//		return strings.Replace(mysqlType, "text", "blob", 1)
+//	}
+//
+//	if types.IsTypeChar(c.Type) {
+//		return strings.Replace(mysqlType, "char", "binary", 1)
+//	}
+//
+//	return mysqlType
+//}
 
 func (s *canalEntrySuite) TestGetMySQLType(c *check.C) {
 
