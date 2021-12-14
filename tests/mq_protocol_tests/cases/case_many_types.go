@@ -92,7 +92,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_timestamp TIMESTAMP NULL,
 						t_time      TIME,
 
-						t_tinytext   TINYTEXT
+						t_tinytext   TINYTEXT,
 						t_mediumtext MEDIUMTEXT,
 						t_text       TEXT,
 						t_longtext   LONGTEXT,
