@@ -198,10 +198,14 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 
-		checkTables := make(map[string][]string)
+		tableNum := 0
+		for _, tables := range mapping {
+			tableNum += len(tables)
+		}
+		checkTables := make([]*filter.Table, tableNum)
 		for name, tables := range mapping {
+			checkTables = append(checkTables, tables...)
 			for _, table := range tables {
-				checkTables[table.Schema] = append(checkTables[table.Schema], table.Name)
 				if _, ok := sharding[name]; !ok {
 					sharding[name] = make(map[string]map[string][]string)
 				}

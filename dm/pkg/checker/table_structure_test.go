@@ -22,6 +22,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	tc "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
 func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
@@ -138,7 +139,7 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 
 	checker := NewTablesChecker(db,
 		&dbutil.DBConfig{},
-		map[string][]string{"test-db": {"test-table-1"}})
+		[]*filter.Table{{Schema: "test-db", Name: "test-table-1"}})
 	result := checker.Check(ctx)
 
 	c.Assert(result.State, tc.Equals, StateSuccess)

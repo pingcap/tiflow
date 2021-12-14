@@ -19,22 +19,29 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 )
 
-// AutoIncrementKeyChecking is an identification for auto increment key checking.
-const AutoIncrementKeyChecking = "auto-increment key checking"
+const (
+	// AutoIncrementKeyChecking is an identification for auto increment key checking.
+	AutoIncrementKeyChecking = "auto-increment key checking"
+	CHECK_TIMEOUT            = 10 * time.Second
+)
 
 // hold information of incompatibility option.
 type incompatibilityOption struct {
 	state       State
+	tableID     string
 	instruction string
 	errMessage  string
 }
@@ -60,11 +67,11 @@ func (o *incompatibilityOption) String() string {
 type TablesChecker struct {
 	db     *sql.DB
 	dbinfo *dbutil.DBConfig
-	tables map[string][]string // schema => []table; if []table is empty, query tables from db
+	tables []*filter.Table // tableID => filter.Table
 }
 
 // NewTablesChecker returns a RealChecker.
-func NewTablesChecker(db *sql.DB, dbinfo *dbutil.DBConfig, tables map[string][]string) RealChecker {
+func NewTablesChecker(db *sql.DB, dbinfo *dbutil.DBConfig, tables []*filter.Table) RealChecker {
 	return &TablesChecker{
 		db:     db,
 		dbinfo: dbinfo,
@@ -82,49 +89,49 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	var (
-		err        error
-		options    = make(map[string][]*incompatibilityOption)
-		statements = make(map[string]string)
+		cunrrency = 4
+		onethread = len(c.tables) / cunrrency
+		optCh     = make(chan *incompatibilityOption)
+		errCh     = make(chan error)
+		checkWg   sync.WaitGroup
 	)
-	for schema, tables := range c.tables {
-		if len(tables) == 0 {
-			tables, err = dbutil.GetTables(ctx, c.db, schema)
-			if err != nil {
-				markCheckError(r, err)
-				return r
-			}
-		}
-
+	checkFunc := func(tables []*filter.Table) {
 		for _, table := range tables {
-			tableName := dbutil.TableName(schema, table)
-			statement, err := dbutil.GetCreateTableSQL(ctx, c.db, schema, table)
+			statement, err := dbutil.GetCreateTableSQL(ctx, c.db, table.Schema, table.Name)
 			if err != nil {
 				// continue if table was deleted when checking
 				if isMySQLError(err, mysql.ErrNoSuchTable) {
 					continue
 				}
-				markCheckError(r, err)
-				return r
+				errCh <- err
+				break
 			}
 
 			opts := c.checkCreateSQL(ctx, statement)
-			if len(opts) > 0 {
-				options[tableName] = opts
-				statements[tableName] = statement
+			for _, opt := range opts {
+				opt.tableID = table.String()
+				optCh <- opt
 			}
+		}
+		checkWg.Done()
+	}
+
+	for i := 0; i < cunrrency; i++ {
+		checkWg.Add(1)
+		if i+1 == cunrrency {
+			go checkFunc(c.tables[onethread*i:])
+		} else {
+			go checkFunc(c.tables[onethread*i : onethread*(i+1)])
 		}
 	}
 
-	for name, opts := range options {
-		if len(opts) == 0 {
-			continue
-		}
-		tableMsg := "table " + name + " "
-
-		for _, option := range opts {
+	for {
+		select {
+		case option := <-optCh:
+			tableMsg := "table " + option.tableID + " "
 			switch option.state {
 			case StateWarning:
-				if len(r.State) == 0 {
+				if r.State != StateFailure {
 					r.State = StateWarning
 				}
 				e := NewError(tableMsg + option.errMessage)
@@ -137,10 +144,13 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 				e.Instruction = option.instruction
 				r.Errors = append(r.Errors, e)
 			}
+		case err := <-errCh:
+			markCheckError(r, err)
+		case <-time.After(CHECK_TIMEOUT):
+			checkWg.Wait()
+			return r
 		}
 	}
-
-	return r
 }
 
 // Name implements RealChecker interface.

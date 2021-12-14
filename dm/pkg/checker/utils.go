@@ -131,7 +131,9 @@ func markCheckError(result *Result, err error) {
 		} else {
 			state = StateFailure
 		}
-		result.State = state
+		if result.State != StateFailure {
+			result.State = state
+		}
 		result.Errors = append(result.Errors, &Error{Severity: state, ShortErr: err.Error()})
 	}
 }
