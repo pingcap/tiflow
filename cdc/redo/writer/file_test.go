@@ -56,8 +56,11 @@ func TestWriterWrite(t *testing.T) {
 			FileType:     common.DefaultRowLogFileType,
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		},
-		uint64buf: make([]byte, 8),
-		running:   *atomic.NewBool(true),
+		uint64buf:              make([]byte, 8),
+		running:                *atomic.NewBool(true),
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues("cp", "test-cf"),
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues("cp", "test-cf"),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("cp", "test-cf"),
 	}
 
 	w.eventCommitTS.Store(1)
@@ -108,8 +111,11 @@ func TestWriterWrite(t *testing.T) {
 			FileType:     common.DefaultRowLogFileType,
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		},
-		uint64buf: make([]byte, 8),
-		running:   *atomic.NewBool(true),
+		uint64buf:              make([]byte, 8),
+		running:                *atomic.NewBool(true),
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues("cp", "test-cf11"),
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues("cp", "test-cf11"),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("cp", "test-cf11"),
 	}
 
 	w1.eventCommitTS.Store(1)
@@ -164,9 +170,12 @@ func TestWriterGC(t *testing.T) {
 		S3Storage:         true,
 	}
 	w := &Writer{
-		cfg:       cfg,
-		uint64buf: make([]byte, 8),
-		storage:   mockStorage,
+		cfg:                    cfg,
+		uint64buf:              make([]byte, 8),
+		storage:                mockStorage,
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
 	}
 	w.running.Store(true)
 	w.eventCommitTS.Store(1)
@@ -197,8 +206,17 @@ func TestWriterGC(t *testing.T) {
 	require.Nil(t, err, files[0].Name())
 	require.EqualValues(t, 3, ts)
 	require.Equal(t, common.DefaultRowLogFileType, fileType)
-
 	time.Sleep(time.Duration(100) * time.Millisecond)
+
+	w1 := &Writer{
+		cfg:       cfg,
+		uint64buf: make([]byte, 8),
+		storage:   mockStorage,
+	}
+	w1.cfg.Dir += "not-exist"
+	w1.running.Store(true)
+	err = w1.GC(111)
+	require.Nil(t, err)
 }
 
 func TestAdvanceTs(t *testing.T) {
@@ -245,8 +263,11 @@ func TestNewWriter(t *testing.T) {
 			S3Storage:    true,
 			MaxLogSize:   defaultMaxLogSize,
 		},
-		uint64buf: make([]byte, 8),
-		storage:   mockStorage,
+		uint64buf:              make([]byte, 8),
+		storage:                mockStorage,
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues("cp", "test"),
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues("cp", "test"),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("cp", "test"),
 	}
 	w.running.Store(true)
 	_, err = w.Write([]byte("test"))

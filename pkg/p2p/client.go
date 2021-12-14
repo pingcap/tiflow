@@ -388,6 +388,12 @@ func (c *MessageClient) SendMessage(ctx context.Context, topic Topic, value inte
 // TrySendMessage tries to send a message. It will return ErrPeerMessageSendTryAgain
 // if the client is not ready to accept the message.
 func (c *MessageClient) TrySendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
+	// FIXME (zixiong): This is a temporary way for testing client congestion.
+	// This failpoint will be removed once we abstract the MessageClient as an interface.
+	failpoint.Inject("ClientInjectSendMessageTryAgain", func() {
+		failpoint.Return(0, cerrors.ErrPeerMessageSendTryAgain.GenWithStackByArgs())
+	})
+
 	return c.sendMessage(ctx, topic, value, true)
 }
 
