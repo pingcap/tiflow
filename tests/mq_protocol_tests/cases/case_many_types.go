@@ -69,13 +69,8 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						PRIMARY KEY (id)
 					)`
 	case *canal.SingleTableTask:
-		//t_tinytext   TINYTEXT
-
-		//t_mediumtext MEDIUMTEXT,
-		//t_longtext   LONGTEXT,
-		//
+		//-- 						t_year      YEAR,
 		//t_tinyblob   TINYBLOB,
-
 		//t_mediumblob MEDIUMBLOB,
 		//t_longblob   LONGBLOB,
 		createDBQuery = `create table test (
@@ -96,8 +91,12 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_datetime  DATETIME,
 						t_timestamp TIMESTAMP NULL,
 						t_time      TIME,
-						t_year      YEAR,
-						t_text      TEXT,
+
+						t_tinytext   TINYTEXT
+						t_mediumtext MEDIUMTEXT,
+						t_text       TEXT,
+						t_longtext   LONGTEXT,
+
 						t_blob      BLOB,
 
 						t_char      CHAR,
@@ -187,14 +186,14 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["t_mediumint"] = 8388607
 		data["t_int"] = 2147483647
 
-		data["t_year"] = 2021
+		//data["t_year"] = 2021
 		data["t_binary"] = []byte{0x1, 0x2, 0x0, 0x3}
 		data["t_varbinary"] = []byte{0x1, 0x2, 0x0, 0x3}
 
-		//data["t_tinytext"] = "测试tinytext"
-		//data["t_mediumtext"] = "测试mediumtext"
-		//data["t_longtext"] = "测试longtext"
-		//
+		data["t_tinytext"] = "测试tinytext"
+		data["t_mediumtext"] = "测试mediumtext"
+		data["t_longtext"] = "测试longtext"
+
 		//data["t_tinyblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
 		//data["t_mediumblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
 		//data["t_longblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
