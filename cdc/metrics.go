@@ -48,6 +48,5 @@ func init() {
 	// Sorter metrics
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
-	leveldb.InitMetrics(registry)
 	redowriter.InitMetrics(registry)
 }
