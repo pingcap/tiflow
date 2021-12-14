@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/master/resource"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/autoid"
@@ -15,10 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	_ ExecutorClient = &ExecutorManager{}
-	_ ResourceMgr    = &ExecutorManager{}
-)
+var _ ExecutorClient = &ExecutorManager{}
 
 // ExecutorManager holds all the executors info, including liveness, status, resource usage.
 type ExecutorManager struct {
@@ -34,6 +32,8 @@ type ExecutorManager struct {
 
 	// TODO: complete ha store.
 	haStore ha.HAStore // nolint:structcheck,unused
+
+	rescMgr resource.RescMgr
 }
 
 func NewExecutorManager(offExec chan model.ExecutorID, initHeartbeatTTL, keepAliveInterval time.Duration, ctx *test.Context) *ExecutorManager {
@@ -44,6 +44,7 @@ func NewExecutorManager(offExec chan model.ExecutorID, initHeartbeatTTL, keepAli
 		offExecutor:       offExec,
 		initHeartbeatTTL:  initHeartbeatTTL,
 		keepAliveInterval: keepAliveInterval,
+		rescMgr:           resource.NewCapRescMgr(),
 	}
 }
 
@@ -57,6 +58,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
 	}
 	delete(e.executors, id)
+	e.rescMgr.Unregister(id)
 	//err := e.haStore.Del(exec.EtcdKey())
 	//if err != nil {
 	//	return err
@@ -96,8 +98,11 @@ func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Heartbe
 	exec.lastUpdateTime = time.Now()
 	exec.heartbeatTTL = time.Duration(req.Ttl) * time.Millisecond
 	exec.Status = model.ExecutorStatus(req.Status)
-	usage := ResourceUsage(req.ResourceUsage)
-	exec.resource.Used = usage
+	usage := resource.RescUnit(req.GetResourceUsage())
+	err := e.rescMgr.Update(exec.ID, usage, exec.Status)
+	if err != nil {
+		return nil, err
+	}
 	resp := &pb.HeartbeatResponse{}
 	return resp, nil
 }
@@ -119,11 +124,7 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 
 	// Following part is to bootstrap the executor.
 	exec := &Executor{
-		ExecutorInfo: *info,
-		resource: ExecutorResource{
-			ID:       info.ID,
-			Capacity: ResourceUsage(info.Capability),
-		},
+		ExecutorInfo:   *info,
 		lastUpdateTime: time.Now(),
 		heartbeatTTL:   e.initHeartbeatTTL,
 		Status:         model.Initing,
@@ -144,14 +145,18 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 	e.mu.Lock()
 	e.executors[info.ID] = exec
 	e.mu.Unlock()
+	e.rescMgr.Register(exec.ID, resource.RescUnit(exec.Capability))
 	return info, nil
+}
+
+func (e *ExecutorManager) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
+	return e.rescMgr.Allocate(tasks)
 }
 
 // Executor records the status of an executor instance.
 type Executor struct {
 	model.ExecutorInfo
-	Status   model.ExecutorStatus
-	resource ExecutorResource
+	Status model.ExecutorStatus
 
 	mu sync.Mutex
 	// Last heartbeat

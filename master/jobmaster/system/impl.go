@@ -22,9 +22,8 @@ type Master struct {
 	ctx    context.Context
 	cancel func()
 
-	resourceManager cluster.ResourceMgr
-	client          cluster.ExecutorClient
-	mClient         cluster.JobMasterClient
+	client  cluster.ExecutorClient
+	mClient cluster.JobMasterClient
 
 	offExecutors chan model.ExecutorID
 
@@ -41,18 +40,16 @@ type Master struct {
 func New(
 	parentCtx context.Context,
 	job *model.Job,
-	resourceMgr cluster.ResourceMgr,
 	client cluster.ExecutorClient,
 	mClient cluster.JobMasterClient,
 ) *Master {
 	ctx, cancel := context.WithCancel(parentCtx)
 	return &Master{
-		ctx:             ctx,
-		cancel:          cancel,
-		job:             job,
-		resourceManager: resourceMgr,
-		client:          client,
-		mClient:         mClient,
+		ctx:     ctx,
+		cancel:  cancel,
+		job:     job,
+		client:  client,
+		mClient: mClient,
 
 		offExecutors:         make(chan model.ExecutorID, 100),
 		scheduleWaitingTasks: make(chan scheduleGroup, 1024),

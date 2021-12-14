@@ -16,7 +16,6 @@ import (
 func BuildBenchmarkJobMaster(
 	rawConfig string,
 	idAllocator *autoid.IDAllocator,
-	resourceMgr cluster.ResourceMgr,
 	client cluster.ExecutorClient,
 	mClient cluster.JobMasterClient,
 ) (*jobMaster, error) {
@@ -140,7 +139,7 @@ func BuildBenchmarkJobMaster(
 	job.Tasks = append(job.Tasks, tableTasks...)
 	job.Tasks = append(job.Tasks, hashTasks...)
 	job.Tasks = append(job.Tasks, sinkTasks...)
-	systemJobMaster := system.New(context.Background(), job, resourceMgr, client, mClient)
+	systemJobMaster := system.New(context.Background(), job, client, mClient)
 	master := &jobMaster{
 		Master: systemJobMaster,
 		config: config,
