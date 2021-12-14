@@ -69,45 +69,38 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						PRIMARY KEY (id)
 					)`
 	case *canal.SingleTableTask:
-		//-- 						t_year      YEAR,
 		createDBQuery = `create table test (
-						id          INT,
-						t_boolean   BOOLEAN,
-
-						t_tinyint   TINYINT,
-						t_smallint  SMALLINT,
-						t_mediumint MEDIUMINT,
-						t_int       INT,
-						t_bigint    BIGINT,
-
-						t_double    DOUBLE,
-						t_float     FLOAT,
-						t_decimal   DECIMAL(38, 19),
-
-						t_date      DATE,
-						t_datetime  DATETIME,
-						t_timestamp TIMESTAMP NULL,
-						t_time      TIME,
-
+						id           INT,
+						t_boolean    BOOLEAN,
+						t_tinyint    TINYINT,
+						t_smallint   SMALLINT,
+						t_mediumint  MEDIUMINT,
+						t_int        INT,
+						t_bigint     BIGINT,
+						t_double     DOUBLE,
+						t_float      FLOAT,
+						t_decimal    DECIMAL(38, 19),
+						t_date       DATE,
+						t_datetime   DATETIME,
+						t_timestamp  TIMESTAMP NULL,
+						t_time       TIME,
+						t_year       YEAR,
 						t_tinytext   TINYTEXT,
 						t_mediumtext MEDIUMTEXT,
 						t_text       TEXT,
 						t_longtext   LONGTEXT,
-
 						t_tinyblob   TINYBLOB,
 						t_mediumblob MEDIUMBLOB,
 						t_blob       BLOB,
 						t_longblob   LONGBLOB,
-
-						t_char      CHAR,
-						t_varchar   VARCHAR(10),
-						t_binary    BINARY(16),
-						t_varbinary VARBINARY(16),
-
-						t_enum      ENUM ('enum1', 'enum2', 'enum3'),
-						t_set       SET ('a', 'b', 'c'),
-						t_json      JSON,
-						PRIMARY KEY (id)
+						t_char       CHAR,
+						t_varchar    VARCHAR(10),
+						t_binary     BINARY(16),
+						t_varbinary  VARBINARY(16),
+						t_enum       ENUM ('enum1', 'enum2', 'enum3'),
+						t_set        SET ('a', 'b', 'c'),
+						t_json       JSON,
+						PRIMARY KEY  (id)
 					)`
 	case *mysql.SingleTableTask:
 		createDBQuery = `create table test (
@@ -186,7 +179,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["t_mediumint"] = 8388607
 		data["t_int"] = 2147483647
 
-		//data["t_year"] = 2021
+		data["t_year"] = 2021
 		data["t_binary"] = []byte{0x1, 0x2, 0x0, 0x3}
 		data["t_varbinary"] = []byte{0x1, 0x2, 0x0, 0x3}
 
