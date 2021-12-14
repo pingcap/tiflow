@@ -70,9 +70,6 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 					)`
 	case *canal.SingleTableTask:
 		//-- 						t_year      YEAR,
-		//t_tinyblob   TINYBLOB,
-		//t_mediumblob MEDIUMBLOB,
-		//t_longblob   LONGBLOB,
 		createDBQuery = `create table test (
 						id          INT,
 						t_boolean   BOOLEAN,
@@ -97,7 +94,10 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_text       TEXT,
 						t_longtext   LONGTEXT,
 
-						t_blob      BLOB,
+						t_tinyblob   TINYBLOB,
+						t_mediumblob MEDIUMBLOB,
+						t_blob       BLOB,
+						t_longblob   LONGBLOB,
 
 						t_char      CHAR,
 						t_varchar   VARCHAR(10),
@@ -194,9 +194,9 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["t_mediumtext"] = "测试mediumtext"
 		data["t_longtext"] = "测试longtext"
 
-		//data["t_tinyblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
-		//data["t_mediumblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
-		//data["t_longblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
+		data["t_tinyblob"] = []byte{0x1, 0x2}
+		data["t_mediumblob"] = []byte{0x1, 0x2}
+		data["t_longblob"] = []byte{0x1, 0x2}
 	}
 
 	return table.Insert(data).Send().Wait().Check()
