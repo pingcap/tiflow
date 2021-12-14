@@ -40,8 +40,8 @@ func (s *UnsignedCase) Name() string {
 func (s *UnsignedCase) Run(ctx *framework.TaskContext) error {
 	createDBQuery := `create table test (
 		id          INT,
-		t_tinyint TINYINT UNSIGNED,
-		t_smallint SMALLINT UNSIGNED,
+		t_tinyint   TINYINT UNSIGNED,
+		t_smallint  SMALLINT UNSIGNED,
 		t_mediumint MEDIUMINT UNSIGNED,
 		t_int       INT UNSIGNED,
 		t_bigint    BIGINT UNSIGNED,
