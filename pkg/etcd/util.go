@@ -15,7 +15,7 @@ package etcd
 
 import "go.etcd.io/etcd/clientv3"
 
-func getRevision(opts ...clientv3.OpOption) int64 {
+func getRevisionFromWatchOpts(opts ...clientv3.OpOption) int64 {
 	op := &clientv3.Op{}
 	for _, opt := range opts {
 		opt(op)
