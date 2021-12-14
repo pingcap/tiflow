@@ -324,7 +324,7 @@ services:
       CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
 
   canal-adapter:
-    image: slpcat/canal-adapter:v1.1.5-jdk8
+    image: canal-adapter:latest
     build:
       context: ../../../scripts/canal/docker
       dockerfile: ./Dockerfile
