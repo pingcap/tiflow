@@ -112,8 +112,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: c.closeDBs})
 
-	// target name => source => schema => [tables]
-	sharding := make(map[string]map[string]map[string][]string)
+	// target name => source => [tableIDs]
+	sharding := make(map[string]map[string][]*filter.Table)
 	shardingCounter := make(map[string]int)
 	dbs := make(map[string]*sql.DB)
 	columnMapping := make(map[string]*column.Mapping)
@@ -199,24 +199,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 
 		var checkTables []*filter.Table
-		for name, tables := range mapping {
+		for targetTableID, tables := range mapping {
 			checkTables = append(checkTables, tables...)
-			log.L().Logger.Info("check table", zap.String("name", name), zap.Int("table length", len(tables)))
-			for i, table := range tables {
-				log.L().Logger.Info("check table", zap.Int("cnt", i), zap.Int("table length", len(tables)), zap.Stringer("table", table), zap.Stringer("check table i", checkTables[i]))
-				if _, ok := sharding[name]; !ok {
-					sharding[name] = make(map[string]map[string][]string)
-				}
-				if _, ok := sharding[name][instance.cfg.SourceID]; !ok {
-					sharding[name][instance.cfg.SourceID] = make(map[string][]string)
-				}
-				if _, ok := sharding[name][instance.cfg.SourceID][table.Schema]; !ok {
-					sharding[name][instance.cfg.SourceID][table.Schema] = make([]string, 0, 1)
-				}
-
-				sharding[name][instance.cfg.SourceID][table.Schema] = append(sharding[name][instance.cfg.SourceID][table.Schema], table.Name)
-				shardingCounter[name]++
+			if _, ok := sharding[targetTableID]; !ok {
+				sharding[targetTableID] = make(map[string][]*filter.Table)
 			}
+			sharding[targetTableID][instance.cfg.SourceID] = append(sharding[targetTableID][instance.cfg.SourceID], tables...)
+			shardingCounter[targetTableID] += len(tables)
 		}
 		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
 

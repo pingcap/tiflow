@@ -61,7 +61,7 @@ func NewSourceDumpPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChec
 
 // Check implements the RealChecker interface.
 // We only check RELOAD, SELECT privileges.
-func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
+func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) (*Result, error) {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check dump privileges of source DB",
@@ -71,12 +71,11 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 
 	grants, err := dbutil.ShowGrants(ctx, pc.db, "", "")
 	if err != nil {
-		markCheckError(result, err)
-		return result
+		return result, err
 	}
 
 	verifyPrivileges(result, grants, dumpPrivileges)
-	return result
+	return result, nil
 }
 
 // Name implements the RealChecker interface.
@@ -99,7 +98,7 @@ func NewSourceReplicationPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig) R
 
 // Check implements the RealChecker interface.
 // We only check REPLICATION SLAVE, REPLICATION CLIENT privileges.
-func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
+func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) (*Result, error) {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check replication privileges of source DB",
@@ -109,12 +108,11 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 
 	grants, err := dbutil.ShowGrants(ctx, pc.db, "", "")
 	if err != nil {
-		markCheckError(result, err)
-		return result
+		return result, err
 	}
 
 	verifyPrivileges(result, grants, replicationPrivileges)
-	return result
+	return result, nil
 }
 
 // Name implements the RealChecker interface.

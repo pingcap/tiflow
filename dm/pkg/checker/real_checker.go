@@ -23,7 +23,7 @@ import (
 // It is mainly used for configuration checking of data synchronization between database systems.
 type RealChecker interface {
 	Name() string
-	Check(ctx context.Context) *Result
+	Check(ctx context.Context) (*Result, error)
 }
 
 // State is state of check.
@@ -127,7 +127,8 @@ func Do(ctx context.Context, checkers []RealChecker) (*Results, error) {
 		wg.Add(1)
 		go func(i int, checker RealChecker) {
 			defer wg.Done()
-			result := checker.Check(ctx)
+			result, err := checker.Check(ctx)
+			markCheckError(result, err)
 			result.ID = uint64(i)
 			resultCh <- result
 		}(i, checker)

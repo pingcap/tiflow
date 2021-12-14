@@ -52,7 +52,7 @@ var SupportedVersion = map[string]struct {
 
 // Check implements the RealChecker interface.
 // we only support version >= 5.6.
-func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
+func (pc *MySQLVersionChecker) Check(ctx context.Context) (*Result, error) {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check whether mysql version is satisfied",
@@ -62,12 +62,11 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 
 	value, err := dbutil.ShowVersion(ctx, pc.db)
 	if err != nil {
-		markCheckError(result, err)
-		return result
+		return result, err
 	}
 
 	pc.checkVersion(value, result)
-	return result
+	return result, nil
 }
 
 func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) {
@@ -115,7 +114,7 @@ func NewMySQLServerIDChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 }
 
 // Check implements the RealChecker interface.
-func (pc *MySQLServerIDChecker) Check(ctx context.Context) *Result {
+func (pc *MySQLServerIDChecker) Check(ctx context.Context) (*Result, error) {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check whether mysql server_id has been greater than 0",
@@ -128,20 +127,19 @@ func (pc *MySQLServerIDChecker) Check(ctx context.Context) *Result {
 		if utils.OriginError(err) == sql.ErrNoRows {
 			result.Errors = append(result.Errors, NewError("server_id not set"))
 			result.Instruction = "please set server_id in your database"
+			return result, nil
 		} else {
-			markCheckError(result, err)
+			return result, err
 		}
-
-		return result
 	}
 
 	if serverID == 0 {
 		result.Errors = append(result.Errors, NewError("server_id is 0"))
 		result.Instruction = "please set server_id greater than 0"
-		return result
+		return result, nil
 	}
 	result.State = StateSuccess
-	return result
+	return result, nil
 }
 
 // Name implements the RealChecker interface.
