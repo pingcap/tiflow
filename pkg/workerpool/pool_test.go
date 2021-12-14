@@ -25,8 +25,10 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
@@ -423,6 +425,38 @@ func (s *workerPoolSuite) TestCancelByAddEventContext(c *check.C) {
 
 	err := errg.Wait()
 	c.Assert(err, check.IsNil)
+}
+
+func TestSynchronizeLog(t *testing.T) {
+	w := newWorker()
+	w.isRunning = 1
+	// Always report "synchronize is taking too long".
+	w.slowSynchronizeThreshold = time.Duration(0)
+	w.slowSynchronizeLimiter = rate.NewLimiter(rate.Every(100*time.Minute), 1)
+
+	counter := int32(0)
+	logWarn = func(msg string, fields ...zap.Field) {
+		atomic.AddInt32(&counter, 1)
+	}
+	defer func() { logWarn = log.Warn }()
+
+	doneCh := make(chan struct{})
+	go func() {
+		w.synchronize()
+		close(doneCh)
+	}()
+
+	time.Sleep(300 * time.Millisecond)
+	w.stopNotifier.Notify()
+	time.Sleep(300 * time.Millisecond)
+	w.stopNotifier.Notify()
+
+	// Close worker.
+	atomic.StoreInt32(&w.isRunning, 0)
+	w.stopNotifier.Close()
+	<-doneCh
+
+	require.EqualValues(t, 1, atomic.LoadInt32(&counter))
 }
 
 // Benchmark workerpool with ping-pong workflow.
