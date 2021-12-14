@@ -223,7 +223,7 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType)
 		// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
 		switch javaType {
 		// for normal text
-		case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR:
+		case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR, JavaSQLTypeCLOB:
 			result = string(v)
 		default:
 			// for `binary` and `blob`
