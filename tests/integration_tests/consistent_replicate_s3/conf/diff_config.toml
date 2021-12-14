@@ -7,7 +7,7 @@ export-fix-sql = true
 check-struct-only = false
 
 [task]
-    output-dir = "/tmp/ticdc_dm_test/output"
+    output-dir = "/tmp/tidb_cdc_test/consistent_replicate_s3/sync_diff/output"
 
     source-instances = ["mysql1"]
 
