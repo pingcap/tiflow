@@ -261,7 +261,7 @@ func testUpdate(c *check.C) {
 		c.Assert(col.GetUpdated(), check.IsTrue)
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeINTEGER))
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "2")
@@ -281,7 +281,7 @@ func testUpdate(c *check.C) {
 		c.Assert(col.GetUpdated(), check.IsTrue)
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeINTEGER))
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
@@ -331,7 +331,7 @@ func testDelete(c *check.C) {
 		c.Assert(col.GetUpdated(), check.IsFalse)
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeINTEGER))
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
