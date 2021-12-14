@@ -127,39 +127,11 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 	c.Assert(err, check.IsNil)
 	flatMessage, ok = message.(*canalFlatMessage)
 	c.Assert(ok, check.IsTrue)
-<<<<<<< HEAD
 	c.Assert(flatMessage.Data, check.NotNil)
 	c.Assert(flatMessage.Old, check.NotNil)
 	c.Assert(flatMessage.EventType, check.Equals, "UPDATE")
 
 	message, err = encoder.newFlatMessageForDML(testCaseDelete)
-=======
-	c.Assert(msg.EventType, check.Equals, "UPDATE")
-	c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(testCaseUpdate.CommitTs))
-	c.Assert(msg.tikvTs, check.Equals, testCaseUpdate.CommitTs)
-	c.Assert(msg.Schema, check.Equals, "cdc")
-	c.Assert(msg.Table, check.Equals, "person")
-	c.Assert(msg.IsDDL, check.IsFalse)
-	c.Assert(msg.SQLType, check.DeepEquals, map[string]int32{
-		"id":           int32(JavaSQLTypeINTEGER),
-		"name":         int32(JavaSQLTypeVARCHAR),
-		"tiny":         int32(JavaSQLTypeTINYINT),
-		"comment":      int32(JavaSQLTypeCLOB),
-		"blob":         int32(JavaSQLTypeBLOB),
-		"binaryString": int32(JavaSQLTypeBLOB),
-		"binaryBlob":   int32(JavaSQLTypeBLOB),
-	})
-	c.Assert(msg.MySQLType, check.DeepEquals, map[string]string{
-		"id":           "int",
-		"name":         "varchar",
-		"tiny":         "tinyint",
-		"comment":      "text",
-		"blob":         "blob",
-		"binaryString": "binary",
-		"binaryBlob":   "varbinary",
-	})
-	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
->>>>>>> cb15ddc01 (fix test case.)
 	c.Assert(err, check.IsNil)
 	flatMessage, ok = message.(*canalFlatMessage)
 	c.Assert(ok, check.IsTrue)
