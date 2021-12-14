@@ -69,8 +69,6 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						PRIMARY KEY (id)
 					)`
 	case *canal.SingleTableTask:
-		// todo: add `t_year      YEAR,`
-
 		//t_tinytext   TINYTEXT
 
 		//t_mediumtext MEDIUMTEXT,
@@ -98,9 +96,9 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_datetime  DATETIME,
 						t_timestamp TIMESTAMP NULL,
 						t_time      TIME,
-
-						t_text       TEXT,
-						t_blob       BLOB,
+						t_year      YEAR,
+						t_text      TEXT,
+						t_blob      BLOB,
 
 						t_char      CHAR,
 						t_varchar   VARCHAR(10),
@@ -189,7 +187,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["t_mediumint"] = 8388607
 		data["t_int"] = 2147483647
 
-		// data["t_year"] = 2021
+		data["t_year"] = 2021
 		data["t_binary"] = []byte{0x1, 0x2, 0x0, 0x3}
 		data["t_varbinary"] = []byte{0x1, 0x2, 0x0, 0x3}
 
