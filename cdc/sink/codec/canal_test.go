@@ -366,95 +366,56 @@ func testDdl(c *check.C) {
 	c.Assert(rc.GetDdlSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
 }
 
-type testCanalColumnGroup struct {
-	c                 *model.Column
-	expectedMySQLType byte
-}
-
-//var testColumns = []*model.Column{
-//	,
-//	{Name: "b", Type: mysql.TypeShort, Value: 2}, //
-//}
-//
 var testColumns = []*struct {
 	c                 *model.Column
 	expectedMySQLType string
 	expectedJavaType  JavaSQLType
 }{
-	{&model.Column{Type: mysql.TypeTiny, Value: 1}, "tinyint", JavaSQLTypeTINYINT},   // Boolean
 	{&model.Column{Type: mysql.TypeTiny, Value: 127}, "tinyint", JavaSQLTypeTINYINT}, // TinyInt
-	{&model.Column{Type: mysql.TypeTiny, Value: 255, Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeSMALLINT},
+	{&model.Column{Type: mysql.TypeTiny, Value: 127, Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeTINYINT},
+	{&model.Column{Type: mysql.TypeTiny, Value: 128, Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeSMALLINT},
 
-	{&model.Column{Type: mysql.TypeShort, Value: 2}, "smallint", JavaSQLTypeSMALLINT},
-	{&model.Column{Type: mysql.}},
+	{&model.Column{Type: mysql.TypeShort, Value: 32767}, "smallint", JavaSQLTypeSMALLINT},
+	{&model.Column{Type: mysql.TypeShort, Value: 32767, Flag: model.UnsignedFlag}, "smallint unsigned", JavaSQLTypeSMALLINT},
+	{&model.Column{Type: mysql.TypeShort, Value: 32768, Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER},
 
-	{&model.Column{Type: mysql.TypeLong, Value: 3}, "int", JavaSQLTypeINTEGER},
+	{&model.Column{Type: mysql.TypeInt24, Value: 8388607}, "mediumint", JavaSQLTypeINTEGER},
+	{&model.Column{Type: mysql.TypeInt24, Value: 8388607, Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER},
+	{&model.Column{Type: mysql.TypeInt24, Value: 8388608, Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER},
+
+	{&model.Column{Type: mysql.TypeLong, Value: 2147483647}, "int", JavaSQLTypeINTEGER},
+	{&model.Column{Type: mysql.TypeLong, Value: 2147483647, Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeINTEGER},
+	{&model.Column{Type: mysql.TypeLong, Value: 2147483648, Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeBIGINT},
+
+	{&model.Column{Type: mysql.TypeLonglong, Value: uint64(9223372036854775807)}, "bigint", JavaSQLTypeBIGINT},
+	{&model.Column{Type: mysql.TypeLonglong, Value: uint64(9223372036854775807), Flag: model.UnsignedFlag}, "decimal", JavaSQLTypeBIGINT},
+	{&model.Column{Type: mysql.TypeLonglong, Value: uint64(9223372036854775808), Flag: model.UnsignedFlag}, "decimal", JavaSQLTypeDECIMAL},
 
 	{&model.Column{Type: mysql.TypeFloat, Value: 3.14}, "float", JavaSQLTypeREAL},
 	{&model.Column{Type: mysql.TypeDouble, Value: 2.71}, "double", JavaSQLTypeDOUBLE},
 	{&model.Column{Type: mysql.TypeNewDecimal, Value: "2333"}, "decimal", JavaSQLTypeDECIMAL},
+
+	// char / varchar / binary / varbinary
+	// {&model.Column{Type: mysql.}},
+
+	// tinytext / text / mediumtext / longtext
+	// {&model.Column{Type: mysql.type}},
+
+	// tinyblob / blob / mediumblob / longblob
+
+	// date / datetime / timestamp / time / year
+	{&model.Column{Type: mysql.TypeDate, Value: "2020-02-20"}, "date", JavaSQLTypeDATE},
+	{&model.Column{Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"}, "datetime", JavaSQLTypeTIMESTAMP},
+	{&model.Column{Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"}, "datetime", JavaSQLTypeTIMESTAMP},
+	{&model.Column{Type: mysql.TypeDuration, Value: "02:20:20"}, "time", JavaSQLTypeTIME},
+	{&model.Column{Type: mysql.TypeYear, Value: "2020"}, "year", JavaSQLTypeVARCHAR},
+
+	// enum / set / bit / json
+	{&model.Column{Type: mysql.TypeEnum}, "enum", JavaSQLTypeINTEGER},
+	{&model.Column{Type: mysql.TypeSet}, "set", JavaSQLTypeBIT},
+	{&model.Column{Type: mysql.TypeBit, Flag: model.UnsignedFlag}, "bit", JavaSQLTypeBIT},
+	{&model.Column{Type: mysql.TypeJSON}, "json", JavaSQLTypeVARCHAR},
 }
-
-//TypeTiny        byte = 1
-//TypeShort       byte = 2
-//TypeLong        byte = 3
-//TypeFloat       byte = 4
-//TypeDouble      byte = 5
-//TypeNull        byte = 6
-//TypeTimestamp   byte = 7
-//TypeLonglong    byte = 8
-//TypeInt24       byte = 9
-//TypeDate        byte = 10
-///* TypeDuration original name was TypeTime, renamed to TypeDuration to resolve the conflict with Go type Time.*/
-//TypeDuration byte = 11
-//TypeDatetime byte = 12
-//TypeYear     byte = 13
-//TypeNewDate  byte = 14
-//TypeVarchar  byte = 15
-//TypeBit      byte = 16
-//
-//TypeJSON       byte = 0xf5
-//TypeNewDecimal byte = 0xf6
-//TypeEnum       byte = 0xf7
-//TypeSet        byte = 0xf8
-//TypeTinyBlob   byte = 0xf9
-//TypeMediumBlob byte = 0xfa
-//TypeLongBlob   byte = 0xfb
-//TypeBlob       byte = 0xfc
-//TypeVarString  byte = 0xfd
-//TypeString     byte = 0xfe
-//TypeGeometry   byte = 0xff
-
-//type Column struct {
-//	Name  string         `json:"name" msg:"name"`
-//	Type  byte           `json:"type" msg:"type"`
-//	Flag  ColumnFlagType `json:"flag" msg:"-"`
-//	Value interface{}    `json:"value" msg:"value"`
-//
-//	// ApproximateBytes is approximate bytes consumed by the column.
-//	ApproximateBytes int `json:"-"`
-//}
-
-//func getMySQLType(c *model.Column) string {
-//	mysqlType := types.TypeStr(c.Type)
-//	// make `mysqlType` representation keep the same as the canal official implementation
-//	if c.Flag.IsUnsigned() && mysqlType != "bit" && mysqlType != "year" {
-//		mysqlType = mysqlType + " " + "unsigned"
-//	}
-//	if !c.Flag.IsBinary() {
-//		return mysqlType
-//	}
-//
-//	if types.IsTypeBlob(c.Type) {
-//		return strings.Replace(mysqlType, "text", "blob", 1)
-//	}
-//
-//	if types.IsTypeChar(c.Type) {
-//		return strings.Replace(mysqlType, "char", "binary", 1)
-//	}
-//
-//	return mysqlType
-//}
 
 func (s *canalEntrySuite) TestGetMySQLType(c *check.C) {
 
