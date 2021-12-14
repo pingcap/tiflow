@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/filelock"
+	"github.com/pingcap/ticdc/pkg/fsutil"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/util/memory"
 )
@@ -209,13 +209,13 @@ func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 type mockOtherProcess struct {
 	dir    string
 	prefix string
-	flock  *filelock.FileLock
+	flock  *fsutil.FileLock
 	files  []string
 }
 
 func newMockOtherProcess(c *check.C, dir string, prefix string) *mockOtherProcess {
 	prefixLockPath := fmt.Sprintf("%s/%s", dir, sortDirLockFileName)
-	flock, err := filelock.NewFileLock(prefixLockPath)
+	flock, err := fsutil.NewFileLock(prefixLockPath)
 	c.Assert(err, check.IsNil)
 
 	err = flock.Lock()
@@ -350,4 +350,17 @@ func (s *backendPoolSuite) TestGetMemoryPressureFailure(c *check.C) {
 			}
 		}
 	}
+}
+
+func (s *backendPoolSuite) TestCheckDataDirSatisfied(c *check.C) {
+	defer testleak.AfterTest(c)()
+	dir := c.MkDir()
+	conf := config.GetGlobalServerConfig()
+	conf.DataDir = dir
+	config.StoreGlobalServerConfig(conf)
+
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectCheckDataDirSatisfied", ""), check.IsNil)
+	err := checkDataDirSatisfied()
+	c.Assert(err, check.IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectCheckDataDirSatisfied"), check.IsNil)
 }
