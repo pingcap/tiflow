@@ -140,7 +140,15 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DMLContent(c *check.C) {
 	c.Assert(flatMessage.Table, check.Equals, "person")
 	c.Assert(flatMessage.IsDDL, check.IsFalse)
 
-	for idx,
+	// check data is enough
+	obtainedDataMap := flatMessage.getData()
+	c.Assert(obtainedDataMap, check.NotNil)
+
+	for _, item := range testColumnsTable {
+		obtainedValue, ok := obtainedDataMap[item.column.Name]
+		c.Assert(ok, check.IsTrue)
+		c.Assert(obtainedValue, check.Equals, item.expectedValue)
+	}
 }
 
 //func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
