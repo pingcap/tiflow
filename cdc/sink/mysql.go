@@ -184,7 +184,6 @@ func newMySQLSink(
 	sink.resolvedNotifier = new(notify.Notifier)
 
 	err = sink.createSinkWorkers(ctx)
-
 	if err != nil {
 		return nil, err
 	}
@@ -603,6 +602,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	values := make([][]interface{}, 0, len(rows))
 	replaces := make(map[string][][]interface{})
 	rowCount := 0
+	// translateToInsert control the update and insert behavior
 	translateToInsert := s.params.enableOldValue && !s.params.safeMode
 
 	// flush cached batch replace or insert, to keep the sequence of DMLs
