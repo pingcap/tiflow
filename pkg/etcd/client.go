@@ -190,7 +190,7 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 	}()
 
 	// get initial revision from opts to avoid revision fall back
-	lastRevision := getRevision(opts...)
+	lastRevision := getRevisionFromWatchOpts(opts...)
 
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()

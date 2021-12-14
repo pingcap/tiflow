@@ -25,11 +25,11 @@ type utilSuit struct{}
 
 var _ = check.Suite(&utilSuit{})
 
-func (s utilSuit) TestGetRevision(c *check.C) {
+func (s utilSuit) TestGetRevisionFromWatchOpts(c *check.C) {
 	defer testleak.AfterTest(c)()
 	for i := 0; i < 100; i++ {
 		rev := rand.Int63n(math.MaxInt64)
 		opt := clientv3.WithRev(rev)
-		c.Assert(getRevision(opt), check.Equals, rev)
+		c.Assert(getRevisionFromWatchOpts(opt), check.Equals, rev)
 	}
 }
