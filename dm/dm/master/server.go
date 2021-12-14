@@ -54,6 +54,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/ui"
 )
 
 const (
@@ -195,6 +196,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
 		userHandles["/api/v1/"] = s.openapiHandles
+		userHandles["/dashboard/"] = ui.InitWebUIRouter()
 	}
 
 	// gRPC API server
