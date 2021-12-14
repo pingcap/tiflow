@@ -38,17 +38,18 @@ If we have a large number of tables in source, we will take too much time in che
 2. Dump_privilege will check different privileges according to different [consistency](https://docs.pingcap.com/tidb/stable/dumpling-overview#adjust-dumplings-data-consistency-options) and downstream on source.
     - For all consistency, we will check
         - REPLICATION CLIENT (global)
-        - SELECT (only dump table)
+        - SELECT (only INFORMATION_SCHEMA's tables and dump tables)
     - For flush consistency:
         - RELOAD (global)
     - For flush/lock consistency:
-        - LOCK TABLES (only tables to dump)
-    - For TiDB source databases:
-        - PROCESS (global)
+        - LOCK TABLES (only dump tables)
+    
+    As we know, TiDB is different from MySQL in some place. If source is TiDB, we also need:
+    - PROCESS (global)
 3. Add OnlineDDLChecker to check if a DDL of tables in allow list exists in online-ddl stage when DM task is all mode and online-ddl is true.
 4. Enhance schema_of_shard_tables. 
     - If a task has passed the pre-checking when starting and exited, DM should keep the consistency during the task running. So we **don't check it** when restart the task.
-    - If not exit checkpoint:
+    - If not exist checkpoint:
         - For all/full mode (pessimistic task): we keep **the original check**;
         - For all/full mode (optimistic task): we check whether the shard tables schema meets **the definition of [Optimistic Schema Compatibility](20191209_optimistic_ddl.md)**. If that meets, we can create tables by the compatible schema in the dump stage.
         - For incremental mode: **not check** the sharding tables’ schema, because the table schema obtained from show create table is not the schema at the point of binlog.
