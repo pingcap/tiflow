@@ -395,11 +395,11 @@ var testColumnsTable = []*testColumnTuple{
 	{&model.Column{Name: "mediumint unsigned 2", Type: mysql.TypeInt24, Value: uint64(8388608), Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER, "8388608"},
 
 	{&model.Column{Name: "int", Type: mysql.TypeLong, Value: int64(2147483647)}, "int", JavaSQLTypeINTEGER, "2147483647"},
-	{&model.Column{Name: "int unsigned", Type: mysql.TypeLong, Value: uint64(2147483647), Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeINTEGER, "2147483648"},
+	{&model.Column{Name: "int unsigned", Type: mysql.TypeLong, Value: uint64(2147483647), Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeINTEGER, "2147483647"},
 	{&model.Column{Name: "int unsigned 2", Type: mysql.TypeLong, Value: uint64(2147483648), Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeBIGINT, "2147483648"},
 
 	{&model.Column{Name: "bigint", Type: mysql.TypeLonglong, Value: int64(9223372036854775807)}, "bigint", JavaSQLTypeBIGINT, "9223372036854775807"},
-	{&model.Column{Name: "bigint unsigned", Type: mysql.TypeLonglong, Value: uint64(9223372036854775807), Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeBIGINT, "9223372036854775808"},
+	{&model.Column{Name: "bigint unsigned", Type: mysql.TypeLonglong, Value: uint64(9223372036854775807), Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeBIGINT, "9223372036854775807"},
 	{&model.Column{Name: "bigint unsigned 2", Type: mysql.TypeLonglong, Value: uint64(9223372036854775808), Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeDECIMAL, "9223372036854775808"},
 
 	{&model.Column{Name: "float", Type: mysql.TypeFloat, Value: 3.14}, "float", JavaSQLTypeREAL, "3.14"},
