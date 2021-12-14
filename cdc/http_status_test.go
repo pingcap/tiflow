@@ -35,6 +35,7 @@ import (
 	security2 "github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/br/pkg/httputil"
+	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
@@ -172,9 +173,10 @@ func testHandleFailpoint(c *check.C) {
 
 func (s *httpStatusSuite) TestServerTLSWithoutCommonName(c *check.C) {
 	defer testleak.AfterTest(c)
-	addr := "127.0.0.1:8301"
+	addr := tempurl.Alloc()[len("http://"):]
 	// Do not specify common name
 	security, err := security2.NewCredential4Test("")
+	c.Assert(err, check.IsNil)
 	conf := config.GetDefaultServerConfig()
 	conf.Addr = addr
 	conf.AdvertiseAddr = addr
@@ -239,9 +241,10 @@ func (s *httpStatusSuite) TestServerTLSWithoutCommonName(c *check.C) {
 //
 func (s *httpStatusSuite) TestServerTLSWithCommonName(c *check.C) {
 	defer testleak.AfterTest(c)
-	addr := "127.0.0.1:8302"
+	addr := tempurl.Alloc()[len("http://"):]
 	// specify a common name
 	security, err := security2.NewCredential4Test("test")
+	c.Assert(err, check.IsNil)
 	conf := config.GetDefaultServerConfig()
 	conf.Addr = addr
 	conf.AdvertiseAddr = addr
