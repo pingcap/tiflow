@@ -86,7 +86,7 @@ func newTask(ctx context.Context, cli pb.MasterClient, taskFile string, schema s
 		}
 
 		cfg := sourcesCfg[i]
-		db, err2 := conn.DefaultDBProvider.Apply(cfg)
+		db, err2 := conn.DefaultDBProvider.Apply(&cfg)
 		if err2 != nil {
 			return nil, err2
 		}
@@ -110,7 +110,7 @@ func newTask(ctx context.Context, cli pb.MasterClient, taskFile string, schema s
 		res = append(res, singleResult{})
 	}
 
-	targetDB, err := conn.DefaultDBProvider.Apply(targetCfg)
+	targetDB, err := conn.DefaultDBProvider.Apply(&targetCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +293,7 @@ func (t *task) incrLoop() error {
 
 	// execute preSQLs in upstream
 	for _, sql := range t.caseGenerator.GetPreSQLs() {
-		if err := t.sourceConns[sql.source].execDDLs(sql.statement); err != nil {
+		if err := t.sourceConns[sql.source].execDDLs(t.ctx, sql.statement); err != nil {
 			return err
 		}
 	}
@@ -363,7 +363,7 @@ func (t *task) genIncrData(pCtx context.Context) (err error) {
 		}
 		for _, testSQL := range testSQLs {
 			log.L().Info("execute test case sql", zap.String("ddl", testSQL.statement), zap.Int("source", testSQL.source))
-			if err2 := t.sourceConns[testSQL.source].execDDLs(testSQL.statement); err2 != nil {
+			if err2 := t.sourceConns[testSQL.source].execDDLs(t.ctx, testSQL.statement); err2 != nil {
 				return err2
 			}
 		}
@@ -401,7 +401,7 @@ func (t *task) genIncrData(pCtx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		if err = t.sourceConns[idx].execDDLs(query); err != nil {
+		if err = t.sourceConns[idx].execDDLs(t.ctx, query); err != nil {
 			return err
 		}
 
@@ -440,7 +440,7 @@ func (t *task) genIncrData(pCtx context.Context) (err error) {
 				conn2 := conn
 				i2 := i
 				eg.Go(func() error {
-					if err2 := conn2.execDDLs(query); err2 != nil {
+					if err2 := conn2.execDDLs(t.ctx, query); err2 != nil {
 						if utils.IsMySQLError(err2, mysql.ErrDupFieldName) {
 							t.logger.Warn("ignore duplicate field name for ddl", log.ShortError(err))
 							return nil

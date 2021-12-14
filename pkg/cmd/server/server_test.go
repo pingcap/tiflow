@@ -175,21 +175,6 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 			MaxMemoryConsumption:   60000,
 			NumWorkerPoolGoroutine: 90,
 			SortDir:                config.DefaultSortDir,
-			EnableLevelDB:          false,
-			LevelDB: config.LevelDBConfig{
-				Count:                  16,
-				Concurrency:            256,
-				MaxOpenFiles:           10000,
-				BlockSize:              65536,
-				BlockCacheSize:         4294967296,
-				WriterBufferSize:       8388608,
-				Compression:            "snappy",
-				TargetFileSizeBase:     8388608,
-				CompactionL0Trigger:    160,
-				WriteL0SlowdownTrigger: math.MaxInt32,
-				WriteL0PauseTrigger:    math.MaxInt32,
-				CleanupSpeedLimit:      10000,
-			},
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -204,6 +189,31 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 		},
 		Debug: &config.DebugConfig{
 			EnableTableActor: true,
+			EnableDBSorter:   false,
+			DB: &config.DBConfig{
+				Count:                  16,
+				Concurrency:            256,
+				MaxOpenFiles:           10000,
+				BlockSize:              65536,
+				BlockCacheSize:         4294967296,
+				WriterBufferSize:       8388608,
+				Compression:            "snappy",
+				TargetFileSizeBase:     8388608,
+				CompactionL0Trigger:    160,
+				WriteL0SlowdownTrigger: math.MaxInt32,
+				WriteL0PauseTrigger:    math.MaxInt32,
+				CleanupSpeedLimit:      10000,
+			},
+			// We expect the default configuration here.
+			Messages: &config.MessagesConfig{
+				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 100),
+				ClientMaxBatchSize:           8 * 1024,
+				ClientMaxBatchCount:          128,
+				ClientRetryRateLimit:         1.0,
+				ServerMaxPendingMessageCount: 102400,
+				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
+				ServerWorkerPoolSize:         4,
+			},
 		},
 	})
 }
@@ -240,8 +250,10 @@ max-memory-percentage = 3
 num-concurrent-worker = 4
 num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
-enable-leveldb-sorter = false
-[sorter.leveldb]
+
+[debug]
+enable-db-sorter = false
+[debug.db]
 count = 5
 concurrency = 6
 max-open-files = 7
@@ -254,6 +266,15 @@ compaction-l0-trigger = 11
 write-l0-slowdown-trigger = 12
 write-l0-pause-trigger = 13
 cleanup-speed-limit = 14
+
+[debug.messages]
+client-max-batch-interval = "500ms"
+client-max-batch-size = 999
+client-max-batch-count = 888
+client-retry-rate-limit = 100.0
+server-max-pending-message-count = 1024
+server-ack-interval = "1s"
+server-worker-pool-size = 16
 `, dataDir)
 	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
@@ -293,8 +314,18 @@ cleanup-speed-limit = 14
 			MaxMemoryConsumption:   2000000,
 			NumWorkerPoolGoroutine: 5,
 			SortDir:                config.DefaultSortDir,
-			EnableLevelDB:          false,
-			LevelDB: config.LevelDBConfig{
+		},
+		Security:            &config.SecurityConfig{},
+		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
+		KVClient: &config.KVClientConfig{
+			WorkerConcurrent: 8,
+			WorkerPoolSize:   0,
+			RegionScanLimit:  40,
+		},
+		Debug: &config.DebugConfig{
+			EnableTableActor: true,
+			EnableDBSorter:   false,
+			DB: &config.DBConfig{
 				Count:                  5,
 				Concurrency:            6,
 				MaxOpenFiles:           7,
@@ -308,16 +339,15 @@ cleanup-speed-limit = 14
 				WriteL0PauseTrigger:    13,
 				CleanupSpeedLimit:      14,
 			},
-		},
-		Security:            &config.SecurityConfig{},
-		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
-		KVClient: &config.KVClientConfig{
-			WorkerConcurrent: 8,
-			WorkerPoolSize:   0,
-			RegionScanLimit:  40,
-		},
-		Debug: &config.DebugConfig{
-			EnableTableActor: true,
+			Messages: &config.MessagesConfig{
+				ClientMaxBatchInterval:       config.TomlDuration(500 * time.Millisecond),
+				ClientMaxBatchSize:           999,
+				ClientMaxBatchCount:          888,
+				ClientRetryRateLimit:         100.0,
+				ServerMaxPendingMessageCount: 1024,
+				ServerAckInterval:            config.TomlDuration(1 * time.Second),
+				ServerWorkerPoolSize:         16,
+			},
 		},
 	})
 }
@@ -414,21 +444,6 @@ cert-allowed-cn = ["dd","ee"]
 			MaxMemoryConsumption:   60000000,
 			NumWorkerPoolGoroutine: 5,
 			SortDir:                config.DefaultSortDir,
-			EnableLevelDB:          false,
-			LevelDB: config.LevelDBConfig{
-				Count:                  16,
-				Concurrency:            256,
-				MaxOpenFiles:           10000,
-				BlockSize:              65536,
-				BlockCacheSize:         4294967296,
-				WriterBufferSize:       8388608,
-				Compression:            "snappy",
-				TargetFileSizeBase:     8388608,
-				CompactionL0Trigger:    160,
-				WriteL0SlowdownTrigger: math.MaxInt32,
-				WriteL0PauseTrigger:    math.MaxInt32,
-				CleanupSpeedLimit:      10000,
-			},
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -443,6 +458,31 @@ cert-allowed-cn = ["dd","ee"]
 		},
 		Debug: &config.DebugConfig{
 			EnableTableActor: true,
+			EnableDBSorter:   false,
+			DB: &config.DBConfig{
+				Count:                  16,
+				Concurrency:            256,
+				MaxOpenFiles:           10000,
+				BlockSize:              65536,
+				BlockCacheSize:         4294967296,
+				WriterBufferSize:       8388608,
+				Compression:            "snappy",
+				TargetFileSizeBase:     8388608,
+				CompactionL0Trigger:    160,
+				WriteL0SlowdownTrigger: math.MaxInt32,
+				WriteL0PauseTrigger:    math.MaxInt32,
+				CleanupSpeedLimit:      10000,
+			},
+			// We expect the default configuration here.
+			Messages: &config.MessagesConfig{
+				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 100),
+				ClientMaxBatchSize:           8 * 1024,
+				ClientMaxBatchCount:          128,
+				ClientRetryRateLimit:         1.0,
+				ServerMaxPendingMessageCount: 102400,
+				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
+				ServerWorkerPoolSize:         4,
+			},
 		},
 	})
 }

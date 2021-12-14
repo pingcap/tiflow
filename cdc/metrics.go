@@ -20,12 +20,14 @@ import (
 	"github.com/pingcap/ticdc/cdc/processor"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
+	redowriter "github.com/pingcap/ticdc/cdc/redo/writer"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sorter"
 	"github.com/pingcap/ticdc/cdc/sorter/leveldb"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/actor"
+	"github.com/pingcap/ticdc/pkg/db"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
@@ -53,4 +55,6 @@ func init() {
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
 	leveldb.InitMetrics(registry)
+	redowriter.InitMetrics(registry)
+	db.InitMetrics(registry)
 }

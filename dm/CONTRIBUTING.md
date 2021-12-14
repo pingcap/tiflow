@@ -73,7 +73,7 @@ questions: what changed and why. The subject line should feature the what and
 the body of the commit should describe the why.
 
 ```
-dm-master: add comment for variable declaration
+worker(dm): add comment for variable declaration
 
 Improve documentation.
 ```
@@ -81,22 +81,23 @@ Improve documentation.
 The format can be described more formally as follows:
 
 ```
-<subsystem>: <what changed>
+<subsystem>(ticdc|dm|both): <what changed>
 <BLANK LINE>
 <why this change was made>
 <BLANK LINE>
 <footer>(optional)
 ```
 
-The first line is the subject and should be no longer than 70 characters, the
-second line is always blank, and other lines should be wrapped at 80 characters.
-This allows the message to be easier to read on GitHub as well as in various
+The first line is the subject and should be no longer than 70 characters, the second line is always blank, and other
+lines should be wrapped at 80 characters. This allows the message to be easier to read on GitHub as well as in various
 git tools.
 
-If the change affects more than one subsystem, you can use comma to separate them like `dm-master,dm-worker:`.
+If the change affects more than one subsystem, you can use comma to separate them like ```worker,syncer:```. If the
+change affects many subsystems, you can use ```*``` instead, like ```*:```.
 
-If the change affects many subsystems, you can use ```*``` instead, like ```*:```.
+If this change affects ticdc, fill in ```<subsystem>(ticdc)```, if it affects dm, fill in ```<subsystem>(dm)```. If it
+involves a code that is used by both products, fill in ```<subsystem>(both)```.
 
-For the why part, if no specific reason for the change,
-you can use one of some generic reasons like "Improve documentation.",
+For the why part, if no specific reason for the change, you can use one of some generic reasons like "Improve
+documentation.",
 "Improve performance.", "Improve robustness.", "Improve test coverage."

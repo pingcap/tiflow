@@ -27,12 +27,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	tijson "github.com/pingcap/tidb/types/json"
 	"go.uber.org/zap"
 )
 
@@ -88,7 +88,7 @@ func (a *AvroEventBatchEncoder) SetTimeZone(tz *time.Location) {
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
 func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	mqMessage := NewMQMessage(ProtocolAvro, nil, nil, e.CommitTs, model.MqMessageTypeRow, &e.Table.Schema, &e.Table.Table)
+	mqMessage := NewMQMessage(config.ProtocolAvro, nil, nil, e.CommitTs, model.MqMessageTypeRow, &e.Table.Schema, &e.Table.Table)
 
 	if !e.IsDelete() {
 		res, err := avroEncode(e.Table, a.valueSchemaManager, e.TableInfoVersion, e.Columns, a.tz)
@@ -476,7 +476,7 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 	case mysql.TypeYear:
 		return col.Value.(int64), "long", nil
 	case mysql.TypeJSON:
-		return col.Value.(tijson.BinaryJSON).String(), "string", nil
+		return col.Value.(string), "string", nil
 	case mysql.TypeNewDecimal:
 		return col.Value.(string), "string", nil
 	case mysql.TypeEnum:

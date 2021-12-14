@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/schema"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
 
@@ -68,7 +69,7 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: syncer.cfg, BaseConn: s.baseConn}
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), syncer.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
 	c.Assert(err, IsNil)
-	syncer.exprFilterGroup = NewExprFilterGroup(nil)
+	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 
 	// test binlog filter
 	filterRules := []*bf.BinlogEventRule{
@@ -124,12 +125,14 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 		},
 	}
 	p := parser.New()
-	qec := &queryEventContext{
-		eventContext: &eventContext{tctx: tcontext.Background()},
-		p:            p,
-	}
+
 	for _, ca := range cases {
-		ddlInfo, err := syncer.genDDLInfo(p, ca.schema, ca.sql)
+		qec := &queryEventContext{
+			eventContext: &eventContext{tctx: tcontext.Background()},
+			p:            p,
+			ddlSchema:    ca.schema,
+		}
+		ddlInfo, err := syncer.genDDLInfo(qec, ca.sql)
 		c.Assert(err, IsNil)
 		qec.ddlSchema = ca.schema
 		qec.originSQL = ca.sql

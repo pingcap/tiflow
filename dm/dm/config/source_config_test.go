@@ -115,6 +115,7 @@ func (t *testConfig) TestConfig(c *C) {
 
 	clone6, err := ParseYaml(clone4yaml)
 	c.Assert(err, IsNil)
+	clone6.From.Session = nil
 	c.Assert(clone6, DeepEquals, clone4)
 
 	// test invalid config

@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/sessionctx"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -160,6 +161,7 @@ type Syncer struct {
 	columnMapping   *cm.Mapping
 	baList          *filter.Filter
 	exprFilterGroup *ExprFilterGroup
+	sessCtx         sessionctx.Context
 
 	closed atomic.Bool
 
@@ -224,7 +226,8 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
-	relay relay.Process
+	relay                      relay.Process
+	charsetAndDefaultCollation map[string]string
 }
 
 // NewSyncer creates a new Syncer.
@@ -245,7 +248,6 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.lastCount.Store(0)
 	syncer.count.Store(0)
 	syncer.done = nil
-	syncer.setTimezone()
 	syncer.addJobFunc = syncer.addJob
 	syncer.cli = etcdClient
 
@@ -305,6 +307,9 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
+	if err = s.setTimezone(ctx); err != nil {
+		return
+	}
 
 	err = s.setSyncCfg()
 	if err != nil {
@@ -322,6 +327,10 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
+	s.charsetAndDefaultCollation, err = s.fromDB.GetCharsetAndDefaultCollation(ctx)
+	if err != nil {
+		return err
+	}
 	s.streamerController = NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
 
 	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
@@ -334,7 +343,11 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSyncerUnitGenBinlogEventFilter.Delegate(err)
 	}
 
-	s.exprFilterGroup = NewExprFilterGroup(s.cfg.ExprFilter)
+	vars := map[string]string{
+		"time_zone": s.timezone.String(),
+	}
+	s.sessCtx = utils.NewSessionCtx(vars)
+	s.exprFilterGroup = NewExprFilterGroup(s.sessCtx, s.cfg.ExprFilter)
 
 	if len(s.cfg.ColumnMappingRules) > 0 {
 		s.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
@@ -1421,6 +1434,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		currentLocation = s.checkpoint.GlobalPoint() // also init to global checkpoint
 		startLocation   = s.checkpoint.GlobalPoint()
 		lastLocation    = s.checkpoint.GlobalPoint()
+
+		currentGTID string
 	)
 	tctx.L().Info("replicate binlog from checkpoint", zap.Stringer("checkpoint", lastLocation))
 
@@ -1556,7 +1571,20 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				if err1 != nil {
 					return err
 				}
-				if _, ok := e.Event.(*replication.RowsEvent); ok {
+				switch e.Event.(type) {
+				case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+					gtidStr, err2 := event.GetGTIDStr(e)
+					if err2 != nil {
+						return err2
+					}
+					if currentGTID != gtidStr {
+						s.tctx.L().Error("after recover GTID-based replication, the first GTID is not same as broken one. May meet duplicate entry or corrupt data if table has no PK/UK.",
+							zap.String("last GTID", currentGTID),
+							zap.String("GTID after reset", gtidStr),
+						)
+						return nil
+					}
+				case *replication.RowsEvent:
 					i++
 				}
 			}
@@ -1864,6 +1892,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					err2 = s.flushJobs()
 				}
 			}
+		case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+			currentGTID, err2 = event.GetGTIDStr(e)
+			if err2 != nil {
+				return err2
+			}
 		}
 		if err2 != nil {
 			if err := s.handleEventError(err2, startLocation, currentLocation, e.Header.EventType == replication.QUERY_EVENT, originSQL); err != nil {
@@ -2032,12 +2065,18 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
-	rows, err := s.mappingDML(sourceTable, tableInfo, ev.Rows)
+	originRows, err := s.mappingDML(sourceTable, tableInfo, ev.Rows)
 	if err != nil {
 		return err
 	}
 	if err2 := checkLogColumns(ev.SkippedColumns); err2 != nil {
 		return err2
+	}
+
+	extRows := generateExtendColumn(originRows, s.tableRouter, sourceTable, s.cfg.SourceID)
+	rows := originRows
+	if extRows != nil {
+		rows = extRows
 	}
 
 	prunedColumns, prunedRows, err := pruneGeneratedColumnDML(tableInfo, rows)
@@ -2053,10 +2092,11 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	param := &genDMLParam{
 		targetTableID:   utils.GenTableID(targetTable),
 		data:            prunedRows,
-		originalData:    rows,
+		originalData:    originRows,
 		columns:         prunedColumns,
 		sourceTableInfo: tableInfo,
 		sourceTable:     sourceTable,
+		extendData:      extRows,
 	}
 
 	switch ec.header.EventType {
@@ -2133,6 +2173,7 @@ type queryEventContext struct {
 	trackInfos      []*ddlInfo
 	sourceTbls      map[string]map[string]struct{} // db name -> tb name
 	onlineDDLTable  *filter.Table
+	eventStatusVars []byte // binlog StatusVars
 }
 
 func (qec *queryEventContext) String() string {
@@ -2161,6 +2202,23 @@ func (qec *queryEventContext) String() string {
 		qec.ddlSchema, qec.originSQL, startLocation, currentLocation, lastLocation, shardingReSync, needHandleDDLs, strings.Join(trackInfos, ","))
 }
 
+// generateExtendColumn generate extended columns by extractor.
+func generateExtendColumn(data [][]interface{}, r *router.Table, table *filter.Table, sourceID string) [][]interface{} {
+	extendCol, extendVal := r.FetchExtendColumn(table.Schema, table.Name, sourceID)
+	if len(extendCol) == 0 {
+		return nil
+	}
+
+	rows := make([][]interface{}, len(data))
+	for i := range data {
+		rows[i] = data[i]
+		for _, v := range extendVal {
+			rows[i] = append(rows[i], v)
+		}
+	}
+	return rows
+}
+
 func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
 	if originSQL == "BEGIN" {
 		// GTID event: GTID_NEXT = xxx:11
@@ -2173,12 +2231,13 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 	}
 
 	qec := &queryEventContext{
-		eventContext: &ec,
-		ddlSchema:    string(ev.Schema),
-		originSQL:    utils.TrimCtrlChars(originSQL),
-		splitDDLs:    make([]string, 0),
-		appliedDDLs:  make([]string, 0),
-		sourceTbls:   make(map[string]map[string]struct{}),
+		eventContext:    &ec,
+		ddlSchema:       string(ev.Schema),
+		originSQL:       utils.TrimCtrlChars(originSQL),
+		splitDDLs:       make([]string, 0),
+		appliedDDLs:     make([]string, 0),
+		sourceTbls:      make(map[string]map[string]struct{}),
+		eventStatusVars: ev.StatusVars,
 	}
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
 	if err != nil {
@@ -2286,7 +2345,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 			continue
 		}
 		// We use default parser because sqls are came from above *Syncer.splitAndFilterDDL, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
-		ddlInfo, err2 := s.genDDLInfo(qec.p, qec.ddlSchema, sql)
+		ddlInfo, err2 := s.genDDLInfo(qec, sql)
 		if err2 != nil {
 			return err2
 		}
@@ -2815,6 +2874,10 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			continue
 		}
 		if db, table, ok := utils.GetTableFromDumpFilename(f); ok {
+			cols, _ := s.tableRouter.FetchExtendColumn(db, table, s.cfg.SourceID)
+			if len(cols) > 0 {
+				continue
+			}
 			tables = append(tables, dbutil.TableName(db, table))
 			tableFiles = append(tableFiles, [2]string{db, f})
 			continue
@@ -2871,7 +2934,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	var err error
 	dbCfg := s.cfg.From
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	s.fromDB, err = dbconn.NewUpStreamConn(dbCfg)
+	s.fromDB, err = dbconn.NewUpStreamConn(&dbCfg)
 	if err != nil {
 		return err
 	}
@@ -2914,7 +2977,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 		SetReadTimeout(maxDMLConnectionTimeout).
 		SetMaxIdleConns(s.cfg.WorkerCount)
 
-	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, dbCfg, s.cfg.WorkerCount)
+	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, s.cfg.WorkerCount)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB) // release resources acquired before return with error
 		return err
@@ -2924,7 +2987,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDDLConnectionTimeout)
 
 	var ddlDBConns []*dbconn.DBConn
-	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, dbCfg, 2)
+	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 2)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB)
 		dbconn.CloseBaseDB(s.tctx, s.toDB)
@@ -3080,7 +3143,7 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 // Update implements Unit.Update
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config.
-func (s *Syncer) Update(cfg *config.SubTaskConfig) error {
+func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		_, tables := s.sgk.UnresolvedTables()
 		if len(tables) > 0 {
@@ -3168,8 +3231,9 @@ func (s *Syncer) Update(cfg *config.SubTaskConfig) error {
 	s.cfg.ColumnMappingRules = cfg.ColumnMappingRules
 
 	// update timezone
-	s.setTimezone()
-
+	if s.timezone == nil {
+		return s.setTimezone(ctx)
+	}
 	return nil
 }
 
@@ -3200,7 +3264,7 @@ func (s *Syncer) UpdateFromConfig(cfg *config.SubTaskConfig) error {
 
 	var err error
 	s.cfg.From.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	s.fromDB, err = dbconn.NewUpStreamConn(s.cfg.From)
+	s.fromDB, err = dbconn.NewUpStreamConn(&s.cfg.From)
 	if err != nil {
 		s.tctx.L().Error("fail to create baseConn connection", log.ShortError(err))
 		return err
@@ -3217,9 +3281,22 @@ func (s *Syncer) UpdateFromConfig(cfg *config.SubTaskConfig) error {
 	return nil
 }
 
-func (s *Syncer) setTimezone() {
-	s.tctx.L().Info("use timezone", log.WrapStringerField("location", time.UTC))
-	s.timezone = time.UTC
+func (s *Syncer) setTimezone(ctx context.Context) error {
+	tz := s.cfg.Timezone
+	var err error
+	if len(tz) == 0 {
+		tz, err = conn.FetchTimeZoneSetting(ctx, &s.cfg.To)
+		if err != nil {
+			return err
+		}
+	}
+	loc, err := utils.ParseTimeZone(tz)
+	if err != nil {
+		return err
+	}
+	s.tctx.L().Info("use timezone", zap.String("location", loc.String()))
+	s.timezone = loc
+	return nil
 }
 
 func (s *Syncer) setSyncCfg() error {

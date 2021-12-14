@@ -698,7 +698,7 @@ func (o *Optimist) handleLock(info optimism.Info, tts []optimism.TargetTable, sk
 func (o *Optimist) removeLock(lock *optimism.Lock) (bool, error) {
 	failpoint.Inject("SleepWhenRemoveLock", func(val failpoint.Value) {
 		t := val.(int)
-		log.L().Info("wait new ddl info putted into etcd",
+		log.L().Info("wait new ddl info putted into etcd in optimistic",
 			zap.String("failpoint", "SleepWhenRemoveLock"),
 			zap.Int("max wait second", t))
 

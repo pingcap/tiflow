@@ -70,7 +70,7 @@ func newRelayCfg(c *C, flavor string) *Config {
 	}
 }
 
-func getDBConfigForTest() config.DBConfig {
+func getDBConfigForTest() *config.DBConfig {
 	host := os.Getenv("MYSQL_HOST")
 	if host == "" {
 		host = "127.0.0.1"
@@ -84,7 +84,7 @@ func getDBConfigForTest() config.DBConfig {
 		user = "root"
 	}
 	password := os.Getenv("MYSQL_PSWD")
-	return config.DBConfig{
+	return &config.DBConfig{
 		Host:     host,
 		Port:     port,
 		User:     user,
@@ -120,6 +120,10 @@ type mockWriter struct {
 	result      WResult
 	err         error
 	latestEvent *replication.BinlogEvent
+}
+
+func (w *mockWriter) IsActive(uuid, filename string) (bool, int64) {
+	return false, 0
 }
 
 func (w *mockWriter) Close() error {
@@ -437,7 +441,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		replication.ErrSyncClosed,
 		replication.ErrNeedSyncAgain,
 	} {
-		_, handleErr := r.handleEvents(context.Background(), reader2, parser2)
+		handleErr := r.handleEvents(context.Background(), reader2, parser2)
 		c.Assert(errors.Cause(handleErr), Equals, reader2.err)
 	}
 
@@ -447,7 +451,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// writer return error to force handleEvents return
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
-	_, err = r.handleEvents(context.Background(), reader2, parser2)
+	err = r.handleEvents(context.Background(), reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, writer2.err)
 	// after handle rotate event, we save and flush the meta immediately
 	c.Assert(r.meta.Dirty(), Equals, false)
@@ -466,7 +470,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		lm := r.meta.(*LocalMeta)
 		backupUUID := lm.currentUUID
 		lm.currentUUID = "not exist"
-		_, err = r.handleEvents(context.Background(), reader2, parser2)
+		err = r.handleEvents(context.Background(), reader2, parser2)
 		c.Assert(os.IsNotExist(errors.Cause(err)), Equals, true)
 		lm.currentUUID = backupUUID
 	}
@@ -478,7 +482,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// writer return error
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
-	_, err = r.handleEvents(context.Background(), reader2, parser2)
+	err = r.handleEvents(context.Background(), reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, writer2.err)
 	c.Assert(r.meta.Dirty(), Equals, false)
 
@@ -486,7 +490,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	writer2.err = nil
-	_, err = r.handleEvents(ctx, reader2, parser2) // returned when ctx timeout
+	err = r.handleEvents(ctx, reader2, parser2) // returned when ctx timeout
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	// check written event
 	c.Assert(writer2.latestEvent, Equals, reader2.result.Event)
@@ -501,7 +505,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 
 	// write a QueryEvent with GTID sets
 	reader2.result.Event = queryEv
-	_, err = r.handleEvents(ctx2, reader2, parser2)
+	err = r.handleEvents(ctx2, reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	// check written event
 	c.Assert(writer2.latestEvent, Equals, reader2.result.Event)
@@ -520,7 +524,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	}
 	ctx4, cancel4 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel4()
-	_, err = r.handleEvents(ctx4, reader2, parser2)
+	err = r.handleEvents(ctx4, reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	select {
 	case <-ctx4.Done():
@@ -533,7 +537,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	writer2.result.Ignore = true
 	ctx5, cancel5 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel5()
-	_, err = r.handleEvents(ctx5, reader2, parser2)
+	err = r.handleEvents(ctx5, reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	select {
 	case <-ctx5.Done():
@@ -765,7 +769,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *C) {
 	})
 
 	// other event type with LOG_EVENT_ARTIFICIAL_F
-	ev, err = event.GenCommonGTIDEvent(gmysql.MySQLFlavor, header.ServerID, latestPos, gtidSet)
+	ev, err = event.GenTableMapEvent(header, latestPos, 0, []byte("testdb"), []byte("testtbl"), []byte("INT"))
 	c.Assert(err, IsNil)
 	ev.Header.Flags |= replication.LOG_EVENT_ARTIFICIAL_F
 	cases = append(cases, Case{

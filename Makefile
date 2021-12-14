@@ -49,7 +49,7 @@ FAILPOINT_DISABLE := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v5.2.0-master
+	RELEASE_VERSION := v5.4.0-master
 	release_version_regex := ^v5\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
 	ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
@@ -129,6 +129,7 @@ unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov 
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	tools/bin/gocov convert "$(TEST_DIR)/cov.unit.out" | tools/bin/gocov-xml > cdc-coverage.xml
 	$(FAILPOINT_DISABLE)
+	@bash <(curl -s https://codecov.io/bash) -F cdc -f $(TEST_DIR)/cov.unit.out -t $(TICDC_CODECOV_TOKEN)
 
 leak_test: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
@@ -161,10 +162,10 @@ integration_test_build: check_failpoint_ctl
 integration_test: integration_test_mysql
 
 integration_test_mysql:
-	tests/run.sh mysql "$(CASE)"
+	tests/integration_tests/run.sh mysql "$(CASE)"
 
 integration_test_kafka: check_third_party_binary
-	tests/run.sh kafka "$(CASE)"
+	tests/integration_tests/run.sh kafka "$(CASE)"
 
 fmt: tools/bin/gofumports tools/bin/shfmt
 	@echo "gofmt (simplify)"
@@ -211,18 +212,19 @@ check-static: tools/bin/golangci-lint
 
 check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts
 
-coverage: tools/bin/gocovmerge tools/bin/goveralls
+integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
-	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls
 	tools/bin/goveralls -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
-	@bash <(curl -s https://codecov.io/bash) -f $(TEST_DIR)/unit_cov.out -t $(CODECOV_TOKEN)
 else
 	go tool cover -html "$(TEST_DIR)/all_cov.out" -o "$(TEST_DIR)/all_cov.html"
+endif
+
+unit_test_coverage:
+	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 	go tool cover -html "$(TEST_DIR)/unit_cov.out" -o "$(TEST_DIR)/unit_cov.html"
 	go tool cover -func="$(TEST_DIR)/unit_cov.out"
-endif
 
 data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
@@ -230,13 +232,18 @@ data-flow-diagram: docs/data-flow.dot
 clean:
 	go clean -i ./...
 	rm -rf *.out
-	rm -f bin/cdc
-	rm -f bin/cdc_kafka_consumer
+	rm -rf bin
+	rm -rf tools/bin
 
 dm: dm-master dm-worker dmctl dm-portal dm-syncer
 
 dm-master:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/dm-master ./dm/cmd/dm-master
+
+dm-master-with-webui:
+	@echo "build webui first"
+	cd dm/ui && yarn && yarn build
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -tags dm_webui -o bin/dm-master ./dm/cmd/dm-master
 
 dm-worker:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/dm-worker ./dm/cmd/dm-worker
@@ -284,6 +291,7 @@ dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/goc
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	tools/bin/gocov convert "$(DM_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > dm-coverage.xml
 	$(FAILPOINT_DISABLE)
+	@bash <(curl -s https://codecov.io/bash) -F dm -f $(DM_TEST_DIR)/cov.unit_test.out -t $(TICDC_CODECOV_TOKEN)
 
 dm_integration_test_build: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
@@ -353,58 +361,54 @@ dm_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	find "$(DM_TEST_DIR)" -type f -name "cov.*.dmctl.*.out" -exec sed -i "s/mode: count/mode: atomic/g" {} \;
 	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.* | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*portal.*|.*chaos.*" > "$(DM_TEST_DIR)/all_cov.out"
 	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.unit_test*.out | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*portal.*|.*chaos.*" > $(DM_TEST_DIR)/unit_test.out
-ifeq ("$(JenkinsCI)", "1")
-	@bash <(curl -s https://codecov.io/bash) -f $(DM_TEST_DIR)/unit_test.out -t $(CODECOV_TOKEN)
-	tools/bin/goveralls -coverprofile=$(DM_TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
-else
 	go tool cover -html "$(DM_TEST_DIR)/all_cov.out" -o "$(DM_TEST_DIR)/all_cov.html"
 	go tool cover -html "$(DM_TEST_DIR)/unit_test.out" -o "$(DM_TEST_DIR)/unit_test_cov.html"
-endif
+
 
 tools/bin/failpoint-ctl: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/failpoint-ctl github.com/pingcap/failpoint/failpoint-ctl
+	cd tools/check && $(GO) build -mod=mod -o ../bin/failpoint-ctl github.com/pingcap/failpoint/failpoint-ctl
 
 tools/bin/gocovmerge: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gocovmerge github.com/zhouqiang-cl/gocovmerge
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gocovmerge github.com/zhouqiang-cl/gocovmerge
 
 tools/bin/goveralls: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/goveralls github.com/mattn/goveralls
+	cd tools/check && $(GO) build -mod=mod -o ../bin/goveralls github.com/mattn/goveralls
 
 tools/bin/golangci-lint: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
+	cd tools/check && $(GO) build  -mod=mod -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 
 tools/bin/mockgen: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/mockgen github.com/golang/mock/mockgen
+	cd tools/check && $(GO) build -mod=mod -o ../bin/mockgen github.com/golang/mock/mockgen
 
 tools/bin/protoc-gen-gogofaster: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/protoc-gen-gogofaster github.com/gogo/protobuf/protoc-gen-gogofaster
+	cd tools/check && $(GO) build -mod=mod -o ../bin/protoc-gen-gogofaster github.com/gogo/protobuf/protoc-gen-gogofaster
 
 tools/bin/protoc-gen-grpc-gateway: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/protoc-gen-grpc-gateway github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
+	cd tools/check && $(GO) build -mod=mod -o ../bin/protoc-gen-grpc-gateway github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 
 tools/bin/statik: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/statik github.com/rakyll/statik
+	cd tools/check && $(GO) build -mod=mod -o ../bin/statik github.com/rakyll/statik
 
 tools/bin/gofumports: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gofumports mvdan.cc/gofumpt/gofumports
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gofumports mvdan.cc/gofumpt/gofumports
 
 tools/bin/shfmt: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/shfmt mvdan.cc/sh/v3/cmd/shfmt
+	cd tools/check && $(GO) build -mod=mod -o ../bin/shfmt mvdan.cc/sh/v3/cmd/shfmt
 
 tools/bin/oapi-codegen: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/oapi-codegen github.com/deepmap/oapi-codegen/cmd/oapi-codegen
+	cd tools/check && $(GO) build -mod=mod -o ../bin/oapi-codegen github.com/deepmap/oapi-codegen/cmd/oapi-codegen
 
 tools/bin/gocov: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gocov  github.com/axw/gocov/gocov
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gocov  github.com/axw/gocov/gocov
 
 tools/bin/gocov-xml: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gocov-xml github.com/AlekSi/gocov-xml
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gocov-xml github.com/AlekSi/gocov-xml
 
 tools/bin/gotestsum: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/gotestsum gotest.tools/gotestsum
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gotestsum gotest.tools/gotestsum
 
 tools/bin/errdoc-gen: tools/check/go.mod
-	cd tools/check && $(GO) build -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
+	cd tools/check && $(GO) build -mod=mod -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
 
 check_failpoint_ctl: tools/bin/failpoint-ctl
 

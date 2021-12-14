@@ -14,7 +14,10 @@
 package util
 
 import (
+	"log"
+
 	"github.com/pingcap/ticdc/cdc/model"
+	"go.uber.org/zap"
 )
 
 // TableSet provides a data structure to store the tables' states for the
@@ -35,6 +38,9 @@ type TableRecord struct {
 	Status    TableStatus
 }
 
+// Clone returns a copy of the TableSet.
+// This method is future-proof in case we add
+// something not trivially copyable.
 func (r *TableRecord) Clone() *TableRecord {
 	return &TableRecord{
 		TableID:   r.TableID,
@@ -67,7 +73,8 @@ func (s *TableSet) AddTableRecord(record *TableRecord) (successful bool) {
 		// duplicate tableID
 		return false
 	}
-	s.tableIDMap[record.TableID] = record.Clone()
+	recordCloned := record.Clone()
+	s.tableIDMap[record.TableID] = recordCloned
 
 	captureIndexEntry := s.captureIndex[record.CaptureID]
 	if captureIndexEntry == nil {
@@ -75,7 +82,38 @@ func (s *TableSet) AddTableRecord(record *TableRecord) (successful bool) {
 		s.captureIndex[record.CaptureID] = captureIndexEntry
 	}
 
-	captureIndexEntry[record.TableID] = record.Clone()
+	captureIndexEntry[record.TableID] = recordCloned
+	return true
+}
+
+// UpdateTableRecord updates an existing TableRecord.
+// All modifications to a table's status should be done by this method.
+func (s *TableSet) UpdateTableRecord(record *TableRecord) (successful bool) {
+	oldRecord, ok := s.tableIDMap[record.TableID]
+	if !ok {
+		// table does not exist
+		return false
+	}
+
+	// If there is no need to modify the CaptureID, we simply
+	// update the record.
+	if record.CaptureID == oldRecord.CaptureID {
+		recordCloned := record.Clone()
+		s.tableIDMap[record.TableID] = recordCloned
+		s.captureIndex[record.CaptureID][record.TableID] = recordCloned
+		return true
+	}
+
+	// If the CaptureID is changed, we do a proper RemoveTableRecord followed
+	// by AddTableRecord.
+	if record.CaptureID != oldRecord.CaptureID {
+		if ok := s.RemoveTableRecord(record.TableID); !ok {
+			log.Panic("unreachable", zap.Any("record", record))
+		}
+		if ok := s.AddTableRecord(record); !ok {
+			log.Panic("unreachable", zap.Any("record", record))
+		}
+	}
 	return true
 }
 
@@ -99,7 +137,7 @@ func (s *TableSet) RemoveTableRecord(tableID model.TableID) bool {
 
 	captureIndexEntry, ok := s.captureIndex[record.CaptureID]
 	if !ok {
-		panic("unreachable")
+		log.Panic("unreachable", zap.Int64("table-id", tableID))
 	}
 	delete(captureIndexEntry, record.TableID)
 	if len(captureIndexEntry) == 0 {
@@ -110,16 +148,21 @@ func (s *TableSet) RemoveTableRecord(tableID model.TableID) bool {
 
 // RemoveTableRecordByCaptureID removes all table records associated with
 // captureID.
-func (s *TableSet) RemoveTableRecordByCaptureID(captureID model.CaptureID) {
+func (s *TableSet) RemoveTableRecordByCaptureID(captureID model.CaptureID) []*TableRecord {
 	captureIndexEntry, ok := s.captureIndex[captureID]
 	if !ok {
-		return
+		return nil
 	}
 
-	for tableID := range captureIndexEntry {
+	var ret []*TableRecord
+	for tableID, record := range captureIndexEntry {
 		delete(s.tableIDMap, tableID)
+		// Since the record has been removed,
+		// there is no need to clone it before returning.
+		ret = append(ret, record)
 	}
 	delete(s.captureIndex, captureID)
+	return ret
 }
 
 // CountTableByCaptureID counts the number of tables associated with the captureID.

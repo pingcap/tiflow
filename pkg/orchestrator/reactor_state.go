@@ -60,7 +60,9 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		return nil
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
-			log.Info("remote capture offline", zap.String("capture-id", k.CaptureID))
+			log.Info("remote capture offline",
+				zap.String("capture-id", k.CaptureID),
+				zap.Any("info", s.Captures[k.CaptureID]))
 			delete(s.Captures, k.CaptureID)
 			return nil
 		}
@@ -210,7 +212,7 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 		return errors.Trace(err)
 	}
 	if key.Tp == etcd.CDCKeyTypeChangefeedInfo {
-		if err := s.Info.VerifyAndFix(); err != nil {
+		if err := s.Info.VerifyAndComplete(); err != nil {
 			return errors.Trace(err)
 		}
 	}

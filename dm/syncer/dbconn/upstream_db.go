@@ -41,7 +41,7 @@ type UpStreamConn struct {
 }
 
 // NewUpStreamConn creates an UpStreamConn from config.
-func NewUpStreamConn(dbCfg config.DBConfig) (*UpStreamConn, error) {
+func NewUpStreamConn(dbCfg *config.DBConfig) (*UpStreamConn, error) {
 	baseDB, err := CreateBaseDB(dbCfg)
 	if err != nil {
 		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
@@ -69,6 +69,11 @@ func (conn *UpStreamConn) GetServerUUID(ctx context.Context, flavor string) (str
 // GetServerUnixTS returns the result of current timestamp in upstream.
 func (conn *UpStreamConn) GetServerUnixTS(ctx context.Context) (int64, error) {
 	return utils.GetServerUnixTS(ctx, conn.BaseDB.DB)
+}
+
+// GetCharsetAndDefaultCollation returns charset and default collation map.
+func (conn *UpStreamConn) GetCharsetAndDefaultCollation(ctx context.Context) (map[string]string, error) {
+	return utils.GetCharsetAndDefaultCollation(ctx, conn.BaseDB.DB)
 }
 
 // GetParser returns the parser with correct flag for upstream.

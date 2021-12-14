@@ -65,7 +65,7 @@ func (s *testSyncerSuite) TestHandleError(c *C) {
 	)
 	mockDB := conn.InitMockDB(c)
 	var err error
-	syncer.fromDB, err = dbconn.NewUpStreamConn(s.cfg.From) // used to get parser
+	syncer.fromDB, err = dbconn.NewUpStreamConn(&s.cfg.From) // used to get parser
 	c.Assert(err, IsNil)
 
 	for _, cs := range cases {

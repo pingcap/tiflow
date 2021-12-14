@@ -38,6 +38,7 @@ import (
 	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
 	"github.com/pingcap/ticdc/dm/pkg/retry"
 	"github.com/pingcap/ticdc/dm/pkg/schema"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
@@ -276,11 +277,9 @@ func (s *testSyncerSuite) TestSelectDB(c *C) {
 		Flags:     0x01,
 	}
 
-	qec := &queryEventContext{
-		p: p,
-	}
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for _, cs := range cases {
-		e, err := event.GenQueryEvent(header, 123, 0, 0, 0, nil, cs.schema, cs.query)
+		e, err := event.GenQueryEvent(header, 123, 0, 0, 0, statusVars, cs.schema, cs.query)
 		c.Assert(err, IsNil)
 		c.Assert(e, NotNil)
 		ev, ok := e.Event.(*replication.QueryEvent)
@@ -288,10 +287,14 @@ func (s *testSyncerSuite) TestSelectDB(c *C) {
 
 		sql := string(ev.Query)
 		schema := string(ev.Schema)
-		ddlInfo, err := syncer.genDDLInfo(p, schema, sql)
+		qec := &queryEventContext{
+			p:               p,
+			ddlSchema:       schema,
+			eventStatusVars: ev.StatusVars,
+		}
+		ddlInfo, err := syncer.genDDLInfo(qec, sql)
 		c.Assert(err, IsNil)
 
-		qec.ddlSchema = schema
 		qec.originSQL = sql
 		needSkip, err := syncer.skipQueryEvent(qec, ddlInfo)
 		c.Assert(err, IsNil)
@@ -416,9 +419,7 @@ func (s *testSyncerSuite) TestIgnoreDB(c *C) {
 	c.Assert(syncer.genRouter(), IsNil)
 	i := 0
 
-	qec := &queryEventContext{
-		p: p,
-	}
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for _, e := range allEvents {
 		ev, ok := e.Event.(*replication.QueryEvent)
 		if !ok {
@@ -426,10 +427,14 @@ func (s *testSyncerSuite) TestIgnoreDB(c *C) {
 		}
 		sql := string(ev.Query)
 		schema := string(ev.Schema)
-		ddlInfo, err := syncer.genDDLInfo(p, schema, sql)
+		qec := &queryEventContext{
+			p:               p,
+			ddlSchema:       schema,
+			eventStatusVars: statusVars,
+		}
+		ddlInfo, err := syncer.genDDLInfo(qec, sql)
 		c.Assert(err, IsNil)
 
-		qec.ddlSchema = schema
 		qec.originSQL = sql
 		needSkip, err := syncer.skipQueryEvent(qec, ddlInfo)
 		c.Assert(err, IsNil)
@@ -774,7 +779,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.cfg.CheckpointFlushInterval = 30
-	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db, func() {})}
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
 	syncer.toDBConns = []*dbconn.DBConn{
 		{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})},
 		{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})},
@@ -795,8 +800,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
-
-	syncer.exprFilterGroup = NewExprFilterGroup(nil)
+	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
@@ -846,7 +850,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			nil,
 		}, {
 			ddl,
-			[]string{"CREATE DATABASE IF NOT EXISTS `test_1`"},
+			[]string{"CREATE DATABASE IF NOT EXISTS `test_1` COLLATE = latin1_swedish_ci"},
 			nil,
 		}, {
 			flush,
@@ -866,7 +870,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			nil,
 		}, {
 			insert,
-			[]string{"INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)"},
+			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(580981944116838401), "a"}},
 		}, {
 			flush,
@@ -878,7 +882,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			nil,
 		}, {
 			insert,
-			[]string{"INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)"},
+			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(580981944116838402), "b"}},
 		}, {
 			del,
@@ -887,7 +891,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		}, {
 			// safe mode is true, will split update to delete + replace
 			update,
-			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)"},
+			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(580981944116838402)}, {int64(580981944116838401), "b"}},
 		}, {
 			flush,
@@ -942,7 +946,12 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	cancel()
 	// when syncer exit Run(), will flush job
 	syncer.Pause()
-	c.Assert(syncer.Update(s.cfg), IsNil)
+
+	mockDBProvider := conn.InitMockDB(c)
+	mockDBProvider.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
+		WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("01:00:00"))
+	c.Assert(syncer.Update(context.Background(), s.cfg), IsNil)
+	c.Assert(syncer.timezone.String(), Equals, "+01:00")
 
 	events2 := mockBinlogEvents{
 		mockBinlogEvent{typ: Write, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(3), "c"}}}},
@@ -1030,7 +1039,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
-	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db, func() {})}
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
 	syncer.toDBConns = []*dbconn.DBConn{
 		{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})},
 		{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})},
@@ -1046,7 +1055,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24))"))
 
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
-	syncer.exprFilterGroup = NewExprFilterGroup(nil)
+	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
@@ -1112,7 +1121,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			nil,
 		}, {
 			ddl,
-			[]string{"CREATE DATABASE IF NOT EXISTS `test_1`"},
+			[]string{"CREATE DATABASE IF NOT EXISTS `test_1` COLLATE = latin1_swedish_ci"},
 			nil,
 		}, {
 			flush,
@@ -1124,7 +1133,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			nil,
 		}, {
 			insert,
-			[]string{"INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)"},
+			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int32(1), "a"}},
 		}, {
 			del,
@@ -1132,7 +1141,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			[][]interface{}{{int32(1)}},
 		}, {
 			update,
-			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)"},
+			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int32(2)}, {int32(1), "b"}},
 		}, {
 			// start from this event, location passes safeModeExitLocation and safe mode should exit
@@ -1210,9 +1219,10 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 		testTbl2 = "test_tbl2"
 		ec       = &eventContext{tctx: tcontext.Background()}
 		qec      = &queryEventContext{
-			eventContext: ec,
-			ddlSchema:    testDB,
-			p:            parser.New(),
+			eventContext:    ec,
+			ddlSchema:       testDB,
+			p:               parser.New(),
+			eventStatusVars: []byte{4, 0, 0, 0, 0, 46, 0},
 		}
 	)
 	db, mock, err := sqlmock.New()
@@ -1235,7 +1245,7 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
 	syncer.checkpoint.(*RemoteCheckPoint).dbConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(checkPointDBConn, &retry.FiniteRetryStrategy{})}
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
-	syncer.exprFilterGroup = NewExprFilterGroup(nil)
+	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(syncer.genRouter(), IsNil)
 	c.Assert(err, IsNil)
 
@@ -1314,7 +1324,7 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 	}
 
 	for _, ca := range cases {
-		ddlInfo, err := syncer.genDDLInfo(qec.p, qec.ddlSchema, ca.sql)
+		ddlInfo, err := syncer.genDDLInfo(qec, ca.sql)
 		c.Assert(err, IsNil)
 		ca.callback()
 
@@ -1331,14 +1341,16 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 	ec := &eventContext{
 		tctx: tctx,
 	}
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for _, e := range allEvents {
 		switch ev := e.Event.(type) {
 		case *replication.QueryEvent:
 			qec := &queryEventContext{
-				eventContext: ec,
-				originSQL:    string(ev.Query),
-				ddlSchema:    string(ev.Schema),
-				p:            p,
+				eventContext:    ec,
+				originSQL:       string(ev.Query),
+				ddlSchema:       string(ev.Schema),
+				p:               p,
+				eventStatusVars: statusVars,
 			}
 			stmt, err := parseOneStmt(qec)
 			c.Assert(err, IsNil)
@@ -1361,7 +1373,7 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 			}
 
 			for j, sql := range qec.appliedDDLs {
-				ddlInfo, err := syncer.genDDLInfo(p, string(ev.Schema), sql)
+				ddlInfo, err := syncer.genDDLInfo(qec, sql)
 				c.Assert(err, IsNil)
 
 				needSkip, err := syncer.skipQueryEvent(qec, ddlInfo)

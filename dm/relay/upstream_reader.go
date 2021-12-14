@@ -22,7 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
-	br "github.com/pingcap/ticdc/dm/pkg/binlog/reader"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
@@ -67,7 +67,7 @@ type upstreamReader struct {
 	mu    sync.RWMutex
 	stage common.Stage
 
-	in  br.Reader // the underlying reader used to read binlog events.
+	in  reader.Reader // the underlying reader used to read binlog events.
 	out chan *replication.BinlogEvent
 
 	logger log.Logger
@@ -77,7 +77,7 @@ type upstreamReader struct {
 func NewUpstreamReader(cfg *RConfig) Reader {
 	return &upstreamReader{
 		cfg:    cfg,
-		in:     br.NewTCPReader(cfg.SyncConfig),
+		in:     reader.NewTCPReader(cfg.SyncConfig),
 		out:    make(chan *replication.BinlogEvent),
 		logger: log.With(zap.String("component", "relay reader")),
 	}
@@ -133,19 +133,12 @@ func (r *upstreamReader) GetEvent(ctx context.Context) (RResult, error) {
 		return result, terror.ErrRelayReaderNeedStart.Generate(r.stage, common.StagePrepared)
 	}
 
-	for {
-		ctx2, cancel2 := context.WithTimeout(ctx, common.SlaveReadTimeout)
-		ev, err := r.in.GetEvent(ctx2)
-		cancel2()
+	ev, err := r.in.GetEvent(ctx)
 
-		if err == nil {
-			result.Event = ev
-		} else if isRetryableError(err) {
-			r.logger.Info("get retryable error when reading binlog event", log.ShortError(err))
-			continue
-		}
-		return result, err
+	if err == nil {
+		result.Event = ev
 	}
+	return result, err
 }
 
 func (r *upstreamReader) setUpReaderByGTID() error {

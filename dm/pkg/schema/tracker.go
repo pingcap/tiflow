@@ -222,7 +222,7 @@ func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (str
 	// nolint:errcheck
 	defer rs[0].Close()
 
-	req := rs[0].NewChunk()
+	req := rs[0].NewChunk(nil)
 	err = rs[0].Next(ctx, req)
 	if err != nil {
 		return "", err
