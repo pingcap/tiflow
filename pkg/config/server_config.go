@@ -255,7 +255,7 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.Debug == nil {
 		c.Debug = defaultCfg.Debug
 	}
-	if err := c.Debug.Messages.ValidateAndAdjust(); err != nil {
+	if err = c.Debug.ValidateAndAdjust(); err != nil {
 		return errors.Trace(err)
 	}
 

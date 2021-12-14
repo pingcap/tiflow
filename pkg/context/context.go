@@ -21,8 +21,10 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
+	ssystem "github.com/pingcap/ticdc/cdc/sorter/leveldb/system"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/p2p"
 	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -44,9 +46,14 @@ type GlobalVars struct {
 	RegionCache      *tikv.RegionCache
 	TimeAcquirer     pdtime.TimeAcquirer
 	TableActorSystem *system.System
+	SorterSystem     *ssystem.System
 
 	// OwnerRevision is the Etcd revision when the owner got elected.
 	OwnerRevision int64
+
+	// MessageServer and MessageRouter are for peer-messaging
+	MessageServer *p2p.MessageServer
+	MessageRouter p2p.MessageRouter
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline

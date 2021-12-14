@@ -11,86 +11,79 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package filelock
+package fsutil
 
 import (
 	"testing"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type fileLockSuite struct{}
-
-var _ = check.SerialSuites(&fileLockSuite{})
-
-func Test(t *testing.T) { check.TestingT(t) }
-
 // TestBasicCase tests the basic scenarios of using FileLock and all operations are expected to be successful
-func (s *fileLockSuite) TestBasicCase(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestBasicCase(t *testing.T) {
+	t.Parallel()
 
-	path := c.MkDir() + "/test_lock"
+	path := t.TempDir() + "/test_lock"
 
 	fileLock, err := NewFileLock(path)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer fileLock.Close() //nolint:errcheck
 
 	fileLockCheck, err := NewFileLock(path)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer fileLockCheck.Close() //nolint:errcheck
 
 	isLocked, err := fileLock.IsLocked()
-	c.Assert(err, check.IsNil)
-	c.Assert(isLocked, check.IsFalse)
+	require.Nil(t, err)
+	require.False(t, isLocked)
 
 	err = fileLock.Lock()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	isLocked, err = fileLockCheck.IsLocked()
-	c.Assert(err, check.IsNil)
-	c.Assert(isLocked, check.IsTrue)
+	require.Nil(t, err)
+	require.True(t, isLocked)
 
 	err = fileLock.Unlock()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	isLocked, err = fileLockCheck.IsLocked()
-	c.Assert(err, check.IsNil)
-	c.Assert(isLocked, check.IsFalse)
+	require.Nil(t, err)
+	require.False(t, isLocked)
 
 	isLocked, err = fileLock.IsLocked()
-	c.Assert(err, check.IsNil)
-	c.Assert(isLocked, check.IsFalse)
+	require.Nil(t, err)
+	require.False(t, isLocked)
 }
 
 // TestBadPath tests the case where the file path is not accessible
-func (s *fileLockSuite) TestBadPath(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestBadPath(t *testing.T) {
+	t.Parallel()
 
-	path := c.MkDir() + "/bad_path/bad_file"
+	path := t.TempDir() + "/bad_path/bad_file"
 
 	_, err := NewFileLock(path)
-	c.Assert(err, check.ErrorMatches, ".*no such file.*")
+	require.Regexp(t, ".*no such file.*", err)
 }
 
 // TestBadPath tests the case where the file is locked twice
 // We do not expect this to happen in TiCDC.
-func (s *fileLockSuite) TestDuplicateLocking(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestDuplicateLocking(t *testing.T) {
+	t.Parallel()
 
-	path := c.MkDir() + "/test_lock"
+	path := t.TempDir() + "/test_lock"
 
 	fileLock, err := NewFileLock(path)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer fileLock.Close() //nolint:errcheck
 
 	fileLock2, err := NewFileLock(path)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer fileLock2.Close() //nolint:errcheck
 
 	err = fileLock.Lock()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	err = fileLock2.Lock()
-	c.Assert(err, check.ErrorMatches, ".*ErrConflictingFileLocks.*")
+	require.Regexp(t, ".*ErrConflictingFileLocks.*", err)
 }
