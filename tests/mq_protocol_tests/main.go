@@ -56,7 +56,7 @@ func testCanal() {
 		cases.NewSimpleCase(task),
 		cases.NewDeleteCase(task),
 		cases.NewManyTypesCase(task),
-		cases.NewUnsignedCase(task),
+		// cases.NewUnsignedCase(task),
 		cases.NewCompositePKeyCase(task),
 		// tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
 	}
@@ -71,8 +71,8 @@ func testCanalJSON() {
 	testCases := []framework.Task{
 		cases.NewSimpleCase(task),
 		cases.NewDeleteCase(task),
-		cases.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
 		cases.NewManyTypesCase(task),
+		// cases.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
 		cases.NewCompositePKeyCase(task),
 		cases.NewAlterCase(task),
 	}
