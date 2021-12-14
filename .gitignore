@@ -58,4 +58,8 @@ relay_log/*
 dumped_data/*
 *-coverage.xml
 *-junit-report.xml
+dm/ui/dist
+
+# npm dependencies
+node_modules
 

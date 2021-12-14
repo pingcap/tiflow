@@ -111,6 +111,7 @@ func (s *Server) Start() error {
 		DialKeepAliveTime:    keepaliveTime,
 		DialKeepAliveTimeout: keepaliveTimeout,
 		TLS:                  tls.TLSConfig(),
+		AutoSyncInterval:     syncMasterEndpointsTime,
 	})
 	if err != nil {
 		return err
@@ -121,12 +122,6 @@ func (s *Server) Start() error {
 	s.wg.Add(1)
 	go func() {
 		s.runBackgroundJob(s.ctx)
-		s.wg.Done()
-	}()
-
-	s.wg.Add(1)
-	go func() {
-		s.syncMasterEndpoints(s.ctx)
 		s.wg.Done()
 	}()
 
@@ -264,42 +259,6 @@ func (s *Server) stopKeepAlive() {
 func (s *Server) restartKeepAlive() {
 	s.stopKeepAlive()
 	s.startKeepAlive()
-}
-
-func (s *Server) syncMasterEndpoints(ctx context.Context) {
-	lastClientUrls := []string{}
-	clientURLs := []string{}
-
-	updateF := func() {
-		clientURLs = clientURLs[:0]
-		resp, err := s.etcdClient.MemberList(ctx)
-		if err != nil {
-			log.L().Error("can't get etcd member list", zap.Error(err))
-			return
-		}
-
-		for _, m := range resp.Members {
-			clientURLs = append(clientURLs, m.GetClientURLs()...)
-		}
-		if utils.NonRepeatStringsEqual(clientURLs, lastClientUrls) {
-			log.L().Debug("etcd member list doesn't change", zap.Strings("client URLs", clientURLs))
-			return
-		}
-		log.L().Info("will sync endpoints to", zap.Strings("client URLs", clientURLs))
-		s.etcdClient.SetEndpoints(clientURLs...)
-		lastClientUrls = make([]string, len(clientURLs))
-		copy(lastClientUrls, clientURLs)
-	}
-
-	for {
-		updateF()
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(syncMasterEndpointsTime):
-		}
-	}
 }
 
 func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
