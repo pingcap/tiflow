@@ -471,6 +471,11 @@ error = '''
 locate region by id
 '''
 
+["CDC:ErrMQSinkUnknownProtocol"]
+error = '''
+unknown '%s' protocol for Message Queue sink
+'''
+
 ["CDC:ErrMailboxFull"]
 error = '''
 mailbox is full, please try again. Internal use only, report a bug if seen externally
@@ -879,11 +884,6 @@ sink config invalid
 ["CDC:ErrSinkURIInvalid"]
 error = '''
 sink uri invalid
-'''
-
-["CDC:ErrMQSinkUnknownProtocol"]
-error = '''
-unknown '%s' protocol for Message Queue sink
 '''
 
 ["CDC:ErrSnapshotLostByGC"]
