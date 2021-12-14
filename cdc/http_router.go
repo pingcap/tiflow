@@ -141,7 +141,7 @@ func logMiddleware() gin.HandlerFunc {
 		if err != nil {
 			stdErr = err.Err
 		}
-		// Do not logs metrics related requests when there is no error
+		// Do not log metrics related requests when there is no error
 		if strings.Contains(path, "/metrics") && err == nil {
 			return
 		}
