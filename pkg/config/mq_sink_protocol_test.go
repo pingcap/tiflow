@@ -24,14 +24,15 @@ func TestFromString(t *testing.T) {
 	testCases := []struct {
 		protocol             string
 		expectedProtocolEnum Protocol
+		expectedErr          string
 	}{
 		{
-			protocol:             "unknown",
-			expectedProtocolEnum: ProtocolDefault,
+			protocol:    "random",
+			expectedErr: ".*unknown 'random' protocol.*",
 		},
 		{
 			protocol:             "default",
-			expectedProtocolEnum: ProtocolDefault,
+			expectedProtocolEnum: ProtocolOpen,
 		},
 		{
 			protocol:             "canal",
@@ -55,14 +56,18 @@ func TestFromString(t *testing.T) {
 		},
 		{
 			protocol:             "open-protocol",
-			expectedProtocolEnum: ProtocolOpenProtocol,
+			expectedProtocolEnum: ProtocolOpen,
 		},
 	}
 
 	for _, tc := range testCases {
 		var protocol Protocol
-		protocol.FromString(tc.protocol)
-		require.Equal(t, tc.expectedProtocolEnum, protocol)
+		err := protocol.FromString(tc.protocol)
+		if tc.expectedErr != "" {
+			require.Regexp(t, tc.expectedErr, err)
+		} else {
+			require.Equal(t, tc.expectedProtocolEnum, protocol)
+		}
 	}
 }
 
@@ -97,7 +102,7 @@ func TestString(t *testing.T) {
 			expectedProtocol: "craft",
 		},
 		{
-			protocolEnum:     ProtocolOpenProtocol,
+			protocolEnum:     ProtocolOpen,
 			expectedProtocol: "open-protocol",
 		},
 	}

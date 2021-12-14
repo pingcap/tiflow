@@ -14,10 +14,8 @@
 package config
 
 import (
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"strings"
-
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
 )
 
 // Protocol is the protocol of the mq message.
@@ -31,14 +29,14 @@ const (
 	ProtocolMaxwell
 	ProtocolCanalJSON
 	ProtocolCraft
-	ProtocolOpenProtocol
+	ProtocolOpen
 )
 
 // FromString converts the protocol from string to Protocol enum type.
-func (p *Protocol) FromString(protocol string) {
+func (p *Protocol) FromString(protocol string) error {
 	switch strings.ToLower(protocol) {
 	case "default":
-		*p = ProtocolDefault
+		*p = ProtocolOpen
 	case "canal":
 		*p = ProtocolCanal
 	case "avro":
@@ -50,11 +48,12 @@ func (p *Protocol) FromString(protocol string) {
 	case "craft":
 		*p = ProtocolCraft
 	case "open-protocol":
-		*p = ProtocolOpenProtocol
+		*p = ProtocolOpen
 	default:
-		*p = ProtocolDefault
-		log.Warn("can't support codec protocol, using default protocol", zap.String("protocol", protocol))
+		return cerror.ErrMQSinkUnknownProtocol.GenWithStackByArgs(protocol)
 	}
+
+	return nil
 }
 
 // String converts the Protocol enum type string to string.
@@ -72,7 +71,7 @@ func (p Protocol) String() string {
 		return "canal-json"
 	case ProtocolCraft:
 		return "craft"
-	case ProtocolOpenProtocol:
+	case ProtocolOpen:
 		return "open-protocol"
 	default:
 		panic("unreachable")
