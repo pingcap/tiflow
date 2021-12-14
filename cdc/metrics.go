@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/processor"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
+	redowriter "github.com/pingcap/ticdc/cdc/redo/writer"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
@@ -47,4 +48,10 @@ func init() {
 	// Sorter metrics
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
+<<<<<<< HEAD
+=======
+	leveldb.InitMetrics(registry)
+	redowriter.InitMetrics(registry)
+	db.InitMetrics(registry)
+>>>>>>> 958f142e6 ( redolog: add metric (#3481))
 }
