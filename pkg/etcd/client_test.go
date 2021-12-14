@@ -116,9 +116,8 @@ func (s *etcdSuite) TestDelegateLease(c *check.C) {
 }
 
 // test no data lost when WatchCh blocked
-func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
+func (s *clientSuite) TestWatchChBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
 	cli := clientv3.NewCtxClient(context.TODO())
 	resetCount := 0
 	requestCount := 0
@@ -179,9 +178,8 @@ func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 }
 
 // test no data lost when OutCh blocked
-func (s *etcdSuite) TestOutChBlocked(c *check.C) {
+func (s *clientSuite) TestOutChBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
 
 	cli := clientv3.NewCtxClient(context.TODO())
 	resetCount := 0
@@ -233,9 +231,8 @@ func (s *etcdSuite) TestOutChBlocked(c *check.C) {
 	c.Check(sentRes, check.DeepEquals, receivedRes)
 }
 
-func (s *etcdSuite) TestRevisionNotFallBack(c *check.C) {
+func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
 	cli := clientv3.NewCtxClient(context.TODO())
 
 	resetCount := 0
