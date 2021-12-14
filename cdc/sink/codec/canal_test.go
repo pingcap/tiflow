@@ -367,7 +367,7 @@ func testDdl(c *check.C) {
 }
 
 var testColumns = []*struct {
-	c                 *model.Column
+	column            *model.Column
 	expectedMySQLType string
 	expectedJavaType  JavaSQLType
 }{
@@ -395,34 +395,41 @@ var testColumns = []*struct {
 	{&model.Column{Type: mysql.TypeDouble, Value: 2.71}, "double", JavaSQLTypeDOUBLE},
 	{&model.Column{Type: mysql.TypeNewDecimal, Value: "2333"}, "decimal", JavaSQLTypeDECIMAL},
 
-	// char / varchar / binary / varbinary
-	// {&model.Column{Type: mysql.}},
+	{&model.Column{Type: mysql.TypeVarchar, Value: []uint8("89504E470D0A1A0A")}, "varchar", JavaSQLTypeVARCHAR},
+	{&model.Column{Type: mysql.TypeString, Value: []uint8("89504E470D0A1A0A")}, "char", JavaSQLTypeCHAR},
+	{&model.Column{Type: mysql.TypeString, Value: []uint8(""), Flag: model.BinaryFlag}, "binary", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeVarchar, Value: []uint8(""), Flag: model.BinaryFlag}, "varbinary", JavaSQLTypeBLOB},
 
-	// tinytext / text / mediumtext / longtext
-	// {&model.Column{Type: mysql.type}},
+	{&model.Column{Type: mysql.TypeTinyBlob, Value: []uint8("")}, "tinytext", JavaSQLTypeCLOB},
+	{&model.Column{Type: mysql.TypeBlob, Value: []uint8("")}, "text", JavaSQLTypeCLOB},
+	{&model.Column{Type: mysql.TypeMediumBlob, Value: []uint8("")}, "mediumtext", JavaSQLTypeCLOB},
+	{&model.Column{Type: mysql.TypeLongBlob, Value: []uint8("")}, "longtext", JavaSQLTypeCLOB},
 
-	// tinyblob / blob / mediumblob / longblob
+	{&model.Column{Type: mysql.TypeTinyBlob, Value: []uint8(""), Flag: model.BinaryFlag}, "tinyblob", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeBlob, Value: []uint8(""), Flag: model.BinaryFlag}, "blob", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeMediumBlob, Value: []uint8(""), Flag: model.BinaryFlag}, "mediumblob", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeLongBlob, Value: []uint8(""), Flag: model.BinaryFlag}, "longblob", JavaSQLTypeBLOB},
 
-	// date / datetime / timestamp / time / year
 	{&model.Column{Type: mysql.TypeDate, Value: "2020-02-20"}, "date", JavaSQLTypeDATE},
 	{&model.Column{Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"}, "datetime", JavaSQLTypeTIMESTAMP},
 	{&model.Column{Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"}, "datetime", JavaSQLTypeTIMESTAMP},
 	{&model.Column{Type: mysql.TypeDuration, Value: "02:20:20"}, "time", JavaSQLTypeTIME},
-	{&model.Column{Type: mysql.TypeYear, Value: "2020"}, "year", JavaSQLTypeVARCHAR},
+	{&model.Column{Type: mysql.TypeYear, Value: "2020", Flag: model.UnsignedFlag}, "year", JavaSQLTypeVARCHAR},
 
-	// enum / set / bit / json
 	{&model.Column{Type: mysql.TypeEnum}, "enum", JavaSQLTypeINTEGER},
 	{&model.Column{Type: mysql.TypeSet}, "set", JavaSQLTypeBIT},
 	{&model.Column{Type: mysql.TypeBit, Flag: model.UnsignedFlag}, "bit", JavaSQLTypeBIT},
 	{&model.Column{Type: mysql.TypeJSON}, "json", JavaSQLTypeVARCHAR},
 }
 
-func (s *canalEntrySuite) TestGetMySQLType(c *check.C) {
+func (s *canalEntrySuite) TestGetMySQLTypeAndJavaSQLType(c *check.C) {
+	for _, item := range testColumns {
+		obtainedMySQLType := getMySQLType(item.column)
+		c.Assert(obtainedMySQLType, check.Equals, item.expectedMySQLType)
 
-}
-
-func (s *canalEntrySuite) TestGetJavaSQLType(c *check.C) {
-
+		obtainedJavaSQLType := getJavaSQLType(item.column, obtainedMySQLType)
+		c.Assert(obtainedJavaSQLType, check.Equals, item.expectedJavaType)
+	}
 }
 
 func (s *canalEntrySuite) TestFormatValue(c *check.C) {
