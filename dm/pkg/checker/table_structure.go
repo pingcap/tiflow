@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -30,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"go.uber.org/zap"
 )
 
 const (
@@ -97,6 +99,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	)
 	checkFunc := func(tables []*filter.Table) {
 		for _, table := range tables {
+			log.L().Logger.Info("check table", zap.Int("table length", len(tables)), zap.Stringer("table", table))
 			statement, err := dbutil.GetCreateTableSQL(ctx, c.db, table.Schema, table.Name)
 			if err != nil {
 				// continue if table was deleted when checking
@@ -116,13 +119,25 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 		checkWg.Done()
 	}
 
+	log.L().Logger.Info("before check table", zap.Int("table length", len(c.tables)))
 	for i := 0; i < cunrrency; i++ {
-		checkWg.Add(1)
-		if i+1 == cunrrency {
-			go checkFunc(c.tables[onethread*i:])
-		} else {
-			go checkFunc(c.tables[onethread*i : onethread*(i+1)])
+		if onethread == 0 {
+			checkWg.Add(1)
+			go checkFunc(c.tables[0:])
+			break
 		}
+		if onethread*i >= len(c.tables) {
+			break
+		}
+		var checkTables []*filter.Table
+		if i+1 == cunrrency || onethread*(i+1) >= len(c.tables) {
+			checkTables = c.tables[onethread*i:]
+		} else {
+			checkTables = c.tables[onethread*i : onethread*(i+1)]
+		}
+		log.L().Logger.Info("before check table nums", zap.Int("cnt", i), zap.Int("table length", len(checkTables)), zap.Stringer("table", checkTables[0]))
+		checkWg.Add(1)
+		go checkFunc(checkTables)
 	}
 
 	for {
