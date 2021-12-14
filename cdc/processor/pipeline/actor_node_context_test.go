@@ -32,6 +32,12 @@ func TestContext(t *testing.T) {
 	require.NotNil(t, ctx.GlobalVars())
 	require.Equal(t, "zzz", ctx.ChangefeedVars().ID)
 	require.Equal(t, actor.ID(1), ctx.tableActorID)
+	ctx.SendToNextNode(pipeline.BarrierMessage(1))
+	require.Equal(t, 1, ctx.noTickMessageCount)
+	wait(t, 500*time.Millisecond, func() {
+		msg := ctx.Message()
+		require.Equal(t, pipeline.MessageTypeBarrier, msg.Tp)
+	})
 }
 
 func TestTryGetProcessedMessageFromChan(t *testing.T) {
@@ -122,4 +128,17 @@ func (f *forwardActor) Poll(ctx sdtContext.Context, msgs []message.Message) bool
 		}
 	}
 	return true
+}
+
+func wait(t *testing.T, timeout time.Duration, f func()) {
+	wait := make(chan int)
+	go func() {
+		f()
+		wait <- 0
+	}()
+	select {
+	case <-wait:
+	case <-time.After(timeout):
+		t.Fatal("Timed out")
+	}
 }
