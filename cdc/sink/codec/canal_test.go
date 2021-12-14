@@ -381,10 +381,49 @@ var testColumns = []*struct {
 	expectedMySQLType string
 	expectedJavaType  JavaSQLType
 }{
-	{&model.Column{Type: mysql.TypeTiny, Value: 1}, "tinyint", JavaSQLTypeTINYINT}, // Boolean / TinyInt
+	{&model.Column{Type: mysql.TypeTiny, Value: 1}, "tinyint", JavaSQLTypeTINYINT},   // Boolean
+	{&model.Column{Type: mysql.TypeTiny, Value: 127}, "tinyint", JavaSQLTypeTINYINT}, // TinyInt
+	{&model.Column{Type: mysql.TypeTiny, Value: 255, Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeSMALLINT},
+
 	{&model.Column{Type: mysql.TypeShort, Value: 2}, "smallint", JavaSQLTypeSMALLINT},
-	{&model.Column{Type: mysql.TypeUnspecified}},
+	{&model.Column{Type: mysql.}},
+
+	{&model.Column{Type: mysql.TypeLong, Value: 3}, "int", JavaSQLTypeINTEGER},
+
+	{&model.Column{Type: mysql.TypeFloat, Value: 3.14}, "float", JavaSQLTypeREAL},
+	{&model.Column{Type: mysql.TypeDouble, Value: 2.71}, "double", JavaSQLTypeDOUBLE},
+	{&model.Column{Type: mysql.TypeNewDecimal, Value: "2333"}, "decimal", JavaSQLTypeDECIMAL},
 }
+
+//TypeTiny        byte = 1
+//TypeShort       byte = 2
+//TypeLong        byte = 3
+//TypeFloat       byte = 4
+//TypeDouble      byte = 5
+//TypeNull        byte = 6
+//TypeTimestamp   byte = 7
+//TypeLonglong    byte = 8
+//TypeInt24       byte = 9
+//TypeDate        byte = 10
+///* TypeDuration original name was TypeTime, renamed to TypeDuration to resolve the conflict with Go type Time.*/
+//TypeDuration byte = 11
+//TypeDatetime byte = 12
+//TypeYear     byte = 13
+//TypeNewDate  byte = 14
+//TypeVarchar  byte = 15
+//TypeBit      byte = 16
+//
+//TypeJSON       byte = 0xf5
+//TypeNewDecimal byte = 0xf6
+//TypeEnum       byte = 0xf7
+//TypeSet        byte = 0xf8
+//TypeTinyBlob   byte = 0xf9
+//TypeMediumBlob byte = 0xfa
+//TypeLongBlob   byte = 0xfb
+//TypeBlob       byte = 0xfc
+//TypeVarString  byte = 0xfd
+//TypeString     byte = 0xfe
+//TypeGeometry   byte = 0xff
 
 //type Column struct {
 //	Name  string         `json:"name" msg:"name"`
