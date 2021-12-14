@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
 	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/cdc/sorter"
+	"github.com/pingcap/ticdc/cdc/sorter/leveldb"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/actor"
@@ -55,6 +56,10 @@ type sorterNode struct {
 
 	eg     *errgroup.Group
 	cancel context.CancelFunc
+
+	cleanID     actor.ID
+	cleanTask   message.Message
+	cleanRouter *actor.Router
 
 	// The latest resolved ts that sorter has received.
 	resolvedTs model.Ts
@@ -110,14 +115,25 @@ func (n *sorterNode) StartActorNode(ctx context.Context, tableActorRouter *actor
 			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
 				zap.String("changefeed-id", info.ID), zap.String("table-name", n.tableName))
 		}
-		sortDir := info.Info.SortDir
-		err := unified.CheckDir(sortDir)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		sorter, err = unified.NewUnifiedSorter(sortDir, info.ID, n.tableName, n.tableID, vars.CaptureInfo.AdvertiseAddr)
-		if err != nil {
-			return errors.Trace(err)
+
+		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
+			startTs := info.Info.StartTs
+			actorID := ctx.GlobalVars().SorterSystem.ActorID(uint64(n.tableID))
+			router := ctx.GlobalVars().SorterSystem.Router()
+			levelSorter := leveldb.NewLevelDBSorter(ctx, n.tableID, startTs, router, actorID)
+			n.cleanID = actorID
+			n.cleanTask = levelSorter.CleanupTask()
+			n.cleanRouter = ctx.GlobalVars().SorterSystem.CleanerRouter()
+			sorter = levelSorter
+		} else {
+			// Sorter dir has been set and checked when server starts.
+			// See https://github.com/pingcap/ticdc/blob/9dad09/cdc/server.go#L275
+			sortDir := config.GetGlobalServerConfig().Sorter.SortDir
+			var err error
+			sorter, err = unified.NewUnifiedSorter(sortDir, info.ID, n.tableName, n.tableID, vars.CaptureInfo.AdvertiseAddr)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	default:
 		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(sortEngine)
@@ -327,6 +343,13 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
+	if n.cleanRouter != nil {
+		// Clean up data when the table sorter is canceled.
+		err := n.cleanRouter.SendB(ctx, n.cleanID, n.cleanTask)
+		if err != nil {
+			log.Warn("schedule table cleanup task failed", zap.Error(err))
+		}
+	}
 	return n.eg.Wait()
 }
 
