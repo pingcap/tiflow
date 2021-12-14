@@ -92,13 +92,13 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	c.Assert(msg.Table, check.Equals, "person")
 	c.Assert(msg.IsDDL, check.IsFalse)
 	c.Assert(msg.SQLType, check.DeepEquals, map[string]int32{
-		"id":           int32(JavaSQLTypeBIGINT),
+		"id":           int32(JavaSQLTypeINTEGER),
 		"name":         int32(JavaSQLTypeVARCHAR),
-		"tiny":         int32(JavaSQLTypeSMALLINT),
-		"comment":      int32(JavaSQLTypeVARCHAR),
+		"tiny":         int32(JavaSQLTypeTINYINT),
+		"comment":      int32(JavaSQLTypeCLOB),
 		"blob":         int32(JavaSQLTypeBLOB),
-		"binaryString": int32(JavaSQLTypeCHAR),
-		"binaryBlob":   int32(JavaSQLTypeVARCHAR),
+		"binaryString": int32(JavaSQLTypeBLOB),
+		"binaryBlob":   int32(JavaSQLTypeBLOB),
 	})
 	c.Assert(msg.MySQLType, check.DeepEquals, map[string]string{
 		"id":           "int",
