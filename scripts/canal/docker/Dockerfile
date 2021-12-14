@@ -6,6 +6,5 @@ RUN tar xf canal.adapter-1.1.5.tar.gz
 COPY . .
 RUN chmod 777 ./bin/startup.sh
 
-CMD ["/bin/sh", "./bin/startup.sh"]
-
+CMD ["/bin/sh", "./start.sh"]
 
