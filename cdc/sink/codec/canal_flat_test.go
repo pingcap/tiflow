@@ -28,31 +28,69 @@ type canalFlatSuite struct{}
 
 var _ = check.Suite(&canalFlatSuite{})
 
-var testCaseUpdate = &model.RowChangedEvent{
-	CommitTs: 417318403368288260,
-	Table: &model.TableName{
-		Schema: "cdc",
-		Table:  "person",
-	},
-	Columns: []*model.Column{
-		{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
-		{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
-		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
-		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
-		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
-		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
-		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
-	},
-	PreColumns: []*model.Column{
-		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
-		{Name: "name", Type: mysql.TypeVarchar, Value: "Alice"},
-		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
-		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
-		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
-		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
-		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
-	},
-}
+var (
+	testCaseInsert = &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "cdc",
+			Table:  "person",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
+			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
+			{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
+			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+			{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+			{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
+			{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
+		},
+		PreColumns: nil,
+	}
+
+	testCaseUpdate = &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "cdc",
+			Table:  "person",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
+			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
+			{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
+			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+			{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+			{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
+			{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
+		},
+		PreColumns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
+			{Name: "name", Type: mysql.TypeVarchar, Value: "Alice"},
+			{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
+			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+			{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+			{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
+			{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
+		},
+	}
+
+	testCaseDelete = &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "cdc",
+			Table:  "person",
+		},
+		Columns: nil,
+		PreColumns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
+			{Name: "name", Type: mysql.TypeVarchar, Value: "Alice"},
+			{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
+			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+			{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+			{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
+			{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
+		},
+	}
+)
 
 var testCaseDDL = &model.DDLEvent{
 	CommitTs: 417318403368288260,
@@ -74,6 +112,47 @@ func (s *canalFlatSuite) TestSetParams(c *check.C) {
 	err := encoder.SetParams(params)
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.enableTiDBExtension, check.IsTrue)
+}
+
+func (s *canalFlatSuite) TestNewCanalFlatMessage4DMLFormat(c *check.C) {
+	defer testleak.AfterTest(c)()
+	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
+	c.Assert(encoder, check.NotNil)
+
+	message, err := encoder.newFlatMessageForDML(testCaseInsert)
+	c.Assert(err, check.IsNil)
+	flatMessage, ok := message.(*canalFlatMessage)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(flatMessage.Data, check.NotNil)
+	c.Assert(flatMessage.Old, check.IsNil)
+	c.Assert(flatMessage.EventType, check.Equals, "INSERT")
+
+	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
+	c.Assert(err, check.IsNil)
+	flatMessage, ok = message.(*canalFlatMessage)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(flatMessage.Data, check.NotNil)
+	c.Assert(flatMessage.Old, check.NotNil)
+	c.Assert(flatMessage.EventType, check.Equals, "UPDATE")
+
+	message, err = encoder.newFlatMessageForDML(testCaseDelete)
+	c.Assert(err, check.IsNil)
+	flatMessage, ok = message.(*canalFlatMessage)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(flatMessage.Data, check.NotNil)
+	c.Assert(flatMessage.Old, check.IsNil)
+	c.Assert(flatMessage.EventType, check.Equals, "DELETE")
+
+	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
+	c.Assert(encoder, check.NotNil)
+	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
+	c.Assert(err, check.IsNil)
+
+	withExtension, ok := message.(*canalFlatMessageWithTiDBExtension)
+	c.Assert(ok, check.IsTrue)
+
+	c.Assert(withExtension.Extensions, check.NotNil)
+	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseUpdate.CommitTs)
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
@@ -137,17 +216,6 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 			"binaryBlob":   string(encodedBinaryBlob),
 		},
 	})
-
-	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
-	c.Assert(encoder, check.NotNil)
-	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
-	c.Assert(err, check.IsNil)
-
-	withExtension, ok := message.(*canalFlatMessageWithTiDBExtension)
-	c.Assert(ok, check.IsTrue)
-
-	c.Assert(withExtension.Extensions, check.NotNil)
-	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseUpdate.CommitTs)
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C) {
