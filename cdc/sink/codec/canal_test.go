@@ -366,11 +366,22 @@ func testDdl(c *check.C) {
 	c.Assert(rc.GetDdlSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
 }
 
-var testColumns = []*struct {
-	column            *model.Column
-	expectedMySQLType string
-	expectedJavaType  JavaSQLType
-}{
+type testColumnTuple struct {
+	column              *model.Column
+	expectedMySQLType   string
+	expectedJavaSQLType JavaSQLType
+	// expectedValue       string
+}
+
+func collectAllColumns(groups []*testColumnTuple) []*model.Column {
+	result := make([]*model.Column, 0, len(groups))
+	for _, item := range groups {
+		result = append(result, item.column)
+	}
+	return result
+}
+
+var testColumnsTable = []*testColumnTuple{
 	{&model.Column{Type: mysql.TypeTiny, Value: int64(127)}, "tinyint", JavaSQLTypeTINYINT}, // TinyInt
 	{&model.Column{Type: mysql.TypeTiny, Value: uint64(127), Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeTINYINT},
 	{&model.Column{Type: mysql.TypeTiny, Value: uint64(128), Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeSMALLINT},
@@ -399,20 +410,20 @@ var testColumns = []*struct {
 	{&model.Column{Type: mysql.TypeDouble, Value: 2.71, Flag: model.UnsignedFlag}, "double unsigned", JavaSQLTypeDOUBLE},
 	{&model.Column{Type: mysql.TypeNewDecimal, Value: "2333", Flag: model.UnsignedFlag}, "decimal unsigned", JavaSQLTypeDECIMAL},
 
-	{&model.Column{Type: mysql.TypeVarchar, Value: []uint8("89504E470D0A1A0A")}, "varchar", JavaSQLTypeVARCHAR},
-	{&model.Column{Type: mysql.TypeString, Value: []uint8("89504E470D0A1A0A")}, "char", JavaSQLTypeCHAR},
-	{&model.Column{Type: mysql.TypeString, Value: []uint8("89504E470D0A1A0A"), Flag: model.BinaryFlag}, "binary", JavaSQLTypeBLOB},
-	{&model.Column{Type: mysql.TypeVarchar, Value: []uint8("89504E470D0A1A0A"), Flag: model.BinaryFlag}, "varbinary", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeVarchar, Value: []uint8("测试Varchar")}, "varchar", JavaSQLTypeVARCHAR},
+	{&model.Column{Type: mysql.TypeString, Value: []uint8("测试String")}, "char", JavaSQLTypeCHAR},
+	{&model.Column{Type: mysql.TypeString, Value: []uint8("测试BinaryString"), Flag: model.BinaryFlag}, "binary", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeVarchar, Value: []uint8("测试BinaryVarchar"), Flag: model.BinaryFlag}, "varbinary", JavaSQLTypeBLOB},
 
-	{&model.Column{Type: mysql.TypeTinyBlob, Value: []uint8("89504E470D0A1A0A")}, "tinytext", JavaSQLTypeCLOB},
-	{&model.Column{Type: mysql.TypeBlob, Value: []uint8("89504E470D0A1A0A")}, "text", JavaSQLTypeCLOB},
-	{&model.Column{Type: mysql.TypeMediumBlob, Value: []uint8("89504E470D0A1A0A")}, "mediumtext", JavaSQLTypeCLOB},
-	{&model.Column{Type: mysql.TypeLongBlob, Value: []uint8("89504E470D0A1A0A")}, "longtext", JavaSQLTypeCLOB},
+	{&model.Column{Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")}, "tinytext", JavaSQLTypeCLOB},
+	{&model.Column{Type: mysql.TypeBlob, Value: []uint8("测试text")}, "text", JavaSQLTypeCLOB},
+	{&model.Column{Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumtext")}, "mediumtext", JavaSQLTypeCLOB},
+	{&model.Column{Type: mysql.TypeLongBlob, Value: []uint8("测试longtext")}, "longtext", JavaSQLTypeCLOB},
 
-	{&model.Column{Type: mysql.TypeTinyBlob, Value: []uint8("89504E470D0A1A0A"), Flag: model.BinaryFlag}, "tinyblob", JavaSQLTypeBLOB},
-	{&model.Column{Type: mysql.TypeBlob, Value: []uint8("89504E470D0A1A0A"), Flag: model.BinaryFlag}, "blob", JavaSQLTypeBLOB},
-	{&model.Column{Type: mysql.TypeMediumBlob, Value: []uint8("89504E470D0A1A0A"), Flag: model.BinaryFlag}, "mediumblob", JavaSQLTypeBLOB},
-	{&model.Column{Type: mysql.TypeLongBlob, Value: []uint8("89504E470D0A1A0A"), Flag: model.BinaryFlag}, "longblob", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeTinyBlob, Value: []uint8("测试tinyblob"), Flag: model.BinaryFlag}, "tinyblob", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeBlob, Value: []uint8("测试blob"), Flag: model.BinaryFlag}, "blob", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumblob"), Flag: model.BinaryFlag}, "mediumblob", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeLongBlob, Value: []uint8("测试longblob"), Flag: model.BinaryFlag}, "longblob", JavaSQLTypeBLOB},
 
 	{&model.Column{Type: mysql.TypeDate, Value: "2020-02-20"}, "date", JavaSQLTypeDATE},
 	{&model.Column{Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"}, "datetime", JavaSQLTypeTIMESTAMP},
@@ -427,27 +438,27 @@ var testColumns = []*struct {
 }
 
 func (s *canalEntrySuite) TestGetMySQLTypeAndJavaSQLType(c *check.C) {
-	for _, item := range testColumns {
+	for _, item := range testColumnsTable {
 		obtainedMySQLType := getMySQLType(item.column)
 		c.Assert(obtainedMySQLType, check.Equals, item.expectedMySQLType)
 
 		obtainedJavaSQLType := getJavaSQLType(item.column, obtainedMySQLType)
-		c.Assert(obtainedJavaSQLType, check.Equals, item.expectedJavaType)
+		c.Assert(obtainedJavaSQLType, check.Equals, item.expectedJavaSQLType)
 	}
 }
 
-func (s *canalEntrySuite) TestFormatValue(c *check.C) {
-	decoder := charmap.ISO8859_1.NewDecoder()
-
-	javaResult := []byte("\u0089PNG\r\n\u001A\n")
-	result, err := decoder.Bytes(javaResult)
-	c.Assert(err, check.IsNil)
-	a := string(result)
-
-	golangResult := []byte("PNG\r\n\u001a\n")
-	result, err = decoder.Bytes(golangResult)
-	c.Assert(err, check.IsNil)
-	b := string(result)
-
-	c.Assert(a, check.Equals, b)
-}
+//func (s *canalEntrySuite) TestFormatValue(c *check.C) {
+//	decoder := charmap.ISO8859_1.NewDecoder()
+//
+//	javaResult := []byte("\u0089PNG\r\n\u001A\n")
+//	result, err := decoder.Bytes(javaResult)
+//	c.Assert(err, check.IsNil)
+//	a := string(result)
+//
+//	golangResult := []byte("PNG\r\n\u001a\n")
+//	result, err = decoder.Bytes(golangResult)
+//	c.Assert(err, check.IsNil)
+//	b := string(result)
+//
+//	c.Assert(a, check.Equals, b)
+//}
