@@ -725,11 +725,6 @@ func (h *HTTPHandler) ListCapture(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/status [get]
 func (h *HTTPHandler) ServerStatus(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		h.forwardToOwner(c)
-		return
-	}
-
 	status := model.ServerStatus{
 		Version: version.ReleaseVersion,
 		GitHash: version.GitHash,
@@ -750,11 +745,6 @@ func (h *HTTPHandler) ServerStatus(c *gin.Context) {
 // @Failure 500 {object} model.HTTPError
 // @Router	/api/v1/health [get]
 func (h *HTTPHandler) Health(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		h.forwardToOwner(c)
-		return
-	}
-
 	ctx := c.Request.Context()
 
 	if _, err := h.capture.GetOwner(ctx); err != nil {
