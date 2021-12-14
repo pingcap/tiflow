@@ -156,6 +156,10 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 		return javaType
 	}
 
+	if c.Type == mysql.TypeFloat || c.Type == mysql.TypeDouble || c.Type == mysql.TypeNewDecimal {
+		return javaType
+	}
+
 	// for **unsigned** `Int` related data type, should have type in `uint64`. see reference:
 	// https://github.com/pingcap/ticdc/blob/f0a38a7aaf9f3b11a4d807da275b567642733f58/cdc/entry/mounter.go#L493
 	// https://github.com/pingcap/tidb/blob/6495a5a116a016a3e077d181b8c8ad81f76ac31b/types/datum.go#L423-L455

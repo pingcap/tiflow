@@ -196,12 +196,12 @@ func testInsert(c *check.C) {
 			c.Assert(col.GetValue(), check.Equals, "Bob")
 			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
 		case "tiny":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeSMALLINT))
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeTINYINT))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "255")
 		case "comment":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeCLOB))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(err, check.IsNil)
@@ -371,48 +371,52 @@ var testColumns = []*struct {
 	expectedMySQLType string
 	expectedJavaType  JavaSQLType
 }{
-	{&model.Column{Type: mysql.TypeTiny, Value: 127}, "tinyint", JavaSQLTypeTINYINT}, // TinyInt
-	{&model.Column{Type: mysql.TypeTiny, Value: 127, Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeTINYINT},
-	{&model.Column{Type: mysql.TypeTiny, Value: 128, Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeSMALLINT},
+	{&model.Column{Type: mysql.TypeTiny, Value: int64(127)}, "tinyint", JavaSQLTypeTINYINT}, // TinyInt
+	{&model.Column{Type: mysql.TypeTiny, Value: uint64(127), Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeTINYINT},
+	{&model.Column{Type: mysql.TypeTiny, Value: uint64(128), Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeSMALLINT},
 
-	{&model.Column{Type: mysql.TypeShort, Value: 32767}, "smallint", JavaSQLTypeSMALLINT},
-	{&model.Column{Type: mysql.TypeShort, Value: 32767, Flag: model.UnsignedFlag}, "smallint unsigned", JavaSQLTypeSMALLINT},
-	{&model.Column{Type: mysql.TypeShort, Value: 32768, Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER},
+	{&model.Column{Type: mysql.TypeShort, Value: int64(32767)}, "smallint", JavaSQLTypeSMALLINT},
+	{&model.Column{Type: mysql.TypeShort, Value: uint64(32767), Flag: model.UnsignedFlag}, "smallint unsigned", JavaSQLTypeSMALLINT},
+	{&model.Column{Type: mysql.TypeShort, Value: uint64(32768), Flag: model.UnsignedFlag}, "smallint unsigned", JavaSQLTypeINTEGER},
 
-	{&model.Column{Type: mysql.TypeInt24, Value: 8388607}, "mediumint", JavaSQLTypeINTEGER},
-	{&model.Column{Type: mysql.TypeInt24, Value: 8388607, Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER},
-	{&model.Column{Type: mysql.TypeInt24, Value: 8388608, Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER},
+	{&model.Column{Type: mysql.TypeInt24, Value: int64(8388607)}, "mediumint", JavaSQLTypeINTEGER},
+	{&model.Column{Type: mysql.TypeInt24, Value: uint64(8388607), Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER},
+	{&model.Column{Type: mysql.TypeInt24, Value: uint64(8388608), Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER},
 
-	{&model.Column{Type: mysql.TypeLong, Value: 2147483647}, "int", JavaSQLTypeINTEGER},
-	{&model.Column{Type: mysql.TypeLong, Value: 2147483647, Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeINTEGER},
-	{&model.Column{Type: mysql.TypeLong, Value: 2147483648, Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeBIGINT},
+	{&model.Column{Type: mysql.TypeLong, Value: int64(2147483647)}, "int", JavaSQLTypeINTEGER},
+	{&model.Column{Type: mysql.TypeLong, Value: uint64(2147483647), Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeINTEGER},
+	{&model.Column{Type: mysql.TypeLong, Value: uint64(2147483648), Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeBIGINT},
 
-	{&model.Column{Type: mysql.TypeLonglong, Value: uint64(9223372036854775807)}, "bigint", JavaSQLTypeBIGINT},
-	{&model.Column{Type: mysql.TypeLonglong, Value: uint64(9223372036854775807), Flag: model.UnsignedFlag}, "decimal", JavaSQLTypeBIGINT},
-	{&model.Column{Type: mysql.TypeLonglong, Value: uint64(9223372036854775808), Flag: model.UnsignedFlag}, "decimal", JavaSQLTypeDECIMAL},
+	{&model.Column{Type: mysql.TypeLonglong, Value: int64(9223372036854775807)}, "bigint", JavaSQLTypeBIGINT},
+	{&model.Column{Type: mysql.TypeLonglong, Value: uint64(9223372036854775807), Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeBIGINT},
+	{&model.Column{Type: mysql.TypeLonglong, Value: uint64(9223372036854775808), Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeDECIMAL},
 
 	{&model.Column{Type: mysql.TypeFloat, Value: 3.14}, "float", JavaSQLTypeREAL},
 	{&model.Column{Type: mysql.TypeDouble, Value: 2.71}, "double", JavaSQLTypeDOUBLE},
 	{&model.Column{Type: mysql.TypeNewDecimal, Value: "2333"}, "decimal", JavaSQLTypeDECIMAL},
 
+	{&model.Column{Type: mysql.TypeFloat, Value: 3.14, Flag: model.UnsignedFlag}, "float unsigned", JavaSQLTypeREAL},
+	{&model.Column{Type: mysql.TypeDouble, Value: 2.71, Flag: model.UnsignedFlag}, "double unsigned", JavaSQLTypeDOUBLE},
+	{&model.Column{Type: mysql.TypeNewDecimal, Value: "2333", Flag: model.UnsignedFlag}, "decimal unsigned", JavaSQLTypeDECIMAL},
+
 	{&model.Column{Type: mysql.TypeVarchar, Value: []uint8("89504E470D0A1A0A")}, "varchar", JavaSQLTypeVARCHAR},
 	{&model.Column{Type: mysql.TypeString, Value: []uint8("89504E470D0A1A0A")}, "char", JavaSQLTypeCHAR},
-	{&model.Column{Type: mysql.TypeString, Value: []uint8(""), Flag: model.BinaryFlag}, "binary", JavaSQLTypeBLOB},
-	{&model.Column{Type: mysql.TypeVarchar, Value: []uint8(""), Flag: model.BinaryFlag}, "varbinary", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeString, Value: []uint8("89504E470D0A1A0A"), Flag: model.BinaryFlag}, "binary", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeVarchar, Value: []uint8("89504E470D0A1A0A"), Flag: model.BinaryFlag}, "varbinary", JavaSQLTypeBLOB},
 
-	{&model.Column{Type: mysql.TypeTinyBlob, Value: []uint8("")}, "tinytext", JavaSQLTypeCLOB},
-	{&model.Column{Type: mysql.TypeBlob, Value: []uint8("")}, "text", JavaSQLTypeCLOB},
-	{&model.Column{Type: mysql.TypeMediumBlob, Value: []uint8("")}, "mediumtext", JavaSQLTypeCLOB},
-	{&model.Column{Type: mysql.TypeLongBlob, Value: []uint8("")}, "longtext", JavaSQLTypeCLOB},
+	{&model.Column{Type: mysql.TypeTinyBlob, Value: []uint8("89504E470D0A1A0A")}, "tinytext", JavaSQLTypeCLOB},
+	{&model.Column{Type: mysql.TypeBlob, Value: []uint8("89504E470D0A1A0A")}, "text", JavaSQLTypeCLOB},
+	{&model.Column{Type: mysql.TypeMediumBlob, Value: []uint8("89504E470D0A1A0A")}, "mediumtext", JavaSQLTypeCLOB},
+	{&model.Column{Type: mysql.TypeLongBlob, Value: []uint8("89504E470D0A1A0A")}, "longtext", JavaSQLTypeCLOB},
 
-	{&model.Column{Type: mysql.TypeTinyBlob, Value: []uint8(""), Flag: model.BinaryFlag}, "tinyblob", JavaSQLTypeBLOB},
-	{&model.Column{Type: mysql.TypeBlob, Value: []uint8(""), Flag: model.BinaryFlag}, "blob", JavaSQLTypeBLOB},
-	{&model.Column{Type: mysql.TypeMediumBlob, Value: []uint8(""), Flag: model.BinaryFlag}, "mediumblob", JavaSQLTypeBLOB},
-	{&model.Column{Type: mysql.TypeLongBlob, Value: []uint8(""), Flag: model.BinaryFlag}, "longblob", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeTinyBlob, Value: []uint8("89504E470D0A1A0A"), Flag: model.BinaryFlag}, "tinyblob", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeBlob, Value: []uint8("89504E470D0A1A0A"), Flag: model.BinaryFlag}, "blob", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeMediumBlob, Value: []uint8("89504E470D0A1A0A"), Flag: model.BinaryFlag}, "mediumblob", JavaSQLTypeBLOB},
+	{&model.Column{Type: mysql.TypeLongBlob, Value: []uint8("89504E470D0A1A0A"), Flag: model.BinaryFlag}, "longblob", JavaSQLTypeBLOB},
 
 	{&model.Column{Type: mysql.TypeDate, Value: "2020-02-20"}, "date", JavaSQLTypeDATE},
 	{&model.Column{Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"}, "datetime", JavaSQLTypeTIMESTAMP},
-	{&model.Column{Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"}, "datetime", JavaSQLTypeTIMESTAMP},
+	{&model.Column{Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"}, "timestamp", JavaSQLTypeTIMESTAMP},
 	{&model.Column{Type: mysql.TypeDuration, Value: "02:20:20"}, "time", JavaSQLTypeTIME},
 	{&model.Column{Type: mysql.TypeYear, Value: "2020", Flag: model.UnsignedFlag}, "year", JavaSQLTypeVARCHAR},
 
