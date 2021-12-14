@@ -28,7 +28,7 @@ func TestFromString(t *testing.T) {
 	}{
 		{
 			protocol:    "random",
-			expectedErr: ".*unknown 'random' protocol.*",
+			expectedErr: ".*unknown 'random' protocol for Message Queue sink.*",
 		},
 		{
 			protocol:             "default",
