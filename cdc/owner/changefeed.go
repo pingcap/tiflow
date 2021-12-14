@@ -323,6 +323,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
+	// todo (Ling Jin) 12-14-6-14: figure out this ctx before merge the PR.
 	if err := c.sink.close(canceledCtx); err != nil {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
