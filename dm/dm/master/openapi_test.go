@@ -496,6 +496,33 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(resultTaskList.Total, check.Equals, 1)
 	c.Assert(resultTaskList.Data[0].Name, check.Equals, task.Name)
 
+	// test batch import task config
+	taskBatchImportURL := "/api/v1/task_configs/batch_import"
+	req := openapi.BatchImportTaskConfigRequest{Overwrite: false}
+	result = testutil.NewRequest().Post(taskBatchImportURL).WithJsonBody(req).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.Code(), check.Equals, http.StatusAccepted)
+	var resp openapi.BatchImportTaskConfigResponse
+	c.Assert(result.UnmarshalBodyToObject(&resp), check.IsNil)
+	c.Assert(resp.SuccessTaskList, check.HasLen, 1)
+	c.Assert(resp.SuccessTaskList[0], check.Equals, task.Name)
+	c.Assert(resp.FailedTaskList, check.HasLen, 0)
+
+	// import again without overwrite will fail
+	result = testutil.NewRequest().Post(taskBatchImportURL).WithJsonBody(req).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.Code(), check.Equals, http.StatusAccepted)
+	c.Assert(result.UnmarshalBodyToObject(&resp), check.IsNil)
+	c.Assert(resp.SuccessTaskList, check.HasLen, 0)
+	c.Assert(resp.FailedTaskList, check.HasLen, 1)
+	c.Assert(resp.FailedTaskList[0].TaskName, check.Equals, task.Name)
+
+	// import again with overwrite will success
+	req.Overwrite = true
+	result = testutil.NewRequest().Post(taskBatchImportURL).WithJsonBody(req).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.UnmarshalBodyToObject(&resp), check.IsNil)
+	c.Assert(resp.SuccessTaskList, check.HasLen, 1)
+	c.Assert(resp.SuccessTaskList[0], check.Equals, task.Name)
+	c.Assert(resp.FailedTaskList, check.HasLen, 0)
+
 	// pause and resume task
 	pauseTaskURL := fmt.Sprintf("%s/%s/pause", taskURL, task.Name)
 	result = testutil.NewRequest().Post(pauseTaskURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
@@ -632,6 +659,112 @@ func (t *openAPISuite) TestClusterAPI(c *check.C) {
 	c.Assert(resultWorkers.Total, check.Equals, 0)
 
 	cancel1()
+}
+
+func (t *openAPISuite) TestTaskConfigsAPI(c *check.C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	s := setupServer(ctx, c)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
+	checker.CheckSyncConfigFunc = mockCheckSyncConfig
+	defer func() {
+		checker.CheckSyncConfigFunc = checker.CheckSyncConfig
+		cancel()
+		s.Close()
+		c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
+	}()
+
+	dbCfg := config.GetDBConfigForTest()
+	source1 := openapi.Source{
+		SourceName: source1Name,
+		EnableGtid: false,
+		Host:       dbCfg.Host,
+		Password:   dbCfg.Password,
+		Port:       dbCfg.Port,
+		User:       dbCfg.User,
+	}
+	// create source
+	sourceURL := "/api/v1/sources"
+	result := testutil.NewRequest().Post(sourceURL).WithJsonBody(source1).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	// check http status code
+	c.Assert(result.Code(), check.Equals, http.StatusCreated)
+
+	// create task config template
+	url := "/api/v1/task_configs"
+
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	c.Assert(err, check.IsNil)
+	// use a valid target db
+	task.TargetConfig.Host = dbCfg.Host
+	task.TargetConfig.Port = dbCfg.Port
+	task.TargetConfig.User = dbCfg.User
+	task.TargetConfig.Password = dbCfg.Password
+
+	// create one
+	result = testutil.NewRequest().Post(url).WithJsonBody(task).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.Code(), check.Equals, http.StatusCreated)
+	var createTaskResp openapi.Task
+	err = result.UnmarshalBodyToObject(&createTaskResp)
+	c.Assert(err, check.IsNil)
+	c.Assert(task.Name, check.Equals, createTaskResp.Name)
+
+	// create again will fail
+	result = testutil.NewRequest().Post(url).WithJsonBody(task).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.Code(), check.Equals, http.StatusBadRequest)
+	var errResp openapi.ErrorWithMessage
+	err = result.UnmarshalBodyToObject(&errResp)
+	c.Assert(err, check.IsNil)
+	c.Assert(errResp.ErrorCode, check.Equals, int(terror.ErrOpenAPITaskConfigExist.Code()))
+
+	// list templates
+	result = testutil.NewRequest().Get(url).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	var resultTaskList openapi.GetTaskListResponse
+	err = result.UnmarshalBodyToObject(&resultTaskList)
+	c.Assert(err, check.IsNil)
+	c.Assert(resultTaskList.Total, check.Equals, 1)
+	c.Assert(resultTaskList.Data[0].Name, check.Equals, task.Name)
+
+	// get detail
+	oneURL := fmt.Sprintf("%s/%s", url, task.Name)
+	result = testutil.NewRequest().Get(oneURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	var respTask openapi.Task
+	err = result.UnmarshalBodyToObject(&respTask)
+	c.Assert(err, check.IsNil)
+	c.Assert(respTask.Name, check.Equals, task.Name)
+
+	// get not exist
+	notExistURL := fmt.Sprintf("%s/%s", url, "notexist")
+	result = testutil.NewRequest().Get(notExistURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.Code(), check.Equals, http.StatusBadRequest)
+	err = result.UnmarshalBodyToObject(&errResp)
+	c.Assert(err, check.IsNil)
+	c.Assert(errResp.ErrorCode, check.Equals, int(terror.ErrOpenAPITaskConfigNotExist.Code()))
+
+	// update
+	task.TaskMode = openapi.TaskTaskModeAll
+	result = testutil.NewRequest().Put(oneURL).WithJsonBody(task).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	err = result.UnmarshalBodyToObject(&respTask)
+	c.Assert(err, check.IsNil)
+	c.Assert(respTask.Name, check.Equals, task.Name)
+
+	// update not exist will fail
+	task.Name = "notexist"
+	result = testutil.NewRequest().Put(notExistURL).WithJsonBody(task).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.Code(), check.Equals, http.StatusBadRequest)
+	err = result.UnmarshalBodyToObject(&errResp)
+	c.Assert(err, check.IsNil)
+	c.Assert(errResp.ErrorCode, check.Equals, int(terror.ErrOpenAPITaskConfigNotExist.Code()))
+
+	// delete task config template
+	result = testutil.NewRequest().Delete(oneURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.Code(), check.Equals, http.StatusNoContent)
+	result = testutil.NewRequest().Get(url).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	err = result.UnmarshalBodyToObject(&resultTaskList)
+	c.Assert(err, check.IsNil)
+	c.Assert(resultTaskList.Total, check.Equals, 0)
 }
 
 func setupServer(ctx context.Context, c *check.C) *Server {

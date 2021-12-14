@@ -31,6 +31,21 @@ const (
 	TaskTaskModeIncremental TaskTaskMode = "incremental"
 )
 
+// BatchImportTaskConfigRequest defines model for BatchImportTaskConfigRequest.
+type BatchImportTaskConfigRequest struct {
+	// whether to overwrite task config template
+	Overwrite bool `json:"overwrite"`
+}
+
+// BatchImportTaskConfigResponse defines model for BatchImportTaskConfigResponse.
+type BatchImportTaskConfigResponse struct {
+	FailedTaskList []struct {
+		ErrorMsg string `json:"error_msg"`
+		TaskName string `json:"task_name"`
+	} `json:"failed_task_list"`
+	SuccessTaskList []string `json:"success_task_list"`
+}
+
 // ClusterMaster defines model for ClusterMaster.
 type ClusterMaster struct {
 	// address of the current master node
@@ -522,6 +537,12 @@ type DMAPIStopRelayJSONBody StopRelayRequest
 // DMAPITransferSourceJSONBody defines parameters for DMAPITransferSource.
 type DMAPITransferSourceJSONBody WorkerNameRequest
 
+// DMAPICreateTaskConfigJSONBody defines parameters for DMAPICreateTaskConfig.
+type DMAPICreateTaskConfigJSONBody Task
+
+// DMAPIBatchImportTaskConfigJSONBody defines parameters for DMAPIBatchImportTaskConfig.
+type DMAPIBatchImportTaskConfigJSONBody BatchImportTaskConfigRequest
+
 // DMAPIStartTaskJSONBody defines parameters for DMAPIStartTask.
 type DMAPIStartTaskJSONBody CreateTaskRequest
 
@@ -557,6 +578,12 @@ type DMAPIStopRelayJSONRequestBody DMAPIStopRelayJSONBody
 
 // DMAPITransferSourceJSONRequestBody defines body for DMAPITransferSource for application/json ContentType.
 type DMAPITransferSourceJSONRequestBody DMAPITransferSourceJSONBody
+
+// DMAPICreateTaskConfigJSONRequestBody defines body for DMAPICreateTaskConfig for application/json ContentType.
+type DMAPICreateTaskConfigJSONRequestBody DMAPICreateTaskConfigJSONBody
+
+// DMAPIBatchImportTaskConfigJSONRequestBody defines body for DMAPIBatchImportTaskConfig for application/json ContentType.
+type DMAPIBatchImportTaskConfigJSONRequestBody DMAPIBatchImportTaskConfigJSONBody
 
 // DMAPIStartTaskJSONRequestBody defines body for DMAPIStartTask for application/json ContentType.
 type DMAPIStartTaskJSONRequestBody DMAPIStartTaskJSONBody
