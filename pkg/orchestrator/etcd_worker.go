@@ -20,12 +20,14 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/etcdserver/etcdserverpb"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -145,18 +147,47 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
 			}
+<<<<<<< HEAD
 			lastReceivedEventTime = time.Now()
+=======
+
+			// ProgressNotify implies no new events.
+			if response.IsProgressNotify() {
+				log.Debug("Etcd progress notification",
+					zap.Int64("revision", response.Header.GetRevision()))
+				// Note that we don't need to update the revision here, and we
+				// should not do so, because the revision of the progress notification
+				// may not satisfy the strict monotonicity we have expected.
+				//
+				// Updating `worker.revision` can cause a useful event with the
+				// same revision to be dropped erroneously.
+				//
+				// Refer to https://etcd.io/docs/v3.3/dev-guide/interacting_v3/#watch-progress
+				// "Note: The revision number in the progress notify response is the revision
+				// from the local etcd server node that the watch stream is connected to. [...]"
+				// This implies that the progress notification will NOT go through the raft
+				// consensus, thereby NOT affecting the revision (index).
+				continue
+			}
+>>>>>>> 06547d9f9 (etcd_worker: fix missed watch events caused by progress notifications (#3848))
 
 			// Check whether the response is stale.
 			if worker.revision >= response.Header.GetRevision() {
+				log.Info("Stale Etcd event dropped",
+					zap.Int64("event-revision", response.Header.GetRevision()),
+					zap.Int64("previous-revision", worker.revision),
+					zap.Any("events", response.Events))
 				continue
 			}
 			worker.revision = response.Header.GetRevision()
+<<<<<<< HEAD
 
 			// ProgressNotify implies no new events.
 			if response.IsProgressNotify() {
 				continue
 			}
+=======
+>>>>>>> 06547d9f9 (etcd_worker: fix missed watch events caused by progress notifications (#3848))
 
 			for _, event := range response.Events {
 				// handleEvent will apply the event to our internal `rawState`.
@@ -344,7 +375,30 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 		panic("unreachable")
 	}
 
+<<<<<<< HEAD
 	resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
+=======
+	worker.metrics.metricEtcdTxnSize.Observe(float64(size))
+	startTime := time.Now()
+
+	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
+	resp, err := worker.client.Txn(txnCtx).If(cmps...).Then(ops...).Commit()
+	cancel()
+
+	// For testing the situation where we have a progress notification that
+	// has the same revision as the committed Etcd transaction.
+	failpoint.Inject("InjectProgressRequestAfterCommit", func() {
+		if err := worker.client.RequestProgress(ctx); err != nil {
+			failpoint.Return(errors.Trace(err))
+		}
+	})
+
+	costTime := time.Since(startTime)
+	if costTime > etcdWorkerLogsWarnDuration {
+		log.Warn("Etcd transaction took too long", zap.Duration("duration", costTime))
+	}
+	worker.metrics.metricEtcdTxnDuration.Observe(costTime.Seconds())
+>>>>>>> 06547d9f9 (etcd_worker: fix missed watch events caused by progress notifications (#3848))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -355,6 +409,8 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 		return nil
 	}
 
+	// Logs the conditions for the failed Etcd transaction.
+	worker.logEtcdCmps(cmps)
 	return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 }
 
@@ -370,19 +426,34 @@ func (worker *EtcdWorker) applyUpdates() error {
 	return nil
 }
 
-func logEtcdOps(ops []clientv3.Op, commited bool) {
-	if log.GetLevel() != zapcore.DebugLevel || len(ops) == 0 {
+func logEtcdOps(ops []clientv3.Op, committed bool) {
+	if committed && (log.GetLevel() != zapcore.DebugLevel || len(ops) == 0) {
 		return
 	}
-	log.Debug("[etcd worker] ==========Update State to ETCD==========")
+	logFn := log.Debug
+	if !committed {
+		logFn = log.Info
+	}
+
+	logFn("[etcd worker] ==========Update State to ETCD==========")
 	for _, op := range ops {
 		if op.IsDelete() {
-			log.Debug("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
+			logFn("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
 		} else {
-			log.Debug("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
+			logFn("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
 		}
 	}
-	log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
+	logFn("[etcd worker] ============State Commit=============", zap.Bool("committed", committed))
+}
+
+func (worker *EtcdWorker) logEtcdCmps(cmps []clientv3.Cmp) {
+	log.Info("[etcd worker] ==========Failed Etcd Txn Cmps==========")
+	for _, cmp := range cmps {
+		cmp := etcdserverpb.Compare(cmp)
+		log.Info("[etcd worker] compare",
+			zap.String("cmp", cmp.String()))
+	}
+	log.Info("[etcd worker] ============End Failed Etcd Txn Cmps=============")
 }
 
 func (worker *EtcdWorker) cleanUp() {
