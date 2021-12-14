@@ -48,10 +48,6 @@ func init() {
 	// Sorter metrics
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
-<<<<<<< HEAD
-=======
 	leveldb.InitMetrics(registry)
 	redowriter.InitMetrics(registry)
-	db.InitMetrics(registry)
->>>>>>> 958f142e6 ( redolog: add metric (#3481))
 }
