@@ -204,7 +204,7 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			return
 		case response := <-watchCh:
 			lastReceivedResponseTime = c.clock.Now()
-			if response.Err() == nil {
+			if response.Err() == nil && !response.IsProgressNotify() {
 				lastRevision = response.Header.Revision
 			}
 
