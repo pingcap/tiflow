@@ -15,7 +15,7 @@ package security
 
 import "os"
 
-// All these certificate and key are use for testing only.
+// All these certificates or keys are use for testing only.
 var certPem = `-----BEGIN CERTIFICATE-----
 MIIDjzCCAnegAwIBAgIUWBTDQm4xOYDxZBTkpCQouREtT8QwDQYJKoZIhvcNAQEL
 BQAwVzELMAkGA1UEBhMCQ04xEDAOBgNVBAgTB0JlaWppbmcxEDAOBgNVBAcTB0Jl
