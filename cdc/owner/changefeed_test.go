@@ -354,6 +354,7 @@ func (s *changefeedSuite) TestFinished(c *check.C) {
 }
 
 func (s *changefeedSuite) TestAddSpecialComment(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCase := []struct {
 		input  string
 		result string
