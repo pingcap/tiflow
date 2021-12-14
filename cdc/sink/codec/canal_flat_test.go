@@ -111,6 +111,10 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	})
 	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
 	c.Assert(err, check.IsNil)
+
+	encodedBinaryBlob, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("你好，世界"))
+	c.Assert(err, check.IsNil)
+
 	c.Assert(msg.Data, check.DeepEquals, []map[string]interface{}{
 		{
 			"id":           "1",
@@ -119,7 +123,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 			"comment":      "测试",
 			"blob":         string(encodedBytes),
 			"binaryString": "Chengdu International Airport",
-			"binaryBlob":   "你好，世界",
+			"binaryBlob":   string(encodedBinaryBlob),
 		},
 	})
 	c.Assert(msg.Old, check.DeepEquals, []map[string]interface{}{
@@ -130,7 +134,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 			"comment":      "测试",
 			"blob":         string(encodedBytes),
 			"binaryString": "Chengdu International Airport",
-			"binaryBlob":   "你好，世界",
+			"binaryBlob":   string(encodedBinaryBlob),
 		},
 	})
 
@@ -151,6 +155,8 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 
 	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
 	c.Assert(err, check.IsNil)
+	encodedBinaryBlob, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("你好，世界"))
+	c.Assert(err, check.IsNil)
 	expected := map[string]interface{}{
 		"id":           "1",
 		"name":         "Bob",
@@ -158,7 +164,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 		"comment":      "测试",
 		"blob":         string(encodedBytes),
 		"binaryString": "Chengdu International Airport",
-		"binaryBlob":   "你好，世界",
+		"binaryBlob":   string(encodedBinaryBlob),
 	}
 
 	for _, encodeEnable := range []bool{false, true} {
