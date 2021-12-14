@@ -336,9 +336,7 @@ func (l *LightningLoader) Resume(ctx context.Context, pr chan pb.ProcessResult) 
 		l.logger.Warn("try to resume, but already closed")
 		return
 	}
-	l.Lock()
 	l.core = lightning.New(l.lightningGlobalConfig)
-	l.Unlock()
 	// continue the processing
 	l.Process(ctx, pr)
 }
