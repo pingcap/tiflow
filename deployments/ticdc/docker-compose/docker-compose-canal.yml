@@ -325,6 +325,9 @@ services:
 
   canal-adapter:
     image: slpcat/canal-adapter:v1.1.5-jdk8
+    build:
+      context: ../../../scripts/canal/docker
+      dockerfile: ./Dockerfile
     ports:
       - 8081:8081
     volumes:
