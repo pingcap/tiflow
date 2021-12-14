@@ -70,6 +70,16 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 					)`
 	case *canal.SingleTableTask:
 		// todo: add `t_year      YEAR,`
+
+		//t_tinytext   TINYTEXT
+
+		//t_mediumtext MEDIUMTEXT,
+		//t_longtext   LONGTEXT,
+		//
+		//t_tinyblob   TINYBLOB,
+
+		//t_mediumblob MEDIUMBLOB,
+		//t_longblob   LONGBLOB,
 		createDBQuery = `create table test (
 						id          INT,
 						t_boolean   BOOLEAN,
@@ -89,20 +99,13 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_timestamp TIMESTAMP NULL,
 						t_time      TIME,
 
+						t_text       TEXT,
+						t_blob       BLOB,
+
 						t_char      CHAR,
 						t_varchar   VARCHAR(10),
 						t_binary    BINARY(16),
 						t_varbinary VARBINARY(16),
-
-						t_tinytext   TINYTEXT,
-						t_text       TEXT,
-						t_mediumtext MEDIUMTEXT,
-						t_longtext   LONGTEXT,
-
-						t_tinyblob   TINYBLOB,
-						t_blob       BLOB,
-						t_mediumblob MEDIUMBLOB,
-						t_longblob   LONGBLOB,
 
 						t_enum      ENUM ('enum1', 'enum2', 'enum3'),
 						t_set       SET ('a', 'b', 'c'),
@@ -190,13 +193,13 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["t_binary"] = []byte{0x1, 0x2, 0x0, 0x3}
 		data["t_varbinary"] = []byte{0x1, 0x2, 0x0, 0x3}
 
-		data["t_tinytext"] = "测试tinytext"
-		data["t_mediumtext"] = "测试mediumtext"
-		data["t_longtext"] = "测试longtext"
-
-		data["t_tinyblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
-		data["t_mediumblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
-		data["t_longblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
+		//data["t_tinytext"] = "测试tinytext"
+		//data["t_mediumtext"] = "测试mediumtext"
+		//data["t_longtext"] = "测试longtext"
+		//
+		//data["t_tinyblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
+		//data["t_mediumblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
+		//data["t_longblob"] = []byte{0x1, 0x2, 0x0, 0x3, 0x4}
 	}
 
 	return table.Insert(data).Send().Wait().Check()
