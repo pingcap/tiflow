@@ -381,6 +381,14 @@ func collectAllColumns(groups []*testColumnTuple) []*model.Column {
 	return result
 }
 
+func collectDecodeValueByColumns(columns []*model.Column) map[string]interface{} {
+	result := make(map[string]interface{}, len(columns))
+	for _, item := range columns {
+		result[item.Name] = item.Value
+	}
+	return result
+}
+
 var testColumnsTable = []*testColumnTuple{
 	{&model.Column{Name: "tinyint", Type: mysql.TypeTiny, Value: int64(127)}, "tinyint", JavaSQLTypeTINYINT, "127"}, // TinyInt
 	{&model.Column{Name: "tinyint unsigned", Type: mysql.TypeTiny, Value: uint64(127), Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeTINYINT, "127"},
@@ -446,19 +454,3 @@ func (s *canalEntrySuite) TestGetMySQLTypeAndJavaSQLType(c *check.C) {
 		c.Assert(obtainedJavaSQLType, check.Equals, item.expectedJavaSQLType)
 	}
 }
-
-//func (s *canalEntrySuite) TestFormatValue(c *check.C) {
-//	decoder := charmap.ISO8859_1.NewDecoder()
-//
-//	javaResult := []byte("\u0089PNG\r\n\u001A\n")
-//	result, err := decoder.Bytes(javaResult)
-//	c.Assert(err, check.IsNil)
-//	a := string(result)
-//
-//	golangResult := []byte("PNG\r\n\u001a\n")
-//	result, err = decoder.Bytes(golangResult)
-//	c.Assert(err, check.IsNil)
-//	b := string(result)
-//
-//	c.Assert(a, check.Equals, b)
-//}

@@ -148,25 +148,12 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
-	c.Assert(err, check.IsNil)
-	encodedBinaryBlob, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("你好，世界"))
-	c.Assert(err, check.IsNil)
-	expected := map[string]interface{}{
-		"id":           "1",
-		"name":         "Bob",
-		"tiny":         "255",
-		"comment":      "测试",
-		"blob":         string(encodedBytes),
-		"binaryString": "Chengdu International Airport",
-		"binaryBlob":   string(encodedBinaryBlob),
-	}
-
+	expectedDecodedValues := collectDecodeValueByColumns(testCaseInsert.Columns)
 	for _, encodeEnable := range []bool{false, true} {
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
 		c.Assert(encoder, check.NotNil)
 
-		result, err := encoder.AppendRowChangedEvent(testCaseUpdate)
+		result, err := encoder.AppendRowChangedEvent(testCaseInsert)
 		c.Assert(err, check.IsNil)
 		c.Assert(result, check.Equals, EncoderNoOperation)
 
@@ -199,7 +186,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 			}
 
 			for _, col := range consumed.Columns {
-				value, ok := expected[col.Name]
+				value, ok := expectedDecodedValues[col.Name]
 				c.Assert(ok, check.IsTrue)
 
 				if val, ok := col.Value.([]byte); ok {
