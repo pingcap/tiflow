@@ -81,6 +81,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_timestamp TIMESTAMP NULL,
 						t_time      TIME,
 						t_char      CHAR,
+						t_year      YEAR,
 						t_varchar   VARCHAR(10),
 						t_blob      BLOB,
 						t_text      TEXT,
