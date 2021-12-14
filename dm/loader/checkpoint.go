@@ -512,11 +512,7 @@ func (cp *LightningCheckpointList) Prepare(ctx context.Context) error {
 	if err != nil {
 		return terror.WithScope(terror.Annotate(err, "initialize connection when prepare"), terror.ScopeDownstream)
 	}
-	defer func() {
-		if err1 := cp.db.CloseBaseConn(connection); err1 != nil {
-			log.L().Warn("close db connection failed", zap.Error(err1))
-		}
-	}()
+	defer conn.CloseBaseConnWithoutErr(cp.db, connection)
 
 	createSchema := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", cp.schema)
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
@@ -541,11 +537,7 @@ func (cp *LightningCheckpointList) RegisterCheckPoint(ctx context.Context) error
 	if err != nil {
 		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
 	}
-	defer func() {
-		if err1 := cp.db.CloseBaseConn(connection); err1 != nil {
-			log.L().Warn("close db connection failed", zap.Error(err1))
-		}
-	}()
+	defer conn.CloseBaseConnWithoutErr(cp.db, connection)
 
 	sql := fmt.Sprintf("INSERT IGNORE INTO %s (`task_name`, `source_name`) VALUES (?, ?)", cp.tableName)
 	cp.logger.Info("initial checkpoint record",
@@ -565,11 +557,7 @@ func (cp *LightningCheckpointList) UpdateStatus(ctx context.Context, status ligh
 	if err != nil {
 		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
 	}
-	defer func() {
-		if err1 := cp.db.CloseBaseConn(connection); err1 != nil {
-			log.L().Warn("close db connection failed", zap.Error(err1))
-		}
-	}()
+	defer conn.CloseBaseConnWithoutErr(cp.db, connection)
 
 	sql := fmt.Sprintf("UPDATE %s set status = ? WHERE `task_name` = ? AND `source_name` = ?", cp.tableName)
 	cp.logger.Info("update lightning loader status",
@@ -589,11 +577,7 @@ func (cp *LightningCheckpointList) taskStatus(ctx context.Context) (lightingLoad
 	if err != nil {
 		return lightningStatusInit, terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
 	}
-	defer func() {
-		if err1 := cp.db.CloseBaseConn(connection); err1 != nil {
-			log.L().Warn("close db connection failed", zap.Error(err1))
-		}
-	}()
+	defer conn.CloseBaseConnWithoutErr(cp.db, connection)
 
 	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", cp.tableName)
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
@@ -618,11 +602,7 @@ func (cp *LightningCheckpointList) RemoveTaskCheckPoint(ctx context.Context) err
 	if err != nil {
 		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
 	}
-	defer func() {
-		if err1 := cp.db.CloseBaseConn(connection); err1 != nil {
-			log.L().Warn("close db connection failed", zap.Error(err1))
-		}
-	}()
+	defer conn.CloseBaseConnWithoutErr(cp.db, connection)
 
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
 	query := fmt.Sprintf("DELETE from %s where `task_name`=?", cp.tableName)

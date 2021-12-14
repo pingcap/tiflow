@@ -150,6 +150,9 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	taskCtx, cancel := context.WithCancel(ctx)
 	l.cancel = cancel
 	l.Unlock()
+	if err := l.checkPointList.UpdateStatus(ctx, lightningStatusRunning); err != nil {
+		return err
+	}
 	err := l.core.RunOnce(taskCtx, cfg, nil)
 	failpoint.Inject("LightningLoadDataSlowDown", nil)
 	failpoint.Inject("LightningLoadDataSlowDownByTask", func(val failpoint.Value) {
