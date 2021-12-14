@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/pingcap/check"
@@ -31,7 +30,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/ticdc/pkg/version"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
@@ -287,7 +285,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickThreeTime()
 	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
-	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "CREATE TABLE test1.test1(id int primary key)")
+	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "CREATE TABLE test1.test1 (id int PRIMARY KEY)")
 
 	// executing the ddl finished
 	mockAsyncSink.ddlDone = true
@@ -355,7 +353,7 @@ func (s *changefeedSuite) TestFinished(c *check.C) {
 	c.Assert(state.Info.State, check.Equals, model.StateFinished)
 }
 
-func TestAddSpecialComment(t *testing.T) {
+func (s *changefeedSuite) TestAddSpecialComment(c *check.C) {
 	testCase := []struct {
 		input  string
 		result string
@@ -488,10 +486,10 @@ func TestAddSpecialComment(t *testing.T) {
 	}
 	for _, ca := range testCase {
 		re, err := addSpecialComment(ca.input)
-		require.Nil(t, err)
-		require.Equal(t, ca.result, re)
+		c.Check(err, check.IsNil)
+		c.Check(re, check.Equals, ca.result)
 	}
-	require.Panics(t, func() {
+	c.Assert(func() {
 		_, _ = addSpecialComment("alter table t force, auto_increment = 12;alter table t force, auto_increment = 12;")
-	})
+	}, check.Panics, "invalid ddlQuery statement size")
 }
