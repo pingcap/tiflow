@@ -24,7 +24,7 @@ import (
 )
 
 // feedStateManager manages the ReactorState of a changefeed
-// when a error or a admin job occurs, the feedStateManager is responsible for controlling the ReactorState
+// when an error or an admin job occurs, the feedStateManager is responsible for controlling the ReactorState
 type feedStateManager struct {
 	state           *model.ChangefeedReactorState
 	shouldBeRunning bool
@@ -53,7 +53,7 @@ func (m *feedStateManager) Tick(state *model.ChangefeedReactorState) {
 		return
 	}
 	errs := m.errorsReportedByProcessors()
-	m.HandleError(errs...)
+	m.handleError(errs...)
 }
 
 func (m *feedStateManager) ShouldRunning() bool {
@@ -257,26 +257,32 @@ func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
 	return result
 }
 
-func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
+func (m *feedStateManager) handleError(errs ...*model.RunningError) {
+	// if there are a fastFail error in errs, we can just fastFail the changefeed
+	// and no need to patch other error to the changefeed info
+	for _, err := range errs {
+		if cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code)) {
+			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+				info.Error = err
+				info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
+				info.CleanUpOutdatedErrorHistory()
+				return info, true, nil
+			})
+			m.shouldBeRunning = false
+			m.patchState(model.StateFailed)
+			return
+		}
+	}
+
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		for _, err := range errs {
 			info.Error = err
 			info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 		}
-		needSave := info.CleanUpOutdatedErrorHistory()
-		return info, needSave || len(errs) > 0, nil
+		changed := info.CleanUpOutdatedErrorHistory()
+		return info, changed || len(errs) > 0, nil
 	})
-	var err *model.RunningError
-	if len(errs) > 0 {
-		err = errs[len(errs)-1]
-	}
-	// if one of the error stored by changefeed state(error in the last tick) or the error specified by this function(error in the this tick)
-	// is a fast-fail error, the changefeed should be failed
-	if m.state.Info.HasFastFailError() || (err != nil && cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code))) {
-		m.shouldBeRunning = false
-		m.patchState(model.StateFailed)
-		return
-	}
+
 	// if the number of errors has reached the error threshold, stop the changefeed
 	if m.state.Info.ErrorsReachedThreshold() {
 		m.shouldBeRunning = false

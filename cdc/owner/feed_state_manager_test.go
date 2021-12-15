@@ -24,8 +24,7 @@ import (
 
 var _ = check.Suite(&feedStateManagerSuite{})
 
-type feedStateManagerSuite struct {
-}
+type feedStateManagerSuite struct{}
 
 func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	defer testleak.AfterTest(c)()

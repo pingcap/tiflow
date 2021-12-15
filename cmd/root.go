@@ -21,6 +21,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "cdc",
+	Args:  cobra.NoArgs,
 	Short: "CDC",
 	Long:  `Change Data Capture`,
 }

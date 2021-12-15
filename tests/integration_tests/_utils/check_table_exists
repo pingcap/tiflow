@@ -1,0 +1,29 @@
+#!/bin/bash
+# parameter 1: schema.table
+# parameter 2: database host
+# parameter 3: database port
+# parameter 4: max check times
+
+if [ $# -ge 4 ]; then
+	check_time=$4
+else
+	check_time=60
+fi
+
+i=0
+while [ $i -lt $check_time ]; do
+	mysql -h$2 -P$3 -uroot -e "show create table $1" >/dev/null 2>&1
+	ret=$?
+	if [ "$ret" == 0 ]; then
+		echo "table $1 exists"
+		break
+	fi
+	((i++))
+	echo "table $1 not exists for $i-th check, retry later"
+	sleep 2
+done
+
+if [ $i -ge $check_time ]; then
+	echo "table $1 not exists at last check"
+	exit 1
+fi

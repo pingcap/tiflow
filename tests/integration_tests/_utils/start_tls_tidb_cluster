@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# --workdir: work directory
+# --tlsdir: certificates directory
+# --retry: retry times
+
+set -e
+
+OUT_DIR=
+TLS_DIR=
+retry_times=3
+
+while [[ ${1} ]]; do
+	case "${1}" in
+	--workdir)
+		OUT_DIR=${2}
+		shift
+		;;
+	--tlsdir)
+		TLS_DIR=${2}
+		shift
+		;;
+	--retry)
+		retry_times=${2}
+		shift
+		;;
+	*)
+		echo "Unknown parameter: ${1}" >&2
+		exit 1
+		;;
+	esac
+
+	if ! shift; then
+		echo 'Missing parameter argument.' >&2
+		exit 1
+	fi
+done
+
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source $CUR/../_utils/test_prepare
+
+set +e
+i=1
+while [ $i -le $retry_times ]; do
+	echo "The ${i} times to try to start tls tidb cluster..."
+
+	start_tls_tidb_cluster_impl --workdir ${OUT_DIR} --tlsdir ${TLS_DIR}
+
+	if [ $? -eq 0 ]; then
+		break
+	fi
+	let i++
+	echo "start tls tidb cluster failed"
+done

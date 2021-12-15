@@ -36,7 +36,7 @@ const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes
-	DefaultMaxMessageBytes int = 64 * 1024 * 1024 // 64M
+	DefaultMaxMessageBytes int = 1 * 1024 * 1024 // 1M
 	// DefaultMaxBatchSize sets the default value for max-batch-size
 	DefaultMaxBatchSize int = 16
 )
@@ -377,12 +377,6 @@ func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, er
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	// Some transactions could generate empty row change event, such as
-	// begin; insert into t (id) values (1); delete from t where id=1; commit;
-	// Just ignore these row changed events
-	if len(e.Columns) == 0 && len(e.PreColumns) == 0 {
-		return EncoderNoOperation, nil
-	}
 	keyMsg, valueMsg := rowEventToMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -405,6 +399,15 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		d.valueBuf.Write(valueLenByte[:])
 		d.valueBuf.Write(value)
 	} else {
+		// for single message that longer than max-message-size, do not send it.
+		// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
+		length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
+		if length > d.maxKafkaMessageSize {
+			log.Warn("Single message too large",
+				zap.Int("max-message-size", d.maxKafkaMessageSize), zap.Int("length", length), zap.Any("table", e.Table))
+			return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
+		}
+
 		if len(d.messageBuf) == 0 ||
 			d.curBatchSize >= d.maxBatchSize ||
 			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxKafkaMessageSize {
@@ -427,7 +430,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 		if message.Length() > d.maxKafkaMessageSize {
 			// `len(d.messageBuf) == 1` is implied
-			log.Warn("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
+			log.Debug("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
 				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxKafkaMessageSize))
 		}
 		d.curBatchSize++

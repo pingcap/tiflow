@@ -1,0 +1,70 @@
+#!/bin/bash
+
+# --workdir: work directory
+# --tidb-config: path to tidb config file
+# --retry: retry times
+
+set -e
+
+OUT_DIR=
+tidb_config=
+pd_config=
+retry_times=3
+multiple_upstream_pd="false"
+
+while [[ ${1} ]]; do
+	case "${1}" in
+	--workdir)
+		OUT_DIR=${2}
+		shift
+		;;
+	--tidb-config)
+		tidb_config=${2}
+		shift
+		;;
+	--pd-config)
+		pd_config=${2}
+		shift
+		;;
+	--retry)
+		retry_times=${2}
+		shift
+		;;
+	--multiple-upstream-pd)
+		multiple_upstream_pd=${2}
+		shift
+		;;
+	*)
+		echo "Unknown parameter: ${1}" >&2
+		exit 1
+		;;
+	esac
+
+	if ! shift; then
+		echo 'Missing parameter argument.' >&2
+		exit 1
+	fi
+done
+
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source $CUR/../_utils/test_prepare
+
+set +e
+i=1
+while [ $i -le $retry_times ]; do
+	echo "The ${i} times to try to start tidb cluster..."
+
+	if [[ "$tidb_config" != "" ]]; then
+		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --tidb-config ${tidb_config}
+	elif [[ "$pd_config" != "" ]]; then
+		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --pd-config ${pd_config}
+	else
+		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd}
+	fi
+
+	if [ $? -eq 0 ]; then
+		break
+	fi
+	let i++
+	echo "start tidb cluster failed"
+done

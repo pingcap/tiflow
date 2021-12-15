@@ -74,5 +74,5 @@ EOF
 bash ./bin/startup.sh
 
 while true; do
-  sleep 30000
+	sleep 30000
 done

@@ -74,3 +74,37 @@ func (s *helperSuite) TestIsRetryableError(c *check.C) {
 		c.Assert(ret, check.Equals, tt.want, check.Commentf("case:%s", tt.name))
 	}
 }
+
+func (s *helperSuite) TestChangefeedFastFailError(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	err := ErrGCTTLExceeded.FastGenByArgs()
+	rfcCode, _ := RFCCode(err)
+	c.Assert(ChangefeedFastFailError(err), check.IsTrue)
+	c.Assert(ChangefeedFastFailErrorCode(rfcCode), check.IsTrue)
+
+	err = ErrGCTTLExceeded.GenWithStack("aa")
+	rfcCode, _ = RFCCode(err)
+	c.Assert(ChangefeedFastFailError(err), check.IsTrue)
+	c.Assert(ChangefeedFastFailErrorCode(rfcCode), check.IsTrue)
+
+	err = ErrGCTTLExceeded.Wrap(errors.New("aa"))
+	rfcCode, _ = RFCCode(err)
+	c.Assert(ChangefeedFastFailError(err), check.IsTrue)
+	c.Assert(ChangefeedFastFailErrorCode(rfcCode), check.IsTrue)
+
+	err = ErrSnapshotLostByGC.FastGenByArgs()
+	rfcCode, _ = RFCCode(err)
+	c.Assert(ChangefeedFastFailError(err), check.IsTrue)
+	c.Assert(ChangefeedFastFailErrorCode(rfcCode), check.IsTrue)
+
+	err = ErrStartTsBeforeGC.FastGenByArgs()
+	rfcCode, _ = RFCCode(err)
+	c.Assert(ChangefeedFastFailError(err), check.IsTrue)
+	c.Assert(ChangefeedFastFailErrorCode(rfcCode), check.IsTrue)
+
+	err = ErrToTLSConfigFailed.FastGenByArgs()
+	rfcCode, _ = RFCCode(err)
+	c.Assert(ChangefeedFastFailError(err), check.IsFalse)
+	c.Assert(ChangefeedFastFailErrorCode(rfcCode), check.IsFalse)
+}

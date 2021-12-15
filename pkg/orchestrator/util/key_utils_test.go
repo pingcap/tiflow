@@ -24,8 +24,7 @@ func Test(t *testing.T) { check.TestingT(t) }
 
 var _ = check.Suite(&keyUtilsSuite{})
 
-type keyUtilsSuite struct {
-}
+type keyUtilsSuite struct{}
 
 func (s *keyUtilsSuite) TestEtcdKey(c *check.C) {
 	defer testleak.AfterTest(c)()

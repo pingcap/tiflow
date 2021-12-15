@@ -30,21 +30,40 @@ func WrapError(rfcError *errors.Error, err error) error {
 	return rfcError.Wrap(err).GenWithStackByCause()
 }
 
-// ChangefeedFastFailError checks the error, returns true if it is meaningless
-// to retry on this error
-func ChangefeedFastFailError(err error) bool {
-	return ErrStartTsBeforeGC.Equal(errors.Cause(err)) || ErrSnapshotLostByGC.Equal(errors.Cause(err))
+// ChangeFeedFastFailError is read only.
+// If this type of error occurs in a changefeed, it means that the data it
+// wants to replicate has been or will be GC. So it makes no sense to try to
+// resume the changefeed, and the changefeed should immediately be failed.
+var ChangeFeedFastFailError = []*errors.Error{
+	ErrGCTTLExceeded, ErrSnapshotLostByGC, ErrStartTsBeforeGC,
 }
 
-// ChangefeedFastFailErrorCode checks the error, returns true if it is meaningless
-// to retry on this error
-func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
-	switch errCode {
-	case ErrStartTsBeforeGC.RFCCode(), ErrSnapshotLostByGC.RFCCode():
-		return true
-	default:
+// ChangefeedFastFailError checks if an error is a ChangefeedFastFailError
+func ChangefeedFastFailError(err error) bool {
+	if err == nil {
 		return false
 	}
+	for _, e := range ChangeFeedFastFailError {
+		if e.Equal(err) {
+			return true
+		}
+		rfcCode, ok := RFCCode(err)
+		if ok && e.RFCCode() == rfcCode {
+			return true
+		}
+	}
+	return false
+}
+
+// ChangefeedFastFailErrorCode checks the error code, returns true if it is a
+// ChangefeedFastFailError code
+func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
+	for _, e := range ChangeFeedFastFailError {
+		if errCode == e.RFCCode() {
+			return true
+		}
+	}
+	return false
 }
 
 // RFCCode returns a RFCCode from an error

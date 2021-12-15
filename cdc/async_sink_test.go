@@ -32,8 +32,7 @@ import (
 
 var _ = check.Suite(&asyncSinkSuite{})
 
-type asyncSinkSuite struct {
-}
+type asyncSinkSuite struct{}
 
 type mockAsyncSink struct {
 	sink.Sink

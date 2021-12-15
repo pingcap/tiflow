@@ -16,7 +16,6 @@ package sink
 import (
 	"context"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -399,99 +398,14 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	config := kafka.NewKafkaConfig()
-
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "kafka" && scheme != "kafka+ssl" {
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("can't create MQ sink with unsupported scheme: %s", scheme)
 	}
-	s := sinkURI.Query().Get("partition-num")
-	if s != "" {
-		c, err := strconv.Atoi(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-		}
-		config.PartitionNum = int32(c)
-	}
 
-	s = sinkURI.Query().Get("replication-factor")
-	if s != "" {
-		c, err := strconv.Atoi(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-		}
-		config.ReplicationFactor = int16(c)
-	}
-
-	s = sinkURI.Query().Get("kafka-version")
-	if s != "" {
-		config.Version = s
-	}
-
-	s = sinkURI.Query().Get("max-message-bytes")
-	if s != "" {
-		c, err := strconv.Atoi(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-		}
-		config.MaxMessageBytes = c
-		opts["max-message-bytes"] = s
-	}
-
-	s = sinkURI.Query().Get("max-batch-size")
-	if s != "" {
-		opts["max-batch-size"] = s
-	}
-
-	s = sinkURI.Query().Get("compression")
-	if s != "" {
-		config.Compression = s
-	}
-
-	config.ClientID = sinkURI.Query().Get("kafka-client-id")
-
-	s = sinkURI.Query().Get("protocol")
-	if s != "" {
-		replicaConfig.Sink.Protocol = s
-	}
-
-	s = sinkURI.Query().Get("ca")
-	if s != "" {
-		config.Credential.CAPath = s
-	}
-
-	s = sinkURI.Query().Get("cert")
-	if s != "" {
-		config.Credential.CertPath = s
-	}
-
-	s = sinkURI.Query().Get("key")
-	if s != "" {
-		config.Credential.KeyPath = s
-	}
-
-	s = sinkURI.Query().Get("sasl-user")
-	if s != "" {
-		config.SaslScram.SaslUser = s
-	}
-
-	s = sinkURI.Query().Get("sasl-password")
-	if s != "" {
-		config.SaslScram.SaslPassword = s
-	}
-
-	s = sinkURI.Query().Get("sasl-mechanism")
-	if s != "" {
-		config.SaslScram.SaslMechanism = s
-	}
-
-	s = sinkURI.Query().Get("auto-create-topic")
-	if s != "" {
-		autoCreate, err := strconv.ParseBool(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-		}
-		config.TopicPreProcess = autoCreate
+	config := kafka.NewConfig()
+	if err := config.Initialize(sinkURI, replicaConfig, opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {

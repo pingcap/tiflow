@@ -1,0 +1,25 @@
+@startuml TiCDC GC safepoint
+box #LightBlue
+participant CLI
+participant API
+end box
+
+group "CLI or API?" [CLI]
+  CLI -> PD : service GC safepoint\n"cdc-creating-<ID>"
+  activate PD
+  CLI -> PD : Create changefeed
+else API
+  API -> Owner : Create changefeed API
+  Owner -> PD : service GC safepoint\n"cdc-creating-<ID>"
+  activate PD
+  Owner -> PD : Create changefeed
+end
+
+Owner -> PD : GC safepoint "ticdc"
+note right: using the minimal\ncheckpoint among\nall changefeeds
+
+Owner -> PD : Remove service\nGC safepoint\n"cdc-creating-<ID>"
+deactivate PD
+deactivate PD
+Owner -> Owner : Start changefeed
+@enduml

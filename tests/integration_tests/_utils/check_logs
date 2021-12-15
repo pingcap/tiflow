@@ -1,0 +1,33 @@
+#!/bin/bash
+# parameter 1: work directory
+WORK_DIR=$1
+
+set +e
+
+## check cdc state checker log
+if [ ! -f $WORK_DIR/cdc_etcd_check.log ]; then
+	exit 0
+fi
+
+grep -q -i test-case-failed $WORK_DIR/cdc_etcd_check.log
+
+if [ $? -eq 0 ]; then
+	echo "cdc state checker failed"
+	exit 1
+else
+	exit 0
+fi
+
+## check data race
+if [ ! -f $WORK_DIR/stdout.log ]; then
+	exit 0
+fi
+
+grep -q -i 'DATA RACE' $WORK_DIR/stdout.log
+
+if [ $? -eq 0 ]; then
+	echo "found DATA RACE"
+	exit 1
+else
+	exit 0
+fi

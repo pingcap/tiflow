@@ -24,8 +24,7 @@ type Hashable interface {
 	HashCode() int64
 }
 
-type defaultHasher struct {
-}
+type defaultHasher struct{}
 
 // Hash returns the hash value.
 func (m *defaultHasher) Hash(object Hashable) int64 {

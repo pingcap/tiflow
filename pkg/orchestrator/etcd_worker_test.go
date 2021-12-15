@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -46,8 +47,7 @@ func Test(t *testing.T) { check.TestingT(t) }
 
 var _ = check.Suite(&etcdWorkerSuite{})
 
-type etcdWorkerSuite struct {
-}
+type etcdWorkerSuite struct{}
 
 type simpleReactor struct {
 	state     *simpleReactorState
@@ -224,7 +224,6 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 	defer func() {
 		_ = cli.Unwrap().Close()
 	}()
-
 	_, err := cli.Put(ctx, testEtcdKeyPrefix+"/sum", "0")
 	c.Check(err, check.IsNil)
 
@@ -273,7 +272,9 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 	}
 
 	err = errg.Wait()
-	if err != nil && (errors.Cause(err) == context.DeadlineExceeded || errors.Cause(err) == context.Canceled) {
+	if err != nil && (errors.Cause(err) == context.DeadlineExceeded ||
+		errors.Cause(err) == context.Canceled ||
+		strings.Contains(err.Error(), "etcdserver: request timeout")) {
 		return
 	}
 	c.Check(err, check.IsNil)
@@ -282,6 +283,7 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 type intReactorState struct {
 	val       int
 	isUpdated bool
+	lastVal   int
 }
 
 func (s *intReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
@@ -290,6 +292,12 @@ func (s *intReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 	if err != nil {
 		log.Panic("intReactorState", zap.Error(err))
 	}
+	// As long as we can ensure that val is monotonically increasing,
+	// we can ensure that the linearizability of state changes
+	if s.lastVal > s.val {
+		log.Panic("linearizability check failed, lastVal must less than current val", zap.Int("lastVal", s.lastVal), zap.Int("val", s.val))
+	}
+	s.lastVal = s.val
 	s.isUpdated = !isInit
 	return nil
 }
@@ -299,17 +307,17 @@ func (s *intReactorState) GetPatches() [][]DataPatch {
 }
 
 type linearizabilityReactor struct {
-	state    *intReactorState
-	expected int
+	state     *intReactorState
+	tickCount int
 }
 
 func (r *linearizabilityReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
 	r.state = state.(*intReactorState)
 	if r.state.isUpdated {
-		if r.state.val != r.expected {
-			log.Panic("linearizability check failed", zap.Int("expected", r.expected), zap.Int("actual", r.state.val))
+		if r.state.val < r.tickCount {
+			log.Panic("linearizability check failed, val must larger than tickCount", zap.Int("expected", r.tickCount), zap.Int("actual", r.state.val))
 		}
-		r.expected++
+		r.tickCount++
 	}
 	if r.state.val == 1999 {
 		return r.state, cerrors.ErrReactorFinished
@@ -335,8 +343,8 @@ func (s *etcdWorkerSuite) TestLinearizability(c *check.C) {
 	}
 
 	reactor, err := NewEtcdWorker(cli0, testEtcdKeyPrefix+"/lin", &linearizabilityReactor{
-		state:    nil,
-		expected: 999,
+		state:     nil,
+		tickCount: 999,
 	}, &intReactorState{
 		val:       0,
 		isUpdated: false,

@@ -30,8 +30,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-type AvroSchemaRegistrySuite struct {
-}
+type AvroSchemaRegistrySuite struct{}
 
 var _ = check.Suite(&AvroSchemaRegistrySuite{})
 

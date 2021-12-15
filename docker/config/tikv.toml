@@ -9,6 +9,7 @@
 log-level = "error"
 # file to store log, write to stderr if it's empty.
 # log-file = ""
+log-rotation-size="500MB"
 
 [readpool.storage]
 # size of thread pool for high-priority operations

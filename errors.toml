@@ -336,6 +336,11 @@ error = '''
 json codec invalid data
 '''
 
+["CDC:ErrJSONCodecRowTooLarge"]
+error = '''
+json codec single row too large
+'''
+
 ["CDC:ErrKVStorageBackoffFailed"]
 error = '''
 backoff failed
@@ -453,7 +458,7 @@ MySQL connection error
 
 ["CDC:ErrMySQLInvalidConfig"]
 error = '''
-MySQL config invaldi
+MySQL config invalid
 '''
 
 ["CDC:ErrMySQLQueryError"]
@@ -573,7 +578,7 @@ prepare avro failed
 
 ["CDC:ErrPrewriteNotMatch"]
 error = '''
-prewrite not match, key: %b, start-ts: %d
+prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s
 '''
 
 ["CDC:ErrProcessorEtcdWatch"]
@@ -698,7 +703,7 @@ sink uri invalid
 
 ["CDC:ErrSnapshotLostByGC"]
 error = '''
-fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than GC safepoint at %d
+fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
 ["CDC:ErrSnapshotSchemaExists"]
@@ -783,7 +788,7 @@ unified sorter IO error. Make sure your sort-dir is configured correctly by pass
 
 ["CDC:ErrUnknownKVEventType"]
 error = '''
-unknown kv event type: %v, entry: %v
+unknown kv optype: %s, entry: %v
 '''
 
 ["CDC:ErrUnknownMetaType"]

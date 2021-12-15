@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -25,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -39,7 +39,7 @@ type changefeed struct {
 	scheduler        *scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	gcManager        GcManager
+	gcManager        gc.Manager
 
 	schema      *schemaWrap4Owner
 	sink        AsyncSink
@@ -68,7 +68,7 @@ type changefeed struct {
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
+func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 	c := &changefeed{
 		id:               id,
 		scheduler:        newScheduler(),
@@ -86,7 +86,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, gcManager GcManager,
+	id model.ChangeFeedID, gcManager gc.Manager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
@@ -110,7 +110,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		} else {
 			code = string(cerror.ErrOwnerUnknown.RFCCode())
 		}
-		c.feedStateManager.HandleError(&model.RunningError{
+		c.feedStateManager.handleError(&model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
 			Code:    code,
 			Message: err.Error(),
@@ -122,7 +122,10 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
 	state := c.state.Info.State
 	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
-		if err := c.gcManager.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
+		failpoint.Inject("InjectChangefeedFastFailError", func() error {
+			return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
+		})
+		if err := c.gcManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -132,14 +135,17 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	c.state = state
 	c.feedStateManager.Tick(state)
+
+	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	// check stale checkPointTs must be called before `feedStateManager.ShouldRunning()`
+	// to ensure an error or stopped changefeed also be checked
+	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
+		return errors.Trace(err)
+	}
+
 	if !c.feedStateManager.ShouldRunning() {
 		c.releaseResources()
 		return nil
-	}
-
-	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
-		return errors.Trace(err)
 	}
 
 	if !c.preflightCheck(captures) {
@@ -160,12 +166,20 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if barrierTs < checkpointTs {
+		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
+		// which implies that it would be premature to schedule tables or to update status.
+		// So we return here.
+		return nil
+	}
 	shouldUpdateState, err := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	if shouldUpdateState {
-		c.updateStatus(barrierTs)
+		pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		currentTs := oracle.GetPhysical(pdTime)
+		c.updateStatus(currentTs, barrierTs)
 	}
 	return nil
 }
@@ -196,7 +210,19 @@ LOOP:
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
 	if c.state.Info.Config.CheckGCSafePoint {
-		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, checkpointTs)
+		// Check TiDB GC safepoint does not exceed the checkpoint.
+		//
+		// We update TTL to 10 minutes,
+		//  1. to delete the service GC safepoint effectively,
+		//  2. in case owner update TiCDC service GC safepoint fails.
+		//
+		// Also it unblocks TiDB GC, because the service GC safepoint is set to
+		// 1 hour TTL during creating changefeed.
+		//
+		// See more gc doc.
+		ensureTTL := int64(10 * 60)
+		err := gc.EnsureChangefeedStartTsSafety(
+			ctx, ctx.GlobalVars().PDClient, c.state.ID, ensureTTL, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -204,7 +230,10 @@ LOOP:
 	if c.state.Info.SyncPointEnabled {
 		c.barriers.Update(syncPointBarrier, checkpointTs)
 	}
-	c.barriers.Update(ddlJobBarrier, checkpointTs)
+	// Since we are starting DDL puller from (checkpointTs-1) to make
+	// the DDL committed at checkpointTs executable by CDC, we need to set
+	// the DDL barrier to the correct start point.
+	c.barriers.Update(ddlJobBarrier, checkpointTs-1)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 	var err error
 	// Note that (checkpointTs == ddl.FinishedTs) DOES NOT imply that the DDL has been completed executed.
@@ -410,7 +439,7 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	return done, nil
 }
 
-func (c *changefeed) updateStatus(barrierTs model.Ts) {
+func (c *changefeed) updateStatus(currentTs int64, barrierTs model.Ts) {
 	resolvedTs := barrierTs
 	for _, position := range c.state.TaskPositions {
 		if resolvedTs > position.ResolvedTs {
@@ -442,12 +471,10 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 		}
 		return status, changed, nil
 	})
-
 	phyTs := oracle.ExtractPhysical(checkpointTs)
+
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
-	// It is more accurate to get tso from PD, but in most cases since we have
-	// deployed NTP service, a little bias is acceptable here.
-	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyTs) / 1e3)
 }
 
 func (c *changefeed) Close() {
