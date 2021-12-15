@@ -328,7 +328,8 @@ func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessag
 	if err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
 	}
-	return newResolvedMQMessage(config.ProtocolCanalJSON, nil, value, ts), nil
+	key, _ := json.Marshal(model.MqMessageTypeResolved)
+	return newResolvedMQMessage(config.ProtocolCanalJSON, key, value, ts), nil
 }
 
 // AppendRowChangedEvent implements the interface EventBatchEncoder
@@ -366,7 +367,8 @@ func (c *CanalFlatEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessa
 	if err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
 	}
-	return newDDLMQMessage(config.ProtocolCanalJSON, nil, value, e), nil
+	key, _ := json.Marshal(model.MqMessageTypeDDL)
+	return newDDLMQMessage(config.ProtocolCanalJSON, key, value, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -374,6 +376,7 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 	if len(c.resolvedBuf) == 0 {
 		return nil
 	}
+	key, _ := json.Marshal(model.MqMessageTypeRow)
 	ret := make([]*MQMessage, len(c.resolvedBuf))
 	for i, msg := range c.resolvedBuf {
 		value, err := json.Marshal(msg)
@@ -381,7 +384,7 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 			log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
 			return nil
 		}
-		ret[i] = NewMQMessage(config.ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MqMessageTypeRow, msg.getSchema(), msg.getTable())
+		ret[i] = NewMQMessage(config.ProtocolCanalJSON, key, value, msg.getTikvTs(), model.MqMessageTypeRow, msg.getSchema(), msg.getTable())
 	}
 	c.resolvedBuf = c.resolvedBuf[0:0]
 	return ret
