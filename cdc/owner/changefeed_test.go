@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -69,11 +70,16 @@ type mockDDLSink struct {
 	checkpointTs model.Ts
 	syncPoint    model.Ts
 	syncPointHis []model.Ts
+
+	wg sync.WaitGroup
 }
 
 func (m *mockDDLSink) run(ctx cdcContext.Context, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) {
-	// mock async sink blocked
-	<-ctx.Done()
+	m.wg.Add(1)
+	go func() {
+		<-ctx.Done()
+		m.wg.Done()
+	}()
 }
 
 func (m *mockDDLSink) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
@@ -96,6 +102,7 @@ func (m *mockDDLSink) emitCheckpointTs(ctx cdcContext.Context, ts uint64) {
 }
 
 func (m *mockDDLSink) close(ctx context.Context) error {
+	m.wg.Wait()
 	return nil
 }
 
