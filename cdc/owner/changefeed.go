@@ -320,7 +320,10 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id), zap.Error(err))
 		}
 	}
-	if err := c.sink.close(ctx); err != nil {
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// We don't need to wait sink Close, pass a canceled context is ok
+	if err := c.sink.close(canceledCtx); err != nil {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
