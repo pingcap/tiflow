@@ -42,11 +42,7 @@ var SupportedVersion = map[string]struct {
 }{
 	"mysql": {
 		MySQLVersion{5, 6, 0},
-		MaxVersion,
-	},
-	"mariadb": {
-		MySQLVersion{10, 1, 2},
-		MaxVersion,
+		MySQLVersion{8, 0, 0},
 	},
 }
 
@@ -56,7 +52,7 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check whether mysql version is satisfied",
-		State: StateFailure,
+		State: StateWarning,
 		Extra: fmt.Sprintf("address of db instance - %s:%d", pc.dbinfo.Host, pc.dbinfo.Port),
 	}
 
@@ -73,7 +69,8 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) {
 	needVersion := SupportedVersion["mysql"]
 	if IsMariaDB(value) {
-		needVersion = SupportedVersion["mariadb"]
+		result.Errors = append(result.Errors, NewWarn("There may be some unexpected behavior when you are MariaDB"))
+		return
 	}
 
 	version, err := toMySQLVersion(value)
@@ -83,13 +80,12 @@ func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) {
 	}
 
 	if !version.Ge(needVersion.Min) {
-		result.Errors = append(result.Errors, NewError("version required at least %v but got %v", needVersion.Min, version))
-		result.Instruction = "Please upgrade your database system"
+		result.Errors = append(result.Errors, NewWarn("version suggested at least %v but got %v", needVersion.Min, version))
 		return
 	}
 
 	if !version.Lt(needVersion.Max) {
-		result.Errors = append(result.Errors, NewError("version required less than %v but got %v", needVersion.Max, version))
+		result.Errors = append(result.Errors, NewWarn("version suggested less than %v but got %v", needVersion.Max, version))
 		return
 	}
 
