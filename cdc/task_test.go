@@ -179,7 +179,9 @@ func (s *taskSuite) TestWatch(c *check.C) {
 	}
 
 	// Watch with a normal context
-	ch := s.w.Watch(context.Background())
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	ch := s.w.Watch(ctx)
 
 	// Trigger the ErrCompacted error
 	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc.restart_task_watch", "50%off"), check.IsNil)
