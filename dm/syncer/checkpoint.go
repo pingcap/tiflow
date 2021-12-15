@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/conn"
@@ -244,8 +245,8 @@ type CheckPoint interface {
 	// corresponding to Meta.Flush
 	FlushPointsExcept(tctx *tcontext.Context, snapshotID int, exceptTables []*filter.Table, extraSQLs []string, extraArgs [][]interface{}) error
 
-	// FlushPointWithTableInfo flushed the table point with given table info
-	FlushPointWithTableInfo(tctx *tcontext.Context, table *filter.Table, ti *model.TableInfo) error
+	// FlushPointsWithTableInfos flushed the table point with given table info
+	FlushPointsWithTableInfos(tctx *tcontext.Context, table []*filter.Table, ti []*model.TableInfo) error
 
 	// FlushSafeModeExitPoint flushed the global checkpoint's with given table info
 	FlushSafeModeExitPoint(tctx *tcontext.Context) error
@@ -698,45 +699,61 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	return nil
 }
 
-// FlushPointWithTableInfo implements CheckPoint.FlushPointWithTableInfo.
-func (cp *RemoteCheckPoint) FlushPointWithTableInfo(tctx *tcontext.Context, table *filter.Table, ti *model.TableInfo) error {
+// FlushPointsWithTableInfos implements CheckPoint.FlushPointsWithTableInfos.
+func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, tables []*filter.Table, tis []*model.TableInfo) error {
 	cp.Lock()
 	defer cp.Unlock()
-	sourceSchema, sourceTable := table.Schema, table.Name
-	sqls := make([]string, 0, 1)
-	args := make([][]interface{}, 0, 10)
-	point := newBinlogPoint(binlog.NewLocation(cp.cfg.Flavor), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+	// should not happened
+	if len(tables) != len(tis) {
+		return errors.Errorf("the length of the tables is not equal to the length of the table infos, left: %d, right: %d", len(tables), len(tis))
+	}
 
-	if tablePoints, ok := cp.points[sourceSchema]; ok {
-		if p, ok2 := tablePoints[sourceTable]; ok2 {
-			point = p
+	batch := 100
+	for i := 0; i < len(tables); i += batch {
+		end := i + batch
+		if end > len(tables) {
+			end = len(tables)
+		}
+
+		sqls := make([]string, 0, batch)
+		args := make([][]interface{}, 0, batch)
+		points := make([]*binlogPoint, 0, batch)
+		for j := i; j < end; j++ {
+			table := tables[j]
+			ti := tis[j]
+			sourceSchema, sourceTable := table.Schema, table.Name
+			point := newBinlogPoint(binlog.NewLocation(cp.cfg.Flavor), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+			if tablePoints, ok := cp.points[sourceSchema]; ok {
+				if p, ok2 := tablePoints[sourceTable]; ok2 {
+					point = p
+				}
+			}
+			tiBytes, err := json.Marshal(ti)
+			if err != nil {
+				return terror.ErrSchemaTrackerCannotSerialize.Delegate(err, sourceSchema, sourceTable)
+			}
+			location := point.MySQLLocation()
+			sql, arg := cp.genUpdateSQL(sourceSchema, sourceTable, location, nil, tiBytes, false)
+			sqls = append(sqls, sql)
+			args = append(args, arg)
+			points = append(points, point)
+		}
+		// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
+		tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(utils.DefaultDBTimeout)
+		defer cancel()
+		_, err := cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
+		if err != nil {
+			return err
+		}
+
+		for idx, point := range points {
+			err = point.save(point.savedPoint.location, tis[i+idx])
+			if err != nil {
+				return err
+			}
+			point.flush()
 		}
 	}
-
-	tiBytes, err := json.Marshal(ti)
-	if err != nil {
-		return terror.ErrSchemaTrackerCannotSerialize.Delegate(err, sourceSchema, sourceTable)
-	}
-
-	location := point.MySQLLocation()
-	sql2, arg := cp.genUpdateSQL(sourceSchema, sourceTable, location, nil, tiBytes, false)
-	sqls = append(sqls, sql2)
-	args = append(args, arg)
-
-	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
-	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(utils.DefaultDBTimeout)
-	defer cancel()
-	_, err = cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
-	if err != nil {
-		return err
-	}
-
-	err = point.save(point.savedPoint.location, ti)
-	if err != nil {
-		return err
-	}
-	point.flush()
-
 	return nil
 }
 

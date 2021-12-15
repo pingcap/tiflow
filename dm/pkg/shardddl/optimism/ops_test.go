@@ -30,7 +30,7 @@ func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *C) {
 		DDLs       = []string{"ALTER TABLE bar ADD COLUMN c1 INT"}
 		info       = NewInfo(task, source, upSchema, upTable, downSchema, downTable, DDLs, nil, nil)
 		op         = NewOperation("test-ID", task, source, upSchema, upTable, DDLs, ConflictResolved, "", false, []string{})
-		is         = NewInitSchema(task, downSchema, downTable, nil)
+		// is         = NewInitSchema(task, downSchema, downTable, nil)
 	)
 
 	// put info.
@@ -52,15 +52,15 @@ func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *C) {
 	c.Assert(opm, HasLen, 1)
 	c.Assert(opm[task][source][upSchema][upTable], DeepEquals, op)
 
-	// put init schema.
-	_, _, err = PutInitSchemaIfNotExist(etcdTestCli, is)
-	c.Assert(err, IsNil)
-	isc, _, err := GetInitSchema(etcdTestCli, is.Task, is.DownSchema, is.DownTable)
-	c.Assert(err, IsNil)
-	c.Assert(isc, DeepEquals, is)
+	//	// put init schema.
+	//	_, _, err = PutInitSchemaIfNotExist(etcdTestCli, is)
+	//	c.Assert(err, IsNil)
+	//	isc, _, err := GetInitSchema(etcdTestCli, is.Task, is.DownSchema, is.DownTable)
+	//	c.Assert(err, IsNil)
+	//	c.Assert(isc, DeepEquals, is)
 
 	// DELETE info and operation with version 0
-	_, deleted, err := DeleteInfosOperationsSchemaColumn(etcdTestCli, []Info{info}, []Operation{op}, is)
+	_, deleted, err := DeleteInfosOperationsSchemaColumn(etcdTestCli, []Info{info}, []Operation{op}, task, downSchema, downTable)
 	c.Assert(err, IsNil)
 	c.Assert(deleted, IsFalse)
 
@@ -71,12 +71,12 @@ func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *C) {
 	opm, _, err = GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 1)
-	isc, _, err = GetInitSchema(etcdTestCli, is.Task, is.DownSchema, is.DownTable)
-	c.Assert(err, IsNil)
-	c.Assert(isc.IsEmpty(), IsFalse)
+	//	isc, _, err = GetInitSchema(etcdTestCli, is.Task, is.DownSchema, is.DownTable)
+	//	c.Assert(err, IsNil)
+	//	c.Assert(isc.IsEmpty(), IsFalse)
 
 	// DELETE info and operation with version 1
-	_, deleted, err = DeleteInfosOperationsSchemaColumn(etcdTestCli, []Info{infoWithVer}, []Operation{op}, is)
+	_, deleted, err = DeleteInfosOperationsSchemaColumn(etcdTestCli, []Info{infoWithVer}, []Operation{op}, task, downSchema, downTable)
 	c.Assert(err, IsNil)
 	c.Assert(deleted, IsTrue)
 
@@ -87,9 +87,9 @@ func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *C) {
 	opm, _, err = GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 0)
-	isc, _, err = GetInitSchema(etcdTestCli, is.Task, is.DownSchema, is.DownTable)
-	c.Assert(err, IsNil)
-	c.Assert(isc.IsEmpty(), IsTrue)
+	//	isc, _, err = GetInitSchema(etcdTestCli, is.Task, is.DownSchema, is.DownTable)
+	//	c.Assert(err, IsNil)
+	//	c.Assert(isc.IsEmpty(), IsTrue)
 }
 
 func (t *testForEtcd) TestSourceTablesInfo(c *C) {

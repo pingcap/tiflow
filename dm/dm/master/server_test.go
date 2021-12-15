@@ -958,7 +958,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, req))
 	server.pessimist = shardddl.NewPessimist(&logger, func(task string) []string { return sources })
-	server.optimist = shardddl.NewOptimist(&logger)
+	server.optimist = shardddl.NewOptimist(&logger, server.scheduler.GetDownstreamMetaByTask)
 
 	var (
 		DDLs          = []string{"ALTER TABLE bar ADD COLUMN c1 INT"}
@@ -1042,7 +1042,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, req))
 	server.pessimist = shardddl.NewPessimist(&logger, func(task string) []string { return sources })
-	server.optimist = shardddl.NewOptimist(&logger)
+	server.optimist = shardddl.NewOptimist(&logger, server.scheduler.GetDownstreamMetaByTask)
 
 	var (
 		p           = parser.New()

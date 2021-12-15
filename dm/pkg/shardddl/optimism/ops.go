@@ -51,7 +51,7 @@ func PutSourceTablesDeleteInfo(cli *clientv3.Client, st SourceTables, info Info)
 // DeleteInfosOperationsSchemaColumn deletes the shard DDL infos, operations, init schemas and dropped columns in etcd.
 // This function should often be called by DM-master when removing the lock.
 // Only delete when all info's version are greater or equal to etcd's version, otherwise it means new info was putted into etcd before.
-func DeleteInfosOperationsSchemaColumn(cli *clientv3.Client, infos []Info, ops []Operation, schema InitSchema) (int64, bool, error) {
+func DeleteInfosOperationsSchemaColumn(cli *clientv3.Client, infos []Info, ops []Operation, task, downSchema, downTable string) (int64, bool, error) {
 	opsDel := make([]clientv3.Op, 0, len(infos)+len(ops))
 	cmps := make([]clientv3.Cmp, 0, len(infos))
 	for _, info := range infos {
@@ -62,8 +62,8 @@ func DeleteInfosOperationsSchemaColumn(cli *clientv3.Client, infos []Info, ops [
 	for _, op := range ops {
 		opsDel = append(opsDel, deleteOperationOp(op))
 	}
-	opsDel = append(opsDel, deleteInitSchemaOp(schema.Task, schema.DownSchema, schema.DownTable))
-	opsDel = append(opsDel, deleteDroppedColumnsByLockOp(utils.GenDDLLockID(schema.Task, schema.DownSchema, schema.DownTable)))
+	//	opsDel = append(opsDel, deleteInitSchemaOp(schema.Task, schema.DownSchema, schema.DownTable))
+	opsDel = append(opsDel, deleteDroppedColumnsByLockOp(utils.GenDDLLockID(task, downSchema, downTable)))
 	resp, rev, err := etcdutil.DoOpsInOneCmpsTxnWithRetry(cli, cmps, opsDel, []clientv3.Op{})
 	if err != nil {
 		return 0, false, err
@@ -77,7 +77,7 @@ func DeleteInfosOperationsTablesSchemasByTask(cli *clientv3.Client, task string,
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Encode(task), clientv3.WithPrefix()))
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismOperationKeyAdapter.Encode(task), clientv3.WithPrefix()))
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismSourceTablesKeyAdapter.Encode(task), clientv3.WithPrefix()))
-	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInitSchemaKeyAdapter.Encode(task), clientv3.WithPrefix()))
+	//	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInitSchemaKeyAdapter.Encode(task), clientv3.WithPrefix()))
 	for lockID := range lockIDSet {
 		opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismDroppedColumnsKeyAdapter.Encode(lockID), clientv3.WithPrefix()))
 	}

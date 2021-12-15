@@ -20,80 +20,122 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"go.etcd.io/etcd/clientv3"
 
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
+
+type DownstreamMeta struct {
+	db   *conn.BaseDB
+	meta string
+}
 
 // LockKeeper used to keep and handle DDL lock conveniently.
 // The lock information do not need to be persistent, and can be re-constructed from the shard DDL info.
 type LockKeeper struct {
 	mu    sync.RWMutex
 	locks map[string]*Lock // lockID -> Lock
+
+	downstreamMetaMap map[string]*DownstreamMeta
+	downDBFunc        func(string) (*config.DBConfig, string)
+	dropColumns       map[string]map[string]map[string]map[string]map[string]DropColumnStage
 }
 
 // NewLockKeeper creates a new LockKeeper instance.
-func NewLockKeeper() *LockKeeper {
+func NewLockKeeper(downDBFunc func(string) (*config.DBConfig, string)) *LockKeeper {
 	return &LockKeeper{
-		locks: make(map[string]*Lock),
+		locks:             make(map[string]*Lock),
+		downstreamMetaMap: make(map[string]*DownstreamMeta),
+		downDBFunc:        downDBFunc,
 	}
 }
 
-// RebuildLocksAndTables rebuild the locks and tables.
-func (lk *LockKeeper) RebuildLocksAndTables(
-	cli *clientv3.Client,
-	ifm map[string]map[string]map[string]map[string]Info,
-	colm map[string]map[string]map[string]map[string]map[string]DropColumnStage,
-	lockJoined map[string]schemacmp.Table,
-	lockTTS map[string][]TargetTable,
-	missTable map[string]map[string]map[string]map[string]schemacmp.Table,
-) {
-	var (
-		lock *Lock
-		ok   bool
-	)
-	for task, taskInfos := range ifm {
-		for source, sourceInfos := range taskInfos {
-			for schema, schemaInfos := range sourceInfos {
-				for table, info := range schemaInfos {
-					lockID := utils.GenDDLLockID(info.Task, info.DownSchema, info.DownTable)
-					if lock, ok = lk.locks[lockID]; !ok {
-						lock = NewLock(cli, lockID, info.Task, info.DownSchema, info.DownTable, lockJoined[lockID], lockTTS[lockID])
-					}
-					// filter info which doesn't have SourceTable
-					// SourceTable will be changed after user update block-allow-list
-					// But old infos still remain in etcd.
-					// TODO: add a mechanism to remove all outdated infos in etcd.
-					if !lock.TableExist(info.Source, info.UpSchema, info.UpTable) {
-						delete(ifm[task][source][schema], table)
-						continue
-					}
-					lk.locks[lockID] = lock
-					lock.tables[info.Source][info.UpSchema][info.UpTable] = schemacmp.Encode(info.TableInfoBefore)
-					if columns, ok := colm[lockID]; ok {
-						lock.columns = columns
-					}
-				}
-			}
-		}
-	}
-
-	// update missTable's table info for locks
-	for lockID, lockTable := range missTable {
-		for source, sourceTable := range lockTable {
-			for schema, schemaTable := range sourceTable {
-				for table, tableinfo := range schemaTable {
-					if _, ok := lk.locks[lockID]; !ok {
-						continue
-					}
-					if !lk.locks[lockID].TableExist(source, schema, table) {
-						continue
-					}
-					lk.locks[lockID].tables[source][schema][table] = tableinfo
-				}
-			}
-		}
+// SetDropColumns set drop columns for lock keeper
+func (lk *LockKeeper) SetDropColumns(dropColumns map[string]map[string]map[string]map[string]map[string]DropColumnStage) {
+	if dropColumns != nil {
+		lk.dropColumns = dropColumns
 	}
 }
+
+func (lk *LockKeeper) getDownstreamMeta(task string) (*DownstreamMeta, error) {
+	if downstreamMeta, ok := lk.downstreamMetaMap[task]; ok {
+		return downstreamMeta, nil
+	}
+
+	dbConfig, meta := lk.downDBFunc(task)
+	if dbConfig == nil {
+		return nil, terror.ErrMasterOptimisticDownstreamMetaNotFound.Generate(task)
+	}
+	db, err := conn.DefaultDBProvider.Apply(dbConfig)
+	if err != nil {
+		return nil, err
+	}
+	downstreamMeta := &DownstreamMeta{db: db, meta: meta}
+	return downstreamMeta, nil
+}
+
+// // RebuildLocksAndTables rebuild the locks and tables.
+// func (lk *LockKeeper) RebuildLocksAndTables(
+// 	cli *clientv3.Client,
+// 	ifm map[string]map[string]map[string]map[string]Info,
+// 	colm map[string]map[string]map[string]map[string]map[string]DropColumnStage,
+// 	lockJoined map[string]schemacmp.Table,
+// 	lockTTS map[string][]TargetTable,
+// 	missTable map[string]map[string]map[string]map[string]schemacmp.Table,
+// ) {
+// 	var (
+// 		lock *Lock
+// 		ok   bool
+// 	)
+// 	for task, taskInfos := range ifm {
+// 		for source, sourceInfos := range taskInfos {
+// 			for schema, schemaInfos := range sourceInfos {
+// 				for table, info := range schemaInfos {
+// 					lockID := utils.GenDDLLockID(info.Task, info.DownSchema, info.DownTable)
+// 					if lock, ok = lk.locks[lockID]; !ok {
+// 						downstreamMeta, err := lk.getDownstreamMeta(task)
+// 						if err != nil {
+// 							log.L().Error("get downstream meta", log.ShortError(err))
+// 						}
+// 						lock = NewLock(cli, lockID, info.Task, info.DownSchema, info.DownTable, lockJoined[lockID], lockTTS[lockID], downstreamMeta)
+// 					}
+// 					// filter info which doesn't have SourceTable
+// 					// SourceTable will be changed after user update block-allow-list
+// 					// But old infos still remain in etcd.
+// 					// TODO: add a mechanism to remove all outdated infos in etcd.
+// 					if !lock.TableExist(info.Source, info.UpSchema, info.UpTable) {
+// 						delete(ifm[task][source][schema], table)
+// 						continue
+// 					}
+// 					lk.locks[lockID] = lock
+// 					lock.tables[info.Source][info.UpSchema][info.UpTable] = schemacmp.Encode(info.TableInfoBefore)
+// 					if columns, ok := colm[lockID]; ok {
+// 						lock.columns = columns
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+//
+// 	// update missTable's table info for locks
+// 	for lockID, lockTable := range missTable {
+// 		for source, sourceTable := range lockTable {
+// 			for schema, schemaTable := range sourceTable {
+// 				for table, tableinfo := range schemaTable {
+// 					if _, ok := lk.locks[lockID]; !ok {
+// 						continue
+// 					}
+// 					if !lk.locks[lockID].TableExist(source, schema, table) {
+// 						continue
+// 					}
+// 					lk.locks[lockID].tables[source][schema][table] = tableinfo
+// 				}
+// 			}
+// 		}
+// 	}
+// }
 
 // TrySync tries to sync the lock.
 func (lk *LockKeeper) TrySync(cli *clientv3.Client, info Info, tts []TargetTable) (string, []string, []string, error) {
@@ -111,8 +153,21 @@ func (lk *LockKeeper) TrySync(cli *clientv3.Client, info Info, tts []TargetTable
 	}
 
 	if l, ok = lk.locks[lockID]; !ok {
-		lk.locks[lockID] = NewLock(cli, lockID, info.Task, info.DownSchema, info.DownTable, schemacmp.Encode(info.TableInfoBefore), tts)
+		downstreamMeta, err := lk.getDownstreamMeta(info.Task)
+		if err != nil {
+			log.L().Error("get downstream meta", log.ShortError(err))
+		}
+
+		lk.locks[lockID] = NewLock(cli, lockID, info.Task, info.DownSchema, info.DownTable, schemacmp.Encode(info.TableInfoBefore), tts, downstreamMeta)
 		l = lk.locks[lockID]
+
+		// set drop columns
+		if cols, ok := lk.dropColumns[lockID]; ok {
+			l.columns = cols
+			delete(lk.dropColumns, lockID)
+		}
+	} else {
+		log.L().Error("lock already exist")
 	}
 
 	newDDLs, cols, err := l.TrySync(info, tts)
@@ -243,6 +298,30 @@ func (tk *TableKeeper) AddTable(task, source, upSchema, upTable, downSchema, dow
 	added := st.AddTable(upSchema, upTable, downSchema, downTable)
 	tk.tables[task][source] = st // assign the modified SourceTables.
 	return added
+}
+
+// SourceTableExist check whether a source table exist
+func (tk *TableKeeper) SourceTableExist(task, source, upSchema, upTable, downSchema, downTable string) bool {
+	tk.mu.Lock()
+	defer tk.mu.Unlock()
+
+	if _, ok := tk.tables[task]; !ok {
+		return false
+	}
+	if _, ok := tk.tables[task][source]; !ok {
+		return false
+	}
+	st := tk.tables[task][source]
+	targetTable := st.TargetTable(downSchema, downTable)
+
+	if targetTable.UpTables != nil {
+		if tables, ok := targetTable.UpTables[upSchema]; ok {
+			if _, ok2 := tables[upTable]; ok2 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // RemoveTable removes a table from the source tables.

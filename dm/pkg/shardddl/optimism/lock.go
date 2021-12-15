@@ -14,16 +14,22 @@
 package optimism
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"sync"
 
+	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/model"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
+	"golang.org/x/net/context"
 
 	"github.com/pingcap/ticdc/dm/dm/master/metrics"
+	"github.com/pingcap/ticdc/dm/pkg/cputil"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
@@ -75,28 +81,62 @@ type Lock struct {
 	// record the partially dropped columns
 	// column name -> source -> upSchema -> upTable -> int
 	columns map[string]map[string]map[string]map[string]DropColumnStage
+
+	downstreamMeta *DownstreamMeta
 }
 
 // NewLock creates a new Lock instance.
 // NOTE: we MUST give the initial table info when creating the lock now.
-func NewLock(cli *clientv3.Client, id, task, downSchema, downTable string, joined schemacmp.Table, tts []TargetTable) *Lock {
+func NewLock(cli *clientv3.Client, id, task, downSchema, downTable string, joined schemacmp.Table, tts []TargetTable, downstreamMeta *DownstreamMeta) *Lock {
 	l := &Lock{
-		cli:        cli,
-		ID:         id,
-		Task:       task,
-		DownSchema: downSchema,
-		DownTable:  downTable,
-		joined:     joined,
-		tables:     make(map[string]map[string]map[string]schemacmp.Table),
-		done:       make(map[string]map[string]map[string]bool),
-		synced:     true,
-		versions:   make(map[string]map[string]map[string]int64),
-		columns:    make(map[string]map[string]map[string]map[string]DropColumnStage),
+		cli:            cli,
+		ID:             id,
+		Task:           task,
+		DownSchema:     downSchema,
+		DownTable:      downTable,
+		joined:         joined,
+		tables:         make(map[string]map[string]map[string]schemacmp.Table),
+		done:           make(map[string]map[string]map[string]bool),
+		synced:         true,
+		versions:       make(map[string]map[string]map[string]int64),
+		columns:        make(map[string]map[string]map[string]map[string]DropColumnStage),
+		downstreamMeta: downstreamMeta,
 	}
 	l.addTables(tts)
 	metrics.ReportDDLPending(task, metrics.DDLPendingNone, metrics.DDLPendingSynced)
 
 	return l
+}
+
+// FetchTableInfos fetch all table infos for a lock
+func (l *Lock) FetchTableInfos(task, source, schema, table string) (*model.TableInfo, error) {
+	if l.downstreamMeta == nil {
+		log.L().Warn("nil downstream meta")
+		return nil, terror.ErrMasterOptimisticDownstreamMetaNotFound.Generate(task)
+	}
+
+	db := l.downstreamMeta.db
+	ctx, cancel := context.WithTimeout(context.Background(), dbutil.DefaultTimeout)
+	defer cancel()
+
+	query := `SELECT table_info FROM ` + dbutil.TableName(l.downstreamMeta.meta, cputil.SyncerCheckpoint(task)) + ` WHERE id = ? AND cp_schema = ?`
+	row := db.DB.QueryRowContext(ctx, query, source, schema)
+	if row.Err() != nil {
+		return nil, row.Err()
+	}
+	var tiBytes []byte
+	if err := row.Scan(&tiBytes); err != nil {
+		return nil, err
+	}
+	var ti *model.TableInfo
+	if bytes.Equal(tiBytes, []byte("null")) {
+		log.L().Warn("null table info", zap.String("query", query), zap.String("source", source), zap.String("schema", schema), zap.String("table", table))
+		return nil, terror.ErrMasterOptimisticDownstreamMetaNotFound.Generate(task)
+	}
+	if err := json.Unmarshal(tiBytes, &ti); err != nil {
+		return nil, err
+	}
+	return ti, nil
 }
 
 // TrySync tries to sync the lock, re-entrant.
@@ -548,7 +588,14 @@ func (l *Lock) addTables(tts []TargetTable) {
 			}
 			for table := range tables {
 				if _, ok := l.tables[tt.Source][schema][table]; !ok {
-					l.tables[tt.Source][schema][table] = l.joined
+					ti, err := l.FetchTableInfos(tt.Task, tt.Source, schema, table)
+					if err != nil {
+						log.L().Error("source table info not found, use joined table info instead", zap.String("task", tt.Task), zap.String("source", tt.Source), zap.String("schema", schema), zap.String("table", table), log.ShortError(err))
+						l.tables[tt.Source][schema][table] = l.joined
+					} else {
+						t := schemacmp.Encode(ti)
+						l.tables[tt.Source][schema][table] = t
+					}
 					l.done[tt.Source][schema][table] = false
 					l.versions[tt.Source][schema][table] = 0
 					log.L().Info("table added to the lock", zap.String("lock", l.ID),

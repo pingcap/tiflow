@@ -131,7 +131,7 @@ func NewServer(cfg *Config) *Server {
 		ap:        NewAgentPool(&RateLimitConfig{rate: cfg.RPCRateLimit, burst: cfg.RPCRateBurst}),
 	}
 	server.pessimist = shardddl.NewPessimist(&logger, server.getTaskResources)
-	server.optimist = shardddl.NewOptimist(&logger)
+	server.optimist = shardddl.NewOptimist(&logger, server.scheduler.GetDownstreamMetaByTask)
 	server.closed.Store(true)
 	setUseTLS(&cfg.Security)
 
