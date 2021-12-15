@@ -76,8 +76,13 @@ func (c *compactor) run() {
 			}
 			metrics.QueueSizeGauge.WithLabelValues(c.task, "compactor_input", c.source).Set(float64(len(c.inCh)))
 
-			if j.tp == flush {
+			if j.tp == flush || j.tp == asyncFlush {
 				c.flushBuffer()
+				c.outCh <- j
+				continue
+			}
+
+			if j.tp == gc {
 				c.outCh <- j
 				continue
 			}
