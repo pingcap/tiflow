@@ -25,18 +25,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/sorter/unified"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	"github.com/pingcap/ticdc/pkg/leakutil"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 )
-
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(
-		m,
-		goleak.IgnoreTopFunction("github.com/pingcap/ticdc/cdc/sorter/unified.newBackEndPool.func1"),
-	)
-}
 
 func TestUnifiedSorterFileLockConflict(t *testing.T) {
 	dir := t.TempDir()

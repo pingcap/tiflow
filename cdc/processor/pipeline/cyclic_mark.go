@@ -14,6 +14,8 @@
 package pipeline
 
 import (
+	"container/list"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
@@ -70,27 +72,32 @@ func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
 // and adds the mark row event or normal row event into the cache.
 func (n *cyclicMarkNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
+	_, err := n.TryHandleDataMessage(ctx, msg)
+	return err
+}
+
+func (n *cyclicMarkNode) TryHandleDataMessage(ctx pipeline.NodeContext, msg pipeline.Message) (bool, error) {
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
 		n.flush(ctx, event.CRTs)
 		if event.RawKV.OpType == model.OpTypeResolved {
 			ctx.SendToNextNode(msg)
-			return nil
+			return true, nil
 		}
 		tableID, err := entry.DecodeTableID(event.RawKV.Key)
 		if err != nil {
-			return errors.Trace(err)
+			return false, errors.Trace(err)
 		}
 		if tableID == n.markTableID {
 			n.appendMarkRowEvent(ctx, event)
 		} else {
 			n.appendNormalRowEvent(ctx, event)
 		}
-		return nil
+		return true, nil
 	}
 	ctx.SendToNextNode(msg)
-	return nil
+	return true, nil
 }
 
 // appendNormalRowEvent adds the normal row into the cache.
@@ -173,4 +180,40 @@ func extractReplicaID(markRow *model.RowChangedEvent) uint64 {
 	}
 	log.Panic("bad mark table, " + mark.CyclicReplicaIDCol + " not found")
 	return 0
+}
+
+// cyclicNodeContext implements the NodeContext, cyclicMarkNode can be reused in table actor
+// buffer all messages with a queue, it will not block the actor system
+type cyclicNodeContext struct {
+	*actorNodeContext
+	queue list.List
+}
+
+func NewCyclicNodeContext(ctx *actorNodeContext) *cyclicNodeContext {
+	return &cyclicNodeContext{
+		actorNodeContext: ctx,
+	}
+}
+
+// SendToNextNode implement the interface function, push the message to queue
+func (c *cyclicNodeContext) SendToNextNode(msg pipeline.Message) {
+	c.queue.PushBack(msg)
+}
+
+// Message implements the interface function, not used
+func (c *cyclicNodeContext) Message() pipeline.Message {
+	msg := c.tryGetProcessedMessage()
+	if msg != nil {
+		return *msg
+	}
+	return pipeline.Message{}
+}
+
+func (c *cyclicNodeContext) tryGetProcessedMessage() *pipeline.Message {
+	el := c.queue.Front()
+	if el == nil {
+		return nil
+	}
+	msg := c.queue.Remove(el).(pipeline.Message)
+	return &msg
 }
