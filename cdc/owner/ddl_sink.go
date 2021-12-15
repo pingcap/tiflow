@@ -170,15 +170,17 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		return true, nil
 	}
 	if ddl.CommitTs <= s.ddlSentTs {
-		// the DDL event is executing and not finished yes, return false
+		// the DDL event is executing and not finished yet, return false
 		return false, nil
 	}
 	select {
 	case <-ctx.Done():
 		return false, errors.Trace(ctx.Err())
 	case s.ddlCh <- ddl:
+		s.ddlSentTs = ddl.CommitTs
+	default:
+		// if this hit, we can think that ddlCh is full, just return false and send the ddl in the next round.
 	}
-	s.ddlSentTs = ddl.CommitTs
 	return false, nil
 }
 
