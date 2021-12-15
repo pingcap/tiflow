@@ -63,6 +63,14 @@ const (
 	// JavaSQLTypeTIMESTAMP_WITH_TIMEZONE JavaSQLType = 2014
 )
 
+func (t JavaSQLType) isBinary() bool {
+	switch t {
+	case JavaSQLTypeBLOB, JavaSQLTypeBIT:
+		return true
+	}
+	return false
+}
+
 // mySQLType2JavaType converts the mysql protocol types to java sql types
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L132-L269
 func mySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
