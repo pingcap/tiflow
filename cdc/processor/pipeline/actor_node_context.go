@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	sdtContext "context"
+	"sync/atomic"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/actor"
@@ -34,8 +35,8 @@ type actorNodeContext struct {
 	tableActorID         actor.ID
 	changefeedVars       *context.ChangefeedVars
 	globalVars           *context.GlobalVars
-	tickMessageThreshold int
-	noTickMessageCount   int
+	tickMessageThreshold int32
+	noTickMessageCount   int32
 }
 
 func NewContext(stdCtx sdtContext.Context, tableActorRouter *actor.Router, tableActorID actor.ID, changefeedVars *context.ChangefeedVars, globalVars *context.GlobalVars) *actorNodeContext {
@@ -51,8 +52,8 @@ func NewContext(stdCtx sdtContext.Context, tableActorRouter *actor.Router, table
 	}
 }
 
-func (c *actorNodeContext) setTickMessageThreshold(threshold int) {
-	c.tickMessageThreshold = threshold
+func (c *actorNodeContext) setTickMessageThreshold(threshold int32) {
+	atomic.StoreInt32(&c.tickMessageThreshold, threshold)
 }
 
 func (c *actorNodeContext) GlobalVars() *context.GlobalVars {
@@ -73,12 +74,7 @@ func (c *actorNodeContext) Throw(err error) {
 
 func (c *actorNodeContext) SendToNextNode(msg pipeline.Message) {
 	c.outputCh <- msg
-	c.noTickMessageCount++
-	// resolvedTs message will be sent by puller periodically
-	if c.noTickMessageCount >= c.tickMessageThreshold {
-		_ = c.tableActorRouter.Send(c.tableActorID, message.TickMessage())
-		c.noTickMessageCount = 0
-	}
+	c.trySendTickMessage()
 }
 
 func (c *actorNodeContext) TrySendToNextNode(msg pipeline.Message) bool {
@@ -121,5 +117,16 @@ func (c *actorNodeContext) tryGetProcessedMessage() *pipeline.Message {
 		return &msg
 	default:
 		return nil
+	}
+}
+
+func (c *actorNodeContext) trySendTickMessage() {
+	threshold := atomic.LoadInt32(&c.tickMessageThreshold)
+	atomic.AddInt32(&c.noTickMessageCount, 1)
+	count := atomic.LoadInt32(&c.noTickMessageCount)
+	// resolvedTs message will be sent by puller periodically
+	if count >= threshold {
+		_ = c.tableActorRouter.Send(c.tableActorID, message.TickMessage())
+		atomic.StoreInt32(&c.noTickMessageCount, 0)
 	}
 }
