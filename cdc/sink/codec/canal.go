@@ -138,7 +138,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 
 	switch javaType {
 	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
-		if strings.Contains(mysqlType, "text") {
+		if strings.Contains(mysqlType, "TEXT") {
 			return JavaSQLTypeCLOB
 		}
 		return JavaSQLTypeBLOB
