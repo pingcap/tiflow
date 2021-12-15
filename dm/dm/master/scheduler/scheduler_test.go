@@ -1171,38 +1171,39 @@ func (t *testScheduler) TestTransferSource(c *C) {
 	worker3.ToFree()
 	worker4.ToFree()
 
+	ctx := context.Background()
 	// test invalid transfer: source not exists
-	c.Assert(s.TransferSource("not-exist", workerName3), NotNil)
+	c.Assert(s.TransferSource(ctx, "not-exist", workerName3), NotNil)
 
 	// test valid transfer: source -> worker = bound -> free
-	c.Assert(s.TransferSource(sourceID1, workerName4), IsNil)
+	c.Assert(s.TransferSource(ctx, sourceID1, workerName4), IsNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker4)
 	c.Assert(worker1.Stage(), Equals, WorkerFree)
 
 	// test valid transfer: source -> worker = unbound -> free
 	s.sourceCfgs[sourceID3] = &config.SourceConfig{}
 	s.unbounds[sourceID3] = struct{}{}
-	c.Assert(s.TransferSource(sourceID3, workerName3), IsNil)
+	c.Assert(s.TransferSource(ctx, sourceID3, workerName3), IsNil)
 	c.Assert(s.bounds[sourceID3], DeepEquals, worker3)
 
 	// test valid transfer: self
-	c.Assert(s.TransferSource(sourceID3, workerName3), IsNil)
+	c.Assert(s.TransferSource(ctx, sourceID3, workerName3), IsNil)
 	c.Assert(s.bounds[sourceID3], DeepEquals, worker3)
 
 	// test invalid transfer: source -> worker = bound -> bound
-	c.Assert(s.TransferSource(sourceID1, workerName3), NotNil)
+	c.Assert(s.TransferSource(ctx, sourceID1, workerName3), NotNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker4)
 	c.Assert(s.bounds[sourceID3], DeepEquals, worker3)
 
 	// test invalid transfer: source -> worker = bound -> offline
 	worker1.ToOffline()
-	c.Assert(s.TransferSource(sourceID1, workerName1), NotNil)
+	c.Assert(s.TransferSource(ctx, sourceID1, workerName1), NotNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker4)
 
 	// test invalid transfer: source -> worker = unbound -> bound
 	s.sourceCfgs[sourceID4] = &config.SourceConfig{}
 	s.unbounds[sourceID4] = struct{}{}
-	c.Assert(s.TransferSource(sourceID4, workerName3), NotNil)
+	c.Assert(s.TransferSource(ctx, sourceID4, workerName3), NotNil)
 	c.Assert(s.bounds[sourceID3], DeepEquals, worker3)
 	delete(s.unbounds, sourceID4)
 	delete(s.sourceCfgs, sourceID4)
@@ -1212,16 +1213,17 @@ func (t *testScheduler) TestTransferSource(c *C) {
 
 	// test fail halfway won't left old worker unbound
 	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/scheduler/failToReplaceSourceBound", `return()`), IsNil)
-	c.Assert(s.TransferSource(sourceID1, workerName1), NotNil)
+	c.Assert(s.TransferSource(ctx, sourceID1, workerName1), NotNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker4)
 	c.Assert(worker1.Stage(), Equals, WorkerFree)
 	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/scheduler/failToReplaceSourceBound"), IsNil)
 
-	// test can't transfer when there's any running task on the source
+	// test can't transfer when there's any running(no sync) task on the source
 	s.expectSubTaskStages.Store("test", map[string]ha.Stage{sourceID1: {Expect: pb.Stage_Running}})
-	c.Assert(s.TransferSource(sourceID1, workerName1), NotNil)
-	c.Assert(s.bounds[sourceID1], DeepEquals, worker4)
-	c.Assert(worker1.Stage(), Equals, WorkerFree)
+	c.Assert(s.TransferSource(ctx, sourceID1, workerName1), IsNil)
+	c.Assert(s.bounds[sourceID1], DeepEquals, worker1)
+	c.Assert(worker1.Stage(), Equals, WorkerBound)
+	// todo add new stage test
 }
 
 func (t *testScheduler) TestStartStopRelay(c *C) {

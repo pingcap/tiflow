@@ -41,12 +41,12 @@ function run() {
 		"\"result\": true" 2
 
 	# join master3
-	run_dm_master $WORK_DIR/master3 $MASTER_PORT3 $cur/conf/dm-master3.toml
-	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT3
-	check_metric $MASTER_PORT3 'start_leader_counter' 3 -1 1 # master3 is not leader
+	# run_dm_master $WORK_DIR/master3 $MASTER_PORT3 $cur/conf/dm-master3.toml
+	# check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT3
+	# check_metric $MASTER_PORT3 'start_leader_counter' 3 -1 1 # master3 is not leader
 
 	# worker in running stage
-	check_metric $MASTER_PORT1 'dm_master_worker_state{worker="worker1"}' 3 1 3 || check_metric $MASTER_PORT2 'dm_master_worker_state{worker="worker1"}' 3 1 3
+	# check_metric $MASTER_PORT1 'dm_master_worker_state{worker="worker1"}' 3 1 3 || check_metric $MASTER_PORT2 'dm_master_worker_state{worker="worker1"}' 3 1 3
 
 	echo "start DM task"
 	dmctl_start_task
@@ -64,54 +64,56 @@ function run() {
 
 	echo "use sync_diff_inspector to check increment data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	sleep 2
 
-	echo "pause task before kill and restart dm-worker"
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"pause-task test" \
-		"\"result\": true" 3
 
-	echo "start dm-worker3 and kill dm-worker2"
-	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER2_PORT 20
-	rm -rf $WORK_DIR/worker2/relay_log
+	# echo "pause task before kill and restart dm-worker"
+	# run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	# 	"pause-task test" \
+	# 	"\"result\": true" 3
+
+	# echo "start dm-worker3 and kill dm-worker2"
+	# ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+	# check_port_offline $WORKER2_PORT 20
+	# rm -rf $WORK_DIR/worker2/relay_log
 
 	run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $cur/conf/dm-worker3.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER3_PORT
 
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 2
+	# run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	# 	"start-relay -s $SOURCE_ID2 worker2" \
+	# 	"\"result\": true" 2
 
-	sleep 8
-	echo "wait for the task to be scheduled and keep paused"
-	check_http_alive 127.0.0.1:$MASTER_PORT/apis/${API_VERSION}/status/test '"stage": "Paused"' 10
+	# sleep 8
+	# echo "wait for the task to be scheduled and keep paused"
+	# check_http_alive 127.0.0.1:$MASTER_PORT/apis/${API_VERSION}/status/test '"stage": "Paused"' 10
 
-	echo "resume task before kill and restart dm-worker"
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task test" \
-		"\"result\": true" 3
+	# echo "resume task before kill and restart dm-worker"
+	# run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	# 	"resume-task test" \
+	# 	"\"result\": true" 3
 
-	echo "start dm-worker2 and kill dm-worker3"
-	ps aux | grep dm-worker3 | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER3_PORT 20
-	rm -rf $WORK_DIR/worker3/relay_log
+	# echo "start dm-worker2 and kill dm-worker3"
+	# ps aux | grep dm-worker3 | awk '{print $2}' | xargs kill || true
+	# check_port_offline $WORKER3_PORT 20
+	# rm -rf $WORK_DIR/worker3/relay_log
 
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	# run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	# check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	sleep 8
-	echo "wait and check task running"
-	check_http_alive 127.0.0.1:$MASTER_PORT/apis/${API_VERSION}/status/test '"stage": "Running"' 10
+	# sleep 8
+	# echo "wait and check task running"
+	# check_http_alive 127.0.0.1:$MASTER_PORT/apis/${API_VERSION}/status/test '"stage": "Running"' 10
 
-	# manually transfer a exist source to a newly started worker
-	run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $cur/conf/dm-worker3.toml
+	# # manually transfer a exist source to a newly started worker
+	# run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $cur/conf/dm-worker3.toml
 
-	# pause task first
+
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER3_PORT
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"transfer-source $SOURCE_ID1 worker3" \
 		"tasks \[test\] on source $SOURCE_ID1 should not be running" 1
+	exit 1
+
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-task -s $SOURCE_ID1 test" \
 		"\"result\": true" 2
