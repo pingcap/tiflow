@@ -66,6 +66,8 @@ type sorterNode struct {
 	barrierTs model.Ts
 
 	replConfig *config.ReplicaConfig
+
+	isTableActorMode bool
 }
 
 func newSorterNode(
@@ -235,7 +237,11 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 
 // Receive receives the message from the previous node
 func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
-	msg := ctx.Message()
+	_, err := n.TryHandleDataMessage(ctx, ctx.Message())
+	return err
+}
+
+func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		rawKV := msg.PolymorphicEvent.RawKV
@@ -266,16 +272,25 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 					model.NewResolvedPolymorphicEvent(0, n.barrierTs))
 			}
 		}
-		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
+		if n.isTableActorMode {
+			return n.sorter.TryAddEntry(ctx, msg.PolymorphicEvent)
+		} else {
+			n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
+			return true, nil
+		}
 	case pipeline.MessageTypeBarrier:
 		if msg.BarrierTs > n.barrierTs {
 			n.barrierTs = msg.BarrierTs
 		}
 		fallthrough
 	default:
-		ctx.SendToNextNode(msg)
+		if !n.isTableActorMode {
+			ctx.(pipeline.NodeContext).SendToNextNode(msg)
+			return true, nil
+		} else {
+			return ctx.(*actorNodeContext).TrySendToNextNode(msg), nil
+		}
 	}
-	return nil
 }
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
