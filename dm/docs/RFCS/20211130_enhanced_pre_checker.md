@@ -18,6 +18,7 @@ If we have a large number of tables in source, we will take too much time in che
 * Dump privilege only checks RELOAD and SELECT. However, Dumpling supports different [consistency configurations](https://docs.pingcap.com/tidb/stable/dumpling-overview#adjust-dumplings-data-consistency-options), which need more privileges.
 * If online-ddl is set by true and a DDL is in online-ddl stage, DM will have a problem in all mode. Specifically, when ghost table has been created but not been renamed, DM will report an error when the ghost table is renamed during the incremental phase. You can learn more about online-ddl [here](https://docs.pingcap.com/tidb-data-migration/stable/feature-online-ddl).
 * For schema_of_shard_tables, whether it's a pessimistic task or an optimistic task, we all simply check consistency of schema by comparing all sharding tables’ structures. For optimistic mode, we can do better.
+* Version checker checks that MySQLVersion >= 5.6.0 and MariadbVersion >= 10.1.2 before. However, we find more and more incompatibility problems in MySQLVersion >= 8.0.0 and Mariadb. In view of supporting MySQL 8.0 and Mariadb is experimental yet, checker will report a warning for them.
 
 ## Proposal
 
@@ -53,6 +54,10 @@ If we have a large number of tables in source, we will take too much time in che
         - For all/full mode (pessimistic task): we keep **the original check**;
         - For all/full mode (optimistic task): we check whether the shard tables schema meets **the definition of [Optimistic Schema Compatibility](20191209_optimistic_ddl.md)**. If that meets, we can create tables by the compatible schema in the dump stage.
         - For incremental mode: **not check** the sharding tables’ schema, because the table schema obtained from show create table is not the schema at the point of binlog.
+5.  Version checker will report a warning in the following cases:
+    - MySQL < 5.6.0
+    - MySQL >= 8.0.0
+    - Mariadb
 
 ### Restrict user usage
 1. Remove all `ignore_check_items` settings from the [document](https://docs.pingcap.com/tidb-data-migration/stable/precheck#disable-checking-items). If the following items are detected to be set in the configuration, a warning will be reported.
