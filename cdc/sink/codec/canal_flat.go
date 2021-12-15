@@ -140,6 +140,9 @@ func (c *canalFlatMessage) getOld() map[string]interface{} {
 }
 
 func (c *canalFlatMessage) getData() map[string]interface{} {
+	if c.Data == nil {
+		return nil
+	}
 	return c.Data[0]
 }
 
@@ -186,10 +189,16 @@ func (c *canalFlatMessageWithTiDBExtension) getQuery() string {
 }
 
 func (c *canalFlatMessageWithTiDBExtension) getOld() map[string]interface{} {
+	if c.Old == nil {
+		return nil
+	}
 	return c.Old[0]
 }
 
 func (c *canalFlatMessageWithTiDBExtension) getData() map[string]interface{} {
+	if c.Data == nil {
+		return nil
+	}
 	return c.Data[0]
 }
 
@@ -522,11 +531,11 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 	}
 
 	var err error
-	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(), flatMessage.getMySQLType())
+	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(), flatMessage.getMySQLType(), flatMessage.getJavaSQLType())
 	if err != nil {
 		return nil, err
 	}
-	result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(), flatMessage.getMySQLType())
+	result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(), flatMessage.getMySQLType(), flatMessage.getJavaSQLType())
 	if err != nil {
 		return nil, err
 	}
@@ -534,25 +543,15 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 	return result, nil
 }
 
-func isBinary(mysqlTypeStr string) bool {
-	if strings.Contains(mysqlTypeStr, "blob") {
-		return true
-	}
-	if strings.Contains(mysqlTypeStr, "binary") {
-		return true
-	}
-	if strings.Contains(mysqlTypeStr, "bit") {
-		return true
-	}
-	if strings.Contains(mysqlTypeStr, "json") {
-		return true
-	}
-	return false
-}
-
-func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType map[string]string) ([]*model.Column, error) {
+func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType map[string]string, javaSQLType map[string]int32) ([]*model.Column, error) {
 	result := make([]*model.Column, 0, len(cols))
 	for name, value := range cols {
+		javaType, ok := javaSQLType[name]
+		if !ok {
+			// this should not happen, else we have to check encoding for javaSQLType.
+			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
+				"java sql type does not found, column: %+v, mysqlType: %+v", name, javaSQLType)
+		}
 		mysqlTypeStr, ok := mysqlType[name]
 		if !ok {
 			// this should not happen, else we have to check encoding for mysqlType.
@@ -560,12 +559,9 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
 		mysqlTypeStr = strings.ToLower(mysqlTypeStr)
+		mysqlTypeStr = strings.TrimSuffix(mysqlTypeStr, " unsigned")
 		mysqlType := types.StrToType(mysqlTypeStr)
-		if !ok {
-			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
-				"mysql type does not found, column: %+v, type: %+v", name, mysqlType)
-		}
-		col := NewColumn(value, mysqlType).decodeCanalJSONColumn(name, isBinary(mysqlTypeStr))
+		col := NewColumn(value, mysqlType).decodeCanalJSONColumn(name, JavaSQLType(javaType))
 		result = append(result, col)
 	}
 	if len(result) == 0 {

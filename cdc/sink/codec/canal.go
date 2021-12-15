@@ -219,6 +219,7 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType)
 	case string:
 		result = v
 	case []byte:
+		//  JavaSQLTypeVARCHAR / JavaSQLTypeCHAR / JavaSQLTypeBLOB / JavaSQLTypeCLOB /
 		// special handle for text and blob
 		// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
 		switch javaType {
@@ -226,7 +227,7 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType)
 		case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR, JavaSQLTypeCLOB:
 			result = string(v)
 		default:
-			// for `binary` and `blob`
+			// JavaSQLTypeBLOB
 			decoded, err := b.bytesDecoder.Bytes(v)
 			if err != nil {
 				return "", err

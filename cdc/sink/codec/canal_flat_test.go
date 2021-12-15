@@ -154,7 +154,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	expectedDecodedValues := collectDecodeValueByColumns(testCaseInsert.Columns)
+	expectedDecodedValues := collectDecodeValueByColumns(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
 		c.Assert(encoder, check.NotNil)
@@ -192,10 +192,15 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 			}
 
 			for _, col := range consumed.Columns {
-				value, ok := expectedDecodedValues[col.Name]
+				expected, ok := expectedDecodedValues[col.Name]
 				c.Assert(ok, check.IsTrue)
 
-				c.Assert(col.Value, check.Equals, value)
+				if obtained, ok := col.Value.([]byte); ok {
+					c.Assert(string(obtained), check.Equals, expected)
+				} else {
+					c.Assert(col.Value, check.Equals, expected)
+				}
+
 				for _, item := range testCaseInsert.Columns {
 					if item.Name == col.Name {
 						c.Assert(col.Type, check.Equals, item.Type)

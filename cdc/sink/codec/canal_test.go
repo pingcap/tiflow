@@ -370,7 +370,8 @@ type testColumnTuple struct {
 	column              *model.Column
 	expectedMySQLType   string
 	expectedJavaSQLType JavaSQLType
-	expectedValue       string
+	// expectedValue is expected by both encoding and decoding
+	expectedValue string
 }
 
 func collectAllColumns(groups []*testColumnTuple) []*model.Column {
@@ -381,10 +382,10 @@ func collectAllColumns(groups []*testColumnTuple) []*model.Column {
 	return result
 }
 
-func collectDecodeValueByColumns(columns []*model.Column) map[string]interface{} {
-	result := make(map[string]interface{}, len(columns))
+func collectDecodeValueByColumns(columns []*testColumnTuple) map[string]string {
+	result := make(map[string]string, len(columns))
 	for _, item := range columns {
-		result[item.Name] = item.Value
+		result[item.column.Name] = item.expectedValue
 	}
 	return result
 }
@@ -436,13 +437,13 @@ var testColumnsTable = []*testColumnTuple{
 
 	{&model.Column{Name: "date", Type: mysql.TypeDate, Value: "2020-02-20"}, "DATE", JavaSQLTypeDATE, "2020-02-20"},
 	{&model.Column{Name: "datetime", Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"}, "DATETIME", JavaSQLTypeTIMESTAMP, "2020-02-20 02:20:20"},
-	{&model.Column{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"}, "TIMESTAMP", JavaSQLTypeTIMESTAMP, "02:20:20"},
+	{&model.Column{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"}, "TIMESTAMP", JavaSQLTypeTIMESTAMP, "2020-02-20 10:20:20"},
 	{&model.Column{Name: "time", Type: mysql.TypeDuration, Value: "02:20:20"}, "TIME", JavaSQLTypeTIME, "02:20:20"},
 	{&model.Column{Name: "year", Type: mysql.TypeYear, Value: "2020", Flag: model.UnsignedFlag}, "YEAR", JavaSQLTypeVARCHAR, "2020"},
 
 	{&model.Column{Name: "enum", Type: mysql.TypeEnum, Value: uint64(1)}, "ENUM", JavaSQLTypeINTEGER, "1"},
 	{&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(3)}, "SET", JavaSQLTypeBIT, "3"},
-	{&model.Column{Name: "bit", Type: mysql.TypeBit, Value: uint64(5), Flag: model.UnsignedFlag | model.BinaryFlag}, "BIT", JavaSQLTypeBIT, "65"},
+	{&model.Column{Name: "bit", Type: mysql.TypeBit, Value: uint64(65), Flag: model.UnsignedFlag | model.BinaryFlag}, "BIT", JavaSQLTypeBIT, "65"},
 	{&model.Column{Name: "json", Type: mysql.TypeJSON, Value: "{\"key1\": \"value1\"}", Flag: model.BinaryFlag}, "JSON", JavaSQLTypeVARCHAR, "{\"key1\": \"value1\"}"},
 }
 

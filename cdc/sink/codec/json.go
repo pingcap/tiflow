@@ -23,6 +23,8 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/text/encoding/charmap"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -91,7 +93,7 @@ func (c *column) FromSinkColumn(col *model.Column) {
 	}
 }
 
-func (c *column) decodeCanalJSONColumn(name string, isBinary bool) *model.Column {
+func (c *column) decodeCanalJSONColumn(name string, javaType JavaSQLType) *model.Column {
 	col := new(model.Column)
 	col.Type = c.Type
 	col.Flag = c.Flag
@@ -100,20 +102,25 @@ func (c *column) decodeCanalJSONColumn(name string, isBinary bool) *model.Column
 	if c.Value == nil {
 		return col
 	}
-	switch col.Type {
-	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-		str := col.Value.(string)
-		var err error
-		if isBinary {
-			str, err = strconv.Unquote("\"" + str + "\"")
-			if err != nil {
-				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
-			}
-		}
-		col.Value = []byte(str)
-	default:
-		col.Value = c.Value
+
+	value, ok := col.Value.(string)
+	if !ok {
+		log.Panic("canal-json encoded message should have type int `string`")
 	}
+
+	if javaType != JavaSQLTypeBLOB {
+		col.Value = value
+		return col
+	}
+
+	// when encoding the `JavaSQLTypeBLOB`, use `ISO8859_1` decoder, now reverse it back.
+	encoder := charmap.ISO8859_1.NewEncoder()
+	value, err := encoder.String(value)
+	if err != nil {
+		log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+	}
+
+	col.Value = value
 	return col
 }
 
