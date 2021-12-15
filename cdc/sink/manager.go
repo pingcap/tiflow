@@ -15,10 +15,8 @@ package sink
 
 import (
 	"context"
-	"math"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -26,10 +24,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
-)
-
-const (
-	defaultMetricInterval = time.Second * 15
 )
 
 // Manager manages table sinks, maintains the relationship between table sinks and backendSink.
@@ -77,7 +71,6 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 		tableID:     tableID,
 		manager:     m,
 		buffer:      make([]*model.RowChangedEvent, 0, 128),
-		emittedTs:   checkpointTs,
 		redoManager: redoManager,
 	}
 	m.tableSinks[tableID] = sink
@@ -91,22 +84,6 @@ func (m *Manager) Close(ctx context.Context) error {
 		return m.backendSink.Close(ctx)
 	}
 	return nil
-}
-
-func (m *Manager) getMinEmittedTs(tableID model.TableID) model.Ts {
-	m.tableSinksMu.Lock()
-	defer m.tableSinksMu.Unlock()
-	if len(m.tableSinks) == 0 {
-		return m.getCheckpointTs(tableID)
-	}
-	minTs := model.Ts(math.MaxUint64)
-	for _, tblSink := range m.tableSinks {
-		resolvedTs := tblSink.getResolvedTs()
-		if minTs > resolvedTs {
-			minTs = resolvedTs
-		}
-	}
-	return minTs
 }
 
 func (m *Manager) flushBackendSink(ctx context.Context, tableID model.TableID, resolvedTs uint64) (model.Ts, error) {

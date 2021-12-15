@@ -59,7 +59,6 @@ type runState struct {
 
 	metricFlushDuration   prometheus.Observer
 	metricEmitRowDuration prometheus.Observer
-	metricBufferSize      prometheus.Counter
 	metricTotalRows       prometheus.Counter
 }
 
