@@ -32,6 +32,7 @@ func TestStartAndStopSystem(t *testing.T) {
 }
 
 func TestActorID(t *testing.T) {
+	sys := NewSystem()
 	type table struct {
 		changeFeed string
 		tableID    model.TableID
@@ -47,9 +48,9 @@ func TestActorID(t *testing.T) {
 	}
 	ids := make(map[actor.ID]bool)
 	for _, c := range cases {
-		id1 := ActorID(c.changeFeed, c.tableID)
+		id1 := sys.ActorID(c.changeFeed, c.tableID)
 		for i := 0; i < 10; i++ {
-			require.Equal(t, id1, ActorID(c.changeFeed, c.tableID))
+			require.Equal(t, id1, sys.ActorID(c.changeFeed, c.tableID))
 		}
 		require.False(t, ids[id1])
 		ids[id1] = true

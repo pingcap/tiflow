@@ -28,6 +28,9 @@ import (
 // send a tick message to actor if we get 32 pipeline messages
 const messagesPerTick = 32
 
+// actorNodeContext implements the NodeContext interface, with this we do not need to change too much logic to implement the table actor
+// the SendToNextNode buffer the pipeline message and tick the actor system
+// the Throw function handle error and stop the actor
 type actorNodeContext struct {
 	sdtContext.Context
 	outputCh             chan pipeline.Message
@@ -72,6 +75,8 @@ func (c *actorNodeContext) Throw(err error) {
 	_ = c.tableActorRouter.SendB(c, c.tableActorID, message.StopMessage())
 }
 
+// SendToNextNode send msg to the outputCh and notify the actor system,
+// to reduce the  actor message, only send tick message per threshold
 func (c *actorNodeContext) SendToNextNode(msg pipeline.Message) {
 	c.outputCh <- msg
 	c.trySendTickMessage()

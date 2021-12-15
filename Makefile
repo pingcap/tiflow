@@ -273,6 +273,7 @@ dm_generate_openapi: tools/bin/oapi-codegen
 	@echo "generate_openapi"
 	cd dm && ../tools/bin/oapi-codegen --config=openapi/spec/server-gen-cfg.yaml openapi/spec/dm.yaml
 	cd dm && ../tools/bin/oapi-codegen --config=openapi/spec/types-gen-cfg.yaml openapi/spec/dm.yaml
+	cd dm && ../tools/bin/oapi-codegen --config=openapi/spec/client-gen-cfg.yaml openapi/spec/dm.yaml
 
 dm_unit_test: check_failpoint_ctl
 	mkdir -p $(DM_TEST_DIR)
