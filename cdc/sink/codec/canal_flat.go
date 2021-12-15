@@ -82,6 +82,7 @@ type canalFlatMessageInterface interface {
 	getOld() map[string]interface{}
 	getData() map[string]interface{}
 	getMySQLType() map[string]string
+	getJavaSQLType() map[string]int32
 }
 
 // adapted from https://github.com/alibaba/canal/blob/master/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java
@@ -146,6 +147,10 @@ func (c *canalFlatMessage) getMySQLType() map[string]string {
 	return c.MySQLType
 }
 
+func (c *canalFlatMessage) getJavaSQLType() map[string]int32 {
+	return c.SQLType
+}
+
 type tidbExtension struct {
 	CommitTs    uint64 `json:"commitTs,omitempty"`
 	WatermarkTs uint64 `json:"watermarkTs,omitempty"`
@@ -190,6 +195,10 @@ func (c *canalFlatMessageWithTiDBExtension) getData() map[string]interface{} {
 
 func (c *canalFlatMessageWithTiDBExtension) getMySQLType() map[string]string {
 	return c.MySQLType
+}
+
+func (c *canalFlatMessageWithTiDBExtension) getJavaSQLType() map[string]int32 {
+	return c.SQLType
 }
 
 func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEvent) (canalFlatMessageInterface, error) {
@@ -525,21 +534,38 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 	return result, nil
 }
 
+func isBinary(mysqlTypeStr string) bool {
+	if strings.Contains(mysqlTypeStr, "blob") {
+		return true
+	}
+	if strings.Contains(mysqlTypeStr, "binary") {
+		return true
+	}
+	if strings.Contains(mysqlTypeStr, "bit") {
+		return true
+	}
+	if strings.Contains(mysqlTypeStr, "json") {
+		return true
+	}
+	return false
+}
+
 func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType map[string]string) ([]*model.Column, error) {
 	result := make([]*model.Column, 0, len(cols))
 	for name, value := range cols {
-		typeStr, ok := mysqlType[name]
+		mysqlTypeStr, ok := mysqlType[name]
 		if !ok {
 			// this should not happen, else we have to check encoding for mysqlType.
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		tp := types.StrToType(strings.ToLower(typeStr))
+		mysqlTypeStr = strings.ToLower(mysqlTypeStr)
+		mysqlType := types.StrToType(mysqlTypeStr)
 		if !ok {
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
-				"mysql type does not found, column: %+v, type: %+v", name, tp)
+				"mysql type does not found, column: %+v, type: %+v", name, mysqlType)
 		}
-		col := NewColumn(value, tp).ToSinkColumn(name)
+		col := NewColumn(value, mysqlType).decodeCanalJSONColumn(name, isBinary(mysqlTypeStr))
 		result = append(result, col)
 	}
 	if len(result) == 0 {

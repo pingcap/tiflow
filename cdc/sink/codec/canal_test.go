@@ -390,60 +390,60 @@ func collectDecodeValueByColumns(columns []*model.Column) map[string]interface{}
 }
 
 var testColumnsTable = []*testColumnTuple{
-	//{&model.Column{Name: "tinyint", Type: mysql.TypeTiny, Value: int64(127)}, "TINYINT", JavaSQLTypeTINYINT, "127"}, // TinyInt
-	//{&model.Column{Name: "tinyint unsigned", Type: mysql.TypeTiny, Value: uint64(127), Flag: model.UnsignedFlag}, "TINYINT UNSIGNED", JavaSQLTypeTINYINT, "127"},
-	//{&model.Column{Name: "tinyint unsigned 2", Type: mysql.TypeTiny, Value: uint64(128), Flag: model.UnsignedFlag}, "TINYINT UNSIGNED", JavaSQLTypeSMALLINT, "128"},
-	//
-	//{&model.Column{Name: "smallint", Type: mysql.TypeShort, Value: int64(32767)}, "SMALLINT", JavaSQLTypeSMALLINT, "32767"},
-	//{&model.Column{Name: "smallint unsigned", Type: mysql.TypeShort, Value: uint64(32767), Flag: model.UnsignedFlag}, "SMALLINT UNSIGNED", JavaSQLTypeSMALLINT, "32767"},
-	//{&model.Column{Name: "smallint unsigned 2", Type: mysql.TypeShort, Value: uint64(32768), Flag: model.UnsignedFlag}, "SMALLINT UNSIGNED", JavaSQLTypeINTEGER, "32768"},
-	//
-	//{&model.Column{Name: "mediumint", Type: mysql.TypeInt24, Value: int64(8388607)}, "MEDIUMINT", JavaSQLTypeINTEGER, "8388607"},
-	//{&model.Column{Name: "mediumint unsigned", Type: mysql.TypeInt24, Value: uint64(8388607), Flag: model.UnsignedFlag}, "MEDIUMINT UNSIGNED", JavaSQLTypeINTEGER, "8388607"},
-	//{&model.Column{Name: "mediumint unsigned 2", Type: mysql.TypeInt24, Value: uint64(8388608), Flag: model.UnsignedFlag}, "MEDIUMINT UNSIGNED", JavaSQLTypeINTEGER, "8388608"},
-	//
-	//{&model.Column{Name: "int", Type: mysql.TypeLong, Value: int64(2147483647)}, "INT", JavaSQLTypeINTEGER, "2147483647"},
-	//{&model.Column{Name: "int unsigned", Type: mysql.TypeLong, Value: uint64(2147483647), Flag: model.UnsignedFlag}, "INT UNSIGNED", JavaSQLTypeINTEGER, "2147483647"},
-	//{&model.Column{Name: "int unsigned 2", Type: mysql.TypeLong, Value: uint64(2147483648), Flag: model.UnsignedFlag}, "INT UNSIGNED", JavaSQLTypeBIGINT, "2147483648"},
-	//
-	//{&model.Column{Name: "bigint", Type: mysql.TypeLonglong, Value: int64(9223372036854775807)}, "BIGINT", JavaSQLTypeBIGINT, "9223372036854775807"},
-	//{&model.Column{Name: "bigint unsigned", Type: mysql.TypeLonglong, Value: uint64(9223372036854775807), Flag: model.UnsignedFlag}, "BIGINT UNSIGNED", JavaSQLTypeBIGINT, "9223372036854775807"},
-	//{&model.Column{Name: "bigint unsigned 2", Type: mysql.TypeLonglong, Value: uint64(9223372036854775808), Flag: model.UnsignedFlag}, "BIGINT UNSIGNED", JavaSQLTypeDECIMAL, "9223372036854775808"},
-	//
-	//{&model.Column{Name: "float", Type: mysql.TypeFloat, Value: 3.14}, "FLOAT", JavaSQLTypeREAL, "3.14"},
-	//{&model.Column{Name: "double", Type: mysql.TypeDouble, Value: 2.71}, "DOUBLE", JavaSQLTypeDOUBLE, "2.71"},
-	//{&model.Column{Name: "decimal", Type: mysql.TypeNewDecimal, Value: "2333"}, "DECIMAL", JavaSQLTypeDECIMAL, "2333"},
-	//
-	//{&model.Column{Name: "float unsigned", Type: mysql.TypeFloat, Value: 3.14, Flag: model.UnsignedFlag}, "FLOAT UNSIGNED", JavaSQLTypeREAL, "3.14"},
-	//{&model.Column{Name: "double unsigned", Type: mysql.TypeDouble, Value: 2.71, Flag: model.UnsignedFlag}, "DOUBLE UNSIGNED", JavaSQLTypeDOUBLE, "2.71"},
-	//{&model.Column{Name: "decimal unsigned", Type: mysql.TypeNewDecimal, Value: "2333", Flag: model.UnsignedFlag}, "DECIMAL UNSIGNED", JavaSQLTypeDECIMAL, "2333"},
-	//
-	//// for column value type in `[]uint8` and have `BinaryFlag`, expectedValue is dummy.
-	//{&model.Column{Name: "varchar", Type: mysql.TypeVarchar, Value: []uint8("测试Varchar")}, "VARCHAR", JavaSQLTypeVARCHAR, "测试Varchar"},
-	//{&model.Column{Name: "char", Type: mysql.TypeString, Value: []uint8("测试String")}, "CHAR", JavaSQLTypeCHAR, "测试String"},
+	{&model.Column{Name: "tinyint", Type: mysql.TypeTiny, Value: int64(127)}, "TINYINT", JavaSQLTypeTINYINT, "127"}, // TinyInt
+	{&model.Column{Name: "tinyint unsigned", Type: mysql.TypeTiny, Value: uint64(127), Flag: model.UnsignedFlag}, "TINYINT UNSIGNED", JavaSQLTypeTINYINT, "127"},
+	{&model.Column{Name: "tinyint unsigned 2", Type: mysql.TypeTiny, Value: uint64(128), Flag: model.UnsignedFlag}, "TINYINT UNSIGNED", JavaSQLTypeSMALLINT, "128"},
+
+	{&model.Column{Name: "smallint", Type: mysql.TypeShort, Value: int64(32767)}, "SMALLINT", JavaSQLTypeSMALLINT, "32767"},
+	{&model.Column{Name: "smallint unsigned", Type: mysql.TypeShort, Value: uint64(32767), Flag: model.UnsignedFlag}, "SMALLINT UNSIGNED", JavaSQLTypeSMALLINT, "32767"},
+	{&model.Column{Name: "smallint unsigned 2", Type: mysql.TypeShort, Value: uint64(32768), Flag: model.UnsignedFlag}, "SMALLINT UNSIGNED", JavaSQLTypeINTEGER, "32768"},
+
+	{&model.Column{Name: "mediumint", Type: mysql.TypeInt24, Value: int64(8388607)}, "MEDIUMINT", JavaSQLTypeINTEGER, "8388607"},
+	{&model.Column{Name: "mediumint unsigned", Type: mysql.TypeInt24, Value: uint64(8388607), Flag: model.UnsignedFlag}, "MEDIUMINT UNSIGNED", JavaSQLTypeINTEGER, "8388607"},
+	{&model.Column{Name: "mediumint unsigned 2", Type: mysql.TypeInt24, Value: uint64(8388608), Flag: model.UnsignedFlag}, "MEDIUMINT UNSIGNED", JavaSQLTypeINTEGER, "8388608"},
+
+	{&model.Column{Name: "int", Type: mysql.TypeLong, Value: int64(2147483647)}, "INT", JavaSQLTypeINTEGER, "2147483647"},
+	{&model.Column{Name: "int unsigned", Type: mysql.TypeLong, Value: uint64(2147483647), Flag: model.UnsignedFlag}, "INT UNSIGNED", JavaSQLTypeINTEGER, "2147483647"},
+	{&model.Column{Name: "int unsigned 2", Type: mysql.TypeLong, Value: uint64(2147483648), Flag: model.UnsignedFlag}, "INT UNSIGNED", JavaSQLTypeBIGINT, "2147483648"},
+
+	{&model.Column{Name: "bigint", Type: mysql.TypeLonglong, Value: int64(9223372036854775807)}, "BIGINT", JavaSQLTypeBIGINT, "9223372036854775807"},
+	{&model.Column{Name: "bigint unsigned", Type: mysql.TypeLonglong, Value: uint64(9223372036854775807), Flag: model.UnsignedFlag}, "BIGINT UNSIGNED", JavaSQLTypeBIGINT, "9223372036854775807"},
+	{&model.Column{Name: "bigint unsigned 2", Type: mysql.TypeLonglong, Value: uint64(9223372036854775808), Flag: model.UnsignedFlag}, "BIGINT UNSIGNED", JavaSQLTypeDECIMAL, "9223372036854775808"},
+
+	{&model.Column{Name: "float", Type: mysql.TypeFloat, Value: 3.14}, "FLOAT", JavaSQLTypeREAL, "3.14"},
+	{&model.Column{Name: "double", Type: mysql.TypeDouble, Value: 2.71}, "DOUBLE", JavaSQLTypeDOUBLE, "2.71"},
+	{&model.Column{Name: "decimal", Type: mysql.TypeNewDecimal, Value: "2333"}, "DECIMAL", JavaSQLTypeDECIMAL, "2333"},
+
+	{&model.Column{Name: "float unsigned", Type: mysql.TypeFloat, Value: 3.14, Flag: model.UnsignedFlag}, "FLOAT UNSIGNED", JavaSQLTypeREAL, "3.14"},
+	{&model.Column{Name: "double unsigned", Type: mysql.TypeDouble, Value: 2.71, Flag: model.UnsignedFlag}, "DOUBLE UNSIGNED", JavaSQLTypeDOUBLE, "2.71"},
+	{&model.Column{Name: "decimal unsigned", Type: mysql.TypeNewDecimal, Value: "2333", Flag: model.UnsignedFlag}, "DECIMAL UNSIGNED", JavaSQLTypeDECIMAL, "2333"},
+
+	// for column value type in `[]uint8` and have `BinaryFlag`, expectedValue is dummy.
+	{&model.Column{Name: "varchar", Type: mysql.TypeVarchar, Value: []uint8("测试Varchar")}, "VARCHAR", JavaSQLTypeVARCHAR, "测试Varchar"},
+	{&model.Column{Name: "char", Type: mysql.TypeString, Value: []uint8("测试String")}, "CHAR", JavaSQLTypeCHAR, "测试String"},
 	{&model.Column{Name: "binary", Type: mysql.TypeString, Value: []uint8("测试Binary"), Flag: model.BinaryFlag}, "BINARY", JavaSQLTypeBLOB, "测试Binary"},
-	//{&model.Column{Name: "varbinary", Type: mysql.TypeVarchar, Value: []uint8("测试varbinary"), Flag: model.BinaryFlag}, "VARBINARY", JavaSQLTypeBLOB, "测试varbinary"},
-	//
-	//{&model.Column{Name: "tinytext", Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")}, "TINYTEXT", JavaSQLTypeCLOB, "测试Tinytext"},
-	//{&model.Column{Name: "text", Type: mysql.TypeBlob, Value: []uint8("测试text")}, "TEXT", JavaSQLTypeCLOB, "测试text"},
-	//{&model.Column{Name: "mediumtext", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumtext")}, "MEDIUMTEXT", JavaSQLTypeCLOB, "测试mediumtext"},
-	//{&model.Column{Name: "longtext", Type: mysql.TypeLongBlob, Value: []uint8("测试longtext")}, "LONGTEXT", JavaSQLTypeCLOB, "测试longtext"},
-	//
-	//{&model.Column{Name: "tinyblob", Type: mysql.TypeTinyBlob, Value: []uint8("测试tinyblob"), Flag: model.BinaryFlag}, "TINYBLOB", JavaSQLTypeBLOB, "测试tinyblob"},
-	//{&model.Column{Name: "blob", Type: mysql.TypeBlob, Value: []uint8("测试blob"), Flag: model.BinaryFlag}, "BLOB", JavaSQLTypeBLOB, "测试blob"},
-	//{&model.Column{Name: "mediumblob", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumblob"), Flag: model.BinaryFlag}, "MEDIUMBLOB", JavaSQLTypeBLOB, "测试mediumblob"},
-	//{&model.Column{Name: "longblob", Type: mysql.TypeLongBlob, Value: []uint8("测试longblob"), Flag: model.BinaryFlag}, "LONGBLOB", JavaSQLTypeBLOB, "测试longblob"},
-	//
-	//{&model.Column{Name: "date", Type: mysql.TypeDate, Value: "2020-02-20"}, "DATE", JavaSQLTypeDATE, "2020-02-20"},
-	//{&model.Column{Name: "datetime", Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"}, "DATETIME", JavaSQLTypeTIMESTAMP, "2020-02-20 02:20:20"},
-	//{&model.Column{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"}, "TIMESTAMP", JavaSQLTypeTIMESTAMP, "02:20:20"},
-	//{&model.Column{Name: "time", Type: mysql.TypeDuration, Value: "02:20:20"}, "TIME", JavaSQLTypeTIME, "02:20:20"},
-	//{&model.Column{Name: "year", Type: mysql.TypeYear, Value: "2020", Flag: model.UnsignedFlag}, "YEAR", JavaSQLTypeVARCHAR, "2020"},
-	//
-	//{&model.Column{Name: "enum", Type: mysql.TypeEnum, Value: uint64(1)}, "ENUM", JavaSQLTypeINTEGER, "1"},
-	//{&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(3)}, "SET", JavaSQLTypeBIT, "3"},
-	//{&model.Column{Name: "bit", Type: mysql.TypeBit, Value: uint64(5), Flag: model.UnsignedFlag | model.BinaryFlag}, "BIT", JavaSQLTypeBIT, "65"},
-	//{&model.Column{Name: "json", Type: mysql.TypeJSON, Value: "{\"key1\": \"value1\"}", Flag: model.BinaryFlag}, "JSON", JavaSQLTypeVARCHAR, "{\"key1\": \"value1\"}"},
+	{&model.Column{Name: "varbinary", Type: mysql.TypeVarchar, Value: []uint8("测试varbinary"), Flag: model.BinaryFlag}, "VARBINARY", JavaSQLTypeBLOB, "测试varbinary"},
+
+	{&model.Column{Name: "tinytext", Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")}, "TINYTEXT", JavaSQLTypeCLOB, "测试Tinytext"},
+	{&model.Column{Name: "text", Type: mysql.TypeBlob, Value: []uint8("测试text")}, "TEXT", JavaSQLTypeCLOB, "测试text"},
+	{&model.Column{Name: "mediumtext", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumtext")}, "MEDIUMTEXT", JavaSQLTypeCLOB, "测试mediumtext"},
+	{&model.Column{Name: "longtext", Type: mysql.TypeLongBlob, Value: []uint8("测试longtext")}, "LONGTEXT", JavaSQLTypeCLOB, "测试longtext"},
+
+	{&model.Column{Name: "tinyblob", Type: mysql.TypeTinyBlob, Value: []uint8("测试tinyblob"), Flag: model.BinaryFlag}, "TINYBLOB", JavaSQLTypeBLOB, "测试tinyblob"},
+	{&model.Column{Name: "blob", Type: mysql.TypeBlob, Value: []uint8("测试blob"), Flag: model.BinaryFlag}, "BLOB", JavaSQLTypeBLOB, "测试blob"},
+	{&model.Column{Name: "mediumblob", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumblob"), Flag: model.BinaryFlag}, "MEDIUMBLOB", JavaSQLTypeBLOB, "测试mediumblob"},
+	{&model.Column{Name: "longblob", Type: mysql.TypeLongBlob, Value: []uint8("测试longblob"), Flag: model.BinaryFlag}, "LONGBLOB", JavaSQLTypeBLOB, "测试longblob"},
+
+	{&model.Column{Name: "date", Type: mysql.TypeDate, Value: "2020-02-20"}, "DATE", JavaSQLTypeDATE, "2020-02-20"},
+	{&model.Column{Name: "datetime", Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"}, "DATETIME", JavaSQLTypeTIMESTAMP, "2020-02-20 02:20:20"},
+	{&model.Column{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"}, "TIMESTAMP", JavaSQLTypeTIMESTAMP, "02:20:20"},
+	{&model.Column{Name: "time", Type: mysql.TypeDuration, Value: "02:20:20"}, "TIME", JavaSQLTypeTIME, "02:20:20"},
+	{&model.Column{Name: "year", Type: mysql.TypeYear, Value: "2020", Flag: model.UnsignedFlag}, "YEAR", JavaSQLTypeVARCHAR, "2020"},
+
+	{&model.Column{Name: "enum", Type: mysql.TypeEnum, Value: uint64(1)}, "ENUM", JavaSQLTypeINTEGER, "1"},
+	{&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(3)}, "SET", JavaSQLTypeBIT, "3"},
+	{&model.Column{Name: "bit", Type: mysql.TypeBit, Value: uint64(5), Flag: model.UnsignedFlag | model.BinaryFlag}, "BIT", JavaSQLTypeBIT, "65"},
+	{&model.Column{Name: "json", Type: mysql.TypeJSON, Value: "{\"key1\": \"value1\"}", Flag: model.BinaryFlag}, "JSON", JavaSQLTypeVARCHAR, "{\"key1\": \"value1\"}"},
 }
 
 func (s *canalEntrySuite) TestGetMySQLTypeAndJavaSQLType(c *check.C) {
