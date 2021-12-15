@@ -190,6 +190,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["u_int"] = 4294967295
 		data["u_bigint"] = uint64(18446744073709551615)
 
+		// todo(3AceShowHand): `year` cannot be synced by canal-adapter, investigate more later, comment it out now.
 		// data["t_year"] = 2021
 		data["t_binary"] = []byte{0x1, 0x2, 0x0, 0x3}
 		data["t_varbinary"] = []byte{0x1, 0x2, 0x0, 0x3}
