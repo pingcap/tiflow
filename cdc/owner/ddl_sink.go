@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -40,7 +41,7 @@ const (
 // Other functions are still in a synchronized way.
 type DDLSink interface {
 	// run the DDLSink
-	run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) error
+	run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo)
 	// emitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
@@ -69,6 +70,7 @@ type ddlSinkImpl struct {
 	sinkInitHandler ddlSinkInitHandler
 
 	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 func newDDLSink() DDLSink {
@@ -109,54 +111,62 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 	return nil
 }
 
-func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) error {
+func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	s.cancel = cancel
 
-	start := time.Now()
-	if err := s.sinkInitHandler(ctx, s, id, info); err != nil {
-		return errors.Trace(err)
-	}
-
-	log.Info("ddl sink initialized, start processing...", zap.Duration("elapsed", time.Since(start)))
-
-	// TODO make the tick duration configurable
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	var lastCheckpointTs model.Ts
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case err := <-s.errCh:
-			return errors.Trace(err)
-		case <-ticker.C:
-			checkpointTs := atomic.LoadUint64(&s.checkpointTs)
-			if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
-				continue
-			}
-			lastCheckpointTs = checkpointTs
-			if err := s.sink.EmitCheckpointTs(ctx, checkpointTs); err != nil {
-				return errors.Trace(err)
-			}
-		case ddl := <-s.ddlCh:
-			err := s.sink.EmitDDLEvent(ctx, ddl)
-			failpoint.Inject("InjectChangefeedDDLError", func() {
-				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
-			})
-			if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
-				log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
-				atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
-				continue
-			}
-			// If DDL executing failed, and the error can not be ignored, throw an error and pause the changefeed
-			log.Error("Execute DDL failed",
-				zap.String("ChangeFeedID", ctx.ChangefeedVars().ID),
-				zap.Error(err),
-				zap.Reflect("ddl", ddl))
-			return errors.Trace(err)
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		start := time.Now()
+		if err := s.sinkInitHandler(ctx, s, id, info); err != nil {
+			s.errCh <- err
+			log.Warn("ddl sink initialize failed", zap.Duration("elapsed", time.Since(start)))
+			return
 		}
-	}
+		log.Info("ddl sink initialized, start processing...", zap.Duration("elapsed", time.Since(start)))
+
+		// TODO make the tick duration configurable
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		var lastCheckpointTs model.Ts
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case err := <-s.errCh:
+				s.errCh <- err
+				return
+			case <-ticker.C:
+				checkpointTs := atomic.LoadUint64(&s.checkpointTs)
+				if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
+					continue
+				}
+				lastCheckpointTs = checkpointTs
+				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs); err != nil {
+					s.errCh <- err
+					return
+				}
+			case ddl := <-s.ddlCh:
+				err := s.sink.EmitDDLEvent(ctx, ddl)
+				failpoint.Inject("InjectChangefeedDDLError", func() {
+					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
+				})
+				if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
+					log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
+					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
+					continue
+				}
+				// If DDL executing failed, and the error can not be ignored, throw an error and pause the changefeed
+				log.Error("Execute DDL failed",
+					zap.String("ChangeFeedID", ctx.ChangefeedVars().ID),
+					zap.Error(err),
+					zap.Reflect("ddl", ddl))
+				s.errCh <- err
+				return
+			}
+		}
+	}()
 }
 
 func (s *ddlSinkImpl) emitCheckpointTs(ctx cdcContext.Context, ts uint64) {
@@ -195,6 +205,7 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64)
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
+	s.wg.Wait()
 	if s.sink != nil {
 		err = s.sink.Close(ctx)
 	}
