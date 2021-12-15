@@ -202,11 +202,11 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 		if createStmt.ReferTable != nil {
 			return
 		}
+		adjustColumnsCollation(tctx, createStmt, charsetAndDefaultCollationMap)
 		var justCharset string
 		for _, tableOption := range createStmt.Options {
 			// already have 'Collation'
 			if tableOption.Tp == ast.TableOptionCollate {
-				adjustColumnsCollation(tctx, createStmt, charsetAndDefaultCollationMap)
 				return
 			}
 			if tableOption.Tp == ast.TableOptionCharset {
@@ -215,23 +215,21 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 		}
 		if justCharset == "" {
 			tctx.L().Warn("detect create table risk which use implicit charset and collation", zap.String("originSQL", ddlInfo.originDDL))
-			adjustColumnsCollation(tctx, createStmt, charsetAndDefaultCollationMap)
 			return
 		}
 		// just has charset, can add collation by charset and default collation map
 		collation, ok := charsetAndDefaultCollationMap[strings.ToLower(justCharset)]
 		if !ok {
 			tctx.L().Warn("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
-			adjustColumnsCollation(tctx, createStmt, charsetAndDefaultCollationMap)
 			return
 		}
 		tctx.L().Info("detect create table risk which use explicit charset and implicit collation, we will add collation by INFORMATION_SCHEMA.COLLATIONS", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
 		createStmt.Options = append(createStmt.Options, &ast.TableOption{Tp: ast.TableOptionCollate, StrValue: collation})
-		adjustColumnsCollation(tctx, createStmt, charsetAndDefaultCollationMap)
 
 	case *ast.CreateDatabaseStmt:
 		var justCharset, collation string
 		var ok bool
+		var err error
 		for _, createOption := range createStmt.Options {
 			// already have 'Collation'
 			if createOption.Tp == ast.DatabaseOptionCollate {
@@ -253,7 +251,13 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 		} else {
 			// has no charset and collation
 			// add collation by server collation from binlog statusVars
-			collation, _ = event.GetServerCollationByStatusVars(statusVars, idAndCollationMap)
+			collation, err = event.GetServerCollationByStatusVars(statusVars, idAndCollationMap)
+			if err != nil {
+				tctx.L().Error("can not get charset server collation from binlog statusVars.", zap.Error(err), zap.String("originSQL", ddlInfo.originDDL))
+				if collation == "" {
+					return
+				}
+			}
 			// add collation
 			tctx.L().Info("detect create database risk which use implicit charset and collation, we will add collation by binlog status_vars", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
 		}
@@ -271,6 +275,7 @@ func adjustColumnsCollation(tctx *tcontext.Context, createStmt *ast.CreateTableS
 			}
 		}
 		fieldType := col.Tp
+		// already have 'Collation'
 		if fieldType.Collate != "" {
 			continue
 		}
@@ -281,7 +286,7 @@ func adjustColumnsCollation(tctx *tcontext.Context, createStmt *ast.CreateTableS
 				tctx.L().Warn("not found charset default collation for column.", zap.String("table", createStmt.Table.Name.String()), zap.String("column", col.Name.String()), zap.String("charset", strings.ToLower(fieldType.Charset)))
 				continue
 			}
-			fieldType.Collate = collation
+			col.Options = append(col.Options, &ast.ColumnOption{Tp: ast.ColumnOptionCollate, StrValue: collation})
 		}
 	}
 }

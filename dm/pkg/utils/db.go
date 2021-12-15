@@ -391,57 +391,6 @@ func GetServerUnixTS(ctx context.Context, db *sql.DB) (int64, error) {
 	return ts, err
 }
 
-// GetCharsetAndCollationInfo gets charset and collation info.
-func GetCharsetAndCollationInfo(ctx context.Context, db *sql.DB) (map[string]string, map[int]string, error) {
-	charsetAndDefaultCollation := make(map[string]string)
-	idAndCollationMap := make(map[int]string)
-
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return nil, nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-	defer conn.Close()
-
-	// Show an example.
-	/*
-		mysql> SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS;
-		+----------------------------+--------------------+-----+------------+
-		| COLLATION_NAME             | CHARACTER_SET_NAME | ID  | IS_DEFAULT |
-		+----------------------------+--------------------+-----+------------+
-		| armscii8_general_ci        | armscii8           |  32 | Yes        |
-		| armscii8_bin               | armscii8           |  64 |            |
-		| ascii_general_ci           | ascii              |  11 | Yes        |
-		| ascii_bin                  | ascii              |  65 |            |
-		| big5_chinese_ci            | big5               |   1 | Yes        |
-		| big5_bin                   | big5               |  84 |            |
-		| binary                     | binary             |  63 | Yes        |
-		+----------------------------+--------------------+-----+------------+
-	*/
-
-	rows, err := conn.QueryContext(ctx, "SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS")
-	if err != nil {
-		return nil, nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-
-	defer rows.Close()
-	for rows.Next() {
-		var collation, charset, isDefault string
-		var id int
-		if scanErr := rows.Scan(&collation, &charset, &id, &isDefault); scanErr != nil {
-			return nil, nil, terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
-		}
-		idAndCollationMap[id] = strings.ToLower(collation)
-		if strings.ToLower(isDefault) == "yes" {
-			charsetAndDefaultCollation[strings.ToLower(charset)] = collation
-		}
-	}
-
-	if err = rows.Close(); err != nil {
-		return nil, nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
-	}
-	return charsetAndDefaultCollation, idAndCollationMap, err
-}
-
 // GetSchemaList gets db schema list with `SHOW DATABASES`.
 func GetSchemaList(ctx context.Context, db *sql.DB) ([]string, error) {
 	schemaList := []string{}
