@@ -37,8 +37,6 @@ const (
 // DDLSink is a wrapper of the `Sink` interface for the owner
 // DDLSink should send `DDLEvent` and `CheckpointTs` to downstream sink,
 // If `SyncPointEnabled`, also send `syncPoint` to downstream.
-// The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
-// Other functions are still in a synchronized way.
 type DDLSink interface {
 	// run the DDLSink
 	run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo)
@@ -46,11 +44,12 @@ type DDLSink interface {
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
 	emitCheckpointTs(ctx cdcContext.Context, ts uint64)
-	// emitDDLEvent emits DDL event asynchronously and return true if the DDL is executed
+	// emitDDLEvent emits DDL event and return true if the DDL is executed
 	// the DDL event will be sent to another goroutine and execute to downstream
 	// the caller of this function can call again and again until a true returned
 	emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
 	emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
+	// close the sink, cancel running goroutine.
 	close(ctx context.Context) error
 }
 
@@ -69,7 +68,7 @@ type ddlSinkImpl struct {
 	// `sinkInitHandler` can be helpful in unit testing.
 	sinkInitHandler ddlSinkInitHandler
 
-	// cancel would be used to cancel sink's goroutines.
+	// cancel would be used to cancel the goroutine start by `run`
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
@@ -208,12 +207,12 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64)
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
+	s.wg.Wait()
 	if s.sink != nil {
 		err = s.sink.Close(ctx)
 	}
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()
 	}
-	s.wg.Wait()
 	return err
 }

@@ -58,11 +58,11 @@ type changefeed struct {
 	ddlEventCache *model.DDLEvent
 
 	errCh chan error
-	// cancel the running goroutine of `DDLSink` and `DDLPuller`
+	// cancel the running goroutine start by `DDLPuller`
 	cancel context.CancelFunc
 
 	// The changefeed will start some backend goroutines in the function `initialize`,
-	// such as DDLPuller, Sink, etc.
+	// such as DDLPuller, DDLSink, etc.
 	// `wg` is used to manage those backend goroutines.
 	wg sync.WaitGroup
 
@@ -261,11 +261,12 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
 	c.sink = c.newSink()
-	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
+	c.sink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
