@@ -17,12 +17,11 @@ import (
 	"testing"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/ticdc/cdc/model"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 type MockProcessorMessenger struct {
