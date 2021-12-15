@@ -15,7 +15,6 @@ package pipeline
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 	"testing"
@@ -189,7 +188,7 @@ func TestCyclicMarkNode(t *testing.T) {
 			}
 			return output[i].CommitTs < output[j].CommitTs
 		})
-		require.Equal(t, tc.expected, output, fmt.Sprintf("%s", cmp.Diff(output, tc.expected)))
+		require.Equal(t, tc.expected, output, cmp.Diff(output, tc.expected))
 	}
 
 	// table actor
@@ -257,6 +256,6 @@ func TestCyclicMarkNode(t *testing.T) {
 			}
 			return output[i].CommitTs < output[j].CommitTs
 		})
-		require.Equal(t, tc.expected, output, fmt.Sprintf("%s", cmp.Diff(output, tc.expected)))
+		require.Equal(t, tc.expected, output, cmp.Diff(output, tc.expected))
 	}
 }
