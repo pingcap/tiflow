@@ -107,13 +107,19 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 
 	for _, item := range testColumnsTable {
 		obtainedValue, ok := obtainedDataMap[item.column.Name]
-		if item.column.Flag.IsBinary() {
-			if bytes, ok := item.column.Value.([]byte); ok {
-				obtainedValue, err = charmap.ISO8859_1.NewDecoder().Bytes(bytes)
-				c.Assert(err, check.IsNil)
-			}
-		}
 		c.Assert(ok, check.IsTrue)
+		if !item.column.Flag.IsBinary() {
+			c.Assert(obtainedValue, check.Equals, item.expectedValue)
+			continue
+		}
+
+		if bytes, ok := item.column.Value.([]byte); ok {
+			expectedValue, err := charmap.ISO8859_1.NewDecoder().Bytes(bytes)
+			c.Assert(err, check.IsNil)
+			c.Assert(obtainedValue, check.Equals, expectedValue)
+			continue
+		}
+
 		c.Assert(obtainedValue, check.Equals, item.expectedValue)
 	}
 

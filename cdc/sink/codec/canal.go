@@ -245,16 +245,18 @@ func getMySQLType(c *model.Column) string {
 	if c.Flag.IsUnsigned() && mysqlType != "bit" && mysqlType != "year" {
 		mysqlType = mysqlType + " " + "unsigned"
 	}
+	mysqlType = strings.ToUpper(mysqlType)
+
 	if !c.Flag.IsBinary() {
 		return mysqlType
 	}
 
 	if types.IsTypeBlob(c.Type) {
-		return strings.Replace(mysqlType, "text", "blob", 1)
+		return strings.Replace(mysqlType, "TEXT", "BLOB", 1)
 	}
 
 	if types.IsTypeChar(c.Type) {
-		return strings.Replace(mysqlType, "char", "binary", 1)
+		return strings.Replace(mysqlType, "CHAR", "BINARY", 1)
 	}
 
 	return mysqlType

@@ -418,6 +418,7 @@ var testColumnsTable = []*testColumnTuple{
 	{&model.Column{Name: "double unsigned", Type: mysql.TypeDouble, Value: 2.71, Flag: model.UnsignedFlag}, "double unsigned", JavaSQLTypeDOUBLE, "2.71"},
 	{&model.Column{Name: "decimal unsigned", Type: mysql.TypeNewDecimal, Value: "2333", Flag: model.UnsignedFlag}, "decimal unsigned", JavaSQLTypeDECIMAL, "2333"},
 
+	// for column value type in `[]uint8` and have `BinaryFlag`, expectedValue is dummy.
 	{&model.Column{Name: "varchar", Type: mysql.TypeVarchar, Value: []uint8("测试Varchar")}, "varchar", JavaSQLTypeVARCHAR, "测试Varchar"},
 	{&model.Column{Name: "char", Type: mysql.TypeString, Value: []uint8("测试String")}, "char", JavaSQLTypeCHAR, "测试String"},
 	{&model.Column{Name: "binary", Type: mysql.TypeString, Value: []uint8("测试Binary"), Flag: model.BinaryFlag}, "binary", JavaSQLTypeBLOB, "测试Binary"},
