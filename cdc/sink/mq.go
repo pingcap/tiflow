@@ -70,7 +70,10 @@ func newMqSink(
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error,
 ) (*mqSink, error) {
 	var protocol config.Protocol
-	protocol.FromString(replicaConfig.Sink.Protocol)
+	err := protocol.FromString(replicaConfig.Sink.Protocol)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
 	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(protocol, credential, opts)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
