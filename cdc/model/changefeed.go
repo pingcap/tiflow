@@ -16,6 +16,7 @@ package model
 import (
 	"encoding/json"
 	"math"
+	"net/url"
 	"regexp"
 	"sort"
 	"time"
@@ -259,12 +260,16 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 
 // FixIncompatible fixes incompatible changefeed meta info.
 func (info *ChangeFeedInfo) FixIncompatible() {
+	log.Info("Start fixing incompatible changefeed info", zap.Any("changefeed", info))
 	creatorVersionGate := version.NewCreatorVersionGate(info.CreatorVersion)
 	if creatorVersionGate.ChangefeedStateFromAdminJob() {
-		log.Info("Start fixing incompatible changefeed state", zap.Any("changefeed", info))
 		info.fixState()
-		log.Info("Fix incompatibility changefeed state completed", zap.Any("changefeed", info))
 	}
+
+	if creatorVersionGate.ChangefeedAcceptUnknownProtocols() {
+		info.fixSinkProtocol()
+	}
+	log.Info("Fix incompatibility changefeed info completed", zap.Any("changefeed", info))
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -302,6 +307,32 @@ func (info *ChangeFeedInfo) fixState() {
 			zap.String("admin job type", info.AdminJobType.String()),
 			zap.String("new state", string(state)))
 		info.State = state
+	}
+}
+
+// fixSinkProtocol attempts to fix protocol incompatible.
+// We no longer support the acceptance of protocols that are not known.
+// The ones that were already accepted need to be fixed.
+func (info *ChangeFeedInfo) fixSinkProtocol() {
+	sinkURIParsed, err := url.Parse(info.SinkURI)
+	if err != nil {
+		log.Warn("parse sink URI failed", zap.Any("sink URI", info.SinkURI))
+		return
+	}
+	protocolStr := sinkURIParsed.Query().Get("protocol")
+	if protocolStr != "" {
+		info.Config.Sink.Protocol = protocolStr
+	}
+
+	var protocol config.Protocol
+	err = protocol.FromString(info.Config.Sink.Protocol)
+	// There are two cases:
+	// 1. there is an error indicating that the old ticdc accepts
+	//    a protocol that is not known. It needs to be fixed as open protocol.
+	// 2. If it is default, then it needs to be fixed as open protocol.
+	needsFix := err != nil || info.Config.Sink.Protocol == config.ProtocolDefault.String()
+	if needsFix {
+		info.Config.Sink.Protocol = config.ProtocolOpen.String()
 	}
 }
 

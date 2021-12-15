@@ -192,7 +192,7 @@ func TestVerifyAndComplete(t *testing.T) {
 
 func TestFixIncompatible(t *testing.T) {
 	// Test to fix incompatible states.
-	testCases := []struct {
+	testCases1 := []struct {
 		info          *ChangeFeedInfo
 		expectedState FeedState
 	}{
@@ -202,6 +202,10 @@ func TestFixIncompatible(t *testing.T) {
 				State:          StateNormal,
 				Error:          nil,
 				CreatorVersion: "",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
 			},
 			expectedState: StateStopped,
 		},
@@ -211,6 +215,10 @@ func TestFixIncompatible(t *testing.T) {
 				State:          StateNormal,
 				Error:          nil,
 				CreatorVersion: "4.0.14",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
 			},
 			expectedState: StateStopped,
 		},
@@ -220,14 +228,85 @@ func TestFixIncompatible(t *testing.T) {
 				State:          StateNormal,
 				Error:          nil,
 				CreatorVersion: "5.0.5",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
 			},
 			expectedState: StateStopped,
 		},
 	}
 
-	for _, tc := range testCases {
+	for _, tc := range testCases1 {
 		tc.info.FixIncompatible()
 		require.Equal(t, tc.expectedState, tc.info.State)
+	}
+
+	// Test to fix incompatible protocols.
+	testCases2 := []struct {
+		info             *ChangeFeedInfo
+		expectedProtocol config.Protocol
+	}{
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateStopped,
+				Error:          nil,
+				CreatorVersion: "",
+				SinkURI:        "kafka://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedProtocol: config.ProtocolOpen,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateStopped,
+				Error:          nil,
+				CreatorVersion: "",
+				SinkURI:        "kafka://127.0.0.1:9092/ticdc-test2?protocol=random",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedProtocol: config.ProtocolOpen,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateStopped,
+				Error:          nil,
+				CreatorVersion: "5.3.0",
+				SinkURI:        "kafka://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedProtocol: config.ProtocolOpen,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateStopped,
+				Error:          nil,
+				CreatorVersion: "5.3.0",
+				SinkURI:        "kafka://127.0.0.1:9092/ticdc-test2?protocol=random",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedProtocol: config.ProtocolOpen,
+		},
+	}
+
+	for _, tc := range testCases2 {
+		tc.info.FixIncompatible()
+		var protocol config.Protocol
+		err := protocol.FromString(tc.info.Config.Sink.Protocol)
+		require.Nil(t, err)
+		require.Equal(t, tc.expectedProtocol, protocol)
 	}
 }
 
@@ -331,6 +410,78 @@ func TestFixState(t *testing.T) {
 	for _, tc := range testCases {
 		tc.info.fixState()
 		require.Equal(t, tc.expectedState, tc.info.State)
+	}
+}
+
+func TestFixSinkProtocol(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		info             *ChangeFeedInfo
+		expectedProtocol config.Protocol
+	}{
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedProtocol: config.ProtocolOpen,
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolCanal.String()},
+				},
+			},
+			expectedProtocol: config.ProtocolCanal,
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedProtocol: config.ProtocolOpen,
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: "random"},
+				},
+			},
+			expectedProtocol: config.ProtocolOpen,
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=canal",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedProtocol: config.ProtocolCanal,
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=random",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedProtocol: config.ProtocolOpen,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.info.fixSinkProtocol()
+		var protocol config.Protocol
+		err := protocol.FromString(tc.info.Config.Sink.Protocol)
+		require.Nil(t, err)
+		require.Equal(t, tc.expectedProtocol, protocol)
 	}
 }
 

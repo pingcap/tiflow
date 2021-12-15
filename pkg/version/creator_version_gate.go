@@ -32,6 +32,10 @@ var changefeedStateFromAdminJobVersions = []semver.Version{
 	*semver.New("5.0.5"),
 }
 
+// changefeedAcceptUnknownProtocolsVersion specifies the version
+// of TiCDC for which changefeed supports accepting unknown protocols.
+var changefeedAcceptUnknownProtocolsVersion = *semver.New("5.4.0")
+
 // NewCreatorVersionGate creates the creator version gate.
 func NewCreatorVersionGate(version string) *CreatorVersionGate {
 	return &CreatorVersionGate{
@@ -58,4 +62,17 @@ func (f *CreatorVersionGate) ChangefeedStateFromAdminJob() bool {
 	}
 
 	return false
+}
+
+// ChangefeedAcceptUnknownProtocols determines whether to accept
+// unknown protocols based on the creator's version.
+func (f *CreatorVersionGate) ChangefeedAcceptUnknownProtocols() bool {
+	// Introduced in https://github.com/pingcap/ticdc/pull/1341.
+	// So it was supported at the time.
+	if f.version == "" {
+		return true
+	}
+
+	creatorVersion := semver.New(removeVAndHash(f.version))
+	return creatorVersion.LessThan(changefeedAcceptUnknownProtocolsVersion)
 }
