@@ -43,7 +43,6 @@ const (
 	deletionCounterKey         = "/meta/ticdc-delete-etcd-key-count"
 )
 
->>>>>>> 60479c898 (etcd_worker: add timeout for etcd txn and watchCh (#3667))
 // EtcdWorker handles all interactions with Etcd
 type EtcdWorker struct {
 	client  *etcd.Client
