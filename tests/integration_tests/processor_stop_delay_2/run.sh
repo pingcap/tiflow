@@ -57,6 +57,8 @@ function run() {
 	run_sql "CREATE table processor_stop_delay_2.t (id int primary key auto_increment, t datetime DEFAULT CURRENT_TIMESTAMP)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO processor_stop_delay_2.t values (),(),(),(),(),(),()" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
+	sleep 5
+
 	# pause changefeed first, and then resume the changefeed. The processor stop
 	# logic will be delayed by 10s, which is controlled by failpoint injection.
 	# The changefeed should be resumed and no data loss.
