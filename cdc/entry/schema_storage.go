@@ -77,6 +77,9 @@ func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo,
 			return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(job.TableID)
 		}
 		return table, nil
+	case timodel.ActionRenameTables:
+		// DDL on multiple tables, ignore pre table info
+		return nil, nil
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {

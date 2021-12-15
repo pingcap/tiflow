@@ -38,6 +38,8 @@ function complete_ddls() {
 		# DDLs that are supportted since 5.0
 		ddls+=("alter table ddl_reentrant.t2 add column c1 int, add column c2 int, add column c3 int" false)
 		ddls+=("alter table ddl_reentrant.t2 drop column c1, drop column c2, drop column c3" false)
+		ddls+=("rename table ddl_reentrant.t2 to ddl_reentrant.tt2, ddl_reentrant.t3 to ddl_reentrant.tt3" false)
+		ddls+=("rename table ddl_reentrant.tt2 to ddl_reentrant.t2, ddl_reentrant.tt3 to ddl_reentrant.t3" false)
 	fi
 	ddls+=("alter table ddl_reentrant.t2 drop primary key" false)
 	ddls+=("alter table ddl_reentrant.t2 add primary key pk(id)" false)

@@ -455,6 +455,13 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 	d.CommitTs = job.BinlogInfo.FinishedTS
 	d.Query = job.Query
 	d.Type = job.Type
+	d.fillPreTableInfo(preTableInfo)
+
+	switch d.Type {
+	case model.ActionRenameTables:
+		return
+	default:
+	}
 
 	if job.BinlogInfo.TableInfo != nil {
 		tableName := job.BinlogInfo.TableInfo.Name.O
@@ -469,7 +476,6 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 		d.TableInfo.Table = tableName
 		d.TableInfo.TableID = job.TableID
 	}
-	d.fillPreTableInfo(preTableInfo)
 }
 
 func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
