@@ -14,7 +14,6 @@
 package syncer
 
 import (
-	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -38,7 +37,6 @@ type DMLWorker struct {
 	multipleRows bool
 	toDBConns    []*dbconn.DBConn
 	tctx         *tcontext.Context
-	wg           sync.WaitGroup // counts conflict/flush jobs in all DML job channels.
 	logger       log.Logger
 
 	// for metrics
@@ -117,24 +115,23 @@ func (w *DMLWorker) run() {
 
 	for j := range w.inCh {
 		metrics.QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
-		if j.tp == flush || j.tp == conflict {
-			if j.tp == conflict {
-				w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
-			}
-			w.wg.Add(w.workerCount)
-			// flush for every DML queue
-			for i, jobCh := range jobChs {
-				startTime := time.Now()
-				jobCh <- j
-				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
-			}
-			w.wg.Wait()
-			if j.tp == conflict {
-				w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
-			} else {
-				w.flushCh <- j
-			}
-		} else {
+		switch j.tp {
+		case flush:
+			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
+			j.flushWg.Wait()
+			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
+			w.flushCh <- j
+		case asyncFlush:
+			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
+			w.flushCh <- j
+		case conflict:
+			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
+			j.flushWg.Wait()
+			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
+		default:
 			queueBucket := int(utils.GenHashKey(j.dml.key)) % w.workerCount
 			w.addCountFunc(false, queueBucketMapping[queueBucket], j.tp, 1, j.targetTable)
 			startTime := time.Now()
@@ -142,6 +139,15 @@ func (w *DMLWorker) run() {
 			jobChs[queueBucket] <- j
 			metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[queueBucket], w.source).Observe(time.Since(startTime).Seconds())
 		}
+	}
+}
+
+func (w *DMLWorker) sendJobToAllDmlQueue(j *job, jobChs []chan *job, queueBucketMapping []string) {
+	// flush for every DML queue
+	for i, jobCh := range jobChs {
+		startTime := time.Now()
+		jobCh <- j
+		metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
 	}
 }
 
@@ -154,7 +160,7 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 	for j := range jobCh {
 		metrics.QueueSizeGauge.WithLabelValues(w.task, queueBucket, w.source).Set(float64(len(jobCh)))
 
-		if j.tp != flush && j.tp != conflict {
+		if j.tp != flush && j.tp != asyncFlush && j.tp != conflict {
 			if len(jobs) == 0 {
 				// set job TS when received first job of this batch.
 				w.lagFunc(j, workerJobIdx)
@@ -172,8 +178,8 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 		})
 
 		w.executeBatchJobs(queueID, jobs)
-		if j.tp == conflict || j.tp == flush {
-			w.wg.Done()
+		if j.tp == conflict || j.tp == flush || j.tp == asyncFlush {
+			j.flushWg.Done()
 		}
 
 		jobs = jobs[0:0]
