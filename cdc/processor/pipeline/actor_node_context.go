@@ -95,15 +95,6 @@ func (c *actorNodeContext) TrySendToNextNode(msg pipeline.Message) bool {
 	return added
 }
 
-func (c *actorNodeContext) trySendTickMessage() {
-	c.noTickMessageCount++
-	// resolvedTs message will be sent by puller periodically
-	if c.noTickMessageCount >= c.tickMessageThreshold {
-		_ = c.tableActorRouter.Send(c.tableActorID, message.TickMessage())
-		c.noTickMessageCount = 0
-	}
-}
-
 func (c *actorNodeContext) Message() pipeline.Message {
 	return <-c.outputCh
 }
