@@ -28,6 +28,7 @@ import (
 // causality groups sqls that maybe contain causal relationships, and syncer executes them linearly.
 // if some conflicts exist in more than one groups, causality generate a conflict job and reset.
 // this mechanism meets quiescent consistency to ensure correctness.
+// causality relation is consisted of groups of keys separated by flush job, and such design helps removed flushed dml job keys.
 type causality struct {
 	relation    *causalityRelation
 	outCh       chan *job
