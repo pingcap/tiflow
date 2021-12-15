@@ -112,9 +112,6 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 }
 
 func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) {
-	ctx, cancel := cdcContext.WithCancel(ctx)
-	s.cancel = cancel
-
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -205,12 +202,12 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64)
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
-	s.wg.Wait()
 	if s.sink != nil {
 		err = s.sink.Close(ctx)
 	}
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()
 	}
+	s.wg.Wait()
 	return err
 }
