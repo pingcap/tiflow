@@ -311,7 +311,7 @@ func (s *lightningCpListSuite) TestLightningCheckpointListStatusInit(c *C) {
 func (s *lightningCpListSuite) TestLightningCheckpointListStatusRunning(c *C) {
 	s.mock.ExpectQuery(fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = \\? AND `source_name` = \\?", s.cpList.tableName)).
 		WithArgs(s.cpList.taskName, s.cpList.sourceName).
-		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow(lightningStatusRunning))
+		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("running"))
 	status, err := s.cpList.taskStatus(context.Background())
 	c.Assert(err, IsNil)
 	c.Assert(status, Equals, lightningStatusRunning)
@@ -330,7 +330,7 @@ func (s *lightningCpListSuite) TestLightningCheckpointListRegister(c *C) {
 func (s *lightningCpListSuite) TestLightningCheckpointListUpdateStatus(c *C) {
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec(fmt.Sprintf("UPDATE %s set status = \\? WHERE `task_name` = \\? AND `source_name` = \\?", s.cpList.tableName)).
-		WithArgs(lightningStatusRunning, s.cpList.taskName, s.cpList.sourceName).
+		WithArgs("running", s.cpList.taskName, s.cpList.sourceName).
 		WillReturnResult(sqlmock.NewResult(3, 1))
 	s.mock.ExpectCommit()
 	err := s.cpList.UpdateStatus(context.Background(), lightningStatusRunning)

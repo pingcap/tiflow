@@ -487,6 +487,20 @@ func (s lightingLoadStatus) String() string {
 	}
 }
 
+func parseLightningLoadStatus(s string) lightingLoadStatus {
+	switch s {
+	case "running":
+		return lightningStatusRunning
+	case "finished":
+		return lightningStatusFinished
+	case "init":
+		return lightningStatusInit
+	default:
+		log.L().Warn("unknown lightning load status, will fallback to init", zap.String("status", s))
+		return lightningStatusInit
+	}
+}
+
 type LightningCheckpointList struct {
 	db         *conn.BaseDB
 	schema     string
@@ -523,7 +537,7 @@ func (cp *LightningCheckpointList) Prepare(ctx context.Context) error {
 	createTable := `CREATE TABLE IF NOT EXISTS %s (
 		task_name varchar(255) NOT NULL,
 		source_name varchar(255) NOT NULL,
-		status tinyint NOT NULL DEFAULT 0,
+		status varchar(10) NOT NULL DEFAULT 'init' COMMENT 'init,running,finished',
 		PRIMARY KEY (task_name, source_name)
 	);
 `
@@ -565,7 +579,7 @@ func (cp *LightningCheckpointList) UpdateStatus(ctx context.Context, status ligh
 		zap.Stringer("status", status))
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
 	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{sql},
-		[]interface{}{status, cp.taskName, cp.sourceName})
+		[]interface{}{status.String(), cp.taskName, cp.sourceName})
 	if err != nil {
 		return terror.WithScope(terror.Annotate(err, "update lightning status"), terror.ScopeDownstream)
 	}
@@ -587,11 +601,11 @@ func (cp *LightningCheckpointList) taskStatus(ctx context.Context) (lightingLoad
 	}
 	defer rows.Close()
 	if rows.Next() {
-		var status lightingLoadStatus
+		var status string
 		if err = rows.Scan(&status); err != nil {
 			return lightningStatusInit, terror.WithScope(err, terror.ScopeDownstream)
 		}
-		return status, nil
+		return parseLightningLoadStatus(status), nil
 	}
 	// status row doesn't exist, return default value
 	return lightningStatusInit, nil
