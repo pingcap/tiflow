@@ -69,6 +69,7 @@ type ddlSinkImpl struct {
 	// `sinkInitHandler` can be helpful in unit testing.
 	sinkInitHandler ddlSinkInitHandler
 
+	// cancel would be used to cancel sink's goroutines.
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
@@ -114,6 +115,7 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	s.cancel = cancel
+
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -189,7 +191,8 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	case s.ddlCh <- ddl:
 		s.ddlSentTs = ddl.CommitTs
 	default:
-		// if this hit, we think that ddlCh is full, just return false and send the ddl in the next round.
+		// if this hit, we think that ddlCh is full,
+		// just return false and send the ddl in the next round.
 	}
 	return false, nil
 }
