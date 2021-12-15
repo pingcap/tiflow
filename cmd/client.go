@@ -130,9 +130,6 @@ func newCliCommand() *cobra.Command {
 		Use:   "cli",
 		Args:  cobra.NoArgs,
 		Short: "Manage replication task and TiCDC cluster",
-    //CompletionOptions: cobra.CompletionOptions{
-		//	DisableDefaultCmd: true,
-		//},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			initCmd(cmd, &logutil.Config{Level: cliLogLevel})
 
@@ -268,7 +265,7 @@ func loop() {
 		command.SetOut(os.Stdout)
 		command.SetErr(os.Stderr)
 		if err = command.Execute(); err != nil {
-			command.PrintErrln(err)
+			command.PrintErr(err.Error() + "\n")
 		}
 	}
 }

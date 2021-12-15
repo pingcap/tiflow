@@ -30,8 +30,9 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	// Outputs cmd.Print to stdout.
 	rootCmd.SetOut(os.Stdout)
+	rootCmd.SetErr(os.Stderr)
 	if err := rootCmd.Execute(); err != nil {
-		rootCmd.Println(err)
+		rootCmd.PrintErr(err.Error() + "\n")
 		os.Exit(1)
 	}
 }
