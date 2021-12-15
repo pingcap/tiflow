@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-	"github.com/pingcap/ticdc/cdc/redo"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -48,7 +47,6 @@ func newProcessor4Test(
 ) *processor {
 	p := newProcessor(ctx)
 	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
-	p.redoManager = redo.NewDisabledManager()
 	p.createTablePipeline = createTablePipeline
 	p.schemaStorage = &mockSchemaStorage{c: c}
 	return p
@@ -702,9 +700,6 @@ func (s *processorSuite) TestPositionDeleted(c *check.C) {
 	})
 }
 
-<<<<<<< HEAD
-func cleanUpFinishedOpOperation(state *model.ChangefeedReactorState, captureID model.CaptureID, tester *orchestrator.ReactorStateTester) {
-=======
 func (s *processorSuite) TestSchemaGC(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
@@ -731,8 +726,7 @@ func (s *processorSuite) TestSchemaGC(c *check.C) {
 	c.Assert(p.lastSchemaTs, check.Equals, uint64(49))
 }
 
-func cleanUpFinishedOpOperation(state *orchestrator.ChangefeedReactorState, captureID model.CaptureID, tester *orchestrator.ReactorStateTester) {
->>>>>>> fd39bb2e9 (schema_storage: fix schema GC threshold & improve memory management (#3172))
+func cleanUpFinishedOpOperation(state *model.ChangefeedReactorState, captureID model.CaptureID, tester *orchestrator.ReactorStateTester) {
 	state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		if status == nil || status.Operation == nil {
 			return status, false, nil

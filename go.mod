@@ -30,7 +30,6 @@ require (
 	github.com/klauspost/compress v1.11.1 // indirect
 	github.com/lib/pq v1.3.0 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
-	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
 	github.com/onsi/ginkgo v1.9.0 // indirect
