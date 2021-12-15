@@ -15,8 +15,8 @@ package system
 
 import (
 	"context"
-	"encoding/binary"
-	"hash/fnv"
+	"fmt"
+	"sync"
 
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/actor"
@@ -26,11 +26,17 @@ import (
 type System struct {
 	tableActorSystem *actor.System
 	tableActorRouter *actor.Router
+	idLock           sync.Mutex
+	idMap            map[string]uint64
+	lastID           uint64
 }
 
 // NewSystem returns a system.
 func NewSystem() *System {
-	return &System{}
+	return &System{
+		idMap:  map[string]uint64{},
+		lastID: 1,
+	}
 }
 
 // Start starts a system.
@@ -55,11 +61,16 @@ func (s *System) System() *actor.System {
 }
 
 // ActorID returns an ActorID correspond with tableID.
-func ActorID(changefeedID string, tableID model.TableID) actor.ID {
-	h := fnv.New64()
-	b := [8]byte{}
-	binary.LittleEndian.PutUint64(b[:], uint64(tableID))
-	_, _ = h.Write([]byte(changefeedID))
-	_, _ = h.Write(b[:])
-	return actor.ID(h.Sum64())
+func (s *System) ActorID(changefeedID string, tableID model.TableID) actor.ID {
+	s.idLock.Lock()
+	defer s.idLock.Unlock()
+
+	key := fmt.Sprintf("%s-%d", changefeedID, tableID)
+	id, ok := s.idMap[key]
+	if !ok {
+		s.lastID++
+		id = s.lastID
+		s.idMap[key] = id
+	}
+	return actor.ID(id)
 }

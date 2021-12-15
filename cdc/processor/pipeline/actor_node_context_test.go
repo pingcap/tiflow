@@ -59,7 +59,7 @@ func TestThrow(t *testing.T) {
 	}()
 
 	require.Nil(t, sys.Start(ctx))
-	actorID := system.ActorID("abc", 1)
+	actorID := sys.ActorID("abc", 1)
 	mb := actor.NewMailbox(actorID, defaultOutputChannelSize)
 	ch := make(chan message.Message, defaultOutputChannelSize)
 	fa := &forwardActor{ch: ch}
@@ -87,7 +87,7 @@ func TestSendToNextNodeNoTickMessage(t *testing.T) {
 	}()
 
 	require.Nil(t, sys.Start(ctx))
-	actorID := system.ActorID("abc", 1)
+	actorID := sys.ActorID("abc", 1)
 	mb := actor.NewMailbox(actorID, defaultOutputChannelSize)
 	ch := make(chan message.Message, defaultOutputChannelSize)
 	fa := &forwardActor{ch: ch}
