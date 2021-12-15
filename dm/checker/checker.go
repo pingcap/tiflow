@@ -177,9 +177,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if _, ok := c.checkingItems[config.BinlogRowImageChecking]; ok {
 			c.checkList = append(c.checkList, checker.NewMySQLBinlogRowImageChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
-		if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
-			c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-		}
 		if _, ok := c.checkingItems[config.ReplicationPrivilegeChecking]; ok {
 			c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
@@ -217,7 +214,9 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 		}
 		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
-
+		if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
+			c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables))
+		}
 		if checkSchema {
 			c.checkList = append(c.checkList, checker.NewTablesChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables))
 		}

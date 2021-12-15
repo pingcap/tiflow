@@ -23,6 +23,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/utils"
+	pmysql "github.com/pingcap/tidb/parser/mysql"
 )
 
 // MySQLVersion represents MySQL version number.
@@ -140,4 +141,20 @@ func isMySQLError(err error, code uint16) bool {
 	err = errors.Cause(err)
 	e, ok := err.(*mysql.MySQLError)
 	return ok && e.Number == code
+}
+
+func genExpectGrants(checkTables map[string][]string) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
+	lackGrants := make(map[pmysql.PrivilegeType]map[string]map[string]struct{}, len(dumpPrivileges))
+	for p := range dumpPrivileges {
+		lackGrants[p] = make(map[string]map[string]struct{}, len(checkTables))
+		for schema, tables := range checkTables {
+			if _, ok := lackGrants[p][schema]; !ok {
+				lackGrants[p][schema] = make(map[string]struct{}, len(tables))
+			}
+			for _, table := range tables {
+				lackGrants[p][schema][table] = struct{}{}
+			}
+		}
+	}
+	return lackGrants
 }
