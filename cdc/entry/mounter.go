@@ -316,7 +316,6 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		}
 		var err error
 		var warn string
-		var size int
 		if exist {
 			colValue, warn, err = formatColVal(colDatums, colInfo.Tp)
 		} else if fillWithDefaultValue {
@@ -458,6 +457,9 @@ func formatColVal(datum types.Datum, tp byte) (value interface{}, warn string, e
 	}
 }
 
+// getDefaultOrZeroValue return interface{} need to meet to require type in
+// https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
+// Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
 func getDefaultOrZeroValue(col *timodel.ColumnInfo) (value interface{}, warn string, err error) {
 	var d types.Datum
 	if !mysql.HasNotNullFlag(col.Flag) {
@@ -479,10 +481,8 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (value interface{}, warn str
 			d = table.GetZeroValue(col)
 		}
 	}
-	// FIXME: GetValue() may return some types that go sql not support, which will cause sink DML fail
-	// Make specified convert upper if you need
-	// Go sql support type ref to: https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
-	return datum.GetValue(), "", nil
+
+	return formatColVal(d, col.Tp)
 }
 
 // DecodeTableID decodes the raw key to a table ID
