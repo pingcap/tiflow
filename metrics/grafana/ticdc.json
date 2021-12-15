@@ -3278,7 +3278,7 @@
             {
               "alias": "Time",
               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-              "pattern": "Time",
+              "pattern": "Value",
               "type": "date"
             },
             {
