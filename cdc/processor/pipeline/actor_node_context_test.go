@@ -33,7 +33,7 @@ func TestContext(t *testing.T) {
 	require.Equal(t, "zzz", ctx.ChangefeedVars().ID)
 	require.Equal(t, actor.ID(1), ctx.tableActorID)
 	ctx.SendToNextNode(pipeline.BarrierMessage(1))
-	require.Equal(t, 1, ctx.noTickMessageCount)
+	require.Equal(t, int32(1), ctx.noTickMessageCount)
 	wait(t, 500*time.Millisecond, func() {
 		msg := ctx.Message()
 		require.Equal(t, pipeline.MessageTypeBarrier, msg.Tp)
