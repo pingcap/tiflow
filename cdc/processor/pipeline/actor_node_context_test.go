@@ -78,6 +78,16 @@ func TestThrow(t *testing.T) {
 	}
 }
 
+func TestActorNodeContextTrySendToNextNode(t *testing.T) {
+	ctx := NewContext(sdtContext.TODO(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{})
+	ctx.outputCh = make(chan pipeline.Message, 1)
+	require.True(t, ctx.TrySendToNextNode(pipeline.BarrierMessage(1)))
+	require.False(t, ctx.TrySendToNextNode(pipeline.BarrierMessage(1)))
+	ctx.outputCh = make(chan pipeline.Message, 1)
+	close(ctx.outputCh)
+	require.Panics(t, func() { ctx.TrySendToNextNode(pipeline.BarrierMessage(1)) })
+}
+
 func TestSendToNextNodeNoTickMessage(t *testing.T) {
 	ctx, cancel := sdtContext.WithCancel(sdtContext.TODO())
 	sys := system.NewSystem()

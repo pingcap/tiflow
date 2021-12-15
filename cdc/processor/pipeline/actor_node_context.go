@@ -85,12 +85,7 @@ func (c *actorNodeContext) TrySendToNextNode(msg pipeline.Message) bool {
 	default:
 	}
 	if added {
-		c.noTickMessageCount++
-		// resolvedTs message will be sent by puller periodically
-		if c.noTickMessageCount >= c.tickMessageThreshold {
-			_ = c.tableActorRouter.Send(c.tableActorID, message.TickMessage())
-			c.noTickMessageCount = 0
-		}
+		c.trySendTickMessage()
 	}
 	return added
 }
