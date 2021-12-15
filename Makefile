@@ -240,6 +240,11 @@ dm: dm-master dm-worker dmctl dm-portal dm-syncer
 dm-master:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/dm-master ./dm/cmd/dm-master
 
+dm-master-with-webui:
+	@echo "build webui first"
+	cd dm/ui && yarn && yarn build
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -tags dm_webui -o bin/dm-master ./dm/cmd/dm-master
+
 dm-worker:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/dm-worker ./dm/cmd/dm-worker
 

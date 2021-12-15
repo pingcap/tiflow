@@ -14,7 +14,7 @@
 //go:build !freebsd
 // +build !freebsd
 
-package util
+package fsutil
 
 import (
 	"os"
