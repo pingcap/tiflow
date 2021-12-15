@@ -1637,7 +1637,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					return err
 				}
 				log.L().Info("reset replication binlog puller", zap.Any("pos", s.checkpoint.GlobalPoint()))
-				_ = s.safeMode.Add(tctx, 1)
 				inFinerRetry = true
 				continue
 			}
@@ -1777,7 +1776,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			shardingReSync:      shardingReSync,
 			closeShardingResync: closeShardingResync,
 			traceSource:         traceSource,
-			safeMode:            s.safeMode.Enable(),
+			safeMode:            s.safeMode.Enable() || inFinerRetry,
 			tryReSync:           tryReSync,
 			startTime:           startTime,
 			shardingReSyncCh:    &shardingReSyncCh,
@@ -1800,7 +1799,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			eventIndex = 0
 			if inFinerRetry {
 				inFinerRetry = false
-				_ = s.safeMode.Add(tctx, -1)
 			}
 			if shardingReSync != nil {
 				shardingReSync.currLocation.Position.Pos = e.Header.LogPos
