@@ -15,8 +15,6 @@ package cases
 
 import (
 	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
-	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/avro"
-	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/mysql"
 )
 
 // UnsignedCase is base impl of test case for unsigned int type data
@@ -40,9 +38,6 @@ func (s *UnsignedCase) Name() string {
 func (s *UnsignedCase) Run(ctx *framework.TaskContext) error {
 	createDBQuery := `create table test (
 		id          INT,
-		t_tinyint   TINYINT UNSIGNED,
-		t_smallint  SMALLINT UNSIGNED,
-		t_mediumint MEDIUMINT UNSIGNED,
 		t_int       INT UNSIGNED,
 		t_bigint    BIGINT UNSIGNED,
 		t_bit       BIT(64),
@@ -66,23 +61,10 @@ func (s *UnsignedCase) Run(ctx *framework.TaskContext) error {
 
 	// Get a handle of an existing table
 	table := ctx.SQLHelper().GetTable("test")
-	data := map[string]interface{}{
-		"id":          0,
-		"t_tinyint":   255,
-		"t_smallint":  65535,
-		"t_mediumint": 16777215,
-	}
-
-	// For Canal, since canal adapter can not deal with unsigned int greater than int max,
-	// so we don't test `int unsigned` and `bigint unsigned` here.
-	if _, ok := s.Task.(*avro.SingleTableTask); ok {
-		data["t_int"] = 0xFEEDBEEF
-		data["t_bigint"] = uint64(0xFEEDBEEFFEEDBEEF)
-	}
-
-	if _, ok := s.Task.(*mysql.SingleTableTask); ok {
-		data["t_int"] = 0xFEEDBEEF
-		data["t_bigint"] = uint64(0xFEEDBEEFFEEDBEEF)
-	}
-	return table.Insert(data).Send().Wait().Check()
+	return table.Insert(map[string]interface{}{
+		"id":       0,
+		"t_int":    0xFEEDBEEF,
+		"t_bigint": uint64(0xFEEDBEEFFEEDBEEF),
+		"t_bit":    uint64(0xFFFFFFFFFFFFFFFA),
+	}).Send().Wait().Check()
 }
