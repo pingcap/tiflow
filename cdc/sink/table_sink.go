@@ -59,7 +59,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 		if err != nil {
 			return ckpt, err
 		}
-		return t.manager.flushBackendSink(ctx, tableID)
+		return t.manager.flushBackendSink(ctx, tableID, resolvedTs)
 	}
 	resolvedRows := t.buffer[:i]
 	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
@@ -73,7 +73,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	if err != nil {
 		return ckpt, err
 	}
-	return t.manager.flushBackendSink(ctx, tableID)
+	return t.manager.flushBackendSink(ctx, tableID, resolvedTs)
 }
 
 func (t *tableSink) flushRedoLogs(ctx context.Context, resolvedTs uint64) (uint64, error) {
