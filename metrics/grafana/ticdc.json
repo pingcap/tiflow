@@ -10537,9 +10537,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-<<<<<<< HEAD
-  "version": 24
-=======
   "version": 26
->>>>>>> 2569abaa3 (etcd_worker: batch etcd patch (#3277))
 }
