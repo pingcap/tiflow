@@ -534,7 +534,7 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		tp := types.StrToType(typeStr)
+		tp := types.StrToType(strings.ToLower(typeStr))
 		if !ok {
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, type: %+v", name, tp)

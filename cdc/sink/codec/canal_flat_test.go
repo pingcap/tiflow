@@ -116,7 +116,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 		if bytes, ok := item.column.Value.([]byte); ok {
 			expectedValue, err := charmap.ISO8859_1.NewDecoder().Bytes(bytes)
 			c.Assert(err, check.IsNil)
-			c.Assert(obtainedValue, check.Equals, expectedValue)
+			c.Assert(obtainedValue, check.Equals, string(expectedValue))
 			continue
 		}
 
@@ -184,9 +184,9 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 			consumed, err := decoder.NextRowChangedEvent()
 			c.Assert(err, check.IsNil)
 
-			c.Assert(consumed.Table, check.DeepEquals, testCaseUpdate.Table)
+			c.Assert(consumed.Table, check.DeepEquals, testCaseInsert.Table)
 			if encodeEnable && decodeEnable {
-				c.Assert(consumed.CommitTs, check.Equals, testCaseUpdate.CommitTs)
+				c.Assert(consumed.CommitTs, check.Equals, testCaseInsert.CommitTs)
 			} else {
 				c.Assert(consumed.CommitTs, check.Equals, uint64(0))
 			}
@@ -195,13 +195,14 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 				value, ok := expectedDecodedValues[col.Name]
 				c.Assert(ok, check.IsTrue)
 
-				if val, ok := col.Value.([]byte); ok {
-					c.Assert(string(val), check.Equals, value)
-				} else {
-					c.Assert(col.Value, check.Equals, value)
-				}
+				c.Assert(col.Value, check.Equals, value)
+				//if val, ok := col.Value.([]byte); ok {
+				//	c.Assert(val, check.Equals, value)
+				//} else {
+				//	c.Assert(col.Value, check.Equals, value)
+				//}
 
-				for _, item := range testCaseUpdate.Columns {
+				for _, item := range testCaseInsert.Columns {
 					if item.Name == col.Name {
 						c.Assert(col.Type, check.Equals, item.Type)
 					}
