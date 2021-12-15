@@ -237,7 +237,6 @@ function test_fail_job_between_event() {
 	inject_points=(
 		"github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
 		"github.com/pingcap/ticdc/dm/syncer/countJobFromOneEvent=return()"
-		"github.com/pingcap/ticdc/dm/syncer/flushFirstJob=return()"
 		"github.com/pingcap/ticdc/dm/syncer/failSecondJob=return()"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
@@ -245,7 +244,7 @@ function test_fail_job_between_event() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
-	# worker2 will be bound to source2 and fail when see the second event in a GTID
+	# worker2 will be bound to source2 and fail when see the second event (we reuse failSecondJob) in a GTID
 	inject_points=(
 		"github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
 		"github.com/pingcap/ticdc/dm/syncer/countJobFromOneGTID=return()"

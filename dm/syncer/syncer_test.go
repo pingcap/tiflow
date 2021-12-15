@@ -47,7 +47,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/pkg/errorutil"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -57,6 +56,8 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/ticdc/pkg/errorutil"
 )
 
 var _ = Suite(&testSyncerSuite{})
@@ -841,7 +842,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		afterFlushFn: syncer.afterFlushCheckpoint,
 	}
 
-	syncer.addJobFunc = syncer.addJobToMemory
+	syncer.handleJobFunc = syncer.addJobToMemory
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
@@ -1118,7 +1119,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		afterFlushFn: syncer.afterFlushCheckpoint,
 	}
 
-	syncer.addJobFunc = syncer.addJobToMemory
+	syncer.handleJobFunc = syncer.addJobToMemory
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
