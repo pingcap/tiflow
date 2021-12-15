@@ -348,36 +348,3 @@ func PrintCmdUsage(cmd *cobra.Command) {
 		fmt.Println("can't output command's usage:", err)
 	}
 }
-
-// SyncMasterEndpoints sync masters' endpoints.
-func SyncMasterEndpoints(ctx context.Context) {
-	lastClientUrls := []string{}
-	clientURLs := []string{}
-	updateF := func() {
-		clientURLs = clientURLs[:0]
-		resp, err := GlobalCtlClient.EtcdClient.MemberList(ctx)
-		if err != nil {
-			return
-		}
-
-		for _, m := range resp.Members {
-			clientURLs = append(clientURLs, m.GetClientURLs()...)
-		}
-		if utils.NonRepeatStringsEqual(clientURLs, lastClientUrls) {
-			return
-		}
-		GlobalCtlClient.EtcdClient.SetEndpoints(clientURLs...)
-		lastClientUrls = make([]string, len(clientURLs))
-		copy(lastClientUrls, clientURLs)
-	}
-
-	for {
-		updateF()
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(syncMasterEndpointsTime):
-		}
-	}
-}
