@@ -132,6 +132,9 @@ func (c *canalFlatMessage) getQuery() string {
 }
 
 func (c *canalFlatMessage) getOld() map[string]interface{} {
+	if c.Old == nil {
+		return nil
+	}
 	return c.Old[0]
 }
 
