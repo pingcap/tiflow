@@ -25,7 +25,7 @@ insert into tp_char_binary(c_char, c_varchar, c_binary, c_varbinary)
 values('89504E470D0A1A0A', '89504E470D0A1A0A', x'89504E470D0A1A0A',
        x'89504E470D0A1A0A');
 
-insert into tp_text(c_tinyblob, c_blob, c_mediumblob, c_longblob)
+insert into tp_blob(c_tinyblob, c_blob, c_mediumblob, c_longblob)
 values (x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A',
         x'89504E470D0A1A0A');
 
