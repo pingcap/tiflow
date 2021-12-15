@@ -183,7 +183,7 @@ func (d *BaseDB) CloseBaseConn(conn *BaseConn) error {
 	return conn.close()
 }
 
-// CloseBaseConnWithoutErr close the base connect and output a warn log if meets an error
+// CloseBaseConnWithoutErr close the base connect and output a warn log if meets an error.
 func CloseBaseConnWithoutErr(d *BaseDB, conn *BaseConn) {
 	if err1 := d.CloseBaseConn(conn); err1 != nil {
 		log.L().Warn("close db connection failed", zap.Error(err1))
