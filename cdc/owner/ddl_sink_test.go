@@ -81,24 +81,13 @@ func newDDLSink4Test() (DDLSink, *mockSink) {
 func (s *ddlSinkSuite) TestCheckpoint(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ddlSink, mSink := newDDLSink4Test()
-
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
-	defer cancel()
-
-	var wg sync.WaitGroup
-	errCh := make(chan error, 1)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		errCh <- ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
-	}()
-
-	go func() {
-		wg.Wait()
+	defer func() {
+		cancel()
 		ddlSink.close(ctx)
-		c.Assert(<-errCh, check.IsNil)
 	}()
+	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
 
 	waitCheckpointGrowingUp := func(m *mockSink, targetTs model.Ts) error {
 		return retry.Do(context.Background(), func() error {
@@ -117,18 +106,13 @@ func (s *ddlSinkSuite) TestCheckpoint(c *check.C) {
 func (s *ddlSinkSuite) TestExecDDL(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ddlSink, mSink := newDDLSink4Test()
-
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
-	defer cancel()
-
-	var wg sync.WaitGroup
-	errCh := make(chan error, 1)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		errCh <- ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
+	defer func() {
+		cancel()
+		ddlSink.close(ctx)
 	}()
+	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
 
 	ddlEvents := []*model.DDLEvent{
 		{CommitTs: 1},
@@ -146,10 +130,6 @@ func (s *ddlSinkSuite) TestExecDDL(c *check.C) {
 			}
 		}
 	}
-
-	ddlSink.close(ctx)
-	wg.Wait()
-	c.Assert(<-errCh, check.IsNil)
 }
 
 func (s *ddlSinkSuite) TestExecDDLError(c *check.C) {
@@ -165,25 +145,21 @@ func (s *ddlSinkSuite) TestExecDDLError(c *check.C) {
 		defer resultErrMu.Unlock()
 		return resultErr
 	}
-	writeResultErr := func(err error) {
+
+	ddlSink, mSink := newDDLSink4Test()
+	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		resultErrMu.Lock()
 		defer resultErrMu.Unlock()
 		resultErr = err
-	}
-
-	ddlSink, mSink := newDDLSink4Test()
+		return nil
+	})
 	ctx, cancel := cdcContext.WithCancel(ctx)
-	defer cancel()
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
-		if err != nil {
-			writeResultErr(err)
-		}
+	defer func() {
+		cancel()
+		ddlSink.close(ctx)
 	}()
+
+	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
 
 	mSink.ddlError = cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	ddl1 := &model.DDLEvent{CommitTs: 1}
@@ -209,7 +185,4 @@ func (s *ddlSinkSuite) TestExecDDLError(c *check.C) {
 		}
 	}
 	c.Assert(cerror.ErrExecDDLFailed.Equal(readResultErr()), check.IsTrue)
-
-	wg.Wait()
-	ddlSink.close(ctx)
 }

@@ -71,10 +71,9 @@ type mockDDLSink struct {
 	syncPointHis []model.Ts
 }
 
-func (m *mockDDLSink) run(ctx cdcContext.Context, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) error {
+func (m *mockDDLSink) run(ctx cdcContext.Context, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) {
 	// mock async sink blocked
 	<-ctx.Done()
-	return nil
 }
 
 func (m *mockDDLSink) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {

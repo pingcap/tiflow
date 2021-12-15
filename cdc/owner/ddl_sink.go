@@ -112,13 +112,16 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 }
 
 func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) {
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	s.cancel = cancel
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+
 		start := time.Now()
 		if err := s.sinkInitHandler(ctx, s, id, info); err != nil {
-			s.errCh <- err
 			log.Warn("ddl sink initialize failed", zap.Duration("elapsed", time.Since(start)))
+			ctx.Throw(err)
 			return
 		}
 		log.Info("ddl sink initialized, start processing...", zap.Duration("elapsed", time.Since(start)))
@@ -132,7 +135,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			case <-ctx.Done():
 				return
 			case err := <-s.errCh:
-				s.errCh <- err
+				ctx.Throw(err)
 				return
 			case <-ticker.C:
 				checkpointTs := atomic.LoadUint64(&s.checkpointTs)
@@ -141,7 +144,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				}
 				lastCheckpointTs = checkpointTs
 				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs); err != nil {
-					s.errCh <- err
+					ctx.Throw(errors.Trace(err))
 					return
 				}
 			case ddl := <-s.ddlCh:
@@ -159,7 +162,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					zap.String("ChangeFeedID", ctx.ChangefeedVars().ID),
 					zap.Error(err),
 					zap.Reflect("ddl", ddl))
-				s.errCh <- err
+				ctx.Throw(errors.Trace(err))
 				return
 			}
 		}
@@ -186,7 +189,7 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	case s.ddlCh <- ddl:
 		s.ddlSentTs = ddl.CommitTs
 	default:
-		// if this hit, we can think that ddlCh is full, just return false and send the ddl in the next round.
+		// if this hit, we think that ddlCh is full, just return false and send the ddl in the next round.
 	}
 	return false, nil
 }
