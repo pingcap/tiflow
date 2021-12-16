@@ -209,7 +209,7 @@ func (m *Dumpling) IsFreshTask(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// ConstructArgs constructs arguments for exec.Command.
+// constructArgs constructs arguments for exec.Command.
 func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	cfg := m.cfg
 	db := cfg.From
