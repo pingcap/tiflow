@@ -715,7 +715,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 			}
 		}
 
-		// wait all tasks are pasused phase before actually starting scheduling
+		// wait all tasks are paused before actually starting scheduling
 		keepQuery := true
 		maxRetryNum := 10
 		for keepQuery && maxRetryNum > 0 {

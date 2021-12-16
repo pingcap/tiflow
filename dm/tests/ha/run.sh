@@ -112,10 +112,6 @@ function run() {
 		"\"result\": true" 1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"transfer-source $SOURCE_ID1 worker3" \
-		"\"result\": true" 1
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member --name worker3" \
 		"$SOURCE_ID1" 1
 
