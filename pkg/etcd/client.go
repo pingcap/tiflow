@@ -165,7 +165,77 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 
 // Watch delegates request to clientv3.Watcher.Watch
 func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
+<<<<<<< HEAD
 	return c.cli.Watch(ctx, key, opts...)
+=======
+	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
+	go c.WatchWithChan(ctx, watchCh, key, opts...)
+	return watchCh
+}
+
+// WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
+func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, opts ...clientv3.OpOption) {
+	defer func() {
+		close(outCh)
+		log.Info("WatchWithChan exited")
+	}()
+
+	// get initial revision from opts to avoid revision fall back
+	lastRevision := getRevisionFromWatchOpts(opts...)
+
+	watchCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	watchCh := c.cli.Watch(watchCtx, key, opts...)
+
+	ticker := c.clock.Ticker(etcdRequestProgressDuration)
+	defer ticker.Stop()
+	lastReceivedResponseTime := c.clock.Now()
+
+	for {
+		select {
+		case <-ctx.Done():
+			cancel()
+			return
+		case response := <-watchCh:
+			lastReceivedResponseTime = c.clock.Now()
+			if response.Err() == nil && !response.IsProgressNotify() {
+				lastRevision = response.Header.Revision
+			}
+
+		Loop:
+			// we must loop here until the response is sent to outCh
+			// or otherwise the response will be lost
+			for {
+				select {
+				case <-ctx.Done():
+					cancel()
+					return
+				case outCh <- response: // it may block here
+					break Loop
+				case <-ticker.C:
+					if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
+						log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)))
+					}
+				}
+			}
+
+			ticker.Reset(etcdRequestProgressDuration)
+		case <-ticker.C:
+			if err := c.RequestProgress(ctx); err != nil {
+				log.Warn("failed to request progress for etcd watcher", zap.Error(err))
+			}
+			if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
+				// cancel the last cancel func to reset it
+				log.Warn("etcd client watchCh blocking too long, reset the watchCh", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)), zap.Stack("stack"))
+				cancel()
+				watchCtx, cancel = context.WithCancel(ctx)
+				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision))
+				// we need to reset lastReceivedResponseTime after reset Watch
+				lastReceivedResponseTime = c.clock.Now()
+			}
+		}
+	}
+>>>>>>> f90ca46e7 (etcd/client (ticdc): Prevent revision in WatchWitchChan fallback. (#3851))
 }
 
 // RequestProgress requests a progress notify response be sent in all watch channels.
