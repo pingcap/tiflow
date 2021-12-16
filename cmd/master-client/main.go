@@ -8,7 +8,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/hanfei1991/microcosm/master"
+	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/master/jobmaster/benchmark"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pkg/errors"
@@ -30,7 +30,7 @@ func main() {
 		os.Exit(0)
 	}
 	ctx := context.Background()
-	clt, err := master.NewMasterClient(ctx, []string{addr})
+	clt, err := client.NewMasterClient(ctx, []string{addr})
 	if err != nil {
 		fmt.Printf("err: %v", err)
 	}

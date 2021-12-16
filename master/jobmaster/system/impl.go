@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/master/cluster"
+	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -22,8 +22,7 @@ type Master struct {
 	ctx    context.Context
 	cancel func()
 
-	client  cluster.ExecutorClient
-	mClient cluster.JobMasterClient
+	clients *client.Manager
 
 	offExecutors chan model.ExecutorID
 
@@ -40,16 +39,14 @@ type Master struct {
 func New(
 	parentCtx context.Context,
 	job *model.Job,
-	client cluster.ExecutorClient,
-	mClient cluster.JobMasterClient,
+	clients *client.Manager,
 ) *Master {
 	ctx, cancel := context.WithCancel(parentCtx)
 	return &Master{
 		ctx:     ctx,
 		cancel:  cancel,
 		job:     job,
-		client:  client,
-		mClient: mClient,
+		clients: clients,
 
 		offExecutors:         make(chan model.ExecutorID, 100),
 		scheduleWaitingTasks: make(chan scheduleGroup, 1024),
@@ -113,11 +110,11 @@ func (m *Master) dispatch(ctx context.Context, tasks []*Task) error {
 		}
 		reqPb := job.ToPB()
 		log.L().Logger.Info("submit sub job", zap.String("exec id", string(execID)), zap.String("req pb", reqPb.String()))
-		request := &cluster.ExecutorRequest{
-			Cmd: cluster.CmdSubmitBatchTasks,
+		request := &client.ExecutorRequest{
+			Cmd: client.CmdSubmitBatchTasks,
 			Req: reqPb,
 		}
-		resp, err := m.client.Send(ctx, execID, request)
+		resp, err := m.clients.ExecutorClient(execID).Send(ctx, request)
 		if err != nil {
 			log.L().Logger.Info("Send meet error", zap.Error(err))
 			return err
@@ -153,7 +150,7 @@ func (m *Master) reScheduleTask(group scheduleGroup) error {
 		reqTasks = append(reqTasks, task.ToScheduleTaskPB())
 	}
 	req := &pb.TaskSchedulerRequest{Tasks: reqTasks}
-	resp, err := m.mClient.RequestForSchedule(m.ctx, req, time.Minute)
+	resp, err := m.clients.MasterClient().RequestForSchedule(m.ctx, req, time.Minute)
 	if err != nil {
 		// TODO: convert grpc error to rfc error
 		return err
@@ -164,6 +161,10 @@ func (m *Master) reScheduleTask(group scheduleGroup) error {
 			return errors.ErrMasterScheduleMissTask.GenWithStackByArgs(task.ID)
 		}
 		task.exec = model.ExecutorID(schedule.GetExecutorId())
+		err := m.clients.AddExecutor(task.exec, schedule.Addr)
+		if err != nil {
+			return err
+		}
 	}
 	err = m.dispatch(m.ctx, group)
 	return err
@@ -175,7 +176,7 @@ func (m *Master) scheduleJobImpl(ctx context.Context, tasks []*model.Task) error
 		reqTasks = append(reqTasks, task.ToScheduleTaskPB())
 	}
 	req := &pb.TaskSchedulerRequest{Tasks: reqTasks}
-	resp, err := m.mClient.RequestForSchedule(m.ctx, req, time.Minute)
+	resp, err := m.clients.MasterClient().RequestForSchedule(m.ctx, req, time.Minute)
 	if err != nil {
 		// TODO: convert grpc error to rfc error
 		return err
@@ -190,6 +191,10 @@ func (m *Master) scheduleJobImpl(ctx context.Context, tasks []*model.Task) error
 			Task: task,
 			exec: model.ExecutorID(schedule.GetExecutorId()),
 		})
+		err := m.clients.AddExecutor(model.ExecutorID(schedule.GetExecutorId()), schedule.Addr)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = m.dispatch(ctx, sysTasks)
@@ -230,8 +235,8 @@ func (m *Master) StopTasks(ctx context.Context, tasks []*model.Task) error {
 			TaskIdList: taskList,
 		}
 		log.L().Info("begin to cancel tasks", zap.String("exec", string(exec)), zap.Any("task", taskList))
-		resp, err := m.client.Send(ctx, exec, &cluster.ExecutorRequest{
-			Cmd: cluster.CmdCancelBatchTasks,
+		resp, err := m.clients.ExecutorClient(exec).Send(ctx, &client.ExecutorRequest{
+			Cmd: client.CmdCancelBatchTasks,
 			Req: req,
 		})
 		if err != nil {

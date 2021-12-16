@@ -24,12 +24,13 @@ func NewCapRescMgr() *CapRescMgr {
 }
 
 // Register implements RescMgr.Register
-func (m *CapRescMgr) Register(id model.ExecutorID, capacity RescUnit) {
+func (m *CapRescMgr) Register(id model.ExecutorID, addr string, capacity RescUnit) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.executors[id] = &ExecutorResource{
 		ID:       id,
 		Capacity: capacity,
+		Addr:     addr,
 	}
 	log.L().Info("executor resource is registered",
 		zap.String("executor-id", string(id)), zap.Int("capacity", int(capacity)))
@@ -94,6 +95,7 @@ func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
 			if rest >= RescUnit(task.Cost) {
 				result[task.GetTask().Id] = &pb.ScheduleResult{
 					ExecutorId: string(exec.ID),
+					Addr:       exec.Addr,
 				}
 				exec.Reserved = exec.Reserved + RescUnit(task.GetCost())
 				break

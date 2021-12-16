@@ -1,9 +1,8 @@
-package cluster
+package client
 
 import (
 	"context"
 
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/test"
@@ -11,10 +10,11 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 type ExecutorClient interface {
-	Send(context.Context, model.ExecutorID, *ExecutorRequest) (*ExecutorResponse, error)
+	Send(context.Context, *ExecutorRequest) (*ExecutorResponse, error)
 }
 
 type closeable interface {
@@ -26,11 +26,7 @@ type executorClient struct {
 	client pb.ExecutorClient
 }
 
-func (c *executorClient) close() error {
-	return c.conn.Close()
-}
-
-func (c *executorClient) send(ctx context.Context, req *ExecutorRequest) (*ExecutorResponse, error) {
+func (c *executorClient) Send(ctx context.Context, req *ExecutorRequest) (*ExecutorResponse, error) {
 	resp := &ExecutorResponse{}
 	var err error
 	switch req.Cmd {
@@ -60,7 +56,7 @@ func newExecutorClient(addr string) (*executorClient, error) {
 	if test.GlobalTestFlag {
 		return newExecutorClientForTest(addr)
 	}
-	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoff.DefaultConfig}))
 	if err != nil {
 		return nil, errors.ErrGrpcBuildConn.GenWithStackByArgs(addr)
 	}

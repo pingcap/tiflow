@@ -16,8 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ ExecutorClient = &ExecutorManager{}
-
 // ExecutorManager holds all the executors info, including liveness, status, resource usage.
 type ExecutorManager struct {
 	testContext *test.Context
@@ -52,7 +50,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	log.L().Logger.Info("begin to remove executor", zap.String("id", string(id)))
-	exec, ok := e.executors[id]
+	_, ok := e.executors[id]
 	if !ok {
 		// This executor has been removed
 		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
@@ -71,7 +69,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 			Time: time.Now(),
 		})
 	}
-	return exec.close()
+	return nil
 }
 
 // HandleHeartbeat implements pb interface,
@@ -124,15 +122,11 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 
 	// Following part is to bootstrap the executor.
 	exec := &Executor{
-		ExecutorInfo:   *info,
+		ExecutorInfo: *info,
+
 		lastUpdateTime: time.Now(),
 		heartbeatTTL:   e.initHeartbeatTTL,
 		Status:         model.Initing,
-	}
-	var err error
-	exec.client, err = newExecutorClient(info.Addr)
-	if err != nil {
-		return nil, err
 	}
 
 	// Persistant
@@ -145,7 +139,7 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 	e.mu.Lock()
 	e.executors[info.ID] = exec
 	e.mu.Unlock()
-	e.rescMgr.Register(exec.ID, resource.RescUnit(exec.Capability))
+	e.rescMgr.Register(exec.ID, exec.Addr, resource.RescUnit(exec.Capability))
 	return info, nil
 }
 
@@ -162,12 +156,6 @@ type Executor struct {
 	// Last heartbeat
 	lastUpdateTime time.Time
 	heartbeatTTL   time.Duration
-
-	client *executorClient
-}
-
-func (e *Executor) close() error {
-	return e.client.close()
 }
 
 func (e *Executor) checkAlive() bool {
@@ -217,25 +205,4 @@ func (e *ExecutorManager) checkAliveImpl() error {
 	}
 	e.mu.Unlock()
 	return nil
-}
-
-// Send implements ExecutorClient interface.
-func (e *ExecutorManager) Send(ctx context.Context, id model.ExecutorID, req *ExecutorRequest) (*ExecutorResponse, error) {
-	e.mu.Lock()
-	exec, ok := e.executors[id]
-	if !ok {
-		e.mu.Unlock()
-		return nil, errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
-	}
-	e.mu.Unlock()
-	resp, err := exec.client.send(ctx, req)
-	if err != nil {
-		exec.mu.Lock()
-		if exec.Status == model.Running {
-			exec.Status = model.Disconnected
-		}
-		exec.mu.Unlock()
-		return resp, err
-	}
-	return resp, nil
 }

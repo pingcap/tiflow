@@ -8,7 +8,7 @@ import (
 // RescMgr manages the resources of the clusters.
 type RescMgr interface {
 	// Register registers new executor, it is called when an executor joins
-	Register(id model.ExecutorID, capacity RescUnit)
+	Register(id model.ExecutorID, addr string, capacity RescUnit)
 
 	// Unregister is called when an executor exits
 	Unregister(id model.ExecutorID)
@@ -30,4 +30,5 @@ type ExecutorResource struct {
 	Capacity RescUnit
 	Reserved RescUnit
 	Used     RescUnit
+	Addr     string
 }

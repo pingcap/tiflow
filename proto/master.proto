@@ -114,6 +114,7 @@ message TaskSchedulerRequest {
 // Currently it contains an executor id.
 message ScheduleResult {
     string executor_id = 1;
+    string addr = 2;
 }
 
 message TaskSchedulerResponse {
