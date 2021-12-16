@@ -57,13 +57,14 @@ type EventBatchEncoder interface {
 
 // MQMessage represents an MQ message to the mqSink
 type MQMessage struct {
-	Key      []byte
-	Value    []byte
-	Ts       uint64              // reserved for possible output sorting
-	Schema   *string             // schema
-	Table    *string             // table
-	Type     model.MqMessageType // type
-	Protocol config.Protocol     // protocol
+	Key       []byte
+	Value     []byte
+	Ts        uint64              // reserved for possible output sorting
+	Schema    *string             // schema
+	Table     *string             // table
+	Type      model.MqMessageType // type
+	Protocol  config.Protocol     // protocol
+	rowsCount int                 // rows in one MQ Message
 }
 
 // maximumRecordOverhead is used to calculate ProducerMessage's byteSize by sarama kafka client.
@@ -83,6 +84,21 @@ func (m *MQMessage) PhysicalTime() time.Time {
 	return oracle.GetTimeFromTS(m.Ts)
 }
 
+// GetRowsCount returns the number of rows batched in one MQMessage
+func (m *MQMessage) GetRowsCount() int {
+	return m.rowsCount
+}
+
+// SetRowsCount set the number of rows
+func (m *MQMessage) SetRowsCount(cnt int) {
+	m.rowsCount = cnt
+}
+
+// IncRowsCount increase the number of rows
+func (m *MQMessage) IncRowsCount() {
+	m.rowsCount++
+}
+
 func newDDLMQMessage(proto config.Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
 	return NewMQMessage(proto, key, value, event.CommitTs, model.MqMessageTypeDDL, &event.TableInfo.Schema, &event.TableInfo.Table)
 }
@@ -95,13 +111,14 @@ func newResolvedMQMessage(proto config.Protocol, key, value []byte, ts uint64) *
 // It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
 func NewMQMessage(proto config.Protocol, key []byte, value []byte, ts uint64, ty model.MqMessageType, schema, table *string) *MQMessage {
 	ret := &MQMessage{
-		Key:      nil,
-		Value:    nil,
-		Ts:       ts,
-		Schema:   schema,
-		Table:    table,
-		Type:     ty,
-		Protocol: proto,
+		Key:       nil,
+		Value:     nil,
+		Ts:        ts,
+		Schema:    schema,
+		Table:     table,
+		Type:      ty,
+		Protocol:  proto,
+		rowsCount: 0,
 	}
 
 	if key != nil {
@@ -150,7 +167,7 @@ type EncoderBuilder interface {
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
 func NewEventBatchEncoderBuilder(p config.Protocol, credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
 	switch p {
-	case config.ProtocolDefault:
+	case config.ProtocolDefault, config.ProtocolOpen:
 		return newJSONEventBatchEncoderBuilder(opts), nil
 	case config.ProtocolCanal:
 		return newCanalEventBatchEncoderBuilder(opts), nil

@@ -840,6 +840,12 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		streamerProducer: mockStreamerProducer,
 		streamer:         mockStreamer,
 	}
+	syncer.checkpointFlushWorker = &checkpointFlushWorker{
+		input:        make(chan *checkpointFlushTask, 16),
+		cp:           syncer.checkpoint,
+		execError:    &syncer.execError,
+		afterFlushFn: syncer.afterFlushCheckpoint,
+	}
 
 	syncer.addJobFunc = syncer.addJobToMemory
 
@@ -975,6 +981,12 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		streamerProducer: mockStreamerProducer,
 		streamer:         mockStreamer,
 	}
+	syncer.checkpointFlushWorker = &checkpointFlushWorker{
+		input:        make(chan *checkpointFlushTask, 16),
+		cp:           syncer.checkpoint,
+		execError:    &syncer.execError,
+		afterFlushFn: syncer.afterFlushCheckpoint,
+	}
 
 	// When crossing safeModeExitPoint, will generate a flush sql
 	checkPointMock.ExpectBegin()
@@ -1104,6 +1116,12 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	syncer.streamerController = &StreamerController{
 		streamerProducer: mockStreamerProducer,
 		streamer:         mockStreamer,
+	}
+	syncer.checkpointFlushWorker = &checkpointFlushWorker{
+		input:        make(chan *checkpointFlushTask, 16),
+		cp:           syncer.checkpoint,
+		execError:    &syncer.execError,
+		afterFlushFn: syncer.afterFlushCheckpoint,
 	}
 
 	syncer.addJobFunc = syncer.addJobToMemory
@@ -1502,6 +1520,13 @@ func (s *Syncer) setupMockCheckpoint(c *C, checkPointDBConn *sql.Conn, checkPoin
 
 	// mock syncer.checkpoint.Init() function
 	s.checkpoint.(*RemoteCheckPoint).dbConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(checkPointDBConn, &retry.FiniteRetryStrategy{})}
+	// mock syncer.flushCpWorker init
+	s.checkpointFlushWorker = &checkpointFlushWorker{
+		input:        nil,
+		cp:           s.checkpoint,
+		execError:    &s.execError,
+		afterFlushFn: s.afterFlushCheckpoint,
+	}
 	c.Assert(s.checkpoint.(*RemoteCheckPoint).prepare(tcontext.Background()), IsNil)
 }
 

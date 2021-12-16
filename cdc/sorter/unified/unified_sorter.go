@@ -15,7 +15,6 @@ package unified
 
 import (
 	"context"
-	"os"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -53,34 +52,6 @@ type metricsInfo struct {
 
 type ctxKey struct{}
 
-// CheckDir checks whether the directory needed exists and is writable.
-// If it does not exist, we try to create one.
-// parameter: cfSortDir - the directory designated in changefeed's setting,
-// which will be overridden by a non-empty local setting of `sort-dir`.
-// TODO better way to organize this function after we obsolete chanegfeed setting's `sort-dir`
-func CheckDir(cfSortDir string) error {
-	dir := cfSortDir
-	sorterConfig := config.GetGlobalServerConfig().Sorter
-	if sorterConfig.SortDir != "" {
-		// Let the local setting override the changefeed setting
-		dir = sorterConfig.SortDir
-	}
-
-	err := util.IsDirAndWritable(dir)
-	if err != nil {
-		if os.IsNotExist(errors.Cause(err)) {
-			err = os.MkdirAll(dir, 0o700)
-			if err != nil {
-				return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
-			}
-		} else {
-			return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check")
-		}
-	}
-
-	return nil
-}
-
 // NewUnifiedSorter creates a new Sorter
 func NewUnifiedSorter(
 	dir string,
@@ -92,11 +63,6 @@ func NewUnifiedSorter(
 	defer poolMu.Unlock()
 
 	if pool == nil {
-		sorterConfig := config.GetGlobalServerConfig().Sorter
-		if sorterConfig.SortDir != "" {
-			// Let the local setting override the changefeed setting
-			dir = sorterConfig.SortDir
-		}
 		var err error
 		pool, err = newBackEndPool(dir, captureAddr)
 		if err != nil {

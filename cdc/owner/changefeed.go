@@ -72,13 +72,14 @@ type changefeed struct {
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
+	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler, error)
 }
 
 func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 	c := &changefeed{
 		id: id,
-		// TODO: creates a SchedulerV2 once it is ready.
-		scheduler:        newSchedulerV1(),
+		// The scheduler will be created lazily.
+		scheduler:        nil,
 		barriers:         newBarriers(),
 		feedStateManager: new(feedStateManager),
 		gcManager:        gcManager,
@@ -89,6 +90,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		newDDLPuller: newDDLPuller,
 	}
 	c.newSink = newAsyncSink
+	c.newScheduler = newScheduler
 	return c
 }
 
@@ -180,7 +182,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// So we return here.
 		return nil
 	}
-	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
+	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(ctx, c.state, c.schema.AllPhysicalTables(), captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -289,11 +291,18 @@ LOOP:
 	// init metrics
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
+
+	// create scheduler
+	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	c.initialized = true
 	return nil
 }
 
-func (c *changefeed) releaseResources(ctx context.Context) {
+func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if !c.initialized {
 		return
 	}
@@ -309,13 +318,14 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id), zap.Error(err))
 		}
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
-	if err := c.sink.Close(ctx); err != nil {
+	if err := c.sink.Close(canceledCtx); err != nil {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
+	c.scheduler.Close(ctx)
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsGauge = nil
@@ -491,6 +501,6 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyTs) / 1e3)
 }
 
-func (c *changefeed) Close(ctx context.Context) {
+func (c *changefeed) Close(ctx cdcContext.Context) {
 	c.releaseResources(ctx)
 }

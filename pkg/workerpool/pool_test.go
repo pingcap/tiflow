@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 func TestTaskError(t *testing.T) {
@@ -505,6 +506,38 @@ func TestGracefulUnregisterTimeout(t *testing.T) {
 	err = handle.GracefulUnregister(ctx, time.Millisecond*10)
 	require.Error(t, err)
 	require.Truef(t, cerror.ErrWorkerPoolGracefulUnregisterTimedOut.Equal(err), "%s", err.Error())
+}
+
+func TestSynchronizeLog(t *testing.T) {
+	w := newWorker()
+	w.isRunning = 1
+	// Always report "synchronize is taking too long".
+	w.slowSynchronizeThreshold = time.Duration(0)
+	w.slowSynchronizeLimiter = rate.NewLimiter(rate.Every(100*time.Minute), 1)
+
+	counter := int32(0)
+	logWarn = func(msg string, fields ...zap.Field) {
+		atomic.AddInt32(&counter, 1)
+	}
+	defer func() { logWarn = log.Warn }()
+
+	doneCh := make(chan struct{})
+	go func() {
+		w.synchronize()
+		close(doneCh)
+	}()
+
+	time.Sleep(300 * time.Millisecond)
+	w.stopNotifier.Notify()
+	time.Sleep(300 * time.Millisecond)
+	w.stopNotifier.Notify()
+
+	// Close worker.
+	atomic.StoreInt32(&w.isRunning, 0)
+	w.stopNotifier.Close()
+	<-doneCh
+
+	require.EqualValues(t, 1, atomic.LoadInt32(&counter))
 }
 
 // Benchmark workerpool with ping-pong workflow.

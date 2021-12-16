@@ -240,6 +240,11 @@ dm: dm-master dm-worker dmctl dm-portal dm-syncer
 dm-master:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/dm-master ./dm/cmd/dm-master
 
+dm-master-with-webui:
+	@echo "build webui first"
+	cd dm/ui && yarn && yarn build
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -tags dm_webui -o bin/dm-master ./dm/cmd/dm-master
+
 dm-worker:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/dm-worker ./dm/cmd/dm-worker
 
@@ -268,6 +273,7 @@ dm_generate_openapi: tools/bin/oapi-codegen
 	@echo "generate_openapi"
 	cd dm && ../tools/bin/oapi-codegen --config=openapi/spec/server-gen-cfg.yaml openapi/spec/dm.yaml
 	cd dm && ../tools/bin/oapi-codegen --config=openapi/spec/types-gen-cfg.yaml openapi/spec/dm.yaml
+	cd dm && ../tools/bin/oapi-codegen --config=openapi/spec/client-gen-cfg.yaml openapi/spec/dm.yaml
 
 dm_unit_test: check_failpoint_ctl
 	mkdir -p $(DM_TEST_DIR)
