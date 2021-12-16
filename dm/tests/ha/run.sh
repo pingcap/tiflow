@@ -45,7 +45,7 @@ function run() {
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT3
 	check_metric $MASTER_PORT3 'start_leader_counter' 3 -1 1 # master3 is not leader
 
-	worker in running stage
+	# worker in running stage
 	check_metric $MASTER_PORT1 'dm_master_worker_state{worker="worker1"}' 3 1 3 || check_metric $MASTER_PORT2 'dm_master_worker_state{worker="worker1"}' 3 1 3
 
 	echo "start DM task"
