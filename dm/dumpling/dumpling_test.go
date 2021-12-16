@@ -21,12 +21,12 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/prometheus/client_golang/prometheus"
 
+	. "github.com/pingcap/check"
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/dm/pb"
 	"github.com/pingcap/ticdc/dm/pkg/log"
-
-	. "github.com/pingcap/check"
 )
 
 var _ = Suite(&testDumplingSuite{})
@@ -126,10 +126,12 @@ func (d *testDumplingSuite) TestDefaultConfig(c *C) {
 }
 
 func (d *testDumplingSuite) TestCallStatus(c *C) {
-	dumpConf := export.DefaultConfig()
-	taskCfg := &config.SubTaskConfig{}
-	m := &Dumpling{cfg: taskCfg}
+	m := NewDumpling(d.cfg)
 	ctx := context.Background()
+
+	dumpConf := export.DefaultConfig()
+	dumpConf.Labels = prometheus.Labels{"task": m.cfg.Name, "source_id": m.cfg.SourceID}
+	export.InitMetricsVector(dumpConf.Labels)
 
 	s := m.Status(nil).(*pb.DumpStatus)
 	c.Assert(s.CompletedTables, Equals, float64(0))
@@ -137,14 +139,11 @@ func (d *testDumplingSuite) TestCallStatus(c *C) {
 	c.Assert(s.FinishedRows, Equals, float64(0))
 	c.Assert(s.EstimateTotalRows, Equals, float64(0))
 
-	dumpling, err := export.NewDumper(ctx, dumpConf)
-	c.Assert(err, NotNil)
+	// NewDumper is the only way we can set conf to Dumper, but it will return error. so we just ignore the error
+	dumpling, _ := export.NewDumper(ctx, dumpConf)
 	m.core = dumpling
 
-	export.InitMetricsVector(dumpConf.Labels)
-
 	m.Close()
-
 	s = m.Status(nil).(*pb.DumpStatus)
 	c.Assert(s.CompletedTables, Equals, float64(0))
 	c.Assert(s.FinishedBytes, Equals, float64(0))

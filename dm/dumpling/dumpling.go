@@ -48,7 +48,7 @@ type Dumpling struct {
 	dumpConfig *export.Config
 	closed     atomic.Bool
 	core       *export.Dumper
-	mu         sync.Mutex
+	mu         sync.RWMutex
 }
 
 // NewDumpling creates a new Dumpling.
@@ -203,8 +203,8 @@ func (m *Dumpling) Update(context.Context, *config.SubTaskConfig) error {
 // Status implements Unit.Status.
 func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 	// NOTE: try to add some status, like dumped file count
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if m.core == nil {
 		return &pb.DumpStatus{}
 	}
