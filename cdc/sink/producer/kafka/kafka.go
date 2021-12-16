@@ -324,6 +324,7 @@ func (k *kafkaSaramaProducer) stop() {
 	if atomic.SwapInt32(&k.closing, kafkaProducerClosing) == kafkaProducerClosing {
 		return
 	}
+	log.Info("kafka producer closing...")
 	close(k.closeCh)
 }
 

@@ -43,7 +43,7 @@ type changefeed struct {
 	gcManager        gc.Manager
 
 	schema      *schemaWrap4Owner
-	sink        AsyncSink
+	sink        DDLSink
 	ddlPuller   DDLPuller
 	initialized bool
 
@@ -52,21 +52,25 @@ type changefeed struct {
 	// After the DDL event has been executed, ddlEventCache will be set to nil.
 	ddlEventCache *model.DDLEvent
 
-	errCh  chan error
+	errCh chan error
+	// cancel the running goroutine start by `DDLPuller`
 	cancel context.CancelFunc
 
 	// The changefeed will start some backend goroutines in the function `initialize`,
-	// such as DDLPuller, Sink, etc.
+	// such as DDLPuller, DDLSink, etc.
 	// `wg` is used to manage those backend goroutines.
-	// But it only manages the DDLPuller for now.
-	// TODO: manage the Sink and other backend goroutines.
 	wg sync.WaitGroup
 
 	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
+<<<<<<< HEAD
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
+=======
+	newSink      func() DDLSink
+	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler, error)
+>>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
 }
 
 func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
@@ -81,15 +85,20 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		cancel: func() {},
 
 		newDDLPuller: newDDLPuller,
+		newSink:      newDDLSink,
 	}
+<<<<<<< HEAD
 	c.newSink = newAsyncSink
+=======
+	c.newScheduler = newScheduler
+>>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
 	return c
 }
 
 func newChangefeed4Test(
 	id model.ChangeFeedID, gcManager gc.Manager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
-	newSink func(ctx cdcContext.Context) (AsyncSink, error),
+	newSink func() DDLSink,
 ) *changefeed {
 	c := newChangefeed(id, gcManager)
 	c.newDDLPuller = newDDLPuller
@@ -162,7 +171,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	default:
 	}
 
-	c.sink.EmitCheckpointTs(ctx, checkpointTs)
+	c.sink.emitCheckpointTs(ctx, checkpointTs)
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -234,8 +243,10 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
+<<<<<<< HEAD
 	c.sink, err = c.newSink(cancelCtx)
 	if err != nil {
 		return errors.Trace(err)
@@ -244,6 +255,12 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
+=======
+
+	c.sink = c.newSink()
+	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
+
+>>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
@@ -275,7 +292,11 @@ func (c *changefeed) releaseResources() {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
+<<<<<<< HEAD
 	if err := c.sink.Close(ctx); err != nil {
+=======
+	if err := c.sink.close(canceledCtx); err != nil {
+>>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
@@ -377,8 +398,13 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		if !blocked {
 			return barrierTs, nil
 		}
+<<<<<<< HEAD
 		nextSyncPointTs := oracle.ComposeTS(oracle.GetPhysical(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval)), 0)
 		if err := c.sink.SinkSyncpoint(ctx, barrierTs); err != nil {
+=======
+		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval))
+		if err := c.sink.emitSyncPoint(ctx, barrierTs); err != nil {
+>>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
 			return 0, errors.Trace(err)
 		}
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
@@ -419,7 +445,7 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		log.Warn("ignore the DDL job of ineligible table", zap.Reflect("job", job))
 		return true, nil
 	}
-	done, err = c.sink.EmitDDLEvent(ctx, c.ddlEventCache)
+	done, err = c.sink.emitDDLEvent(ctx, c.ddlEventCache)
 	if err != nil {
 		return false, err
 	}
