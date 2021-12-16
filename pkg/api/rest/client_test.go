@@ -62,7 +62,7 @@ func TestRestRawRequestFailed(t *testing.T) {
 
 	c, err := restClient(testServer)
 	require.Nil(t, err)
-	body, err := c.Get().Do(context.Background()).Raw()
+	body, err := c.Get().MaxRetries(1).Do(context.Background()).Raw()
 	require.NotNil(t, body)
 	require.NotNil(t, err)
 }
