@@ -15,10 +15,10 @@ package sink
 
 import (
 	"context"
-	"log"
 	"sort"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo"
 	"go.uber.org/zap"
