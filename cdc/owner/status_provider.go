@@ -72,6 +72,11 @@ type ownerStatusProvider struct {
 	owner *Owner
 }
 
+// NewStatusProvider returns a StatusProvider
+func NewStatusProvider(o *Owner) StatusProvider {
+	return &ownerStatusProvider{owner: o}
+}
+
 func (p *ownerStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
 	query := &ownerQuery{
 		tp: ownerQueryAllChangeFeedStatuses,

@@ -46,7 +46,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		return nil, cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedConfig.ID)
 	}
 	// check if the changefeed exists
-	cfStatus, err := capture.owner.StatusProvider().GetChangeFeedStatus(ctx, changefeedConfig.ID)
+	cfStatus, err := capture.owner.StatusProvider.GetChangeFeedStatus(ctx, changefeedConfig.ID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		replicaConfig.Filter.Rules = changefeedConfig.FilterRules
 	}
 
-	captureInfos, err := capture.owner.StatusProvider().GetCaptures(ctx)
+	captureInfos, err := capture.owner.StatusProvider.GetCaptures(ctx)
 	if err != nil {
 		return nil, err
 	}

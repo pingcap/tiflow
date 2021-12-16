@@ -91,18 +91,21 @@ type Owner struct {
 	// NOTICE: Do not use it in a method other than tick unexpectedly, as it is not a thread-safe value.
 	bootstrapped bool
 
-	newChangefeed func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed
+	newChangefeed  func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed
+	StatusProvider StatusProvider
 }
 
 // NewOwner creates a new Owner
 func NewOwner(pdClient pd.Client) *Owner {
-	return &Owner{
+	o := &Owner{
 		changefeeds:   make(map[model.ChangeFeedID]*changefeed),
 		gcManager:     gc.NewManager(pdClient),
 		lastTickTime:  time.Now(),
-		newChangefeed: newChangefeed,
 		logLimiter:    rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
+		newChangefeed: newChangefeed,
 	}
+	o.StatusProvider = NewStatusProvider(o)
+	return o
 }
 
 // NewOwner4Test creates a new Owner for test
@@ -493,9 +496,4 @@ func (o *Owner) updateGCSafepoint(
 	gcSafepointUpperBound := minCheckpointTs - 1
 	err := o.gcManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
 	return errors.Trace(err)
-}
-
-// StatusProvider returns a StatusProvider
-func (o *Owner) StatusProvider() StatusProvider {
-	return &ownerStatusProvider{owner: o}
 }

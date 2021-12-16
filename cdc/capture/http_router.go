@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package capture
 
 import (
 	"context"
@@ -23,7 +23,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/capture"
 	"github.com/pingcap/ticdc/cdc/model"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -33,9 +32,8 @@ import (
 	_ "github.com/pingcap/ticdc/api"
 )
 
-// newRouter create a router for OpenAPI
-
-func newRouter(captureHandler capture.HTTPHandler) *gin.Engine {
+// NewRouter create a router for OpenAPI
+func NewRouter(handler HTTPHandler) *gin.Engine {
 	// discard gin log output
 	gin.DefaultWriter = io.Discard
 
@@ -50,41 +48,41 @@ func newRouter(captureHandler capture.HTTPHandler) *gin.Engine {
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// common API
-	router.GET("/api/v1/status", captureHandler.ServerStatus)
-	router.GET("/api/v1/health", captureHandler.Health)
-	router.POST("/api/v1/log", capture.SetLogLevel)
+	router.GET("/api/v1/status", handler.ServerStatus)
+	router.GET("/api/v1/health", handler.Health)
+	router.POST("/api/v1/log", SetLogLevel)
 
 	// changefeed API
 	changefeedGroup := router.Group("/api/v1/changefeeds")
 	{
-		changefeedGroup.GET("", captureHandler.ListChangefeed)
-		changefeedGroup.GET("/:changefeed_id", captureHandler.GetChangefeed)
-		changefeedGroup.POST("", captureHandler.CreateChangefeed)
-		changefeedGroup.PUT("/:changefeed_id", captureHandler.UpdateChangefeed)
-		changefeedGroup.POST("/:changefeed_id/pause", captureHandler.PauseChangefeed)
-		changefeedGroup.POST("/:changefeed_id/resume", captureHandler.ResumeChangefeed)
-		changefeedGroup.DELETE("/:changefeed_id", captureHandler.RemoveChangefeed)
-		changefeedGroup.POST("/:changefeed_id/tables/rebalance_table", captureHandler.RebalanceTable)
-		changefeedGroup.POST("/:changefeed_id/tables/move_table", captureHandler.MoveTable)
+		changefeedGroup.GET("", handler.ListChangefeed)
+		changefeedGroup.GET("/:changefeed_id", handler.GetChangefeed)
+		changefeedGroup.POST("", handler.CreateChangefeed)
+		changefeedGroup.PUT("/:changefeed_id", handler.UpdateChangefeed)
+		changefeedGroup.POST("/:changefeed_id/pause", handler.PauseChangefeed)
+		changefeedGroup.POST("/:changefeed_id/resume", handler.ResumeChangefeed)
+		changefeedGroup.DELETE("/:changefeed_id", handler.RemoveChangefeed)
+		changefeedGroup.POST("/:changefeed_id/tables/rebalance_table", handler.RebalanceTable)
+		changefeedGroup.POST("/:changefeed_id/tables/move_table", handler.MoveTable)
 	}
 
 	// owner API
 	ownerGroup := router.Group("/api/v1/owner")
 	{
-		ownerGroup.POST("/resign", captureHandler.ResignOwner)
+		ownerGroup.POST("/resign", handler.ResignOwner)
 	}
 
 	// processor API
 	processorGroup := router.Group("/api/v1/processors")
 	{
-		processorGroup.GET("", captureHandler.ListProcessor)
-		processorGroup.GET("/:changefeed_id/:capture_id", captureHandler.GetProcessor)
+		processorGroup.GET("", handler.ListProcessor)
+		processorGroup.GET("/:changefeed_id/:capture_id", handler.GetProcessor)
 	}
 
 	// capture API
 	captureGroup := router.Group("/api/v1/captures")
 	{
-		captureGroup.GET("", captureHandler.ListCapture)
+		captureGroup.GET("", handler.ListCapture)
 	}
 
 	// pprof debug API
@@ -167,7 +165,7 @@ func errorHandleMiddleware() gin.HandlerFunc {
 		if lastError != nil {
 			err := lastError.Err
 			// put the error into response
-			if capture.IsHTTPBadRequestError(err) {
+			if IsHTTPBadRequestError(err) {
 				c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
 			} else {
 				c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))

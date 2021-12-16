@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package capture
 
 import (
 	"fmt"
@@ -19,13 +19,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pingcap/ticdc/cdc/capture"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPProfPath(t *testing.T) {
 	t.Parallel()
-	router := newRouter(capture.NewHTTPHandler(nil))
+	router := NewRouter(NewHTTPHandler(nil))
 
 	apis := []*openAPI{
 		{"/debug/pprof/", http.MethodGet},
