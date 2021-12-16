@@ -24,7 +24,6 @@ import (
 
 	"github.com/docker/go-units"
 	"github.com/go-mysql-org/go-mysql/mysql"
-	tfilter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/spf13/pflag"
 
@@ -282,7 +281,7 @@ func ParseExtraArgs(logger *log.Logger, dumpCfg *export.Config, args []string) e
 	}
 
 	if len(tablesList) > 0 || (len(filters) != 1 || filters[0] != "*.*") {
-		ff, err2 := parseTableFilter(tablesList, filters)
+		ff, err2 := export.ParseTableFilter(tablesList, filters)
 		if err2 != nil {
 			return err2
 		}
@@ -291,28 +290,4 @@ func ParseExtraArgs(logger *log.Logger, dumpCfg *export.Config, args []string) e
 	}
 
 	return nil
-}
-
-// parseTableFilter parses `--tables-list` and `--filter`.
-// copy (and update) from https://github.com/pingcap/dumpling/blob/6f74c686e54183db7b869775af1c32df46462a6a/cmd/dumpling/main.go#L222.
-func parseTableFilter(tablesList, filters []string) (tfilter.Filter, error) {
-	if len(tablesList) == 0 {
-		return tfilter.Parse(filters)
-	}
-
-	// only parse -T when -f is default value. otherwise bail out.
-	if len(filters) != 1 || filters[0] != "*.*" {
-		return nil, errors.New("cannot parse --tables-list and --filter together")
-	}
-
-	tableNames := make([]tfilter.Table, 0, len(tablesList))
-	for _, table := range tablesList {
-		parts := strings.SplitN(table, ".", 2)
-		if len(parts) < 2 {
-			return nil, fmt.Errorf("--tables-list only accepts qualified table names, but `%s` lacks a dot", table)
-		}
-		tableNames = append(tableNames, tfilter.Table{Schema: parts[0], Name: parts[1]})
-	}
-
-	return tfilter.NewTablesFilter(tableNames...), nil
 }
