@@ -188,13 +188,13 @@ func testInsert(c *check.C) {
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
-			c.Assert(col.GetMysqlType(), check.Equals, "INT")
+			c.Assert(col.GetMysqlType(), check.Equals, "int")
 		case "name":
 			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "Bob")
-			c.Assert(col.GetMysqlType(), check.Equals, "VARCHAR")
+			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
 		case "tiny":
 			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeTINYINT))
 			c.Assert(col.GetIsKey(), check.IsFalse)
@@ -206,7 +206,7 @@ func testInsert(c *check.C) {
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(err, check.IsNil)
 			c.Assert(col.GetValue(), check.Equals, "测试")
-			c.Assert(col.GetMysqlType(), check.Equals, "TEXT")
+			c.Assert(col.GetMysqlType(), check.Equals, "text")
 		case "blob":
 			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBLOB))
 			c.Assert(col.GetIsKey(), check.IsFalse)
@@ -214,7 +214,7 @@ func testInsert(c *check.C) {
 			s, err := charmap.ISO8859_1.NewEncoder().String(col.GetValue())
 			c.Assert(err, check.IsNil)
 			c.Assert(s, check.Equals, "测试blob")
-			c.Assert(col.GetMysqlType(), check.Equals, "BLOB")
+			c.Assert(col.GetMysqlType(), check.Equals, "blob")
 		}
 	}
 }
@@ -265,13 +265,13 @@ func testUpdate(c *check.C) {
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "2")
-			c.Assert(col.GetMysqlType(), check.Equals, "INT")
+			c.Assert(col.GetMysqlType(), check.Equals, "int")
 		case "name":
 			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "Nancy")
-			c.Assert(col.GetMysqlType(), check.Equals, "VARCHAR")
+			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
 		}
 	}
 
@@ -285,13 +285,13 @@ func testUpdate(c *check.C) {
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
-			c.Assert(col.GetMysqlType(), check.Equals, "INT")
+			c.Assert(col.GetMysqlType(), check.Equals, "int")
 		case "name":
 			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "Bob")
-			c.Assert(col.GetMysqlType(), check.Equals, "VARCHAR")
+			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
 		}
 	}
 }
@@ -335,7 +335,7 @@ func testDelete(c *check.C) {
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
-			c.Assert(col.GetMysqlType(), check.Equals, "INT")
+			c.Assert(col.GetMysqlType(), check.Equals, "int")
 		}
 	}
 }
