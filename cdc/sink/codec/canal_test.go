@@ -448,6 +448,7 @@ var testColumnsTable = []*testColumnTuple{
 }
 
 func (s *canalEntrySuite) TestGetMySQLTypeAndJavaSQLType(c *check.C) {
+		defer testleak.AfterTest(c)()
 	for _, item := range testColumnsTable {
 		obtainedMySQLType := getMySQLType(item.column)
 		c.Assert(obtainedMySQLType, check.Equals, item.expectedMySQLType)
