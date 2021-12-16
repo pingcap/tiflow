@@ -95,6 +95,11 @@ func NewLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error)
 		if err != nil {
 			return nil, err
 		}
+		// remove logs in local dir first, if have logs left belongs to previous changefeed with the same name may have error when apply logs
+		err = os.RemoveAll(cfg.Dir)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrRedoFileOp, err)
+		}
 		err = downLoadToLocal(ctx, cfg.Dir, s3storage, common.DefaultMetaFileType)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrRedoDownloadFailed, err)
@@ -231,7 +236,9 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 	for l.rowHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.rowHeap).(*logWithIdx)
 		if item.data.RedoRow != nil && item.data.RedoRow.Row != nil &&
-			item.data.RedoRow.Row.CommitTs > l.cfg.startTs {
+			// by design only data (startTs,endTs] is needed, so filter out data may beyond the boundary
+			item.data.RedoRow.Row.CommitTs > l.cfg.startTs &&
+			item.data.RedoRow.Row.CommitTs <= l.cfg.endTs {
 			ret = append(ret, item.data.RedoRow)
 			i++
 		}
@@ -292,7 +299,9 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 	for l.ddlHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.ddlHeap).(*logWithIdx)
 		if item.data.RedoDDL != nil && item.data.RedoDDL.DDL != nil &&
-			item.data.RedoDDL.DDL.CommitTs > l.cfg.startTs {
+			// by design only data (startTs,endTs] is needed, so filter out data may beyond the boundary
+			item.data.RedoDDL.DDL.CommitTs > l.cfg.startTs &&
+			item.data.RedoDDL.DDL.CommitTs <= l.cfg.endTs {
 			ret = append(ret, item.data.RedoDDL)
 			i++
 		}

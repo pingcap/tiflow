@@ -5,6 +5,7 @@ import requests
 
 NO_SHARD_TASK_NAME = "test-no-shard"
 SHARD_TASK_NAME = "test-shard"
+ILLEGAL_CHAR_TASK_NAME = "t-Ë!s`t"
 SOURCE1_NAME = "mysql-01"
 SOURCE2_NAME = "mysql-02"
 
@@ -191,6 +192,76 @@ def get_task_list(task_count):
     assert data["total"] == int(task_count)
 
 
+def pause_task_success(task_name, source_name):
+    url = API_ENDPOINT + "/" + task_name + "/pause"
+    resp = requests.post(
+        url=url,
+        json=[
+            source_name,
+        ],
+    )
+    assert resp.status_code == 200
+
+
+def resume_task_success(task_name, source_name):
+    url = API_ENDPOINT + "/" + task_name + "/resume"
+    resp = requests.post(
+        url=url,
+        json=[
+            source_name,
+        ],
+    )
+    assert resp.status_code == 200
+
+
+def operate_schema_and_table_success(task_name, source_name, schema_name, table_name):
+    schema_url = API_ENDPOINT + "/" + task_name + "/sources/" + source_name + "/schemas"
+    schema_resp = requests.get(url=schema_url)
+    assert schema_resp.status_code == 200
+    print("get_task_schema_success schema resp=", schema_resp.json())
+    assert len(schema_resp.json()) > 0
+
+    schema_list = schema_resp.json()
+    assert schema_name in schema_list
+    table_url = schema_url + "/" + schema_name
+    table_resp = requests.get(url=table_url)
+    assert table_resp.status_code == 200
+    print("get_task_schema_success table resp=", table_resp.json())
+    table_list = table_resp.json()
+    assert table_name in table_list
+
+    single_table_url = table_url + "/" + table_name
+    create_table_resp = requests.get(url=single_table_url)
+    assert create_table_resp.status_code == 200
+    create_table = create_table_resp.json()
+    print("get_task_schema_success create table resp=", create_table)
+    assert create_table["table_name"] == table_name
+    assert create_table["schema_name"] == schema_name
+    assert table_name in create_table["schema_create_sql"]
+
+    # delete table
+    resp = requests.delete(url=single_table_url)
+    assert resp.status_code == 204
+
+    # after delete, no table in schema
+    resp = requests.get(url=table_url)
+    assert resp.status_code == 200
+    print("get_task_schema_success table resp=", resp.json())
+    assert len(resp.json()) == 0
+
+    # add table back again
+    set_table_data = {
+        "sql_content": "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);",
+        "flush": True,
+        "sync": True,
+    }
+    resp = requests.put(url=single_table_url, json=set_table_data)
+    assert resp.status_code == 200
+    table_list = requests.get(url=table_url).json()
+    print("get_task_schema_success table resp=", table_list)
+    assert len(table_list) == 1
+
+
 def stop_task_failed(task_name):
     resp = requests.delete(url=API_ENDPOINT + "/" + task_name)
     print("stop_task_failed resp=", resp.json())
@@ -209,10 +280,14 @@ if __name__ == "__main__":
         "start_noshard_task_success": start_noshard_task_success,
         "start_shard_task_success": start_shard_task_success,
         "stop_task_failed": stop_task_failed,
+        "pause_task_success": pause_task_success,
+        "resume_task_success": resume_task_success,
         "stop_task_success": stop_task_success,
         "get_task_list": get_task_list,
         "get_task_status_failed": get_task_status_failed,
+        "get_illegal_char_task_status_failed": get_illegal_char_task_status_failed,
         "get_task_status_success": get_task_status_success,
+        "operate_schema_and_table_success": operate_schema_and_table_success,
     }
 
     func = FUNC_MAP[sys.argv[1]]

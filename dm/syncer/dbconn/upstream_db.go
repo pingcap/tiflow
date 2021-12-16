@@ -41,7 +41,7 @@ type UpStreamConn struct {
 }
 
 // NewUpStreamConn creates an UpStreamConn from config.
-func NewUpStreamConn(dbCfg config.DBConfig) (*UpStreamConn, error) {
+func NewUpStreamConn(dbCfg *config.DBConfig) (*UpStreamConn, error) {
 	baseDB, err := CreateBaseDB(dbCfg)
 	if err != nil {
 		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)

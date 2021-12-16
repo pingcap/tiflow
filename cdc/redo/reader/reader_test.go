@@ -18,15 +18,19 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	"github.com/pingcap/ticdc/cdc/redo/writer"
+	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/multierr"
@@ -38,6 +42,35 @@ func TestNewLogReader(t *testing.T) {
 
 	_, err = NewLogReader(context.Background(), &LogReaderConfig{})
 	require.Nil(t, err)
+
+	dir, err := ioutil.TempDir("", "redo-NewLogReader")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
+	require.Nil(t, err)
+
+	origin := common.InitS3storage
+	defer func() {
+		common.InitS3storage = origin
+	}()
+	controller := gomock.NewController(t)
+	mockStorage := mockstorage.NewMockExternalStorage(controller)
+	// no file to download
+	mockStorage.EXPECT().WalkDir(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	common.InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
+		return mockStorage, nil
+	}
+
+	// after init should rm the dir
+	_, err = NewLogReader(context.Background(), &LogReaderConfig{
+		S3Storage: true,
+		Dir:       dir,
+		S3URI:     *s3URI,
+	})
+	require.Nil(t, err)
+	_, err = os.Stat(dir)
+	require.True(t, os.IsNotExist(err))
 }
 
 func TestLogReaderResetReader(t *testing.T) {
@@ -63,7 +96,8 @@ func TestLogReaderResetReader(t *testing.T) {
 	require.Nil(t, err)
 	_, err = w.Write(data)
 	require.Nil(t, err)
-	w.Close()
+	err = w.Close()
+	require.Nil(t, err)
 
 	path := filepath.Join(dir, fileName)
 	f, err := os.Open(path)
@@ -81,7 +115,8 @@ func TestLogReaderResetReader(t *testing.T) {
 	require.Nil(t, err)
 	_, err = w.Write(data)
 	require.Nil(t, err)
-	w.Close()
+	err = w.Close()
+	require.Nil(t, err)
 	path = filepath.Join(dir, fileName)
 	f1, err := os.Open(path)
 	require.Nil(t, err)
@@ -193,6 +228,7 @@ func TestLogReaderResetReader(t *testing.T) {
 
 		}
 	}
+	time.Sleep(1001 * time.Millisecond)
 }
 
 func TestLogReaderReadMeta(t *testing.T) {
@@ -306,7 +342,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 			readerRet: &model.RedoLog{
 				RedoRow: &model.RedoRowChangedEvent{
 					Row: &model.RowChangedEvent{
-						CommitTs: 5,
+						CommitTs: 15,
 						RowID:    1,
 					},
 				},
@@ -464,9 +500,8 @@ func TestLogReaderReadNextLog(t *testing.T) {
 					require.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.RedoRow.Row.CommitTs, tt.name)
 					continue
 				}
-				require.Equal(t, ret[i].Row.CommitTs, tt.readerRet.RedoRow.Row.CommitTs, tt.name)
+				require.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.RedoRow.Row.CommitTs, tt.name)
 			}
-
 		}
 	}
 }
@@ -494,7 +529,7 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 			readerRet: &model.RedoLog{
 				RedoDDL: &model.RedoDDLEvent{
 					DDL: &model.DDLEvent{
-						CommitTs: 5,
+						CommitTs: 15,
 					},
 				},
 			},
@@ -641,7 +676,7 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 					require.Equal(t, ret[i].DDL.CommitTs, tt.readerRet1.RedoDDL.DDL.CommitTs, tt.name)
 					continue
 				}
-				require.Equal(t, ret[i].DDL.CommitTs, tt.readerRet.RedoDDL.DDL.CommitTs, tt.name)
+				require.Equal(t, ret[i].DDL.CommitTs, tt.readerRet1.RedoDDL.DDL.CommitTs, tt.name)
 			}
 		}
 	}

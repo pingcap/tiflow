@@ -189,7 +189,7 @@ function test_shard_task() {
 	run_sql_source1 "DELETE FROM openapi.t;"
 	run_sql_tidb_with_retry "select count(1) from openapi.t;" "count(1): 2"
 
-	# test binlog event filter, this ddl will ignored in source-2
+	# test binlog event filter, this ddl will be ignored in source-2
 	run_sql "alter table openapi.t add column aaa int;" $MYSQL_PORT2 $MYSQL_PASSWORD2
 	# ddl will be ignored, so no ddl locks and the task will work normally.
 	run_sql "INSERT INTO openapi.t(i,j) VALUES (5, 5);" $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -197,6 +197,9 @@ function test_shard_task() {
 
 	# get task status failed
 	openapi_task_check "get_task_status_failed" "not a task name"
+
+	# get illegal char task_status failed
+	openapi_task_check get_illegal_char_task_status_failed
 
 	# get task status success
 	openapi_task_check "get_task_status_success" "$task_name" 2
@@ -231,15 +234,17 @@ function test_noshard_task() {
 	# create source succesfully
 	openapi_source_check "create_source1_success"
 	openapi_source_check "list_source_success" 1
+
 	# get source status success
-	# openapi_source_check "get_source_status_success" "mysql-01"
+	openapi_source_check "get_source_status_success" "mysql-01"
 
 	# create source succesfully
 	openapi_source_check "create_source2_success"
 	# get source list success
 	openapi_source_check "list_source_success" 2
+
 	# get source status success
-	# openapi_source_check "get_source_status_success" "mysql-02"
+	openapi_source_check "get_source_status_success" "mysql-02"
 
 	# start task success: not vaild task create request
 	openapi_task_check "start_task_failed"
@@ -268,6 +273,15 @@ function test_noshard_task() {
 
 	# get task list
 	openapi_task_check "get_task_list" 1
+
+	# pause task first for operate schema
+	openapi_task_check "pause_task_success" "$task_name" "mysql-02"
+
+	# opreate schema
+	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-02" "openapi" "t2"
+
+	# resume task
+	openapi_task_check "resume_task_success" "$task_name" "mysql-02"
 
 	# stop task success
 	openapi_task_check "stop_task_success" "$task_name"
@@ -319,7 +333,6 @@ function run() {
 
 	test_shard_task
 	test_noshard_task
-
 	test_cluster
 }
 
