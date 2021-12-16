@@ -521,7 +521,8 @@ func addSpecialComment(ddlQuery string) (string, error) {
 		log.Panic("invalid ddlQuery statement size", zap.String("ddlQuery", ddlQuery))
 	}
 	var sb strings.Builder
-	if err = stms[0].Restore(format.NewRestoreCtx(format.RestoreTiDBSpecialComment, &sb)); err != nil {
+	if err = stms[0].Restore(format.NewRestoreCtx(format.RestoreStringSingleQuotes|format.RestoreNameBackQuotes|
+		format.RestoreKeyWordUppercase|format.RestoreTiDBSpecialComment, &sb)); err != nil {
 		return "", errors.Trace(err)
 	}
 	return sb.String(), nil
