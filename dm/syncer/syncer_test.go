@@ -840,6 +840,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		cp:           syncer.checkpoint,
 		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 
 	syncer.handleJobFunc = syncer.addJobToMemory
@@ -981,6 +982,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		cp:           syncer.checkpoint,
 		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 
 	// When crossing safeModeExitPoint, will generate a flush sql
@@ -1117,6 +1119,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		cp:           syncer.checkpoint,
 		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 
 	syncer.handleJobFunc = syncer.addJobToMemory
@@ -1521,6 +1524,7 @@ func (s *Syncer) setupMockCheckpoint(c *C, checkPointDBConn *sql.Conn, checkPoin
 		cp:           s.checkpoint,
 		execError:    &s.execError,
 		afterFlushFn: s.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 	c.Assert(s.checkpoint.(*RemoteCheckPoint).prepare(tcontext.Background()), IsNil)
 }

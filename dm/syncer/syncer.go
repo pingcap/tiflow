@@ -1354,8 +1354,6 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.
 		}
 		s.jobWg.Done()
 		s.addCount(true, queueBucket, ddlJob.tp, int64(len(ddlJob.ddls)), ddlJob.targetTable)
-		// reset job TS when this ddl is finished.
-		s.updateReplicationJobTS(nil, ddlJobIdx)
 	}
 }
 
