@@ -195,12 +195,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 				expected, ok := expectedDecodedValues[col.Name]
 				c.Assert(ok, check.IsTrue)
 
-				if obtained, ok := col.Value.([]byte); ok {
-					c.Assert(string(obtained), check.Equals, expected)
-				} else {
-					c.Assert(col.Value, check.Equals, expected)
-				}
-
+				c.Assert(col.Value, check.Equals, expected)
 				for _, item := range testCaseInsert.Columns {
 					if item.Name == col.Name {
 						c.Assert(col.Type, check.Equals, item.Type)
