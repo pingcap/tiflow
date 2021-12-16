@@ -181,24 +181,6 @@ func (o *Optimist) DoneOperation(op optimism.Operation) error {
 	return nil
 }
 
-// GetTableInfo tries to get the init schema of the downstream table.
-// func (o *Optimist) GetTableInfo(downSchema, downTable string) (*model.TableInfo, error) {
-// 	if downTable == "" {
-// 		return nil, nil
-// 	}
-//
-// 	is, rev, err := optimism.GetInitSchema(o.cli, o.task, downSchema, downTable)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	if is.IsEmpty() {
-// 		o.logger.Info("no init schema exists", zap.String("schema", downSchema), zap.String("table", downTable), zap.Int64("revision", rev))
-// 	} else {
-// 		o.logger.Info("got init schema", zap.Stringer("init schema", is))
-// 	}
-// 	return is.TableInfo, nil
-// }
-
 // PendingInfo returns the shard DDL info which is pending to handle.
 func (o *Optimist) PendingInfo() *optimism.Info {
 	o.mu.RLock()

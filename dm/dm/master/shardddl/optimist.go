@@ -249,12 +249,6 @@ func (o *Optimist) rebuildLocks() (revSource, revInfo, revOperation int64, err e
 	}
 	o.logger.Info("get history shard DDL lock operation", zap.Int64("revision", revOperation))
 
-	//	initSchemas, revInitSchemas, err := optimism.GetAllInitSchemas(o.cli)
-	//	if err != nil {
-	//		return 0, 0, 0, err
-	//	}
-	//	o.logger.Info("get all init schemas", zap.Int64("revision", revInitSchemas))
-
 	colm, _, err := optimism.GetAllDroppedColumns(o.cli)
 	if err != nil {
 		// only log the error, and don't return it to forbid the startup of the DM-master leader.
@@ -570,18 +564,6 @@ func (o *Optimist) handleLock(info optimism.Info, tts []optimism.TargetTable, sk
 	default:
 		o.logger.Info("the shard DDL lock returned some DDLs",
 			zap.String("lock", lockID), zap.Strings("ddls", newDDLs), zap.Strings("cols", cols), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted))
-
-		// try to record the init schema before applied the DDL to the downstream.
-		//		initSchema := optimism.NewInitSchema(info.Task, info.DownSchema, info.DownTable, info.TableInfoBefore)
-		//		rev, putted, err2 := optimism.PutInitSchemaIfNotExist(o.cli, initSchema)
-		//		switch {
-		//		case err2 != nil:
-		//			return err2
-		//		case putted:
-		//			o.logger.Info("recorded the initial schema", zap.String("info", info.ShortString()))
-		//		default:
-		//			o.logger.Debug("skip to record the initial schema", zap.String("info", info.ShortString()), zap.Int64("revision", rev))
-		//		}
 	}
 
 	lock := o.lk.FindLock(lockID)
@@ -682,7 +664,6 @@ func (o *Optimist) deleteInfosOps(lock *optimism.Lock) (bool, error) {
 		}
 	}
 	// NOTE: we rely on only `task`, `downSchema`, and `downTable` used for deletion.
-	//	initSchema := optimism.NewInitSchema(lock.Task, lock.DownSchema, lock.DownTable, nil)
 	rev, deleted, err := optimism.DeleteInfosOperationsSchemaColumn(o.cli, infos, ops, lock.Task, lock.DownSchema, lock.DownTable)
 	if err != nil {
 		return deleted, err

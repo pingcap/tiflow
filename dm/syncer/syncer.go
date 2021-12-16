@@ -727,14 +727,6 @@ func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *
 		return ti, nil
 	}
 
-	//	// in optimistic shard mode, we should try to get the init schema (the one before modified by other tables) first.
-	//	if s.cfg.ShardMode == config.ShardOptimistic {
-	//		ti, err = s.trackInitTableInfoOptimistic(sourceTable, targetTable)
-	//		if err != nil {
-	//			return nil, err
-	//		}
-	//	}
-	//
 	// if the table does not exist (IsTableNotExists(err)), continue to fetch the table from downstream and create it.
 	if ti == nil {
 		err = s.trackTableInfoFromDownstream(tctx, sourceTable, targetTable)

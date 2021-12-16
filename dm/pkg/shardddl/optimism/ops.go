@@ -62,7 +62,6 @@ func DeleteInfosOperationsSchemaColumn(cli *clientv3.Client, infos []Info, ops [
 	for _, op := range ops {
 		opsDel = append(opsDel, deleteOperationOp(op))
 	}
-	//	opsDel = append(opsDel, deleteInitSchemaOp(schema.Task, schema.DownSchema, schema.DownTable))
 	opsDel = append(opsDel, deleteDroppedColumnsByLockOp(utils.GenDDLLockID(task, downSchema, downTable)))
 	resp, rev, err := etcdutil.DoOpsInOneCmpsTxnWithRetry(cli, cmps, opsDel, []clientv3.Op{})
 	if err != nil {
@@ -77,7 +76,6 @@ func DeleteInfosOperationsTablesSchemasByTask(cli *clientv3.Client, task string,
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Encode(task), clientv3.WithPrefix()))
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismOperationKeyAdapter.Encode(task), clientv3.WithPrefix()))
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismSourceTablesKeyAdapter.Encode(task), clientv3.WithPrefix()))
-	//	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInitSchemaKeyAdapter.Encode(task), clientv3.WithPrefix()))
 	for lockID := range lockIDSet {
 		opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismDroppedColumnsKeyAdapter.Encode(lockID), clientv3.WithPrefix()))
 	}
