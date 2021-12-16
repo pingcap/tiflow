@@ -73,6 +73,9 @@ func (s *testLocationSuite) SetUpSuite(c *C) {
 	}
 	prevGSet := s.prevGSet.Origin()
 	c.Assert(s.loc.SetGTID(prevGSet), IsNil)
+
+	s.eventsGenerator, err = event.NewGenerator(s.flavor, s.serverID, s.binlogPos, s.lastGTID, s.prevGSet, 0)
+	c.Assert(err, IsNil)
 }
 
 func (s *testLocationSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) []*replication.BinlogEvent {
@@ -148,9 +151,6 @@ func (s *testLocationSuite) updateLastEventGSet(c *C, events []*replication.Binl
 }
 
 func (s *testLocationSuite) generateDMLEvents(c *C) []*replication.BinlogEvent {
-	var err error
-	s.eventsGenerator, err = event.NewGenerator(s.flavor, s.serverID, s.binlogPos, s.lastGTID, s.prevGSet, 0)
-	c.Assert(err, IsNil)
 	events := s.generateEvents([]mockBinlogEvent{
 		{Headers, []interface{}{s.binlogFile}},
 		{Write, []interface{}{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(1)}}}},
@@ -161,9 +161,6 @@ func (s *testLocationSuite) generateDMLEvents(c *C) []*replication.BinlogEvent {
 }
 
 func (s *testLocationSuite) generateDDLEvents(c *C) []*replication.BinlogEvent {
-	var err error
-	s.eventsGenerator, err = event.NewGenerator(s.flavor, s.serverID, s.binlogPos, s.lastGTID, s.prevGSet, 0)
-	c.Assert(err, IsNil)
 	events := s.generateEvents([]mockBinlogEvent{
 		{Headers, []interface{}{s.binlogFile}},
 		{DBCreate, []interface{}{"foo1"}},
