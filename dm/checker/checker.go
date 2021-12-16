@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/checker"
 	"github.com/pingcap/ticdc/dm/pkg/conn"
+	"github.com/pingcap/ticdc/dm/pkg/dumpling"
 	fr "github.com/pingcap/ticdc/dm/pkg/func-rollback"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
@@ -40,6 +41,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/pingcap/tidb/dumpling/export"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -215,7 +217,12 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
 		if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
-			c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables))
+			exportCfg := export.DefaultConfig()
+			err := dumpling.ParseExtraArgs(&c.logger, exportCfg, strings.Fields(instance.cfg.ExtraArgs))
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables, exportCfg.Consistency))
 		}
 		if checkSchema {
 			c.checkList = append(c.checkList, checker.NewTablesChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables))

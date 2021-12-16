@@ -31,11 +31,11 @@ import (
 
 var (
 	dumpPrivileges = map[mysql.PrivilegeType]struct{}{
-		mysql.ReloadPriv:            {},
+		// mysql.ReloadPriv:            {},
 		mysql.SelectPriv:            {},
 		mysql.ReplicationClientPriv: {},
-		mysql.LockTablesPriv:        {},
-		mysql.ProcessPriv:           {},
+		// mysql.LockTablesPriv:        {},
+		// mysql.ProcessPriv:           {},
 	}
 	replicationPrivileges = map[mysql.PrivilegeType]struct{}{
 		mysql.ReplicationClientPriv: {},
@@ -50,11 +50,17 @@ type SourceDumpPrivilegeChecker struct {
 	db          *sql.DB
 	dbinfo      *dbutil.DBConfig
 	checkTables map[string][]string
+	consistency string
 }
 
 // NewSourceDumpPrivilegeChecker returns a RealChecker.
-func NewSourceDumpPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig, checkTables map[string][]string) RealChecker {
-	return &SourceDumpPrivilegeChecker{db: db, dbinfo: dbinfo, checkTables: checkTables}
+func NewSourceDumpPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig, checkTables map[string][]string, consistency string) RealChecker {
+	return &SourceDumpPrivilegeChecker{
+		db:          db,
+		dbinfo:      dbinfo,
+		checkTables: checkTables,
+		consistency: consistency,
+	}
 }
 
 // Check implements the RealChecker interface.
