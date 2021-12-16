@@ -528,3 +528,10 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 func (c *changefeed) Close(ctx cdcContext.Context) {
 	c.releaseResources(ctx)
 }
+
+func (c *changefeed) GetInfoProvider() schedulerv2.InfoProvider {
+	if provider, ok := c.scheduler.(schedulerv2.InfoProvider); ok {
+		return provider
+	}
+	return nil
+}
