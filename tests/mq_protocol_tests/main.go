@@ -56,7 +56,7 @@ func testCanal() {
 		cases.NewSimpleCase(task),
 		cases.NewDeleteCase(task),
 		cases.NewManyTypesCase(task),
-		// tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
+		// cases.NewUnsignedCase(task),
 		cases.NewCompositePKeyCase(task),
 		// tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
 	}
@@ -72,7 +72,7 @@ func testCanalJSON() {
 		cases.NewSimpleCase(task),
 		cases.NewDeleteCase(task),
 		cases.NewManyTypesCase(task),
-		// tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
+		// cases.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
 		cases.NewCompositePKeyCase(task),
 		cases.NewAlterCase(task),
 	}
@@ -111,7 +111,7 @@ func testMySQL() {
 	runTests(testCases, env)
 }
 
-func testMySQLWithCheckingOldvValue() {
+func testMySQLWithCheckingOldValue() {
 	env := mysql.NewDockerEnv(*dockerComposeFile)
 	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/ticdc/cdc/sink/SimpleMySQLSinkTester=return(ture)"}
 	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
@@ -154,7 +154,7 @@ func main() {
 	} else if *testProtocol == "mysql" {
 		testMySQL()
 	} else if *testProtocol == "simple-mysql-checking-old-value" {
-		testMySQLWithCheckingOldvValue()
+		testMySQLWithCheckingOldValue()
 	} else {
 		log.Fatal("Unknown sink protocol", zap.String("protocol", *testProtocol))
 	}
