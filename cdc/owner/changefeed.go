@@ -535,6 +535,13 @@ func (c *changefeed) Close(ctx cdcContext.Context) {
 	c.releaseResources(ctx)
 }
 
+func (c *changefeed) GetInfoProvider() schedulerv2.InfoProvider {
+	if provider, ok := c.scheduler.(schedulerv2.InfoProvider); ok {
+		return provider
+	}
+	return nil
+}
+
 // addSpecialComment translate tidb feature to comment
 func addSpecialComment(ddlQuery string) (string, error) {
 	stms, _, err := parser.New().ParseSQL(ddlQuery)
