@@ -254,9 +254,10 @@ func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte
 			collation, err = event.GetServerCollationByStatusVars(statusVars, idAndCollationMap)
 			if err != nil {
 				tctx.L().Error("can not get charset server collation from binlog statusVars.", zap.Error(err), zap.String("originSQL", ddlInfo.originDDL))
-				if collation == "" {
-					return
-				}
+			}
+			if collation == "" {
+				tctx.L().Error("get server collation from binlog statusVars is nil.", zap.Error(err), zap.String("originSQL", ddlInfo.originDDL))
+				return
 			}
 			// add collation
 			tctx.L().Info("detect create database risk which use implicit charset and collation, we will add collation by binlog status_vars", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
