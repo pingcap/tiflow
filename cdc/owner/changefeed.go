@@ -266,7 +266,7 @@ LOOP:
 	c.cancel = cancel
 
 	c.sink = c.newSink()
-	c.sink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
+	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
