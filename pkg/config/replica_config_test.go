@@ -81,3 +81,15 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	}
 	require.Equal(t, conf, conf2)
 }
+
+func TestReplicaConfigValidate(t *testing.T) {
+	t.Parallel()
+	conf := GetDefaultReplicaConfig()
+	require.Nil(t, conf.Validate())
+
+	// Incorrect sink configuration.
+	conf = GetDefaultReplicaConfig()
+	conf.Sink.Protocol = "canal"
+	conf.EnableOldValue = false
+	require.Regexp(t, ".*canal protocol requires old value to be enabled.*", conf.Validate())
+}

@@ -36,3 +36,20 @@ func TestMarshalUnmarshal(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, info, decodedInfo)
 }
+
+func TestListVersionsFromCaptureInfos(t *testing.T) {
+	infos := []*CaptureInfo{
+		{
+			ID:            "9ff52aca-aea6-4022-8ec4-fbee3f2c7891",
+			AdvertiseAddr: "127.0.0.1:8300",
+			Version:       "dev",
+		},
+		{
+			ID:            "9ff52aca-aea6-4022-8ec4-fbee3f2c7891",
+			AdvertiseAddr: "127.0.0.1:8300",
+			Version:       "",
+		},
+	}
+
+	require.ElementsMatch(t, []string{"dev", ""}, ListVersionsFromCaptureInfos(infos))
+}

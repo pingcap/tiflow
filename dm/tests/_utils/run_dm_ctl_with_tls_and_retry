@@ -45,6 +45,9 @@ for ((k = 0; k < 10; k++)); do
 
 	sleep 2
 done
+
+exit 1
+
 # gocovmerge doesn't support merge profiles with different modes, however atomic
 # mode and count mode have the same profile format, so we need to unify cover
 # mode before running gocovmerge. As coverage file is not generated synchronously,

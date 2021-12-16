@@ -20,6 +20,7 @@ import (
 
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -170,6 +171,10 @@ func (c *MessageClient) Run(
 }
 
 func (c *MessageClient) launchStream(ctx context.Context, gRPCClient p2p.CDCPeerToPeerClient, meta *p2p.StreamMeta) error {
+	failpoint.Inject("InjectClientPermanentFailure", func() {
+		failpoint.Return(cerrors.ErrPeerMessageClientPermanentFail.GenWithStackByArgs())
+	})
+
 	cancelCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 
@@ -383,6 +388,12 @@ func (c *MessageClient) SendMessage(ctx context.Context, topic Topic, value inte
 // TrySendMessage tries to send a message. It will return ErrPeerMessageSendTryAgain
 // if the client is not ready to accept the message.
 func (c *MessageClient) TrySendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
+	// FIXME (zixiong): This is a temporary way for testing client congestion.
+	// This failpoint will be removed once we abstract the MessageClient as an interface.
+	failpoint.Inject("ClientInjectSendMessageTryAgain", func() {
+		failpoint.Return(0, cerrors.ErrPeerMessageSendTryAgain.GenWithStackByArgs())
+	})
+
 	return c.sendMessage(ctx, topic, value, true)
 }
 

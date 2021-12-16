@@ -160,13 +160,13 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 					require.Equal(t, "test-topic-1", acks[0].Topic)
 					require.GreaterOrEqual(t, acks[0].LastSeq, lastAck)
 					lastAck = acks[0].LastSeq
-					if lastAck == defaultMessageBatchSizeLarge {
+					if lastAck == defaultMessageBatchSizeMedium {
 						return
 					}
 				}
 			}()
 
-			for j := 0; j < defaultMessageBatchSizeLarge; j++ {
+			for j := 0; j < defaultMessageBatchSizeMedium; j++ {
 				content := &testTopicContent{Index: int64(j + 1)}
 				bytes, err := json.Marshal(content)
 				require.NoError(t, err)
@@ -203,11 +203,20 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 		select {
 		case <-ctx.Done():
 		case err := <-errCh:
-			require.NoError(t, err)
+			require.Error(t, err)
+			require.Regexp(t, ".*ErrWorkerPoolHandleCancelled.*", err.Error())
 		}
 	}()
 
 	ackWg.Wait()
+
+	err := server.SyncRemoveHandler(ctx, "test-topic-1")
+	require.NoError(t, err)
+
+	// double remove to test idempotency.
+	err = server.SyncRemoveHandler(ctx, "test-topic-1")
+	require.NoError(t, err)
+
 	closer()
 	cancel()
 

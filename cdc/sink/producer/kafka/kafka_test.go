@@ -101,9 +101,9 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 		cfg.Producer.Flush.MaxMessages = 1
 		return cfg, err
 	}
-	NewSaramaAdminClientImpl = kafka.NewMockAdminClient
+	NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
+		NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
@@ -272,9 +272,9 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.Version = "invalid"
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
 	topic := "topic"
-	NewSaramaAdminClientImpl = kafka.NewMockAdminClient
+	NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
+		NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 	_, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
@@ -304,9 +304,9 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
-	NewSaramaAdminClientImpl = kafka.NewMockAdminClient
+	NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
+		NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
@@ -384,9 +384,9 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
-	NewSaramaAdminClientImpl = kafka.NewMockAdminClient
+	NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
+		NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	errCh := make(chan error, 1)
