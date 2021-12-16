@@ -40,10 +40,10 @@ const (
 	printWarnLogMinInterval         = time.Second * 1
 )
 
-// Agent is a data structure in the Processor that serves as a bridge with
+// processorAgent is a data structure in the Processor that serves as a bridge with
 // the Owner.
 //
-// Agent has a BaseAgent embedded in it, which handles the high-level logic of receiving
+// processorAgent has a BaseAgent embedded in it, which handles the high-level logic of receiving
 // commands from the Owner. It also implements ProcessorMessenger interface, which
 // provides the BaseAgent with the necessary methods to send messages to the Owner.
 //
@@ -68,7 +68,10 @@ type agentImpl struct {
 	clock              clock.Clock
 	barrierSeqs        map[p2p.Topic]p2p.Seq
 	barrierLastCleared time.Time
-	logRateLimiter     *rate.Limiter
+
+	// TODO (zixiong): remove these limiters after we have a better way to handle this
+	barrierLogRateLimiter  *rate.Limiter
+	noClientLogRateLimiter *rate.Limiter
 
 	handlerErrChs []<-chan error
 }
@@ -86,9 +89,11 @@ func newAgent(
 
 		changeFeed: changeFeedID,
 
-		clock:          clock.New(),
-		barrierSeqs:    map[p2p.Topic]p2p.Seq{},
-		logRateLimiter: rate.NewLimiter(rate.Every(printWarnLogMinInterval), 1),
+		clock:                 clock.New(),
+		barrierSeqs:           map[p2p.Topic]p2p.Seq{},
+		barrierLogRateLimiter: rate.NewLimiter(rate.Every(printWarnLogMinInterval), 1),
+
+		noClientLogRateLimiter: rate.NewLimiter(rate.Every(printWarnLogMinInterval), 1),
 	}
 
 	conf := config.GetGlobalServerConfig()
@@ -215,7 +220,7 @@ func (a *agentImpl) Barrier(_ context.Context) (done bool) {
 		}
 
 		sinceLastAdvanced := a.clock.Since(a.barrierLastCleared)
-		if sinceLastAdvanced > barrierNotAdvancingWarnDuration && a.logRateLimiter.Allow() {
+		if sinceLastAdvanced > barrierNotAdvancingWarnDuration && a.barrierLogRateLimiter.Allow() {
 			log.Warn("processor send barrier not advancing, report a bug if this log repeats",
 				zap.String("changefeed-id", a.changeFeed),
 				zap.String("owner-id", a.ownerCaptureID),
@@ -241,6 +246,7 @@ func (a *agentImpl) Barrier(_ context.Context) (done bool) {
 		// Client not found for owner.
 		// Note that if the owner is eventually gone,
 		// OnOwnerChanged will reset the barriers.
+		a.printNoClientWarning(a.ownerCaptureID)
 		return false
 	}
 	for topic, waitSeq := range a.barrierSeqs {
@@ -284,8 +290,7 @@ func (a *agentImpl) trySendMessage(
 ) (bool, error) {
 	client := a.messageRouter.GetClient(target)
 	if client == nil {
-		log.Warn("processor: no message client found for owner, retry later",
-			zap.String("owner-id", target))
+		a.printNoClientWarning(target)
 		return false, nil
 	}
 
@@ -366,4 +371,12 @@ func (a *agentImpl) deregisterPeerMessageHandlers() error {
 	}
 
 	return nil
+}
+
+func (a *agentImpl) printNoClientWarning(target model.CaptureID) {
+	if !a.noClientLogRateLimiter.Allow() {
+		return
+	}
+	log.Warn("processor: no message client found for owner, retry later",
+		zap.String("owner-id", target))
 }
