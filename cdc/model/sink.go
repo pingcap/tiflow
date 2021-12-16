@@ -459,10 +459,13 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 
 	switch d.Type {
 	case model.ActionRenameTables:
+		// DDLs update multiple target tables, in which case `TableInfo` isn't meaningful.
+		// So we can skip to fill TableInfo for the event.
 		return
 	default:
 	}
 
+	// Fill TableInfo for the event.
 	if job.BinlogInfo.TableInfo != nil {
 		tableName := job.BinlogInfo.TableInfo.Name.O
 		tableInfo := job.BinlogInfo.TableInfo
