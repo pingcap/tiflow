@@ -34,6 +34,7 @@ var changefeedStateFromAdminJobVersions = []semver.Version{
 
 // changefeedAcceptUnknownProtocolsVersion specifies the version
 // of TiCDC for which changefeed supports accepting unknown protocols.
+// Introduced in https://github.com/pingcap/ticdc/pull/3811.
 var changefeedAcceptUnknownProtocolsVersion = *semver.New("5.4.0")
 
 // NewCreatorVersionGate creates the creator version gate.

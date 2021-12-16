@@ -332,16 +332,24 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 		return err != nil || protocolStr == config.ProtocolDefault.String()
 	}
 
+	openProtocolStr := config.ProtocolOpen.String()
 	// The sinkURI always has a higher priority.
 	if protocolStr != "" {
 		if needsFix(protocolStr) {
-			rawQuery.Set(config.ProtocolKey, config.ProtocolOpen.String())
+			rawQuery.Set(config.ProtocolKey, openProtocolStr)
 			sinkURIParsed.RawQuery = rawQuery.Encode()
-			info.SinkURI = sinkURIParsed.String()
+			fixedSinkURI := sinkURIParsed.String()
+			log.Info("handle incompatible protocol from sink URI",
+				zap.String("old URI", info.SinkURI),
+				zap.String("fixed URI", fixedSinkURI))
+			info.SinkURI = fixedSinkURI
 		}
 	} else {
 		if needsFix(info.Config.Sink.Protocol) {
-			info.Config.Sink.Protocol = config.ProtocolOpen.String()
+			log.Info("handle incompatible protocol from sink config",
+				zap.String("old protocol", info.Config.Sink.Protocol),
+				zap.String("fixed protocol", openProtocolStr))
+			info.Config.Sink.Protocol = openProtocolStr
 		}
 	}
 }
