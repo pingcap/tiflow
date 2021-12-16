@@ -50,8 +50,8 @@ type Request struct {
 	headers    http.Header
 
 	// retry options
-	backoffBaseDelay time.Duration // milliseconds
-	backoffMaxDelay  time.Duration // milliseconds
+	backoffBaseDelay time.Duration
+	backoffMaxDelay  time.Duration
 	maxRetries       int64
 
 	//output
@@ -59,7 +59,7 @@ type Request struct {
 	body io.Reader
 }
 
-// NewRequest creates a new request
+// NewRequest creates a new request.
 func NewRequest(c *RESTClient) *Request {
 	var pathPrefix string
 	if c.base != nil {
@@ -83,7 +83,7 @@ func NewRequest(c *RESTClient) *Request {
 	return r
 }
 
-// NewRequestWithClient creates a Request with an embedded RESTClient for test
+// NewRequestWithClient creates a Request with an embedded RESTClient for test.
 func NewRequestWithClient(base *url.URL, versionedAPIPath string, client *httputil.Client) *Request {
 	return NewRequest(&RESTClient{
 		base:             base,
@@ -92,7 +92,7 @@ func NewRequestWithClient(base *url.URL, versionedAPIPath string, client *httput
 	})
 }
 
-// Prefix adds segments to the begining of request url
+// Prefix adds segments to the begining of request url.
 func (r *Request) Prefix(segments ...string) *Request {
 	if r.err != nil {
 		return r
@@ -102,7 +102,7 @@ func (r *Request) Prefix(segments ...string) *Request {
 	return r
 }
 
-// URI sets the
+// URI sets the server relative URI.
 func (r *Request) URI(uri string) *Request {
 	if r.err != nil {
 		return r
@@ -125,7 +125,7 @@ func (r *Request) URI(uri string) *Request {
 	return r
 }
 
-// Param sets the http request query params
+// Param sets the http request query params.
 func (r *Request) Param(name, value string) *Request {
 	if r.err != nil {
 		return r
@@ -143,7 +143,7 @@ func (r *Request) Verb(verb string) *Request {
 	return r
 }
 
-// SetHeader set the http request header
+// SetHeader set the http request header.
 func (r *Request) SetHeader(key string, values ...string) *Request {
 	if r.headers == nil {
 		r.headers = http.Header{}
@@ -164,7 +164,7 @@ func (r *Request) Timeout(d time.Duration) *Request {
 	return r
 }
 
-// BackoffBaseDelay specifies the base backoff sleep duration
+// BackoffBaseDelay specifies the base backoff sleep duration.
 func (r *Request) BackoffBaseDelay(delay time.Duration) *Request {
 	if r.err != nil {
 		return r
@@ -173,7 +173,7 @@ func (r *Request) BackoffBaseDelay(delay time.Duration) *Request {
 	return r
 }
 
-// BackoffMaxDelay specifies the maximum backoff sleep duration
+// BackoffMaxDelay specifies the maximum backoff sleep duration.
 func (r *Request) BackoffMaxDelay(delay time.Duration) *Request {
 	if r.err != nil {
 		return r
@@ -182,7 +182,7 @@ func (r *Request) BackoffMaxDelay(delay time.Duration) *Request {
 	return r
 }
 
-// MaxRetries specifies the maximum times a request will retry
+// MaxRetries specifies the maximum times a request will retry.
 func (r *Request) MaxRetries(maxRetries int64) *Request {
 	if r.err != nil {
 		return r
@@ -327,7 +327,7 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 	return
 }
 
-// check http response and unmarshal error message if necessary
+// check http response and unmarshal error message if necessary.
 func (r *Request) checkResponse(resp *http.Response) *Result {
 	var body []byte
 	if resp.Body != nil {
@@ -374,12 +374,12 @@ func (r Result) Raw() ([]byte, error) {
 	return r.body, r.err
 }
 
-// Error returns the request error
+// Error returns the request error.
 func (r Result) Error() error {
 	return r.err
 }
 
-// Into stores the http response body into obj
+// Into stores the http response body into obj.
 func (r Result) Into(obj interface{}) error {
 	if r.err != nil {
 		return r.err
