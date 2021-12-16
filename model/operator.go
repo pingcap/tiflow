@@ -10,6 +10,8 @@ const (
 	TableSinkType
 	ProducerType
 	BinlogType
+	// Task of job master.
+	JobMasterType
 )
 
 // benchmark operators

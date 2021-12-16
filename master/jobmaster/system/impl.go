@@ -17,18 +17,17 @@ import (
 
 // Master implements the master of benchmark workload.
 type Master struct {
-	job *model.Job
-
 	ctx    context.Context
 	cancel func()
 
+	id      model.ID
 	clients *client.Manager
 
 	offExecutors chan model.ExecutorID
 
 	mu           sync.Mutex
 	execTasks    map[model.ExecutorID][]*model.Task
-	runningTasks map[model.TaskID]*Task
+	runningTasks map[model.ID]*Task
 
 	scheduleWaitingTasks chan scheduleGroup
 	// rate limit for rescheduling when error happens
@@ -38,14 +37,14 @@ type Master struct {
 // New creates a master instance
 func New(
 	parentCtx context.Context,
-	job *model.Job,
+	id model.ID,
 	clients *client.Manager,
 ) *Master {
 	ctx, cancel := context.WithCancel(parentCtx)
 	return &Master{
 		ctx:     ctx,
 		cancel:  cancel,
-		job:     job,
+		id:      id,
 		clients: clients,
 
 		offExecutors:         make(chan model.ExecutorID, 100),
@@ -53,7 +52,7 @@ func New(
 		scheduleRateLimit:    rate.NewLimiter(rate.Every(time.Second), 1),
 
 		execTasks:    make(map[model.ExecutorID][]*model.Task),
-		runningTasks: make(map[model.TaskID]*Task),
+		runningTasks: make(map[model.ID]*Task),
 	}
 }
 
@@ -85,8 +84,8 @@ type Task struct {
 }
 
 // ID implements JobMaster interface.
-func (m *Master) ID() model.JobID {
-	return m.job.ID
+func (m *Master) ID() model.ID {
+	return m.id
 }
 
 // master dispatches a set of task.
@@ -104,11 +103,10 @@ func (m *Master) dispatch(ctx context.Context, tasks []*Task) error {
 
 	for execID, taskList := range arrangement {
 		// construct sub job
-		job := &model.Job{
-			ID:    m.job.ID,
-			Tasks: taskList,
+		reqPb := &pb.SubmitBatchTasksRequest{}
+		for _, t := range taskList {
+			reqPb.Tasks = append(reqPb.Tasks, t.ToPB())
 		}
-		reqPb := job.ToPB()
 		log.L().Logger.Info("submit sub job", zap.String("exec id", string(execID)), zap.String("req pb", reqPb.String()))
 		request := &client.ExecutorRequest{
 			Cmd: client.CmdSubmitBatchTasks,
@@ -156,7 +154,7 @@ func (m *Master) reScheduleTask(group scheduleGroup) error {
 		return err
 	}
 	for _, task := range group {
-		schedule, ok := resp.GetSchedule()[int32(task.ID)]
+		schedule, ok := resp.GetSchedule()[int64(task.ID)]
 		if !ok {
 			return errors.ErrMasterScheduleMissTask.GenWithStackByArgs(task.ID)
 		}
@@ -183,7 +181,7 @@ func (m *Master) scheduleJobImpl(ctx context.Context, tasks []*model.Task) error
 	}
 	sysTasks := make([]*Task, 0, len(tasks))
 	for _, task := range tasks {
-		schedule, ok := resp.GetSchedule()[int32(task.ID)]
+		schedule, ok := resp.GetSchedule()[int64(task.ID)]
 		if !ok {
 			return errors.ErrMasterScheduleMissTask.GenWithStackByArgs(task.ID)
 		}
@@ -218,14 +216,14 @@ func (m *Master) DispatchTasks(ctx context.Context, tasks []*model.Task) error {
 func (m *Master) StopTasks(ctx context.Context, tasks []*model.Task) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	arrange := make(map[model.ExecutorID][]int32)
+	arrange := make(map[model.ExecutorID][]int64)
 	for _, task := range tasks {
 		runningTask := m.runningTasks[task.ID]
 		li, ok := arrange[runningTask.exec]
 		if !ok {
-			arrange[runningTask.exec] = []int32{int32(task.ID)}
+			arrange[runningTask.exec] = []int64{int64(task.ID)}
 		} else {
-			li = append(li, int32(task.ID))
+			li = append(li, int64(task.ID))
 			arrange[runningTask.exec] = li
 		}
 	}

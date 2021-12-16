@@ -17,5 +17,5 @@ type JobMaster interface {
 	// OfflineExecutor notifies the offlined executor to all the job masters.
 	OfflineExecutor(eid model.ExecutorID)
 	// ID returns the current job id.
-	ID() model.JobID
+	ID() model.ID
 }

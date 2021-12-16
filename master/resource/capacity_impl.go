@@ -80,7 +80,7 @@ func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
 ) (bool, *pb.TaskSchedulerResponse) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	result := make(map[int32]*pb.ScheduleResult)
+	result := make(map[int64]*pb.ScheduleResult)
 	resources := m.getAvailableResource()
 	var idx int = 0
 	for _, task := range tasks {

@@ -57,15 +57,15 @@ func (s *Server) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksR
 	tasks := make([]*model.Task, 0, len(req.Tasks))
 	for _, pbTask := range req.Tasks {
 		task := &model.Task{
-			ID:   model.TaskID(pbTask.Id),
+			ID:   model.ID(pbTask.Id),
 			Op:   pbTask.Op,
 			OpTp: model.OperatorType(pbTask.OpTp),
 		}
 		for _, id := range pbTask.Inputs {
-			task.Inputs = append(task.Inputs, model.TaskID(id))
+			task.Inputs = append(task.Inputs, model.ID(id))
 		}
 		for _, id := range pbTask.Outputs {
-			task.Outputs = append(task.Outputs, model.TaskID(id))
+			task.Outputs = append(task.Outputs, model.ID(id))
 		}
 		tasks = append(tasks, task)
 	}

@@ -33,17 +33,17 @@ func (q *queue) push(t *taskContainer) {
 type Runtime struct {
 	testCtx   *test.Context
 	tasksLock sync.Mutex
-	tasks     map[model.TaskID]*taskContainer
+	tasks     map[model.ID]*taskContainer
 	q         queue
 	wg        sync.WaitGroup
 }
 
-func (s *Runtime) Stop(tasks []int32) error {
+func (s *Runtime) Stop(tasks []int64) error {
 	s.tasksLock.Lock()
 	defer s.tasksLock.Unlock()
 	var retErr error
 	for _, id := range tasks {
-		if task, ok := s.tasks[model.TaskID(id)]; ok {
+		if task, ok := s.tasks[model.ID(id)]; ok {
 			err := task.Stop()
 			if err != nil {
 				retErr = err

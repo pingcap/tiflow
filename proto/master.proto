@@ -118,5 +118,5 @@ message ScheduleResult {
 }
 
 message TaskSchedulerResponse {
-    map<int32, ScheduleResult> schedule = 1;
+    map<int64, ScheduleResult> schedule = 1;
 }

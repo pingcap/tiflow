@@ -26,14 +26,6 @@ func (e *ExecutorInfo) EtcdKey() string {
 	return adapter.ExecutorKeyAdapter.Encode(string(e.ID))
 }
 
-type JobType int
-
-const (
-	JobDM JobType = iota
-	JobCDC
-	JobBenchmark
-)
-
 type ExecutorStatus int32
 
 const (
@@ -43,17 +35,6 @@ const (
 	Tombstone
 	Busy
 )
-
-type JobInfo struct {
-	Type     JobType `json:"type"`
-	Config   string  `json:"config"` // describes a cdc/dm or other type of job.
-	UserName string  `json:"user"`   // reserved field
-	// CostQuota int // indicates how much resource this job will use.
-}
-
-//type TaskInfo struct {
-//
-//}
 
 func (e *ExecutorInfo) ToJSON() (string, error) {
 	data, err := json.Marshal(e)

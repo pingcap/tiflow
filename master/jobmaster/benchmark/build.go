@@ -15,7 +15,7 @@ import (
 // BuildBenchmarkJobMaster for benchmark workload.
 func BuildBenchmarkJobMaster(
 	rawConfig string,
-	idAllocator *autoid.IDAllocator,
+	jobID model.ID,
 	clients *client.Manager,
 ) (*jobMaster, error) {
 	config, err := configFromJSON(rawConfig)
@@ -23,10 +23,10 @@ func BuildBenchmarkJobMaster(
 		return nil, err
 	}
 
-	job := &model.Job{
-		ID: model.JobID(idAllocator.AllocID()),
+	idAllocator, err := autoid.NewTaskIDAllocator(int32(jobID))
+	if err != nil {
+		return nil, err
 	}
-
 	// build producers
 	produceTasks := make([]*model.Task, 0)
 	binlogTasks := make([]*model.Task, 0)
@@ -43,8 +43,7 @@ func BuildBenchmarkJobMaster(
 		}
 		produceTasks = append(produceTasks, &model.Task{
 			FlowID: config.FlowID,
-			JobID:  job.ID,
-			ID:     model.TaskID(idAllocator.AllocID()),
+			ID:     model.ID(idAllocator.AllocTaskID()),
 			Cost:   1,
 			OpTp:   model.ProducerType,
 			Op:     js,
@@ -60,8 +59,7 @@ func BuildBenchmarkJobMaster(
 		}
 		binlogTasks = append(binlogTasks, &model.Task{
 			FlowID: config.FlowID,
-			JobID:  job.ID,
-			ID:     model.TaskID(idAllocator.AllocID()),
+			ID:     model.ID(idAllocator.AllocTaskID()),
 			Cost:   1,
 			OpTp:   model.BinlogType,
 			Op:     js,
@@ -73,9 +71,6 @@ func BuildBenchmarkJobMaster(
 			connectTwoTask(inputTask, outputTask)
 		}
 	}
-
-	job.Tasks = append(job.Tasks, binlogTasks...)
-	job.Tasks = append(job.Tasks, produceTasks...)
 
 	tableTasks := make([]*model.Task, 0)
 	hashTasks := make([]*model.Task, 0)
@@ -92,8 +87,7 @@ func BuildBenchmarkJobMaster(
 		}
 		tableTask := &model.Task{
 			FlowID: config.FlowID,
-			JobID:  job.ID,
-			ID:     model.TaskID(idAllocator.AllocID()),
+			ID:     model.ID(idAllocator.AllocTaskID()),
 			Cost:   1,
 			Op:     js,
 			OpTp:   model.TableReaderType,
@@ -107,8 +101,7 @@ func BuildBenchmarkJobMaster(
 		}
 		hashTask := &model.Task{
 			FlowID: config.FlowID,
-			JobID:  job.ID,
-			ID:     model.TaskID(idAllocator.AllocID()),
+			ID:     model.ID(idAllocator.AllocTaskID()),
 			Cost:   1,
 			Op:     js,
 			OpTp:   model.HashType,
@@ -124,8 +117,7 @@ func BuildBenchmarkJobMaster(
 		}
 		sinkTask := &model.Task{
 			FlowID: config.FlowID,
-			JobID:  job.ID,
-			ID:     model.TaskID(idAllocator.AllocID()),
+			ID:     model.ID(idAllocator.AllocTaskID()),
 			Cost:   1,
 			Op:     js,
 			OpTp:   model.TableSinkType,
@@ -135,10 +127,7 @@ func BuildBenchmarkJobMaster(
 		connectTwoTask(hashTask, sinkTask)
 	}
 
-	job.Tasks = append(job.Tasks, tableTasks...)
-	job.Tasks = append(job.Tasks, hashTasks...)
-	job.Tasks = append(job.Tasks, sinkTasks...)
-	systemJobMaster := system.New(context.Background(), job, clients)
+	systemJobMaster := system.New(context.Background(), jobID, clients)
 	master := &jobMaster{
 		Master: systemJobMaster,
 		config: config,

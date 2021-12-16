@@ -10,7 +10,7 @@ service Executor {
 }
 
 message CancelBatchTasksRequest {
-    repeated int32 task_id_list = 1;
+    repeated int64 task_id_list = 1;
 }
 
 message SubmitBatchTasksRequest {
@@ -18,9 +18,9 @@ message SubmitBatchTasksRequest {
 }
 
 message TaskRequest {
-    int32 id = 1;
-    repeated int32 inputs = 2;
-    repeated int32 outputs = 3;
+    int64 id = 1;
+    repeated int64 inputs = 2;
+    repeated int64 outputs = 3;
     bytes op = 4;
     int32 op_tp = 5;
 }

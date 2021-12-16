@@ -46,7 +46,7 @@ func InitOpBuilders() {
 }
 
 func (s *Runtime) SubmitTasks(tasks []*model.Task) error {
-	taskSet := make(map[model.TaskID]*taskContainer)
+	taskSet := make(map[model.ID]*taskContainer)
 	taskToRun := make([]*taskContainer, 0)
 	for _, t := range tasks {
 		task := s.newTaskContainer(t)
@@ -83,7 +83,7 @@ func (s *Runtime) SubmitTasks(tasks []*model.Task) error {
 	}
 
 	if s.tasks == nil {
-		s.tasks = make(map[model.TaskID]*taskContainer)
+		s.tasks = make(map[model.ID]*taskContainer)
 	}
 	for _, t := range taskSet {
 		err := t.prepare()

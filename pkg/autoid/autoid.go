@@ -1,25 +1,51 @@
 package autoid
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/google/uuid"
 )
 
-type IDAllocator struct {
+type JobIDAllocator interface {
+	AllocJobID() int32
+}
+
+type TaskIDAllocator interface {
+	AllocTaskID() int64
+}
+
+type iDAllocator struct {
 	sync.Mutex
-	id int32
+	internalID int32
+	jobID      int64
 }
 
-func NewAllocator() *IDAllocator {
-	return &IDAllocator{}
+func NewTaskIDAllocator(jobID int32) (TaskIDAllocator, error) {
+	if jobID < 1 {
+		return nil, errors.New("job id have to be a positive int")
+	}
+	return &iDAllocator{
+		jobID: int64(jobID) << 32,
+	}, nil
 }
 
-func (a *IDAllocator) AllocID() int32 {
+func NewJobIDAllocator() JobIDAllocator {
+	return &iDAllocator{}
+}
+
+func (a *iDAllocator) AllocJobID() int32 {
 	a.Lock()
 	defer a.Unlock()
-	a.id++
-	return a.id
+	a.internalID++
+	return a.internalID
+}
+
+func (a *iDAllocator) AllocTaskID() int64 {
+	a.Lock()
+	defer a.Unlock()
+	a.internalID++
+	return int64(a.internalID) + a.jobID
 }
 
 type UUIDAllocator struct{}

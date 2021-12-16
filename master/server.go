@@ -50,7 +50,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	for _, u := range urls {
 		masterAddrs = append(masterAddrs, u.Host)
 	}
-	jobManager := NewJobManager(executorNotifier, masterAddrs)
+	jobManager := NewJobManager(masterAddrs)
 	server := &Server{
 		cfg:             cfg,
 		executorManager: executorManager,
@@ -148,9 +148,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 
 	s.executorManager.Start(ctx)
-	s.jobManager.Start(ctx)
-
-	return nil
+	return s.jobManager.Start(ctx)
 }
 
 // Stop and clean resources.
@@ -218,8 +216,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 
 	// start keep alive
 	s.executorManager.Start(ctx)
-	s.jobManager.Start(ctx)
-	return nil
+	return s.jobManager.Start(ctx)
 }
 
 func withHost(addr string) string {

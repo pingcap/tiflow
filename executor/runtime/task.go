@@ -73,7 +73,7 @@ type Chunk []*Record
 
 type taskContainer struct {
 	cfg         *model.Task
-	id          model.TaskID
+	id          model.ID
 	status      int32
 	inputCache  []Chunk
 	outputCache []Chunk
