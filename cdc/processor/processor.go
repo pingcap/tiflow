@@ -31,7 +31,6 @@ import (
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/redo"
-	"github.com/pingcap/ticdc/cdc/scheduler"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sorter/memory"
 	"github.com/pingcap/ticdc/pkg/config"
@@ -76,10 +75,11 @@ type processor struct {
 
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
+	newAgent            func(ctx cdcContext.Context) (processorAgent, error)
 
 	// fields for integration with Scheduler(V2).
 	newSchedulerEnabled bool
-	agent               scheduler.Agent
+	agent               processorAgent
 	checkpointTs        model.Ts
 	resolvedTs          model.Ts
 
@@ -244,6 +244,7 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
+	p.newAgent = p.newAgentImpl
 	return p
 }
 
@@ -448,9 +449,27 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if err != nil {
 		return err
 	}
+
+	if p.newSchedulerEnabled {
+		p.agent, err = p.newAgent(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
 	p.initialized = true
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil
+}
+
+func (p *processor) newAgentImpl(ctx cdcContext.Context) (processorAgent, error) {
+	messageServer := ctx.GlobalVars().MessageServer
+	messageRouter := ctx.GlobalVars().MessageRouter
+	ret, err := newAgent(ctx, messageServer, messageRouter, p, p.changefeedID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return ret, nil
 }
 
 // handleErrorCh listen the error channel and throw the error if it is not expected.
@@ -1000,8 +1019,20 @@ func (p *processor) Close() error {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		return p.sinkManager.Close(ctx)
+		if err := p.sinkManager.Close(ctx); err != nil {
+			return errors.Trace(err)
+		}
 	}
+	if p.newSchedulerEnabled {
+		if p.agent == nil {
+			return nil
+		}
+		if err := p.agent.Close(); err != nil {
+			return errors.Trace(err)
+		}
+		p.agent = nil
+	}
+
 	return nil
 }
 
