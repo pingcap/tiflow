@@ -316,7 +316,7 @@ func (info *ChangeFeedInfo) fixState() {
 func (info *ChangeFeedInfo) fixSinkProtocol() {
 	sinkURIParsed, err := url.Parse(info.SinkURI)
 	if err != nil {
-		log.Warn("parse sink URI failed", zap.Any("sink URI", info.SinkURI))
+		log.Warn("parse sink URI failed", zap.Any("sink URI", info.SinkURI), zap.Error(err))
 		// SAFETY: It is safe to ignore this unresolvable sink URI here,
 		// as it is almost impossible for this to happen.
 		// If we ignore it when fixing it after it happens,

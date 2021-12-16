@@ -599,6 +599,15 @@ func TestFixSinkProtocol(t *testing.T) {
 			},
 			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?max-message-size=15&protocol=open-protocol",
 		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=default&max-message-size=15",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?max-message-size=15&protocol=open-protocol",
+		},
 	}
 
 	for _, tc := range sinkURITestCases {
