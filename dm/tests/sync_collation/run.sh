@@ -36,7 +36,7 @@ function run() {
 	run_sql_file $cur/data/clean_data.sql $TIDB_HOST $TIDB_PORT $TIDB_PASSWORD
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	
+
 	echo "start task"
 	cat $cur/conf/dm-task.yaml >$WORK_DIR/dm-task.yaml
 	dmctl_start_task $WORK_DIR/dm-task.yaml "--remove-meta"
@@ -102,9 +102,9 @@ function run() {
 		"Error 1273: Unsupported collation when new collation is enabled: 'latin1_swedish_ci'" 1 \
 		"Error 1273: Unsupported collation when new collation is enabled: 'utf8mb4_0900_ai_ci'" 1
 
-	dmctl_stop_task $TASK_NAME $MASTER_PORT 
+	dmctl_stop_task $TASK_NAME $MASTER_PORT
 
-	echo "prepare data for incremental phase error test"		
+	echo "prepare data for incremental phase error test"
 	run_sql_file $cur/data/clean_data.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/clean_data.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	run_sql_file $cur/data/clean_data.sql $TIDB_HOST $TIDB_PORT $TIDB_PASSWORD
