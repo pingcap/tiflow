@@ -262,7 +262,9 @@ func (s *ownerSuite) TestFixChangefeedSinkProtocol(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
 	// The meta information is fixed correctly.
-	c.Assert(owner.changefeeds[changefeedID].state.Info.Config.Sink.Protocol, check.Equals, config.ProtocolOpen.String())
+	c.Assert(owner.changefeeds[changefeedID].state.Info.SinkURI,
+		check.Equals,
+		"kafka://127.0.0.1:9092/ticdc-test2?protocol=open-protocol")
 }
 
 func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {

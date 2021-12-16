@@ -319,20 +319,30 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 		log.Warn("parse sink URI failed", zap.Any("sink URI", info.SinkURI))
 		return
 	}
-	protocolStr := sinkURIParsed.Query().Get("protocol")
-	if protocolStr != "" {
-		info.Config.Sink.Protocol = protocolStr
+	rawQuery := sinkURIParsed.Query()
+	protocolStr := rawQuery.Get(config.ProtocolKey)
+
+	needsFix := func(protocolStr string) bool {
+		var protocol config.Protocol
+		err = protocol.FromString(protocolStr)
+		// There are two cases:
+		// 1. there is an error indicating that the old ticdc accepts
+		//    a protocol that is not known. It needs to be fixed as open protocol.
+		// 2. If it is default, then it needs to be fixed as open protocol.
+		return err != nil || protocolStr == config.ProtocolDefault.String()
 	}
 
-	var protocol config.Protocol
-	err = protocol.FromString(info.Config.Sink.Protocol)
-	// There are two cases:
-	// 1. there is an error indicating that the old ticdc accepts
-	//    a protocol that is not known. It needs to be fixed as open protocol.
-	// 2. If it is default, then it needs to be fixed as open protocol.
-	needsFix := err != nil || info.Config.Sink.Protocol == config.ProtocolDefault.String()
-	if needsFix {
-		info.Config.Sink.Protocol = config.ProtocolOpen.String()
+	// The sinkURI always has a higher priority.
+	if protocolStr != "" {
+		if needsFix(protocolStr) {
+			rawQuery.Set(config.ProtocolKey, config.ProtocolOpen.String())
+			sinkURIParsed.RawQuery = rawQuery.Encode()
+			info.SinkURI = sinkURIParsed.String()
+		}
+	} else {
+		if needsFix(info.Config.Sink.Protocol) {
+			info.Config.Sink.Protocol = config.ProtocolOpen.String()
+		}
 	}
 }
 
