@@ -1,5 +1,5 @@
 ---
-name: test
+name: test2
 task-mode: all
 is-sharding: false
 meta-schema: "dm_meta"
@@ -17,6 +17,7 @@ target-database:
 mysql-instances:
   - source-id: "mysql-replica-01"
     black-white-list: "instance"
+    route-rules: ["route-rule-1"]
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
@@ -24,6 +25,11 @@ mysql-instances:
 black-white-list:
   instance:
     do-dbs: ["tls"]
+
+routes:
+  route-rule-1:
+    schema-pattern: "tls"
+    target-schema: "tls2"
 
 mydumpers:
   global:
@@ -43,4 +49,4 @@ syncers:
     batch: 100
 
 tidb:
- backend: "tidb"
+  backend: "tidb"
