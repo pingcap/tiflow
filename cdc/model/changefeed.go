@@ -317,6 +317,11 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 	sinkURIParsed, err := url.Parse(info.SinkURI)
 	if err != nil {
 		log.Warn("parse sink URI failed", zap.Any("sink URI", info.SinkURI))
+		// SAFETY: It is safe to ignore this unresolvable sink URI here,
+		// as it is almost impossible for this to happen.
+		// If we ignore it when fixing it after it happens,
+		// it will expose the problem when starting the changefeed,
+		// which is easier to troubleshoot than reporting the error directly in the bootstrap process.
 		return
 	}
 	rawQuery := sinkURIParsed.Query()
