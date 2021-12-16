@@ -20,6 +20,8 @@ enum ErrorCode {
     BuildGrpcConnFailed  = 7;
     // unknown or upsupported metastore type
     InvalidMetaStoreType = 8;
+    // MasterNotReady means the master is staring up, and not ready to serve
+    MasterNotReady = 9;
     UnknownError = 10001;
 }
 

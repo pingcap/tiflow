@@ -23,7 +23,7 @@ type ExecutorInfo struct {
 }
 
 func (e *ExecutorInfo) EtcdKey() string {
-	return adapter.ExecutorKeyAdapter.Encode(string(e.ID))
+	return adapter.ExecutorInfoKeyAdapter.Encode(string(e.ID))
 }
 
 type ExecutorStatus int32

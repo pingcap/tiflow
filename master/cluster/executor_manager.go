@@ -74,7 +74,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 
 // HandleHeartbeat implements pb interface,
 func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	log.L().Logger.Info("handle heart beat", zap.String("id", req.ExecutorId))
+	log.L().Logger.Info("handle heart beat", zap.Stringer("req", req))
 	e.mu.Lock()
 	exec, ok := e.executors[model.ExecutorID(req.ExecutorId)]
 
@@ -105,9 +105,26 @@ func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Heartbe
 	return resp, nil
 }
 
-// AddExecutor processes the `RegisterExecutorRequest`.
-func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.ExecutorInfo, error) {
-	log.L().Logger.Info("add executor", zap.String("addr", req.Address))
+// RegisterExec registers executor to both executor manager and resource manager
+func (e *ExecutorManager) RegisterExec(info *model.ExecutorInfo) {
+	log.L().Info("register executor", zap.Any("info", info))
+	exec := &Executor{
+		ExecutorInfo:   *info,
+		lastUpdateTime: time.Now(),
+		heartbeatTTL:   e.initHeartbeatTTL,
+		Status:         model.Initing,
+	}
+	e.mu.Lock()
+	e.executors[info.ID] = exec
+	e.mu.Unlock()
+	e.rescMgr.Register(exec.ID, exec.Addr, resource.RescUnit(exec.Capability))
+}
+
+// AllocateNewExec allocates new executor info to a give RegisterExecutorRequest
+// and then registers the executor.
+func (e *ExecutorManager) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.ExecutorInfo, error) {
+	log.L().Logger.Info("allocate new executor", zap.Stringer("req", req))
+
 	e.mu.Lock()
 	info := &model.ExecutorInfo{
 		ID:         model.ExecutorID(e.idAllocator.AllocID()),
@@ -120,26 +137,7 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 	}
 	e.mu.Unlock()
 
-	// Following part is to bootstrap the executor.
-	exec := &Executor{
-		ExecutorInfo: *info,
-
-		lastUpdateTime: time.Now(),
-		heartbeatTTL:   e.initHeartbeatTTL,
-		Status:         model.Initing,
-	}
-
-	// Persistant
-	//value, err := info.ToJSON()
-	//if err != nil {
-	//return nil, err
-	//}
-	//	e.haStore.Put(info.EtcdKey(), value)
-
-	e.mu.Lock()
-	e.executors[info.ID] = exec
-	e.mu.Unlock()
-	e.rescMgr.Register(exec.ID, exec.Addr, resource.RescUnit(exec.Capability))
+	e.RegisterExec(info)
 	return info, nil
 }
 

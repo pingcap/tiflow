@@ -76,7 +76,9 @@ func (t *testJobSuite) TestSubmit(c *C) {
 	for i := int32(0); i < testJobConfig.TableNum*testJobConfig.RecordCnt; i++ {
 		data := executorCtx.RecvRecord()
 		r := data.(*runtime.Record)
-		log.L().Info("recv record", zap.Int32("table", r.Tid), zap.Int32("pk", r.Payload.(*pb.Record).Pk), zap.Int32("ith", i))
+		if i%10000 == 0 {
+			log.L().Info("recv record", zap.Int32("table", r.Tid), zap.Int32("pk", r.Payload.(*pb.Record).Pk), zap.Int32("ith", i))
+		}
 		tablesCnt[r.Tid]++
 	}
 	for _, cnt := range tablesCnt {

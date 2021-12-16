@@ -20,13 +20,13 @@ import (
 // all dataflow engine errors
 var (
 	// This happens when a unknown executor send requests to master.
-	ErrUnknownExecutorID        = errors.Normalize("cannot find executor ID: %d", errors.RFCCodeText("DFLOW:ErrUnknownExecutorID"))
-	ErrTombstoneExecutor        = errors.Normalize("executor %d has been dead", errors.RFCCodeText("DFLOW:ErrTombstoneExecutor"))
-	ErrSubJobFailed             = errors.Normalize("executor %d job %d", errors.RFCCodeText("DFLOW:ErrSubJobFailed"))
+	ErrUnknownExecutorID        = errors.Normalize("cannot find executor ID: %s", errors.RFCCodeText("DFLOW:ErrUnknownExecutorID"))
+	ErrTombstoneExecutor        = errors.Normalize("executor %s has been dead", errors.RFCCodeText("DFLOW:ErrTombstoneExecutor"))
+	ErrSubJobFailed             = errors.Normalize("executor %s job %d", errors.RFCCodeText("DFLOW:ErrSubJobFailed"))
 	ErrClusterResourceNotEnough = errors.Normalize("cluster resource is not enough, please scale out the cluster", errors.RFCCodeText("DFLOW:ErrClusterResourceNotEnough"))
 	ErrBuildJobFailed           = errors.Normalize("build job failed", errors.RFCCodeText("DFLOW:ErrBuildJobFailed"))
 
-	ErrExecutorDupRegister   = errors.Normalize("executor %d has been registered", errors.RFCCodeText("DFLOW:ErrExecutorDupRegister"))
+	ErrExecutorDupRegister   = errors.Normalize("executor %s has been registered", errors.RFCCodeText("DFLOW:ErrExecutorDupRegister"))
 	ErrGrpcBuildConn         = errors.Normalize("dial grpc connection to %s failed", errors.RFCCodeText("DFLOW:ErrGrpcBuildConn"))
 	ErrDecodeEtcdKeyFail     = errors.Normalize("failed to decode etcd key: %s", errors.RFCCodeText("DFLOW:ErrDecodeEtcdKeyFail"))
 	ErrInvalidMetaStoreKey   = errors.Normalize("invalid metastore key %s", errors.RFCCodeText("DFLOW:ErrInvalidMetaStoreKey"))
@@ -51,7 +51,7 @@ var (
 	ErrHeartbeat                  = errors.Normalize("heartbeat error type: %s", errors.RFCCodeText("DFLOW:ErrHeartbeat"))
 	ErrTaskNotFound               = errors.Normalize("task %d is not found", errors.RFCCodeText("DFLOW:ErrTaskNotFound"))
 	ErrExecutorUnknownOperator    = errors.Normalize("operator type %d is unknown", errors.RFCCodeText("DFLOW:ErrOperatorUnknown"))
-	ErrExecutorSessionDone        = errors.Normalize("executor session done", errors.RFCCodeText("DFLOW:ErrExecutorSessionDone"))
+	ErrExecutorSessionDone        = errors.Normalize("executor %s session done", errors.RFCCodeText("DFLOW:ErrExecutorSessionDone"))
 
 	// planner related errors
 	ErrPlannerDAGDepthExceeded = errors.Normalize("dag depth exceeded: %d", errors.RFCCodeText("DFLOW:ErrPlannerDAGDepthExceeded"))

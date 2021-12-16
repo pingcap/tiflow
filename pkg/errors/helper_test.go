@@ -82,7 +82,7 @@ func TestWrapError(t *testing.T) {
 		}{
 			{ErrBuildJobFailed, nil, true, "", []interface{}{}},
 			{ErrBuildJobFailed, err, false, "[DFLOW:ErrBuildJobFailed]build job failed: test", []interface{}{}},
-			{ErrSubJobFailed, err, false, "[DFLOW:ErrSubJobFailed]executor 1 job 2: test", []interface{}{1, 2}},
+			{ErrSubJobFailed, err, false, "[DFLOW:ErrSubJobFailed]executor e-1 job 2: test", []interface{}{"e-1", 2}},
 		}
 	)
 	for _, tc := range testCases {

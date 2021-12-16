@@ -16,6 +16,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -32,6 +33,8 @@ type Server struct {
 	jobManager      *JobManager
 	//
 	cfg *Config
+
+	initialized atomic.Bool
 
 	// mocked server for test
 	mockGrpcServer mock.GrpcServer
@@ -55,29 +58,58 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		cfg:             cfg,
 		executorManager: executorManager,
 		jobManager:      jobManager,
+		initialized:     *atomic.NewBool(false),
 	}
 	return server, nil
 }
 
 // Heartbeat implements pb interface.
 func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
+	if !s.initialized.Load() {
+		return &pb.HeartbeatResponse{
+			Err: &pb.Error{
+				Code: pb.ErrorCode_MasterNotReady,
+			},
+		}, nil
+	}
 	return s.executorManager.HandleHeartbeat(req)
 }
 
 // SubmitJob passes request onto "JobManager".
 func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
+	if !s.initialized.Load() {
+		return &pb.SubmitJobResponse{
+			Err: &pb.Error{
+				Code: pb.ErrorCode_MasterNotReady,
+			},
+		}, nil
+	}
 	return s.jobManager.SubmitJob(ctx, req), nil
 }
 
 func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
+	if !s.initialized.Load() {
+		return &pb.CancelJobResponse{
+			Err: &pb.Error{
+				Code: pb.ErrorCode_MasterNotReady,
+			},
+		}, nil
+	}
 	return s.jobManager.CancelJob(ctx, req), nil
 }
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
+	if !s.initialized.Load() {
+		return &pb.RegisterExecutorResponse{
+			Err: &pb.Error{
+				Code: pb.ErrorCode_MasterNotReady,
+			},
+		}, nil
+	}
 	// register executor to scheduler
 	// TODO: check leader, if not leader, return notLeader error.
-	execInfo, err := s.executorManager.AddExecutor(req)
+	execInfo, err := s.executorManager.AllocateNewExec(req)
 	if err != nil {
 		log.L().Logger.Error("add executor failed", zap.Error(err))
 		return &pb.RegisterExecutorResponse{
@@ -148,7 +180,12 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 
 	s.executorManager.Start(ctx)
-	return s.jobManager.Start(ctx)
+	err = s.jobManager.Start(ctx)
+	if err != nil {
+		return
+	}
+	s.initialized.Store(true)
+	return
 }
 
 // Stop and clean resources.
@@ -164,6 +201,34 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	if test.GlobalTestFlag {
 		return s.startForTest(ctx)
 	}
+
+	err = s.startGrpcSrv()
+	if err != nil {
+		return
+	}
+
+	// start leader election
+	// TODO: Consider election. And Notify workers when leader changes.
+	// s.election, err = election.NewElection(ctx, )
+
+	// rebuild states from existing meta if needed
+	err = s.resetExecutor(ctx)
+	if err != nil {
+		return err
+	}
+
+	// start background managers
+	s.executorManager.Start(ctx)
+	err = s.jobManager.Start(ctx)
+	if err != nil {
+		return
+	}
+	s.initialized.Store(true)
+
+	return
+}
+
+func (s *Server) startGrpcSrv() (err error) {
 	etcdCfg := etcdutils.GenEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
 	// prepare to join an existing etcd cluster.
 	err = etcdutils.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
@@ -206,17 +271,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	// start grpc server
 
 	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
-	if err != nil {
-		return
-	}
-
-	// start leader election
-	// TODO: Consider election. And Notify workers when leader changes.
-	// s.election, err = election.NewElection(ctx, )
-
-	// start keep alive
-	s.executorManager.Start(ctx)
-	return s.jobManager.Start(ctx)
+	return
 }
 
 func withHost(addr string) string {

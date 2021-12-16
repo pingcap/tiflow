@@ -253,7 +253,7 @@ func (s *Server) keepalive(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-session.Done():
-		return errors.ErrExecutorSessionDone.GenWithStackByArgs()
+		return errors.ErrExecutorSessionDone.GenWithStackByArgs(s.info.ID)
 	}
 }
 
@@ -312,14 +312,14 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			}
 			resp, err := s.cli.SendHeartbeat(ctx, req, s.cfg.RPCTimeout)
 			if err != nil {
-				log.L().Error("heartbeat meet error", zap.Error(err))
+				log.L().Error("heartbeat rpc meet error", zap.Error(err))
 				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
 					return errors.Wrap(errors.ErrHeartbeat, err, "rpc")
 				}
 				continue
 			}
 			if resp.Err != nil {
-				log.L().Error("heartbeat meet error")
+				log.L().Warn("heartbeat response meet error", zap.Stringer("code", resp.Err.GetCode()))
 				switch resp.Err.Code {
 				case pb.ErrorCode_UnknownExecutor, pb.ErrorCode_TombstoneExecutor:
 					return errors.ErrHeartbeat.GenWithStack("logic error: %s", resp.Err.GetMessage())
