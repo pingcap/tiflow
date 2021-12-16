@@ -231,7 +231,7 @@ func (s *ownerSuite) TestFixChangefeedSinkProtocol(c *check.C) {
 	// We need to do bootstrap.
 	owner.bootstrapped = false
 	changefeedID := "test-changefeed"
-	// Mismatched state and admin job.
+	// Unknown protocol.
 	changefeedInfo := &model.ChangeFeedInfo{
 		State:          model.StateNormal,
 		AdminJobType:   model.AdminStop,
