@@ -20,11 +20,13 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
 	_ "github.com/pingcap/tidb/types/parser_driver" // for parser driver
+	"go.uber.org/zap"
 )
 
 var (
@@ -71,7 +73,7 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 		return result
 	}
 
-	lackGrants := genExpectGrants(pc.checkTables)
+	lackGrants := genDumpGrants(pc.checkTables)
 	verifyPrivileges(result, grants, lackGrants)
 	return result
 }
@@ -109,7 +111,7 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 		markCheckError(result, err)
 		return result
 	}
-	lackGrants := genExpectGrants(nil)
+	lackGrants := genReplicationGrants()
 	verifyPrivileges(result, grants, lackGrants)
 	return result
 }
@@ -158,11 +160,11 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 
 		dbName := grantStmt.Level.DBName
 		tableName := grantStmt.Level.TableName
+		log.Info("privilege", zap.String("grant", grant), zap.Int("level", int(grantStmt.Level.Level)), zap.String("db name", dbName), zap.String("table name", tableName))
 		switch grantStmt.Level.Level {
 		case ast.GrantLevelGlobal:
 			for _, privElem := range grantStmt.Privs {
-				priv := privElem.Priv
-				switch priv {
+				switch privElem.Priv {
 				case mysql.AllPriv:
 					result.State = StateSuccess
 					return
@@ -171,9 +173,10 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 				// https://dev.mysql.com/doc/refman/5.7/en/grant.html#grant-global-privileges
 				case mysql.ReloadPriv, mysql.ReplicationClientPriv, mysql.ReplicationSlavePriv, mysql.SelectPriv,
 					mysql.LockTablesPriv, mysql.ProcessPriv:
-					if _, ok := lackGrants[priv]; ok {
-						delete(lackGrants, priv)
+					if _, ok := lackGrants[privElem.Priv]; !ok {
+						continue
 					}
+					delete(lackGrants, privElem.Priv)
 				}
 			}
 		case ast.GrantLevelDB:

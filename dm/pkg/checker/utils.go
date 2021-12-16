@@ -143,9 +143,9 @@ func isMySQLError(err error, code uint16) bool {
 	return ok && e.Number == code
 }
 
-func genExpectGrants(checkTables map[string][]string) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
-	lackGrants := make(map[pmysql.PrivilegeType]map[string]map[string]struct{}, len(dumpPrivileges))
-	for p := range dumpPrivileges {
+func genExpectGrants(privileges map[pmysql.PrivilegeType]struct{}, checkTables map[string][]string) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
+	lackGrants := make(map[pmysql.PrivilegeType]map[string]map[string]struct{}, len(privileges))
+	for p := range privileges {
 		lackGrants[p] = make(map[string]map[string]struct{}, len(checkTables))
 		for schema, tables := range checkTables {
 			if _, ok := lackGrants[p][schema]; !ok {
@@ -157,4 +157,12 @@ func genExpectGrants(checkTables map[string][]string) map[pmysql.PrivilegeType]m
 		}
 	}
 	return lackGrants
+}
+
+func genReplicationGrants() map[pmysql.PrivilegeType]map[string]map[string]struct{} {
+	return genExpectGrants(replicationPrivileges, nil)
+}
+
+func genDumpGrants(checkTables map[string][]string) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
+	return genExpectGrants(dumpPrivileges, checkTables)
 }
