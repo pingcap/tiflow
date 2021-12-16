@@ -15,9 +15,9 @@ package context
 
 import (
 	"context"
-	"log"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
