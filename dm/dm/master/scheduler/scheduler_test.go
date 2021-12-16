@@ -1218,12 +1218,25 @@ func (t *testScheduler) TestTransferSource(c *C) {
 	c.Assert(worker1.Stage(), Equals, WorkerFree)
 	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/scheduler/failToReplaceSourceBound"), IsNil)
 
-	// test can't transfer when there's any running(no sync) task on the source
+	// set running tasks
 	s.expectSubTaskStages.Store("test", map[string]ha.Stage{sourceID1: {Expect: pb.Stage_Running}})
+
+	// test can't transfer when running tasks not in sync unit
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/scheduler/operateQueryWorkerF", `return("notInSyncUnit")`), IsNil)
+	c.Assert(terror.ErrSchedulerRequireRunningTaskInSyncUnit.Equal(s.TransferSource(ctx, sourceID1, workerName1)), IsTrue)
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/scheduler/operateQueryWorkerF"), IsNil)
+
+	// test can't transfer when query status met error
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/scheduler/operateQueryWorkerF", `return("error")`), IsNil)
+	c.Assert(s.TransferSource(ctx, sourceID1, workerName1), ErrorMatches, "failed to query worker.*")
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/scheduler/operateQueryWorkerF"), IsNil)
+
+	// test can transfer when all running task is in sync unit
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/scheduler/operateQueryWorkerF", `return("allTaskIsPaused")`), IsNil)
 	c.Assert(s.TransferSource(ctx, sourceID1, workerName1), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/scheduler/operateQueryWorkerF"), IsNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker1)
 	c.Assert(worker1.Stage(), Equals, WorkerBound)
-	// todo add new stage test
 }
 
 func (t *testScheduler) TestStartStopRelay(c *C) {

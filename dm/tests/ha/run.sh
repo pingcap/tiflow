@@ -65,7 +65,6 @@ function run() {
 	echo "use sync_diff_inspector to check increment data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-
 	# echo "pause task before kill and restart dm-worker"
 	# run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 	# 	"pause-task test" \
@@ -106,7 +105,6 @@ function run() {
 
 	# # manually transfer a exist source to a newly started worker
 	# run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $cur/conf/dm-worker3.toml
-
 
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER3_PORT
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
