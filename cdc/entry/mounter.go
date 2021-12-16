@@ -490,7 +490,7 @@ func formatColVal(datum types.Datum, tp byte) (
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), warn, nil
 	default:
-		// FIXME: GetValue() may return some types that go sql not support, which will cause sink DML fail
+		// NOTICE: GetValue() may return some types that go sql not support, which will cause sink DML fail
 		// Make specified convert upper if you need
 		// Go sql support type ref to: https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
 		return datum.GetValue(), sizeOfDatum(datum), "", nil
@@ -502,13 +502,22 @@ func formatColVal(datum types.Datum, tp byte) (
 // Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
 func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, error) {
 	var d types.Datum
+	// NOTICE: In TiDB, default value type is not consistent with the column type
+	// For example, datetime default value is a string type
+	// So This is strong dependent on the TiDB implement and need check if all types default value type can be pass to go sql
+	// We will get sink error here if col.GetDefaultValue() return a TiDB type directly
+	if col.GetDefaultValue() != nil {
+		d := types.NewDatum(col.GetDefaultValue())
+		return d.GetValue(), sizeOfDatum(d), "", nil
+	}
+
+	// NOTICE: NotNullCheck need do after defaultValue check, as meet TiDB "amend + add column default xxx",
+	// TiDB will use default value but TiCDC here will sink nil to downstream if check before defaultValue check above
 	if !mysql.HasNotNullFlag(col.Flag) {
 		// see https://github.com/pingcap/tidb/issues/9304
 		// must use null if TiDB not write the column value when default value is null
 		// and the value is null
 		d = types.NewDatum(nil)
-	} else if col.GetDefaultValue() != nil {
-		d = types.NewDatum(col.GetDefaultValue())
 	} else {
 		switch col.Tp {
 		case mysql.TypeEnum:
