@@ -251,6 +251,11 @@ def get_processor():
     resp = rq.get(url, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
 
+    # test capture_id error and cdc server no panic
+    url = url + "/" + data["changefeed_id"] + "/" + "non-exist-capture-id"
+    resp = rq.get(url, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.bad_request
+
     print("pass test: get processors")
 
 
