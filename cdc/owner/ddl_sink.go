@@ -207,12 +207,12 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64)
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
-	s.wg.Wait()
 	if s.sink != nil {
 		err = s.sink.Close(ctx)
 	}
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()
 	}
+	s.wg.Wait()
 	return err
 }
