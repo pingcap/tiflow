@@ -286,7 +286,7 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 		if err != nil {
 			return err
 		}
-		// rewind the request body when req.body is not nil
+		// rewind the request body when r.body is not nil
 		if seeker, ok := r.body.(io.Seeker); ok && r.body != nil {
 			if _, err := seeker.Seek(0, 0); err != nil {
 				return terrors.Annotatef(err, "failed to seek to the beginning of request body:%v", r)
