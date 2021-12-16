@@ -715,7 +715,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 			}
 		}
 
-		// wait all tasks are in the pasused phase before actually starting scheduling
+		// wait all tasks are pasused phase before actually starting scheduling
 		keepQuery := true
 		maxRetryNum := 10
 		for keepQuery && maxRetryNum > 0 {
@@ -750,7 +750,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		s.logger.DPanic("we have checked w.stage is free, so there should not be an error", zap.Error(err2))
 	}
 
-	// 6. try bound the old worker (now this worker is free, we can bound other source to it)
+	// 6. now this old worker is free, try bound source to it
 	_, err = s.tryBoundForWorker(oldWorker)
 	if err != nil {
 		s.logger.Warn("in transfer source, error when try bound the old worker", zap.Error(err))
