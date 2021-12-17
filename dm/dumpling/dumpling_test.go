@@ -18,12 +18,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/docker/go-units"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	tfilter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/dumpling/export"
 
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 
 	. "github.com/pingcap/check"
@@ -44,9 +48,9 @@ type testDumplingSuite struct {
 	cfg *config.SubTaskConfig
 }
 
-func (d *testDumplingSuite) SetUpSuite(c *C) {
+func (t *testDumplingSuite) SetUpSuite(c *C) {
 	dir := c.MkDir()
-	d.cfg = &config.SubTaskConfig{
+	t.cfg = &config.SubTaskConfig{
 		Name:     "dumpling_ut",
 		Timezone: "UTC",
 		From:     config.GetDBConfigForTest(),
@@ -64,8 +68,8 @@ func (d *testDumplingSuite) SetUpSuite(c *C) {
 	c.Assert(log.InitLogger(&log.Config{}), IsNil)
 }
 
-func (d *testDumplingSuite) TestDumpling(c *C) {
-	dumpling := NewDumpling(d.cfg)
+func (t *testDumplingSuite) TestDumpling(c *C) {
+	dumpling := NewDumpling(t.cfg)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -117,10 +121,56 @@ func (d *testDumplingSuite) TestDumpling(c *C) {
 	c.Assert(result.Errors[0].String(), Matches, ".*context deadline exceeded.*")
 }
 
-func (d *testDumplingSuite) TestDefaultConfig(c *C) {
-	dumpling := NewDumpling(d.cfg)
+func (t *testDumplingSuite) TestDefaultConfig(c *C) {
+	dumpling := NewDumpling(t.cfg)
 	ctx := context.Background()
 	c.Assert(dumpling.Init(ctx), IsNil)
 	c.Assert(dumpling.dumpConfig.StatementSize, Not(Equals), export.UnspecifiedSize)
 	c.Assert(dumpling.dumpConfig.Rows, Not(Equals), export.UnspecifiedSize)
+}
+
+func (t *testDumplingSuite) TestParseArgsWontOverwrite(c *C) {
+	cfg := &config.SubTaskConfig{
+		Timezone: "UTC",
+	}
+	cfg.ChunkFilesize = "1"
+	rules := &filter.Rules{
+		DoDBs: []string{"unit_test"},
+	}
+	cfg.BAList = rules
+	// make sure we enter `parseExtraArgs`
+	cfg.ExtraArgs = "-s=4000 --consistency lock"
+
+	d := NewDumpling(cfg)
+	exportCfg, err := d.constructArgs(context.Background())
+	c.Assert(err, IsNil)
+
+	c.Assert(exportCfg.StatementSize, Equals, uint64(4000))
+	c.Assert(exportCfg.FileSize, Equals, uint64(1*units.MiB))
+
+	f, err2 := tfilter.ParseMySQLReplicationRules(rules)
+	c.Assert(err2, IsNil)
+	c.Assert(exportCfg.TableFilter, DeepEquals, tfilter.CaseInsensitive(f))
+
+	c.Assert(exportCfg.Consistency, Equals, "lock")
+}
+
+func (t *testDumplingSuite) TestConstructArgs(c *C) {
+	ctx := context.Background()
+
+	mock := conn.InitMockDB(c)
+	mock.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
+		WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("01:00:00"))
+
+	cfg := &config.SubTaskConfig{}
+	cfg.ExtraArgs = `--statement-size=100 --where "t>10" --threads 8 -F 50B`
+	d := NewDumpling(cfg)
+	exportCfg, err := d.constructArgs(ctx)
+	c.Assert(err, IsNil)
+	c.Assert(exportCfg.StatementSize, Equals, uint64(100))
+	c.Assert(exportCfg.Where, Equals, "t>10")
+	c.Assert(exportCfg.Threads, Equals, 8)
+	c.Assert(exportCfg.FileSize, Equals, uint64(50))
+	c.Assert(exportCfg.SessionParams, NotNil)
+	c.Assert(exportCfg.SessionParams["time_zone"], Equals, "+01:00")
 }
