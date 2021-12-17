@@ -391,51 +391,6 @@ func GetServerUnixTS(ctx context.Context, db *sql.DB) (int64, error) {
 	return ts, err
 }
 
-// GetCharsetAndDefaultCollation gets charset and default collation map.
-func GetCharsetAndDefaultCollation(ctx context.Context, db *sql.DB) (map[string]string, error) {
-	charsetAndDefaultCollation := make(map[string]string)
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-	defer conn.Close()
-
-	// Show an example.
-	/*
-		mysql> SHOW CHARACTER SET;
-		+----------+---------------------------------+---------------------+--------+
-		| Charset  | Description                     | Default collation   | Maxlen |
-		+----------+---------------------------------+---------------------+--------+
-		| armscii8 | ARMSCII-8 Armenian              | armscii8_general_ci |      1 |
-		| ascii    | US ASCII                        | ascii_general_ci    |      1 |
-		| big5     | Big5 Traditional Chinese        | big5_chinese_ci     |      2 |
-		| binary   | Binary pseudo charset           | binary              |      1 |
-		| cp1250   | Windows Central European        | cp1250_general_ci   |      1 |
-		| cp1251   | Windows Cyrillic                | cp1251_general_ci   |      1 |
-		+----------+---------------------------------+---------------------+--------+
-	*/
-
-	rows, err := conn.QueryContext(ctx, "SHOW CHARACTER SET")
-	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-
-	defer rows.Close()
-	for rows.Next() {
-		var charset, description, collation string
-		var maxlen int
-		if scanErr := rows.Scan(&charset, &description, &collation, &maxlen); scanErr != nil {
-			return nil, terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
-		}
-		charsetAndDefaultCollation[strings.ToLower(charset)] = collation
-	}
-
-	if err = rows.Close(); err != nil {
-		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
-	}
-	return charsetAndDefaultCollation, err
-}
-
 // GetSchemaList gets db schema list with `SHOW DATABASES`.
 func GetSchemaList(ctx context.Context, db *sql.DB) ([]string, error) {
 	schemaList := []string{}

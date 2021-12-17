@@ -14,7 +14,7 @@ your contribution accepted.
 
 Developing TiDB-CDC requires:
 
-* [Go 1.13+](http://golang.org/doc/code.html)
+* [Go 1.16+](https://go.dev/doc/code)
 * An internet connection to download the dependencies
 
 Simply run `make` to build the program.
@@ -32,7 +32,7 @@ For more information on how to trigger these tests, please see the [command help
 
 ### Updating dependencies
 
-TiDB-CDC uses [Go 1.11 module](https://github.com/golang/go/wiki/Modules) to manage dependencies. To add or update a
+TiDB-CDC uses [Go Modules](https://github.com/golang/go/wiki/Modules) to manage dependencies. To add or update a
 dependency: use the `go mod edit` command to change the dependency.
 
 ## Contribution flow
