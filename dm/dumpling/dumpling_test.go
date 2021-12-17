@@ -129,7 +129,7 @@ func (t *testDumplingSuite) TestDefaultConfig(c *C) {
 	c.Assert(dumpling.dumpConfig.Rows, Not(Equals), export.UnspecifiedSize)
 }
 
-func (d *testDumplingSuite) TestCallStatus(c *C) {
+func (t *testDumplingSuite) TestCallStatus(c *C) {
 	m := NewDumpling(d.cfg)
 	ctx := context.Background()
 
