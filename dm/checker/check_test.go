@@ -87,13 +87,14 @@ func (s *testCheckerSuite) TestDumpPrivilegeChecking(c *tc.C) {
 	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
 		AddRow("GRANT USAGE ON *.* TO 'haha'@'%'"))
 	err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(err, tc.ErrorMatches, "(.|\n)*lack.*REPLICATION CLIENT(.|\n)*")
-	c.Assert(err, tc.ErrorMatches, "(.|\n)*lack.*REPLICATION SLAVE(.|\n)*")
+	// c.Assert(err, tc.ErrorMatches, "(.|\n)*lack.*REPLICATION CLIENT(.|\n)*")
+	// c.Assert(err, tc.ErrorMatches, "(.|\n)*lack.*REPLICATION SLAVE(.|\n)*")
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*lack.*Select(.|\n)*")
 
 	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
-		AddRow("GRANT REPLICATION SLAVE, REPLICATION CLIENT,SELECT ON *.* TO 'haha'@'%'"))
+		// AddRow("GRANT REPLICATION SLAVE, REPLICATION CLIENT,SELECT ON *.* TO 'haha'@'%'"))
+		AddRow("GRANT SELECT ON *.* TO 'haha'@'%'"))
 	c.Assert(CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt), tc.IsNil)
 }
 
