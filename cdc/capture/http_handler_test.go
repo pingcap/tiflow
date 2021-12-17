@@ -135,7 +135,7 @@ func TestListChangefeed(t *testing.T) {
 	router := newRouter(newStatusServer())
 
 	// test list changefeed succeeded
-	api := openAPI{url: fmt.Sprint("/api/v1/changefeeds"), method: "GET"}
+	api := openAPI{url: "/api/v1/changefeeds", method: "GET"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -309,7 +309,7 @@ func TestResignOwner(t *testing.T) {
 	t.Parallel()
 	router := newRouter(newStatusServer())
 	// test resign owner succeeded
-	api := openAPI{url: fmt.Sprint("/api/v1/owner/resign"), method: "POST"}
+	api := openAPI{url: "/api/v1/owner/resign", method: "POST"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -346,7 +346,7 @@ func TestListProcessor(t *testing.T) {
 	t.Parallel()
 	router := newRouter(newStatusServer())
 	// test list processor succeeded
-	api := openAPI{url: fmt.Sprint("/api/v1/processors"), method: "GET"}
+	api := openAPI{url: "/api/v1/processors", method: "GET"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -361,7 +361,7 @@ func TestListCapture(t *testing.T) {
 	t.Parallel()
 	router := newRouter(newStatusServer())
 	// test list processor succeeded
-	api := openAPI{url: fmt.Sprint("/api/v1/captures"), method: "GET"}
+	api := openAPI{url: "/api/v1/captures", method: "GET"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -376,7 +376,7 @@ func TestServerStatus(t *testing.T) {
 	t.Parallel()
 	// cpature is owner
 	ownerRouter := newRouter(newStatusServer())
-	api := openAPI{url: fmt.Sprint("/api/v1/status"), method: "GET"}
+	api := openAPI{url: "/api/v1/status", method: "GET"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, nil)
 	ownerRouter.ServeHTTP(w, req)
@@ -390,7 +390,7 @@ func TestServerStatus(t *testing.T) {
 	// capture is not owner
 	capture := NewCapture4Test()
 	router := NewRouter(NewHTTPHandler(capture))
-	api = openAPI{url: fmt.Sprint("/api/v1/status"), method: "GET"}
+	api = openAPI{url: "/api/v1/status", method: "GET"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -409,7 +409,7 @@ func TestSetLogLevel(t *testing.T) {
 		Level string `json:"log_level"`
 	}{"warn"}
 	router := newRouter(newStatusServer())
-	api := openAPI{url: fmt.Sprint("/api/v1/log"), method: "POST"}
+	api := openAPI{url: "/api/v1/log", method: "POST"}
 	w := httptest.NewRecorder()
 	b, err := json.Marshal(&data)
 	require.Nil(t, err)
@@ -422,7 +422,7 @@ func TestSetLogLevel(t *testing.T) {
 	data = struct {
 		Level string `json:"log_level"`
 	}{"foo"}
-	api = openAPI{url: fmt.Sprint("/api/v1/log"), method: "POST"}
+	api = openAPI{url: "/api/v1/log", method: "POST"}
 	w = httptest.NewRecorder()
 	b, err = json.Marshal(&data)
 	require.Nil(t, err)

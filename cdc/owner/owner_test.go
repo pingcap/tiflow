@@ -425,7 +425,7 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 	defer cancel()
 	owner, state, tester := createOwner4Test(ctx, c)
 
-	statusProvider := owner.StatusProvider()
+	statusProvider := owner.StatusProvider
 	// work well
 	cf1 := "test-changefeed"
 	cfInfo1 := &model.ChangeFeedInfo{
