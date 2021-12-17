@@ -14,8 +14,9 @@
 package util
 
 import (
-	"log"
 	"strings"
+
+	"github.com/pingcap/log"
 )
 
 // EtcdKey represents a complete key in Etcd.

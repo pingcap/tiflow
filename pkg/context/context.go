@@ -15,13 +15,16 @@ package context
 
 import (
 	"context"
-	"log"
 	"time"
 
+<<<<<<< HEAD
 	"github.com/pingcap/ticdc/pkg/pdtime"
 
 	"github.com/pingcap/ticdc/pkg/version"
 
+=======
+	"github.com/pingcap/log"
+>>>>>>> 2ed02366d (pkg,cdc: do not use log package (#3902))
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
