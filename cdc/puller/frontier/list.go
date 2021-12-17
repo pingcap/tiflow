@@ -16,11 +16,12 @@ package frontier
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"math"
 	"strings"
 
 	_ "unsafe" // required by go:linkname
+
+	"github.com/pingcap/log"
 )
 
 const (
