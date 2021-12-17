@@ -611,19 +611,6 @@ func (cp *LightningCheckpointList) taskStatus(ctx context.Context) (lightingLoad
 	return lightningStatusInit, nil
 }
 
-func (cp *LightningCheckpointList) RemoveTaskCheckPoint(ctx context.Context) error {
-	connection, err := cp.db.GetBaseConn(ctx)
-	if err != nil {
-		return terror.WithScope(terror.Annotate(err, "initialize connection"), terror.ScopeDownstream)
-	}
-	defer conn.CloseBaseConnWithoutErr(cp.db, connection)
-
-	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
-	query := fmt.Sprintf("DELETE from %s where `task_name`=?", cp.tableName)
-	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{query}, []interface{}{cp.taskName})
-	return terror.WithScope(err, terror.ScopeDownstream)
-}
-
 // Close implements CheckPoint.Close.
 func (cp *LightningCheckpointList) Close() {
 	if err := cp.db.Close(); err != nil {
