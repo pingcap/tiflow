@@ -161,6 +161,19 @@ func (s *BaseScheduleDispatcher) Tick(
 	// (from Etcd in the current implementation).
 	s.captures = captures
 
+	// We trigger an automatic rebalance if the capture count has changed.
+	// This logic is the same as in the older implementation of scheduler.
+	// TODO a better criterion is needed.
+	// NOTE: We need to check whether the capture count has changed in every tick,
+	// and set needRebalance to true if it has. If we miss a capture count change,
+	// the workload may never be balanced until user manually triggers a rebalance.
+	if s.lastTickCaptureCount != captureCountUninitialized &&
+		s.lastTickCaptureCount != len(captures) {
+
+		s.needRebalance = true
+	}
+	s.lastTickCaptureCount = len(captures)
+
 	// Checks for checkpoint regression as a safety measure.
 	if s.checkpointTs > checkpointTs {
 		s.logger.Panic("checkpointTs regressed",
@@ -245,16 +258,6 @@ func (s *BaseScheduleDispatcher) Tick(
 	if !checkAllTasksNormal() {
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
-
-	// We trigger an automatic rebalance if the capture count has changed.
-	// This logic is the same as in the older implementation of scheduler.
-	// TODO a better criterion is needed.
-	if s.lastTickCaptureCount != captureCountUninitialized &&
-		s.lastTickCaptureCount != len(captures) {
-
-		s.needRebalance = true
-	}
-	s.lastTickCaptureCount = len(captures)
 
 	if s.needRebalance {
 		ok, err := s.rebalance(ctx)
