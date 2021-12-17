@@ -377,6 +377,9 @@ function run() {
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	run_sql_source1 "SHOW SLAVE HOSTS;"
+	check_contains 'Slave_UUID'
+
 	run_sql_tidb "set time_zone = '+04:00';SELECT count(*) from all_mode.no_diff where dt = ts;"
 	check_contains "count(*): 3"
 
