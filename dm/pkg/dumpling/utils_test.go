@@ -291,7 +291,7 @@ func (t *testSuite) TestParseArgs(c *C) {
 	// specify `--tables-list` and `--filter`
 	extraArgs = `--threads 16 --tables-list=foo.bar --filter=*.foo`
 	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
-	c.Assert(err, ErrorMatches, ".*cannot parse --tables-list and --filter together.*")
+	c.Assert(err, ErrorMatches, ".*--tables-list and --filter together.*")
 
 	// only specify `--filter`.
 	extraArgs = `--threads 16 --filter=*.foo`

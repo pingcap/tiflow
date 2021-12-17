@@ -24,7 +24,6 @@ import (
 
 	"github.com/docker/go-units"
 	"github.com/go-mysql-org/go-mysql/mysql"
-	tfilter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/spf13/pflag"
 
@@ -32,7 +31,10 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
+
+var DumplingDefaultTableFilter = []string{"*.*", export.DefaultTableFilter}
 
 // ParseMetaData parses mydumper's output meta file and returns binlog location.
 // since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
@@ -251,7 +253,7 @@ func ParseExtraArgs(logger *log.Logger, dumpCfg *export.Config, args []string) e
 	dumplingFlagSet.Uint64VarP(&dumpCfg.Rows, "rows", "r", dumpCfg.Rows, "Split table into chunks of this many rows, default unlimited")
 	dumplingFlagSet.StringVar(&dumpCfg.Where, "where", dumpCfg.Where, "Dump only selected records")
 	dumplingFlagSet.BoolVar(&dumpCfg.EscapeBackslash, "escape-backslash", dumpCfg.EscapeBackslash, "Use backslash to escape quotation marks")
-	dumplingFlagSet.StringArrayVarP(&filters, "filter", "f", []string{"*.*"}, "Filter to select which tables to dump")
+	dumplingFlagSet.StringArrayVarP(&filters, "filter", "f", DumplingDefaultTableFilter, "Filter to select which tables to dump")
 	dumplingFlagSet.StringVar(&dumpCfg.Security.CAPath, "ca", dumpCfg.Security.CAPath, "The path name to the certificate authority file for TLS connection")
 	dumplingFlagSet.StringVar(&dumpCfg.Security.CertPath, "cert", dumpCfg.Security.CertPath, "The path name to the client certificate file for TLS connection")
 	dumplingFlagSet.StringVar(&dumpCfg.Security.KeyPath, "key", dumpCfg.Security.KeyPath, "The path name to the client private key file for TLS connection")
@@ -281,8 +283,8 @@ func ParseExtraArgs(logger *log.Logger, dumpCfg *export.Config, args []string) e
 		}
 	}
 
-	if len(tablesList) > 0 || (len(filters) != 1 || filters[0] != "*.*") {
-		ff, err2 := parseTableFilter(tablesList, filters)
+	if len(tablesList) > 0 || !utils.NonRepeatStringsEqual(DumplingDefaultTableFilter, filters) {
+		ff, err2 := export.ParseTableFilter(tablesList, filters)
 		if err2 != nil {
 			return err2
 		}
@@ -291,28 +293,4 @@ func ParseExtraArgs(logger *log.Logger, dumpCfg *export.Config, args []string) e
 	}
 
 	return nil
-}
-
-// parseTableFilter parses `--tables-list` and `--filter`.
-// copy (and update) from https://github.com/pingcap/dumpling/blob/6f74c686e54183db7b869775af1c32df46462a6a/cmd/dumpling/main.go#L222.
-func parseTableFilter(tablesList, filters []string) (tfilter.Filter, error) {
-	if len(tablesList) == 0 {
-		return tfilter.Parse(filters)
-	}
-
-	// only parse -T when -f is default value. otherwise bail out.
-	if len(filters) != 1 || filters[0] != "*.*" {
-		return nil, errors.New("cannot parse --tables-list and --filter together")
-	}
-
-	tableNames := make([]tfilter.Table, 0, len(tablesList))
-	for _, table := range tablesList {
-		parts := strings.SplitN(table, ".", 2)
-		if len(parts) < 2 {
-			return nil, fmt.Errorf("--tables-list only accepts qualified table names, but `%s` lacks a dot", table)
-		}
-		tableNames = append(tableNames, tfilter.Table{Schema: parts[0], Name: parts[1]})
-	}
-
-	return tfilter.NewTablesFilter(tableNames...), nil
 }

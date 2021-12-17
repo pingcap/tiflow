@@ -48,9 +48,9 @@ type testDumplingSuite struct {
 	cfg *config.SubTaskConfig
 }
 
-func (d *testDumplingSuite) SetUpSuite(c *C) {
+func (t *testDumplingSuite) SetUpSuite(c *C) {
 	dir := c.MkDir()
-	d.cfg = &config.SubTaskConfig{
+	t.cfg = &config.SubTaskConfig{
 		Name:     "dumpling_ut",
 		Timezone: "UTC",
 		From:     config.GetDBConfigForTest(),
@@ -68,8 +68,8 @@ func (d *testDumplingSuite) SetUpSuite(c *C) {
 	c.Assert(log.InitLogger(&log.Config{}), IsNil)
 }
 
-func (d *testDumplingSuite) TestDumpling(c *C) {
-	dumpling := NewDumpling(d.cfg)
+func (t *testDumplingSuite) TestDumpling(c *C) {
+	dumpling := NewDumpling(t.cfg)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -121,8 +121,8 @@ func (d *testDumplingSuite) TestDumpling(c *C) {
 	c.Assert(result.Errors[0].String(), Matches, ".*context deadline exceeded.*")
 }
 
-func (d *testDumplingSuite) TestDefaultConfig(c *C) {
-	dumpling := NewDumpling(d.cfg)
+func (t *testDumplingSuite) TestDefaultConfig(c *C) {
+	dumpling := NewDumpling(t.cfg)
 	ctx := context.Background()
 	c.Assert(dumpling.Init(ctx), IsNil)
 	c.Assert(dumpling.dumpConfig.StatementSize, Not(Equals), export.UnspecifiedSize)
