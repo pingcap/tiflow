@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"math"
 	"os"
 	"path"
 	"reflect"
@@ -140,7 +141,8 @@ type Syncer struct {
 
 	schemaTracker *schema.Tracker
 
-	fromDB *dbconn.UpStreamConn
+	fromDB   *dbconn.UpStreamConn
+	fromConn *dbconn.DBConn
 
 	toDB                *conn.BaseDB
 	toDBConns           []*dbconn.DBConn
@@ -189,8 +191,9 @@ type Syncer struct {
 
 	done chan struct{}
 
-	checkpoint CheckPoint
-	onlineDDL  onlineddl.OnlinePlugin
+	checkpoint            CheckPoint
+	checkpointFlushWorker *checkpointFlushWorker
+	onlineDDL             onlineddl.OnlinePlugin
 
 	// record process error rather than log.Fatal
 	runFatalChan chan *pb.ProcessError
@@ -217,6 +220,7 @@ type Syncer struct {
 	}
 
 	addJobFunc func(*job) error
+	flushSeq   int64
 
 	// `lower_case_table_names` setting of upstream db
 	SourceTableNamesFlavor utils.LowerCaseTableNamesFlavor
@@ -228,6 +232,7 @@ type Syncer struct {
 
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
+	idAndCollationMap          map[int]string
 }
 
 // NewSyncer creates a new Syncer.
@@ -276,6 +281,7 @@ func (s *Syncer) newJobChans() {
 	chanSize := calculateChanSize(s.cfg.QueueSize, s.cfg.WorkerCount, s.cfg.Compact)
 	s.dmlJobCh = make(chan *job, chanSize)
 	s.ddlJobCh = make(chan *job, s.cfg.QueueSize)
+	s.checkpointFlushWorker.input = make(chan *checkpointFlushTask, 16)
 	s.jobsClosed.Store(false)
 }
 
@@ -287,6 +293,7 @@ func (s *Syncer) closeJobChans() {
 	}
 	close(s.dmlJobCh)
 	close(s.ddlJobCh)
+	close(s.checkpointFlushWorker.input)
 	s.jobsClosed.Store(true)
 }
 
@@ -327,7 +334,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
-	s.charsetAndDefaultCollation, err = s.fromDB.GetCharsetAndDefaultCollation(ctx)
+	s.charsetAndDefaultCollation, s.idAndCollationMap, err = dbconn.GetCharsetAndCollationInfo(tctx, s.fromConn)
 	if err != nil {
 		return err
 	}
@@ -417,6 +424,13 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 				return err
 			}
 		}
+	}
+	s.checkpointFlushWorker = &checkpointFlushWorker{
+		input:        nil, // will be created in s.reset()
+		cp:           s.checkpoint,
+		execError:    &s.execError,
+		afterFlushFn: s.afterFlushCheckpoint,
+		addCountFunc: s.addCount,
 	}
 
 	// when Init syncer, set active relay log info
@@ -549,6 +563,7 @@ func (s *Syncer) reset() {
 	s.isReplacingErr = false
 	s.waitXIDJob.Store(int64(noWait))
 	s.isTransactionEnd = true
+	s.flushSeq = 0
 
 	switch s.cfg.ShardMode {
 	case config.ShardPessimistic:
@@ -801,7 +816,7 @@ func (s *Syncer) addCount(isFinished bool, queueBucket string, tp opType, n int6
 		m = metrics.FinishedJobsTotal
 	}
 	switch tp {
-	case insert, update, del, ddl, flush, conflict, compact:
+	case insert, update, del, ddl, flush, asyncFlush, conflict, compact:
 		m.WithLabelValues(tp.String(), s.cfg.Name, queueBucket, s.cfg.SourceID, s.cfg.WorkerName, targetTable.Schema, targetTable.Name).Add(float64(n))
 	case skip, xid:
 		// ignore skip/xid jobs
@@ -855,10 +870,6 @@ func (s *Syncer) updateReplicationLagMetric() {
 	}
 }
 
-func (s *Syncer) checkFlush() bool {
-	return s.checkpoint.CheckGlobalPoint()
-}
-
 func (s *Syncer) saveTablePoint(table *filter.Table, location binlog.Location) {
 	ti, err := s.schemaTracker.GetTableInfo(table)
 	if err != nil && table.Name != "" {
@@ -875,6 +886,7 @@ var (
 	lastLocation    binlog.Location
 	lastLocationNum int
 	waitJobsDone    bool
+	flushFirstJob   bool
 	failExecuteSQL  bool
 	failOnce        atomic.Bool
 )
@@ -943,11 +955,9 @@ func (s *Syncer) addJob(job *job) error {
 	case skip:
 		s.updateReplicationJobTS(job, skipJobIdx)
 	case flush:
-		s.addCount(false, adminQueueName, job.tp, 1, job.targetTable)
 		s.jobWg.Add(1)
 		s.dmlJobCh <- job
 		s.jobWg.Wait()
-		s.addCount(true, adminQueueName, job.tp, 1, job.targetTable)
 		return s.flushCheckPoints()
 	case ddl:
 		s.addCount(false, adminQueueName, job.tp, 1, job.targetTable)
@@ -966,18 +976,17 @@ func (s *Syncer) addJob(job *job) error {
 		})
 	}
 
-	// nolint:ifshort
-	needFlush := s.checkFlush()
 	failpoint.Inject("flushFirstJob", func() {
 		if waitJobsDone {
 			s.tctx.L().Info("trigger flushFirstJob")
 			waitJobsDone = false
-			needFlush = true
+			flushFirstJob = true
 		}
 	})
-	if needFlush {
+	if flushFirstJob {
+		flushJob := newFlushJob(s.cfg.WorkerCount, s.getFlushSeq())
 		s.jobWg.Add(1)
-		s.dmlJobCh <- newFlushJob()
+		s.dmlJobCh <- flushJob
 		s.jobWg.Wait()
 	}
 
@@ -1023,7 +1032,7 @@ func (s *Syncer) addJob(job *job) error {
 		}
 	}
 
-	if needFlush || tp == ddl {
+	if flushFirstJob || tp == ddl {
 		// interrupted after save checkpoint and before flush checkpoint.
 		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
 			err := handleFlushCheckpointStage(4, val.(int), "before flush checkpoint")
@@ -1032,6 +1041,16 @@ func (s *Syncer) addJob(job *job) error {
 			}
 		})
 		return s.flushCheckPoints()
+	}
+
+	// Periodically create checkpoint snapshot and async flush checkpoint snapshot
+	if s.checkpoint.CheckGlobalPoint() && s.checkpoint.CheckLastSnapshotCreationTime() {
+		s.jobWg.Add(1)
+		jobSeq := s.getFlushSeq()
+		s.tctx.L().Info("Start to async flush current checkpoint to downstream based on flush interval", zap.Int64("job sequence", jobSeq))
+		j := newAsyncFlushJob(s.cfg.WorkerCount, jobSeq)
+		s.dmlJobCh <- j
+		s.flushCheckPointsAsync(j)
 	}
 
 	return nil
@@ -1056,15 +1075,15 @@ func (s *Syncer) resetShardingGroup(table *filter.Table) {
 	}
 }
 
-// flushCheckPoints flushes previous saved checkpoint in memory to persistent storage, like TiDB
+// flushCheckPoints synchronously flushes previous saved checkpoint in memory to persistent storage, like TiDB
 // we flush checkpoints in four cases:
 //   1. DDL executed
-//   2. at intervals (and job executed)
-//   3. pausing / stopping the sync (driven by `s.flushJobs`)
-//   4. IsFreshTask return true
+//   2. pausing / stopping the sync (driven by `s.flushJobs`)
+//   3. IsFreshTask return true
+//   4. Heartbeat event received
 // but when error occurred, we can not flush checkpoint, otherwise data may lost
 // and except rejecting to flush the checkpoint, we also need to rollback the checkpoint saved before
-//   this should be handled when `s.Run` returned
+// this should be handled when `s.Run` returned
 //
 // we may need to refactor the concurrency model to make the work-flow more clearer later.
 func (s *Syncer) flushCheckPoints() error {
@@ -1074,10 +1093,70 @@ func (s *Syncer) flushCheckPoints() error {
 	// worker resume, it can not execute the DML/DDL in old binlog because of downstream table structure mismatching.
 	// We should find a way to (compensating) implement a transaction containing interaction with both etcd and SQL.
 	if err != nil && (terror.ErrDBExecuteFailed.Equal(err) || terror.ErrDBUnExpect.Equal(err)) {
-		s.tctx.L().Warn("error detected when executing SQL job, skip flush checkpoint",
+		s.tctx.L().Warn("error detected when executing SQL job, skip sync flush checkpoints",
 			zap.Stringer("checkpoint", s.checkpoint),
 			zap.Error(err))
 		return nil
+	}
+
+	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(true)
+
+	if snapshotInfo == nil {
+		log.L().Info("checkpoint has no change, skip sync flush checkpoint")
+		return nil
+	}
+
+	syncFlushErrCh := make(chan error, 1)
+
+	task := &checkpointFlushTask{
+		snapshotInfo:   snapshotInfo,
+		exceptTables:   exceptTables,
+		shardMetaSQLs:  shardMetaSQLs,
+		shardMetaArgs:  shardMetaArgs,
+		asyncflushJob:  nil,
+		syncFlushErrCh: syncFlushErrCh,
+	}
+	s.checkpointFlushWorker.Add(task)
+
+	return <-syncFlushErrCh
+}
+
+// flushCheckPointsAsync asynchronous flushes checkpoint.
+func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
+	err := s.execError.Load()
+	// TODO: for now, if any error occurred (including user canceled), checkpoint won't be updated. But if we have put
+	// optimistic shard info, DM-master may resolved the optimistic lock and let other worker execute DDL. So after this
+	// worker resume, it can not execute the DML/DDL in old binlog because of downstream table structure mismatching.
+	// We should find a way to (compensating) implement a transaction containing interaction with both etcd and SQL.
+	if err != nil && (terror.ErrDBExecuteFailed.Equal(err) || terror.ErrDBUnExpect.Equal(err)) {
+		s.tctx.L().Warn("error detected when executing SQL job, skip async flush checkpoints",
+			zap.Stringer("checkpoint", s.checkpoint),
+			zap.Error(err))
+		return
+	}
+
+	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(false)
+
+	if snapshotInfo == nil {
+		log.L().Info("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
+		return
+	}
+
+	task := &checkpointFlushTask{
+		snapshotInfo:   snapshotInfo,
+		exceptTables:   exceptTables,
+		shardMetaSQLs:  shardMetaSQLs,
+		shardMetaArgs:  shardMetaArgs,
+		asyncflushJob:  asyncFlushJob,
+		syncFlushErrCh: nil,
+	}
+	s.checkpointFlushWorker.Add(task)
+}
+
+func (s *Syncer) createCheckpointSnapshot(isSyncFlush bool) (*SnapshotInfo, []*filter.Table, []string, [][]interface{}) {
+	snapshotInfo := s.checkpoint.Snapshot(isSyncFlush)
+	if snapshotInfo == nil {
+		return nil, nil, nil, nil
 	}
 
 	var (
@@ -1097,14 +1176,21 @@ func (s *Syncer) flushCheckPoints() error {
 		s.tctx.L().Info("prepare flush sqls", zap.Strings("shard meta sqls", shardMetaSQLs), zap.Reflect("shard meta arguments", shardMetaArgs))
 	}
 
-	err = s.checkpoint.FlushPointsExcept(s.tctx, exceptTables, shardMetaSQLs, shardMetaArgs)
-	if err != nil {
-		return terror.Annotatef(err, "flush checkpoint %s", s.checkpoint)
+	return snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs
+}
+
+func (s *Syncer) afterFlushCheckpoint(task *checkpointFlushTask) error {
+	// add a gc job to let causality module gc outdated kvs.
+	if task.asyncflushJob != nil {
+		s.tctx.L().Info("after async flushed checkpoint, gc stale causality keys", zap.Int64("flush job seq", task.asyncflushJob.flushSeq))
+		s.dmlJobCh <- newGCJob(task.asyncflushJob.flushSeq)
+	} else {
+		s.tctx.L().Info("after async flushed checkpoint, gc all causality keys")
+		s.dmlJobCh <- newGCJob(math.MaxInt64)
 	}
-	s.tctx.L().Info("flushed checkpoint", zap.Stringer("checkpoint", s.checkpoint))
 
 	// update current active relay log after checkpoint flushed
-	err = s.updateActiveRelayLog(s.checkpoint.GlobalPoint().Position)
+	err := s.updateActiveRelayLog(task.snapshotInfo.globalPos.Position)
 	if err != nil {
 		return err
 	}
@@ -1116,16 +1202,20 @@ func (s *Syncer) flushCheckPoints() error {
 	}
 	s.lastCheckpointFlushedTime = now
 
-	s.tctx.L().Info("after last flushing checkpoint, DM has ignored row changes by expression filter",
-		zap.Int64("number of filtered insert", s.filteredInsert.Load()),
-		zap.Int64("number of filtered update", s.filteredUpdate.Load()),
-		zap.Int64("number of filtered delete", s.filteredDelete.Load()))
-
-	s.filteredInsert.Store(0)
-	s.filteredUpdate.Store(0)
-	s.filteredDelete.Store(0)
-
+	s.logAndClearFilteredStatistics()
 	return nil
+}
+
+func (s *Syncer) logAndClearFilteredStatistics() {
+	filteredInsert := s.filteredInsert.Swap(0)
+	filteredUpdate := s.filteredUpdate.Swap(0)
+	filteredDelete := s.filteredDelete.Swap(0)
+	if filteredInsert > 0 || filteredUpdate > 0 || filteredDelete > 0 {
+		s.tctx.L().Info("after last flushing checkpoint, DM has ignored row changes by expression filter",
+			zap.Int64("number of filtered insert", filteredInsert),
+			zap.Int64("number of filtered update", filteredUpdate),
+			zap.Int64("number of filtered delete", filteredDelete))
+	}
 }
 
 // DDL synced one by one, so we only need to process one DDL at a time.
@@ -1346,6 +1436,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			return err
 		}
 	}
+
+	// start flush checkpoints worker.
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.checkpointFlushWorker.Run(s.tctx)
+	}()
 
 	var (
 		flushCheckpoint bool
@@ -1991,6 +2088,12 @@ func (s *Syncer) handleRotateEvent(ev *replication.RotateEvent, ec eventContext)
 
 	ec.tctx.L().Info("", zap.String("event", "rotate"), log.WrapStringerField("location", ec.currentLocation))
 	return nil
+}
+
+// getFlushSeq is used for assigning an auto-incremental sequence number for each flush job.
+func (s *Syncer) getFlushSeq() int64 {
+	s.flushSeq++
+	return s.flushSeq
 }
 
 func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) error {
@@ -2934,10 +3037,12 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	var err error
 	dbCfg := s.cfg.From
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	s.fromDB, err = dbconn.NewUpStreamConn(&dbCfg)
+	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 1)
 	if err != nil {
 		return err
 	}
+	s.fromDB = &dbconn.UpStreamConn{BaseDB: fromDB}
+	s.fromConn = fromConns[0]
 	conn, err := s.fromDB.BaseDB.GetBaseConn(ctx)
 	if err != nil {
 		return err
@@ -3016,9 +3121,11 @@ func (s *Syncer) recordSkipSQLsLocation(ec *eventContext) error {
 }
 
 // flushJobs add a flush job and wait for all jobs finished.
+// NOTE: currently, flush job is always sync operation.
 func (s *Syncer) flushJobs() error {
-	s.tctx.L().Info("flush all jobs", zap.Stringer("global checkpoint", s.checkpoint))
-	job := newFlushJob()
+	flushJobSeq := s.getFlushSeq()
+	s.tctx.L().Info("flush all jobs", zap.Stringer("global checkpoint", s.checkpoint), zap.Int64("flush job seq", flushJobSeq))
+	job := newFlushJob(s.cfg.WorkerCount, flushJobSeq)
 	return s.addJobFunc(job)
 }
 

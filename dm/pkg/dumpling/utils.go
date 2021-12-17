@@ -15,6 +15,7 @@ package dumpling
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,11 +24,17 @@ import (
 
 	"github.com/docker/go-units"
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/spf13/pflag"
 
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
+
+var DumplingDefaultTableFilter = []string{"*.*", export.DefaultTableFilter}
 
 // ParseMetaData parses mydumper's output meta file and returns binlog location.
 // since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
@@ -199,4 +206,91 @@ func ParseFileSize(fileSizeStr string, defaultSize uint64) (uint64, error) {
 		return 0, err
 	}
 	return fileSize, nil
+}
+
+// ParseArgLikeBash parses list arguments like bash, which helps us to run
+// executable command via os/exec more likely running from bash.
+func ParseArgLikeBash(args []string) []string {
+	result := make([]string, 0, len(args))
+	for _, arg := range args {
+		parsedArg := trimOutQuotes(arg)
+		result = append(result, parsedArg)
+	}
+	return result
+}
+
+// trimOutQuotes trims a pair of single quotes or a pair of double quotes from arg.
+func trimOutQuotes(arg string) string {
+	argLen := len(arg)
+	if argLen >= 2 {
+		if arg[0] == '"' && arg[argLen-1] == '"' {
+			return arg[1 : argLen-1]
+		}
+		if arg[0] == '\'' && arg[argLen-1] == '\'' {
+			return arg[1 : argLen-1]
+		}
+	}
+	return arg
+}
+
+func ParseExtraArgs(logger *log.Logger, dumpCfg *export.Config, args []string) error {
+	var (
+		dumplingFlagSet = pflag.NewFlagSet("dumpling", pflag.ContinueOnError)
+		fileSizeStr     string
+		tablesList      []string
+		filters         []string
+		noLocks         bool
+	)
+
+	dumplingFlagSet.StringSliceVarP(&dumpCfg.Databases, "database", "B", dumpCfg.Databases, "Database to dump")
+	dumplingFlagSet.StringSliceVarP(&tablesList, "tables-list", "T", nil, "Comma delimited table list to dump; must be qualified table names")
+	dumplingFlagSet.IntVarP(&dumpCfg.Threads, "threads", "t", dumpCfg.Threads, "Number of goroutines to use, default 4")
+	dumplingFlagSet.StringVarP(&fileSizeStr, "filesize", "F", "", "The approximate size of output file")
+	dumplingFlagSet.Uint64VarP(&dumpCfg.StatementSize, "statement-size", "s", dumpCfg.StatementSize, "Attempted size of INSERT statement in bytes")
+	dumplingFlagSet.StringVar(&dumpCfg.Consistency, "consistency", dumpCfg.Consistency, "Consistency level during dumping: {auto|none|flush|lock|snapshot}")
+	dumplingFlagSet.StringVar(&dumpCfg.Snapshot, "snapshot", dumpCfg.Snapshot, "Snapshot position. Valid only when consistency=snapshot")
+	dumplingFlagSet.BoolVarP(&dumpCfg.NoViews, "no-views", "W", dumpCfg.NoViews, "Do not dump views")
+	dumplingFlagSet.Uint64VarP(&dumpCfg.Rows, "rows", "r", dumpCfg.Rows, "Split table into chunks of this many rows, default unlimited")
+	dumplingFlagSet.StringVar(&dumpCfg.Where, "where", dumpCfg.Where, "Dump only selected records")
+	dumplingFlagSet.BoolVar(&dumpCfg.EscapeBackslash, "escape-backslash", dumpCfg.EscapeBackslash, "Use backslash to escape quotation marks")
+	dumplingFlagSet.StringArrayVarP(&filters, "filter", "f", DumplingDefaultTableFilter, "Filter to select which tables to dump")
+	dumplingFlagSet.StringVar(&dumpCfg.Security.CAPath, "ca", dumpCfg.Security.CAPath, "The path name to the certificate authority file for TLS connection")
+	dumplingFlagSet.StringVar(&dumpCfg.Security.CertPath, "cert", dumpCfg.Security.CertPath, "The path name to the client certificate file for TLS connection")
+	dumplingFlagSet.StringVar(&dumpCfg.Security.KeyPath, "key", dumpCfg.Security.KeyPath, "The path name to the client private key file for TLS connection")
+	dumplingFlagSet.BoolVar(&noLocks, "no-locks", false, "")
+	dumplingFlagSet.BoolVar(&dumpCfg.TransactionalConsistency, "transactional-consistency", true, "Only support transactional consistency")
+
+	err := dumplingFlagSet.Parse(args)
+	if err != nil {
+		return err
+	}
+
+	// compatibility for `--no-locks`
+	if noLocks {
+		logger.Warn("`--no-locks` is replaced by `--consistency none` since v2.0.0")
+		// it's default consistency or by meaning of "auto", we could overwrite it by `none`
+		if dumpCfg.Consistency == "auto" {
+			dumpCfg.Consistency = "none"
+		} else if dumpCfg.Consistency != "none" {
+			return errors.New("cannot both specify `--no-locks` and `--consistency` other than `none`")
+		}
+	}
+
+	if fileSizeStr != "" {
+		dumpCfg.FileSize, err = ParseFileSize(fileSizeStr, export.UnspecifiedSize)
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(tablesList) > 0 || !utils.NonRepeatStringsEqual(DumplingDefaultTableFilter, filters) {
+		ff, err2 := export.ParseTableFilter(tablesList, filters)
+		if err2 != nil {
+			return err2
+		}
+		dumpCfg.TableFilter = ff // overwrite `block-allow-list`.
+		logger.Warn("overwrite `block-allow-list` by `tables-list` or `filter`")
+	}
+
+	return nil
 }
