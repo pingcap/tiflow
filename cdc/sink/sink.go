@@ -37,26 +37,59 @@ type Sink interface {
 
 	// EmitRowChangedEvents sends Row Changed Event to Sink
 	// EmitRowChangedEvents may write rows to downstream directly;
+	//
+	// EmitRowChangedEvents is thread-safe.
+	// FIXME: some sink implementation, they should be.
 	EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error
 
 	// EmitDDLEvent sends DDL Event to Sink
 	// EmitDDLEvent should execute DDL to downstream synchronously
+	//
+	// EmitDDLEvent is thread-safe.
+	// FIXME: some sink implementation, they should be.
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 
+<<<<<<< HEAD
 	// FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
 	// TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
 	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error)
+=======
+	// FlushRowChangedEvents flushes each row which of commitTs less than or
+	// equal to `resolvedTs` into downstream.
+	// TiCDC guarantees that all the Events whose commitTs is less than or
+	// equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
+	//
+	// FlushRowChangedEvents is thread-safe.
+	// FIXME: some sink implementation, they should be.
+	FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error)
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 
-	// EmitCheckpointTs sends CheckpointTs to Sink
-	// TiCDC guarantees that all Events **in the cluster** which of commitTs less than or equal `checkpointTs` are sent to downstream successfully.
+	// EmitCheckpointTs sends CheckpointTs to Sink.
+	// TiCDC guarantees that all Events **in the cluster** which of commitTs
+	// less than or equal `checkpointTs` are sent to downstream successfully.
+	//
+	// EmitCheckpointTs is thread-safe.
+	// FIXME: some sink implementation, they should be.
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
 
-	// Close closes the Sink
+	// Close closes the Sink.
+	//
+	// Close is thread-safe and idempotent.
 	Close(ctx context.Context) error
 
+<<<<<<< HEAD
 	// Barrier is a synchronous function to wait all events to be flushed in underlying sink
 	// Note once Barrier is called, the resolved ts won't be pushed until the Barrier call returns.
 	Barrier(ctx context.Context) error
+=======
+	// Barrier is a synchronous function to wait all events to be flushed
+	// in underlying sink.
+	// Note once Barrier is called, the resolved ts won't be pushed until
+	// the Barrier call returns.
+	//
+	// Barrier is thread-safe.
+	Barrier(ctx context.Context, tableID model.TableID) error
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 }
 
 var sinkIniterMap = make(map[string]sinkInitFunc)

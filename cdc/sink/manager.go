@@ -15,11 +15,13 @@ package sink
 
 import (
 	"context"
+<<<<<<< HEAD
 	"math"
 	"sort"
+=======
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -29,6 +31,7 @@ import (
 	"go.uber.org/zap"
 )
 
+<<<<<<< HEAD
 const (
 	defaultMetricInterval = time.Second * 15
 )
@@ -39,9 +42,17 @@ type Manager struct {
 	checkpointTs model.Ts
 	tableSinks   map[model.TableID]*tableSink
 	tableSinksMu sync.Mutex
-
-	flushMu  sync.Mutex
-	flushing int64
+=======
+// Manager manages table sinks, maintains the relationship between table sinks
+// and backendSink.
+// Manager is thread-safe.
+type Manager struct {
+	bufSink                *bufferSink
+	tableCheckpointTsMap   sync.Map
+	tableSinks             map[model.TableID]*tableSink
+	tableSinksMu           sync.Mutex
+	changeFeedCheckpointTs uint64
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 
 	drawbackChan chan drawbackMsg
 
@@ -56,9 +67,16 @@ func NewManager(
 	captureAddr string, changefeedID model.ChangeFeedID,
 ) *Manager {
 	drawbackChan := make(chan drawbackMsg, 16)
+	bufSink := newBufferSink(backendSink, checkpointTs, drawbackChan)
+	go bufSink.run(ctx, errCh)
 	return &Manager{
+<<<<<<< HEAD
 		backendSink:               newBufferSink(ctx, backendSink, errCh, checkpointTs, drawbackChan),
 		checkpointTs:              checkpointTs,
+=======
+		bufSink:                   bufSink,
+		changeFeedCheckpointTs:    checkpointTs,
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 		tableSinks:                make(map[model.TableID]*tableSink),
 		drawbackChan:              drawbackChan,
 		captureAddr:               captureAddr,
@@ -75,10 +93,17 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) 
 		log.Panic("the table sink already exists", zap.Uint64("tableID", uint64(tableID)))
 	}
 	sink := &tableSink{
+<<<<<<< HEAD
 		tableID:   tableID,
 		manager:   m,
 		buffer:    make([]*model.RowChangedEvent, 0, 128),
 		emittedTs: checkpointTs,
+=======
+		tableID:     tableID,
+		manager:     m,
+		buffer:      make([]*model.RowChangedEvent, 0, 128),
+		redoManager: redoManager,
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 	}
 	m.tableSinks[tableID] = sink
 	return sink
@@ -86,6 +111,7 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) 
 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
 func (m *Manager) Close(ctx context.Context) error {
+<<<<<<< HEAD
 	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
 	return m.backendSink.Close(ctx)
 }
@@ -102,10 +128,18 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 		if minTs > emittedTs {
 			minTs = emittedTs
 		}
+=======
+	m.tableSinksMu.Lock()
+	defer m.tableSinksMu.Unlock()
+	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
+	if m.bufSink != nil {
+		return m.bufSink.Close(ctx)
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 	}
-	return minTs
+	return nil
 }
 
+<<<<<<< HEAD
 func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
 	// NOTICE: Because all table sinks will try to flush backend sink,
 	// which will cause a lot of lock contention and blocking in high concurrency cases.
@@ -123,6 +157,10 @@ func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
 	}()
 	minEmittedTs := m.getMinEmittedTs()
 	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
+=======
+func (m *Manager) flushBackendSink(ctx context.Context, tableID model.TableID, resolvedTs uint64) (model.Ts, error) {
+	checkpointTs, err := m.bufSink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 	if err != nil {
 		return m.getCheckpointTs(), errors.Trace(err)
 	}
@@ -145,7 +183,11 @@ func (m *Manager) destroyTableSink(ctx context.Context, tableID model.TableID) e
 		return ctx.Err()
 	case <-callback:
 	}
+<<<<<<< HEAD
 	return m.backendSink.Barrier(ctx)
+=======
+	return m.bufSink.Barrier(ctx, tableID)
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 }
 
 func (m *Manager) getCheckpointTs() uint64 {
@@ -171,6 +213,7 @@ func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	return nil
 }
 
+<<<<<<< HEAD
 func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	// the table sink doesn't receive the DDL event
 	return nil
@@ -210,6 +253,12 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	ckpt, err := t.manager.flushBackendSink(ctx)
 	if err != nil {
 		return ckpt, err
+=======
+func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
+	atomic.StoreUint64(&m.changeFeedCheckpointTs, checkpointTs)
+	if m.bufSink != nil {
+		m.bufSink.UpdateChangeFeedCheckpointTs(checkpointTs)
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 	}
 	logAbnormalCheckpoint(ckpt)
 	return ckpt, err
