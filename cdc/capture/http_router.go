@@ -31,12 +31,6 @@ import (
 	_ "github.com/pingcap/ticdc/api"
 )
 
-//type discard struct{}
-//
-//func (discard) Write(p []byte) (int, error) {
-//	return len(p), nil
-//}
-
 // NewRouter create a router for OpenAPI
 func NewRouter(handler HTTPHandler) *gin.Engine {
 	router := gin.New()
