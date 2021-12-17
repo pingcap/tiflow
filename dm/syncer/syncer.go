@@ -141,7 +141,8 @@ type Syncer struct {
 
 	schemaTracker *schema.Tracker
 
-	fromDB *dbconn.UpStreamConn
+	fromDB   *dbconn.UpStreamConn
+	fromConn *dbconn.DBConn
 
 	toDB                *conn.BaseDB
 	toDBConns           []*dbconn.DBConn
@@ -231,6 +232,7 @@ type Syncer struct {
 
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
+	idAndCollationMap          map[int]string
 }
 
 // NewSyncer creates a new Syncer.
@@ -332,7 +334,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
-	s.charsetAndDefaultCollation, err = s.fromDB.GetCharsetAndDefaultCollation(ctx)
+	s.charsetAndDefaultCollation, s.idAndCollationMap, err = dbconn.GetCharsetAndCollationInfo(tctx, s.fromConn)
 	if err != nil {
 		return err
 	}
@@ -3035,10 +3037,12 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	var err error
 	dbCfg := s.cfg.From
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	s.fromDB, err = dbconn.NewUpStreamConn(&dbCfg)
+	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 1)
 	if err != nil {
 		return err
 	}
+	s.fromDB = &dbconn.UpStreamConn{BaseDB: fromDB}
+	s.fromConn = fromConns[0]
 	conn, err := s.fromDB.BaseDB.GetBaseConn(ctx)
 	if err != nil {
 		return err
