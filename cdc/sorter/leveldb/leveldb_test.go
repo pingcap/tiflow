@@ -22,11 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
-	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/db"
-	"github.com/pingcap/ticdc/pkg/leakutil"
+	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/db"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 )

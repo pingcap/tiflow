@@ -26,7 +26,7 @@ for (KafkaMessage kafkaMessage : kafkaMessages) {
 }
 
 ```
-[See com.pingcap.ticdc.cdc.TicdcEventDecoderTest.](src/test/java/com/pingcap/ticdc/cdc/TicdcEventDecoderTest.java).
+[See com.pingcap.ticdc.cdc.TicdcEventDecoderTest.](src/test/java/com/pingcap/tiflow/cdc/TicdcEventDecoderTest.java).
 
 # How to install
 Prerequisites for building:
@@ -36,7 +36,7 @@ Prerequisites for building:
 * Java 8
 
 ```
-git clone git@github.com:pingcap/ticdc.git
+git clone git@github.com:pingcap/tiflow.git
 cd ticdc/examples/java
 mvn install
 ```
