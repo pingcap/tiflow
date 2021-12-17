@@ -15,9 +15,9 @@ package tests
 
 import (
 	"errors"
-	"log"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 	"github.com/pingcap/ticdc/integration/framework/avro"
 	"github.com/pingcap/ticdc/integration/framework/canal"
