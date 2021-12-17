@@ -542,13 +542,30 @@ func newAvroEventBatchEncoderBuilder(credential *security.Credential, opts map[s
 		return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
 	}
 
+	topic, ok := opts["topic"]
+	if !ok {
+		topic = ""
+	}
+
+	nameStrategy, ok := opts["nameStrategy"]
+	if !ok {
+		switch nameStrategy {
+		case "topic":
+			nameStrategy = "topic"
+		case "legacy", "":
+			nameStrategy = "legacy"
+		default:
+			return nil, fmt.Errorf("invalid name strategy %s", nameStrategy)
+		}
+	}
+
 	ctx := context.Background()
-	keySchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, keySchemaSuffix)
+	keySchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, keySchemaSuffix, topic, nameStrategy)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	valueSchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, valueSchemaSuffix)
+	valueSchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, valueSchemaSuffix, topic, nameStrategy)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

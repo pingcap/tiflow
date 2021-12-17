@@ -42,6 +42,8 @@ import (
 type AvroSchemaManager struct {
 	registryURL   string
 	subjectSuffix string
+	topic         string
+	nameStrategy  string
 
 	credential *security.Credential
 
@@ -73,7 +75,7 @@ type lookupResponse struct {
 
 // NewAvroSchemaManager creates a new AvroSchemaManager
 func NewAvroSchemaManager(
-	ctx context.Context, credential *security.Credential, registryURL string, subjectSuffix string,
+	ctx context.Context, credential *security.Credential, registryURL string, subjectSuffix string, topic string, nameStrategy string,
 ) (*AvroSchemaManager, error) {
 	registryURL = strings.TrimRight(registryURL, "/")
 	// Test connectivity to the Schema Registry
@@ -108,6 +110,8 @@ func NewAvroSchemaManager(
 		registryURL:   registryURL,
 		cache:         make(map[string]*schemaCacheEntry, 1),
 		subjectSuffix: subjectSuffix,
+		topic:         topic,
+		nameStrategy:  nameStrategy,
 		credential:    credential,
 	}, nil
 }
@@ -385,6 +389,12 @@ func httpRetry(ctx context.Context, credential *security.Credential, r *http.Req
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 || (resp.StatusCode == 404 && allow404) {
 			break
 		}
+
+		// Avoid retrying "HTTP 409 Conflict"
+		if resp.StatusCode == 409 {
+			return nil, errors.New("HTTP server returned status code 409, indicating conflict")
+		}
+
 		log.Warn("HTTP server returned with error", zap.Int("status", resp.StatusCode))
 		_ = resp.Body.Close()
 
@@ -404,5 +414,8 @@ func httpRetry(ctx context.Context, credential *security.Credential, r *http.Req
 
 func (m *AvroSchemaManager) tableNameToSchemaSubject(tableName model.TableName) string {
 	// We should guarantee unique names for subjects
+	if m.nameStrategy == "topic" {
+		return m.topic + m.subjectSuffix
+	}
 	return tableName.Schema + "_" + tableName.Table + m.subjectSuffix
 }
