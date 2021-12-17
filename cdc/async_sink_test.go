@@ -43,11 +43,6 @@ type mockAsyncSink struct {
 	ddlError      error
 }
 
-func (m *mockAsyncSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	m.initTableInfo = tableInfo
-	return nil
-}
-
 func (m *mockAsyncSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	atomic.StoreUint64(&m.checkpointTs, ts)
 	return nil
@@ -85,17 +80,6 @@ func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, 
 	mockAsyncSink := &mockAsyncSink{}
 	sink.(*asyncSinkImpl).sink = mockAsyncSink
 	return ctx, sink, mockAsyncSink
-}
-
-func (s *asyncSinkSuite) TestInitialize(c *check.C) {
-	defer testleak.AfterTest(c)()
-	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, sink, mockAsyncSink := newAsyncSink4Test(ctx, c)
-	defer sink.Close(ctx)
-	tableInfos := []*model.SimpleTableInfo{{Schema: "test"}}
-	err := sink.Initialize(ctx, tableInfos)
-	c.Assert(err, check.IsNil)
-	c.Assert(tableInfos, check.DeepEquals, mockAsyncSink.initTableInfo)
 }
 
 func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
