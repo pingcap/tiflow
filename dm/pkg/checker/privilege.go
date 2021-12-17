@@ -32,9 +32,9 @@ import (
 
 var (
 	dumpPrivileges = map[mysql.PrivilegeType]struct{}{
-		mysql.SelectPriv:            {},
-		mysql.ReplicationClientPriv: {},
-		mysql.ReplicationSlavePriv:  {},
+		mysql.SelectPriv: {},
+		// mysql.ReplicationClientPriv: {},
+		// mysql.ReplicationSlavePriv:  {},
 	}
 	replicationPrivileges = map[mysql.PrivilegeType]struct{}{
 		mysql.ReplicationClientPriv: {},

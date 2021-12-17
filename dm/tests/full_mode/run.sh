@@ -17,11 +17,11 @@ function fail_acquire_global_lock() {
 	cp $cur/data/db1.prepare.user.sql $WORK_DIR/db1.prepare.user.sql
 	sed -i "/revoke create temporary/i\revoke reload on *.* from 'dm_full'@'%';" $WORK_DIR/db1.prepare.user.sql
 	run_sql_file $WORK_DIR/db1.prepare.user.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	check_count 'Query OK, 0 rows affected' 7
+	check_count 'Query OK, 0 rows affected' 8
 	cp $cur/data/db2.prepare.user.sql $WORK_DIR/db2.prepare.user.sql
 	sed -i "/revoke create temporary/i\revoke reload on *.* from 'dm_full'@'%';" $WORK_DIR/db2.prepare.user.sql
 	run_sql_file $WORK_DIR/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	check_count 'Query OK, 0 rows affected' 7
+	check_count 'Query OK, 0 rows affected' 8
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -79,9 +79,9 @@ function escape_schema() {
 	run_sql_source1 "insert into \`full/mode\`.\`tb\/1\` values(2,'hihi');"
 
 	run_sql_file $cur/data/db1.prepare.user.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	check_count 'Query OK, 0 rows affected' 6
+	check_count 'Query OK, 0 rows affected' 7
 	run_sql_file $cur/data/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	check_count 'Query OK, 0 rows affected' 6
+	check_count 'Query OK, 0 rows affected' 7
 
 	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/dumpling/SkipRemovingDumplingMetrics=return("")'
 
@@ -164,9 +164,9 @@ function run() {
 	run_sql_source1 "insert into full_mode.\`tb\"1\` values(2,'hihi');"
 
 	run_sql_file $cur/data/db1.prepare.user.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	check_count 'Query OK, 0 rows affected' 6
+	check_count 'Query OK, 0 rows affected' 7
 	run_sql_file $cur/data/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	check_count 'Query OK, 0 rows affected' 6
+	check_count 'Query OK, 0 rows affected' 7
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
