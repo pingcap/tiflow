@@ -17,18 +17,11 @@ import (
 	"errors"
 	"time"
 
-<<<<<<< HEAD:integration/tests/case_date_time.go
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 	"github.com/pingcap/ticdc/integration/framework/avro"
 	"github.com/pingcap/ticdc/integration/framework/canal"
 	"github.com/pingcap/ticdc/integration/framework/mysql"
-=======
-	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
-	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/avro"
-	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/canal"
-	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework/mysql"
->>>>>>> 2ed02366d (pkg,cdc: do not use log package (#3902)):tests/mq_protocol_tests/cases/case_date_time.go
 )
 
 // DateTimeCase is base impl of test case for different types data
