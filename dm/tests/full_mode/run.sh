@@ -52,7 +52,7 @@ function fail_acquire_global_lock() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Paused\"" 2 \
+		"\"stage\": \"Paused\"" 3 \
 		"you need (at least one of) the RELOAD privilege(s) for this operation" 2
 
 	cleanup_data full_mode
