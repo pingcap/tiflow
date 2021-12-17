@@ -31,6 +31,16 @@ func (t JSONTime) MarshalJSON() ([]byte, error) {
 	return []byte(stamp), nil
 }
 
+// UnmarshalJSON used to parse time.Time from bytes
+func (t *JSONTime) UnmarshalJSON(data []byte) error {
+	tm, err := time.Parse(`"2006-01-02 15:04:05.000"`, string(data))
+	if err != nil {
+		return err
+	}
+	*t = JSONTime(tm)
+	return nil
+}
+
 // HTTPError of cdc http api
 type HTTPError struct {
 	Error string `json:"error_msg"`
