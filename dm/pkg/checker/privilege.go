@@ -35,6 +35,7 @@ var (
 		// mysql.ReloadPriv:            {},
 		mysql.SelectPriv:            {},
 		mysql.ReplicationClientPriv: {},
+		mysql.ReplicationSlavePriv:  {},
 		// mysql.LockTablesPriv:        {},
 		// mysql.ProcessPriv:           {},
 	}

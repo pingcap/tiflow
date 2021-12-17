@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
+	plog "github.com/pingcap/log"
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -183,10 +184,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 
-		if !checkingShard && !checkSchema {
-			continue
-		}
-
 		mapping, err := utils.FetchTargetDoTables(ctx, instance.sourceDB.DB, bw, r)
 		if err != nil {
 			return err
@@ -238,7 +235,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.checkList = append(c.checkList, checker.NewShardingTablesChecker(name, dbs, shardingSet, columnMapping, checkingShardID))
 		}
 	}
-
+	plog.Info(c.displayCheckingItems())
 	c.logger.Info(c.displayCheckingItems())
 	return nil
 }
