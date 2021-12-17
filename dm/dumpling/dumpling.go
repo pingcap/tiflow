@@ -280,7 +280,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 
 	extraArgs := strings.Fields(cfg.ExtraArgs)
 	if len(extraArgs) > 0 {
-		err := parseExtraArgs(&m.logger, dumpConfig, ParseArgLikeBash(extraArgs))
+		err := dutils.ParseExtraArgs(&m.logger, dumpConfig, dutils.ParseArgLikeBash(extraArgs))
 		if err != nil {
 			m.logger.Warn("parsed some unsupported arguments", zap.Error(err))
 		}
