@@ -24,6 +24,7 @@ import (
 	ssystem "github.com/pingcap/ticdc/cdc/sorter/leveldb/system"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/p2p"
 	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -49,6 +50,10 @@ type GlobalVars struct {
 
 	// OwnerRevision is the Etcd revision when the owner got elected.
 	OwnerRevision int64
+
+	// MessageServer and MessageRouter are for peer-messaging
+	MessageServer *p2p.MessageServer
+	MessageRouter p2p.MessageRouter
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline
@@ -187,9 +192,10 @@ func (ctx *throwContext) Throw(err error) {
 	}
 }
 
-// NewBackendContext4Test returns a new pipeline context for test
-func NewBackendContext4Test(withChangefeedVars bool) Context {
-	ctx := NewContext(context.Background(), &GlobalVars{
+// NewBackendContext4Test returns a new pipeline context for test, and use the
+// given context as parent context
+func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
+	ctx := NewContext(baseCtx, &GlobalVars{
 		CaptureInfo: &model.CaptureInfo{
 			ID:            "capture-id-test",
 			AdvertiseAddr: "127.0.0.1:0000",
@@ -207,6 +213,12 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 		})
 	}
 	return ctx
+}
+
+// NewBackendContext4Test returns a new pipeline context for test, and us
+// context.Background() as ethe parent context
+func NewBackendContext4Test(withChangefeedVars bool) Context {
+	return NewContext4Test(context.Background(), withChangefeedVars)
 }
 
 // ZapFieldCapture returns a zap field containing capture address

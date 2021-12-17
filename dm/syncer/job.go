@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
@@ -33,10 +34,12 @@ const (
 	ddl
 	xid
 	flush
+	asyncFlush
 	skip // used by Syncer.recordSkipSQLsLocation to record global location, but not execute SQL
 	rotate
 	conflict
 	compact
+	gc // used to clean up out dated causality keys
 )
 
 func (t opType) String() string {
@@ -53,6 +56,8 @@ func (t opType) String() string {
 		return "xid"
 	case flush:
 		return "flush"
+	case asyncFlush:
+		return "asyncFlush"
 	case skip:
 		return "skip"
 	case rotate:
@@ -61,6 +66,8 @@ func (t opType) String() string {
 		return "conflict"
 	case compact:
 		return "compact"
+	case gc:
+		return "gc"
 	}
 
 	return ""
@@ -82,7 +89,9 @@ type job struct {
 	originSQL       string // show origin sql when error, only DDL now
 
 	eventHeader *replication.EventHeader
-	jobAddTime  time.Time // job commit time
+	jobAddTime  time.Time       // job commit time
+	flushSeq    int64           // sequence number for sync and async flush job
+	flushWg     *sync.WaitGroup // wait group for sync, async and conflict job
 }
 
 func (j *job) clone() *job {
@@ -97,7 +106,7 @@ func (j *job) String() string {
 	if j.dml != nil {
 		dmlStr = j.dml.String()
 	}
-	return fmt.Sprintf("tp: %s, dml: %s, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, dmlStr, j.ddls, j.location, j.startLocation, j.currentLocation)
+	return fmt.Sprintf("tp: %s, flushSeq: %d, dml: %s, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, j.flushSeq, dmlStr, j.ddls, j.location, j.startLocation, j.currentLocation)
 }
 
 func newDMLJob(tp opType, sourceTable, targetTable *filter.Table, dml *DML, ec *eventContext) *job {
@@ -171,19 +180,48 @@ func newXIDJob(location, startLocation, currentLocation binlog.Location) *job {
 	}
 }
 
-func newFlushJob() *job {
+func newFlushJob(workerCount int, seq int64) *job {
+	wg := &sync.WaitGroup{}
+	wg.Add(workerCount)
+
 	return &job{
 		tp:          flush,
 		targetTable: &filter.Table{},
 		jobAddTime:  time.Now(),
+		flushWg:     wg,
+		flushSeq:    seq,
 	}
 }
 
-func newConflictJob() *job {
+func newAsyncFlushJob(workerCount int, seq int64) *job {
+	wg := &sync.WaitGroup{}
+	wg.Add(workerCount)
+
+	return &job{
+		tp:          asyncFlush,
+		targetTable: &filter.Table{},
+		jobAddTime:  time.Now(),
+		flushWg:     wg,
+		flushSeq:    seq,
+	}
+}
+
+func newGCJob(flushJobSeq int64) *job {
+	return &job{
+		tp:       gc,
+		flushSeq: flushJobSeq,
+	}
+}
+
+func newConflictJob(workerCount int) *job {
+	wg := &sync.WaitGroup{}
+	wg.Add(workerCount)
+
 	return &job{
 		tp:          conflict,
 		targetTable: &filter.Table{},
 		jobAddTime:  time.Now(),
+		flushWg:     wg,
 	}
 }
 
