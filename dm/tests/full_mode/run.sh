@@ -52,7 +52,7 @@ function fail_acquire_global_lock() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Paused\"" 3 \
+		"\"stage\": \"Paused\"" 2 \
 		"you need (at least one of) the RELOAD privilege(s) for this operation" 2
 
 	cleanup_data full_mode
@@ -79,9 +79,9 @@ function escape_schema() {
 	run_sql_source1 "insert into \`full/mode\`.\`tb\/1\` values(2,'hihi');"
 
 	run_sql_file $cur/data/db1.prepare.user.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	check_count 'Query OK, 0 rows affected' 7
+	check_count 'Query OK, 0 rows affected' 6
 	run_sql_file $cur/data/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	check_count 'Query OK, 0 rows affected' 7
+	check_count 'Query OK, 0 rows affected' 6
 
 	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/dumpling/SkipRemovingDumplingMetrics=return("")'
 
@@ -164,9 +164,9 @@ function run() {
 	run_sql_source1 "insert into full_mode.\`tb\"1\` values(2,'hihi');"
 
 	run_sql_file $cur/data/db1.prepare.user.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	check_count 'Query OK, 0 rows affected' 7
+	check_count 'Query OK, 0 rows affected' 6
 	run_sql_file $cur/data/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	check_count 'Query OK, 0 rows affected' 7
+	check_count 'Query OK, 0 rows affected' 6
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
