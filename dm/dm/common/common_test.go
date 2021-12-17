@@ -110,7 +110,6 @@ func (t *testCommon) TestEncodeAsPrefix(c *C) {
 		_, err := ca.adapter.Decode(encKey)
 		c.Assert(err, NotNil)
 	}
-
 }
 
 func (t *testCommon) TestIsErrNetClosing(c *C) {

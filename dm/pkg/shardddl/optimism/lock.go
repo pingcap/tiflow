@@ -438,6 +438,21 @@ func (l *Lock) TryRemoveTable(source, schema, table string) bool {
 	return true
 }
 
+// HasTables check whether a lock has tables
+func (l *Lock) HasTables() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	for _, schemas := range l.tables {
+		for _, tables := range schemas {
+			for range tables {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // IsSynced returns whether the lock has synced.
 // In the optimistic mode, we call it `synced` if table info of all tables are the same,
 // and we define `remain` as the table count which have different table info with the joined one,

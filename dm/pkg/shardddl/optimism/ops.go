@@ -71,7 +71,7 @@ func DeleteInfosOperationsSchemaColumn(cli *clientv3.Client, infos []Info, ops [
 }
 
 // DeleteInfosOperationsTablesSchemasByTask deletes the shard DDL infos and operations in etcd.
-func DeleteInfosOperationsTablesSchemasByTask(cli *clientv3.Client, task string, lockIDSet map[string]struct{}) (int64, error) {
+func DeleteInfosOperationsTablesByTask(cli *clientv3.Client, task string, lockIDSet map[string]struct{}) (int64, error) {
 	opsDel := make([]clientv3.Op, 0, 5)
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Encode(task), clientv3.WithPrefix()))
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismOperationKeyAdapter.Encode(task), clientv3.WithPrefix()))
@@ -79,6 +79,16 @@ func DeleteInfosOperationsTablesSchemasByTask(cli *clientv3.Client, task string,
 	for lockID := range lockIDSet {
 		opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismDroppedColumnsKeyAdapter.Encode(lockID), clientv3.WithPrefix()))
 	}
+	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, opsDel...)
+	return rev, err
+}
+
+// DeleteInfosOperationsTablesByTaskAndSource deletes the shard DDL infos and operations in etcd by task and source.
+func DeleteInfosOperationsTablesByTaskAndSource(cli *clientv3.Client, task string, source string) (int64, error) {
+	opsDel := make([]clientv3.Op, 0, 5)
+	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Encode(task), clientv3.WithPrefix()))
+	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismOperationKeyAdapter.Encode(task), clientv3.WithPrefix()))
+	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismSourceTablesKeyAdapter.Encode(task), clientv3.WithPrefix()))
 	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, opsDel...)
 	return rev, err
 }

@@ -722,11 +722,18 @@ func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, ta
 			table := tables[j]
 			ti := tis[j]
 			sourceSchema, sourceTable := table.Schema, table.Name
-			point := newBinlogPoint(binlog.NewLocation(cp.cfg.Flavor), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+
+			var point *binlogPoint
+			// if point already in memory, use it
 			if tablePoints, ok := cp.points[sourceSchema]; ok {
 				if p, ok2 := tablePoints[sourceTable]; ok2 {
 					point = p
 				}
+			}
+			// create new point
+			if point == nil {
+				cp.saveTablePoint(table, cp.globalPoint.MySQLLocation(), nil)
+				point = cp.points[sourceSchema][sourceTable]
 			}
 			tiBytes, err := json.Marshal(ti)
 			if err != nil {

@@ -298,6 +298,24 @@ func deleteInfoOp(info Info) clientv3.Op {
 		info.Task, info.Source, info.UpSchema, info.UpTable))
 }
 
+// GetInfosByTaskAndSource gets all shard DDL info and operation by task and source in etcd currently.
+func GetInfosByTaskAndSource(cli *clientv3.Client, task string, source string) ([]Info, int64, error) {
+	respTxn, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.ShardDDLOptimismInfoKeyAdapter.Encode(task, source), clientv3.WithPrefix()))
+	if err != nil {
+		return nil, 0, err
+	}
+	infoResp := respTxn.Responses[0].GetResponseRange()
+	infos := make([]Info, 0, len(infoResp.Kvs))
+	for _, kv := range infoResp.Kvs {
+		info, err2 := infoFromJSON(string(kv.Value))
+		if err2 != nil {
+			return nil, 0, err2
+		}
+		infos = append(infos, info)
+	}
+	return infos, respTxn.Header.Revision, nil
+}
+
 // ClearTestInfoOperationSchema is used to clear all shard DDL information in optimism mode.
 // it only used for testing now.
 func ClearTestInfoOperationSchema(cli *clientv3.Client) error {

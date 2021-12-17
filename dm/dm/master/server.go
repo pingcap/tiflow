@@ -551,7 +551,16 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 	}
 	var err error
 	if expect == pb.Stage_Stopped {
-		err = s.scheduler.RemoveSubTasks(req.Name, sources...)
+		if err = s.scheduler.RemoveSubTasks(req.Name, sources...); err != nil {
+			resp.Msg = err.Error()
+			// nolint:nilerr
+			return resp, nil
+		}
+		if len(req.Sources) == 0 {
+			err = s.optimist.RemoveMetaDataWithTask(req.Name)
+		} else {
+			err = s.optimist.RemoveMetaDataWithTaskAndSources(req.Name, sources...)
+		}
 	} else {
 		err = s.scheduler.UpdateExpectSubTaskStage(expect, req.Name, sources...)
 	}
@@ -1502,7 +1511,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	if err != nil {
 		return err
 	}
-	err = s.optimist.RemoveMetaData(taskName)
+	err = s.optimist.RemoveMetaDataWithTask(taskName)
 	if err != nil {
 		return err
 	}

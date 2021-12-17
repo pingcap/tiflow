@@ -163,7 +163,7 @@ func (o *Optimist) ShowLocks(task string, sources []string) []*pb.DDLLock {
 
 // RemoveMetaData removes meta data for a specified task
 // NOTE: this function can only be used when the specified task is not running.
-func (o *Optimist) RemoveMetaData(task string) error {
+func (o *Optimist) RemoveMetaDataWithTask(task string) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.closed {
@@ -187,8 +187,43 @@ func (o *Optimist) RemoveMetaData(task string) error {
 	o.tk.RemoveTableByTask(task)
 
 	// clear meta data in etcd
-	_, err = optimism.DeleteInfosOperationsTablesSchemasByTask(o.cli, task, lockIDSet)
+	_, err = optimism.DeleteInfosOperationsTablesByTask(o.cli, task, lockIDSet)
 	return err
+}
+
+// RemoveMetaDataWithTaskAndSources removes meta data for a specified task and sources
+// NOTE: this function can only be used when the specified task for source is not running.
+func (o *Optimist) RemoveMetaDataWithTaskAndSources(task string, sources ...string) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.closed {
+		return terror.ErrMasterOptimistNotStarted.Generate()
+	}
+
+	for _, source := range sources {
+		infos, _, err := optimism.GetInfosByTaskAndSource(o.cli, task, source)
+		if err != nil {
+			return err
+		}
+		for _, info := range infos {
+			lock := o.lk.FindLockByInfo(info)
+			if lock != nil {
+				removed := lock.TryRemoveTable(info.Source, info.UpSchema, info.UpTable)
+				o.logger.Debug("the table name remove from the table keeper", zap.Bool("removed", removed), zap.String("info", info.ShortString()))
+				removed = o.tk.RemoveTable(info.Task, info.Source, info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
+				o.logger.Debug("a table removed for info from the lock", zap.Bool("removed", removed), zap.String("info", info.ShortString()))
+			}
+			if !lock.HasTables() {
+				o.lk.RemoveLock(lock.ID)
+			}
+		}
+		// clear meta data in etcd
+		_, err = optimism.DeleteInfosOperationsTablesByTaskAndSource(o.cli, task, source)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // run runs jobs in the background.
