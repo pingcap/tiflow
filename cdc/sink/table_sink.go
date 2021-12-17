@@ -62,7 +62,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	resolvedRows := t.buffer[:i]
 	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
 
-	err := t.manager.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
+	err := t.manager.bufSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
 		return t.manager.getCheckpointTs(tableID), errors.Trace(err)
 	}
