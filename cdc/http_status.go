@@ -39,6 +39,9 @@ import (
 )
 
 func (s *Server) startStatusHTTP() error {
+	// discard gin log output
+	gin.DefaultWriter = io.Discard
+
 	conf := config.GetGlobalServerConfig()
 	router := capture.NewRouter(capture.NewHTTPHandler(s.capture))
 

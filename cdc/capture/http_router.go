@@ -15,7 +15,6 @@ package capture
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"net/http/pprof"
 	"strings"
@@ -32,11 +31,14 @@ import (
 	_ "github.com/pingcap/ticdc/api"
 )
 
+//type discard struct{}
+//
+//func (discard) Write(p []byte) (int, error) {
+//	return len(p), nil
+//}
+
 // NewRouter create a router for OpenAPI
 func NewRouter(handler HTTPHandler) *gin.Engine {
-	// discard gin log output
-	gin.DefaultWriter = io.Discard
-
 	router := gin.New()
 
 	router.Use(logMiddleware())
