@@ -549,14 +549,15 @@ func newAvroEventBatchEncoderBuilder(credential *security.Credential, opts map[s
 
 	nameStrategy, ok := opts["nameStrategy"]
 	if !ok {
-		switch nameStrategy {
-		case "topic":
-			nameStrategy = "topic"
-		case "legacy", "":
-			nameStrategy = "legacy"
-		default:
-			return nil, fmt.Errorf("invalid name strategy %s", nameStrategy)
-		}
+		return nil, fmt.Errorf("invalid name strategy %s", nameStrategy)
+	}
+	switch nameStrategy {
+	case "topic":
+		nameStrategy = "topic"
+	case "legacy", "":
+		nameStrategy = "legacy"
+	default:
+		return nil, fmt.Errorf("invalid name strategy %s", nameStrategy)
 	}
 
 	ctx := context.Background()
