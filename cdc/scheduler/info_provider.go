@@ -14,8 +14,8 @@
 package scheduler
 
 import (
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/scheduler/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/util"
 )
 
 // InfoProvider is the interface to get information about the internal states of the scheduler.

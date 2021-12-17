@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/pb"
 
 	"github.com/spf13/cobra"
 )

@@ -16,8 +16,8 @@ package leveldb
 import (
 	"testing"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/stretchr/testify/require"
 )
 
