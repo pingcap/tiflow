@@ -31,6 +31,11 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/gtid"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
+)
+
+var (
+	DumplingDefaultTableFilter = []string{"*.*", export.DefaultTableFilter}
 )
 
 // ParseMetaData parses mydumper's output meta file and returns binlog location.
@@ -250,7 +255,7 @@ func ParseExtraArgs(logger *log.Logger, dumpCfg *export.Config, args []string) e
 	dumplingFlagSet.Uint64VarP(&dumpCfg.Rows, "rows", "r", dumpCfg.Rows, "Split table into chunks of this many rows, default unlimited")
 	dumplingFlagSet.StringVar(&dumpCfg.Where, "where", dumpCfg.Where, "Dump only selected records")
 	dumplingFlagSet.BoolVar(&dumpCfg.EscapeBackslash, "escape-backslash", dumpCfg.EscapeBackslash, "Use backslash to escape quotation marks")
-	dumplingFlagSet.StringArrayVarP(&filters, "filter", "f", []string{"*.*", export.DefaultTableFilter}, "Filter to select which tables to dump")
+	dumplingFlagSet.StringArrayVarP(&filters, "filter", "f", DumplingDefaultTableFilter, "Filter to select which tables to dump")
 	dumplingFlagSet.StringVar(&dumpCfg.Security.CAPath, "ca", dumpCfg.Security.CAPath, "The path name to the certificate authority file for TLS connection")
 	dumplingFlagSet.StringVar(&dumpCfg.Security.CertPath, "cert", dumpCfg.Security.CertPath, "The path name to the client certificate file for TLS connection")
 	dumplingFlagSet.StringVar(&dumpCfg.Security.KeyPath, "key", dumpCfg.Security.KeyPath, "The path name to the client private key file for TLS connection")
@@ -280,7 +285,7 @@ func ParseExtraArgs(logger *log.Logger, dumpCfg *export.Config, args []string) e
 		}
 	}
 
-	if len(tablesList) > 0 || (len(filters) != 1 || filters[0] != "*.*") {
+	if len(tablesList) > 0 || !utils.NonRepeatStringsEqual(DumplingDefaultTableFilter, filters) {
 		ff, err2 := export.ParseTableFilter(tablesList, filters)
 		if err2 != nil {
 			return err2
