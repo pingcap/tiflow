@@ -136,7 +136,7 @@ func (s *contextSuite) TestThrowPanic(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer func() {
 		panicMsg := recover()
-		c.Assert(panicMsg, check.Equals, "an error has escaped, please report a bug{error 26 0  mock error}")
+		c.Assert(panicMsg, check.Equals, "an error has escaped, please report a bug")
 	}()
 	stdCtx := context.Background()
 	ctx := NewContext(stdCtx, &GlobalVars{})
