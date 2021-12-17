@@ -19,8 +19,8 @@ import (
 	"github.com/pingcap/check"
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"golang.org/x/text/encoding/charmap"
 )
 
