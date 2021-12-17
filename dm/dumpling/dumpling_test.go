@@ -130,7 +130,7 @@ func (t *testDumplingSuite) TestDefaultConfig(c *C) {
 }
 
 func (t *testDumplingSuite) TestCallStatus(c *C) {
-	m := NewDumpling(d.cfg)
+	m := NewDumpling(t.cfg)
 	ctx := context.Background()
 
 	dumpConf := export.DefaultConfig()
