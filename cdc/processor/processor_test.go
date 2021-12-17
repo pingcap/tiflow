@@ -52,6 +52,9 @@ func newProcessor4Test(
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *processor {
 	p := newProcessor(ctx)
+	// disable new scheduler to pass old test cases
+	// TODO refactor the test cases so that new scheduler can be enabled
+	p.newSchedulerEnabled = false
 	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
 	p.sinkManager = &sink.Manager{}
 	p.redoManager = redo.NewDisabledManager()
@@ -155,8 +158,12 @@ func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
 }
 
 type mockAgent struct {
+	// dummy to satisfy the interface
+	processorAgent
+
 	executor         scheduler.TableExecutor
 	lastCheckpointTs model.Ts
+	isClosed         bool
 }
 
 func (a *mockAgent) Tick(_ cdcContext.Context) error {
@@ -169,6 +176,11 @@ func (a *mockAgent) Tick(_ cdcContext.Context) error {
 
 func (a *mockAgent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
 	return a.lastCheckpointTs
+}
+
+func (a *mockAgent) Close() error {
+	a.isClosed = true
+	return nil
 }
 
 func (s *processorSuite) TestCheckTablesNum(c *check.C) {
@@ -510,7 +522,10 @@ func (s *processorSuite) TestTableExecutor(c *check.C) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, c)
 	p.newSchedulerEnabled = true
-	p.agent = &mockAgent{executor: p}
+	p.lazyInit = func(ctx cdcContext.Context) error {
+		p.agent = &mockAgent{executor: p}
+		return nil
+	}
 
 	var err error
 	// init tick
@@ -658,6 +673,10 @@ func (s *processorSuite) TestTableExecutor(c *check.C) {
 
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
 	c.Assert(checkpointTs, check.Equals, uint64(75))
+
+	err = p.Close()
+	c.Assert(err, check.IsNil)
+	c.Assert(p.agent, check.IsNil)
 }
 
 func (s *processorSuite) TestInitTable(c *check.C) {
@@ -937,6 +956,26 @@ func updateChangeFeedPosition(c *check.C, tester *orchestrator.ReactorStateTeste
 	c.Assert(err, check.IsNil)
 
 	tester.MustUpdate(keyStr, valueBytes)
+}
+
+func (s *processorSuite) TestIgnorableError(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	testCases := []struct {
+		err       error
+		ignorable bool
+	}{
+		{nil, true},
+		{cerror.ErrAdminStopProcessor.GenWithStackByArgs(), true},
+		{cerror.ErrReactorFinished.GenWithStackByArgs(), true},
+		{cerror.ErrRedoWriterStopped.GenWithStackByArgs(), true},
+		{errors.Trace(context.Canceled), true},
+		{cerror.ErrProcessorTableNotFound.GenWithStackByArgs(), false},
+		{errors.New("test error"), false},
+	}
+	for _, tc := range testCases {
+		c.Assert(isProcessorIgnorableError(tc.err), check.Equals, tc.ignorable)
+	}
 }
 
 func (s *processorSuite) TestUpdateBarrierTs(c *check.C) {
