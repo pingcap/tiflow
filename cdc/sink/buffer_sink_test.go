@@ -15,6 +15,8 @@ package sink
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -23,6 +25,8 @@ import (
 )
 
 func TestTableIsNotFlushed(t *testing.T) {
+	t.Parallel()
+
 	b := bufferSink{changeFeedCheckpointTs: 1}
 	require.Equal(t, uint64(1), b.getTableCheckpointTs(2))
 	b.UpdateChangeFeedCheckpointTs(3)
@@ -30,11 +34,13 @@ func TestTableIsNotFlushed(t *testing.T) {
 }
 
 func TestFlushTable(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.TODO())
-	defer func() {
-		cancel()
-	}()
-	b := newBufferSink(ctx, newBlackHoleSink(ctx, make(map[string]string)), make(chan error), 5, make(chan drawbackMsg))
+	defer cancel()
+	b := newBufferSink(newBlackHoleSink(ctx, make(map[string]string)), 5, make(chan drawbackMsg))
+	go b.run(ctx, make(chan error))
+
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(2))
 	require.Nil(t, b.EmitRowChangedEvents(ctx))
 	tbl1 := &model.TableName{TableID: 1}
@@ -73,8 +79,12 @@ func TestFlushTable(t *testing.T) {
 }
 
 func TestFlushFailed(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.TODO())
-	b := newBufferSink(ctx, newBlackHoleSink(ctx, make(map[string]string)), make(chan error), 5, make(chan drawbackMsg))
+	b := newBufferSink(newBlackHoleSink(ctx, make(map[string]string)), 5, make(chan drawbackMsg))
+	go b.run(ctx, make(chan error))
+
 	checkpoint, err := b.FlushRowChangedEvents(ctx, 3, 8)
 	require.True(t, checkpoint <= 8)
 	require.Nil(t, err)
@@ -88,4 +98,55 @@ func TestFlushFailed(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	require.Equal(t, uint64(8), b.getTableCheckpointTs(3))
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(1))
+}
+
+type benchSink struct {
+	Sink
+}
+
+func (b *benchSink) EmitRowChangedEvents(
+	ctx context.Context, rows ...*model.RowChangedEvent,
+) error {
+	return nil
+}
+
+func (b *benchSink) FlushRowChangedEvents(
+	ctx context.Context, tableID model.TableID, resolvedTs uint64,
+) (uint64, error) {
+	return 0, nil
+}
+
+func BenchmarkRun(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	state := runState{
+		metricFlushDuration:   flushRowChangedDuration.WithLabelValues(b.Name(), b.Name(), "Flush"),
+		metricEmitRowDuration: flushRowChangedDuration.WithLabelValues(b.Name(), b.Name(), "EmitRow"),
+		metricTotalRows:       bufferSinkTotalRowsCountCounter.WithLabelValues(b.Name(), b.Name()),
+	}
+
+	for exp := 0; exp < 9; exp++ {
+		count := int(math.Pow(4, float64(exp)))
+		s := newBufferSink(&benchSink{}, 5, make(chan drawbackMsg))
+		s.flushTsChan = make(chan flushMsg, count)
+		for i := 0; i < count; i++ {
+			s.buffer[int64(i)] = []*model.RowChangedEvent{{CommitTs: 5}}
+		}
+		b.ResetTimer()
+
+		b.Run(fmt.Sprintf("%d table(s)", count), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				for j := 0; j < count; j++ {
+					s.flushTsChan <- flushMsg{tableID: int64(0)}
+				}
+				for len(s.flushTsChan) != 0 {
+					keepRun, err := s.runOnce(ctx, &state)
+					if err != nil || !keepRun {
+						b.Fatal(keepRun, err)
+					}
+				}
+			}
+		})
+	}
 }
