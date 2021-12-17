@@ -16,8 +16,8 @@ package orchestrator
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator/util"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 )
 
 // ReactorStateTester is a helper struct for unit-testing an implementer of ReactorState
