@@ -17,6 +17,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -46,6 +47,8 @@ type Dumpling struct {
 
 	dumpConfig *export.Config
 	closed     atomic.Bool
+	core       *export.Dumper
+	mu         sync.RWMutex
 }
 
 // NewDumpling creates a new Dumpling.
@@ -117,7 +120,11 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	newCtx, cancel := context.WithCancel(ctx)
 	var dumpling *export.Dumper
+
 	if dumpling, err = export.NewDumper(newCtx, m.dumpConfig); err == nil {
+		m.mu.Lock()
+		m.core = dumpling
+		m.mu.Unlock()
 		err = dumpling.Dump()
 		dumpling.Close()
 	}
@@ -196,7 +203,20 @@ func (m *Dumpling) Update(context.Context, *config.SubTaskConfig) error {
 // Status implements Unit.Status.
 func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 	// NOTE: try to add some status, like dumped file count
-	return &pb.DumpStatus{}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.core == nil {
+		return &pb.DumpStatus{}
+	}
+	mid := m.core.GetParameters()
+	s := &pb.DumpStatus{
+		TotalTables:       mid.TotalTables,
+		CompletedTables:   mid.CompletedTables,
+		FinishedBytes:     mid.FinishedBytes,
+		FinishedRows:      mid.FinishedRows,
+		EstimateTotalRows: mid.EstimateTotalRows,
+	}
+	return s
 }
 
 // Type implements Unit.Type.
