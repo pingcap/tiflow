@@ -156,8 +156,8 @@ func genExpectGrants(privileges map[pmysql.PrivilegeType]struct{}, checkTables m
 			}
 		}
 		if p == pmysql.SelectPriv {
-			if _, ok := lackGrants[p]["INFORMATION_SCEMA"]; !ok {
-				lackGrants[p]["INFORMATION_SCEMA"] = make(map[string]struct{})
+			if _, ok := lackGrants[p]["INFORMATION_SCHEMA"]; !ok {
+				lackGrants[p]["INFORMATION_SCHEMA"] = make(map[string]struct{}, 1)
 			}
 		}
 	}

@@ -27,37 +27,35 @@ var _ = tc.Suite(&testCheckSuite{})
 
 type testCheckSuite struct{}
 
-func (t *testCheckSuite) TestVerifyPrivileges(c *tc.C) {
+func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 	cases := []struct {
-		grants           []string
-		checkTables      map[string][]string
-		dumpState        State
-		replicationState State
+		grants      []string
+		checkTables map[string][]string
+		dumpState   State
 	}{
 		{
-			grants:           nil, // non grants
-			dumpState:        StateFailure,
-			replicationState: StateFailure,
+			grants:    nil, // non grants
+			dumpState: StateFailure,
 		},
 		{
-			grants:           []string{"invalid SQL statement"},
-			dumpState:        StateFailure,
-			replicationState: StateFailure,
+			grants:    []string{"invalid SQL statement"},
+			dumpState: StateFailure,
 		},
 		{
-			grants:           []string{"CREATE DATABASE db1"}, // non GRANT statement
-			dumpState:        StateFailure,
-			replicationState: StateFailure,
+			grants:    []string{"CREATE DATABASE db1"}, // non GRANT statement
+			dumpState: StateFailure,
 		},
 		{
-			grants:           []string{"GRANT SELECT ON *.* TO 'user'@'%'"}, // lack necessary privilege
-			dumpState:        StateFailure,
-			replicationState: StateFailure,
+			grants:    []string{"GRANT SELECT, REPLICATION SLAVE ON *.* TO 'user'@'%'"}, // lack REPLICATION CLIENT privilege
+			dumpState: StateFailure,
 		},
 		{
-			grants:           []string{"GRANT REPLICATION SLAVE ON *.* TO 'user'@'%'"}, // lack necessary privilege
-			dumpState:        StateFailure,
-			replicationState: StateFailure,
+			grants:    []string{"GRANT SELECT, REPLICATION CLIENT ON *.* TO 'user'@'%'"}, // lack REPLICATION SLAVE privilege
+			dumpState: StateFailure,
+		},
+		{
+			grants:    []string{"GRANT REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'user'@'%'"}, // lack SELECT privilege
+			dumpState: StateFailure,
 		},
 		{
 			grants: []string{ // lack optional privilege
@@ -65,21 +63,7 @@ func (t *testCheckSuite) TestVerifyPrivileges(c *tc.C) {
 				"GRANT REPLICATION CLIENT ON *.* TO 'user'@'%'",
 				"GRANT EXECUTE ON FUNCTION db1.anomaly_score TO 'user1'@'domain-or-ip-address1'",
 			},
-			dumpState:        StateFailure,
-			replicationState: StateSuccess,
-			checkTables: map[string][]string{
-				"db1": {"anomaly_score"},
-			},
-		},
-		{
-			grants: []string{ // have privileges
-				"GRANT REPLICATION SLAVE ON *.* TO 'user'@'%'",
-				"GRANT REPLICATION CLIENT ON *.* TO 'user'@'%'",
-				"GRANT RELOAD ON *.* TO 'user'@'%'",
-				"GRANT EXECUTE ON FUNCTION db1.anomaly_score TO 'user1'@'domain-or-ip-address1'",
-			},
-			dumpState:        StateFailure,
-			replicationState: StateSuccess,
+			dumpState: StateFailure,
 			checkTables: map[string][]string{
 				"db1": {"anomaly_score"},
 			},
@@ -88,71 +72,61 @@ func (t *testCheckSuite) TestVerifyPrivileges(c *tc.C) {
 			grants: []string{ // have privileges
 				"GRANT REPLICATION SLAVE, REPLICATION CLIENT, RELOAD, SELECT, Lock Tables, Process ON *.* TO 'user'@'%'",
 			},
-			dumpState:        StateSuccess,
-			replicationState: StateSuccess,
+			dumpState: StateSuccess,
 		},
 		{
 			grants: []string{ // have privileges
 				"GRANT ALL PRIVILEGES ON *.* TO 'user'@'%'",
 			},
-			dumpState:        StateSuccess,
-			replicationState: StateSuccess,
+			dumpState: StateSuccess,
 		},
 		{
 			grants: []string{ // lower case
 				"GRANT all privileges ON *.* TO 'user'@'%'",
 			},
-			dumpState:        StateSuccess,
-			replicationState: StateSuccess,
+			dumpState: StateSuccess,
 		},
 		{
 			grants: []string{ // IDENTIFIED BY PASSWORD
 				"GRANT ALL PRIVILEGES ON *.* TO 'user'@'%' IDENTIFIED BY PASSWORD 'secret'",
 			},
-			dumpState:        StateSuccess,
-			replicationState: StateSuccess,
+			dumpState: StateSuccess,
 		},
 		{
 			grants: []string{ // IDENTIFIED BY PASSWORD
 				"GRANT ALL PRIVILEGES ON *.* TO 'user'@'%' IDENTIFIED BY PASSWORD 'password' WITH GRANT OPTION",
 			},
-			dumpState:        StateSuccess,
-			replicationState: StateSuccess,
+			dumpState: StateSuccess,
 		},
 		{
 			grants: []string{ // Aurora have `LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA`
 				"GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA, INVOKE SAGEMAKER, INVOKE COMPREHEND ON *.* TO 'root'@'%' WITH GRANT OPTION",
 			},
-			dumpState:        StateSuccess,
-			replicationState: StateSuccess,
+			dumpState: StateSuccess,
 		},
 		{
 			grants: []string{ // Aurora have `LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA`
 				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA, INVOKE SAGEMAKER, INVOKE COMPREHEND ON *.* TO 'root'@'%' WITH GRANT OPTION",
 			},
-			dumpState:        StateFailure,
-			replicationState: StateFailure,
+			dumpState: StateFailure,
 		},
 		{
 			grants: []string{ // test `LOAD FROM S3, SELECT INTO S3` not at end
 				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, SELECT ON *.* TO 'root'@'%' WITH GRANT OPTION",
 			},
-			dumpState:        StateSuccess,
-			replicationState: StateSuccess,
+			dumpState: StateSuccess,
 		},
 		{
 			grants: []string{ // ... and `LOAD FROM S3` at beginning, as well as not adjacent with `SELECT INTO S3`
 				"GRANT LOAD FROM S3, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, SELECT INTO S3, SELECT ON *.* TO 'root'@'%' WITH GRANT OPTION",
 			},
-			dumpState:        StateSuccess,
-			replicationState: StateSuccess,
+			dumpState: StateSuccess,
 		},
 		{
 			grants: []string{ // privilege on db/table level is not enough to execute SHOW MASTER STATUS
 				"GRANT ALL PRIVILEGES ON `medz`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 			},
-			dumpState:        StateFailure,
-			replicationState: StateFailure,
+			dumpState: StateFailure,
 			checkTables: map[string][]string{
 				"medz": {"medz"},
 			},
@@ -162,20 +136,19 @@ func (t *testCheckSuite) TestVerifyPrivileges(c *tc.C) {
 				"GRANT REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'user'@'%'",
 				"GRANT SELECT (c) ON `lance`.`t` TO 'user'@'%'",
 			},
-			dumpState:        StateFailure,
-			replicationState: StateSuccess,
+			dumpState: StateFailure,
 			checkTables: map[string][]string{
 				"lance": {"t"},
 			},
 		},
 		{
 			grants: []string{
-				"GRANT RELOAD, REPLICATION CLIENT, PROCESS ON *.* TO `u1`@`localhost`",
+				"GRANT RELOAD, REPLICATION CLIENT, REPLICATION SLAVE, PROCESS ON *.* TO `u1`@`localhost`",
 				"GRANT SELECT, INSERT, UPDATE, DELETE, LOCK TABLES ON `db1`.* TO `u1`@`localhost`",
+				"GRANT SELECT ON `INFORMATION_SCHEMA`.* TO `u1`@`localhost`",
 				"GRANT `r1`@`%`,`r2`@`%` TO `u1`@`localhost`",
 			},
-			dumpState:        StateSuccess,
-			replicationState: StateFailure,
+			dumpState: StateSuccess,
 			checkTables: map[string][]string{
 				"db1": {"t"},
 			},
@@ -186,8 +159,7 @@ func (t *testCheckSuite) TestVerifyPrivileges(c *tc.C) {
 				"GRANT APPLICATION_PASSWORD_ADMIN,AUDIT_ADMIN,BACKUP_ADMIN,BINLOG_ADMIN,BINLOG_ENCRYPTION_ADMIN,CLONE_ADMIN,CONNECTION_ADMIN,ENCRYPTION_KEY_ADMIN,GROUP_REPLICATION_ADMIN,INNODB_REDO_LOG_ARCHIVE,PERSIST_RO_VARIABLES_ADMIN,REPLICATION_APPLIER,REPLICATION_SLAVE_ADMIN,RESOURCE_GROUP_ADMIN,RESOURCE_GROUP_USER,ROLE_ADMIN,SERVICE_CONNECTION_ADMIN,SESSION_VARIABLES_ADMIN,SET_USER_ID,SYSTEM_USER,SYSTEM_VARIABLES_ADMIN,TABLE_ENCRYPTION_ADMIN,XA_RECOVER_ADMIN ON *.* TO `root`@`localhost` WITH GRANT OPTION",
 				"GRANT PROXY ON ''@'' TO 'root'@'localhost' WITH GRANT OPTION",
 			},
-			dumpState:        StateSuccess,
-			replicationState: StateSuccess,
+			dumpState: StateSuccess,
 		},
 	}
 
@@ -198,6 +170,99 @@ func (t *testCheckSuite) TestVerifyPrivileges(c *tc.C) {
 		dumpLackGrants := genDumpGrants(cs.checkTables)
 		verifyPrivileges(result, cs.grants, dumpLackGrants)
 		c.Assert(result.State, tc.Equals, cs.dumpState)
+	}
+}
+
+func (t *testCheckSuite) TestVerifyReplicationPrivileges(c *tc.C) {
+	cases := []struct {
+		grants           []string
+		checkTables      map[string][]string
+		replicationState State
+	}{
+		{
+			grants:           nil, // non grants
+			replicationState: StateFailure,
+		},
+		{
+			grants:           []string{"invalid SQL statement"},
+			replicationState: StateFailure,
+		},
+		{
+			grants:           []string{"CREATE DATABASE db1"}, // non GRANT statement
+			replicationState: StateFailure,
+		},
+		{
+			grants:           []string{"GRANT SELECT ON *.* TO 'user'@'%'"}, // lack necessary privilege
+			replicationState: StateFailure,
+		},
+		{
+			grants:           []string{"GRANT REPLICATION SLAVE ON *.* TO 'user'@'%'"}, // lack REPLICATION CLIENT privilege
+			replicationState: StateFailure,
+		},
+		{
+			grants:           []string{"GRANT REPLICATION CLIENT ON *.* TO 'user'@'%'"}, // lack REPLICATION SLAVE privilege
+			replicationState: StateFailure,
+		},
+		{
+			grants: []string{ // have privileges
+				"GRANT REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'user'@'%'",
+			},
+			replicationState: StateSuccess,
+		},
+		{
+			grants: []string{ // have privileges
+				"GRANT ALL PRIVILEGES ON *.* TO 'user'@'%'",
+			},
+			replicationState: StateSuccess,
+		},
+		{
+			grants: []string{ // lower case
+				"GRANT all privileges ON *.* TO 'user'@'%'",
+			},
+			replicationState: StateSuccess,
+		},
+		{
+			grants: []string{ // IDENTIFIED BY PASSWORD
+				"GRANT ALL PRIVILEGES ON *.* TO 'user'@'%' IDENTIFIED BY PASSWORD 'secret'",
+			},
+			replicationState: StateSuccess,
+		},
+		{
+			grants: []string{ // IDENTIFIED BY PASSWORD
+				"GRANT ALL PRIVILEGES ON *.* TO 'user'@'%' IDENTIFIED BY PASSWORD 'password' WITH GRANT OPTION",
+			},
+			replicationState: StateSuccess,
+		},
+		{
+			grants: []string{ // Aurora have `LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA`
+				"GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA, INVOKE SAGEMAKER, INVOKE COMPREHEND ON *.* TO 'root'@'%' WITH GRANT OPTION",
+			},
+			replicationState: StateSuccess,
+		},
+		{
+			grants: []string{ // Aurora have `LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA`
+				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA, INVOKE SAGEMAKER, INVOKE COMPREHEND ON *.* TO 'root'@'%' WITH GRANT OPTION",
+			},
+			replicationState: StateFailure,
+		},
+		{
+			grants: []string{ // test `LOAD FROM S3, SELECT INTO S3` not at end
+				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, SELECT ON *.* TO 'root'@'%' WITH GRANT OPTION",
+			},
+			replicationState: StateSuccess,
+		},
+		{
+			grants: []string{ // ... and `LOAD FROM S3` at beginning, as well as not adjacent with `SELECT INTO S3`
+				"GRANT LOAD FROM S3, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, SELECT INTO S3, SELECT ON *.* TO 'root'@'%' WITH GRANT OPTION",
+			},
+			replicationState: StateSuccess,
+		},
+	}
+
+	for _, cs := range cases {
+		result := &Result{
+			State: StateFailure,
+		}
 		replicationLackGrants := genReplicationGrants()
 		verifyPrivileges(result, cs.grants, replicationLackGrants)
 		c.Assert(result.State, tc.Equals, cs.replicationState)

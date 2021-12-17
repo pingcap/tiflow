@@ -32,12 +32,9 @@ import (
 
 var (
 	dumpPrivileges = map[mysql.PrivilegeType]struct{}{
-		// mysql.ReloadPriv:            {},
 		mysql.SelectPriv:            {},
 		mysql.ReplicationClientPriv: {},
 		mysql.ReplicationSlavePriv:  {},
-		// mysql.LockTablesPriv:        {},
-		// mysql.ProcessPriv:           {},
 	}
 	replicationPrivileges = map[mysql.PrivilegeType]struct{}{
 		mysql.ReplicationClientPriv: {},
@@ -270,6 +267,7 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 		privileges := strings.Join(lackGrantsStr, ",")
 		result.Errors = append(result.Errors, NewError(privileges))
 		result.Instruction = "You need grant related privileges."
+		log.Info(privileges)
 		return
 	}
 
