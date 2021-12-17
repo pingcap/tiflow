@@ -390,9 +390,6 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 	}
 	s.From.Password = cipher
 
-	// omit default values, so we can ignore them for later marshal
-	s.omitDefaultVals()
-
 	// not write this field when exporting
 	s.EnableRelay = false
 	return s.Yaml()
@@ -445,17 +442,6 @@ func NewSourceConfigForDowngrade(sourceCfg *SourceConfig) *SourceConfigForDowngr
 		Tracer:          sourceCfg.Tracer,
 		CaseSensitive:   sourceCfg.CaseSensitive,
 		Filters:         sourceCfg.Filters,
-	}
-}
-
-// omitDefaultVals change default value to empty value for new config item.
-// If any default value for new config item is not empty(0 or false or nil),
-// we should change it to empty.
-func (c *SourceConfigForDowngrade) omitDefaultVals() {
-	if len(c.From.Session) > 0 {
-		if timeZone, ok := c.From.Session["time_zone"]; ok && timeZone == defaultTimeZone {
-			delete(c.From.Session, "time_zone")
-		}
 	}
 }
 

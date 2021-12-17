@@ -184,15 +184,17 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	// And curl or safari browser does trigger this problem.
 	// But I haven't figured it out.
 	// (maybe more requests are sent from chrome or its extensions).
-	initOpenAPIErr := s.InitOpenAPIHandles()
-	if initOpenAPIErr != nil {
-		return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
-	}
+
 	userHandles := map[string]http.Handler{
-		"/apis/":   apiHandler,
-		"/status":  getStatusHandle(),
-		"/debug/":  getDebugHandler(),
-		"/api/v1/": s.echo,
+		"/apis/":  apiHandler,
+		"/status": getStatusHandle(),
+		"/debug/": getDebugHandler(),
+	}
+	if s.cfg.ExperimentalFeatures.OpenAPI {
+		if initOpenAPIErr := s.InitOpenAPIHandles(); initOpenAPIErr != nil {
+			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
+		}
+		userHandles["/api/v1/"] = s.echo
 	}
 
 	// gRPC API server
@@ -1127,7 +1129,7 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 
 func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
 	dbConfig := cfg.GenerateDBConfig()
-	fromDB, err := conn.DefaultDBProvider.Apply(*dbConfig)
+	fromDB, err := conn.DefaultDBProvider.Apply(dbConfig)
 	if err != nil {
 		return err
 	}
@@ -1163,7 +1165,7 @@ func adjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 		failpoint.Return(nil)
 	})
 
-	toDB, err := conn.DefaultDBProvider.Apply(cfg)
+	toDB, err := conn.DefaultDBProvider.Apply(&cfg)
 	if err != nil {
 		return err
 	}
@@ -1180,7 +1182,6 @@ func adjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 		config.AdjustTargetDBSessionCfg(dbConfig, version)
 	} else {
 		log.L().Warn("get tidb version", log.ShortError(err))
-		config.AdjustTargetDBTimeZone(dbConfig)
 	}
 	return nil
 }
@@ -1437,7 +1438,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	}
 
 	// set up db and clear meta data in downstream db
-	baseDB, err := conn.DefaultDBProvider.Apply(*toDBCfg)
+	baseDB, err := conn.DefaultDBProvider.Apply(toDBCfg)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}

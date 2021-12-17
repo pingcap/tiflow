@@ -114,6 +114,7 @@ func (t *testConfigSuite) TestConfig(c *check.C) {
 			c.Assert(cfg.InitialClusterState, check.Equals, embed.ClusterStateFlagNew)
 			c.Assert(cfg.Join, check.Equals, "")
 			c.Assert(cfg.String(), check.Matches, fmt.Sprintf("{.*master-addr\":\"%s\".*}", masterAddr))
+			c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
 		}
 	}
 }

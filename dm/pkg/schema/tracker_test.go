@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/conn"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	dlog "github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
 
@@ -467,6 +468,15 @@ func (s *trackerSuite) TestAllSchemas(c *C) {
 	c.Assert(err, IsNil)
 	err = tracker.Exec(ctx, "testdb1", "create table c(a int)")
 	c.Assert(err, IsNil)
+
+	// check schema tables
+	tables, err := tracker.ListSchemaTables("testdb1")
+	c.Assert(err, IsNil)
+	c.Assert(tables, DeepEquals, []string{"b", "c"})
+	// check schema not exists
+	notExistSchemaName := "testdb_not_found"
+	_, err = tracker.ListSchemaTables(notExistSchemaName)
+	c.Assert(terror.ErrSchemaTrackerUnSchemaNotExist.Equal(err), IsTrue)
 
 	// check that all schemas and tables are present.
 	allSchemas := tracker.AllSchemas()

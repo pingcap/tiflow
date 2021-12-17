@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
@@ -62,17 +61,6 @@ func NewManager() *Manager {
 	}
 }
 
-// NewManager4Test creates a new processor manager for test
-func NewManager4Test(
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
-) *Manager {
-	m := NewManager()
-	m.newProcessor = func(ctx cdcContext.Context) *processor {
-		return newProcessor4Test(ctx, createTablePipeline)
-	}
-	return m
-}
-
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
@@ -82,6 +70,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}
+
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {

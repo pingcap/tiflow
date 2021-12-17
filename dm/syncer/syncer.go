@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/sessionctx"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -75,6 +76,8 @@ var (
 	maxRetryCount = 100
 
 	retryTimeout = 3 * time.Second
+
+	waitTime = 10 * time.Millisecond
 
 	// MaxDDLConnectionTimeoutMinute also used by SubTask.ExecuteDDL.
 	MaxDDLConnectionTimeoutMinute = 5
@@ -157,6 +160,7 @@ type Syncer struct {
 	columnMapping   *cm.Mapping
 	baList          *filter.Filter
 	exprFilterGroup *ExprFilterGroup
+	sessCtx         sessionctx.Context
 
 	closed atomic.Bool
 
@@ -242,7 +246,6 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, notifier 
 	syncer.lastCount.Store(0)
 	syncer.count.Store(0)
 	syncer.done = nil
-	syncer.setTimezone()
 	syncer.addJobFunc = syncer.addJob
 	syncer.enableRelay = cfg.UseRelay
 	syncer.cli = etcdClient
@@ -303,6 +306,9 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
+	if err = s.setTimezone(ctx); err != nil {
+		return
+	}
 
 	err = s.setSyncCfg()
 	if err != nil {
@@ -332,7 +338,11 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSyncerUnitGenBinlogEventFilter.Delegate(err)
 	}
 
-	s.exprFilterGroup = NewExprFilterGroup(s.cfg.ExprFilter)
+	vars := map[string]string{
+		"time_zone": s.timezone.String(),
+	}
+	s.sessCtx = utils.NewSessionCtx(vars)
+	s.exprFilterGroup = NewExprFilterGroup(s.sessCtx, s.cfg.ExprFilter)
 
 	if len(s.cfg.ColumnMappingRules) > 0 {
 		s.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
@@ -786,7 +796,7 @@ func (s *Syncer) addCount(isFinished bool, queueBucket string, tp opType, n int6
 		m = metrics.FinishedJobsTotal
 	}
 	switch tp {
-	case insert, update, del, ddl, flush, conflict:
+	case insert, update, del, ddl, flush, conflict, compact:
 		m.WithLabelValues(tp.String(), s.cfg.Name, queueBucket, s.cfg.SourceID, s.cfg.WorkerName, targetTable.Schema, targetTable.Name).Add(float64(n))
 	case skip, xid:
 		// ignore skip/xid jobs
@@ -1227,7 +1237,7 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.
 	}
 }
 
-func (s *Syncer) successFunc(queueID int, jobs []*job) {
+func (s *Syncer) successFunc(queueID int, statementsCnt int, jobs []*job) {
 	queueBucket := queueBucketName(queueID)
 	if len(jobs) > 0 {
 		// NOTE: we can use the first job of job queue to calculate lag because when this job committed,
@@ -1248,7 +1258,8 @@ func (s *Syncer) successFunc(queueID int, jobs []*job) {
 		s.addCount(true, queueBucket, sqlJob.tp, 1, sqlJob.targetTable)
 	}
 	s.updateReplicationJobTS(nil, dmlWorkerJobIdx(queueID))
-	metrics.ReplicationTransactionBatch.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID, queueBucket).Observe(float64(len(jobs)))
+	metrics.ReplicationTransactionBatch.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID, queueBucket, "statements").Observe(float64(statementsCnt))
+	metrics.ReplicationTransactionBatch.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID, queueBucket, "rows").Observe(float64(len(jobs)))
 }
 
 func (s *Syncer) fatalFunc(job *job, err error) {
@@ -1538,28 +1549,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		return nil
 	}
 
-	maybeSkipNRowsEvent := func(n int) error {
-		if s.cfg.EnableGTID && n > 0 {
-			for i := 0; i < n; {
-				e, err1 := s.getEvent(tctx, currentLocation)
-				if err1 != nil {
-					return err
-				}
-				if _, ok := e.Event.(*replication.RowsEvent); ok {
-					i++
-				}
-			}
-			log.L().Info("discard event already consumed", zap.Int("count", n),
-				zap.Any("cur_loc", currentLocation))
-		}
-		return nil
-	}
-
-	// eventIndex is the rows event index in this transaction, it's used to avoiding read duplicate event in gtid mode
-	eventIndex := 0
-	// the relay log file may be truncated(not end with an RotateEvent), in this situation, we may read some rows events
-	// and then read from the gtid again, so we force enter safe-mode for one more transaction to avoid failure due to
-	// conflict
 	for {
 		if s.execError.Load() != nil {
 			return nil
@@ -1601,14 +1590,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				err = errors.New("connect: connection refused")
 			}
 		})
-		failpoint.Inject("GetEventErrorInTxn", func(val failpoint.Value) {
-			if intVal, ok := val.(int); ok && intVal == eventIndex {
-				err = errors.New("failpoint triggered")
-				s.tctx.L().Warn("failed to get event", zap.Int("event_index", eventIndex),
-					zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
-					zap.Any("pos", e.Header.LogPos), log.ShortError(err))
-			}
-		})
 		switch {
 		case err == context.Canceled:
 			tctx.L().Info("binlog replication main routine quit(context canceled)!", zap.Stringer("last location", lastLocation))
@@ -1624,13 +1605,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				return err1
 			}
 			continue
-		case err == streamer.ErrorMaybeDuplicateEvent:
-			tctx.L().Warn("read binlog met a truncated file, need to open safe-mode until the next transaction")
-			err = maybeSkipNRowsEvent(eventIndex)
-			if err == nil {
-				continue
-			}
-			log.L().Warn("skip duplicate rows event failed", zap.Error(err))
 		}
 
 		if err != nil {
@@ -1641,15 +1615,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			if s.streamerController.CanRetry(err) {
-				// GlobalPoint is the last finished GTID
-				err = s.streamerController.ResetReplicationSyncer(tctx, s.checkpoint.GlobalPoint())
+				// lastLocation is the last finished GTID
+				err = s.streamerController.ResetReplicationSyncer(tctx, lastLocation)
 				if err != nil {
 					return err
 				}
 				log.L().Info("reset replication binlog puller", zap.Any("pos", s.checkpoint.GlobalPoint()))
-				if err = maybeSkipNRowsEvent(eventIndex); err != nil {
-					return err
-				}
 				continue
 			}
 
@@ -1801,15 +1772,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.RotateEvent:
 			err2 = s.handleRotateEvent(ev, ec)
 		case *replication.RowsEvent:
-			eventIndex++
 			metrics.BinlogEventRowHistogram.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID).Observe(float64(len(ev.Rows)))
 			err2 = s.handleRowsEvent(ev, ec)
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
 			err2 = s.handleQueryEvent(ev, ec, originSQL)
 		case *replication.XIDEvent:
-			// reset eventIndex and force safeMode flag here.
-			eventIndex = 0
 			if shardingReSync != nil {
 				shardingReSync.currLocation.Position.Pos = e.Header.LogPos
 				shardingReSync.currLocation.Suffix = currentLocation.Suffix
@@ -2853,7 +2821,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	var err error
 	dbCfg := s.cfg.From
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	s.fromDB, err = dbconn.NewUpStreamConn(dbCfg)
+	s.fromDB, err = dbconn.NewUpStreamConn(&dbCfg)
 	if err != nil {
 		return err
 	}
@@ -2896,7 +2864,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 		SetReadTimeout(maxDMLConnectionTimeout).
 		SetMaxIdleConns(s.cfg.WorkerCount)
 
-	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, dbCfg, s.cfg.WorkerCount)
+	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, s.cfg.WorkerCount)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB) // release resources acquired before return with error
 		return err
@@ -3062,7 +3030,7 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 // Update implements Unit.Update
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config.
-func (s *Syncer) Update(cfg *config.SubTaskConfig) error {
+func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		_, tables := s.sgk.UnresolvedTables()
 		if len(tables) > 0 {
@@ -3150,8 +3118,9 @@ func (s *Syncer) Update(cfg *config.SubTaskConfig) error {
 	s.cfg.ColumnMappingRules = cfg.ColumnMappingRules
 
 	// update timezone
-	s.setTimezone()
-
+	if s.timezone == nil {
+		return s.setTimezone(ctx)
+	}
 	return nil
 }
 
@@ -3182,7 +3151,7 @@ func (s *Syncer) UpdateFromConfig(cfg *config.SubTaskConfig) error {
 
 	var err error
 	s.cfg.From.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	s.fromDB, err = dbconn.NewUpStreamConn(s.cfg.From)
+	s.fromDB, err = dbconn.NewUpStreamConn(&s.cfg.From)
 	if err != nil {
 		s.tctx.L().Error("fail to create baseConn connection", log.ShortError(err))
 		return err
@@ -3199,9 +3168,22 @@ func (s *Syncer) UpdateFromConfig(cfg *config.SubTaskConfig) error {
 	return nil
 }
 
-func (s *Syncer) setTimezone() {
-	s.tctx.L().Info("use timezone", log.WrapStringerField("location", time.UTC))
-	s.timezone = time.UTC
+func (s *Syncer) setTimezone(ctx context.Context) error {
+	tz := s.cfg.Timezone
+	var err error
+	if len(tz) == 0 {
+		tz, err = conn.FetchTimeZoneSetting(ctx, &s.cfg.To)
+		if err != nil {
+			return err
+		}
+	}
+	loc, err := utils.ParseTimeZone(tz)
+	if err != nil {
+		return err
+	}
+	s.tctx.L().Info("use timezone", zap.String("location", loc.String()))
+	s.timezone = loc
+	return nil
 }
 
 func (s *Syncer) setSyncCfg() error {

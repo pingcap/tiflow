@@ -606,7 +606,9 @@ func TestMultiVersionStorage(t *testing.T) {
 	_, exist = snap.TableByID(3)
 	require.False(t, exist)
 
-	storage.DoGC(0)
+	lastSchemaTs := storage.DoGC(0)
+	require.Equal(t, uint64(0), lastSchemaTs)
+
 	snap, err = storage.GetSnapshot(ctx, 100)
 	require.Nil(t, err)
 	_, exist = snap.SchemaByID(1)
@@ -627,7 +629,9 @@ func TestMultiVersionStorage(t *testing.T) {
 	_, exist = snap.TableByID(3)
 	require.False(t, exist)
 
-	storage.DoGC(155)
+	lastSchemaTs = storage.DoGC(155)
+	require.Equal(t, uint64(140), lastSchemaTs)
+
 	storage.AdvanceResolvedTs(185)
 
 	snap, err = storage.GetSnapshot(ctx, 180)

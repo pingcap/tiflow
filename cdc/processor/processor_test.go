@@ -15,16 +15,22 @@ package processor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
+	"sync/atomic"
 	"testing"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
+	"github.com/pingcap/ticdc/cdc/redo"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
@@ -35,8 +41,21 @@ type processorSuite struct{}
 
 var _ = check.Suite(&processorSuite{})
 
+func newProcessor4Test(
+	ctx cdcContext.Context,
+	c *check.C,
+	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
+) *processor {
+	p := newProcessor(ctx)
+	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
+	p.redoManager = redo.NewDisabledManager()
+	p.createTablePipeline = createTablePipeline
+	p.schemaStorage = &mockSchemaStorage{c: c}
+	return p
+}
+
 func initProcessor4Test(ctx cdcContext.Context, c *check.C) (*processor, *orchestrator.ReactorStateTester) {
-	p := newProcessor4Test(ctx, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+	p := newProcessor4Test(ctx, c, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 		return &mockTablePipeline{
 			tableID:      tableID,
 			name:         fmt.Sprintf("`test`.`table%d`", tableID),
@@ -107,6 +126,25 @@ func (m *mockTablePipeline) Cancel() {
 
 func (m *mockTablePipeline) Wait() {
 	// do nothing
+}
+
+type mockSchemaStorage struct {
+	// dummy to provide default versions of unimplemented interface methods,
+	// as we only need ResolvedTs() and DoGC() in unit tests.
+	entry.SchemaStorage
+
+	c        *check.C
+	lastGcTs uint64
+}
+
+func (s *mockSchemaStorage) ResolvedTs() uint64 {
+	return math.MaxUint64
+}
+
+func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
+	s.c.Assert(s.lastGcTs, check.LessEqual, ts)
+	atomic.StoreUint64(&s.lastGcTs, ts)
+	return ts
 }
 
 func (s *processorSuite) TestCheckTablesNum(c *check.C) {
@@ -664,6 +702,32 @@ func (s *processorSuite) TestPositionDeleted(c *check.C) {
 	})
 }
 
+func (s *processorSuite) TestSchemaGC(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(true)
+	p, tester := initProcessor4Test(ctx, c)
+	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		status.Tables[1] = &model.TableReplicaInfo{StartTs: 30}
+		status.Tables[2] = &model.TableReplicaInfo{StartTs: 40}
+		return status, true, nil
+	})
+
+	var err error
+	// init tick
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	tester.MustApplyPatches()
+
+	updateChangeFeedPosition(c, tester, "changefeed-id-test", 50, 50)
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	tester.MustApplyPatches()
+
+	// GC Ts should be (checkpoint - 1).
+	c.Assert(p.schemaStorage.(*mockSchemaStorage).lastGcTs, check.Equals, uint64(49))
+	c.Assert(p.lastSchemaTs, check.Equals, uint64(49))
+}
+
 func cleanUpFinishedOpOperation(state *orchestrator.ChangefeedReactorState, captureID model.CaptureID, tester *orchestrator.ReactorStateTester) {
 	state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		if status == nil || status.Operation == nil {
@@ -677,4 +741,21 @@ func cleanUpFinishedOpOperation(state *orchestrator.ChangefeedReactorState, capt
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
+}
+
+func updateChangeFeedPosition(c *check.C, tester *orchestrator.ReactorStateTester, cfID model.ChangeFeedID, resolvedTs, checkpointTs model.Ts) {
+	key := etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangeFeedStatus,
+		ChangefeedID: cfID,
+	}
+	keyStr := key.String()
+
+	cfStatus := &model.ChangeFeedStatus{
+		ResolvedTs:   resolvedTs,
+		CheckpointTs: checkpointTs,
+	}
+	valueBytes, err := json.Marshal(cfStatus)
+	c.Assert(err, check.IsNil)
+
+	tester.MustUpdate(keyStr, valueBytes)
 }

@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1633763775536,
+  "iteration": 1636101093950,
   "links": [],
   "panels": [
     {
@@ -1821,11 +1821,17 @@
         },
         {
           "aliasColors": {},
-          "bars": false,
+          "bars": true,
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Percentiles of sink write duration of changefeeds",
+          "description": "Estimate the remaining time for a changefeed catch-up upstream TiDB.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
@@ -1835,11 +1841,13 @@
             "y": 26
           },
           "hiddenSeries": false,
-          "id": 35,
+          "id": 253,
           "legend": {
             "alignAsTable": true,
             "avg": false,
             "current": true,
+            "hideEmpty": true,
+            "hideZero": true,
             "max": false,
             "min": false,
             "rightSide": true,
@@ -1847,12 +1855,12 @@
             "total": false,
             "values": true
           },
-          "lines": true,
+          "lines": false,
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
@@ -1865,32 +1873,20 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_sink_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
+              "exemplar": true,
+              "expr": "abs(max(ticdc_owner_checkpoint_ts_lag{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"} / (deriv(ticdc_owner_checkpoint_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])/1000)) by (changefeed))",
               "format": "time_series",
+              "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p95",
+              "legendFormat": "{{changefeed}}",
               "refId": "A"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p99",
-              "refId": "B"
-            },
-            {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p999",
-              "refId": "C"
             }
           ],
           "thresholds": [],
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink write duration percentile",
+          "title": "Changefeed checkpoint catch-up ETA",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -1907,10 +1903,10 @@
           "yaxes": [
             {
               "format": "s",
-              "label": null,
+              "label": "",
               "logBase": 2,
-              "max": null,
-              "min": null,
+              "max": "604800",
+              "min": "1",
               "show": true
             },
             {
@@ -2012,7 +2008,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Percentiles of sink batch size",
+          "description": "Percentiles of sink write duration of changefeeds",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
@@ -2022,7 +2018,7 @@
             "y": 33
           },
           "hiddenSeries": false,
-          "id": 36,
+          "id": 35,
           "legend": {
             "alignAsTable": true,
             "avg": false,
@@ -2052,25 +2048,24 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_txn_batch_size_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_sink_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-p90",
+              "legendFormat": "{{instance}}-p95",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_batch_size_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-p99",
+              "legendFormat": "{{instance}}-p99",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_batch_size_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
               "format": "time_series",
-              "hide": true,
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-p999",
+              "legendFormat": "{{instance}}-p999",
               "refId": "C"
             }
           ],
@@ -2078,7 +2073,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink write batch size percentile",
+          "title": "Sink write duration percentile",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -2094,7 +2089,7 @@
           },
           "yaxes": [
             {
-              "format": "none",
+              "format": "s",
               "label": null,
               "logBase": 2,
               "max": null,
@@ -2224,7 +2219,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Percentiles of asynchronous flush sink duration of changefeeds",
+          "description": "Percentiles of sink batch size",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
@@ -2232,6 +2227,192 @@
             "w": 12,
             "x": 12,
             "y": 40
+          },
+          "hiddenSeries": false,
+          "id": 36,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": false,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "dataLinks": []
+          },
+          "paceLength": 10,
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_txn_batch_size_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "{{capture}}-p90",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_batch_size_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "{{capture}}-p99",
+              "refId": "B"
+            },
+            {
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_batch_size_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "format": "time_series",
+              "hide": true,
+              "intervalFactor": 1,
+              "legendFormat": "{{capture}}-p999",
+              "refId": "C"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Sink write batch size percentile",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 2,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "cards": {
+            "cardPadding": 0,
+            "cardRound": 0
+          },
+          "color": {
+            "cardColor": "#FF9830",
+            "colorScale": "linear",
+            "colorScheme": "interpolateSpectral",
+            "exponent": 0.5,
+            "max": null,
+            "min": 0,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Asynchronous flush sink duration of changefeeds",
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 47
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 93,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "sort": "current",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "links": [],
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "max(rate(ticdc_sink_flush_event_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
+              "format": "heatmap",
+              "instant": false,
+              "intervalFactor": 2,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Flush sink duration",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "tooltipDecimals": 1,
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": 1,
+            "format": "s",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "upper",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Percentiles of asynchronous flush sink duration of changefeeds",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 47
           },
           "hiddenSeries": false,
           "id": 98,
@@ -2337,22 +2518,22 @@
             "colorScheme": "interpolateSpectral",
             "exponent": 0.5,
             "max": null,
-            "min": 0,
+            "min": 1,
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Asynchronous flush sink duration of changefeeds",
+          "description": "The duration of detecting and waiting conflict of MySQL sink",
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 47
+            "y": 54
           },
           "heatmap": {},
           "hideZeroBuckets": true,
           "highlightCards": true,
-          "id": 93,
+          "id": 103,
           "legend": {
             "alignAsTable": true,
             "avg": false,
@@ -2367,10 +2548,11 @@
             "values": true
           },
           "links": [],
+          "repeatDirection": "h",
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "max(rate(ticdc_sink_flush_event_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "max(rate(ticdc_sink_conflict_detect_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -2378,7 +2560,7 @@
               "refId": "A"
             }
           ],
-          "title": "Flush sink duration",
+          "title": "MySQL sink conflict detect duration",
           "tooltip": {
             "show": true,
             "showHistogram": true
@@ -2416,7 +2598,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 47
+            "y": 54
           },
           "hiddenSeries": false,
           "id": 95,
@@ -2560,194 +2742,6 @@
           },
           "dataFormat": "tsbuckets",
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The duration of detecting and waiting conflict of MySQL sink",
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 0,
-            "y": 54
-          },
-          "heatmap": {},
-          "hideZeroBuckets": true,
-          "highlightCards": true,
-          "id": 103,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "max": true,
-            "min": false,
-            "rightSide": true,
-            "show": true,
-            "sort": "current",
-            "sortDesc": true,
-            "total": false,
-            "values": true
-          },
-          "links": [],
-          "repeatDirection": "h",
-          "reverseYBuckets": false,
-          "targets": [
-            {
-              "expr": "max(rate(ticdc_sink_conflict_detect_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
-              "format": "heatmap",
-              "instant": false,
-              "intervalFactor": 2,
-              "legendFormat": "{{le}}",
-              "refId": "A"
-            }
-          ],
-          "title": "MySQL sink conflict detect duration",
-          "tooltip": {
-            "show": true,
-            "showHistogram": true
-          },
-          "tooltipDecimals": 1,
-          "type": "heatmap",
-          "xAxis": {
-            "show": true
-          },
-          "xBucketNumber": null,
-          "xBucketSize": null,
-          "yAxis": {
-            "decimals": 1,
-            "format": "s",
-            "logBase": 1,
-            "max": null,
-            "min": null,
-            "show": true,
-            "splitFactor": null
-          },
-          "yBucketBound": "upper",
-          "yBucketNumber": null,
-          "yBucketSize": null
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Percentiles of detecting and waiting conflict duration of MySQL sink",
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 12,
-            "y": 54
-          },
-          "hiddenSeries": false,
-          "id": 83,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "max": true,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "options": {
-            "dataLinks": []
-          },
-          "percentage": false,
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "histogram_quantile(0.95,sum(rate(ticdc_sink_conflict_detect_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
-              "format": "time_series",
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p95",
-              "refId": "A"
-            },
-            {
-              "expr": "histogram_quantile(0.99,sum(rate(ticdc_sink_conflict_detect_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
-              "format": "time_series",
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p99",
-              "refId": "B"
-            },
-            {
-              "expr": "histogram_quantile(0.999,sum(rate(ticdc_sink_conflict_detect_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
-              "format": "time_series",
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p999",
-              "refId": "C"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "MySQL sink conflict detect duration percentile",
-          "tooltip": {
-            "shared": true,
-            "sort": 2,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "s",
-              "label": null,
-              "logBase": 2,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "cards": {
-            "cardPadding": 0,
-            "cardRound": 0
-          },
-          "color": {
-            "cardColor": "#FF9830",
-            "colorScale": "linear",
-            "colorScheme": "interpolateSpectral",
-            "exponent": 0.5,
-            "max": null,
-            "min": 1,
-            "mode": "spectrum"
-          },
-          "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The duration of executing DDL in MySQL sink",
           "gridPos": {
             "h": 7,
@@ -2816,7 +2810,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Percentiles of executing DDL duration of MySQL sink",
+          "description": "Percentiles of detecting and waiting conflict duration of MySQL sink",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
@@ -2826,7 +2820,7 @@
             "y": 61
           },
           "hiddenSeries": false,
-          "id": 166,
+          "id": 83,
           "legend": {
             "alignAsTable": true,
             "avg": false,
@@ -2855,7 +2849,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.95,sum(rate(ticdc_sink_ddl_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.95,sum(rate(ticdc_sink_conflict_detect_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -2863,7 +2857,7 @@
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.99,sum(rate(ticdc_sink_ddl_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.99,sum(rate(ticdc_sink_conflict_detect_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -2871,7 +2865,7 @@
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.999,sum(rate(ticdc_sink_ddl_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.999,sum(rate(ticdc_sink_conflict_detect_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -2883,7 +2877,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "MySQL sink ddl execution duration percentile",
+          "title": "MySQL sink conflict detect duration percentile",
           "tooltip": {
             "shared": true,
             "sort": 2,
@@ -3011,12 +3005,122 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Percentiles of executing DDL duration of MySQL sink",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 68
+          },
+          "hiddenSeries": false,
+          "id": 166,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "dataLinks": []
+          },
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95,sum(rate(ticdc_sink_ddl_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{instance}}-p95",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.99,sum(rate(ticdc_sink_ddl_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{instance}}-p99",
+              "refId": "B"
+            },
+            {
+              "expr": "histogram_quantile(0.999,sum(rate(ticdc_sink_ddl_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{instance}}-p999",
+              "refId": "C"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "MySQL sink ddl execution duration percentile",
+          "tooltip": {
+            "shared": true,
+            "sort": 2,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "s",
+              "label": null,
+              "logBase": 2,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
           "fill": 1,
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 68
+            "y": 75
           },
           "id": 164,
           "legend": {
@@ -3089,6 +3193,159 @@
             "align": false,
             "alignLevel": null
           }
+        },
+        {
+          "columns": [],
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "left",
+                "filterable": true
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "dateTimeAsSystem"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "capture"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 191
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "changefeed"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 209
+                  }
+                ]
+              }
+            ]
+          },
+          "fontSize": "100%",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 76
+          },
+          "id": 200,
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "last-snap-ts"
+              }
+            ]
+          },
+          "pageSize": null,
+          "pluginVersion": "6.1.6",
+          "scroll": true,
+          "showHeader": true,
+          "sort": {
+            "col": 0,
+            "desc": true
+          },
+          "styles": [
+            {
+              "alias": "Time",
+              "dateFormat": "YYYY-MM-DD HH:mm:ss",
+              "pattern": "Time",
+              "type": "date"
+            },
+            {
+              "alias": "",
+              "colorMode": null,
+              "colors": [
+                "rgba(245, 54, 54, 0.9)",
+                "rgba(237, 129, 40, 0.89)",
+                "rgba(50, 172, 45, 0.97)"
+              ],
+              "decimals": 2,
+              "pattern": "/.*/",
+              "thresholds": [],
+              "type": "number",
+              "unit": "short"
+            }
+          ],
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "ticdc_processor_schema_storage_gc_ts{changefeed=~\"$changefeed\", capture=~\"$capture\"}",
+              "format": "table",
+              "instant": true,
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "title": "Schema Storage GC progress",
+          "transform": "table",
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "names": [
+                    "capture",
+                    "changefeed",
+                    "Value"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {},
+                "indexByName": {},
+                "renameByName": {
+                  "Value #A": "last-snap-ts"
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "fields": {},
+                "sort": [
+                  {
+                    "field": "last-snap-ts"
+                  }
+                ]
+              }
+            }
+          ],
+          "type": "table"
         }
       ],
       "title": "Changefeed",
@@ -9424,5 +9681,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 24
+  "version": 25
 }

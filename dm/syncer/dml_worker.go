@@ -48,7 +48,7 @@ type DMLWorker struct {
 
 	// callback func
 	// TODO: refine callback func
-	successFunc  func(int, []*job)
+	successFunc  func(int, int, []*job)
 	fatalFunc    func(*job, error)
 	lagFunc      func(*job, int)
 	addCountFunc func(bool, string, opType, int64, *filter.Table)
@@ -193,11 +193,12 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		affect int
 		db     = w.toDBConns[queueID]
 		err    error
+		dmls   = make([]*DML, 0, len(jobs))
 	)
 
 	defer func() {
 		if err == nil {
-			w.successFunc(queueID, jobs)
+			w.successFunc(queueID, len(dmls), jobs)
 		} else {
 			w.fatalFunc(jobs[affect], err)
 		}
@@ -220,7 +221,6 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		}
 	})
 
-	dmls := make([]*DML, 0, len(jobs))
 	for _, j := range jobs {
 		dmls = append(dmls, j.dml)
 	}

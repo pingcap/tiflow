@@ -29,6 +29,10 @@ import (
 type feedStateManager struct {
 	state           *orchestrator.ChangefeedReactorState
 	shouldBeRunning bool
+	// Based on shouldBeRunning = false
+	// shouldBeRemoved = true means the changefeed is removed
+	// shouldBeRemoved = false means the changefeed is paused
+	shouldBeRemoved bool
 
 	adminJobQueue []*model.AdminJob
 }
@@ -49,7 +53,11 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) {
 		return
 	}
 	switch m.state.Info.State {
-	case model.StateStopped, model.StateFailed, model.StateRemoved, model.StateFinished:
+	case model.StateRemoved:
+		m.shouldBeRunning = false
+		m.shouldBeRemoved = true
+		return
+	case model.StateStopped, model.StateFailed, model.StateFinished:
 		m.shouldBeRunning = false
 		return
 	}
@@ -59,6 +67,10 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) {
 
 func (m *feedStateManager) ShouldRunning() bool {
 	return m.shouldBeRunning
+}
+
+func (m *feedStateManager) ShouldRemoved() bool {
+	return m.shouldBeRemoved
 }
 
 func (m *feedStateManager) MarkFinished() {
@@ -111,6 +123,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			return
 		}
 		m.shouldBeRunning = false
+		m.shouldBeRemoved = true
 		jobsPending = true
 
 		// remove changefeedInfo
@@ -123,7 +136,6 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		})
 		checkpointTs := m.state.Info.GetCheckpointTs(m.state.Status)
 		log.Info("the changefeed is removed", zap.String("changefeed-id", m.state.ID), zap.Uint64("checkpoint-ts", checkpointTs))
-
 	case model.AdminResume:
 		switch m.state.Info.State {
 		case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished:

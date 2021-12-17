@@ -36,6 +36,7 @@ const (
 	skip // used by Syncer.recordSkipSQLsLocation to record global location, but not execute SQL
 	rotate
 	conflict
+	compact
 )
 
 func (t opType) String() string {
@@ -58,6 +59,8 @@ func (t opType) String() string {
 		return "rotate"
 	case conflict:
 		return "conflict"
+	case compact:
+		return "compact"
 	}
 
 	return ""

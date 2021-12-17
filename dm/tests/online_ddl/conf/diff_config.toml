@@ -1,69 +1,55 @@
 # diff Configuration.
 
-log-level = "info"
-
-chunk-size = 1000
-
 check-thread-count = 4
 
-sample-percent = 100
+export-fix-sql = true
 
-use-checksum = true
+check-struct-only = false
 
-fix-sql-file = "fix.sql"
+[task]
+    output-dir = "/tmp/ticdc_dm_test/output"
 
-# tables need to check.
-[[check-tables]]
-schema = "online_ddl"
-tables = ["gho_t_target", "pt_t_target"]
+    source-instances = ["mysql1", "mysql2"]
 
-[[table-config]]
-schema = "online_ddl"
-table = "gho_t_target"
+    target-instance = "tidb0"
+
+    target-check-tables = ["online_ddl.gho_t_target", "online_ddl.pt_t_target"]
+
+    target-configs= ["config1"]
+
+[routes.rule1]
+schema-pattern = "online_ddl"
+table-pattern = "gho_t?*"
+target-schema = "online_ddl"
+target-table = "gho_t_target"
+
+[routes.rule2]
+schema-pattern = "online_ddl"
+table-pattern = "pt_t?*"
+target-schema = "online_ddl"
+target-table = "pt_t_target"
+
+[table-configs]
+[table-configs.config1]
+target-tables = ["online_ddl.*"]
 ignore-columns = ["id"]
-is-sharding = true
 
-    [[table-config.source-tables]]
-    instance-id = "source-1"
-    schema = "online_ddl"
-    table  = "~gho_t.*"
-
-    [[table-config.source-tables]]
-    instance-id = "source-2"
-    schema = "online_ddl"
-    table  = "~gho_t.*"
-
-[[table-config]]
-schema = "online_ddl"
-table = "pt_t_target"
-ignore-columns = ["id"]
-is-sharding = true
-
-    [[table-config.source-tables]]
-    instance-id = "source-1"
-    schema = "online_ddl"
-    table  = "~pt_t.*"
-
-    [[table-config.source-tables]]
-    instance-id = "source-2"
-    schema = "online_ddl"
-    table  = "~pt_t.*"
-
-[[source-db]]
+[data-sources]
+[data-sources.mysql1]
 host = "127.0.0.1"
 port = 3306
 user = "root"
 password = "123456"
-instance-id = "source-1"
+route-rules = ["rule1", "rule2"]
 
-[[source-db]]
+[data-sources.mysql2]
 host = "127.0.0.1"
 port = 3307
 user = "root"
 password = "123456"
-instance-id = "source-2"
+route-rules = ["rule1", "rule2"]
 
-[target-db]
+[data-sources.tidb0]
 host = "127.0.0.1"
 port = 4000
 user = "test"

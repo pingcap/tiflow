@@ -151,10 +151,10 @@ integration_test_build: check_failpoint_ctl
 integration_test: integration_test_mysql
 
 integration_test_mysql:
-	tests/run.sh mysql "$(CASE)"
+	tests/integration_tests/run.sh mysql "$(CASE)"
 
 integration_test_kafka: check_third_party_binary
-	tests/run.sh kafka "$(CASE)"
+	tests/integration_tests/run.sh kafka "$(CASE)"
 
 fmt: tools/bin/gofumports tools/bin/shfmt
 	@echo "gofmt (simplify)"
@@ -201,15 +201,20 @@ check-static: tools/bin/golangci-lint
 
 check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts
 
-coverage: tools/bin/gocovmerge tools/bin/goveralls
+integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
-	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls
 	tools/bin/goveralls -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
-	@bash <(curl -s https://codecov.io/bash) -f $(TEST_DIR)/unit_cov.out -t $(CODECOV_TOKEN)
 else
 	go tool cover -html "$(TEST_DIR)/all_cov.out" -o "$(TEST_DIR)/all_cov.html"
+endif
+
+unit_test_coverage:
+	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
+ifeq ("$(JenkinsCI)", "1")
+	@bash <(curl -s https://codecov.io/bash) -f $(TEST_DIR)/unit_cov.out -t $(CODECOV_TOKEN)
+else
 	go tool cover -html "$(TEST_DIR)/unit_cov.out" -o "$(TEST_DIR)/unit_cov.html"
 	go tool cover -func="$(TEST_DIR)/unit_cov.out"
 endif
@@ -299,7 +304,7 @@ dm_integration_test: check_third_party_binary_for_dm install_test_python_dep
 	@which bin/dm-master.test
 	@which bin/dm-worker.test
 	@which bin/dm-syncer.test
-	ln -srf bin dm/
+	cd dm && ln -sf ../bin .
 	cd dm && ./tests/run.sh $(CASE)
 
 dm_compatibility_test: check_third_party_binary_for_dm

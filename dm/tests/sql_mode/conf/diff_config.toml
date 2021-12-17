@@ -1,61 +1,34 @@
 # diff Configuration.
 
-log-level = "info"
-
-chunk-size = 20
-
 check-thread-count = 4
 
-sample-percent = 100
+export-fix-sql = true
 
-use-checksum = true
+check-struct-only = false
 
-fix-sql-file = "fix.sql"
+[task]
+    output-dir = "/tmp/ticdc_dm_test/output"
 
-# tables need to check.
-[[check-tables]]
-schema = "sql_mode"
-tables = ["~.*"]
+    source-instances = ["mysql1", "mysql2"]
 
-[[source-db]]
+    target-instance = "tidb0"
+
+    target-check-tables = ["sql_mode.*"]
+
+[data-sources]
+[data-sources.mysql1]
 host = "127.0.0.1"
 port = 3306
 user = "root"
 password = "123456"
-instance-id = "source-1"
 
-[[table-config]]
-schema = "sql_mode"
-table = "t_1"
-
-[[table-config.source-tables]]
-instance-id = "source-1"
-schema = "sql_mode"
-table  = "t_1"
-
-
-[[table-config.source-tables]]
-instance-id = "source-1"
-schema = "sql_mode"
-table  = "timezone"
-
-[[source-db]]
+[data-sources.mysql2]
 host = "127.0.0.1"
 port = 3307
 user = "root"
 password = "123456"
-instance-id = "source-2"
 
-[[table-config]]
-schema = "sql_mode"
-table = "t_2"
-
-[[table-config.source-tables]]
-instance-id = "source-2"
-schema = "sql_mode"
-table  = "t_2"
-
-[target-db]
+[data-sources.tidb0]
 host = "127.0.0.1"
 port = 4000
 user = "test"

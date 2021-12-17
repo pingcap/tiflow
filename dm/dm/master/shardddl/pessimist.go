@@ -645,7 +645,7 @@ func (p *Pessimist) removeLock(lock *pessimism.Lock) error {
 
 	failpoint.Inject("SleepWhenRemoveLock", func(val failpoint.Value) {
 		t := val.(int)
-		log.L().Info("wait new ddl info putted into etcd",
+		log.L().Info("wait new ddl info putted into etcd in pessimistic",
 			zap.String("failpoint", "SleepWhenRemoveLock"),
 			zap.Int("max wait second", t))
 

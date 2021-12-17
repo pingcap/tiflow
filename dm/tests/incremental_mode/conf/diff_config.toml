@@ -1,55 +1,35 @@
 # diff Configuration.
 
-log-level = "info"
-
-chunk-size = 1000
-
 check-thread-count = 4
 
-sample-percent = 100
+export-fix-sql = true
 
-use-checksum = true
+check-struct-only = false
 
-fix-sql-file = "fix.sql"
+[task]
+    output-dir = "/tmp/ticdc_dm_test/output"
 
-# tables need to check.
-[[check-tables]]
-schema = "incremental_mode"
-tables = ["~t.*"]
+    source-instances = ["mysql1", "mysql2"]
 
-[[table-config]]
-schema = "incremental_mode"
-table = "t1"
+    target-instance = "tidb0"
 
-[[table-config.source-tables]]
-instance-id = "source-1"
-schema = "incremental_mode"
-table  = "t1"
+    target-check-tables = ["incremental_mode.t?*"]
 
-[[table-config]]
-schema = "incremental_mode"
-table = "t2"
 
-[[table-config.source-tables]]
-instance-id = "source-2"
-schema = "incremental_mode"
-table  = "t2"
-
-[[source-db]]
+[data-sources]
+[data-sources.mysql1]
 host = "127.0.0.1"
 port = 3306
 user = "root"
 password = "123456"
-instance-id = "source-1"
 
-[[source-db]]
+[data-sources.mysql2]
 host = "127.0.0.1"
 port = 3307
 user = "root"
 password = "123456"
-instance-id = "source-2"
 
-[target-db]
+[data-sources.tidb0]
 host = "127.0.0.1"
 port = 4000
 user = "test"

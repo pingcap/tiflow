@@ -47,8 +47,9 @@ type testDumplingSuite struct {
 func (d *testDumplingSuite) SetUpSuite(c *C) {
 	dir := c.MkDir()
 	d.cfg = &config.SubTaskConfig{
-		Name: "dumpling_ut",
-		From: config.GetDBConfigForTest(),
+		Name:     "dumpling_ut",
+		Timezone: "UTC",
+		From:     config.GetDBConfigForTest(),
 		LoaderConfig: config.LoaderConfig{
 			Dir: dir,
 		},

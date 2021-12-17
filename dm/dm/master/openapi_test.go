@@ -88,6 +88,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
+	cfg1.ExperimentalFeatures.OpenAPI = true
 
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
@@ -107,6 +108,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg2.PeerUrls = tempurl.Alloc()
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
+	cfg2.ExperimentalFeatures.OpenAPI = true
 
 	s2 := NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
@@ -126,6 +128,29 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	// list source not from leader will get a redirect
 	result2 := testutil.NewRequest().Get(baseURL).Go(t.testT, s2.echo)
 	c.Assert(result2.Code(), check.Equals, http.StatusTemporaryRedirect)
+	cancel()
+}
+
+func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
+	// create a new cluster
+	cfg1 := NewConfig()
+	c.Assert(cfg1.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	cfg1.Name = "dm-master-1"
+	cfg1.DataDir = c.MkDir()
+	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.PeerUrls = tempurl.Alloc()
+	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
+	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
+
+	s1 := NewServer(cfg1)
+	ctx, cancel := context.WithCancel(context.Background())
+	c.Assert(s1.Start(ctx), check.IsNil)
+	// wait the first one become the leader
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s1.election.IsLeader() && s1.scheduler.Started()
+	}), check.IsTrue)
+	c.Assert(s1.echo, check.IsNil)
+	defer s1.Close()
 	cancel()
 }
 
@@ -452,10 +477,10 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	task.TargetConfig.Password = dbCfg.Password
 
 	createTaskReq := openapi.CreateTaskRequest{RemoveMeta: false, Task: task}
-	result2 := testutil.NewRequest().Post(taskURL).WithJsonBody(createTaskReq).Go(t.testT, s.echo)
-	c.Assert(result2.Code(), check.Equals, http.StatusCreated)
+	result = testutil.NewRequest().Post(taskURL).WithJsonBody(createTaskReq).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusCreated)
 	var createTaskResp openapi.Task
-	err = result2.UnmarshalBodyToObject(&createTaskResp)
+	err = result.UnmarshalBodyToObject(&createTaskResp)
 	c.Assert(err, check.IsNil)
 	c.Assert(task.Name, check.Equals, createTaskResp.Name)
 	subTaskM := s.scheduler.GetSubTaskCfgsByTask(task.Name)
@@ -463,41 +488,61 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(subTaskM[source1Name].Name, check.Equals, task.Name)
 
 	// list tasks
-	result3 := testutil.NewRequest().Get(taskURL).Go(t.testT, s.echo)
-	c.Assert(result3.Code(), check.Equals, http.StatusOK)
+	result = testutil.NewRequest().Get(taskURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	var resultTaskList openapi.GetTaskListResponse
-	err = result3.UnmarshalBodyToObject(&resultTaskList)
+	err = result.UnmarshalBodyToObject(&resultTaskList)
 	c.Assert(err, check.IsNil)
 	c.Assert(resultTaskList.Total, check.Equals, 1)
 	c.Assert(resultTaskList.Data[0].Name, check.Equals, task.Name)
+
+	// pause and resume task
+	pauseTaskURL := fmt.Sprintf("%s/%s/pause", taskURL, task.Name)
+	result = testutil.NewRequest().Post(pauseTaskURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	c.Assert(s.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect, check.Equals, pb.Stage_Paused)
+
+	resumeTaskURL := fmt.Sprintf("%s/%s/resume", taskURL, task.Name)
+	result = testutil.NewRequest().Post(resumeTaskURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	c.Assert(s.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect, check.Equals, pb.Stage_Running)
 
 	// get task status
 	mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
 	mockTaskQueryStatus(mockWorkerClient, task.Name, source1.SourceName, workerName1)
 	s.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
 	taskStatusURL := fmt.Sprintf("%s/%s/status", taskURL, task.Name)
-	result4 := testutil.NewRequest().Get(taskStatusURL).Go(t.testT, s.echo)
-	c.Assert(result4.Code(), check.Equals, http.StatusOK)
+	result = testutil.NewRequest().Get(taskStatusURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	var resultTaskStatus openapi.GetTaskStatusResponse
-	err = result4.UnmarshalBodyToObject(&resultTaskStatus)
+	err = result.UnmarshalBodyToObject(&resultTaskStatus)
 	c.Assert(err, check.IsNil)
 	c.Assert(resultTaskStatus.Total, check.Equals, 1) // only 1 subtask
 	c.Assert(resultTaskStatus.Data[0].Name, check.Equals, task.Name)
 	c.Assert(resultTaskStatus.Data[0].Stage, check.Equals, pb.Stage_Running.String())
 	c.Assert(resultTaskStatus.Data[0].WorkerName, check.Equals, workerName1)
 
+	// get task status with source name
+	taskStatusURL = fmt.Sprintf("%s/%s/status?source_name_list=%s", taskURL, task.Name, source1Name)
+	result = testutil.NewRequest().Get(taskStatusURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	var resultTaskStatusWithStatus openapi.GetTaskStatusResponse
+	err = result.UnmarshalBodyToObject(&resultTaskStatusWithStatus)
+	c.Assert(err, check.IsNil)
+	c.Assert(resultTaskStatusWithStatus, check.DeepEquals, resultTaskStatus)
+
 	// stop task
-	result5 := testutil.NewRequest().Delete(fmt.Sprintf("%s/%s", taskURL, task.Name)).Go(t.testT, s.echo)
-	c.Assert(result5.Code(), check.Equals, http.StatusNoContent)
+	result = testutil.NewRequest().Delete(fmt.Sprintf("%s/%s", taskURL, task.Name)).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusNoContent)
 	subTaskM = s.scheduler.GetSubTaskCfgsByTask(task.Name)
 	c.Assert(len(subTaskM) == 0, check.IsTrue)
 	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
 
 	// list tasks
-	result6 := testutil.NewRequest().Get(taskURL).Go(t.testT, s.echo)
-	c.Assert(result6.Code(), check.Equals, http.StatusOK)
+	result = testutil.NewRequest().Get(taskURL).Go(t.testT, s.echo)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	var resultTaskList2 openapi.GetTaskListResponse
-	err = result6.UnmarshalBodyToObject(&resultTaskList2)
+	err = result.UnmarshalBodyToObject(&resultTaskList2)
 	c.Assert(err, check.IsNil)
 	c.Assert(resultTaskList2.Total, check.Equals, 0)
 }
@@ -600,6 +645,7 @@ func setupServer(ctx context.Context, c *check.C) *Server {
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
+	cfg1.ExperimentalFeatures.OpenAPI = true
 
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)

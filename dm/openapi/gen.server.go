@@ -82,25 +82,25 @@ type ServerInterface interface {
 	DMAPIDeleteTask(ctx echo.Context, taskName string, params DMAPIDeleteTaskParams) error
 	// pause task
 	// (POST /api/v1/tasks/{task-name}/pause)
-	DMAPPauseTask(ctx echo.Context, taskName string) error
+	DMAPIPauseTask(ctx echo.Context, taskName string) error
 	// resume task
 	// (POST /api/v1/tasks/{task-name}/resume)
 	DMAPIResumeTask(ctx echo.Context, taskName string) error
 	// get task source schema list
 	// (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas)
-	DMAPIGetTaskSourceSchemaList(ctx echo.Context, taskName string, sourceName string) error
+	DMAPIGetSchemaListByTaskAndSource(ctx echo.Context, taskName string, sourceName string) error
 	// get task source table list
 	// (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name})
-	DMAPIGetTaskSourceTableList(ctx echo.Context, taskName string, sourceName string, schemaName string) error
+	DMAPIGetTableListByTaskAndSource(ctx echo.Context, taskName string, sourceName string, schemaName string) error
 	// delete task source table structure
 	// (DELETE /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name})
-	DMAPIDeleteTaskSourceTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error
+	DMAPIDeleteTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error
 	// get task source table structure
 	// (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name})
-	DMAPIGetTaskSourceTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error
+	DMAPIGetTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error
 	// operate task source table structure
 	// (PUT /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name})
-	DMAPIOperateTaskSourceTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error
+	DMAPIOperateTableStructure(ctx echo.Context, taskName string, sourceName string, schemaName string, tableName string) error
 	// get task status
 	// (GET /api/v1/tasks/{task-name}/status)
 	DMAPIGetTaskStatus(ctx echo.Context, taskName string, params DMAPIGetTaskStatusParams) error
@@ -410,8 +410,8 @@ func (w *ServerInterfaceWrapper) DMAPIDeleteTask(ctx echo.Context) error {
 	return err
 }
 
-// DMAPPauseTask converts echo context to params.
-func (w *ServerInterfaceWrapper) DMAPPauseTask(ctx echo.Context) error {
+// DMAPIPauseTask converts echo context to params.
+func (w *ServerInterfaceWrapper) DMAPIPauseTask(ctx echo.Context) error {
 	var err error
 	// ------------- Path parameter "task-name" -------------
 	var taskName string
@@ -422,7 +422,7 @@ func (w *ServerInterfaceWrapper) DMAPPauseTask(ctx echo.Context) error {
 	}
 
 	// Invoke the callback with all the unmarshalled arguments
-	err = w.Handler.DMAPPauseTask(ctx, taskName)
+	err = w.Handler.DMAPIPauseTask(ctx, taskName)
 	return err
 }
 
@@ -442,8 +442,8 @@ func (w *ServerInterfaceWrapper) DMAPIResumeTask(ctx echo.Context) error {
 	return err
 }
 
-// DMAPIGetTaskSourceSchemaList converts echo context to params.
-func (w *ServerInterfaceWrapper) DMAPIGetTaskSourceSchemaList(ctx echo.Context) error {
+// DMAPIGetSchemaListByTaskAndSource converts echo context to params.
+func (w *ServerInterfaceWrapper) DMAPIGetSchemaListByTaskAndSource(ctx echo.Context) error {
 	var err error
 	// ------------- Path parameter "task-name" -------------
 	var taskName string
@@ -462,44 +462,12 @@ func (w *ServerInterfaceWrapper) DMAPIGetTaskSourceSchemaList(ctx echo.Context) 
 	}
 
 	// Invoke the callback with all the unmarshalled arguments
-	err = w.Handler.DMAPIGetTaskSourceSchemaList(ctx, taskName, sourceName)
+	err = w.Handler.DMAPIGetSchemaListByTaskAndSource(ctx, taskName, sourceName)
 	return err
 }
 
-// DMAPIGetTaskSourceTableList converts echo context to params.
-func (w *ServerInterfaceWrapper) DMAPIGetTaskSourceTableList(ctx echo.Context) error {
-	var err error
-	// ------------- Path parameter "task-name" -------------
-	var taskName string
-
-	err = runtime.BindStyledParameterWithLocation("simple", false, "task-name", runtime.ParamLocationPath, ctx.Param("task-name"), &taskName)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter task-name: %s", err))
-	}
-
-	// ------------- Path parameter "source-name" -------------
-	var sourceName string
-
-	err = runtime.BindStyledParameterWithLocation("simple", false, "source-name", runtime.ParamLocationPath, ctx.Param("source-name"), &sourceName)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter source-name: %s", err))
-	}
-
-	// ------------- Path parameter "schema-name" -------------
-	var schemaName string
-
-	err = runtime.BindStyledParameterWithLocation("simple", false, "schema-name", runtime.ParamLocationPath, ctx.Param("schema-name"), &schemaName)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter schema-name: %s", err))
-	}
-
-	// Invoke the callback with all the unmarshalled arguments
-	err = w.Handler.DMAPIGetTaskSourceTableList(ctx, taskName, sourceName, schemaName)
-	return err
-}
-
-// DMAPIDeleteTaskSourceTableStructure converts echo context to params.
-func (w *ServerInterfaceWrapper) DMAPIDeleteTaskSourceTableStructure(ctx echo.Context) error {
+// DMAPIGetTableListByTaskAndSource converts echo context to params.
+func (w *ServerInterfaceWrapper) DMAPIGetTableListByTaskAndSource(ctx echo.Context) error {
 	var err error
 	// ------------- Path parameter "task-name" -------------
 	var taskName string
@@ -525,21 +493,13 @@ func (w *ServerInterfaceWrapper) DMAPIDeleteTaskSourceTableStructure(ctx echo.Co
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter schema-name: %s", err))
 	}
 
-	// ------------- Path parameter "table-name" -------------
-	var tableName string
-
-	err = runtime.BindStyledParameterWithLocation("simple", false, "table-name", runtime.ParamLocationPath, ctx.Param("table-name"), &tableName)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter table-name: %s", err))
-	}
-
 	// Invoke the callback with all the unmarshalled arguments
-	err = w.Handler.DMAPIDeleteTaskSourceTableStructure(ctx, taskName, sourceName, schemaName, tableName)
+	err = w.Handler.DMAPIGetTableListByTaskAndSource(ctx, taskName, sourceName, schemaName)
 	return err
 }
 
-// DMAPIGetTaskSourceTableStructure converts echo context to params.
-func (w *ServerInterfaceWrapper) DMAPIGetTaskSourceTableStructure(ctx echo.Context) error {
+// DMAPIDeleteTableStructure converts echo context to params.
+func (w *ServerInterfaceWrapper) DMAPIDeleteTableStructure(ctx echo.Context) error {
 	var err error
 	// ------------- Path parameter "task-name" -------------
 	var taskName string
@@ -574,12 +534,12 @@ func (w *ServerInterfaceWrapper) DMAPIGetTaskSourceTableStructure(ctx echo.Conte
 	}
 
 	// Invoke the callback with all the unmarshalled arguments
-	err = w.Handler.DMAPIGetTaskSourceTableStructure(ctx, taskName, sourceName, schemaName, tableName)
+	err = w.Handler.DMAPIDeleteTableStructure(ctx, taskName, sourceName, schemaName, tableName)
 	return err
 }
 
-// DMAPIOperateTaskSourceTableStructure converts echo context to params.
-func (w *ServerInterfaceWrapper) DMAPIOperateTaskSourceTableStructure(ctx echo.Context) error {
+// DMAPIGetTableStructure converts echo context to params.
+func (w *ServerInterfaceWrapper) DMAPIGetTableStructure(ctx echo.Context) error {
 	var err error
 	// ------------- Path parameter "task-name" -------------
 	var taskName string
@@ -614,7 +574,47 @@ func (w *ServerInterfaceWrapper) DMAPIOperateTaskSourceTableStructure(ctx echo.C
 	}
 
 	// Invoke the callback with all the unmarshalled arguments
-	err = w.Handler.DMAPIOperateTaskSourceTableStructure(ctx, taskName, sourceName, schemaName, tableName)
+	err = w.Handler.DMAPIGetTableStructure(ctx, taskName, sourceName, schemaName, tableName)
+	return err
+}
+
+// DMAPIOperateTableStructure converts echo context to params.
+func (w *ServerInterfaceWrapper) DMAPIOperateTableStructure(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "task-name" -------------
+	var taskName string
+
+	err = runtime.BindStyledParameterWithLocation("simple", false, "task-name", runtime.ParamLocationPath, ctx.Param("task-name"), &taskName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter task-name: %s", err))
+	}
+
+	// ------------- Path parameter "source-name" -------------
+	var sourceName string
+
+	err = runtime.BindStyledParameterWithLocation("simple", false, "source-name", runtime.ParamLocationPath, ctx.Param("source-name"), &sourceName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter source-name: %s", err))
+	}
+
+	// ------------- Path parameter "schema-name" -------------
+	var schemaName string
+
+	err = runtime.BindStyledParameterWithLocation("simple", false, "schema-name", runtime.ParamLocationPath, ctx.Param("schema-name"), &schemaName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter schema-name: %s", err))
+	}
+
+	// ------------- Path parameter "table-name" -------------
+	var tableName string
+
+	err = runtime.BindStyledParameterWithLocation("simple", false, "table-name", runtime.ParamLocationPath, ctx.Param("table-name"), &tableName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter table-name: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshalled arguments
+	err = w.Handler.DMAPIOperateTableStructure(ctx, taskName, sourceName, schemaName, tableName)
 	return err
 }
 
@@ -690,98 +690,98 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	router.GET(baseURL+"/api/v1/tasks", wrapper.DMAPIGetTaskList)
 	router.POST(baseURL+"/api/v1/tasks", wrapper.DMAPIStartTask)
 	router.DELETE(baseURL+"/api/v1/tasks/:task-name", wrapper.DMAPIDeleteTask)
-	router.POST(baseURL+"/api/v1/tasks/:task-name/pause", wrapper.DMAPPauseTask)
+	router.POST(baseURL+"/api/v1/tasks/:task-name/pause", wrapper.DMAPIPauseTask)
 	router.POST(baseURL+"/api/v1/tasks/:task-name/resume", wrapper.DMAPIResumeTask)
-	router.GET(baseURL+"/api/v1/tasks/:task-name/sources/:source-name/schemas", wrapper.DMAPIGetTaskSourceSchemaList)
-	router.GET(baseURL+"/api/v1/tasks/:task-name/sources/:source-name/schemas/:schema-name", wrapper.DMAPIGetTaskSourceTableList)
-	router.DELETE(baseURL+"/api/v1/tasks/:task-name/sources/:source-name/schemas/:schema-name/:table-name", wrapper.DMAPIDeleteTaskSourceTableStructure)
-	router.GET(baseURL+"/api/v1/tasks/:task-name/sources/:source-name/schemas/:schema-name/:table-name", wrapper.DMAPIGetTaskSourceTableStructure)
-	router.PUT(baseURL+"/api/v1/tasks/:task-name/sources/:source-name/schemas/:schema-name/:table-name", wrapper.DMAPIOperateTaskSourceTableStructure)
+	router.GET(baseURL+"/api/v1/tasks/:task-name/sources/:source-name/schemas", wrapper.DMAPIGetSchemaListByTaskAndSource)
+	router.GET(baseURL+"/api/v1/tasks/:task-name/sources/:source-name/schemas/:schema-name", wrapper.DMAPIGetTableListByTaskAndSource)
+	router.DELETE(baseURL+"/api/v1/tasks/:task-name/sources/:source-name/schemas/:schema-name/:table-name", wrapper.DMAPIDeleteTableStructure)
+	router.GET(baseURL+"/api/v1/tasks/:task-name/sources/:source-name/schemas/:schema-name/:table-name", wrapper.DMAPIGetTableStructure)
+	router.PUT(baseURL+"/api/v1/tasks/:task-name/sources/:source-name/schemas/:schema-name/:table-name", wrapper.DMAPIOperateTableStructure)
 	router.GET(baseURL+"/api/v1/tasks/:task-name/status", wrapper.DMAPIGetTaskStatus)
 }
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"BZDM7g/m47IHd5/v/h0AAP//ygaUOLJ9AAA=",
+	"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",
+	"JLPLgvm47MH95/t/BwAA//+0gXDln30AAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
