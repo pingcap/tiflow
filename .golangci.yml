@@ -35,7 +35,7 @@ linters-settings:
     include-go-root: false
     packages:
       - log
-      - github.com/pingcap/errors
+      - github.com/juju/errors
     packages-with-error-message:
       # specify an error message to output when a blacklisted package is used
       - log: "logging is allowed only by pingcap/log"
