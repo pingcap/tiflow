@@ -19,9 +19,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	config2 "github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	config2 "github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var (

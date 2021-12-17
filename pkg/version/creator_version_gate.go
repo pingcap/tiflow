@@ -26,9 +26,9 @@ type CreatorVersionGate struct {
 // changefeedStateFromAdminJobVersions specifies the version before
 // which we use the admin job type to control the state of the changefeed.
 var changefeedStateFromAdminJobVersions = []semver.Version{
-	// Introduced in https://github.com/pingcap/ticdc/pull/3014.
+	// Introduced in https://github.com/pingcap/tiflow/pull/3014.
 	*semver.New("4.0.16"),
-	// Introduced in https://github.com/pingcap/ticdc/pull/2946.
+	// Introduced in https://github.com/pingcap/tiflow/pull/2946.
 	*semver.New("5.0.6"),
 }
 
@@ -42,7 +42,7 @@ func NewCreatorVersionGate(version string) *CreatorVersionGate {
 // ChangefeedStateFromAdminJob determines if admin job is the state
 // of changefeed based on the version of the creator.
 func (f *CreatorVersionGate) ChangefeedStateFromAdminJob() bool {
-	// Introduced in https://github.com/pingcap/ticdc/pull/1341.
+	// Introduced in https://github.com/pingcap/tiflow/pull/1341.
 	// The changefeed before it was introduced was using the old owner.
 	if f.version == "" {
 		return true
