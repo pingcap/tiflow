@@ -30,6 +30,8 @@ import (
 
 const maxFlushBatchSize = 512
 
+// bufferSink buffers emitted events and checkpoints and flush asynchronously.
+// Note that it is a thread-safe Sink implementation.
 type bufferSink struct {
 	Sink
 	changeFeedCheckpointTs uint64
@@ -39,6 +41,8 @@ type bufferSink struct {
 	flushTsChan            chan flushMsg
 	drawbackChan           chan drawbackMsg
 }
+
+var _ Sink = (*bufferSink)(nil)
 
 func newBufferSink(
 	backendSink Sink, checkpointTs model.Ts, drawbackChan chan drawbackMsg,

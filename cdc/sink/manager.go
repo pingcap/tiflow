@@ -26,9 +26,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// Manager manages table sinks, maintains the relationship between table sinks and backendSink.
+// Manager manages table sinks, maintains the relationship between table sinks
+// and backendSink.
+// Manager is thread-safe.
 type Manager struct {
-	backendSink            *bufferSink
+	bufSink                *bufferSink
 	tableCheckpointTsMap   sync.Map
 	tableSinks             map[model.TableID]*tableSink
 	tableSinksMu           sync.Mutex
@@ -50,7 +52,7 @@ func NewManager(
 	bufSink := newBufferSink(backendSink, checkpointTs, drawbackChan)
 	go bufSink.run(ctx, errCh)
 	return &Manager{
-		backendSink:               bufSink,
+		bufSink:                   bufSink,
 		changeFeedCheckpointTs:    checkpointTs,
 		tableSinks:                make(map[model.TableID]*tableSink),
 		drawbackChan:              drawbackChan,
@@ -79,15 +81,17 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
 func (m *Manager) Close(ctx context.Context) error {
+	m.tableSinksMu.Lock()
+	defer m.tableSinksMu.Unlock()
 	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
-	if m.backendSink != nil {
-		return m.backendSink.Close(ctx)
+	if m.bufSink != nil {
+		return m.bufSink.Close(ctx)
 	}
 	return nil
 }
 
 func (m *Manager) flushBackendSink(ctx context.Context, tableID model.TableID, resolvedTs uint64) (model.Ts, error) {
-	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+	checkpointTs, err := m.bufSink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
 	if err != nil {
 		return m.getCheckpointTs(tableID), errors.Trace(err)
 	}
@@ -110,7 +114,7 @@ func (m *Manager) destroyTableSink(ctx context.Context, tableID model.TableID) e
 		return ctx.Err()
 	case <-callback:
 	}
-	return m.backendSink.Barrier(ctx, tableID)
+	return m.bufSink.Barrier(ctx, tableID)
 }
 
 func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
@@ -125,8 +129,8 @@ func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
 
 func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
 	atomic.StoreUint64(&m.changeFeedCheckpointTs, checkpointTs)
-	if m.backendSink != nil {
-		m.backendSink.UpdateChangeFeedCheckpointTs(checkpointTs)
+	if m.bufSink != nil {
+		m.bufSink.UpdateChangeFeedCheckpointTs(checkpointTs)
 	}
 }
 
