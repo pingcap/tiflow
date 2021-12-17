@@ -34,9 +34,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
-var (
-	DumplingDefaultTableFilter = []string{"*.*", export.DefaultTableFilter}
-)
+var DumplingDefaultTableFilter = []string{"*.*", export.DefaultTableFilter}
 
 // ParseMetaData parses mydumper's output meta file and returns binlog location.
 // since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
