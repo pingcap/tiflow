@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -618,6 +619,7 @@ func GetSQLModeStrBySQLMode(sqlMode tmysql.SQLMode) string {
 			sqlModeStr = append(sqlModeStr, str)
 		}
 	}
+	sort.Strings(sqlModeStr)
 	return strings.Join(sqlModeStr, ",")
 }
 

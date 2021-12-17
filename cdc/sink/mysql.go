@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
+	dmutils "github.com/pingcap/ticdc/dm/pkg/utils"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
@@ -166,6 +167,10 @@ func newMySQLSink(
 		cancel:                          cancel,
 	}
 
+	if err = sink.adjustSQLModeCompatible(ctx); err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	if val, ok := opts[mark.OptCyclicConfig]; ok {
 		cfg := new(config.CyclicConfig)
 		err := cfg.Unmarshal([]byte(val))
@@ -174,7 +179,7 @@ func newMySQLSink(
 		}
 		sink.cyclic = cyclic.NewCyclic(cfg)
 
-		err = sink.adjustSQLMode(ctx)
+		err = sink.adjustSQLModeCyclic(ctx)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -348,8 +353,26 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
+func (s *mysqlSink) adjustSQLModeCompatible(ctx context.Context) error {
+	var oldMode, newMode string
+	row := s.db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
+	err := row.Scan(&oldMode)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
+	}
+	newMode, err = dmutils.AdjustSQLModeCompatible(oldMode)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
+	}
+	_, err = s.db.ExecContext(ctx, fmt.Sprintf("SET sql_mode = '%s';", newMode))
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
+	}
+	return nil
+}
+
 // adjustSQLMode adjust sql mode according to sink config.
-func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
+func (s *mysqlSink) adjustSQLModeCyclic(ctx context.Context) error {
 	// Must relax sql mode to support cyclic replication, as downstream may have
 	// extra columns (not null and no default value).
 	if s.cyclic == nil || !s.cyclic.Enabled() {
