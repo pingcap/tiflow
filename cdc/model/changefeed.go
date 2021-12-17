@@ -260,7 +260,7 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 
 // FixIncompatible fixes incompatible changefeed meta info.
 func (info *ChangeFeedInfo) FixIncompatible() {
-	log.Info("Start fixing incompatible changefeed info", zap.Any("changefeed", info))
+	log.Info("Start fixing incompatible changefeed info")
 	creatorVersionGate := version.NewCreatorVersionGate(info.CreatorVersion)
 	if creatorVersionGate.ChangefeedStateFromAdminJob() {
 		info.fixState()
@@ -269,7 +269,7 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 	if creatorVersionGate.ChangefeedAcceptUnknownProtocols() {
 		info.fixSinkProtocol()
 	}
-	log.Info("Fix incompatibility changefeed info completed", zap.Any("changefeed", info))
+	log.Info("Fix incompatibility changefeed info completed")
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -316,7 +316,7 @@ func (info *ChangeFeedInfo) fixState() {
 func (info *ChangeFeedInfo) fixSinkProtocol() {
 	sinkURIParsed, err := url.Parse(info.SinkURI)
 	if err != nil {
-		log.Warn("parse sink URI failed", zap.Any("sink URI", info.SinkURI), zap.Error(err))
+		log.Warn("parse sink URI failed", zap.Error(err))
 		// SAFETY: It is safe to ignore this unresolvable sink URI here,
 		// as it is almost impossible for this to happen.
 		// If we ignore it when fixing it after it happens,
@@ -342,11 +342,13 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 	if protocolStr != "" {
 		if needsFix(protocolStr) {
 			rawQuery.Set(config.ProtocolKey, openProtocolStr)
-			sinkURIParsed.RawQuery = rawQuery.Encode()
+			oldRawQuery := sinkURIParsed.RawQuery
+			newRawQuery := rawQuery.Encode()
+			sinkURIParsed.RawQuery = newRawQuery
 			fixedSinkURI := sinkURIParsed.String()
 			log.Info("handle incompatible protocol from sink URI",
-				zap.String("old URI", info.SinkURI),
-				zap.String("fixed URI", fixedSinkURI))
+				zap.String("old URI query", oldRawQuery),
+				zap.String("fixed URI query", newRawQuery))
 			info.SinkURI = fixedSinkURI
 		}
 	} else {
