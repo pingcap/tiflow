@@ -15,6 +15,7 @@ package checker
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -22,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/dm/dm/config"
 	"github.com/pingcap/ticdc/dm/dm/ctl/common"
 	"github.com/pingcap/ticdc/dm/pkg/conn"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
 
 	tc "github.com/pingcap/check"
 )
@@ -62,7 +64,6 @@ func ignoreExcept(itemMap map[string]struct{}) []string {
 	return ignoreCheckingItems
 }
 
-/*
 func (s *testCheckerSuite) TestIgnoreAllCheckingItems(c *tc.C) {
 	c.Assert(CheckSyncConfig(context.Background(), nil, common.DefaultErrorCnt, common.DefaultWarnCnt), tc.IsNil)
 
@@ -116,7 +117,7 @@ func (s *testCheckerSuite) TestReplicationPrivilegeChecking(c *tc.C) {
 		AddRow("GRANT REPLICATION SLAVE,REPLICATION CLIENT ON *.* TO 'haha'@'%'"))
 	c.Assert(CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt), tc.IsNil)
 }
-*/
+
 func (s *testCheckerSuite) TestVersionChecking(c *tc.C) {
 	cfgs := []*config.SubTaskConfig{
 		{
@@ -144,7 +145,8 @@ func (s *testCheckerSuite) TestVersionChecking(c *tc.C) {
 	// mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 	// 	AddRow("version", "10.0.0-MariaDB"))
 	// c.Assert(CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt), tc.ErrorMatches, "(.|\n)*version required at least .* but got 10.0.0(.|\n)*")
-} /*
+}
+
 func (s *testCheckerSuite) TestServerIDChecking(c *tc.C) {
 	cfgs := []*config.SubTaskConfig{
 		{
@@ -365,7 +367,7 @@ func (s *testCheckerSuite) TestSameTargetTableDetection(c *tc.C) {
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
 	c.Assert(CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt), tc.ErrorMatches, "(.|\n)*same table name in case-insensitive(.|\n)*")
 }
-*/
+
 func initMockDB(c *tc.C) sqlmock.Sqlmock {
 	mock := conn.InitMockDB(c)
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))
