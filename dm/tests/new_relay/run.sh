@@ -43,8 +43,6 @@ function test_cant_dail_upstream() {
 	cleanup_data $TEST_NAME
 }
 
-<<<<<<< HEAD
-=======
 function test_cant_dail_downstream() {
 	cleanup_data $TEST_NAME
 	cleanup_process
@@ -161,7 +159,6 @@ function test_restart_relay_status() {
 		"bound" 2
 }
 
->>>>>>> a839044e8 (dm/scheduler: fix inconsistent of relay status (#3474))
 function test_kill_dump_connection() {
 	cleanup_data $TEST_NAME
 	cleanup_process
@@ -202,11 +199,8 @@ function test_kill_dump_connection() {
 }
 
 function run() {
-<<<<<<< HEAD
-=======
 	test_restart_relay_status
 	test_cant_dail_downstream
->>>>>>> a839044e8 (dm/scheduler: fix inconsistent of relay status (#3474))
 	test_cant_dail_upstream
 
 	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/relay/ReportRelayLogSpaceInBackground=return(1)"
