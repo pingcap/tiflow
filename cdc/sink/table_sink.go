@@ -16,7 +16,6 @@ package sink
 import (
 	"context"
 	"sort"
-	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -26,11 +25,9 @@ import (
 )
 
 type tableSink struct {
-	tableID model.TableID
-	manager *Manager
-	buffer  []*model.RowChangedEvent
-	// emittedTs means all of events which of commitTs less than or equal to emittedTs is sent to backendSink
-	emittedTs   model.Ts
+	tableID     model.TableID
+	manager     *Manager
+	buffer      []*model.RowChangedEvent
 	redoManager redo.LogManager
 }
 
@@ -56,6 +53,7 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 // FlushRowChangedEvents flushes sorted rows to sink manager, note the resolvedTs
 // is required to be no more than global resolvedTs, table barrierTs and table
 // redo log watermarkTs.
+<<<<<<< HEAD
 func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	// Log abnormal checkpoint that is large than resolved ts.
 	logAbnormalCheckpoint := func(ckpt uint64) {
@@ -66,11 +64,18 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 					zap.Uint64("resolvedTs", resolvedTs),
 					zap.Uint64("checkpointTs", ckpt))
 		}
+=======
+func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
+	if tableID != t.tableID {
+		log.Panic("inconsistent table sink",
+			zap.Int64("tableID", tableID), zap.Int64("sinkTableID", t.tableID))
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 	}
 	i := sort.Search(len(t.buffer), func(i int) bool {
 		return t.buffer[i].CommitTs > resolvedTs
 	})
 	if i == 0 {
+<<<<<<< HEAD
 		atomic.StoreUint64(&t.emittedTs, resolvedTs)
 		ckpt, err := t.flushRedoLogs(ctx, resolvedTs)
 		if err != nil {
@@ -82,31 +87,47 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		}
 		logAbnormalCheckpoint(ckpt)
 		return ckpt, err
+=======
+		return t.flushResolvedTs(ctx, resolvedTs)
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 	}
 	resolvedRows := t.buffer[:i]
 	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
 
-	err := t.manager.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
+	err := t.manager.bufSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
 		return t.manager.getCheckpointTs(), errors.Trace(err)
 	}
-	atomic.StoreUint64(&t.emittedTs, resolvedTs)
-	ckpt, err := t.flushRedoLogs(ctx, resolvedTs)
+	return t.flushResolvedTs(ctx, resolvedTs)
+}
+
+func (t *tableSink) flushResolvedTs(ctx context.Context, resolvedTs uint64) (uint64, error) {
+	redoTs, err := t.flushRedoLogs(ctx, resolvedTs)
 	if err != nil {
-		return ckpt, err
+		return t.manager.getCheckpointTs(t.tableID), err
 	}
+	if redoTs < resolvedTs {
+		resolvedTs = redoTs
+	}
+<<<<<<< HEAD
 	ckpt, err = t.manager.flushBackendSink(ctx)
 	if err != nil {
 		return ckpt, err
 	}
 	logAbnormalCheckpoint(ckpt)
 	return ckpt, err
+=======
+	return t.manager.flushBackendSink(ctx, t.tableID, resolvedTs)
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 }
 
+// flushRedoLogs flush redo logs and returns redo log resolved ts which means
+// all events before the ts have been persisted to redo log storage.
 func (t *tableSink) flushRedoLogs(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	if t.redoManager.Enabled() {
 		err := t.redoManager.FlushLog(ctx, t.tableID, resolvedTs)
 		if err != nil {
+<<<<<<< HEAD
 			return t.manager.getCheckpointTs(), err
 		}
 	}
@@ -122,9 +143,13 @@ func (t *tableSink) getResolvedTs() uint64 {
 		redoResolvedTs := t.redoManager.GetMinResolvedTs()
 		if redoResolvedTs < ts {
 			ts = redoResolvedTs
+=======
+			return 0, err
+>>>>>>> b5a52cec7 (sink(ticdc): optimize buffer sink flush from O(N^2) to O(N) (#3899))
 		}
+		return t.redoManager.GetMinResolvedTs(), nil
 	}
-	return ts
+	return resolvedTs, nil
 }
 
 func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
