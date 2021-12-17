@@ -17,17 +17,12 @@ import (
 	"context"
 	"time"
 
-<<<<<<< HEAD
-	"github.com/pingcap/ticdc/pkg/pdtime"
-
-	"github.com/pingcap/ticdc/pkg/version"
-
-=======
 	"github.com/pingcap/log"
->>>>>>> 2ed02366d (pkg,cdc: do not use log package (#3902))
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/pdtime"
+	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"

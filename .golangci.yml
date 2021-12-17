@@ -2,36 +2,9 @@ linters:
   enable:
     - unconvert
     - unparam
-<<<<<<< HEAD
-=======
-    - revive
     - depguard
 
 linters-settings:
-  revive:
-    ignore-generated-header: false
-    severity: error
-    confidence: 0.8
-    error-code: -1
-    warning-code: -1
-    rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: if-return
-      - name: var-naming
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: indent-error-flow
-      - name: superfluous-else
-      - name: modifies-parameter
-      - name: unreachable-code
-
   depguard:
     list-type: blacklist
     include-go-root: false
@@ -42,4 +15,3 @@ linters-settings:
       # specify an error message to output when a blacklisted package is used
       - log: "logging is allowed only by pingcap/log"
       - github.com/juju/errors: "error handling is allowed only by pingcap/errors"
->>>>>>> 2ed02366d (pkg,cdc: do not use log package (#3902))
