@@ -23,12 +23,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/owner"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 )

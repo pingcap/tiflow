@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	pd "github.com/tikv/pd/client"
 )
 

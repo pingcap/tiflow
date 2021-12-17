@@ -22,9 +22,9 @@ import (
 
 	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
-	"github.com/pingcap/ticdc/pkg/quotes"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
