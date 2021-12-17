@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/tiflow/integration/framework"
 )
 
 // SingleTableTask provides a basic implementation for an Avro test case

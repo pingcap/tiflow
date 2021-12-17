@@ -15,8 +15,8 @@ package model
 
 import (
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type kvSuite struct{}
