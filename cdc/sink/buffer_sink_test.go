@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
 

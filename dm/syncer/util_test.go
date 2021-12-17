@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	_ "github.com/pingcap/tidb/types/parser_driver"
 
-	"github.com/pingcap/ticdc/dm/relay"
+	"github.com/pingcap/tiflow/dm/relay"
 )
 
 var _ = Suite(&testUtilSuite{})

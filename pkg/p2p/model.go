@@ -13,7 +13,7 @@
 
 package p2p
 
-import "github.com/pingcap/ticdc/proto/p2p"
+import "github.com/pingcap/tiflow/proto/p2p"
 
 type (
 	// NodeID represents the identifier of a sender node.

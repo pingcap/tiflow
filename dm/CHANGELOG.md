@@ -18,12 +18,12 @@ As of DM v2.0, DM uses a TiDB-independent version number; after DM v2.0, DM uses
 - Fix the issue that dmctl returns unclear error messages [#2063](https://github.com/pingcap/dm/pull/2063)
 - Fix the issue of DM-worker scheduling failure when Relay Log is enabled [#2199](https://github.com/pingcap/dm/pull/2219)
 - Fix the issue that DM-worker fails to connect to the upstream database and to start when Relay Log is enabled [#2227](https://github.com/pingcap/dm/pull/2227)
-- Fix the issue of a meta file writing failure when Relay Log is enabled and upstream database switches [#3164](https://github.com/pingcap/ticdc/pull/3164)
+- Fix the issue of a meta file writing failure when Relay Log is enabled and upstream database switches [#3164](https://github.com/pingcap/tiflow/pull/3164)
 
 ### Improvements
 
 - Reduce latency when Relay Log is enabled [#2225](https://github.com/pingcap/dm/pull/2225)
-- Compress/merge DML statements for incremental replication to reduce replication latency [#3162](https://github.com/pingcap/ticdc/pull/3162) [#3167](https://github.com/pingcap/ticdc/pull/3167)
+- Compress/merge DML statements for incremental replication to reduce replication latency [#3162](https://github.com/pingcap/tiflow/pull/3162) [#3167](https://github.com/pingcap/tiflow/pull/3167)
 - Support OpenAPI feature to better manage DM clusters (experimental feature) [#1928](https://github.com/pingcap/dm/issues/1982)
 - Optimize the user experience of dmctl and add subcommands [#1746](https://github.com/pingcap/dm/pull/1746)
 - Support for maintaining transaction atomicity when stopping or pausing replication tasks [#1928](https://github.com/pingcap/dm/pull/1928)
@@ -37,11 +37,11 @@ As of DM v2.0, DM uses a TiDB-independent version number; after DM v2.0, DM uses
 - Optimize logic for fetching status data from upstream sources to reduce pressure on upstream [#2076](https://github.com/pingcap/dm/pull/2076)
 - Report errors and prompt users when encountering unsupported binlog formats [#2099](https://github.com/pingcap/dm/pull/2099)
 - Support for batch manipulation of all sync tasks in a data source via dmctl [#2166](https://github.com/pingcap/dm/pull/2166)
-- Support for automatic acquisition and configuration of upstream and downstream time zones [#3403](https://github.com/pingcap/ticdc/pull/3403)
+- Support for automatic acquisition and configuration of upstream and downstream time zones [#3403](https://github.com/pingcap/tiflow/pull/3403)
 
 ### Known issues
 
-[GitHub issues](https://github.com/pingcap/ticdc/issues?q=is%3Aissue+is%3Aopen+label%3Atype%2Fbug+label%3Aarea%2Fdm)
+[GitHub issues](https://github.com/pingcap/tiflow/issues?q=is%3Aissue+is%3Aopen+label%3Atype%2Fbug+label%3Aarea%2Fdm)
 
 ## [2.0.7] 2021-09-23
 
