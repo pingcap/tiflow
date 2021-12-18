@@ -21,12 +21,12 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/codec"
 )
 
 var _ = check.Suite(&ddlPullerSuite{})

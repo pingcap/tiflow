@@ -22,9 +22,9 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
-	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/spf13/cobra"
 )
 

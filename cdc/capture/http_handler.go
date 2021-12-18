@@ -20,6 +20,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/br/pkg/httputil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -27,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/version"
-	"github.com/pingcap/tidb/br/pkg/httputil"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )

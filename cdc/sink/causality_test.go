@@ -18,9 +18,9 @@ import (
 	"sort"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
-	"github.com/pingcap/tidb/parser/mysql"
 )
 
 type testCausalitySuite struct{}

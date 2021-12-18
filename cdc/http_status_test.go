@@ -27,6 +27,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/br/pkg/httputil"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -34,7 +35,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	security2 "github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
-	"github.com/pingcap/tidb/br/pkg/httputil"
 	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )

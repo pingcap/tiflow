@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -29,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/pingcap/tiflow/pkg/version"
-	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/tikv/client-go/v2/oracle"
 )
 

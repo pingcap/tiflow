@@ -23,10 +23,10 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/fsutil"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
-	"github.com/pingcap/tidb/util/memory"
 )
 
 type backendPoolSuite struct{}
