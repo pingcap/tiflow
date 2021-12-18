@@ -9,6 +9,9 @@ on:
         description: 'Which PR do you want to trigger'
         required: true
         default: ''
+  pull_request:
+    branches:
+      - master
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
