@@ -1,6 +1,6 @@
 FROM golang:1.16-alpine3.12 as builder
 RUN apk add --no-cache git make bash
-WORKDIR /go/src/github.com/pingcap/ticdc
+WORKDIR /go/src/github.com/pingcap/tiflow
 COPY . .
 ENV CDC_ENABLE_VENDOR=1
 RUN go mod vendor
@@ -10,6 +10,6 @@ RUN make failpoint-disable
 
 FROM alpine:3.12
 RUN apk add --no-cache tzdata bash curl socat
-COPY --from=builder /go/src/github.com/pingcap/ticdc/bin/cdc /cdc
+COPY --from=builder /go/src/github.com/pingcap/tiflow/bin/cdc /cdc
 EXPOSE 8300
 CMD [ "/cdc" ]
