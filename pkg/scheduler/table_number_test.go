@@ -16,8 +16,8 @@ package scheduler
 import (
 	"fmt"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 
 	"github.com/pingcap/check"
 )
