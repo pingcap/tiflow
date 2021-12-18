@@ -2283,6 +2283,9 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	metrics.DispatchBinlogDurationHistogram.WithLabelValues(jobType.String(), s.cfg.Name, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
 
 	if len(sourceTable.Schema) != 0 {
+		// when in position-based replication, now events before table checkpoint is sent to queue. But in GTID-based
+		// replication events may share one GTID, so event whose end position is equal to table checkpoint may not be
+		// sent to queue. We may need event index in GTID to resolve it.
 		s.saveTablePoint(sourceTable, *ec.currentLocation)
 	}
 
