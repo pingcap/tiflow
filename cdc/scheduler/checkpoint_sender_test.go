@@ -31,7 +31,7 @@ const (
 
 func TestCheckpointTsSenderBasics(t *testing.T) {
 	ctx := context.NewBackendContext4Test(false)
-	mockCommunicator := &mockProcessorMessenger{}
+	mockCommunicator := &MockProcessorMessenger{}
 	sender := newCheckpointSender(mockCommunicator, zap.L(), defaultCheckpointIntervalForTesting)
 	mockClock := clock.NewMock()
 	sender.(*checkpointTsSenderImpl).clock = mockClock

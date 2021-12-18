@@ -27,9 +27,9 @@ type CreatorVersionGate struct {
 // which we use the admin job type to control the state of the changefeed.
 var changefeedStateFromAdminJobVersions = []semver.Version{
 	// Introduced in https://github.com/pingcap/tiflow/pull/3014.
-	*semver.New("4.0.14"),
+	*semver.New("4.0.16"),
 	// Introduced in https://github.com/pingcap/tiflow/pull/2946.
-	*semver.New("5.0.5"),
+	*semver.New("5.0.6"),
 }
 
 // NewCreatorVersionGate creates the creator version gate.
@@ -52,7 +52,7 @@ func (f *CreatorVersionGate) ChangefeedStateFromAdminJob() bool {
 	for _, version := range changefeedStateFromAdminJobVersions {
 		// NOTICE: To compare against the same major version.
 		if creatorVersion.Major == version.Major &&
-			(creatorVersion.Equal(version) || creatorVersion.LessThan(version)) {
+			creatorVersion.LessThan(version) {
 			return true
 		}
 	}

@@ -108,7 +108,7 @@ func NewOwner(pdClient pd.Client) *Owner {
 // NewOwner4Test creates a new Owner for test
 func NewOwner4Test(
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
-	newSink func(ctx cdcContext.Context) (AsyncSink, error),
+	newSink func() DDLSink,
 	pdClient pd.Client,
 ) *Owner {
 	o := NewOwner(pdClient)
@@ -401,9 +401,21 @@ func (o *Owner) handleQueries(query *ownerQuery) {
 			query.err = cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.changeFeedID)
 			return
 		}
-		ret := map[model.CaptureID]*model.TaskStatus{}
-		for captureID, taskStatus := range cfReactor.state.TaskStatuses {
-			ret[captureID] = taskStatus.Clone()
+
+		var ret map[model.CaptureID]*model.TaskStatus
+		if provider := cfReactor.GetInfoProvider(); provider != nil {
+			// If the new scheduler is enabled, provider should be non-nil.
+			var err error
+			ret, err = provider.GetTaskStatuses()
+			if err != nil {
+				query.err = errors.Trace(err)
+				return
+			}
+		} else {
+			ret = map[model.CaptureID]*model.TaskStatus{}
+			for captureID, taskStatus := range cfReactor.state.TaskStatuses {
+				ret[captureID] = taskStatus.Clone()
+			}
 		}
 		query.data = ret
 	case ownerQueryTaskPositions:
@@ -412,13 +424,25 @@ func (o *Owner) handleQueries(query *ownerQuery) {
 			query.err = cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.changeFeedID)
 			return
 		}
-		if cfReactor.state == nil {
-			query.err = cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.changeFeedID)
-			return
-		}
-		ret := map[model.CaptureID]*model.TaskPosition{}
-		for captureID, taskPosition := range cfReactor.state.TaskPositions {
-			ret[captureID] = taskPosition.Clone()
+
+		var ret map[model.CaptureID]*model.TaskPosition
+		if provider := cfReactor.GetInfoProvider(); provider != nil {
+			// If the new scheduler is enabled, provider should be non-nil.
+			var err error
+			ret, err = provider.GetTaskPositions()
+			if err != nil {
+				query.err = errors.Trace(err)
+				return
+			}
+		} else {
+			if cfReactor.state == nil {
+				query.err = cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.changeFeedID)
+				return
+			}
+			ret = map[model.CaptureID]*model.TaskPosition{}
+			for captureID, taskPosition := range cfReactor.state.TaskPositions {
+				ret[captureID] = taskPosition.Clone()
+			}
 		}
 		query.data = ret
 	case ownerQueryProcessors:

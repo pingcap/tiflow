@@ -55,6 +55,7 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/pkg/errorutil"

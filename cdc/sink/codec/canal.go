@@ -16,12 +16,12 @@ package codec
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	parser_types "github.com/pingcap/tidb/parser/types"

@@ -441,6 +441,7 @@ ClaimMessages:
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
+				log.Info("Emit RowChangedEvent", zap.Any("row", row))
 				lastCommitTs, ok := sink.tablesMap.Load(row.Table.TableID)
 				if !ok || lastCommitTs.(uint64) < row.CommitTs {
 					sink.tablesMap.Store(row.Table.TableID, row.CommitTs)

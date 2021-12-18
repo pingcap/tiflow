@@ -237,6 +237,7 @@ function test_fail_job_between_event() {
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
 		"github.com/pingcap/tiflow/dm/syncer/countJobFromOneEvent=return()"
+		"github.com/pingcap/tiflow/dm/syncer/flushFirstJob=return()"
 		"github.com/pingcap/tiflow/dm/syncer/failSecondJob=return()"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
@@ -244,7 +245,7 @@ function test_fail_job_between_event() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
-	# worker2 will be bound to source2 and fail when see the second event (we reuse failSecondJob) in a GTID
+	# worker2 will be bound to source2 and fail when see the second event in a GTID
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
 		"github.com/pingcap/tiflow/dm/syncer/countJobFromOneGTID=return()"
@@ -375,6 +376,9 @@ function run() {
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	run_sql_source1 "SHOW SLAVE HOSTS;"
+	check_contains 'Slave_UUID'
 
 	run_sql_tidb "set time_zone = '+04:00';SELECT count(*) from all_mode.no_diff where dt = ts;"
 	check_contains "count(*): 3"

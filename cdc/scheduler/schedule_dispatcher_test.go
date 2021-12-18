@@ -777,3 +777,122 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
 }
+
+func TestAutoRebalanceOnCaptureOnline(t *testing.T) {
+	// This test case tests the following scenario:
+	// 1. Capture-1 and Capture-2 are online.
+	// 2. Owner dispatches three tables to these two captures.
+	// 3. While the pending dispatches are in progress, Capture-3 goes online.
+	// 4. Capture-1 and Capture-2 finish the dispatches.
+	//
+	// We expect that the workload is eventually balanced by migrating
+	// a table to Capture-3.
+
+	t.Parallel()
+
+	ctx := cdcContext.NewBackendContext4Test(false)
+	communicator := NewMockScheduleDispatcherCommunicator()
+	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
+
+	captureList := map[model.CaptureID]*model.CaptureInfo{
+		"capture-1": {
+			ID:            "capture-1",
+			AdvertiseAddr: "fakeip:1",
+		},
+		"capture-2": {
+			ID:            "capture-2",
+			AdvertiseAddr: "fakeip:2",
+		},
+	}
+
+	communicator.On("Announce", mock.Anything, "cf-1", "capture-1").Return(true, nil)
+	communicator.On("Announce", mock.Anything, "cf-1", "capture-2").Return(true, nil)
+	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, captureList)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+
+	dispatcher.OnAgentSyncTaskStatuses("capture-1", []model.TableID{}, []model.TableID{}, []model.TableID{})
+	dispatcher.OnAgentSyncTaskStatuses("capture-2", []model.TableID{}, []model.TableID{}, []model.TableID{})
+
+	communicator.Reset()
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), mock.Anything, false).
+		Return(true, nil)
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), mock.Anything, false).
+		Return(true, nil)
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(3), mock.Anything, false).
+		Return(true, nil)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, captureList)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+	require.NotEqual(t, 0, len(communicator.addTableRecords["capture-1"]))
+	require.NotEqual(t, 0, len(communicator.addTableRecords["capture-2"]))
+	require.Equal(t, 0, len(communicator.removeTableRecords["capture-1"]))
+	require.Equal(t, 0, len(communicator.removeTableRecords["capture-2"]))
+
+	dispatcher.OnAgentCheckpoint("capture-1", 2000, 2000)
+	dispatcher.OnAgentCheckpoint("capture-1", 2001, 2001)
+
+	communicator.ExpectedCalls = nil
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, captureList)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+
+	communicator.AssertExpectations(t)
+
+	captureList["capture-3"] = &model.CaptureInfo{
+		ID:            "capture-3",
+		AdvertiseAddr: "fakeip:3",
+	}
+	communicator.ExpectedCalls = nil
+	communicator.On("Announce", mock.Anything, "cf-1", "capture-3").Return(true, nil)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, captureList)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+
+	communicator.ExpectedCalls = nil
+	dispatcher.OnAgentSyncTaskStatuses("capture-3", []model.TableID{}, []model.TableID{}, []model.TableID{})
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, captureList)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+
+	for captureID, tables := range communicator.addTableRecords {
+		for _, tableID := range tables {
+			dispatcher.OnAgentFinishedTableOperation(captureID, tableID)
+		}
+	}
+
+	communicator.Reset()
+	var removeTableFromCapture model.CaptureID
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, true).
+		Return(true, nil).Run(func(args mock.Arguments) {
+		removeTableFromCapture = args.Get(3).(model.CaptureID)
+	})
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, captureList)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+
+	removedTableID := communicator.removeTableRecords[removeTableFromCapture][0]
+
+	dispatcher.OnAgentFinishedTableOperation(removeTableFromCapture, removedTableID)
+	dispatcher.OnAgentCheckpoint("capture-1", 1100, 1400)
+	dispatcher.OnAgentCheckpoint("capture-2", 1200, 1300)
+	communicator.ExpectedCalls = nil
+	communicator.On("DispatchTable", mock.Anything, "cf-1", removedTableID, "capture-3", false).
+		Return(true, nil)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, captureList)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+}

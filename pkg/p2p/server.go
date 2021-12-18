@@ -252,6 +252,13 @@ func (m *MessageServer) run(ctx context.Context) error {
 							close(task.done)
 						}
 					}()
+				} else {
+					// This is to make deregistering a handler idempotent.
+					// Idempotency here will simplify error handling for the callers of this package.
+					log.Warn("handler not found", zap.String("topic", task.topic))
+					if task.done != nil {
+						close(task.done)
+					}
 				}
 			case taskOnRegisterPeer:
 				log.Debug("taskOnRegisterPeer",

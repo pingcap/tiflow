@@ -15,6 +15,7 @@ package dbconn
 
 import (
 	"context"
+	"strings"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
@@ -71,9 +72,49 @@ func (conn *UpStreamConn) GetServerUnixTS(ctx context.Context) (int64, error) {
 	return utils.GetServerUnixTS(ctx, conn.BaseDB.DB)
 }
 
-// GetCharsetAndDefaultCollation returns charset and default collation map.
-func (conn *UpStreamConn) GetCharsetAndDefaultCollation(ctx context.Context) (map[string]string, error) {
-	return utils.GetCharsetAndDefaultCollation(ctx, conn.BaseDB.DB)
+// GetCharsetAndDefaultCollation returns charset and collation info.
+func GetCharsetAndCollationInfo(tctx *tcontext.Context, conn *DBConn) (map[string]string, map[int]string, error) {
+	charsetAndDefaultCollation := make(map[string]string)
+	idAndCollationMap := make(map[int]string)
+
+	// Show an example.
+	/*
+		mysql> SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS;
+		+----------------------------+--------------------+-----+------------+
+		| COLLATION_NAME             | CHARACTER_SET_NAME | ID  | IS_DEFAULT |
+		+----------------------------+--------------------+-----+------------+
+		| armscii8_general_ci        | armscii8           |  32 | Yes        |
+		| armscii8_bin               | armscii8           |  64 |            |
+		| ascii_general_ci           | ascii              |  11 | Yes        |
+		| ascii_bin                  | ascii              |  65 |            |
+		| big5_chinese_ci            | big5               |   1 | Yes        |
+		| big5_bin                   | big5               |  84 |            |
+		| binary                     | binary             |  63 | Yes        |
+		+----------------------------+--------------------+-----+------------+
+	*/
+
+	rows, err := conn.QuerySQL(tctx, "SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS")
+	if err != nil {
+		return nil, nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+
+	defer rows.Close()
+	for rows.Next() {
+		var collation, charset, isDefault string
+		var id int
+		if scanErr := rows.Scan(&collation, &charset, &id, &isDefault); scanErr != nil {
+			return nil, nil, terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
+		}
+		idAndCollationMap[id] = strings.ToLower(collation)
+		if strings.ToLower(isDefault) == "yes" {
+			charsetAndDefaultCollation[strings.ToLower(charset)] = collation
+		}
+	}
+
+	if err = rows.Close(); err != nil {
+		return nil, nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+	}
+	return charsetAndDefaultCollation, idAndCollationMap, err
 }
 
 // GetParser returns the parser with correct flag for upstream.

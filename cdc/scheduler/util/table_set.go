@@ -14,8 +14,7 @@
 package util
 
 import (
-	"log"
-
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )

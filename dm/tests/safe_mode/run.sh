@@ -32,6 +32,7 @@ function consistency_none() {
 	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	sleep 1
 	# make sure dumpling's metadata added empty line after two SHOW MASTER STATUS
 	empty_line=$(grep -cvE '\S' $WORK_DIR/worker1/dumped_data.test/metadata)
 	if [ $empty_line -ne 2 ]; then

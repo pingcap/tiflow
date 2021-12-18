@@ -14,6 +14,7 @@
 package orchestrator
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -21,6 +22,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
@@ -650,6 +652,37 @@ func (s *stateSuite) TestGlobalStateUpdate(c *check.C) {
 		c.Assert(cmp.Equal(state, &tc.expected, cmpopts.IgnoreUnexported(GlobalReactorState{}, ChangefeedReactorState{})), check.IsTrue,
 			check.Commentf("%s", cmp.Diff(state, &tc.expected, cmpopts.IgnoreUnexported(GlobalReactorState{}, ChangefeedReactorState{}))))
 	}
+}
+
+func (s *stateSuite) TestCaptureChangeHooks(c *check.C) {
+	defer testleak.AfterTest(c)()
+	state := NewGlobalState()
+
+	var callCount int
+	state.onCaptureAdded = func(captureID model.CaptureID, addr string) {
+		callCount++
+		c.Check(captureID, check.Equals, "capture-1")
+		c.Check(addr, check.Equals, "ip-1:8300")
+	}
+	state.onCaptureRemoved = func(captureID model.CaptureID) {
+		callCount++
+		c.Check(captureID, check.Equals, "capture-1")
+	}
+
+	captureInfo := &model.CaptureInfo{
+		ID:            "capture-1",
+		AdvertiseAddr: "ip-1:8300",
+	}
+	captureInfoBytes, err := json.Marshal(captureInfo)
+	c.Check(err, check.IsNil)
+
+	err = state.Update(util.NewEtcdKey(etcd.CaptureInfoKeyPrefix+"/capture-1"), captureInfoBytes, false)
+	c.Check(err, check.IsNil)
+	c.Check(callCount, check.Equals, 1)
+
+	err = state.Update(util.NewEtcdKey(etcd.CaptureInfoKeyPrefix+"/capture-1"), nil /* delete */, false)
+	c.Check(err, check.IsNil)
+	c.Check(callCount, check.Equals, 2)
 }
 
 func (s *stateSuite) TestCheckChangefeedNormal(c *check.C) {

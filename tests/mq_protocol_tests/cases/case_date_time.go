@@ -15,9 +15,9 @@ package cases
 
 import (
 	"errors"
-	"log"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/tests/mq_protocol_tests/framework"
 	"github.com/pingcap/tiflow/tests/mq_protocol_tests/framework/avro"
 	"github.com/pingcap/tiflow/tests/mq_protocol_tests/framework/canal"

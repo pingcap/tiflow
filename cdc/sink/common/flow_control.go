@@ -14,12 +14,12 @@
 package common
 
 import (
-	"log"
 	"sync"
 	"sync/atomic"
 
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
