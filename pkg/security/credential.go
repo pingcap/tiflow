@@ -19,7 +19,7 @@ import (
 	"encoding/pem"
 	"os"
 
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tidb-tools/pkg/utils"
 	pd "github.com/tikv/pd/client"
 	"google.golang.org/grpc"

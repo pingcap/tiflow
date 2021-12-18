@@ -17,7 +17,7 @@ import (
 	"log"
 	"strings"
 
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (

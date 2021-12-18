@@ -42,7 +42,7 @@ function insert_data() {
 }
 
 function run() {
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/relay/SetHeartbeatInterval=return(1);github.com/pingcap/ticdc/dm/syncer/syncDMLBatchNotFull=return(true)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval=return(1);github.com/pingcap/tiflow/dm/syncer/syncDMLBatchNotFull=return(true)"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 1 row affected'
