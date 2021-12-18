@@ -17,7 +17,7 @@ import (
 	"flag"
 	"time"
 
-	config2 "github.com/pingcap/ticdc/dm/dm/config"
+	config2 "github.com/pingcap/tiflow/dm/dm/config"
 )
 
 // config is used to run chaos tests.

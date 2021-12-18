@@ -28,9 +28,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/redo/common"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/cdc/redo/common"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/atomic"
 	pioutil "go.etcd.io/etcd/pkg/ioutil"
 	"go.uber.org/multierr"
@@ -120,6 +121,10 @@ type Writer struct {
 	uint64buf     []byte
 	storage       storage.ExternalStorage
 	sync.RWMutex
+
+	metricFsyncDuration    prometheus.Observer
+	metricFlushAllDuration prometheus.Observer
+	metricWriteBytes       prometheus.Gauge
 }
 
 // NewWriter return a file rotated writer, TODO: extract to a common rotate Writer
@@ -153,6 +158,10 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		op:        op,
 		uint64buf: make([]byte, 8),
 		storage:   s3storage,
+
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
 	}
 
 	w.running.Store(true)
@@ -221,6 +230,7 @@ func (w *Writer) Write(rawData []byte) (int, error) {
 	}
 
 	n, err := w.bw.Write(rawData)
+	w.metricWriteBytes.Add(float64(n))
 	w.size += int64(n)
 	return n, err
 }
@@ -232,7 +242,9 @@ func (w *Writer) AdvanceTs(commitTs uint64) {
 
 func (w *Writer) writeUint64(n uint64, buf []byte) error {
 	binary.LittleEndian.PutUint64(buf, n)
-	_, err := w.bw.Write(buf)
+	v, err := w.bw.Write(buf)
+	w.metricWriteBytes.Add(float64(v))
+
 	return err
 }
 
@@ -250,20 +262,20 @@ func encodeFrameSize(dataBytes int) (lenField uint64, padBytes int) {
 
 // Close implements fileWriter.Close.
 func (w *Writer) Close() error {
-	if !w.IsRunning() {
-		return nil
-	}
 	w.Lock()
 	defer w.Unlock()
 	// always set to false when closed, since if having err may not get fixed just by retry
 	defer w.running.Store(false)
 
-	err := w.close()
-	if err != nil {
-		return err
+	if !w.IsRunning() {
+		return nil
 	}
 
-	return nil
+	redoFlushAllDurationHistogram.DeleteLabelValues(w.cfg.CaptureID, w.cfg.ChangeFeedID)
+	redoFsyncDurationHistogram.DeleteLabelValues(w.cfg.CaptureID, w.cfg.ChangeFeedID)
+	redoWriteBytesGauge.DeleteLabelValues(w.cfg.CaptureID, w.cfg.ChangeFeedID)
+
+	return w.close()
 }
 
 // IsRunning implement IsRunning interface
@@ -459,6 +471,10 @@ func (w *Writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error)
 func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, error) {
 	files, err := ioutil.ReadDir(w.cfg.Dir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			log.Warn("check removed log dir fail", zap.Error(err))
+			return []os.FileInfo{}, nil
+		}
 		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotatef(err, "can't read log file directory: %s", w.cfg.Dir))
 	}
 
@@ -485,6 +501,7 @@ func (w *Writer) flushAll() error {
 		return nil
 	}
 
+	start := time.Now()
 	err := w.flush()
 	if err != nil {
 		return err
@@ -495,7 +512,11 @@ func (w *Writer) flushAll() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
 	defer cancel()
-	return w.writeToS3(ctx, w.file.Name())
+
+	err = w.writeToS3(ctx, w.file.Name())
+	w.metricFlushAllDuration.Observe(time.Since(start).Seconds())
+
+	return err
 }
 
 // Flush implement Flush interface
@@ -511,11 +532,17 @@ func (w *Writer) flush() error {
 		return nil
 	}
 
-	err := w.bw.Flush()
+	n, err := w.bw.FlushN()
+	w.metricWriteBytes.Add(float64(n))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	return cerror.WrapError(cerror.ErrRedoFileOp, w.file.Sync())
+
+	start := time.Now()
+	err = w.file.Sync()
+	w.metricFsyncDuration.Observe(time.Since(start).Seconds())
+
+	return cerror.WrapError(cerror.ErrRedoFileOp, err)
 }
 
 func (w *Writer) writeToS3(ctx context.Context, name string) error {

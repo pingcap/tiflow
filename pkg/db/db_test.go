@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"

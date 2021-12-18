@@ -20,12 +20,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/sorter/encoding"
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
-	"github.com/pingcap/ticdc/pkg/actor"
-	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/db"
+	"github.com/pingcap/tiflow/cdc/sorter/encoding"
+	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/pkg/actor"
+	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/db"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )

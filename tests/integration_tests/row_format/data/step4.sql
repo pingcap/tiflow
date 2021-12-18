@@ -17,11 +17,17 @@ values (-128, -32768, -8388608, -2147483648, -9223372036854775808);
 insert into tp_text()
 values ();
 
-insert into tp_text(c_tinytext, c_text, c_mediumtext, c_longtext, c_varchar, c_char, c_tinyblob, c_blob, c_mediumblob,
-                    c_longblob, c_binary, c_varbinary)
-values ('89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A',
-        '89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A'
-           , x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A');
+insert into tp_text(c_tinytext, c_text, c_mediumtext, c_longtext)
+values ('89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A',
+        '89504E470D0A1A0A');
+
+insert into tp_char_binary(c_char, c_varchar, c_binary, c_varbinary)
+values('89504E470D0A1A0A', '89504E470D0A1A0A', x'89504E470D0A1A0A',
+       x'89504E470D0A1A0A');
+
+insert into tp_blob(c_tinyblob, c_blob, c_mediumblob, c_longblob)
+values (x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A',
+        x'89504E470D0A1A0A');
 
 insert into tp_text2() values();
 

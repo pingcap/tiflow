@@ -14,7 +14,7 @@
 package cases
 
 import (
-	"github.com/pingcap/ticdc/tests/mq_protocol_tests/framework"
+	"github.com/pingcap/tiflow/tests/mq_protocol_tests/framework"
 )
 
 // UnsignedCase is base impl of test case for unsigned int type data
