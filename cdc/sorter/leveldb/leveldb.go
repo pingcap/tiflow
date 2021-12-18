@@ -88,27 +88,18 @@ func NewDBActor(
 	return dba, mb, nil
 }
 
-// Schedule a compact task when there are too many deletion.
-func (ldb *DBActor) maybeScheduleCompact() {
-	if ldb.compact.maybeCompact(ldb.id, ldb.deleteCount) {
-		// Reset delete key count if schedule compaction successfully.
-		ldb.deleteCount = 0
-		return
-	}
-}
-
 func (ldb *DBActor) close(err error) {
 	log.Info("db actor quit", zap.Uint64("ID", uint64(ldb.id)), zap.Error(err))
 	ldb.closedWg.Done()
 }
 
-func (ldb *DBActor) maybeWrite(force bool) (bool, error) {
+func (ldb *DBActor) maybeWrite(force bool) error {
 	bytes := len(ldb.wb.Repr())
 	if bytes >= ldb.wbSize || (force && bytes != 0) {
 		startTime := time.Now()
 		err := ldb.wb.Commit()
 		if err != nil {
-			return false, cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
+			return cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
 		}
 		ldb.metricWriteDuration.Observe(time.Since(startTime).Seconds())
 		ldb.metricWriteBytes.Observe(float64(bytes))
@@ -119,9 +110,14 @@ func (ldb *DBActor) maybeWrite(force bool) (bool, error) {
 		} else {
 			ldb.wb = ldb.db.Batch(ldb.wbCap)
 		}
-		return true, nil
+
+		// Schedule a compact task when there are too many deletion.
+		if ldb.compact.maybeCompact(ldb.id, ldb.deleteCount) {
+			// Reset delete key count if schedule compaction successfully.
+			ldb.deleteCount = 0
+		}
 	}
-	return false, nil
+	return nil
 }
 
 // Poll implements actor.Actor.
@@ -158,7 +154,7 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 			}
 
 			// Do not force write, batching for efficiency.
-			if _, err := ldb.maybeWrite(false); err != nil {
+			if err := ldb.maybeWrite(false); err != nil {
 				log.Panic("db error", zap.Error(err))
 			}
 		}
@@ -173,13 +169,9 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 
 	// Force write only if there is a task requires an iterator.
 	forceWrite := len(snapChs) != 0
-	wrote, err := ldb.maybeWrite(forceWrite)
+	err := ldb.maybeWrite(forceWrite)
 	if err != nil {
 		log.Panic("db error", zap.Error(err))
-	}
-	if wrote {
-		// Schedule compact if there are many deletion.
-		ldb.maybeScheduleCompact()
 	}
 	// Batch acquire iterators.
 	for i := range snapChs {

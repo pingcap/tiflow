@@ -115,7 +115,7 @@ func testDB(t *testing.T, db DB) {
 	require.Nil(t, snap.Release())
 
 	// Compact
-	db.Compact([]byte{0x00}, []byte{0xff})
+	require.Nil(t, db.Compact([]byte{0x00}, []byte{0xff}))
 
 	// Close
 	require.Nil(t, db.Close())

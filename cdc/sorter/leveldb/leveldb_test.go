@@ -53,31 +53,26 @@ func TestMaybeWrite(t *testing.T) {
 	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
 	require.Nil(t, err)
 
-	var wrote bool
 	// Empty batch
-	wrote, err = ldb.maybeWrite(false)
+	err = ldb.maybeWrite(false)
 	require.Nil(t, err)
-	require.False(t, wrote)
 
 	// None empty batch
 	ldb.wb.Put([]byte("abc"), []byte("abc"))
-	wrote, err = ldb.maybeWrite(false)
+	err = ldb.maybeWrite(false)
 	require.Nil(t, err)
-	require.False(t, wrote)
 	require.EqualValues(t, ldb.wb.Count(), 1)
 
 	// None empty batch
-	wrote, err = ldb.maybeWrite(true)
+	err = ldb.maybeWrite(true)
 	require.Nil(t, err)
-	require.True(t, wrote)
 	require.EqualValues(t, ldb.wb.Count(), 0)
 
 	ldb.wb.Put([]byte("abc"), []byte("abc"))
 	ldb.wbSize = 1
 	require.Greater(t, len(ldb.wb.Repr()), ldb.wbSize)
-	wrote, err = ldb.maybeWrite(false)
+	err = ldb.maybeWrite(false)
 	require.Nil(t, err)
-	require.True(t, wrote)
 	require.EqualValues(t, ldb.wb.Count(), 0)
 
 	// Close db.

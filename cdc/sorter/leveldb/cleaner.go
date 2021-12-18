@@ -178,15 +178,6 @@ func (clean *CleanerActor) close(err error) {
 	clean.closedWg.Done()
 }
 
-// Schedule a compact task when there are too many deletion.
-func (clean *CleanerActor) maybeScheduleCompact() {
-	if clean.compact.maybeCompact(clean.id, clean.deleteCount) {
-		// Reset delete key count if schedule compaction successfully.
-		clean.deleteCount = 0
-		return
-	}
-}
-
 func (clean *CleanerActor) writeRateLimited(
 	batch db.Batch, force bool,
 ) (time.Duration, error) {
@@ -213,7 +204,11 @@ func (clean *CleanerActor) writeRateLimited(
 		return 0, errors.Trace(err)
 	}
 	batch.Reset()
-	clean.maybeScheduleCompact()
+	// Schedule a compact task when there are too many deletion.
+	if clean.compact.maybeCompact(clean.id, clean.deleteCount) {
+		// Reset delete key count if schedule compaction successfully.
+		clean.deleteCount = 0
+	}
 	return 0, nil
 }
 
