@@ -16,7 +16,7 @@ package errors
 import (
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pingcap/errors"
-	cdc_errors "github.com/pingcap/ticdc/pkg/errors"
+	cdc_errors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // ToPBError translates go error to pb error.

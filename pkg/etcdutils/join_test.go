@@ -12,7 +12,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/phayes/freeport"
-	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/embed"
 )

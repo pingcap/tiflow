@@ -9,7 +9,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/hanfei1991/microcosm/test"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 func TestT(t *testing.T) {
