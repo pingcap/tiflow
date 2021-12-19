@@ -928,11 +928,6 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
 	c.Assert(o.Locks(), HasLen, 0)
 
-	// no init schema exist now.
-	//	is, _, err := optimism.GetInitSchema(etcdTestCli, task, downSchema, downTable)
-	//	c.Assert(err, IsNil)
-	//	c.Assert(is.IsEmpty(), IsTrue)
-
 	// PUT i11, will creat a lock.
 	_, err = optimism.PutInfo(etcdTestCli, i11)
 	c.Assert(err, IsNil)
@@ -940,11 +935,6 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 		return len(o.Locks()) == 1
 	}), IsTrue)
 	time.Sleep(waitTime) // sleep one more time to wait for update of init schema.
-
-	// the init schema exist now.
-	//	is, _, err = optimism.GetInitSchema(etcdTestCli, task, downSchema, downTable)
-	//	c.Assert(err, IsNil)
-	//	c.Assert(is.TableInfo, DeepEquals, ti0) // the init schema.
 
 	// PUT i12, the lock will be synced.
 	rev1, err := optimism.PutInfo(etcdTestCli, i12)
@@ -980,11 +970,6 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 		return len(o.Locks()) == 0
 	}), IsTrue)
 
-	// the init schema should also be deleted.
-	//	is, _, err = optimism.GetInitSchema(etcdTestCli, task, downSchema, downTable)
-	//	c.Assert(err, IsNil)
-	//	c.Assert(is.IsEmpty(), IsTrue)
-
 	// PUT i21 to create the lock again.
 	_, err = optimism.PutInfo(etcdTestCli, i21)
 	c.Assert(err, IsNil)
@@ -992,11 +977,6 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 		return len(o.Locks()) == 1
 	}), IsTrue)
 	time.Sleep(waitTime) // sleep one more time to wait for update of init schema.
-
-	// the init schema exist now.
-	//	is, _, err = optimism.GetInitSchema(etcdTestCli, task, downSchema, downTable)
-	//	c.Assert(err, IsNil)
-	//	c.Assert(is.TableInfo, DeepEquals, ti1) // the init schema is ti1 now.
 }
 
 func (t *testOptimist) testSortInfos(c *C, cli *clientv3.Client) {
@@ -1115,19 +1095,6 @@ func (t *testOptimist) TestBuildLockJoinedAndTable(c *C) {
 	stm, _, err := optimism.GetAllSourceTables(etcdTestCli)
 	c.Assert(err, IsNil)
 	o.tk.Init(stm)
-
-	//	ifm, _, err := optimism.GetAllInfo(etcdTestCli)
-	//	c.Assert(err, IsNil)
-	//
-	//	lockJoined, lockTTS, missTable := o.buildLockJoinedAndTTS(ifm, nil)
-	//	c.Assert(len(lockJoined), Equals, 1)
-	//	c.Assert(len(lockTTS), Equals, 1)
-	//	c.Assert(len(missTable), Equals, 0)
-	//	joined, ok := lockJoined[utils.GenDDLLockID(task, downSchema, downTable)]
-	//	c.Assert(ok, IsTrue)
-	//	cmp, err := joined.Compare(schemacmp.Encode(ti2))
-	//	c.Assert(err, IsNil)
-	//	c.Assert(cmp, Equals, 0)
 }
 
 func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
@@ -1155,7 +1122,6 @@ func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
 		ddlDropC  = "ALTER TABLE bar DROP COLUMN c"
 		infoDropB = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, []string{ddlDropC}, ti0, []*model.TableInfo{ti1})
 		infoDropC = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, []string{ddlDropB}, ti1, []*model.TableInfo{ti2})
-	//	initSchema = optimism.NewInitSchema(task, downSchema, downTable, ti0)
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1178,23 +1144,6 @@ func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
 	stm, _, err := optimism.GetAllSourceTables(etcdTestCli)
 	c.Assert(err, IsNil)
 	o.tk.Init(stm)
-
-	//	ifm, _, err := optimism.GetAllInfo(etcdTestCli)
-	//	c.Assert(err, IsNil)
-	//
-	//	initSchemas := map[string]map[string]map[string]optimism.InitSchema{task: {downSchema: {downTable: initSchema}}}
-	//	lockJoined, lockTTS, missTable := o.buildLockJoinedAndTTS(ifm, initSchemas)
-	//	c.Assert(len(lockJoined), Equals, 1)
-	//	c.Assert(len(lockTTS), Equals, 1)
-	//	c.Assert(len(missTable), Equals, 1)
-	//	cmp, err := missTable[utils.GenDDLLockID(task, downSchema, downTable)][source2]["foo"]["bar-1"].Compare(schemacmp.Encode(initSchema.TableInfo))
-	//	c.Assert(err, IsNil)
-	//	c.Assert(cmp, Equals, 0)
-	//	joined, ok := lockJoined[utils.GenDDLLockID(task, downSchema, downTable)]
-	//	c.Assert(ok, IsTrue)
-	//	cmp, err = joined.Compare(schemacmp.Encode(ti0))
-	//	c.Assert(err, IsNil)
-	//	c.Assert(cmp, Equals, 0)
 }
 
 func getDownstreamMeta(string) (*config.DBConfig, string) {
