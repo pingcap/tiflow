@@ -1527,6 +1527,8 @@ func (s *Syncer) setupMockCheckpoint(c *C, checkPointDBConn *sql.Conn, checkPoin
 		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 	c.Assert(s.checkpoint.(*RemoteCheckPoint).prepare(tcontext.Background()), IsNil)
+	// disable flush checkpoint periodically
+	s.checkpoint.(*RemoteCheckPoint).globalPointSaveTime = time.Now()
 }
 
 func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {
