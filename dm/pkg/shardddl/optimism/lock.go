@@ -108,7 +108,7 @@ func NewLock(cli *clientv3.Client, id, task, downSchema, downTable string, joine
 	return l
 }
 
-// FetchTableInfos fetch all table infos for a lock
+// FetchTableInfos fetch all table infos for a lock.
 func (l *Lock) FetchTableInfos(task, source, schema, table string) (*model.TableInfo, error) {
 	if l.downstreamMeta == nil {
 		log.L().Warn("nil downstream meta")
@@ -438,7 +438,7 @@ func (l *Lock) TryRemoveTable(source, schema, table string) bool {
 	return true
 }
 
-// HasTables check whether a lock has tables
+// HasTables check whether a lock has tables.
 func (l *Lock) HasTables() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()

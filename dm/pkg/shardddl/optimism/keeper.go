@@ -52,7 +52,7 @@ func NewLockKeeper(downDBFunc func(string) (*config.DBConfig, string)) *LockKeep
 	}
 }
 
-// SetDropColumns set drop columns for lock keeper
+// SetDropColumns set drop columns for lock keeper.
 func (lk *LockKeeper) SetDropColumns(dropColumns map[string]map[string]map[string]map[string]map[string]DropColumnStage) {
 	if dropColumns != nil {
 		lk.dropColumns = dropColumns
@@ -239,7 +239,7 @@ func (tk *TableKeeper) AddTable(task, source, upSchema, upTable, downSchema, dow
 	return added
 }
 
-// SourceTableExist check whether a source table exist
+// SourceTableExist check whether a source table exist.
 func (tk *TableKeeper) SourceTableExist(task, source, upSchema, upTable, downSchema, downTable string) bool {
 	tk.mu.Lock()
 	defer tk.mu.Unlock()
