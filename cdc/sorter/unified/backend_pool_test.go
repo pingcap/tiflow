@@ -23,10 +23,10 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/fsutil"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/util/memory"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/fsutil"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type backendPoolSuite struct{}
@@ -51,7 +51,7 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
 	config.StoreGlobalServerConfig(conf)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint", "return(100)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
@@ -68,9 +68,9 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	fileName := backEnd.(*fileBackEnd).fileName
 	c.Assert(fileName, check.Not(check.Equals), "")
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint", "return(0)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint", "return(0)")
 	c.Assert(err, check.IsNil)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryUsageInjectPoint", "return(34359738368)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryUsageInjectPoint", "return(34359738368)")
 	c.Assert(err, check.IsNil)
 
 	backEnd1, err := backEndPool.alloc(ctx)
@@ -80,9 +80,9 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	c.Assert(fileName1, check.Not(check.Equals), "")
 	c.Assert(fileName1, check.Not(check.Equals), fileName)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint", "return(0)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint", "return(0)")
 	c.Assert(err, check.IsNil)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryUsageInjectPoint", "return(0)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryUsageInjectPoint", "return(0)")
 	c.Assert(err, check.IsNil)
 
 	backEnd2, err := backEndPool.alloc(ctx)
@@ -161,9 +161,9 @@ func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
 	config.StoreGlobalServerConfig(conf)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint", "return(100)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)
-	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint") //nolint:errcheck
+	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint") //nolint:errcheck
 
 	backEndPool, err := newBackEndPool(sorterDir, "")
 	c.Assert(err, check.IsNil)
@@ -359,8 +359,8 @@ func (s *backendPoolSuite) TestCheckDataDirSatisfied(c *check.C) {
 	conf.DataDir = dir
 	config.StoreGlobalServerConfig(conf)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectCheckDataDirSatisfied", ""), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectCheckDataDirSatisfied", ""), check.IsNil)
 	err := checkDataDirSatisfied()
 	c.Assert(err, check.IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectCheckDataDirSatisfied"), check.IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectCheckDataDirSatisfied"), check.IsNil)
 }

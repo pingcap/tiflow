@@ -28,10 +28,10 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 
-	"github.com/pingcap/ticdc/dm/dm/master/metrics"
-	"github.com/pingcap/ticdc/dm/pkg/cputil"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/master/metrics"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // DropColumnStage represents whether drop column done for a sharding table.

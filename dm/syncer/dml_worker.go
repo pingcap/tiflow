@@ -21,12 +21,12 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"go.uber.org/zap"
 
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/syncer/dbconn"
-	"github.com/pingcap/ticdc/dm/syncer/metrics"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
 
 // DMLWorker is used to sync dml.

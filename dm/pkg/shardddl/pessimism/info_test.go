@@ -25,8 +25,8 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/integration"
 
-	"github.com/pingcap/ticdc/dm/dm/common"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var etcdTestCli *clientv3.Client

@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tidb/util/mock"
 	"go.etcd.io/etcd/integration"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/config"
 )
 
 type testKeeper struct{}
