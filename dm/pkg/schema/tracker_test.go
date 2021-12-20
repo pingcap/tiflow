@@ -29,8 +29,8 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 func Test(t *testing.T) {

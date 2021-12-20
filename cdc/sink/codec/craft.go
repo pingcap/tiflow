@@ -19,9 +19,9 @@ import (
 	"strconv"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/codec/craft"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/craft"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // CraftEventBatchEncoder encodes the events into the byte of a batch into craft binary format.

@@ -17,12 +17,12 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/pkg/cmd/context"
-	"github.com/pingcap/ticdc/pkg/cmd/factory"
-	"github.com/pingcap/ticdc/pkg/cmd/util"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/cdc"
+	"github.com/pingcap/tiflow/pkg/cmd/context"
+	"github.com/pingcap/tiflow/pkg/cmd/factory"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
