@@ -22,7 +22,7 @@ type Config struct {
 	Version string
 }
 
-// defaultServerUrlFor is used to build base URL and api path.
+// defaultServerUrlFromConfig is used to build base URL and api path.
 func defaultServerUrlFromConfig(config *Config) (*url.URL, string, error) {
 	host := config.Host
 	if host == "" {
