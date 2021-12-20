@@ -21,9 +21,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/parser"
+	"github.com/pingcap/parser/format"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -489,7 +489,7 @@ func (c *changefeed) Close() {
 
 // addSpecialComment translate tidb feature to comment
 func addSpecialComment(ddlQuery string) (string, error) {
-	stms, _, err := parser.New().ParseSQL(ddlQuery)
+	stms, _, err := parser.New().Parse(ddlQuery, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}
