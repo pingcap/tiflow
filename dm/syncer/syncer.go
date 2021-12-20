@@ -1461,14 +1461,14 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		for _, tbl := range tbls {
 			sourceTable := tbl[0]
 			targetTable := tbl[1]
-			tableInfo, err := s.getTableInfo(tctx, &sourceTable, &targetTable)
-			if err != nil {
-				return err
+			tableInfo, err2 := s.getTableInfo(tctx, &sourceTable, &targetTable)
+			if err2 != nil {
+				return err2
 			}
 			sourceTables = append(sourceTables, &sourceTable)
 			tableInfos = append(tableInfos, tableInfo)
 		}
-		err := s.checkpoint.FlushPointsWithTableInfos(tctx, sourceTables, tableInfos)
+		err = s.checkpoint.FlushPointsWithTableInfos(tctx, sourceTables, tableInfos)
 		if err != nil {
 			tctx.L().Error("failed to flush table points with table infos", log.ShortError(err))
 		}
