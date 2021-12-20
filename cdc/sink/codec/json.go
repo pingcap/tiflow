@@ -25,11 +25,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -405,7 +405,7 @@ func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, er
 	valueBuf := new(bytes.Buffer)
 	valueBuf.Write(valueLenByte[:])
 
-	ret := newResolvedMQMessage(config.ProtocolDefault, keyBuf.Bytes(), valueBuf.Bytes(), ts)
+	ret := newResolvedMQMessage(config.ProtocolOpen, keyBuf.Bytes(), valueBuf.Bytes(), ts)
 	return ret, nil
 }
 
@@ -449,7 +449,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 			versionHead := make([]byte, 8)
 			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
 
-			d.messageBuf = append(d.messageBuf, NewMQMessage(config.ProtocolDefault, versionHead, nil, 0, model.MqMessageTypeRow, nil, nil))
+			d.messageBuf = append(d.messageBuf, NewMQMessage(config.ProtocolOpen, versionHead, nil, 0, model.MqMessageTypeRow, nil, nil))
 			d.curBatchSize = 0
 		}
 
@@ -509,7 +509,7 @@ func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, e
 	valueBuf.Write(valueLenByte[:])
 	valueBuf.Write(value)
 
-	ret := newDDLMQMessage(config.ProtocolDefault, keyBuf.Bytes(), valueBuf.Bytes(), e)
+	ret := newDDLMQMessage(config.ProtocolOpen, keyBuf.Bytes(), valueBuf.Bytes(), e)
 	return ret, nil
 }
 
@@ -520,7 +520,7 @@ func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 			return nil
 		}
 		/* there could be multiple types of event encoded within a single message which means the type is not sure */
-		ret := NewMQMessage(config.ProtocolDefault, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeUnknown, nil, nil)
+		ret := NewMQMessage(config.ProtocolOpen, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeUnknown, nil, nil)
 		return []*MQMessage{ret}
 	}
 

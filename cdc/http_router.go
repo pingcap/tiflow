@@ -18,18 +18,19 @@ import (
 	"io"
 	"net/http"
 	"net/http/pprof"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/capture"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/model"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
 
 	// use for OpenAPI online docs
-	_ "github.com/pingcap/ticdc/api"
+	_ "github.com/pingcap/tiflow/api"
 )
 
 // newRouter create a router for OpenAPI
@@ -140,7 +141,10 @@ func logMiddleware() gin.HandlerFunc {
 		if err != nil {
 			stdErr = err.Err
 		}
-
+		// Do not log metrics related requests when there is no error
+		if strings.Contains(path, "/metrics") && err == nil {
+			return
+		}
 		log.Info(path,
 			zap.Int("status", c.Writer.Status()),
 			zap.String("method", c.Request.Method),
