@@ -23,7 +23,7 @@ type Config struct {
 }
 
 // defaultServerUrlFor is used to build base URL and api path.
-func defaultServerUrlFor(config *Config) (*url.URL, string, error) {
+func defaultServerUrlFromConfig(config *Config) (*url.URL, string, error) {
 	host := config.Host
 	if host == "" {
 		host = "127.0.0.1:8300"
@@ -61,7 +61,7 @@ func RESTClientFromConfig(config *Config) (*RESTClient, error) {
 		return nil, errors.Trace(err)
 	}
 
-	baseURL, versionedAPIPath, err := defaultServerUrlFor(config)
+	baseURL, versionedAPIPath, err := defaultServerUrlFromConfig(config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

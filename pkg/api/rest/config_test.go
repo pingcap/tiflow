@@ -25,7 +25,7 @@ func TestRESTClientCommonConfigs(t *testing.T) {
 }
 
 func checkTLS(config *Config) bool {
-	baseURL, _, err := defaultServerUrlFor(config)
+	baseURL, _, err := defaultServerUrlFromConfig(config)
 	if err != nil {
 		return false
 	}
