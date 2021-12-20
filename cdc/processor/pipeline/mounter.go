@@ -15,12 +15,12 @@ package pipeline
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/pipeline"

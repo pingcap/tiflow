@@ -16,12 +16,12 @@ package codec
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
