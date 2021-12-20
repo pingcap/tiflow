@@ -3,10 +3,12 @@ name: gbk
 task-mode: all
 is-sharding: false
 meta-schema: "dm_meta"
+# wait checker support parse GBK charset
+ignore-checking-items: ["all"]
 
 target-database:
   host: "127.0.0.1"
-  port: 4000
+  port: 4000New
   user: "root"
   password: ""
 

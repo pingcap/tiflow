@@ -16,6 +16,8 @@ package parser
 import (
 	"bytes"
 
+	"github.com/pingcap/tidb/parser/charset"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -34,6 +36,16 @@ const (
 	// https://github.com/pingcap/parser/pull/1021
 	SingleRenameTableNameNum = 2
 )
+
+func init() {
+	c := &charset.Charset{
+		Name:             charset.CharsetGBK,
+		DefaultCollation: "gbk_chinese_ci",
+		Collations:       make(map[string]*charset.Collation),
+		Desc:             "Chinese Internal Code Specification",
+		Maxlen:           2}
+	charset.AddCharset(c)
+}
 
 // Parse wraps parser.Parse(), makes `parser` suitable for dm.
 func Parse(p *parser.Parser, sql, charset, collation string) (stmt []ast.StmtNode, err error) {

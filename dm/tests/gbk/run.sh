@@ -37,7 +37,7 @@ function run() {
 	echo "start task"
 	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
 
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+#	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	echo "prepare incremental data"
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
