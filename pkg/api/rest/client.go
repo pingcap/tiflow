@@ -36,7 +36,7 @@ func (h HTTPMethod) String() string {
 
 // RESTInterface includes a set of operations to interact with TiCDC RESTful apis.
 type RESTInterface interface {
-	Method(method string) *Request
+	Method(method HTTPMethod) *Request
 	Post() *Request
 	Put() *Request
 	Get() *Request
