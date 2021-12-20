@@ -20,11 +20,11 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 )
@@ -179,10 +179,12 @@ func (s *taskSuite) TestWatch(c *check.C) {
 	}
 
 	// Watch with a normal context
-	ch := s.w.Watch(context.Background())
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	ch := s.w.Watch(ctx)
 
 	// Trigger the ErrCompacted error
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc.restart_task_watch", "50%off"), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc.restart_task_watch", "50%off"), check.IsNil)
 
 	// Put task changefeed-1
 	c.Assert(client.PutTaskStatus(s.c.Ctx(), "changefeed-1",

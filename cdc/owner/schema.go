@@ -17,14 +17,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	"github.com/pingcap/ticdc/pkg/filter"
 	tidbkv "github.com/pingcap/tidb/kv"
 	timeta "github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"go.uber.org/zap"
 )
 
@@ -46,10 +46,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 			return nil, errors.Trace(err)
 		}
 	}
-	// We do a snapshot read of the metadata from TiKV at (startTs-1) instead of startTs,
-	// because the DDL puller might send a DDL at startTs, which would cause schema conflicts if
-	// the DDL's result is already contained in the snapshot.
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs-1, config.ForceReplicate)
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

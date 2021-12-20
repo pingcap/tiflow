@@ -22,16 +22,16 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/processor"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -162,7 +162,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			return errors.Trace(err)
 		}
 		log.Info("start to listen processor task...")
-		if err := etcdWorker.Run(ctx, c.session, 200*time.Millisecond); err != nil {
+		if err := etcdWorker.Run(ctx, c.session, 200*time.Millisecond, c.info.AdvertiseAddr); err != nil {
 			// We check ttl of lease instead of check `session.Done`, because
 			// `session.Done` is only notified when etcd client establish a
 			// new keepalive request, there could be a time window as long as

@@ -14,15 +14,16 @@
 package cdc
 
 import (
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/owner"
-	"github.com/pingcap/ticdc/cdc/processor"
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/puller/sorter"
-	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/cdc/processor"
+	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/puller/sorter"
+	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -37,6 +38,7 @@ func init() {
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
 	sorter.InitMetrics(registry)
+	orchestrator.InitMetrics(registry)
 	if config.NewReplicaImpl {
 		processor.InitMetrics(registry)
 		tablepipeline.InitMetrics(registry)

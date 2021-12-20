@@ -20,33 +20,30 @@ import (
 	"math"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/sink"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/sink"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 const (
-	schemaStorageGCLag = time.Minute * 20
-
 	backoffBaseDelayInMs = 5
 	maxTries             = 3
 )
@@ -59,9 +56,11 @@ type processor struct {
 	tables map[model.TableID]tablepipeline.TablePipeline
 
 	schemaStorage entry.SchemaStorage
-	filter        *filter.Filter
-	mounter       entry.Mounter
-	sinkManager   *sink.Manager
+	lastSchemaTs  model.Ts
+
+	filter      *filter.Filter
+	mounter     entry.Mounter
+	sinkManager *sink.Manager
 
 	initialized bool
 	errCh       chan error
@@ -71,12 +70,13 @@ type processor struct {
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
 
-	metricResolvedTsGauge       prometheus.Gauge
-	metricResolvedTsLagGauge    prometheus.Gauge
-	metricCheckpointTsGauge     prometheus.Gauge
-	metricCheckpointTsLagGauge  prometheus.Gauge
-	metricSyncTableNumGauge     prometheus.Gauge
-	metricProcessorErrorCounter prometheus.Counter
+	metricResolvedTsGauge        prometheus.Gauge
+	metricResolvedTsLagGauge     prometheus.Gauge
+	metricCheckpointTsGauge      prometheus.Gauge
+	metricCheckpointTsLagGauge   prometheus.Gauge
+	metricSyncTableNumGauge      prometheus.Gauge
+	metricSchemaStorageGcTsGauge prometheus.Gauge
+	metricProcessorErrorCounter  prometheus.Counter
 }
 
 // newProcessor creates a new processor
@@ -90,24 +90,16 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		captureInfo:  ctx.GlobalVars().CaptureInfo,
 		cancel:       func() {},
 
-		metricResolvedTsGauge:       resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricResolvedTsLagGauge:    resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsGauge:     checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsLagGauge:  checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricSyncTableNumGauge:     syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricProcessorErrorCounter: processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsGauge:        resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsLagGauge:     resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsGauge:      checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsLagGauge:   checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricSyncTableNumGauge:      syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricProcessorErrorCounter:  processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
+		metricSchemaStorageGcTsGauge: processorSchemaStorageGcTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
-	return p
-}
-
-func newProcessor4Test(ctx cdcContext.Context,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
-) *processor {
-	p := newProcessor(ctx)
-	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
-	p.createTablePipeline = createTablePipeline
 	return p
 }
 
@@ -184,7 +176,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
 	p.handleWorkload()
-	p.doGCSchemaStorage()
+	p.doGCSchemaStorage(ctx)
 	return p.changefeed, nil
 }
 
@@ -753,16 +745,30 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 }
 
 // doGCSchemaStorage trigger the schema storage GC
-func (p *processor) doGCSchemaStorage() {
+func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
 	if p.schemaStorage == nil {
 		// schemaStorage is nil only in test
 		return
 	}
-	// Delay GC to accommodate pullers starting from a startTs that's too small
-	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
-	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs).Add(-schemaStorageGCLag)
-	gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
-	p.schemaStorage.DoGC(gcTs)
+
+	if p.changefeed.Status == nil {
+		// This could happen if Etcd data is not complete.
+		return
+	}
+
+	// Please refer to `unmarshalAndMountRowChanged` in cdc/entry/mounter.go
+	// for why we need -1.
+	lastSchemaTs := p.schemaStorage.DoGC(p.changefeed.Status.CheckpointTs - 1)
+	if p.lastSchemaTs == lastSchemaTs {
+		return
+	}
+	p.lastSchemaTs = lastSchemaTs
+
+	log.Debug("finished gc in schema storage",
+		zap.Uint64("gcTs", lastSchemaTs),
+		cdcContext.ZapFieldChangefeed(ctx))
+	lastSchemaPhysicalTs := oracle.ExtractPhysical(lastSchemaTs)
+	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaPhysicalTs))
 }
 
 func (p *processor) Close() error {
@@ -782,6 +788,7 @@ func (p *processor) Close() error {
 	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	if p.sinkManager != nil {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
