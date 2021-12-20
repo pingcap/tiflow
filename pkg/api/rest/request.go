@@ -18,7 +18,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"go.uber.org/zap"
-	"golang.org/x/time/rate"
 )
 
 const (
@@ -33,10 +32,8 @@ const (
 // Any errors are stored until the end of your call, so you only have to
 // check once.
 type Request struct {
-	c *RESTClient
-	// TODO: implement client-side throttling
-	rateLimiter *rate.Limiter
-	timeout     time.Duration
+	c       *RESTClient
+	timeout time.Duration
 
 	// generic components accessible via setters
 	method     HTTPMethod
