@@ -22,14 +22,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/capture"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/model"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
 
 	// use for OpenAPI online docs
-	_ "github.com/pingcap/ticdc/docs/api"
+	_ "github.com/pingcap/tiflow/docs/api"
 )
 
 // newRouter create a router for OpenAPI

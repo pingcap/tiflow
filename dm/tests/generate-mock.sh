@@ -19,7 +19,7 @@ for file in ./dm/dm/pb/*pb.go; do
 	# extract public interface from pb source file
 	ifs=$(grep -E "type [[:upper:]].*interface" "$file" | awk '{print $2}' 'ORS=,' | rev | cut -c 2- | rev)
 	echo "generate mock for file $file"
-	"$MOCKGEN" -destination ./dm/dm/pbmock/"$prefix".go -package "$PACKAGE" github.com/pingcap/ticdc/dm/dm/pb "$ifs"
+	"$MOCKGEN" -destination ./dm/dm/pbmock/"$prefix".go -package "$PACKAGE" github.com/pingcap/tiflow/dm/dm/pb "$ifs"
 done
 
 echo "generate grpc mock code successfully"
