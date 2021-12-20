@@ -17,9 +17,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/ticdc/dm/pkg/backoff"
-	"github.com/pingcap/ticdc/dm/pkg/retry"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/backoff"
+	"github.com/pingcap/tiflow/dm/pkg/retry"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // ReaderRetryConfig is the configuration used for binlog reader retry backoff.

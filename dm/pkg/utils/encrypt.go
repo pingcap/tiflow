@@ -16,8 +16,8 @@ package utils
 import (
 	"encoding/base64"
 
-	"github.com/pingcap/ticdc/dm/pkg/encrypt"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/encrypt"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // Encrypt tries to encrypt plaintext to base64 encoded ciphertext.
