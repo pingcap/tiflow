@@ -197,7 +197,7 @@ func upgradeToVer2(cli *clientv3.Client, uctx Context) error {
 	defer cancel()
 
 	for tableName, cfg := range dbConfigs {
-		targetDB, err := conn.DefaultDBProvider.Apply(cfg)
+		targetDB, err := conn.DefaultDBProvider.Apply(&cfg)
 		if err != nil {
 			logger.Error("target DB error when upgrading", zap.String("table name", tableName))
 			return err

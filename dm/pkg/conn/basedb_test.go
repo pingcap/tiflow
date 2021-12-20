@@ -31,7 +31,7 @@ func (t *testBaseDBSuite) TestGetBaseConn(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 
-	baseDB := NewBaseDB(db, func() {})
+	baseDB := NewBaseDB(db)
 
 	tctx := tcontext.Background()
 
@@ -67,7 +67,7 @@ func (t *testBaseDBSuite) TestFailDBPing(c *C) {
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/conn/failDBPing")
 
-	cfg := config.DBConfig{User: "root", Host: "127.0.0.1", Port: 3306}
+	cfg := &config.DBConfig{User: "root", Host: "127.0.0.1", Port: 3306}
 	cfg.Adjust()
 	db, err := DefaultDBProvider.Apply(cfg)
 	c.Assert(db, IsNil)

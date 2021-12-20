@@ -84,10 +84,13 @@ function run() {
 	# avoid cannot unmarshal !!str `binlog-...` into uint32 error
 	sed -i "s/binlog-pos-placeholder-1/4/g" $WORK_DIR/dm-task.yaml
 	sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
-	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
+	# start DM task. don't check error because it will meet injected error soon
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta"
 
 	# use sync_diff_inspector to check full dump loader
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
 
 	name1=$(grep "Log: " $WORK_DIR/worker1/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
 	pos1=$(grep "Pos: " $WORK_DIR/worker1/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
@@ -129,7 +132,8 @@ function run() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
 	# use sync_diff_inspector to check incremental dump loader
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
 
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
 	run_sql_both_source "SET @@global.time_zone = 'SYSTEM';"

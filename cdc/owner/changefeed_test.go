@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/pdtime"
 	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -166,7 +167,7 @@ func (s *changefeedSuite) TestInitialize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
@@ -181,7 +182,7 @@ func (s *changefeedSuite) TestHandleError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
@@ -216,6 +217,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
+		TimeAcquirer: pdtime.NewTimeAcquirer4Test(),
 	})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test",
@@ -226,7 +228,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	})
 
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 	tickThreeTime := func() {
 		cf.Tick(ctx, state, captures)
 		tester.MustApplyPatches()
@@ -298,7 +300,7 @@ func (s *changefeedSuite) TestSyncPoint(c *check.C) {
 	ctx.ChangefeedVars().Info.SyncPointEnabled = true
 	ctx.ChangefeedVars().Info.SyncPointInterval = 1 * time.Second
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -329,7 +331,7 @@ func (s *changefeedSuite) TestFinished(c *check.C) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.TargetTs = ctx.ChangefeedVars().Info.StartTs + 1000
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+	defer cf.Close(ctx)
 
 	// pre check
 	cf.Tick(ctx, state, captures)

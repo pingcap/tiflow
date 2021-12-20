@@ -68,7 +68,7 @@ func (t *testSchema) setUpDBConn(c *C) {
 	}
 	t.password = os.Getenv("MYSQL_PSWD")
 
-	cfg := config.DBConfig{
+	cfg := &config.DBConfig{
 		Host:     t.host,
 		Port:     t.port,
 		User:     t.user,

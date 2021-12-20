@@ -241,7 +241,7 @@ func (t *testShardingGroupSuite) TestKeeper(c *C) {
 	c.Assert(err, IsNil)
 	dbConn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
-	k.db = conn.NewBaseDB(db, func() {})
+	k.db = conn.NewBaseDB(db)
 	k.dbConn = &dbconn.DBConn{Cfg: t.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
 
 	mock.ExpectBegin()
