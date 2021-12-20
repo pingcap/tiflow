@@ -18,7 +18,7 @@ package model
 import (
 	"fmt"
 
-	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/regionspan"
 )
 
 // OpType for the kv, delete or put

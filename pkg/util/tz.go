@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // GetTimezone returns the timezone specified by the name

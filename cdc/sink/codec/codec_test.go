@@ -20,10 +20,10 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/codec/craft"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
-	"github.com/pingcap/ticdc/proto/benchmark"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/craft"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/pingcap/tiflow/proto/benchmark"
 )
 
 var (
