@@ -20,9 +20,9 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/streamer"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // inactiveArgs represents args needed by inactiveStrategy.

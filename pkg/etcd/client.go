@@ -15,11 +15,13 @@ package etcd
 
 import (
 	"context"
+	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/retry"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
@@ -41,6 +43,14 @@ const (
 	backoffBaseDelayInMs = 500
 	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
 	backoffMaxDelayInMs = 60 * 1000
+	// If no msg comes from a etcd watchCh for etcdWatchChTimeoutDuration long,
+	// we should cancel the watchCh and request a new watchCh from etcd client
+	etcdWatchChTimeoutDuration = 10 * time.Second
+	// If no msg comes from a etcd watchCh for etcdRequestProgressDuration long,
+	// we should call RequestProgress of etcd client
+	etcdRequestProgressDuration = 1 * time.Second
+	// etcdWatchChBufferSize is arbitrarily specified, it will be modified in the future
+	etcdWatchChBufferSize = 16
 )
 
 // set to var instead of const for mocking the value to speedup test
@@ -50,11 +60,13 @@ var maxTries int64 = 8
 type Client struct {
 	cli     *clientv3.Client
 	metrics map[string]prometheus.Counter
+	// clock is for making it easier to mock time-related data structures in unit tests
+	clock clock.Clock
 }
 
 // Wrap warps a clientv3.Client that provides etcd APIs required by TiCDC.
 func Wrap(cli *clientv3.Client, metrics map[string]prometheus.Counter) *Client {
-	return &Client{cli: cli, metrics: metrics}
+	return &Client{cli: cli, metrics: metrics, clock: clock.New()}
 }
 
 // Unwrap returns a clientv3.Client
@@ -165,9 +177,6 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 
 // Watch delegates request to clientv3.Watcher.Watch
 func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
-<<<<<<< HEAD
-	return c.cli.Watch(ctx, key, opts...)
-=======
 	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
 	go c.WatchWithChan(ctx, watchCh, key, opts...)
 	return watchCh
@@ -179,7 +188,6 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 		close(outCh)
 		log.Info("WatchWithChan exited")
 	}()
-
 	// get initial revision from opts to avoid revision fall back
 	lastRevision := getRevisionFromWatchOpts(opts...)
 
@@ -218,8 +226,6 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 					}
 				}
 			}
-
-			ticker.Reset(etcdRequestProgressDuration)
 		case <-ticker.C:
 			if err := c.RequestProgress(ctx); err != nil {
 				log.Warn("failed to request progress for etcd watcher", zap.Error(err))
@@ -235,7 +241,6 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			}
 		}
 	}
->>>>>>> f90ca46e7 (etcd/client (ticdc): Prevent revision in WatchWitchChan fallback. (#3851))
 }
 
 // RequestProgress requests a progress notify response be sent in all watch channels.

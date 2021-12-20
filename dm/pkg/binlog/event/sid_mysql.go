@@ -21,7 +21,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/replication"
 
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // SID represents a SERVER_UUID in GTIDEvent/PrevGTIDEvent.
