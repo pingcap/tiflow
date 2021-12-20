@@ -806,7 +806,7 @@ func terrorHTTPErrorHandler() gin.HandlerFunc {
 
 func getOpenAPISubtaskStatusByTaskName(taskName string,
 	workerStatusList []*pb.QueryStatusResponse) ([]openapi.SubTaskStatus, error) {
-	var subTaskStatusList []openapi.SubTaskStatus
+	subTaskStatusList := make([]openapi.SubTaskStatus, 0, len(workerStatusList))
 	for _, workerStatus := range workerStatusList {
 		if workerStatus == nil || workerStatus.SourceStatus == nil {
 			// this should not happen unless the rpc in the worker server has been modified
@@ -821,8 +821,8 @@ func getOpenAPISubtaskStatusByTaskName(taskName string,
 			}
 		}
 		if subTaskStatus == nil {
-			// this may not happen
-			return nil, terror.ErrOpenAPICommonError.Generatef("can not find subtask status task name: %s.", taskName)
+			// not find
+			continue
 		}
 		openapiSubTaskStatus := openapi.SubTaskStatus{
 			Name:                taskName,
@@ -842,7 +842,7 @@ func getOpenAPISubtaskStatusByTaskName(taskName string,
 				TotalBytes:     loadS.TotalBytes,
 			}
 		}
-		// add syncer status
+		// add sync status
 		if syncerS := subTaskStatus.GetSync(); syncerS != nil {
 			openapiSubTaskStatus.SyncStatus = &openapi.SyncStatus{
 				BinlogType:          syncerS.GetBinlogType(),
