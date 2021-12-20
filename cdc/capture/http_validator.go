@@ -139,7 +139,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 
 	tz, err := util.GetTimezone(changefeedConfig.TimeZone)
 	if err != nil {
-		return nil, errors.Annotate(err, "invalid timezone:"+changefeedConfig.TimeZone)
+		return nil, cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err, "invalid timezone:%s", changefeedConfig.TimeZone))
 	}
 	ctx = util.PutTimezoneInCtx(ctx, tz)
 	if err := sink.Validate(ctx, info.SinkURI, info.Config, info.Opts); err != nil {
