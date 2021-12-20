@@ -25,9 +25,9 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/proto/p2p"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/proto/p2p"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -179,9 +179,9 @@ func TestMessageClientBasicMultiTopics(t *testing.T) {
 }
 
 func TestMessageClientServerRestart(t *testing.T) {
-	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectServerRestart", "1%return(true)")
+	_ = failpoint.Enable("github.com/pingcap/tiflow/pkg/p2p/ServerInjectServerRestart", "1%return(true)")
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectServerRestart")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/p2p/ServerInjectServerRestart")
 	}()
 
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
@@ -191,9 +191,9 @@ func TestMessageClientServerRestart(t *testing.T) {
 }
 
 func TestMessageClientServerRestartMultiTopics(t *testing.T) {
-	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectServerRestart", "1%return(true)")
+	_ = failpoint.Enable("github.com/pingcap/tiflow/pkg/p2p/ServerInjectServerRestart", "1%return(true)")
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectServerRestart")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/p2p/ServerInjectServerRestart")
 	}()
 
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout*4)
@@ -203,9 +203,9 @@ func TestMessageClientServerRestartMultiTopics(t *testing.T) {
 }
 
 func TestMessageClientRestart(t *testing.T) {
-	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ClientInjectStreamFailure", "50%return(true)")
+	_ = failpoint.Enable("github.com/pingcap/tiflow/pkg/p2p/ClientInjectStreamFailure", "50%return(true)")
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ClientInjectStreamFailure")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/p2p/ClientInjectStreamFailure")
 	}()
 
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
@@ -215,9 +215,9 @@ func TestMessageClientRestart(t *testing.T) {
 }
 
 func TestMessageClientRestartMultiTopics(t *testing.T) {
-	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ClientInjectStreamFailure", "3%return(true)")
+	_ = failpoint.Enable("github.com/pingcap/tiflow/pkg/p2p/ClientInjectStreamFailure", "3%return(true)")
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ClientInjectStreamFailure")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/p2p/ClientInjectStreamFailure")
 	}()
 
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
@@ -227,9 +227,9 @@ func TestMessageClientRestartMultiTopics(t *testing.T) {
 }
 
 func TestMessageClientSenderErrorsMultiTopics(t *testing.T) {
-	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ClientBatchSenderInjectError", "3*return(true)")
+	_ = failpoint.Enable("github.com/pingcap/tiflow/pkg/p2p/ClientBatchSenderInjectError", "3*return(true)")
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ClientBatchSenderInjectError")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/p2p/ClientBatchSenderInjectError")
 	}()
 
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
@@ -355,9 +355,9 @@ func TestMessageBackPressure(t *testing.T) {
 		require.Regexp(t, ".*context canceled.*", err.Error())
 	}()
 
-	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectTaskDelay", "sleep(1)")
+	_ = failpoint.Enable("github.com/pingcap/tiflow/pkg/p2p/ServerInjectTaskDelay", "sleep(1)")
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectTaskDelay")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/p2p/ServerInjectTaskDelay")
 	}()
 
 	var lastSeq Seq

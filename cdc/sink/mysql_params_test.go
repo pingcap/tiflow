@@ -22,7 +22,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 )
 

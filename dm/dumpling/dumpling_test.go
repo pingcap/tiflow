@@ -24,13 +24,13 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tfilter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/dumpling/export"
-
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/prometheus/client_golang/prometheus"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 var _ = Suite(&testDumplingSuite{})
@@ -77,9 +77,9 @@ func (t *testDumplingSuite) TestDumpling(c *C) {
 	c.Assert(err, IsNil)
 	resultCh := make(chan pb.ProcessResult, 1)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessNoError", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessNoError", `return(true)`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessNoError")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessNoError")
 
 	dumpling.Process(ctx, resultCh)
 	c.Assert(len(resultCh), Equals, 1)
@@ -87,11 +87,11 @@ func (t *testDumplingSuite) TestDumpling(c *C) {
 	c.Assert(result.IsCanceled, IsFalse)
 	c.Assert(len(result.Errors), Equals, 0)
 	//nolint:errcheck
-	failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessNoError")
+	failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessNoError")
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessWithError", `return("unknown error")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError", `return("unknown error")`), IsNil)
 	// nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessWithError")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError")
 
 	// return error
 	dumpling.Process(ctx, resultCh)
@@ -101,15 +101,15 @@ func (t *testDumplingSuite) TestDumpling(c *C) {
 	c.Assert(len(result.Errors), Equals, 1)
 	c.Assert(result.Errors[0].Message, Equals, "unknown error")
 	// nolint:errcheck
-	failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessWithError")
+	failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError")
 
 	// cancel
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessCancel", `return("unknown error")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessCancel", `return("unknown error")`), IsNil)
 	// nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessCancel")
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessForever", `return(true)`), IsNil)
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessCancel")
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessForever", `return(true)`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessForever")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessForever")
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel2()
@@ -127,6 +127,32 @@ func (t *testDumplingSuite) TestDefaultConfig(c *C) {
 	c.Assert(dumpling.Init(ctx), IsNil)
 	c.Assert(dumpling.dumpConfig.StatementSize, Not(Equals), export.UnspecifiedSize)
 	c.Assert(dumpling.dumpConfig.Rows, Not(Equals), export.UnspecifiedSize)
+}
+
+func (t *testDumplingSuite) TestCallStatus(c *C) {
+	m := NewDumpling(t.cfg)
+	ctx := context.Background()
+
+	dumpConf := export.DefaultConfig()
+	dumpConf.Labels = prometheus.Labels{"task": m.cfg.Name, "source_id": m.cfg.SourceID}
+	export.InitMetricsVector(dumpConf.Labels)
+
+	s := m.Status(nil).(*pb.DumpStatus)
+	c.Assert(s.CompletedTables, Equals, float64(0))
+	c.Assert(s.FinishedBytes, Equals, float64(0))
+	c.Assert(s.FinishedRows, Equals, float64(0))
+	c.Assert(s.EstimateTotalRows, Equals, float64(0))
+
+	// NewDumper is the only way we can set conf to Dumper, but it will return error. so we just ignore the error
+	dumpling, _ := export.NewDumper(ctx, dumpConf)
+	m.core = dumpling
+
+	m.Close()
+	s = m.Status(nil).(*pb.DumpStatus)
+	c.Assert(s.CompletedTables, Equals, float64(0))
+	c.Assert(s.FinishedBytes, Equals, float64(0))
+	c.Assert(s.FinishedRows, Equals, float64(0))
+	c.Assert(s.EstimateTotalRows, Equals, float64(0))
 }
 
 func (t *testDumplingSuite) TestParseArgsWontOverwrite(c *C) {

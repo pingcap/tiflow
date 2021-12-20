@@ -17,12 +17,12 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/puller"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	"github.com/pingcap/ticdc/pkg/pipeline"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/puller"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/pipeline"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"golang.org/x/sync/errgroup"
 )
@@ -64,7 +64,7 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	ctxC = util.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
 	// NOTICE: always pull the old value internally
-	// See also: https://github.com/pingcap/ticdc/issues/2301.
+	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, ctx.GlobalVars().GrpcPool, ctx.GlobalVars().RegionCache, ctx.GlobalVars().KVStorage,
 		n.replicaInfo.StartTs, n.tableSpan(ctx), true)
 	n.wg.Go(func() error {
