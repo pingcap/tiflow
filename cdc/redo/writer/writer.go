@@ -28,10 +28,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo/common"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo/common"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -178,12 +178,52 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		if cfg.S3Storage {
+			// since other process get the remove changefeed job async, may still write some logs after owner delete the log
+			err = logWriter.preCleanUpS3(ctx)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	logWriter.metricTotalRowsCount = redoTotalRowsCountGauge.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID)
 	logWriters[cfg.ChangeFeedID] = logWriter
 	go logWriter.runGC(ctx)
 	return logWriter, nil
+}
+
+func (l *LogWriter) preCleanUpS3(ctx context.Context) error {
+	ret, err := l.storage.FileExists(ctx, l.getDeletedChangefeedMarker())
+	if err != nil {
+		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+	}
+	if !ret {
+		return nil
+	}
+
+	files, err := getAllFilesInS3(ctx, l)
+	if err != nil {
+		return err
+	}
+
+	ff := []string{}
+	for _, file := range files {
+		if file != l.getDeletedChangefeedMarker() {
+			ff = append(ff, file)
+		}
+	}
+	err = l.deleteFilesInS3(ctx, ff)
+	if err != nil {
+		return err
+	}
+	err = l.storage.DeleteFile(ctx, l.getDeletedChangefeedMarker())
+	if !isNotExistInS3(err) {
+		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+	}
+
+	return nil
 }
 
 func (l *LogWriter) initMeta(ctx context.Context) error {
@@ -441,7 +481,18 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) error {
 	}
 	// after delete logs, rm the LogWriter since it is already closed
 	l.cleanUpLogWriter()
-	return nil
+
+	// write a marker to s3, since other process get the remove changefeed job async,
+	// may still write some logs after owner delete the log
+	return l.writeDeletedMarkerToS3(ctx)
+}
+
+func (l *LogWriter) getDeletedChangefeedMarker() string {
+	return fmt.Sprintf("delete_%s", l.cfg.ChangeFeedID)
+}
+
+func (l *LogWriter) writeDeletedMarkerToS3(ctx context.Context) error {
+	return cerror.WrapError(cerror.ErrS3StorageAPI, l.storage.WriteFile(ctx, l.getDeletedChangefeedMarker(), []byte("D")))
 }
 
 func (l *LogWriter) cleanUpLogWriter() {

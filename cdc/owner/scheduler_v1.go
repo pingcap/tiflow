@@ -19,10 +19,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	schedulerv2 "github.com/pingcap/ticdc/cdc/scheduler"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/tiflow/cdc/model"
+	schedulerv2 "github.com/pingcap/tiflow/cdc/scheduler"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"go.uber.org/zap"
 )
 
@@ -402,6 +403,7 @@ type schedulerV1CompatWrapper struct {
 }
 
 func (w *schedulerV1CompatWrapper) Tick(
+	_ cdcContext.Context,
 	state *orchestrator.ChangefeedReactorState,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
@@ -425,6 +427,10 @@ func (w *schedulerV1CompatWrapper) MoveTable(tableID model.TableID, target model
 
 func (w *schedulerV1CompatWrapper) Rebalance() {
 	w.inner.Rebalance()
+}
+
+func (w *schedulerV1CompatWrapper) Close(_ cdcContext.Context) {
+	// No-op for the old scheduler
 }
 
 func (w *schedulerV1CompatWrapper) calculateWatermarks(

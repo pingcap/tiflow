@@ -14,7 +14,7 @@
 package config
 
 import (
-	"github.com/pingcap/ticdc/dm/openapi"
+	"github.com/pingcap/tiflow/dm/openapi"
 )
 
 // SourceCfgToOpenAPISource converter SourceConfig to openapi.Source.
