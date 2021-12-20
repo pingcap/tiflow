@@ -16,8 +16,8 @@ package config
 import (
 	"time"
 
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/p2p"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/p2p"
 )
 
 // MessagesConfig configs MessageServer and MessageClient.

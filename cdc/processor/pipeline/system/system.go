@@ -19,7 +19,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/actor"
+	"github.com/pingcap/tiflow/pkg/actor"
 )
 
 // System manages table pipeline global resource.
