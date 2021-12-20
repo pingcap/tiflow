@@ -162,7 +162,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			return errors.Trace(err)
 		}
 		log.Info("start to listen processor task...")
-		if err := etcdWorker.Run(ctx, c.session, 200*time.Millisecond); err != nil {
+		if err := etcdWorker.Run(ctx, c.session, 200*time.Millisecond, c.info.AdvertiseAddr); err != nil {
 			// We check ttl of lease instead of check `session.Done`, because
 			// `session.Done` is only notified when etcd client establish a
 			// new keepalive request, there could be a time window as long as
