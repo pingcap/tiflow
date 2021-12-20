@@ -22,13 +22,13 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -113,10 +113,10 @@ func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	runProcessorCount := 0
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/captureHandleTaskDelay", "sleep(500)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/captureHandleTaskDelay", "sleep(500)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/captureHandleTaskDelay")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/captureHandleTaskDelay")
 	}()
 	runProcessorBackup := runProcessorImpl
 	runProcessorImpl = func(
