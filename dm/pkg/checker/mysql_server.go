@@ -69,7 +69,7 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) {
 	needVersion := SupportedVersion["mysql"]
 	if IsMariaDB(value) {
-		result.Errors = append(result.Errors, NewWarn("There may be some unexpected behavior when you are MariaDB"))
+		result.Errors = append(result.Errors, NewWarn("Migrating from MariaDB is experimentally supported"))
 		return
 	}
 
