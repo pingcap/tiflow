@@ -481,11 +481,6 @@ func (o *Owner) newChangeFeed(
 		}
 	}()
 
-	err = asyncSink.Initialize(cdcCtx, sinkTableInfo)
-	if err != nil {
-		log.Error("error on running owner", zap.Error(err))
-	}
-
 	var syncpointStore sink.SyncpointStore
 	if info.SyncPointEnabled {
 		syncpointStore, err = sink.NewSyncpointStore(ctx, id, info.SinkURI)
