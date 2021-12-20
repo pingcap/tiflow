@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller/sorter"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
