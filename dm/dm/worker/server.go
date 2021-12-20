@@ -622,7 +622,6 @@ func (s *Server) operateSourceBound(bound ha.SourceBound) error {
 	if !ok {
 		return terror.ErrWorkerFailToGetSourceConfigFromEtcd.Generate(bound.Source)
 	}
-	// clean old worker's relay dir
 	return s.enableHandleSubtasks(sourceCfg, true)
 }
 
