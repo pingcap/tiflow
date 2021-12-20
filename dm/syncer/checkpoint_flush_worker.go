@@ -20,8 +20,8 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 type checkpointFlushTask struct {

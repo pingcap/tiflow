@@ -29,10 +29,10 @@ import (
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/syncer/dbconn"
-	"github.com/pingcap/ticdc/pkg/errorutil"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
 // ignoreTrackerDDLError is also same with ignoreDDLError, but in order to keep tracker's table structure same as
