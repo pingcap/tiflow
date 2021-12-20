@@ -123,9 +123,9 @@ func (b *bankReactor) Tick(ctx context.Context, state ReactorState) (nextState R
 func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/orchestrator/InjectProgressRequestAfterCommit", "10%return(true)")
+	_ = failpoint.Enable("github.com/pingcap/tiflow/pkg/orchestrator/InjectProgressRequestAfterCommit", "10%return(true)")
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/orchestrator/InjectProgressRequestAfterCommit")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/orchestrator/InjectProgressRequestAfterCommit")
 	}()
 
 	totalAccountNumber := 25
