@@ -14,7 +14,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "6.1.6"
+      "version": "7.5.7"
     },
     {
       "type": "panel",
@@ -36,8 +36,8 @@
     },
     {
       "type": "panel",
-      "id": "table",
-      "name": "Table",
+      "id": "table-old",
+      "name": "Table (old)",
       "version": ""
     }
   ],
@@ -125,11 +125,12 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1636101093950,
+  "iteration": 1638425041302,
   "links": [],
   "panels": [
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -464,6 +465,7 @@
           "styles": [
             {
               "alias": "Instance",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "#8AB8FF",
@@ -515,7 +517,7 @@
           "timeFrom": "1s",
           "title": "Ownership",
           "transform": "timeseries_aggregations",
-          "type": "table"
+          "type": "table-old"
         },
         {
           "aliasColors": {},
@@ -1488,6 +1490,7 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -2044,11 +2047,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 1
+        "y": 2
       },
       "id": 11,
       "panels": [
@@ -2080,12 +2084,14 @@
           "styles": [
             {
               "alias": "Time",
+              "align": "auto",
               "dateFormat": "YYYY-MM-DD HH:mm:ss",
               "pattern": "Time",
               "type": "date"
             },
             {
               "alias": "",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "rgba(245, 54, 54, 0.9)",
@@ -2113,7 +2119,7 @@
           "timeShift": null,
           "title": "Changefeed table count",
           "transform": "timeseries_aggregations",
-          "type": "table"
+          "type": "table-old"
         },
         {
           "columns": [
@@ -2143,6 +2149,7 @@
           "styles": [
             {
               "alias": "table",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "rgba(245, 54, 54, 0.9)",
@@ -2159,6 +2166,7 @@
             },
             {
               "alias": "resolved ts",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "rgba(245, 54, 54, 0.9)",
@@ -2195,7 +2203,7 @@
           "timeShift": null,
           "title": "Processor resolved ts",
           "transform": "timeseries_aggregations",
-          "type": "table"
+          "type": "table-old"
         },
         {
           "columns": [
@@ -2225,6 +2233,7 @@
           "styles": [
             {
               "alias": "table",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "rgba(245, 54, 54, 0.9)",
@@ -2241,6 +2250,7 @@
             },
             {
               "alias": "resolved ts",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "rgba(245, 54, 54, 0.9)",
@@ -2278,7 +2288,7 @@
           "timeShift": null,
           "title": "Table resolved ts",
           "transform": "timeseries_aggregations",
-          "type": "table"
+          "type": "table-old"
         },
         {
           "columns": [
@@ -2351,7 +2361,7 @@
           "timeShift": null,
           "title": "Table count maintained by owner",
           "transform": "timeseries_aggregations",
-          "type": "table"
+          "type": "table-old"
         },
         {
           "aliasColors": {},
@@ -4390,12 +4400,14 @@
           "styles": [
             {
               "alias": "Time",
+              "align": "auto",
               "dateFormat": "YYYY-MM-DD HH:mm:ss",
               "pattern": "Time",
               "type": "date"
             },
             {
               "alias": "",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "rgba(245, 54, 54, 0.9)",
@@ -4458,7 +4470,7 @@
               }
             }
           ],
-          "type": "table"
+          "type": "table-old"
         }
       ],
       "title": "Changefeed",
@@ -4466,11 +4478,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 2
+        "y": 3
       },
       "id": 206,
       "panels": [
@@ -5803,11 +5816,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 3
+        "y": 4
       },
       "id": 13,
       "panels": [
@@ -7573,11 +7587,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 5
       },
       "id": 130,
       "panels": [
@@ -8057,11 +8072,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 6
       },
       "id": 58,
       "panels": [
@@ -8073,13 +8089,19 @@
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "CPU usage of TiKV CDC component",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 5
+            "y": 7
           },
+          "hiddenSeries": false,
           "id": 60,
           "legend": {
             "alignAsTable": true,
@@ -8099,22 +8121,26 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
           "seriesOverrides": [
             {
+              "$$hashKey": "object:163",
               "alias": "/.*workers/",
-              "transform": "negative-Y",
+              "fill": 0,
               "yaxis": 2
             },
             {
+              "$$hashKey": "object:164",
               "alias": "/.*tso/",
-              "fill": 0,
-              "pointradius": 1,
-              "points": true
+              "fill": 0
             }
           ],
           "spaceLength": 10,
@@ -8122,8 +8148,10 @@
           "steppedLine": false,
           "targets": [
             {
+              "exemplar": true,
               "expr": "sum(rate(tikv_thread_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"cdc_.*|cdc\"}[1m])) by (instance)",
               "format": "time_series",
+              "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}-endpoint",
               "refId": "A",
@@ -8167,6 +8195,7 @@
           },
           "yaxes": [
             {
+              "$$hashKey": "object:143",
               "format": "percentunit",
               "label": null,
               "logBase": 1,
@@ -8175,7 +8204,8 @@
               "show": true
             },
             {
-              "format": "percent",
+              "$$hashKey": "object:144",
+              "format": "percentunit",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -8190,7 +8220,7 @@
         },
         {
           "aliasColors": {},
-          "bars": true,
+          "bars": false,
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
@@ -8198,14 +8228,20 @@
           "description": "Outbound network traffic of TiKV CDC component",
           "editable": true,
           "error": false,
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 0,
+          "fillGradient": 0,
           "grid": {},
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 5
+            "y": 7
           },
+          "hiddenSeries": false,
           "id": 74,
           "legend": {
             "alignAsTable": true,
@@ -8223,23 +8259,24 @@
             "total": false,
             "values": true
           },
-          "lines": false,
+          "lines": true,
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
           "seriesOverrides": [
             {
+              "$$hashKey": "object:339",
               "alias": "/.*resolved_ts/",
-              "bars": false,
-              "fill": 1,
               "lines": true,
-              "linewidth": 2,
-              "transform": "negative-Y",
               "yaxis": 2
             }
           ],
@@ -8278,6 +8315,7 @@
           },
           "yaxes": [
             {
+              "$$hashKey": "object:319",
               "format": "Bps",
               "label": null,
               "logBase": 1,
@@ -8286,7 +8324,8 @@
               "show": true
             },
             {
-              "format": "bytes",
+              "$$hashKey": "object:320",
+              "format": "Bps",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -8307,13 +8346,19 @@
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The count of different kinds of gRPC message",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 12
+            "y": 14
           },
+          "hiddenSeries": false,
           "id": 147,
           "legend": {
             "alignAsTable": true,
@@ -8335,7 +8380,11 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -8405,14 +8454,20 @@
           "description": "The memory usage per TiKV instance",
           "editable": true,
           "error": false,
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 0,
+          "fillGradient": 0,
           "grid": {},
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 12
+            "y": 14
           },
+          "hiddenSeries": false,
           "id": 194,
           "legend": {
             "alignAsTable": true,
@@ -8432,8 +8487,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -8569,14 +8628,20 @@
           "description": "The min resolved ts of each TiKV",
           "editable": true,
           "error": false,
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 0,
+          "fillGradient": 0,
           "grid": {},
           "gridPos": {
             "h": 7,
             "w": 7,
             "x": 0,
-            "y": 19
+            "y": 21
           },
+          "hiddenSeries": false,
           "id": 152,
           "legend": {
             "alignAsTable": true,
@@ -8596,8 +8661,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 1,
           "points": false,
           "renderer": "flot",
@@ -8700,14 +8769,20 @@
           "description": "The ID of the min resolved region of each TiKV",
           "editable": true,
           "error": false,
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 0,
+          "fillGradient": 0,
           "grid": {},
           "gridPos": {
             "h": 7,
             "w": 5,
             "x": 7,
-            "y": 19
+            "y": 21
           },
+          "hiddenSeries": false,
           "id": 153,
           "legend": {
             "alignAsTable": true,
@@ -8727,8 +8802,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -8797,13 +8876,19 @@
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 19
+            "y": 21
           },
+          "hiddenSeries": false,
           "id": 70,
           "legend": {
             "alignAsTable": true,
@@ -8825,8 +8910,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -8900,11 +8989,15 @@
           "dataFormat": "tsbuckets",
           "datasource": "${DS_TEST-CLUSTER}",
           "description": "The time consumed to CDC incremental scan",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 26
+            "y": 28
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -8971,13 +9064,19 @@
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 26
+            "y": 28
           },
+          "hiddenSeries": false,
           "id": 72,
           "legend": {
             "alignAsTable": true,
@@ -8999,8 +9098,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -9066,13 +9169,19 @@
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The number of incremental scan task in different status.",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 26
+            "y": 28
           },
+          "hiddenSeries": false,
           "id": 140,
           "legend": {
             "alignAsTable": true,
@@ -9094,8 +9203,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -9177,14 +9290,20 @@
           "description": "The memory usage per TiKV instance",
           "editable": true,
           "error": false,
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 0,
+          "fillGradient": 0,
           "grid": {},
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 33
+            "y": 35
           },
+          "hiddenSeries": false,
           "id": 78,
           "legend": {
             "alignAsTable": true,
@@ -9204,8 +9323,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -9285,14 +9408,20 @@
           "description": "The speed of TiKV CDC incremental scan",
           "editable": true,
           "error": false,
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 0,
+          "fillGradient": 0,
           "grid": {},
           "gridPos": {
             "h": 7,
-            "w": 6,
+            "w": 12,
             "x": 12,
-            "y": 33
+            "y": 35
           },
+          "hiddenSeries": false,
           "id": 76,
           "legend": {
             "alignAsTable": true,
@@ -9314,24 +9443,44 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
-          "seriesOverrides": [],
+          "seriesOverrides": [
+            {
+              "$$hashKey": "object:563",
+              "alias": "/.*output/",
+              "yaxis": 2
+            }
+          ],
           "spaceLength": 10,
           "stack": false,
           "steppedLine": false,
           "targets": [
             {
+              "exemplar": true,
               "expr": "sum(rate(tikv_cdc_scan_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}[30s])) by (instance)",
               "format": "time_series",
               "hide": false,
+              "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "tikv-{{instance}}",
+              "legendFormat": "{{instance}}-output",
               "refId": "A",
               "step": 10
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(rate(tikv_cdc_scan_disk_read_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}[30s])) by (instance)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{instance}}-disk read",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -9355,6 +9504,7 @@
           },
           "yaxes": [
             {
+              "$$hashKey": "object:290",
               "format": "bytes",
               "label": null,
               "logBase": 1,
@@ -9363,108 +9513,8 @@
               "show": true
             },
             {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": true,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "decimals": 1,
-          "description": "The total bytes of TiKV CDC incremental scan",
-          "editable": true,
-          "error": false,
-          "fill": 0,
-          "grid": {},
-          "gridPos": {
-            "h": 7,
-            "w": 6,
-            "x": 18,
-            "y": 33
-          },
-          "id": 139,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "hideEmpty": true,
-            "hideZero": true,
-            "max": true,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "sort": "current",
-            "sortDesc": true,
-            "total": false,
-            "values": true
-          },
-          "lines": false,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "paceLength": 10,
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(tikv_cdc_scan_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}) by (instance)",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 2,
-              "legendFormat": "tikv-{{instance}}",
-              "refId": "A",
-              "step": 10
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "CDC total scan bytes",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "bytes",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
+              "$$hashKey": "object:291",
+              "format": "binBps",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -9485,13 +9535,19 @@
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 4,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 40
+            "y": 42
           },
+          "hiddenSeries": false,
           "id": 143,
           "legend": {
             "alignAsTable": true,
@@ -9513,8 +9569,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -9612,13 +9672,19 @@
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The total number of cache entries in the old value cache.",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 40
+            "y": 42
           },
+          "hiddenSeries": false,
           "id": 145,
           "legend": {
             "alignAsTable": true,
@@ -9640,8 +9706,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 1,
           "points": false,
           "renderer": "flot",
@@ -9732,14 +9802,20 @@
           "description": "",
           "editable": true,
           "error": false,
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 0,
+          "fillGradient": 0,
           "grid": {},
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 47
+            "y": 49
           },
+          "hiddenSeries": false,
           "id": 141,
           "legend": {
             "alignAsTable": true,
@@ -9761,8 +9837,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -9772,11 +9852,13 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(tikv_cdc_old_value_scan_details{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance, cf, tag)",
+              "exemplar": true,
+              "expr": "sum(rate(tikv_cdc_old_value_scan_details{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (cf, tag, type)",
               "format": "time_series",
               "hide": false,
+              "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "{{instance}}-{{cf}}-{{tag}}",
+              "legendFormat": "{{type}}-CF_{{cf}}-{{tag}}",
               "refId": "A",
               "step": 10
             }
@@ -9802,6 +9884,7 @@
           },
           "yaxes": [
             {
+              "$$hashKey": "object:652",
               "format": "ops",
               "label": null,
               "logBase": 1,
@@ -9810,6 +9893,7 @@
               "show": true
             },
             {
+              "$$hashKey": "object:653",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -9839,11 +9923,15 @@
           "dataFormat": "tsbuckets",
           "datasource": "${DS_TEST-CLUSTER}",
           "description": "The time consumed to get an old value (both from cache and from disk)",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "gridPos": {
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 47
+            "y": 49
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -9909,13 +9997,19 @@
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 47
+            "y": 49
           },
+          "hiddenSeries": false,
           "id": 142,
           "legend": {
             "alignAsTable": true,
@@ -9937,8 +10031,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -10016,11 +10114,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 6
+        "y": 7
       },
       "id": 155,
       "panels": [
@@ -10077,8 +10176,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.32:47800",
-              "value": "172.16.5.32:47800"
+              "text": "172.16.4.189:8300",
+              "value": "172.16.4.189:8300"
             }
           },
           "seriesOverrides": [
@@ -10263,8 +10362,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.32:47800",
-              "value": "172.16.5.32:47800"
+              "text": "172.16.4.189:8300",
+              "value": "172.16.4.189:8300"
             }
           },
           "seriesOverrides": [],
@@ -10370,8 +10469,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.32:47800",
-              "value": "172.16.5.32:47800"
+              "text": "172.16.4.189:8300",
+              "value": "172.16.4.189:8300"
             }
           },
           "seriesOverrides": [
@@ -10492,8 +10591,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.32:47800",
-              "value": "172.16.5.32:47800"
+              "text": "172.16.4.189:8300",
+              "value": "172.16.4.189:8300"
             }
           },
           "seriesOverrides": [
@@ -10960,7 +11059,7 @@
     }
   ],
   "refresh": "1m",
-  "schemaVersion": 18,
+  "schemaVersion": 27,
   "style": "dark",
   "tags": [],
   "templating": {
@@ -10970,13 +11069,18 @@
         "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "",
+        "description": null,
+        "error": null,
         "hide": 0,
         "includeAll": false,
         "label": "tidb_cluster",
         "multi": false,
         "name": "tidb_cluster",
         "options": [],
-        "query": "label_values(go_goroutines, tidb_cluster)",
+        "query": {
+          "query": "label_values(go_goroutines, tidb_cluster)",
+          "refId": "test-cluster-tidb_cluster-Variable-Query"
+        },
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -10992,13 +11096,18 @@
         "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
+        "description": null,
+        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "Changefeed",
         "multi": true,
         "name": "changefeed",
         "options": [],
-        "query": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
+        "query": {
+          "query": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
+          "refId": "test-cluster-changefeed-Variable-Query"
+        },
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -11014,13 +11123,18 @@
         "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
+        "description": null,
+        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "TiCDC",
         "multi": true,
         "name": "capture",
         "options": [],
-        "query": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
+        "query": {
+          "query": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
+          "refId": "test-cluster-capture-Variable-Query"
+        },
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -11036,13 +11150,18 @@
         "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
+        "description": null,
+        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "TiKV",
         "multi": false,
         "name": "tikv_instance",
         "options": [],
-        "query": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
+        "query": {
+          "query": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
+          "refId": "test-cluster-tikv_instance-Variable-Query"
+        },
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -11060,6 +11179,8 @@
           "text": "All",
           "value": "$__all"
         },
+        "description": null,
+        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "Latency spike (s) >",
@@ -11111,13 +11232,18 @@
         "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
+        "description": null,
+        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "Runtime metrics",
         "multi": false,
         "name": "runtime_instance",
         "options": [],
-        "query": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
+        "query": {
+          "query": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
+          "refId": "test-cluster-runtime_instance-Variable-Query"
+        },
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
