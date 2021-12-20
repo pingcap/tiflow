@@ -22,11 +22,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/owner"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
