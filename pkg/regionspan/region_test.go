@@ -16,7 +16,7 @@ package regionspan
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type regionSuite struct{}
