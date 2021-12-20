@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
+// DownstreamMeta used to fetch table info from downstream.
 type DownstreamMeta struct {
 	db   *conn.BaseDB
 	meta string
@@ -34,21 +35,22 @@ type DownstreamMeta struct {
 
 // LockKeeper used to keep and handle DDL lock conveniently.
 // The lock information do not need to be persistent, and can be re-constructed from the shard DDL info.
+// But the drop columns should be persistent.
 type LockKeeper struct {
 	mu    sync.RWMutex
 	locks map[string]*Lock // lockID -> Lock
 
-	downstreamMetaMap map[string]*DownstreamMeta
-	downDBFunc        func(string) (*config.DBConfig, string)
-	dropColumns       map[string]map[string]map[string]map[string]map[string]DropColumnStage
+	downstreamMetaMap     map[string]*DownstreamMeta
+	getDownstreamMetaFunc func(string) (*config.DBConfig, string)
+	dropColumns           map[string]map[string]map[string]map[string]map[string]DropColumnStage
 }
 
 // NewLockKeeper creates a new LockKeeper instance.
-func NewLockKeeper(downDBFunc func(string) (*config.DBConfig, string)) *LockKeeper {
+func NewLockKeeper(getDownstreamMetaFunc func(string) (*config.DBConfig, string)) *LockKeeper {
 	return &LockKeeper{
-		locks:             make(map[string]*Lock),
-		downstreamMetaMap: make(map[string]*DownstreamMeta),
-		downDBFunc:        downDBFunc,
+		locks:                 make(map[string]*Lock),
+		downstreamMetaMap:     make(map[string]*DownstreamMeta),
+		getDownstreamMetaFunc: getDownstreamMetaFunc,
 	}
 }
 
@@ -59,12 +61,13 @@ func (lk *LockKeeper) SetDropColumns(dropColumns map[string]map[string]map[strin
 	}
 }
 
+// getDownstreamMeta gets and cached downstream meta.
 func (lk *LockKeeper) getDownstreamMeta(task string) (*DownstreamMeta, error) {
 	if downstreamMeta, ok := lk.downstreamMetaMap[task]; ok {
 		return downstreamMeta, nil
 	}
 
-	dbConfig, meta := lk.downDBFunc(task)
+	dbConfig, meta := lk.getDownstreamMetaFunc(task)
 	if dbConfig == nil {
 		return nil, terror.ErrMasterOptimisticDownstreamMetaNotFound.Generate(task)
 	}
@@ -105,8 +108,6 @@ func (lk *LockKeeper) TrySync(cli *clientv3.Client, info Info, tts []TargetTable
 			l.columns = cols
 			delete(lk.dropColumns, lockID)
 		}
-	} else {
-		log.L().Error("lock already exist")
 	}
 
 	newDDLs, cols, err := l.TrySync(info, tts)
@@ -291,6 +292,22 @@ func (tk *TableKeeper) RemoveTableByTask(task string) bool {
 		return false
 	}
 	delete(tk.tables, task)
+	return true
+}
+
+// RemoveTableByTaskAndSource removes tables from the source tables through task name and source.
+// it returns whether removed (exit before).
+func (tk *TableKeeper) RemoveTableByTaskAndSource(task, source string) bool {
+	tk.mu.Lock()
+	defer tk.mu.Unlock()
+
+	if _, ok := tk.tables[task]; !ok {
+		return false
+	}
+	if _, ok := tk.tables[task][source]; !ok {
+		return false
+	}
+	delete(tk.tables[task], source)
 	return true
 }
 

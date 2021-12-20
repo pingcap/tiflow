@@ -52,7 +52,7 @@ func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *C) {
 	c.Assert(opm[task][source][upSchema][upTable], DeepEquals, op)
 
 	// DELETE info and operation with version 0
-	_, deleted, err := DeleteInfosOperationsSchemaColumn(etcdTestCli, []Info{info}, []Operation{op}, task, downSchema, downTable)
+	_, deleted, err := DeleteInfosOperationsColumns(etcdTestCli, []Info{info}, []Operation{op}, genDDLLockID(info))
 	c.Assert(err, IsNil)
 	c.Assert(deleted, IsFalse)
 
@@ -65,7 +65,7 @@ func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *C) {
 	c.Assert(opm, HasLen, 1)
 
 	// DELETE info and operation with version 1
-	_, deleted, err = DeleteInfosOperationsSchemaColumn(etcdTestCli, []Info{infoWithVer}, []Operation{op}, task, downSchema, downTable)
+	_, deleted, err = DeleteInfosOperationsColumns(etcdTestCli, []Info{infoWithVer}, []Operation{op}, genDDLLockID(infoWithVer))
 	c.Assert(err, IsNil)
 	c.Assert(deleted, IsTrue)
 

@@ -316,9 +316,9 @@ func GetInfosByTaskAndSource(cli *clientv3.Client, task string, source string) (
 	return infos, respTxn.Header.Revision, nil
 }
 
-// ClearTestInfoOperationSchema is used to clear all shard DDL information in optimism mode.
+// ClearTestInfoOperationColumns is used to clear all shard DDL information in optimism mode.
 // it only used for testing now.
-func ClearTestInfoOperationSchema(cli *clientv3.Client) error {
+func ClearTestInfoOperationColumn(cli *clientv3.Client) error {
 	clearSource := clientv3.OpDelete(common.ShardDDLOptimismSourceTablesKeyAdapter.Path(), clientv3.WithPrefix())
 	clearInfo := clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Path(), clientv3.WithPrefix())
 	clearOp := clientv3.OpDelete(common.ShardDDLOptimismOperationKeyAdapter.Path(), clientv3.WithPrefix())

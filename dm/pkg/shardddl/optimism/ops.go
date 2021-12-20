@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // PutSourceTablesInfo puts source tables and a shard DDL info.
@@ -48,10 +47,10 @@ func PutSourceTablesDeleteInfo(cli *clientv3.Client, st SourceTables, info Info)
 	return rev, err
 }
 
-// DeleteInfosOperationsSchemaColumn deletes the shard DDL infos, operations, init schemas and dropped columns in etcd.
+// DeleteInfosOperationsColumns deletes the shard DDL infos, operations, and dropped columns in etcd.
 // This function should often be called by DM-master when removing the lock.
 // Only delete when all info's version are greater or equal to etcd's version, otherwise it means new info was putted into etcd before.
-func DeleteInfosOperationsSchemaColumn(cli *clientv3.Client, infos []Info, ops []Operation, task, downSchema, downTable string) (int64, bool, error) {
+func DeleteInfosOperationsColumns(cli *clientv3.Client, infos []Info, ops []Operation, lockID string) (int64, bool, error) {
 	opsDel := make([]clientv3.Op, 0, len(infos)+len(ops))
 	cmps := make([]clientv3.Cmp, 0, len(infos))
 	for _, info := range infos {
@@ -62,7 +61,7 @@ func DeleteInfosOperationsSchemaColumn(cli *clientv3.Client, infos []Info, ops [
 	for _, op := range ops {
 		opsDel = append(opsDel, deleteOperationOp(op))
 	}
-	opsDel = append(opsDel, deleteDroppedColumnsByLockOp(utils.GenDDLLockID(task, downSchema, downTable)))
+	opsDel = append(opsDel, deleteDroppedColumnsByLockOp(lockID))
 	resp, rev, err := etcdutil.DoOpsInOneCmpsTxnWithRetry(cli, cmps, opsDel, []clientv3.Op{})
 	if err != nil {
 		return 0, false, err
@@ -70,7 +69,8 @@ func DeleteInfosOperationsSchemaColumn(cli *clientv3.Client, infos []Info, ops [
 	return rev, resp.Succeeded, nil
 }
 
-// DeleteInfosOperationsTablesSchemasByTask deletes the shard DDL infos and operations in etcd.
+// DeleteInfosOperationsTablesByTask deletes the shard DDL infos and operations in etcd.
+// This function should often be called by DM-master when stop a task for all sources.
 func DeleteInfosOperationsTablesByTask(cli *clientv3.Client, task string, lockIDSet map[string]struct{}) (int64, error) {
 	opsDel := make([]clientv3.Op, 0, 5)
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Encode(task), clientv3.WithPrefix()))
@@ -84,11 +84,12 @@ func DeleteInfosOperationsTablesByTask(cli *clientv3.Client, task string, lockID
 }
 
 // DeleteInfosOperationsTablesByTaskAndSource deletes the shard DDL infos and operations in etcd by task and source.
+// This function should often be called by DM-master when stop a task for a certain source.
 func DeleteInfosOperationsTablesByTaskAndSource(cli *clientv3.Client, task string, source string) (int64, error) {
 	opsDel := make([]clientv3.Op, 0, 5)
-	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Encode(task), clientv3.WithPrefix()))
-	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismOperationKeyAdapter.Encode(task), clientv3.WithPrefix()))
-	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismSourceTablesKeyAdapter.Encode(task), clientv3.WithPrefix()))
+	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Encode(task, source), clientv3.WithPrefix()))
+	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismOperationKeyAdapter.Encode(task, source), clientv3.WithPrefix()))
+	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismSourceTablesKeyAdapter.Encode(task, source), clientv3.WithPrefix()))
 	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, opsDel...)
 	return rev, err
 }

@@ -36,7 +36,7 @@ var _ = Suite(&testOptimist{})
 
 // clear keys in etcd test cluster.
 func clearOptimistTestSourceInfoOperation(c *C) {
-	c.Assert(optimism.ClearTestInfoOperationSchema(etcdTestCli), IsNil)
+	c.Assert(optimism.ClearTestInfoOperationColumn(etcdTestCli), IsNil)
 }
 
 func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {

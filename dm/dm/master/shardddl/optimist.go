@@ -52,11 +52,11 @@ type Optimist struct {
 }
 
 // NewOptimist creates a new Optimist instance.
-func NewOptimist(pLogger *log.Logger, downstreamMetaFunc func(string) (*config.DBConfig, string)) *Optimist {
+func NewOptimist(pLogger *log.Logger, getDownstreamMetaFunc func(string) (*config.DBConfig, string)) *Optimist {
 	return &Optimist{
 		logger: pLogger.WithFields(zap.String("component", "shard DDL optimist")),
 		closed: true,
-		lk:     optimism.NewLockKeeper(downstreamMetaFunc),
+		lk:     optimism.NewLockKeeper(getDownstreamMetaFunc),
 		tk:     optimism.NewTableKeeper(),
 	}
 }
@@ -201,22 +201,25 @@ func (o *Optimist) RemoveMetaDataWithTaskAndSources(task string, sources ...stri
 	}
 
 	for _, source := range sources {
+		// gets all infos for this task and source.
 		infos, _, err := optimism.GetInfosByTaskAndSource(o.cli, task, source)
 		if err != nil {
 			return err
 		}
 		for _, info := range infos {
 			lock := o.lk.FindLockByInfo(info)
+			// remove table for related lock
 			if lock != nil {
 				removed := lock.TryRemoveTable(info.Source, info.UpSchema, info.UpTable)
 				o.logger.Debug("the table name remove from the table keeper", zap.Bool("removed", removed), zap.String("info", info.ShortString()))
-				removed = o.tk.RemoveTable(info.Task, info.Source, info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
-				o.logger.Debug("a table removed for info from the lock", zap.Bool("removed", removed), zap.String("info", info.ShortString()))
 			}
 			if !lock.HasTables() {
 				o.lk.RemoveLock(lock.ID)
 			}
 		}
+		// remove source table in table keeper
+		removed := o.tk.RemoveTableByTaskAndSource(task, source)
+		o.logger.Debug("a table removed for info from the lock", zap.Bool("removed", removed), zap.String("task", task), zap.String("source", source))
 		// clear meta data in etcd
 		_, err = optimism.DeleteInfosOperationsTablesByTaskAndSource(o.cli, task, source)
 		if err != nil {
@@ -700,7 +703,7 @@ func (o *Optimist) deleteInfosOps(lock *optimism.Lock) (bool, error) {
 		}
 	}
 	// NOTE: we rely on only `task`, `downSchema`, and `downTable` used for deletion.
-	rev, deleted, err := optimism.DeleteInfosOperationsSchemaColumn(o.cli, infos, ops, lock.Task, lock.DownSchema, lock.DownTable)
+	rev, deleted, err := optimism.DeleteInfosOperationsColumns(o.cli, infos, ops, lock.ID)
 	if err != nil {
 		return deleted, err
 	}

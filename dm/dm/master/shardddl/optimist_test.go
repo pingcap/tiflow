@@ -42,7 +42,7 @@ var _ = SerialSuites(&testOptimist{})
 
 // clear keys in etcd test cluster.
 func clearOptimistTestSourceInfoOperation(c *C) {
-	c.Assert(optimism.ClearTestInfoOperationSchema(etcdTestCli), IsNil)
+	c.Assert(optimism.ClearTestInfoOperationColumn(etcdTestCli), IsNil)
 }
 
 func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
@@ -196,7 +196,7 @@ func (t *testOptimist) TestOptimist(c *C) {
 
 func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 	defer func() {
-		c.Assert(optimism.ClearTestInfoOperationSchema(cli), IsNil)
+		c.Assert(optimism.ClearTestInfoOperationColumn(cli), IsNil)
 	}()
 
 	var (
@@ -981,7 +981,7 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 
 func (t *testOptimist) testSortInfos(c *C, cli *clientv3.Client) {
 	defer func() {
-		c.Assert(optimism.ClearTestInfoOperationSchema(cli), IsNil)
+		c.Assert(optimism.ClearTestInfoOperationColumn(cli), IsNil)
 	}()
 
 	var (

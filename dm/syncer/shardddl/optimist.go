@@ -72,7 +72,7 @@ func (o *Optimist) Init(sourceTables map[string]map[string]map[string]map[string
 }
 
 // Tables clone and return tables
-// first one is sourceTable, second one is targetTable
+// first one is sourceTable, second one is targetTable.
 func (o *Optimist) Tables() [][]filter.Table {
 	o.mu.Lock()
 	defer o.mu.Unlock()

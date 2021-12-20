@@ -86,7 +86,6 @@ type Lock struct {
 }
 
 // NewLock creates a new Lock instance.
-// NOTE: we MUST give the initial table info when creating the lock now.
 func NewLock(cli *clientv3.Client, id, task, downSchema, downTable string, joined schemacmp.Table, tts []TargetTable, downstreamMeta *DownstreamMeta) *Lock {
 	l := &Lock{
 		cli:            cli,
@@ -587,6 +586,7 @@ func (l *Lock) tryRevertDone(source, schema, table string) {
 }
 
 // addTables adds any not-existing tables into the lock.
+// For a new table, try to fetch table info from downstream.
 func (l *Lock) addTables(tts []TargetTable) {
 	for _, tt := range tts {
 		if _, ok := l.tables[tt.Source]; !ok {

@@ -245,8 +245,8 @@ type CheckPoint interface {
 	// corresponding to Meta.Flush
 	FlushPointsExcept(tctx *tcontext.Context, snapshotID int, exceptTables []*filter.Table, extraSQLs []string, extraArgs [][]interface{}) error
 
-	// FlushPointsWithTableInfos flushed the table point with given table info
-	FlushPointsWithTableInfos(tctx *tcontext.Context, table []*filter.Table, ti []*model.TableInfo) error
+	// FlushPointsWithTableInfos flushed the table points with given table infos
+	FlushPointsWithTableInfos(tctx *tcontext.Context, tables []*filter.Table, tis []*model.TableInfo) error
 
 	// FlushSafeModeExitPoint flushed the global checkpoint's with given table info
 	FlushSafeModeExitPoint(tctx *tcontext.Context) error
