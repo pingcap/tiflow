@@ -22,7 +22,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
