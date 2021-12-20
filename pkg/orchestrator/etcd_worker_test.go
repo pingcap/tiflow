@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -25,10 +26,10 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/orchestrator/util"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator/util"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
@@ -224,7 +225,6 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 	defer func() {
 		_ = cli.Unwrap().Close()
 	}()
-
 	_, err := cli.Put(ctx, testEtcdKeyPrefix+"/sum", "0")
 	c.Check(err, check.IsNil)
 
@@ -273,7 +273,9 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 	}
 
 	err = errg.Wait()
-	if err != nil && (errors.Cause(err) == context.DeadlineExceeded || errors.Cause(err) == context.Canceled) {
+	if err != nil && (errors.Cause(err) == context.DeadlineExceeded ||
+		errors.Cause(err) == context.Canceled ||
+		strings.Contains(err.Error(), "etcdserver: request timeout")) {
 		return
 	}
 	c.Check(err, check.IsNil)

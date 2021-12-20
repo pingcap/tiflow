@@ -13,25 +13,37 @@ groups:
       value: '{{ $value }}'
       summary: cdc cluster has multiple owners
 
+  - alert: cdc_no_owner
+    expr: sum(rate(ticdc_owner_ownership_counter[30s])) < 0.5
+    for: 10m
+    labels:
+      env: ENV_LABELS_ENV
+      level: warning
+      expr: sum(rate(ticdc_owner_ownership_counter[30s])) < 0.5
+    annotations:
+      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
+      value: '{{ $value }}'
+      summary: cdc cluster has no owner for more than 10 minutes
+
   - alert: cdc_checkpoint_high_delay
-    expr: (time() - ticdc_processor_checkpoint_ts / 1000) > 600
+    expr: ticdc_processor_checkpoint_ts_lag > 600
     for: 1m
     labels:
       env: ENV_LABELS_ENV
       level: critical
-      expr: (time() - ticdc_processor_checkpoint_ts / 1000) > 600
+      expr: ticdc_processor_checkpoint_ts_lag > 600
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
       summary: cdc processor checkpoint delay more than 10 minutes
 
   - alert: cdc_resolvedts_high_delay
-    expr: (time() - ticdc_processor_resolved_ts / 1000) > 300
+    expr: ticdc_processor_resolved_ts_lag > 300
     for: 1m
     labels:
       env: ENV_LABELS_ENV
       level: critical
-      expr: (time() - ticdc_processor_resolved_ts / 1000) > 300
+      expr: ticdc_processor_resolved_ts_lag > 300
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'

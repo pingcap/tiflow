@@ -20,9 +20,9 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
-	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 )
 

@@ -24,16 +24,17 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/owner"
-	"github.com/pingcap/ticdc/cdc/processor"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/cdc/processor"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
@@ -54,10 +55,11 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	pdClient   pd.Client
-	kvStorage  tidbkv.Storage
-	etcdClient *kv.CDCEtcdClient
-	grpcPool   kv.GrpcPool
+	pdClient     pd.Client
+	kvStorage    tidbkv.Storage
+	etcdClient   *kv.CDCEtcdClient
+	grpcPool     kv.GrpcPool
+	TimeAcquirer pdtime.TimeAcquirer
 
 	cancel context.CancelFunc
 
@@ -98,6 +100,12 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, kv.CaptureOwnerKey)
+
+	if c.TimeAcquirer != nil {
+		c.TimeAcquirer.Stop()
+	}
+	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
+
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
 	}
@@ -146,11 +154,12 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		PDClient:    c.pdClient,
-		KVStorage:   c.kvStorage,
-		CaptureInfo: c.info,
-		EtcdClient:  c.etcdClient,
-		GrpcPool:    c.grpcPool,
+		PDClient:     c.pdClient,
+		KVStorage:    c.kvStorage,
+		CaptureInfo:  c.info,
+		EtcdClient:   c.etcdClient,
+		GrpcPool:     c.grpcPool,
+		TimeAcquirer: c.TimeAcquirer,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -164,7 +173,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		cancel()
 	}()
 	wg := new(sync.WaitGroup)
-	wg.Add(3)
+	wg.Add(4)
 	var ownerErr, processorErr error
 	go func() {
 		defer wg.Done()
@@ -185,6 +194,10 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// so we should also stop the owner and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
 		log.Info("the processor routine has exited", zap.Error(processorErr))
+	}()
+	go func() {
+		defer wg.Done()
+		c.TimeAcquirer.Run(ctx)
 	}()
 	go func() {
 		defer wg.Done()

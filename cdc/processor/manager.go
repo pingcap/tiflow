@@ -22,11 +22,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/tiflow/cdc/model"
+	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"go.uber.org/zap"
 )
 
@@ -82,6 +82,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}
+
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {

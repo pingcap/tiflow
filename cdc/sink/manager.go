@@ -23,8 +23,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -110,9 +110,12 @@ func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
 	// NOTICE: Because all table sinks will try to flush backend sink,
 	// which will cause a lot of lock contention and blocking in high concurrency cases.
 	// So here we use flushing as a lightweight lock to improve the lock competition problem.
-	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
-		return m.getCheckpointTs(), nil
-	}
+	//
+	// Do not skip flushing for resolving #3503.
+	// TODO uncomment the following return.
+	// if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
+	// return m.getCheckpointTs(), nil
+	// }
 	m.flushMu.Lock()
 	defer func() {
 		m.flushMu.Unlock()
@@ -174,12 +177,27 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 }
 
 func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+	// Log abnormal checkpoint that is large than resolved ts.
+	logAbnormalCheckpoint := func(ckpt uint64) {
+		if ckpt > resolvedTs {
+			log.L().WithOptions(zap.AddCallerSkip(1)).
+				Warn("checkpoint ts > resolved ts, flushed more than emitted",
+					zap.Int64("tableID", t.tableID),
+					zap.Uint64("resolvedTs", resolvedTs),
+					zap.Uint64("checkpointTs", ckpt))
+		}
+	}
 	i := sort.Search(len(t.buffer), func(i int) bool {
 		return t.buffer[i].CommitTs > resolvedTs
 	})
 	if i == 0 {
 		atomic.StoreUint64(&t.emittedTs, resolvedTs)
-		return t.manager.flushBackendSink(ctx)
+		ckpt, err := t.manager.flushBackendSink(ctx)
+		if err != nil {
+			return ckpt, err
+		}
+		logAbnormalCheckpoint(ckpt)
+		return ckpt, err
 	}
 	resolvedRows := t.buffer[:i]
 	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
@@ -189,7 +207,12 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		return t.manager.getCheckpointTs(), errors.Trace(err)
 	}
 	atomic.StoreUint64(&t.emittedTs, resolvedTs)
-	return t.manager.flushBackendSink(ctx)
+	ckpt, err := t.manager.flushBackendSink(ctx)
+	if err != nil {
+		return ckpt, err
+	}
+	logAbnormalCheckpoint(ckpt)
+	return ckpt, err
 }
 
 func (t *tableSink) getEmittedTs() uint64 {
