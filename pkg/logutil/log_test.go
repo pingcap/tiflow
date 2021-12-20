@@ -93,7 +93,6 @@ func TestZapInternalErrorOutput(t *testing.T) {
 	defer os.RemoveAll(dir)
 	for idx, tc := range testCases {
 		f := filepath.Join(dir, fmt.Sprintf("test-file%d", idx))
-		require.NoError(t, err)
 		cfg := &Config{
 			Level:                "info",
 			File:                 f,
