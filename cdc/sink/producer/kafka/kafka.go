@@ -81,6 +81,9 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 		if err != nil {
 			return err
 		}
+		if a <= 0 {
+			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(a)
+		}
 		c.PartitionNum = int32(a)
 	}
 
