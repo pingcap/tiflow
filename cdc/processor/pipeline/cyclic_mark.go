@@ -16,10 +16,10 @@ package pipeline
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	"github.com/pingcap/ticdc/pkg/pipeline"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	"github.com/pingcap/tiflow/pkg/pipeline"
 	"go.uber.org/zap"
 )
 

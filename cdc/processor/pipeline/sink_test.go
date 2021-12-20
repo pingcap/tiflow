@@ -20,13 +20,13 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/pipeline"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pipeline"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 func TestSuite(t *testing.T) {

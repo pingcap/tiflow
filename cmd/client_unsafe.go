@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc"
+	"github.com/pingcap/tiflow/cdc"
 	"github.com/spf13/cobra"
 )
 

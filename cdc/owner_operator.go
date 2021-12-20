@@ -21,12 +21,12 @@ import (
 
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/util"
 	pd "github.com/tikv/pd/client"
 	"golang.org/x/sync/errgroup"
 )

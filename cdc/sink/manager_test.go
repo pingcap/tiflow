@@ -25,8 +25,8 @@ import (
 	"github.com/pingcap/errors"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type managerSuite struct{}
@@ -245,7 +245,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 }
 
 // Run the benchmark
-// go test -benchmem -run='^$' -bench '^(BenchmarkManagerFlushing)$' github.com/pingcap/ticdc/cdc/sink
+// go test -benchmem -run='^$' -bench '^(BenchmarkManagerFlushing)$' github.com/pingcap/tiflow/cdc/sink
 func BenchmarkManagerFlushing(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 16)
