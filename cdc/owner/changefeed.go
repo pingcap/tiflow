@@ -512,15 +512,6 @@ func (c *changefeed) updateStatus(currentTs int64, barrierTs model.Ts) {
 func (c *changefeed) Close(ctx context.Context) {
 	c.releaseResources(ctx)
 }
-<<<<<<< HEAD
-=======
-
-func (c *changefeed) GetInfoProvider() schedulerv2.InfoProvider {
-	if provider, ok := c.scheduler.(schedulerv2.InfoProvider); ok {
-		return provider
-	}
-	return nil
-}
 
 // addSpecialComment translate tidb feature to comment
 func addSpecialComment(ddlQuery string) (string, error) {
@@ -545,4 +536,3 @@ func addSpecialComment(ddlQuery string) (string, error) {
 	}
 	return sb.String(), nil
 }
->>>>>>> 7ccaad224 (ticdc/owner: Fix ddl special comment syntax error (#3845))
