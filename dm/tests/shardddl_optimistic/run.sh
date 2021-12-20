@@ -9,38 +9,38 @@ source $cur/../_utils/shardddl_lib.sh
 
 function DM_DIFFERENT_SCHEMA_FULL_CASE() {
 	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb}" "count(1): 4"
-    run_sql_source1 "insert into ${shardddl1}.${tb1} values(5);"
-    run_sql_source1 "insert into ${shardddl1}.${tb2} values(6,'6');"
-    run_sql_source2 "insert into ${shardddl1}.${tb1} values(7,'77');"
-    run_sql_source2 "insert into ${shardddl1}.${tb2} values(8,'8','88');"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(5);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(6,'6');"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(7,'77');"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(8,'8','88');"
 
-    run_sql_source1 "alter table ${shardddl1}.${tb1} add column c text;"
+	run_sql_source1 "alter table ${shardddl1}.${tb1} add column c text;"
 	# source1.tb1(a,c); source1.tb2(a,b); source2.tb1(a,c); source2.tb2(a,b,c)
-    run_sql_source1 "insert into ${shardddl1}.${tb1} values(9,'999');"
-    run_sql_source1 "insert into ${shardddl1}.${tb2} values(10,'1010');"
-    run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,'111111');"
-    run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,'1212','121212');"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(9,'999');"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(10,'1010');"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,'111111');"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,'1212','121212');"
 
-    run_sql_source2 "alter table ${shardddl1}.${tb2} drop column b;"
+	run_sql_source2 "alter table ${shardddl1}.${tb2} drop column b;"
 	# source1.tb1(a,c); source1.tb2(a,b); source2.tb1(a,c); source2.tb2(a,c)
-    run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,'131313');"
-    run_sql_source1 "insert into ${shardddl1}.${tb2} values(14,'1414');"
-    run_sql_source2 "insert into ${shardddl1}.${tb1} values(15,'151515');"
-    run_sql_source2 "insert into ${shardddl1}.${tb2} values(16,'161616');"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,'131313');"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(14,'1414');"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(15,'151515');"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(16,'161616');"
 
-    run_sql_source1 "alter table ${shardddl1}.${tb2} drop column b;"
+	run_sql_source1 "alter table ${shardddl1}.${tb2} drop column b;"
 	# source1.tb1(a,c); source1.tb2(a); source2.tb1(a,c); source2.tb2(a,c)
-    run_sql_source1 "insert into ${shardddl1}.${tb1} values(17,'171717');"
-    run_sql_source1 "insert into ${shardddl1}.${tb2} values(18);"
-    run_sql_source2 "insert into ${shardddl1}.${tb1} values(19,'191919');"
-    run_sql_source2 "insert into ${shardddl1}.${tb2} values(20,'202020');"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(17,'171717');"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(18);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(19,'191919');"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(20,'202020');"
 
-    run_sql_source1 "alter table ${shardddl1}.${tb2} add column c text;"
+	run_sql_source1 "alter table ${shardddl1}.${tb2} add column c text;"
 	# source1.tb1(a,c); source1.tb2(a,c); source2.tb1(a,c); source2.tb2(a,c)
-    run_sql_source1 "insert into ${shardddl1}.${tb1} values(21,'212121');"
-    run_sql_source1 "insert into ${shardddl1}.${tb2} values(22,'222222');"
-    run_sql_source2 "insert into ${shardddl1}.${tb1} values(23,'232323');"
-    run_sql_source2 "insert into ${shardddl1}.${tb2} values(24,'242424');"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(21,'212121');"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(22,'222222');"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(23,'232323');"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(24,'242424');"
 
 	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb}" "count(1): 24"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
