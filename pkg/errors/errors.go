@@ -280,4 +280,9 @@ var (
 	ErrPeerMessageReceiverMismatch     = errors.Normalize("peer-to-peer message receiver is a mismatch: expected %s, got %s", errors.RFCCodeText("CDC:ErrPeerMessageReceiverMismatch"))
 	ErrPeerMessageIllegalClientVersion = errors.Normalize("peer-to-peer message client reported illegal version: %s", errors.RFCCodeText("CDC:ErrPeerMessageIllegalClientVersion"))
 	ErrPeerMessageTopicCongested       = errors.Normalize("peer-to-peer message topic has congested, aborting all connections", errors.RFCCodeText("CDC:ErrPeerMessageTopicCongested"))
+
+	// RESTful client error
+	ErrRewindRequestBodyError = errors.Normalize("failed to seek to the beginning of request body:%v", errors.RFCCodeText("CDC:ErrRewindRequestBodyError"))
+	ErrZeroLengthResponseBody = errors.Normalize("0-length response with status code: %d", errors.RFCCodeText("CDC:ErrZeroLengthResponseBody"))
+	ErrInvalidHost            = errors.Normalize("host must be a URL or a host:port pair: %q", errors.RFCCodeText("CDC:ErrInvalidHost"))
 )

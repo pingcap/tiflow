@@ -1,11 +1,11 @@
 package rest
 
 import (
-	"fmt"
 	"net/url"
 	"path"
 
 	"github.com/pingcap/errors"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
 )
@@ -40,35 +40,36 @@ func defaultServerUrlFor(config *Config) (*url.URL, string, error) {
 			return nil, "", errors.Trace(err)
 		}
 		if hostURL.Path != "" && hostURL.Path != "/" {
-			return nil, "", fmt.Errorf("host must be a URL or a host:port pair: %q", base)
+			return nil, "", cerrors.ErrInvalidHost.GenWithStackByArgs(base)
 		}
 	}
 	versionedPath := path.Join("/", config.APIPath, config.Version)
 	return hostURL, versionedPath, nil
 }
 
-func RESTClientForConfig(config *Config, httpClient *httputil.Client) (*RESTClient, error) {
-	baseURL, versionedAPIPath, err := defaultServerUrlFor(config)
-	restClient, err := NewRESTClient(baseURL, versionedAPIPath, httpClient)
-	return restClient, errors.Trace(err)
-}
-
-func RESTClientFor(config *Config) (*RESTClient, error) {
+// RESTClientFromConfig creates a RESTClient from specific config items.
+func RESTClientFromConfig(config *Config) (*RESTClient, error) {
 	if config.Version == "" {
 		return nil, errors.New("Version is required when initializing a RESTClient")
 	}
 	if config.APIPath == "" {
 		return nil, errors.New("APIPath is required when initializing a RESTClient")
 	}
-	_, _, err := defaultServerUrlFor(config)
-	if err != nil {
-		return nil, err
-	}
 
 	httpClient, err := httputil.NewClient(config.Credential)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
-	return RESTClientForConfig(config, httpClient)
+	baseURL, versionedAPIPath, err := defaultServerUrlFor(config)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	restClient, err := NewRESTClient(baseURL, versionedAPIPath, httpClient)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return restClient, nil
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 	"path"
 	"time"
 
-	terrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
@@ -40,8 +38,8 @@ type Request struct {
 	rateLimiter *rate.Limiter
 	timeout     time.Duration
 
-	// generic components accessible via method setters
-	verb       string
+	// generic components accessible via setters
+	method     HTTPMethod
 	pathPrefix string
 	params     url.Values
 	headers    http.Header
@@ -76,7 +74,7 @@ func NewRequest(c *RESTClient) *Request {
 		pathPrefix: pathPrefix,
 		maxRetries: 1,
 	}
-	r.SetHeader("Accept", "application/json")
+	r.WithHeader("Accept", "application/json")
 	return r
 }
 
@@ -89,8 +87,8 @@ func NewRequestWithClient(base *url.URL, versionedAPIPath string, client *httput
 	})
 }
 
-// Prefix adds segments to the begining of request url.
-func (r *Request) Prefix(segments ...string) *Request {
+// WithPrefix adds segments to the begining of request url.
+func (r *Request) WithPrefix(segments ...string) *Request {
 	if r.err != nil {
 		return r
 	}
@@ -99,8 +97,8 @@ func (r *Request) Prefix(segments ...string) *Request {
 	return r
 }
 
-// URI sets the server relative URI.
-func (r *Request) URI(uri string) *Request {
+// WithURI sets the server relative URI.
+func (r *Request) WithURI(uri string) *Request {
 	if r.err != nil {
 		return r
 	}
@@ -122,8 +120,8 @@ func (r *Request) URI(uri string) *Request {
 	return r
 }
 
-// Param sets the http request query params.
-func (r *Request) Param(name, value string) *Request {
+// WithParam sets the http request query params.
+func (r *Request) WithParam(name, value string) *Request {
 	if r.err != nil {
 		return r
 	}
@@ -134,14 +132,14 @@ func (r *Request) Param(name, value string) *Request {
 	return r
 }
 
-// Verb sets the verb this request will use.
-func (r *Request) Verb(verb string) *Request {
-	r.verb = verb
+// WithMethod sets the method this request will use.
+func (r *Request) WithMethod(method HTTPMethod) *Request {
+	r.method = method
 	return r
 }
 
-// SetHeader set the http request header.
-func (r *Request) SetHeader(key string, values ...string) *Request {
+// WithHeader set the http request header.
+func (r *Request) WithHeader(key string, values ...string) *Request {
 	if r.headers == nil {
 		r.headers = http.Header{}
 	}
@@ -152,8 +150,8 @@ func (r *Request) SetHeader(key string, values ...string) *Request {
 	return r
 }
 
-// Timeout specifies overall timeout of a request.
-func (r *Request) Timeout(d time.Duration) *Request {
+// WithTimeout specifies overall timeout of a request.
+func (r *Request) WithTimeout(d time.Duration) *Request {
 	if r.err != nil {
 		return r
 	}
@@ -161,8 +159,8 @@ func (r *Request) Timeout(d time.Duration) *Request {
 	return r
 }
 
-// BackoffBaseDelay specifies the base backoff sleep duration.
-func (r *Request) BackoffBaseDelay(delay time.Duration) *Request {
+// WithBackoffBaseDelay specifies the base backoff sleep duration.
+func (r *Request) WithBackoffBaseDelay(delay time.Duration) *Request {
 	if r.err != nil {
 		return r
 	}
@@ -171,7 +169,7 @@ func (r *Request) BackoffBaseDelay(delay time.Duration) *Request {
 }
 
 // BackoffMaxDelay specifies the maximum backoff sleep duration.
-func (r *Request) BackoffMaxDelay(delay time.Duration) *Request {
+func (r *Request) WithBackoffMaxDelay(delay time.Duration) *Request {
 	if r.err != nil {
 		return r
 	}
@@ -180,7 +178,7 @@ func (r *Request) BackoffMaxDelay(delay time.Duration) *Request {
 }
 
 // MaxRetries specifies the maximum times a request will retry.
-func (r *Request) MaxRetries(maxRetries int64) *Request {
+func (r *Request) WithMaxRetries(maxRetries int64) *Request {
 	if r.err != nil {
 		return r
 	}
@@ -196,7 +194,7 @@ func (r *Request) MaxRetries(maxRetries int64) *Request {
 // only supports two types now:
 //   1. io.Reader
 //   2. type which can be json marshalled
-func (r *Request) Body(obj interface{}) *Request {
+func (r *Request) WithBody(obj interface{}) *Request {
 	if r.err != nil {
 		return r
 	}
@@ -210,7 +208,7 @@ func (r *Request) Body(obj interface{}) *Request {
 			return r
 		}
 		r.body = bytes.NewReader(b)
-		r.SetHeader("Content-Type", "application/json")
+		r.WithHeader("Content-Type", "application/json")
 	}
 	return r
 }
@@ -238,7 +236,7 @@ func (r *Request) URL() *url.URL {
 
 func (r *Request) newHttpRequest(ctx context.Context) (*http.Request, error) {
 	url := r.URL().String()
-	req, err := http.NewRequest(r.verb, url, r.body)
+	req, err := http.NewRequest(r.method.String(), url, r.body)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +284,7 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 		// rewind the request body when r.body is not nil
 		if seeker, ok := r.body.(io.Seeker); ok && r.body != nil {
 			if _, err := seeker.Seek(0, 0); err != nil {
-				return terrors.Annotatef(err, "failed to seek to the beginning of request body:%v", r)
+				return cerrors.ErrRewindRequestBodyError.GenWithStackByArgs(r.body)
 			}
 		}
 
@@ -390,7 +388,7 @@ func (r Result) Into(obj interface{}) error {
 	}
 
 	if len(r.body) == 0 {
-		return fmt.Errorf("0-length response with status code: %d", r.statusCode)
+		return cerrors.ErrZeroLengthResponseBody.GenWithStackByArgs(r.statusCode)
 	}
 
 	if err := json.Unmarshal(r.body, obj); err != nil {

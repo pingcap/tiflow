@@ -17,16 +17,16 @@ import (
 )
 
 func TestRequestParams(t *testing.T) {
-	req := (&Request{}).Param("foo", "bar")
+	req := (&Request{}).WithParam("foo", "bar")
 	require.Equal(t, req.params, url.Values{"foo": []string{"bar"}})
 
-	req.Param("hello", "world")
+	req.WithParam("hello", "world")
 	require.Equal(t, req.params, url.Values{"foo": []string{"bar"}, "hello": []string{"world"}})
 }
 
 func TestRequestURI(t *testing.T) {
-	req := (&Request{}).Param("foo", "bar").Prefix("test")
-	req.URI("/production?foo=hello&val=1024")
+	req := (&Request{}).WithParam("foo", "bar").WithPrefix("test")
+	req.WithURI("/production?foo=hello&val=1024")
 	require.Equal(t, req.pathPrefix, "/production")
 	require.Equal(t, req.params, url.Values{"foo": []string{"hello"}, "val": []string{"1024"}})
 }
@@ -38,18 +38,18 @@ type testStruct struct {
 
 func TestRequestBody(t *testing.T) {
 	// test unsupported data type
-	req := (&Request{}).Body(func() {})
+	req := (&Request{}).WithBody(func() {})
 	require.NotNil(t, req.err)
 	require.Nil(t, req.body)
 
 	// test data type which can be json marshalled
 	p := &testStruct{Foo: "hello", Bar: 10}
-	req = (&Request{}).Body(p)
+	req = (&Request{}).WithBody(p)
 	require.Nil(t, req.err)
 	require.NotNil(t, req.body)
 
 	// test data type io.Reader
-	req = (&Request{}).Body(bytes.NewReader([]byte(`{"hello": "world"}`)))
+	req = (&Request{}).WithBody(bytes.NewReader([]byte(`{"hello": "world"}`)))
 	require.Nil(t, req.err)
 	require.NotNil(t, req.body)
 }
@@ -77,9 +77,9 @@ func TestRequestHeader(t *testing.T) {
 			Body:       ioutil.NopCloser(bytes.NewReader([]byte{})),
 		}, nil
 	})
-	req := NewRequestWithClient(&url.URL{Path: "/test"}, "", nil).Verb("get")
-	req.SetHeader("signature", "test-header2")
-	req.SetHeader("signature", "test-header1")
+	req := NewRequestWithClient(&url.URL{Path: "/test"}, "", nil).WithMethod(HTTPMethodGet)
+	req.WithHeader("signature", "test-header2")
+	req.WithHeader("signature", "test-header1")
 	req.c.Client = cli
 
 	_ = req.Do(context.Background())
@@ -102,15 +102,15 @@ func TestRequestDoContext(t *testing.T) {
 		<-received
 		cancel()
 	}()
-	c, err := RESTClientFor(&Config{
+	c, err := RESTClientFromConfig(&Config{
 		Host:    testServer.URL,
 		APIPath: "/api",
 		Version: "v1",
 	})
 	require.Nil(t, err)
 	err = c.Get().
-		Prefix("/test").
-		Timeout(time.Second).
+		WithPrefix("/test").
+		WithTimeout(time.Second).
 		Do(ctx).
 		Error()
 	require.NotNil(t, err)
@@ -126,15 +126,15 @@ func TestRequestDoContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c, err := RESTClientFor(&Config{
+	c, err := RESTClientFromConfig(&Config{
 		Host:    testServer.URL,
 		APIPath: "/api",
 		Version: "v1",
 	})
 	require.Nil(t, err)
 	err = c.Get().
-		Prefix("/test").
-		Timeout(time.Second).
+		WithPrefix("/test").
+		WithTimeout(time.Second).
 		Do(ctx).
 		Error()
 	require.NotNil(t, err)

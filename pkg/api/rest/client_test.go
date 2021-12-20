@@ -10,7 +10,7 @@ import (
 )
 
 func restClient(testServer *httptest.Server) (*RESTClient, error) {
-	c, err := RESTClientFor(&Config{
+	c, err := RESTClientFromConfig(&Config{
 		Host:    testServer.URL,
 		APIPath: "/api",
 		Version: "v1",
@@ -30,7 +30,7 @@ func TestRestRequestSuccess(t *testing.T) {
 
 	c, err := restClient(testServer)
 	require.Nil(t, err)
-	body, err := c.Get().Prefix("test").Do(context.Background()).Raw()
+	body, err := c.Get().WithPrefix("test").Do(context.Background()).Raw()
 	require.Equal(t, `{"cdc": "hello world"}`, string(body))
 }
 
@@ -46,7 +46,7 @@ func TestRestRequestFailed(t *testing.T) {
 
 	c, err := restClient(testServer)
 	require.Nil(t, err)
-	err = c.Get().MaxRetries(1).Do(context.Background()).Error()
+	err = c.Get().WithMaxRetries(1).Do(context.Background()).Error()
 	require.NotNil(t, err)
 }
 
@@ -62,7 +62,7 @@ func TestRestRawRequestFailed(t *testing.T) {
 
 	c, err := restClient(testServer)
 	require.Nil(t, err)
-	body, err := c.Get().MaxRetries(1).Do(context.Background()).Raw()
+	body, err := c.Get().WithMaxRetries(1).Do(context.Background()).Raw()
 	require.NotNil(t, body)
 	require.NotNil(t, err)
 }

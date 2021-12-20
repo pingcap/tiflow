@@ -8,19 +8,19 @@ import (
 )
 
 func TestRESTClientCommonConfigs(t *testing.T) {
-	_, err := RESTClientFor(&Config{Host: "127.0.0.1"})
+	_, err := RESTClientFromConfig(&Config{Host: "127.0.0.1"})
 	require.NotNil(t, err)
 
-	_, err = RESTClientFor(&Config{Host: "127.0.0.1", Version: "v1"})
+	_, err = RESTClientFromConfig(&Config{Host: "127.0.0.1", Version: "v1"})
 	require.NotNil(t, err)
 
-	_, err = RESTClientFor(&Config{Host: "127.0.0.1", APIPath: "/api"})
+	_, err = RESTClientFromConfig(&Config{Host: "127.0.0.1", APIPath: "/api"})
 	require.NotNil(t, err)
 
-	_, err = RESTClientFor(&Config{Host: "http://127.0.0.1:2379", APIPath: "/api", Version: "v1"})
+	_, err = RESTClientFromConfig(&Config{Host: "http://127.0.0.1:2379", APIPath: "/api", Version: "v1"})
 	require.Nil(t, err)
 
-	_, err = RESTClientFor(&Config{Host: "127.0.0.1:2379", APIPath: "/api", Version: "v2"})
+	_, err = RESTClientFromConfig(&Config{Host: "127.0.0.1:2379", APIPath: "/api", Version: "v2"})
 	require.Nil(t, err)
 }
 
@@ -32,7 +32,7 @@ func checkTLS(config *Config) bool {
 	return baseURL.Scheme == "https"
 }
 
-func TestRESTClientUsingTls(t *testing.T) {
+func TestRESTClientUsingTLS(t *testing.T) {
 	testCases := []struct {
 		Config   *Config
 		UsingTLS bool
