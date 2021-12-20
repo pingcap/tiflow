@@ -21,10 +21,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/format"
-	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
