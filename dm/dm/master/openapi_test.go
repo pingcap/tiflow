@@ -664,13 +664,13 @@ func (t *openAPISuite) TestClusterAPI(c *check.C) {
 func (t *openAPISuite) TestTaskConfigsAPI(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := setupServer(ctx, c)
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
 	checker.CheckSyncConfigFunc = mockCheckSyncConfig
 	defer func() {
 		checker.CheckSyncConfigFunc = checker.CheckSyncConfig
 		cancel()
 		s.Close()
-		c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
 	}()
 
 	dbCfg := config.GetDBConfigForTest()
