@@ -36,11 +36,10 @@ type asyncSinkSuite struct{}
 
 type mockAsyncSink struct {
 	sink.Sink
-	initTableInfo []*model.SimpleTableInfo
-	checkpointTs  model.Ts
-	ddl           *model.DDLEvent
-	ddlMu         sync.Mutex
-	ddlError      error
+	checkpointTs model.Ts
+	ddl          *model.DDLEvent
+	ddlMu        sync.Mutex
+	ddlError     error
 }
 
 func (m *mockAsyncSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
