@@ -39,6 +39,7 @@ import (
 )
 
 func (s *Server) startStatusHTTP() error {
+	conf := config.GetGlobalServerConfig()
 	router := newRouter(capture.NewHTTPHandler(s.capture))
 
 	router.GET("/status", gin.WrapF(s.handleStatus))
@@ -68,7 +69,6 @@ func (s *Server) startStatusHTTP() error {
 			log.Error("status server set tls config failed", zap.Error(err))
 			return errors.Trace(err)
 		}
-	}
 
 	tlsConfig, err := conf.Security.ToTLSConfigWithVerify()
 	if err != nil {
