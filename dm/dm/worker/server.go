@@ -622,6 +622,7 @@ func (s *Server) operateSourceBound(bound ha.SourceBound) error {
 	if !ok {
 		return terror.ErrWorkerFailToGetSourceConfigFromEtcd.Generate(bound.Source)
 	}
+	// clean old worker's relay dir
 	return s.enableHandleSubtasks(sourceCfg, true)
 }
 
@@ -822,7 +823,7 @@ func (s *Server) getOrStartWorker(cfg *config.SourceConfig, needLock bool) (*Sou
 	}
 
 	log.L().Info("will start a new worker", zap.String("sourceID", cfg.SourceID))
-	w, err := NewSourceWorker(cfg, s.etcdClient, s.cfg.Name)
+	w, err := NewSourceWorker(cfg, s.etcdClient, s.cfg.Name, s.cfg.RelayDir)
 	if err != nil {
 		return nil, err
 	}
