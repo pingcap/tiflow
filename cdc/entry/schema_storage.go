@@ -587,6 +587,36 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+	case timodel.ActionRenameTables:
+		var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
+		var NewTableNames, oldSchemaNames []*timodel.CIStr
+		err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs, &NewTableNames, &oldTableIDs, &oldSchemaNames)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if len(job.BinlogInfo.MultipleTableInfo) < len(NewTableNames) {
+			err := errors.New("Invalid binlog info for rename tables")
+			return errors.Trace(err)
+		}
+		// NOTE: should handle failures in halfway better.
+		for _, tableID := range oldTableIDs {
+			if err := s.dropTable(tableID); err != nil {
+				return errors.Trace(err)
+			}
+		}
+		for i, tableInfo := range job.BinlogInfo.MultipleTableInfo {
+			newSchema, ok := s.SchemaByID(newSchemaIDs[i])
+			if !ok {
+				err := errors.New("Can't find schema for rename tables")
+				return errors.Trace(err)
+			}
+			newSchemaName := newSchema.Name.L
+			err = s.createTable(model.WrapTableInfo(
+				newSchemaIDs[i], newSchemaName, job.BinlogInfo.FinishedTS, tableInfo))
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
 	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
 		err := s.createTable(getWrapTableInfo(job))
 		if err != nil {

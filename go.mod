@@ -74,7 +74,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tidwall/gjson v1.9.1
 	github.com/tidwall/sjson v1.2.2
-	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20211206072923-c0e876615440
+	github.com/tikv/client-go/v2 v2.0.0-rc.0.20211221041211-e9de5625c45c
 	github.com/tikv/pd v1.1.0-beta.0.20211118054146-02848d2660ee
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
@@ -106,3 +106,7 @@ replace (
 	// we need keep the replacement until go.etcd.io supports the higher version of grpc.
 	google.golang.org/grpc v1.40.0 => google.golang.org/grpc v1.29.1
 )
+
+replace github.com/pingcap/tidb/parser v0.0.0-20211209055157-9f744cdf8266 => github.com/hicqu/tidb/parser v0.0.0-20211222061617-9ed2971fd2d8
+
+replace github.com/pingcap/tidb v1.1.0-beta.0.20211209055157-9f744cdf8266 => github.com/hicqu/tidb v1.1.0-alpha.0.20211222061617-9ed2971fd2d8
