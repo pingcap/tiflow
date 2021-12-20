@@ -18,8 +18,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // SyncpointStore is an abstraction for anything that a changefeed may emit into.

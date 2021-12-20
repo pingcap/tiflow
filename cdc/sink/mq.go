@@ -22,18 +22,18 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
-	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
-	"github.com/pingcap/ticdc/cdc/sink/producer"
-	"github.com/pingcap/ticdc/cdc/sink/producer/kafka"
-	"github.com/pingcap/ticdc/cdc/sink/producer/pulsar"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/notify"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sink/producer"
+	"github.com/pingcap/tiflow/cdc/sink/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sink/producer/pulsar"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/notify"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -302,8 +302,8 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	flushToProducer := func(op codec.EncoderResult) error {
 		return k.statistics.RecordBatchExecution(func() (int, error) {
 			messages := encoder.Build()
-			thisBatchSize := len(messages)
-			if thisBatchSize == 0 {
+			thisBatchSize := 0
+			if len(messages) == 0 {
 				return 0, nil
 			}
 
@@ -312,6 +312,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 				if err != nil {
 					return 0, err
 				}
+				thisBatchSize += msg.GetRowsCount()
 			}
 
 			if op == codec.EncoderNeedSyncWrite {

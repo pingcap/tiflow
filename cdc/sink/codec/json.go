@@ -26,10 +26,10 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
 const (
@@ -427,6 +427,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		message.Ts = e.CommitTs
 		message.Schema = &e.Table.Schema
 		message.Table = &e.Table.Table
+		message.IncRowsCount()
 
 		if message.Length() > d.maxKafkaMessageSize {
 			// `len(d.messageBuf) == 1` is implied

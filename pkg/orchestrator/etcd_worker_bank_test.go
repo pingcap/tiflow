@@ -24,9 +24,9 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator/util"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator/util"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"go.uber.org/zap"
 )
 
@@ -150,7 +150,7 @@ func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 					accountNumber: totalAccountNumber,
 				}, &bankReactorState{c: c, index: i, account: make([]int, totalAccountNumber)})
 				c.Assert(err, check.IsNil)
-				err = worker.Run(ctx, nil, 100*time.Millisecond)
+				err = worker.Run(ctx, nil, 100*time.Millisecond, "127.0.0.1")
 				if err == nil || err.Error() == "etcdserver: request timed out" {
 					continue
 				}
