@@ -42,6 +42,7 @@ require (
 	github.com/pingcap/parser v0.0.0-20210831085004-b5390aa83f65
 	github.com/pingcap/tidb v1.1.0-beta.0.20210907130457-cd8fb24c5f7e
 	github.com/pingcap/tidb-tools v5.0.3+incompatible
+	github.com/pingcap/tidb/parser v0.0.0-20211220031146-e3c56b75eaeb // indirect
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
