@@ -371,6 +371,14 @@ paths:
       tags:
         - task
       summary: "get task list"
+      parameters:
+        - name: "with_status"
+          in: query
+          required: false
+          description: "get task with status"
+          schema:
+            type: boolean
+            example: true
       operationId: "DMAPIGetTaskList"
       responses:
         "200":
@@ -1340,6 +1348,10 @@ components:
             $ref: "#/components/schemas/TaskTableMigrateRule"
         source_config:
           $ref: "#/components/schemas/TaskSourceConfig"
+        status_list:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubTaskStatus"
       required:
         - "name"
         - "task_mode"

@@ -520,10 +520,36 @@ func (s *Server) DMAPIDeleteTask(c *gin.Context, taskName string, params openapi
 }
 
 // DMAPIGetTaskList url is:(GET /api/v1/tasks).
-func (s *Server) DMAPIGetTaskList(c *gin.Context) {
+func (s *Server) DMAPIGetTaskList(c *gin.Context, params openapi.DMAPIGetTaskListParams) {
 	// get sub task config by task name task name->source name->subtask config
 	subTaskConfigMap := s.scheduler.GetSubTaskCfgs()
 	taskList := config.SubTaskConfigsToOpenAPITask(subTaskConfigMap)
+
+	// fill status
+	if params.WithStatus != nil && *params.WithStatus {
+		// get source list for all task
+		var sourceList []string
+		sourceNameM := make(map[string]struct{})
+		for _, task := range taskList {
+			for _, sourceConf := range task.SourceConfig.SourceConf {
+				sourceNameM[sourceConf.SourceName] = struct{}{}
+			}
+			for sourceName := range sourceNameM {
+				sourceList = append(sourceList, sourceName)
+			}
+		}
+		// get status from workers
+		workerStatusList := s.getStatusFromWorkers(c.Request.Context(), sourceList, "", false)
+		// fill status for every task
+		for idx := range taskList {
+			subTaskStatusList, err := getOpenAPISubtaskStatusByTaskName(taskList[idx].Name, workerStatusList)
+			if err != nil {
+				_ = c.Error(err)
+				return
+			}
+			taskList[idx].StatusList = &subTaskStatusList
+		}
+	}
 	resp := openapi.GetTaskListResponse{Total: len(taskList), Data: taskList}
 	c.IndentedJSON(http.StatusOK, resp)
 }
@@ -547,73 +573,10 @@ func (s *Server) DMAPIGetTaskStatus(c *gin.Context, taskName string, params open
 	}
 	// 2. get status from workers
 	workerStatusList := s.getStatusFromWorkers(c.Request.Context(), sourceList, taskName, specifiedSource)
-	subTaskStatusList := make([]openapi.SubTaskStatus, len(workerStatusList))
-	for i, workerStatus := range workerStatusList {
-		if workerStatus == nil || workerStatus.SourceStatus == nil {
-			// this should not happen unless the rpc in the worker server has been modified
-			_ = c.Error(terror.ErrOpenAPICommonError.New("worker's query-status response is nil"))
-			return
-		}
-		sourceStatus := workerStatus.SourceStatus
-		// find right task name
-		var subTaskStatus *pb.SubTaskStatus
-		for _, cfg := range workerStatus.SubTaskStatus {
-			if cfg.Name == taskName {
-				subTaskStatus = cfg
-			}
-		}
-		if subTaskStatus == nil {
-			// this may not happen
-			_ = c.Error(terror.ErrOpenAPICommonError.Generatef("can not find subtask status task name: %s.", taskName))
-			return
-		}
-		openapiSubTaskStatus := openapi.SubTaskStatus{
-			Name:                taskName,
-			SourceName:          sourceStatus.GetSource(),
-			WorkerName:          sourceStatus.GetWorker(),
-			Stage:               subTaskStatus.GetStage().String(),
-			Unit:                subTaskStatus.GetUnit().String(),
-			UnresolvedDdlLockId: &subTaskStatus.UnresolvedDDLLockID,
-		}
-		// add load status
-		if loadS := subTaskStatus.GetLoad(); loadS != nil {
-			openapiSubTaskStatus.LoadStatus = &openapi.LoadStatus{
-				FinishedBytes:  loadS.FinishedBytes,
-				MetaBinlog:     loadS.MetaBinlog,
-				MetaBinlogGtid: loadS.MetaBinlogGTID,
-				Progress:       loadS.Progress,
-				TotalBytes:     loadS.TotalBytes,
-			}
-		}
-		// add syncer status
-		if syncerS := subTaskStatus.GetSync(); syncerS != nil {
-			openapiSubTaskStatus.SyncStatus = &openapi.SyncStatus{
-				BinlogType:          syncerS.GetBinlogType(),
-				BlockingDdls:        syncerS.GetBlockingDDLs(),
-				MasterBinlog:        syncerS.GetMasterBinlog(),
-				MasterBinlogGtid:    syncerS.GetMasterBinlogGtid(),
-				RecentTps:           syncerS.RecentTps,
-				SecondsBehindMaster: syncerS.SecondsBehindMaster,
-				Synced:              syncerS.Synced,
-				SyncerBinlog:        syncerS.SyncerBinlog,
-				SyncerBinlogGtid:    syncerS.SyncerBinlogGtid,
-				TotalEvents:         syncerS.TotalEvents,
-				TotalTps:            syncerS.TotalTps,
-			}
-			if unResolvedGroups := syncerS.GetUnresolvedGroups(); len(unResolvedGroups) > 0 {
-				openapiSubTaskStatus.SyncStatus.UnresolvedGroups = make([]openapi.ShardingGroup, len(unResolvedGroups))
-				for i, unResolvedGroup := range unResolvedGroups {
-					openapiSubTaskStatus.SyncStatus.UnresolvedGroups[i] = openapi.ShardingGroup{
-						DdlList:       unResolvedGroup.DDLs,
-						FirstLocation: unResolvedGroup.FirstLocation,
-						Synced:        unResolvedGroup.Synced,
-						Target:        unResolvedGroup.Target,
-						Unsynced:      unResolvedGroup.Unsynced,
-					}
-				}
-			}
-		}
-		subTaskStatusList[i] = openapiSubTaskStatus
+	subTaskStatusList, err := getOpenAPISubtaskStatusByTaskName(taskName, workerStatusList)
+	if err != nil {
+		_ = c.Error(err)
+		return
 	}
 	resp := openapi.GetTaskStatusResponse{Total: len(subTaskStatusList), Data: subTaskStatusList}
 	c.IndentedJSON(http.StatusOK, resp)
@@ -839,4 +802,75 @@ func terrorHTTPErrorHandler() gin.HandlerFunc {
 		}
 		c.IndentedJSON(http.StatusBadRequest, openapi.ErrorWithMessage{ErrorMsg: msg, ErrorCode: code})
 	}
+}
+
+func getOpenAPISubtaskStatusByTaskName(taskName string,
+	workerStatusList []*pb.QueryStatusResponse) ([]openapi.SubTaskStatus, error) {
+	var subTaskStatusList []openapi.SubTaskStatus
+	for _, workerStatus := range workerStatusList {
+		if workerStatus == nil || workerStatus.SourceStatus == nil {
+			// this should not happen unless the rpc in the worker server has been modified
+			return nil, terror.ErrOpenAPICommonError.New("worker's query-status response is nil")
+		}
+		sourceStatus := workerStatus.SourceStatus
+		// find right task name
+		var subTaskStatus *pb.SubTaskStatus
+		for _, cfg := range workerStatus.SubTaskStatus {
+			if cfg.Name == taskName {
+				subTaskStatus = cfg
+			}
+		}
+		if subTaskStatus == nil {
+			// this may not happen
+			return nil, terror.ErrOpenAPICommonError.Generatef("can not find subtask status task name: %s.", taskName)
+		}
+		openapiSubTaskStatus := openapi.SubTaskStatus{
+			Name:                taskName,
+			SourceName:          sourceStatus.GetSource(),
+			WorkerName:          sourceStatus.GetWorker(),
+			Stage:               subTaskStatus.GetStage().String(),
+			Unit:                subTaskStatus.GetUnit().String(),
+			UnresolvedDdlLockId: &subTaskStatus.UnresolvedDDLLockID,
+		}
+		// add load status
+		if loadS := subTaskStatus.GetLoad(); loadS != nil {
+			openapiSubTaskStatus.LoadStatus = &openapi.LoadStatus{
+				FinishedBytes:  loadS.FinishedBytes,
+				MetaBinlog:     loadS.MetaBinlog,
+				MetaBinlogGtid: loadS.MetaBinlogGTID,
+				Progress:       loadS.Progress,
+				TotalBytes:     loadS.TotalBytes,
+			}
+		}
+		// add syncer status
+		if syncerS := subTaskStatus.GetSync(); syncerS != nil {
+			openapiSubTaskStatus.SyncStatus = &openapi.SyncStatus{
+				BinlogType:          syncerS.GetBinlogType(),
+				BlockingDdls:        syncerS.GetBlockingDDLs(),
+				MasterBinlog:        syncerS.GetMasterBinlog(),
+				MasterBinlogGtid:    syncerS.GetMasterBinlogGtid(),
+				RecentTps:           syncerS.RecentTps,
+				SecondsBehindMaster: syncerS.SecondsBehindMaster,
+				Synced:              syncerS.Synced,
+				SyncerBinlog:        syncerS.SyncerBinlog,
+				SyncerBinlogGtid:    syncerS.SyncerBinlogGtid,
+				TotalEvents:         syncerS.TotalEvents,
+				TotalTps:            syncerS.TotalTps,
+			}
+			if unResolvedGroups := syncerS.GetUnresolvedGroups(); len(unResolvedGroups) > 0 {
+				openapiSubTaskStatus.SyncStatus.UnresolvedGroups = make([]openapi.ShardingGroup, len(unResolvedGroups))
+				for i, unResolvedGroup := range unResolvedGroups {
+					openapiSubTaskStatus.SyncStatus.UnresolvedGroups[i] = openapi.ShardingGroup{
+						DdlList:       unResolvedGroup.DDLs,
+						FirstLocation: unResolvedGroup.FirstLocation,
+						Synced:        unResolvedGroup.Synced,
+						Target:        unResolvedGroup.Target,
+						Unsynced:      unResolvedGroup.Unsynced,
+					}
+				}
+			}
+		}
+		subTaskStatusList = append(subTaskStatusList, openapiSubTaskStatus)
+	}
+	return subTaskStatusList, nil
 }
