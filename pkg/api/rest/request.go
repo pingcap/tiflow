@@ -281,7 +281,7 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 		// rewind the request body when r.body is not nil
 		if seeker, ok := r.body.(io.Seeker); ok && r.body != nil {
 			if _, err := seeker.Seek(0, 0); err != nil {
-				return cerrors.ErrRewindRequestBodyError.GenWithStackByArgs(r.body)
+				return cerrors.ErrRewindRequestBodyError
 			}
 		}
 
