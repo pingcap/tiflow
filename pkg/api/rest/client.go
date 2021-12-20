@@ -7,7 +7,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/httputil"
 )
 
-// HTTPInterface includes a set of operations to interact with cdc REST apis
+// RESTInterface includes a set of operations to interact with cdc REST apis
 type RESTInterface interface {
 	Verb(verb string) *Request
 	Post() *Request
