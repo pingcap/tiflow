@@ -396,3 +396,19 @@ func (s *AvroSchemaRegistrySuite) TestHTTPRetry(c *check.C) {
 	c.Assert(err, check.IsNil)
 	_ = resp.Body.Close()
 }
+
+func (s *AvroSchemaRegistrySuite) TestTableNameToSchemaSubject(c *check.C) {
+	table := model.TableName{
+		Schema: "testdb",
+		Table:  "test1",
+	}
+	m1, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value", "cdctest", "legacy")
+	c.Assert(err, check.IsNil)
+	topic := m1.tableNameToSchemaSubject(table)
+	c.Assert(topic, check.Equals, "testdb_test1-value")
+
+	m2, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value", "cdctest", "topic")
+	c.Assert(err, check.IsNil)
+	topic = m2.tableNameToSchemaSubject(table)
+	c.Assert(topic, check.Equals, "cdctest-value")
+}
