@@ -27,13 +27,13 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/cdc/capture"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/retry"
 	security2 "github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/pingcap/tidb/br/pkg/httputil"
 	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -138,7 +138,7 @@ func testRequestNonOwnerFailed(c *check.C, uri string) {
 }
 
 func testHandleFailpoint(c *check.C) {
-	fp := "github.com/pingcap/ticdc/cdc/TestHandleFailpoint"
+	fp := "github.com/pingcap/tiflow/cdc/TestHandleFailpoint"
 	uri := fmt.Sprintf("http://%s/debug/fail/%s", advertiseAddr4Test, fp)
 	body := bytes.NewReader([]byte("return(true)"))
 	req, err := http.NewRequest("PUT", uri, body)

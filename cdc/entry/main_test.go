@@ -16,7 +16,7 @@ package entry
 import (
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/leakutil"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
 func TestMain(m *testing.M) {
