@@ -29,9 +29,9 @@ import (
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/syncer/dbconn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
 func ignoreDDLError(err error) bool {
