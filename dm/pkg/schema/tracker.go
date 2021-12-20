@@ -594,6 +594,7 @@ func handlePkExCase(ti *model.TableInfo) *model.IndexInfo {
 // isSpecifiedIndexColumn checks all of index's columns are matching 'fn'.
 func isSpecifiedIndexColumn(index *model.IndexInfo, fn func(i int) bool) bool {
 	for _, col := range index.Columns {
+		// match fn
 		if !fn(col.Offset) {
 			return false
 		}
