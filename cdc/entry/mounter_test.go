@@ -20,8 +20,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/regionspan"
 	ticonfig "github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -30,6 +28,8 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"

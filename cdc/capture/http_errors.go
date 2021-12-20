@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // httpBadRequestError is some errors that will cause a BadRequestError in http handler
