@@ -6,15 +6,6 @@ cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 TASK_NAME="gbk"
-db="gbk"
-db_increment="gbk_increment"
-db_server_collation="gbk_server"
-db2="gbk2"
-db_increment2="gbk_increment2"
-db_server_collation2="gbk_server2"
-tb="t1"
-tb2="t2"
-tb_check="t_check"
 
 function run() {
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
@@ -37,7 +28,7 @@ function run() {
 	echo "start task"
 	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
 
-#	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	echo "prepare incremental data"
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1

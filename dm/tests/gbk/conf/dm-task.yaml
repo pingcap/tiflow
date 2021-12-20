@@ -8,7 +8,7 @@ ignore-checking-items: ["all"]
 
 target-database:
   host: "127.0.0.1"
-  port: 4000New
+  port: 4000
   user: "root"
   password: ""
 

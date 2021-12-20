@@ -15,6 +15,7 @@ package parser
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/pingcap/tidb/parser/charset"
 
@@ -45,6 +46,11 @@ func init() {
 		Desc:             "Chinese Internal Code Specification",
 		Maxlen:           2}
 	charset.AddCharset(c)
+	for _, coll := range charset.GetCollations() {
+		if strings.EqualFold(coll.CharsetName, c.Name) {
+			charset.AddCollation(coll)
+		}
+	}
 }
 
 // Parse wraps parser.Parse(), makes `parser` suitable for dm.
