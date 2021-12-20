@@ -672,11 +672,50 @@ func TestCheckErrorHistory(t *testing.T) {
 func TestChangefeedInfoStringer(t *testing.T) {
 	t.Parallel()
 
-	info := &ChangeFeedInfo{
-		SinkURI: "blackhole://",
-		StartTs: 418881574869139457,
+	testcases := []struct {
+		info                  *ChangeFeedInfo
+		expectedSinkURIRegexp string
+	}{
+		{
+			&ChangeFeedInfo{
+				SinkURI: "blackhole://",
+				StartTs: 418881574869139457,
+			},
+			`.*blackhole:.*`,
+		},
+		{
+			&ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+				StartTs: 418881574869139457,
+			},
+			`.*kafka://\*\*\*/ticdc-test2.*`,
+		},
+		{
+			&ChangeFeedInfo{
+				SinkURI: "mysql://root:124567@127.0.0.1:3306/",
+				StartTs: 418881574869139457,
+			},
+			`.*mysql://username:password@\*\*\*/.*`,
+		},
+		{
+			&ChangeFeedInfo{
+				SinkURI: "mysql://root@127.0.0.1:3306/",
+				StartTs: 418881574869139457,
+			},
+			`.*mysql://username:password@\*\*\*/.*`,
+		},
+		{
+			&ChangeFeedInfo{
+				SinkURI: "mysql://root:test%21%23%24%25%5E%26%2A@127.0.0.1:3306/",
+				StartTs: 418881574869139457,
+			},
+			`.*mysql://username:password@\*\*\*/.*`,
+		},
 	}
-	require.Regexp(t, "^.*sink-uri\":\"\\*\\*\\*\".*$", info.String())
+
+	for _, tc := range testcases {
+		require.Regexp(t, tc.expectedSinkURIRegexp, tc.info.String())
+	}
 }
 
 func TestValidateChangefeedID(t *testing.T) {

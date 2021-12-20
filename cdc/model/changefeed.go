@@ -160,7 +160,18 @@ func (info *ChangeFeedInfo) String() (str string) {
 		log.Error("failed to unmarshal changefeed info", zap.Error(err))
 		return
 	}
-	clone.SinkURI = "***"
+	sinkURIParsed, err := url.Parse(clone.SinkURI)
+	if err != nil {
+		log.Error("failed to parse sink URI", zap.Error(err))
+		return
+	}
+	if sinkURIParsed.User != nil && sinkURIParsed.User.String() != "" {
+		sinkURIParsed.User = url.UserPassword("username", "password")
+	}
+	if sinkURIParsed.Host != "" {
+		sinkURIParsed.Host = "***"
+	}
+	clone.SinkURI = sinkURIParsed.String()
 	str, err = clone.Marshal()
 	if err != nil {
 		log.Error("failed to marshal changefeed info", zap.Error(err))
@@ -260,16 +271,18 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 
 // FixIncompatible fixes incompatible changefeed meta info.
 func (info *ChangeFeedInfo) FixIncompatible() {
-	log.Info("Start fixing incompatible changefeed info")
 	creatorVersionGate := version.NewCreatorVersionGate(info.CreatorVersion)
 	if creatorVersionGate.ChangefeedStateFromAdminJob() {
+		log.Info("Start fixing incompatible changefeed state", zap.String("changefeed", info.String()))
 		info.fixState()
+		log.Info("Fix incompatibility changefeed state completed", zap.String("changefeed", info.String()))
 	}
 
 	if creatorVersionGate.ChangefeedAcceptUnknownProtocols() {
+		log.Info("Start fixing incompatible changefeed sink protocol", zap.String("changefeed", info.String()))
 		info.fixSinkProtocol()
+		log.Info("Fix incompatibility changefeed sink protocol completed", zap.String("changefeed", info.String()))
 	}
-	log.Info("Fix incompatibility changefeed info completed")
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
