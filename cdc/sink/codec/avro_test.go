@@ -240,3 +240,27 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 	_, err = s.encoder.AppendRowChangedEvent(testCaseUpdate)
 	c.Check(err, check.IsNil)
 }
+
+func (s *avroBatchEncoderSuite) TestnewAvroEventBatchEncoderBuilder(c *check.C) {
+	creds := &security.Credential{}
+
+	opts := map[string]string{}
+	_, err := newAvroEventBatchEncoderBuilder(creds, opts)
+	c.Assert(err, check.ErrorMatches, ".*Avro protocol requires parameter \"registry\".*")
+
+	opts = map[string]string{"registry": "http://127.0.0.1:8081"}
+	_, err = newAvroEventBatchEncoderBuilder(creds, opts)
+	c.Check(err, check.IsNil)
+
+	opts = map[string]string{"registry": "http://127.0.0.1:8081", "nameStrategy": "topic"}
+	_, err = newAvroEventBatchEncoderBuilder(creds, opts)
+	c.Check(err, check.IsNil)
+
+	opts = map[string]string{"registry": "http://127.0.0.1:8081", "nameStrategy": "legacy"}
+	_, err = newAvroEventBatchEncoderBuilder(creds, opts)
+	c.Check(err, check.IsNil)
+
+	opts = map[string]string{"registry": "http://127.0.0.1:8081", "nameStrategy": "banana"}
+	_, err = newAvroEventBatchEncoderBuilder(creds, opts)
+	c.Assert(err, check.ErrorMatches, ".*invalid name strategy banana.*")
+}
