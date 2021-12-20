@@ -18,10 +18,10 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
-	"github.com/pingcap/ticdc/integration/framework/mysql"
+	"github.com/pingcap/tiflow/integration/framework"
+	"github.com/pingcap/tiflow/integration/framework/avro"
+	"github.com/pingcap/tiflow/integration/framework/canal"
+	"github.com/pingcap/tiflow/integration/framework/mysql"
 )
 
 // DateTimeCase is base impl of test case for different types data

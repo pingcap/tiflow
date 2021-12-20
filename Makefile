@@ -2,7 +2,7 @@
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka
 
-PROJECT=ticdc
+PROJECT=tiflow
 
 FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
 
@@ -34,7 +34,7 @@ PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor|kv_gen|proto')
 TEST_FILES := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration|testing_utils')
-CDC_PKG := github.com/pingcap/ticdc
+CDC_PKG := github.com/pingcap/tiflow
 FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/$(PROJECT)/"}|grep -v "github.com/pingcap/$(PROJECT)"; done)
 FAILPOINT := bin/failpoint-ctl
 
@@ -125,8 +125,8 @@ integration_test_build: check_failpoint_ctl
 	./scripts/fix_lib_zstd.sh
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/ticdc/... \
-		-o bin/cdc.test github.com/pingcap/ticdc/cmd/cdc \
+		-coverpkg=github.com/pingcap/tiflow/... \
+		-o bin/cdc.test github.com/pingcap/tiflow/cmd/cdc \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc/main.go \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
