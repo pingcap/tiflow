@@ -160,7 +160,7 @@ function test_operate_task_bound_to_a_source() {
 
 function run() {
 	inject_points=(
-		"github.com/pingcap/ticdc/dm/relay/SetHeartbeatInterval=return(1)"
+		"github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval=return(1)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 

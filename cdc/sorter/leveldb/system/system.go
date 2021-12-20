@@ -22,12 +22,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	lsorter "github.com/pingcap/ticdc/cdc/sorter/leveldb"
-	"github.com/pingcap/ticdc/pkg/actor"
-	"github.com/pingcap/ticdc/pkg/actor/message"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/db"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	lsorter "github.com/pingcap/tiflow/cdc/sorter/leveldb"
+	"github.com/pingcap/tiflow/pkg/actor"
+	"github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/db"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 

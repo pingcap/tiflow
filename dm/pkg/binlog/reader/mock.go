@@ -19,7 +19,7 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )
 
 // MockReader is a binlog event reader which read binlog events from an input channel.
