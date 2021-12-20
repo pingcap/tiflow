@@ -16,8 +16,8 @@ package redo
 import (
 	"context"
 
-	"github.com/pingcap/ticdc/cdc/redo/reader"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/cdc/redo/reader"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // NewRedoReader creates a new redo log reader
