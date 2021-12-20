@@ -14,8 +14,8 @@
 package dispatcher
 
 import (
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/hash"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/hash"
 )
 
 type tableDispatcher struct {
