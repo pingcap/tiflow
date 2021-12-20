@@ -40,7 +40,8 @@ type actorNodeContext struct {
 	changefeedVars       *context.ChangefeedVars
 	globalVars           *context.GlobalVars
 	tickMessageThreshold int32
-	noTickMessageCount   int32
+	// noTickMessageCount is the count of pipeline message that no tick message is sent to actor
+	noTickMessageCount int32
 }
 
 func NewContext(stdCtx sdtContext.Context,
