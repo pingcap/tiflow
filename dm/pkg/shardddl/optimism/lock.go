@@ -117,8 +117,8 @@ func (l *Lock) FetchTableInfos(task, source, schema, table string) (*model.Table
 	ctx, cancel := context.WithTimeout(context.Background(), dbutil.DefaultTimeout)
 	defer cancel()
 
-	query := `SELECT table_info FROM ` + dbutil.TableName(l.downstreamMeta.meta, cputil.SyncerCheckpoint(task)) + ` WHERE id = ? AND cp_schema = ?`
-	row := db.DB.QueryRowContext(ctx, query, source, schema)
+	query := `SELECT table_info FROM ` + dbutil.TableName(l.downstreamMeta.meta, cputil.SyncerCheckpoint(task)) + ` WHERE id = ? AND cp_schema = ? AND cp_table = ?`
+	row := db.DB.QueryRowContext(ctx, query, source, schema, table)
 	if row.Err() != nil {
 		return nil, row.Err()
 	}
@@ -608,6 +608,7 @@ func (l *Lock) addTables(tts []TargetTable) {
 						l.tables[tt.Source][schema][table] = l.joined
 					} else {
 						t := schemacmp.Encode(ti)
+						log.L().Debug("get source table info", zap.String("task", tt.Task), zap.String("source", tt.Source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("info", t))
 						l.tables[tt.Source][schema][table] = t
 					}
 					l.done[tt.Source][schema][table] = false
