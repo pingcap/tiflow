@@ -53,11 +53,11 @@ func interestingGoroutines() (gs []string) {
 		// library used by sarama, ref: https://github.com/rcrowley/go-metrics/pull/266
 		"github.com/rcrowley/go-metrics.(*meterArbiter).tick",
 		// TODO: remove these two lines after unified sorter is fixed
-		"github.com/pingcap/ticdc/cdc/sorter/unified.newBackEndPool",
-		"github.com/pingcap/ticdc/cdc/sorter/unified.(*heapSorter).flush",
+		"github.com/pingcap/tiflow/cdc/sorter/unified.newBackEndPool",
+		"github.com/pingcap/tiflow/cdc/sorter/unified.(*heapSorter).flush",
 		// kv client region worker pool
-		"github.com/pingcap/ticdc/cdc/kv.RunWorkerPool",
-		"github.com/pingcap/ticdc/pkg/workerpool.(*defaultPoolImpl).Run",
+		"github.com/pingcap/tiflow/cdc/kv.RunWorkerPool",
+		"github.com/pingcap/tiflow/pkg/workerpool.(*defaultPoolImpl).Run",
 		// library used by log
 		"gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun",
 	}

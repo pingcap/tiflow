@@ -14,7 +14,7 @@ function run() {
     check_contains 'Query OK, 2 rows affected'
 
     # inject error for loading data
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/pkg/conn/retryableError=return("retry_cancel")'
+    export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/pkg/conn/retryableError=return("retry_cancel")'
 
     run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
     check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -55,7 +55,7 @@ function run() {
 
     # stop DM-worker, then update failpoint for checkpoint
     kill_dm_worker
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/pkg/conn/retryableError=return("UPDATE `dm_meta`.`test_loader_checkpoint`")'
+    export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/pkg/conn/retryableError=return("UPDATE `dm_meta`.`test_loader_checkpoint`")'
 
     # start DM-worker again
     run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -107,7 +107,7 @@ function run() {
     # ---------- test for incremental replication ----------
     # stop DM-worker, then enable failponits
     kill_dm_worker
-    export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/pkg/conn/retryableError=return(\"retry_cancel\")"
+    export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/pkg/conn/retryableError=return(\"retry_cancel\")"
 
     # run sql files to trigger incremental replication
     run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1

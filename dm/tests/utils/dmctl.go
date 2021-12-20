@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/pb"
 )
 
 // CreateDmCtl creates a gRPC client to DM-master.

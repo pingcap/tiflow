@@ -16,7 +16,7 @@ package master
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/pb"
 )
 
 // NewPauseTaskCmd creates a PauseTask command.
