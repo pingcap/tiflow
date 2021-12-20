@@ -25,23 +25,30 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/mock"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/conn"
 	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	dmterror "github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
 
 const (
 	// TiDBClusteredIndex is the variable name for clustered index.
 	TiDBClusteredIndex = "tidb_enable_clustered_index"
+	// downstream mock table id, consists of serial numbers of letters.
+	mockTableID = 121402101900011104
 )
 
 var (
@@ -55,11 +62,6 @@ var (
 
 // Tracker is used to track schema locally.
 type Tracker struct {
-<<<<<<< HEAD
-	store kv.Storage
-	dom   *domain.Domain
-	se    session.Session
-=======
 	store     kv.Storage
 	dom       *domain.Domain
 	se        session.Session
@@ -78,13 +80,12 @@ type DownstreamTableInfo struct {
 	TableInfo            *model.TableInfo   // tableInfo which comes from parse create statement syntaxtree
 	AbsoluteUKIndexInfo  *model.IndexInfo   // absolute uk index is a pk/uk(not null)
 	AvailableUKIndexList []*model.IndexInfo // index list which is all uks
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 }
 
 // NewTracker creates a new tracker. `sessionCfg` will be set as tracker's session variables if specified, or retrieve
-// some variable from downstream TiDB using `tidbConn`.
+// some variable from downstream using `downstreamConn`.
 // NOTE **sessionCfg is a reference to caller**.
-func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, tidbConn *conn.BaseConn) (*Tracker, error) {
+func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, downstreamConn *dbconn.DBConn) (*Tracker, error) {
 	// NOTE: tidb uses a **global** config so can't isolate tracker's config from each other. If that isolation is needed,
 	// we might SetGlobalConfig before every call to tracker, or use some patch like https://github.com/bouk/monkey
 	tidbConfig.UpdateGlobal(func(conf *tidbConfig.Config) {
@@ -103,7 +104,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	for _, k := range downstreamVars {
 		if _, ok := sessionCfg[k]; !ok {
 			var ignoredColumn interface{}
-			rows, err2 := tidbConn.QuerySQL(tctx, fmt.Sprintf("SHOW VARIABLES LIKE '%s'", k))
+			rows, err2 := downstreamConn.QuerySQL(tctx, fmt.Sprintf("SHOW VARIABLES LIKE '%s'", k))
 			if err2 != nil {
 				return nil, err2
 			}
@@ -177,19 +178,17 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		return nil, err
 	}
 
-<<<<<<< HEAD
-=======
 	// init downstreamTracker
 	dsTracker := &downstreamTracker{
 		downstreamConn: downstreamConn,
 		tableInfos:     make(map[string]*DownstreamTableInfo),
 	}
 
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 	return &Tracker{
-		store: store,
-		dom:   dom,
-		se:    se,
+		store:     store,
+		dom:       dom,
+		se:        se,
+		dsTracker: dsTracker,
 	}, nil
 }
 
@@ -375,8 +374,6 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 func (tr *Tracker) GetSystemVar(name string) (string, bool) {
 	return tr.se.GetSessionVars().GetSystemVar(name)
 }
-<<<<<<< HEAD
-=======
 
 // GetDownStreamTableInfo gets downstream table info.
 // note. this function will init downstreamTrack's table info.
@@ -603,4 +600,3 @@ func isSpecifiedIndexColumn(index *model.IndexInfo, fn func(i int) bool) bool {
 	}
 	return true
 }
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))

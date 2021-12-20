@@ -19,6 +19,8 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/util/mock"
 
 	"github.com/pingcap/ticdc/dm/dm/config"
@@ -58,8 +60,6 @@ func (s *testSyncerSuite) TestCasuality(c *C) {
 	schemaStr := "create table tb(a int primary key, b int unique);"
 	ti, err := createTableInfo(p, se, int64(0), schemaStr)
 	c.Assert(err, IsNil)
-<<<<<<< HEAD
-=======
 	tiIndex := &model.IndexInfo{
 		Table:   ti.Name,
 		Unique:  true,
@@ -74,7 +74,6 @@ func (s *testSyncerSuite) TestCasuality(c *C) {
 	}
 	downTi := schema.GetDownStreamTi(ti, ti)
 	c.Assert(downTi, NotNil)
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 
 	jobCh := make(chan *job, 10)
 	syncer := &Syncer{
@@ -121,11 +120,7 @@ func (s *testSyncerSuite) TestCasuality(c *C) {
 	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
 
 	for _, tc := range testCases {
-<<<<<<< HEAD
-		job := newDMLJob(tc.op, table, table, newDML(tc.op, false, "", table, tc.oldVals, tc.vals, tc.oldVals, tc.vals, ti.Columns, ti), ec)
-=======
 		job := newDMLJob(tc.op, table, table, newDML(tc.op, false, "", table, tc.oldVals, tc.vals, tc.oldVals, tc.vals, ti.Columns, ti, tiIndex, downTi), ec)
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 		jobCh <- job
 	}
 

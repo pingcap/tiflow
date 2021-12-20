@@ -238,6 +238,18 @@ func (s *testSyncerSuite) TestGenWhere(c *C) {
 	schema2 := "create table test.tb(id int, col1 int, col2 int, name varchar(24))"
 	ti2, err := createTableInfo(p, se, 0, schema2)
 	c.Assert(err, IsNil)
+	ti1Index := &model.IndexInfo{
+		Table:   ti1.Name,
+		Unique:  true,
+		Primary: true,
+		State:   model.StatePublic,
+		Tp:      model.IndexTypeBtree,
+		Columns: []*model.IndexColumn{{
+			Name:   ti1.Columns[0].Name,
+			Offset: ti1.Columns[0].Offset,
+			Length: types.UnspecifiedLength,
+		}},
+	}
 
 	testCases := []struct {
 		dml    *DML
@@ -245,42 +257,27 @@ func (s *testSyncerSuite) TestGenWhere(c *C) {
 		values []interface{}
 	}{
 		{
-<<<<<<< HEAD
-			newDML(del, false, "", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti1.Columns, ti1),
-=======
 			newDML(del, false, "", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti1.Columns, ti1, ti1Index, nil),
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 			"`id` = ?",
 			[]interface{}{1},
 		},
 		{
-<<<<<<< HEAD
-			newDML(update, false, "", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, ti1.Columns, ti1),
-=======
 			newDML(update, false, "", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, ti1.Columns, ti1, ti1Index, nil),
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 			"`id` = ?",
 			[]interface{}{1},
 		},
 		{
-<<<<<<< HEAD
-			newDML(del, false, "", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti2.Columns, ti2),
-=======
 			newDML(del, false, "", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti2.Columns, ti2, nil, nil),
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 			"`id` = ? AND `col1` = ? AND `col2` = ? AND `name` = ?",
 			[]interface{}{1, 2, 3, "haha"},
 		},
 		{
-<<<<<<< HEAD
-			newDML(update, false, "", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, ti2.Columns, ti2),
-=======
 			newDML(update, false, "", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, ti2.Columns, ti2, nil, nil),
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 			"`id` = ? AND `col1` = ? AND `col2` = ? AND `name` = ?",
 			[]interface{}{1, 2, 3, "haha"},
 		},
 	}
+
 	for _, tc := range testCases {
 		var buf strings.Builder
 		whereValues := tc.dml.genWhere(&buf)
@@ -295,6 +292,18 @@ func (s *testSyncerSuite) TestGenSQL(c *C) {
 	schema := "create table test.tb(id int primary key, col1 int unique not null, col2 int unique, name varchar(24))"
 	ti, err := createTableInfo(p, se, 0, schema)
 	c.Assert(err, IsNil)
+	tiIndex := &model.IndexInfo{
+		Table:   ti.Name,
+		Unique:  true,
+		Primary: true,
+		State:   model.StatePublic,
+		Tp:      model.IndexTypeBtree,
+		Columns: []*model.IndexColumn{{
+			Name:   ti.Columns[0].Name,
+			Offset: ti.Columns[0].Offset,
+			Length: types.UnspecifiedLength,
+		}},
+	}
 
 	testCases := []struct {
 		dml     *DML
@@ -302,47 +311,27 @@ func (s *testSyncerSuite) TestGenSQL(c *C) {
 		args    [][]interface{}
 	}{
 		{
-<<<<<<< HEAD
-			newDML(insert, false, "`targetSchema`.`targetTable`", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti),
-=======
 			newDML(insert, false, "`targetSchema`.`targetTable`", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 			[]string{"INSERT INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
 			[][]interface{}{{1, 2, 3, "haha"}},
 		},
 		{
-<<<<<<< HEAD
-			newDML(insert, true, "`targetSchema`.`targetTable`", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti),
-=======
 			newDML(insert, true, "`targetSchema`.`targetTable`", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 			[]string{"INSERT INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)"},
 			[][]interface{}{{1, 2, 3, "haha"}},
 		},
 		{
-<<<<<<< HEAD
-			newDML(del, false, "`targetSchema`.`targetTable`", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti),
-=======
 			newDML(del, false, "`targetSchema`.`targetTable`", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 			[]string{"DELETE FROM `targetSchema`.`targetTable` WHERE `id` = ? LIMIT 1"},
 			[][]interface{}{{1}},
 		},
 		{
-<<<<<<< HEAD
-			newDML(update, false, "`targetSchema`.`targetTable`", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti),
-=======
 			newDML(update, false, "`targetSchema`.`targetTable`", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 			[]string{"UPDATE `targetSchema`.`targetTable` SET `id` = ?, `col1` = ?, `col2` = ?, `name` = ? WHERE `id` = ? LIMIT 1"},
 			[][]interface{}{{4, 5, 6, "hihi", 1}},
 		},
 		{
-<<<<<<< HEAD
-			newDML(update, true, "`targetSchema`.`targetTable`", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti),
-=======
 			newDML(update, true, "`targetSchema`.`targetTable`", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 			[]string{"DELETE FROM `targetSchema`.`targetTable` WHERE `id` = ? LIMIT 1", "INSERT INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)"},
 			[][]interface{}{{1}, {4, 5, 6, "hihi"}},
 		},
@@ -377,64 +366,6 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 	schema22 := "create table dbb.tbb(id int primary key, col3 int unique not null, name varchar(24))"
 	ti11, err := createTableInfo(p, se, 0, schema11)
 	c.Assert(err, IsNil)
-<<<<<<< HEAD
-	ti12, err := createTableInfo(p, se, 0, schema12)
-	c.Assert(err, IsNil)
-	ti21, err := createTableInfo(p, se, 0, schema21)
-	c.Assert(err, IsNil)
-	ti22, err := createTableInfo(p, se, 0, schema22)
-	c.Assert(err, IsNil)
-
-	dmls := []*DML{
-		// insert
-		newDML(insert, true, targetTableID1, sourceTable11, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti11.Columns, ti11),
-		newDML(insert, true, targetTableID1, sourceTable11, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti11.Columns, ti11),
-		newDML(insert, true, targetTableID1, sourceTable12, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti12.Columns, ti12),
-		// update no index
-		newDML(update, true, targetTableID1, sourceTable11, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, ti11.Columns, ti11),
-		newDML(update, true, targetTableID1, sourceTable11, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, ti11.Columns, ti11),
-		newDML(update, true, targetTableID1, sourceTable12, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, ti12.Columns, ti12),
-		// update uk
-		newDML(update, true, targetTableID1, sourceTable11, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, ti11.Columns, ti11),
-		newDML(update, true, targetTableID1, sourceTable11, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, ti11.Columns, ti11),
-		newDML(update, true, targetTableID1, sourceTable12, []interface{}{3, 3, "cc"}, []interface{}{3, 6, "cc"}, []interface{}{3, 3, "cc"}, []interface{}{3, 6, "cc"}, ti12.Columns, ti12),
-		// update pk
-		newDML(update, true, targetTableID1, sourceTable11, []interface{}{1, 4, "aa"}, []interface{}{4, 4, "aa"}, []interface{}{1, 1, "aa"}, []interface{}{4, 4, "aa"}, ti11.Columns, ti11),
-		newDML(update, true, targetTableID1, sourceTable11, []interface{}{2, 5, "bb"}, []interface{}{5, 5, "bb"}, []interface{}{2, 2, "bb"}, []interface{}{5, 5, "bb"}, ti11.Columns, ti11),
-		newDML(update, true, targetTableID1, sourceTable12, []interface{}{3, 6, "cc"}, []interface{}{6, 6, "cc"}, []interface{}{3, 3, "cc"}, []interface{}{6, 6, "cc"}, ti12.Columns, ti12),
-		// delete
-		newDML(del, true, targetTableID1, sourceTable11, nil, []interface{}{4, 4, "aa"}, nil, []interface{}{4, 4, "aa"}, ti11.Columns, ti11),
-		newDML(del, true, targetTableID1, sourceTable11, nil, []interface{}{5, 5, "bb"}, nil, []interface{}{5, 5, "bb"}, ti11.Columns, ti11),
-		newDML(del, true, targetTableID1, sourceTable12, nil, []interface{}{6, 6, "cc"}, nil, []interface{}{6, 6, "cc"}, ti12.Columns, ti12),
-
-		// target table 2
-		// insert
-		newDML(insert, true, targetTableID2, sourceTable21, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti21.Columns, ti21),
-		newDML(insert, false, targetTableID2, sourceTable21, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti21.Columns, ti21),
-		newDML(insert, false, targetTableID2, sourceTable22, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti22.Columns, ti22),
-		// update no index
-		newDML(update, false, targetTableID2, sourceTable21, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, ti21.Columns, ti21),
-		newDML(update, false, targetTableID2, sourceTable21, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, ti21.Columns, ti21),
-		newDML(update, false, targetTableID2, sourceTable22, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, ti22.Columns, ti22),
-		// update uk
-		newDML(update, false, targetTableID2, sourceTable21, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, ti21.Columns, ti21),
-		newDML(update, false, targetTableID2, sourceTable21, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, ti21.Columns, ti21),
-		newDML(update, false, targetTableID2, sourceTable22, []interface{}{3, 3, "cc"}, []interface{}{3, 6, "cc"}, []interface{}{3, 3, "cc"}, []interface{}{3, 6, "cc"}, ti22.Columns, ti22),
-		// update pk
-		newDML(update, false, targetTableID2, sourceTable21, []interface{}{1, 4, "aa"}, []interface{}{4, 4, "aa"}, []interface{}{1, 1, "aa"}, []interface{}{4, 4, "aa"}, ti21.Columns, ti21),
-		newDML(update, false, targetTableID2, sourceTable21, []interface{}{2, 5, "bb"}, []interface{}{5, 5, "bb"}, []interface{}{2, 2, "bb"}, []interface{}{5, 5, "bb"}, ti21.Columns, ti21),
-		newDML(update, false, targetTableID2, sourceTable22, []interface{}{3, 6, "cc"}, []interface{}{6, 6, "cc"}, []interface{}{3, 3, "cc"}, []interface{}{6, 6, "cc"}, ti22.Columns, ti22),
-		// delete
-		newDML(del, false, targetTableID2, sourceTable21, nil, []interface{}{4, 4, "aa"}, nil, []interface{}{4, 4, "aa"}, ti21.Columns, ti21),
-		newDML(del, false, targetTableID2, sourceTable21, nil, []interface{}{5, 5, "bb"}, nil, []interface{}{5, 5, "bb"}, ti21.Columns, ti21),
-		newDML(del, false, targetTableID2, sourceTable22, nil, []interface{}{6, 6, "cc"}, nil, []interface{}{6, 6, "cc"}, ti22.Columns, ti22),
-
-		// table1
-		// detele
-		newDML(del, false, targetTableID1, sourceTable11, nil, []interface{}{44, 44, "aaa"}, nil, []interface{}{44, 44, "aaa"}, ti11.Columns, ti11),
-		newDML(del, false, targetTableID1, sourceTable11, nil, []interface{}{55, 55, "bbb"}, nil, []interface{}{55, 55, "bbb"}, ti11.Columns, ti11),
-		newDML(del, false, targetTableID1, sourceTable12, nil, []interface{}{66, 66, "ccc"}, nil, []interface{}{66, 66, "ccc"}, ti12.Columns, ti12),
-=======
 	ti11Index := &model.IndexInfo{
 		Table:   ti11.Name,
 		Unique:  true,
@@ -551,7 +482,6 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 		newDML(del, false, targetTableID1, sourceTable11, nil, []interface{}{44, 44, "aaa"}, nil, []interface{}{44, 44, "aaa"}, ti11.Columns, ti11, ti11Index, downTi11),
 		newDML(del, false, targetTableID1, sourceTable11, nil, []interface{}{55, 55, "bbb"}, nil, []interface{}{55, 55, "bbb"}, ti11.Columns, ti11, ti11Index, downTi11),
 		newDML(del, false, targetTableID1, sourceTable12, nil, []interface{}{66, 66, "ccc"}, nil, []interface{}{66, 66, "ccc"}, ti12.Columns, ti12, ti12Index, downTi12),
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 	}
 
 	expectQueries := []string{

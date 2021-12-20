@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/expression"
@@ -27,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
 
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/schema"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
@@ -115,26 +117,24 @@ RowLoop:
 			}
 		}
 
-<<<<<<< HEAD
-		dmls = append(dmls, newDML(insert, param.safeMode, param.targetTableID, param.sourceTable, nil, value, nil, originalValue, columns, ti))
-=======
 		if downstreamIndexColumns == nil {
 			downstreamIndexColumns = s.schemaTracker.GetAvailableDownStreamUKIndexInfo(tableID, value)
 		}
 
 		dmls = append(dmls, newDML(insert, param.safeMode, tableID, param.sourceTable, nil, value, nil, originalValue, columns, ti, downstreamIndexColumns, downstreamTableInfo))
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 	}
 
 	return dmls, nil
 }
 
 func (s *Syncer) genAndFilterUpdateDMLs(
+	tctx *tcontext.Context,
 	param *genDMLParam,
 	oldValueFilters []expression.Expression,
 	newValueFilters []expression.Expression,
 ) ([]*DML, error) {
 	var (
+		tableID      = param.targetTableID
 		data         = param.data
 		originalData = param.originalData
 		columns      = param.columns
@@ -142,8 +142,6 @@ func (s *Syncer) genAndFilterUpdateDMLs(
 		dmls         = make([]*DML, 0, len(data)/2)
 	)
 
-<<<<<<< HEAD
-=======
 	// if downstream pk/uk(not null) exits, then use downstream pk/uk(not null)
 	downstreamTableInfo, err := s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, ti)
 	if err != nil {
@@ -151,7 +149,6 @@ func (s *Syncer) genAndFilterUpdateDMLs(
 	}
 	downstreamIndexColumns := downstreamTableInfo.AbsoluteUKIndexInfo
 
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 RowLoop:
 	for i := 0; i < len(data); i += 2 {
 		oldData := data[i]
@@ -197,29 +194,24 @@ RowLoop:
 			}
 		}
 
-<<<<<<< HEAD
-		dmls = append(dmls, newDML(update, param.safeMode, param.targetTableID, param.sourceTable, oldValues, changedValues, oriOldValues, oriChangedValues, columns, ti))
-=======
 		if downstreamIndexColumns == nil {
 			downstreamIndexColumns = s.schemaTracker.GetAvailableDownStreamUKIndexInfo(tableID, oriOldValues)
 		}
 
 		dmls = append(dmls, newDML(update, param.safeMode, param.targetTableID, param.sourceTable, oldValues, changedValues, oriOldValues, oriChangedValues, columns, ti, downstreamIndexColumns, downstreamTableInfo))
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 	}
 
 	return dmls, nil
 }
 
-func (s *Syncer) genAndFilterDeleteDMLs(param *genDMLParam, filterExprs []expression.Expression) ([]*DML, error) {
+func (s *Syncer) genAndFilterDeleteDMLs(tctx *tcontext.Context, param *genDMLParam, filterExprs []expression.Expression) ([]*DML, error) {
 	var (
+		tableID = param.targetTableID
 		dataSeq = param.originalData
 		ti      = param.sourceTableInfo
 		dmls    = make([]*DML, 0, len(dataSeq))
 	)
 
-<<<<<<< HEAD
-=======
 	// if downstream pk/uk(not null) exits, then use downstream pk/uk(not null)
 	downstreamTableInfo, err := s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, ti)
 	if err != nil {
@@ -227,7 +219,6 @@ func (s *Syncer) genAndFilterDeleteDMLs(param *genDMLParam, filterExprs []expres
 	}
 	downstreamIndexColumns := downstreamTableInfo.AbsoluteUKIndexInfo
 
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 RowLoop:
 	for _, data := range dataSeq {
 		if len(data) != len(ti.Columns) {
@@ -246,16 +237,12 @@ RowLoop:
 				continue RowLoop
 			}
 		}
-<<<<<<< HEAD
-		dmls = append(dmls, newDML(del, false, param.targetTableID, param.sourceTable, nil, value, nil, value, ti.Columns, ti))
-=======
 
 		if downstreamIndexColumns == nil {
 			downstreamIndexColumns = s.schemaTracker.GetAvailableDownStreamUKIndexInfo(tableID, value)
 		}
 
 		dmls = append(dmls, newDML(del, false, param.targetTableID, param.sourceTable, nil, value, nil, value, ti.Columns, ti, downstreamIndexColumns, downstreamTableInfo))
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 	}
 
 	return dmls, nil
@@ -361,14 +348,6 @@ func findFitIndex(ti *model.TableInfo) *model.IndexInfo {
 	// second find not null unique key
 	fn := func(i int) bool {
 		return !mysql.HasNotNullFlag(ti.Columns[i].Flag)
-	}
-
-	return getSpecifiedIndexColumn(ti, fn)
-}
-
-func getAvailableIndexColumn(ti *model.TableInfo, data []interface{}) *model.IndexInfo {
-	fn := func(i int) bool {
-		return data[i] == nil
 	}
 
 	return getSpecifiedIndexColumn(ti, fn)
@@ -487,34 +466,6 @@ func checkLogColumns(skipped [][]int) error {
 
 // DML stores param for DML.
 type DML struct {
-<<<<<<< HEAD
-	targetTableID   string
-	sourceTable     *filter.Table
-	op              opType
-	oldValues       []interface{} // only for update SQL
-	values          []interface{}
-	columns         []*model.ColumnInfo
-	sourceTableInfo *model.TableInfo
-	originOldValues []interface{} // only for update SQL
-	originValues    []interface{} // use to gen key and `WHERE`
-	safeMode        bool
-	key             string // use to detect causality
-}
-
-// newDML creates DML.
-func newDML(op opType, safeMode bool, targetTableID string, sourceTable *filter.Table, oldValues, values, originOldValues, originValues []interface{}, columns []*model.ColumnInfo, sourceTableInfo *model.TableInfo) *DML {
-	return &DML{
-		op:              op,
-		safeMode:        safeMode,
-		targetTableID:   targetTableID,
-		sourceTable:     sourceTable,
-		oldValues:       oldValues,
-		values:          values,
-		columns:         columns,
-		sourceTableInfo: sourceTableInfo,
-		originOldValues: originOldValues,
-		originValues:    originValues,
-=======
 	targetTableID             string
 	sourceTable               *filter.Table
 	op                        opType
@@ -545,7 +496,6 @@ func newDML(op opType, safeMode bool, targetTableID string, sourceTable *filter.
 		originValues:              originValues,
 		pickedDownstreamIndexInfo: pickedDownstreamIndexInfo,
 		downstreamTableInfo:       downstreamTableInfo,
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 	}
 }
 
@@ -677,24 +627,23 @@ func (dml *DML) whereColumnsAndValues() ([]string, []interface{}) {
 		values = dml.originOldValues
 	}
 
-<<<<<<< HEAD
-	defaultIndexColumns := findFitIndex(dml.sourceTableInfo)
-
-	if defaultIndexColumns == nil {
-		defaultIndexColumns = getAvailableIndexColumn(dml.sourceTableInfo, values)
-	}
-	if defaultIndexColumns != nil {
-		columns, values = getColumnData(dml.sourceTableInfo.Columns, defaultIndexColumns, values)
-=======
 	if dml.pickedDownstreamIndexInfo != nil {
 		columns, values = getColumnData(dml.sourceTableInfo.Columns, dml.pickedDownstreamIndexInfo, values)
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 	}
 
 	columnNames := make([]string, 0, len(columns))
 	for _, column := range columns {
 		columnNames = append(columnNames, column.Name.O)
 	}
+
+	failpoint.Inject("DownstreamTrackerWhereCheck", func() {
+		if dml.op == update {
+			log.L().Info("UpdateWhereColumnsCheck", zap.String("Columns", fmt.Sprintf("%v", columnNames)))
+		} else if dml.op == del {
+			log.L().Info("DeleteWhereColumnsCheck", zap.String("Columns", fmt.Sprintf("%v", columnNames)))
+		}
+	})
+
 	return columnNames, values
 }
 

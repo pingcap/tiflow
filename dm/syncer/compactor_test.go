@@ -22,6 +22,8 @@ import (
 	"github.com/pingcap/failpoint"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/util/mock"
 
 	"github.com/pingcap/ticdc/dm/dm/config"
@@ -77,8 +79,6 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 	schemaStr := "create table test.tb(id int primary key, col1 int, name varchar(24))"
 	ti, err := createTableInfo(p, se, 0, schemaStr)
 	c.Assert(err, IsNil)
-<<<<<<< HEAD
-=======
 	tiIndex := &model.IndexInfo{
 		Table:   ti.Name,
 		Unique:  true,
@@ -93,7 +93,6 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 	}
 	downTi := schema.GetDownStreamTi(ti, ti)
 	c.Assert(downTi, NotNil)
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 
 	var dml *DML
 	var dmls []*DML
@@ -112,11 +111,7 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 		oldValues, ok := kv[newID]
 		if !ok {
 			// insert
-<<<<<<< HEAD
-			dml = newDML(insert, false, targetTableID, sourceTable, nil, values, nil, values, ti.Columns, ti)
-=======
 			dml = newDML(insert, false, targetTableID, sourceTable, nil, values, nil, values, ti.Columns, ti, tiIndex, downTi)
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 		} else {
 			if rand.Int()%2 > 0 {
 				// update
@@ -130,17 +125,10 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 						}
 					}
 				}
-<<<<<<< HEAD
-				dml = newDML(update, false, targetTableID, sourceTable, oldValues, values, oldValues, values, ti.Columns, ti)
-			} else {
-				// delete
-				dml = newDML(del, false, targetTableID, sourceTable, nil, oldValues, nil, oldValues, ti.Columns, ti)
-=======
 				dml = newDML(update, false, targetTableID, sourceTable, oldValues, values, oldValues, values, ti.Columns, ti, tiIndex, downTi)
 			} else {
 				// delete
 				dml = newDML(del, false, targetTableID, sourceTable, nil, oldValues, nil, oldValues, ti.Columns, ti, tiIndex, downTi)
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 			}
 		}
 
@@ -208,8 +196,6 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 	schemaStr := "create table test.tb(id int primary key, col1 int, name varchar(24))"
 	ti, err := createTableInfo(p, se, 0, schemaStr)
 	c.Assert(err, IsNil)
-<<<<<<< HEAD
-=======
 	tiIndex := &model.IndexInfo{
 		Table:   ti.Name,
 		Unique:  true,
@@ -224,7 +210,6 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 	}
 	downTi := schema.GetDownStreamTi(ti, ti)
 	c.Assert(downTi, NotNil)
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 
 	testCases := []struct {
 		input  []*DML
@@ -233,18 +218,6 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 		// nolint:dupl
 		{
 			input: []*DML{
-<<<<<<< HEAD
-				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti),
-				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti),
-				newDML(update, true, targetTableID, sourceTable, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, ti.Columns, ti),
-				newDML(del, false, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti),
-				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti),
-			},
-			output: []*DML{
-				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti.Columns, ti),
-				newDML(del, true, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti),
-				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti),
-=======
 				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti, tiIndex, downTi),
 				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti, tiIndex, downTi),
 				newDML(update, true, targetTableID, sourceTable, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, ti.Columns, ti, tiIndex, downTi),
@@ -255,24 +228,11 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti.Columns, ti, tiIndex, downTi),
 				newDML(del, true, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti, tiIndex, downTi),
 				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti, tiIndex, downTi),
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 			},
 		},
 		// nolint:dupl
 		{
 			input: []*DML{
-<<<<<<< HEAD
-				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti),
-				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti),
-				newDML(update, false, targetTableID, sourceTable, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, ti.Columns, ti),
-				newDML(del, false, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti),
-				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti),
-			},
-			output: []*DML{
-				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti.Columns, ti),
-				newDML(del, false, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti),
-				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti),
-=======
 				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti, tiIndex, downTi),
 				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti, tiIndex, downTi),
 				newDML(update, false, targetTableID, sourceTable, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, ti.Columns, ti, tiIndex, downTi),
@@ -283,7 +243,6 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti.Columns, ti, tiIndex, downTi),
 				newDML(del, false, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti, tiIndex, downTi),
 				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti, tiIndex, downTi),
->>>>>>> b4c6b17ca (dm/syncer: multiple rows use downstream schema (#3308))
 			},
 		},
 	}
