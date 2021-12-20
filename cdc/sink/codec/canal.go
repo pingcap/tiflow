@@ -180,7 +180,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 		if number > math.MaxInt8 {
 			javaType = JavaSQLTypeSMALLINT
 		}
-	case mysql.TypeShort, mysql.TypeInt24:
+	case mysql.TypeShort:
 		if number > math.MaxInt16 {
 			javaType = JavaSQLTypeINTEGER
 		}
