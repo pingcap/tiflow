@@ -290,6 +290,8 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		flatMessage.Old = make([]map[string]interface{}, 0)
 		flatMessage.Old = append(flatMessage.Old, oldData)
 		flatMessage.Data = append(flatMessage.Data, data)
+	} else {
+		log.Panic("unreachable event type", zap.Any("event", e))
 	}
 
 	if !c.enableTiDBExtension {
@@ -558,7 +560,7 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		mysqlTypeStr = strings.TrimSuffix(mysqlTypeStr, " unsigned")
+		mysqlTypeStr = tryGetOriginalMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
 		col := NewColumn(value, mysqlType).decodeCanalJSONColumn(name, JavaSQLType(javaType))
 		result = append(result, col)

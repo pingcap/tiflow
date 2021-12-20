@@ -240,12 +240,24 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType)
 	return result, nil
 }
 
+// when encoding the canal format, add `unsigned` keyword to its mysql type.
+// it should have the form `t unsigned`, such as `int unsigned`
+func tryGetUnsignedMySQLType(mysqlType string, unsigned bool) string {
+	if unsigned && mysqlType != "bit" && mysqlType != "year" {
+		return mysqlType + " unsigned"
+	}
+	return mysqlType
+}
+
+// when decoding the canal format, remove `unsigned` to get the original `mysql type`.
+func tryGetOriginalMySQLType(mysqlType string) string {
+	return strings.TrimSuffix(mysqlType, " unsigned")
+}
+
 func getMySQLType(c *model.Column) string {
 	mysqlType := types.TypeStr(c.Type)
 	// make `mysqlType` representation keep the same as the canal official implementation
-	if c.Flag.IsUnsigned() && mysqlType != "bit" && mysqlType != "year" {
-		mysqlType = mysqlType + " unsigned"
-	}
+	mysqlType = tryGetUnsignedMySQLType(mysqlType, c.Flag.IsUnsigned())
 
 	if !c.Flag.IsBinary() {
 		return mysqlType
