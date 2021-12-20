@@ -8,7 +8,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
-	"golang.org/x/time/rate"
 )
 
 // Config holds the common attributes that can be passed to a cdc REST client
@@ -19,9 +18,7 @@ type Config struct {
 	APIPath string
 	// Credential holds the security Credential used for generating tls config
 	Credential *security.Credential
-	// Rate limiter for limiting connections to the cdc owner from this client.
-	RateLimiter *rate.Limiter
-	// Api verion
+	// API verion
 	Version string
 }
 
@@ -29,7 +26,7 @@ type Config struct {
 func defaultServerUrlFor(config *Config) (*url.URL, string, error) {
 	host := config.Host
 	if host == "" {
-		host = "127.0.0.1"
+		host = "127.0.0.1:8300"
 	}
 	base := host
 	hostURL, err := url.Parse(base)
@@ -52,7 +49,7 @@ func defaultServerUrlFor(config *Config) (*url.URL, string, error) {
 
 func RESTClientForConfig(config *Config, httpClient *httputil.Client) (*RESTClient, error) {
 	baseURL, versionedAPIPath, err := defaultServerUrlFor(config)
-	restClient, err := NewRESTClient(baseURL, versionedAPIPath, config.RateLimiter, httpClient)
+	restClient, err := NewRESTClient(baseURL, versionedAPIPath, httpClient)
 	return restClient, errors.Trace(err)
 }
 

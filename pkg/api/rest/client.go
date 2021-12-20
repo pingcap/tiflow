@@ -5,11 +5,10 @@ import (
 	"strings"
 
 	"github.com/pingcap/ticdc/pkg/httputil"
-	"golang.org/x/time/rate"
 )
 
-type Interface interface {
-	GetRateLimiter() *rate.Limiter
+// HTTPInterface includes a set of operations to interact with cdc REST apis
+type RESTInterface interface {
 	Verb(verb string) *Request
 	Post() *Request
 	Put() *Request
@@ -24,15 +23,12 @@ type RESTClient struct {
 	// versionedAPIPath is a http url prefix with api version. eg. /api/v1.
 	versionedAPIPath string
 
-	// rateLimiter is shared among all requests created by this client.
-	rateLimiter *rate.Limiter
-
 	// Client is a wrapped http client.
 	Client *httputil.Client
 }
 
 // NewRESTClient creates a new RESTClient.
-func NewRESTClient(baseURL *url.URL, versionedAPIPath string, rateLimiter *rate.Limiter, client *httputil.Client) (*RESTClient, error) {
+func NewRESTClient(baseURL *url.URL, versionedAPIPath string, client *httputil.Client) (*RESTClient, error) {
 	base := *baseURL
 	if !strings.HasSuffix(base.Path, "/") {
 		base.Path += "/"
@@ -43,17 +39,8 @@ func NewRESTClient(baseURL *url.URL, versionedAPIPath string, rateLimiter *rate.
 	return &RESTClient{
 		base:             &base,
 		versionedAPIPath: versionedAPIPath,
-		rateLimiter:      rateLimiter,
 		Client:           client,
 	}, nil
-}
-
-// GetRateLimiter returns rate limiter for a given client.
-func (c *RESTClient) GetRateLimiter() *rate.Limiter {
-	if c == nil {
-		return nil
-	}
-	return c.rateLimiter
 }
 
 // Verb begins a request with a verb (GET, POST, PUT, DELETE).

@@ -19,7 +19,6 @@ import (
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/retry"
-
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -27,12 +26,10 @@ import (
 const (
 	defaultBackoffBaseDelayInMs = 500
 	defaultBackoffMaxDelayInMs  = 30 * 1000
-	defaultMaxRetries           = 10
+	// The write operations other than 'GET' are not idempotent,
+	// so we only try one time in request.Do() and let users specify the retrying behaviour
+	defaultMaxRetries = 1
 )
-
-type HTTPClient interface {
-	Do(req *http.Request) (*http.Response, error)
-}
 
 // Request allows for building up a request to cdc server in a chained fasion.
 // Any errors are stored until the end of your call, so you only have to
@@ -74,10 +71,10 @@ func NewRequest(c *RESTClient) *Request {
 	}
 
 	r := &Request{
-		c:           c,
-		rateLimiter: c.rateLimiter,
-		timeout:     timeout,
-		pathPrefix:  pathPrefix,
+		c:          c,
+		timeout:    timeout,
+		pathPrefix: pathPrefix,
+		maxRetries: 1,
 	}
 	r.SetHeader("Accept", "application/json")
 	return r
@@ -196,14 +193,14 @@ func (r *Request) MaxRetries(maxRetries int64) *Request {
 }
 
 // Body makes http request use obj as its body.
+// only supports two types now:
+//   1. io.Reader
+//   2. type which can be json marshalled
 func (r *Request) Body(obj interface{}) *Request {
 	if r.err != nil {
 		return r
 	}
 
-	// only supports two types now:
-	//   1. io.Reader
-	//   2. type which can be json marshalled
 	if rd, ok := obj.(io.Reader); ok {
 		r.body = rd
 	} else {
@@ -277,11 +274,11 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 		maxDelay = defaultBackoffMaxDelayInMs
 	}
 	maxRetries := r.maxRetries
-	if maxRetries == 0 {
+	if maxRetries <= 0 {
 		maxRetries = defaultMaxRetries
 	}
 
-	err := retry.Do(ctx, func() error {
+	fn := func() error {
 		req, err := r.newHttpRequest(ctx)
 		if err != nil {
 			return err
@@ -313,12 +310,19 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 			return res.Error()
 		}
 		return nil
-	},
-		retry.WithBackoffBaseDelay(baseDelay),
-		retry.WithBackoffMaxDelay(maxDelay),
-		retry.WithMaxTries(maxRetries),
-		retry.WithIsRetryableErr(cerrors.IsRetryableError),
-	)
+	}
+
+	var err error
+	if maxRetries > 1 {
+		err = retry.Do(ctx, fn,
+			retry.WithBackoffBaseDelay(baseDelay),
+			retry.WithBackoffMaxDelay(maxDelay),
+			retry.WithMaxTries(maxRetries),
+			retry.WithIsRetryableErr(cerrors.IsRetryableError),
+		)
+	} else {
+		err = fn()
+	}
 
 	if res == nil && err != nil {
 		return &Result{err: err}
