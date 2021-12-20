@@ -16,5 +16,5 @@ jobs:
         if: |
           contains(github.event.issue.labels.*.name, 'type/bug')
         with:
-          project: 'https://github.com/pingcap/ticdc/projects/13'
+          project: 'https://github.com/pingcap/tiflow/projects/13'
           column_name: 'Need Triage'
