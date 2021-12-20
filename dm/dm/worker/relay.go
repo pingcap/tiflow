@@ -342,7 +342,7 @@ func NewDummyRelayHolderWithRelayBinlog(cfg *config.SourceConfig, relayBinlog st
 }
 
 // NewDummyRelayHolderWithInitError creates a new RelayHolder with init error.
-func NewDummyRelayHolderWithInitError(cfg *config.SourceConfig, _ string) RelayHolder {
+func NewDummyRelayHolderWithInitError(cfg *config.SourceConfig) RelayHolder {
 	return &dummyRelayHolder{
 		initError: errors.New("init error"),
 		cfg:       cfg,
