@@ -59,7 +59,8 @@ type LogFileConfig struct {
 
 // LogConfig represents log config for server
 type LogConfig struct {
-	File *LogFileConfig `toml:"file" json:"file"`
+	File              *LogFileConfig `toml:"file" json:"file"`
+	InternalErrOutput string         `toml:"error-output" json:"error-output"`
 }
 
 var defaultServerConfig = &ServerConfig{
@@ -73,6 +74,7 @@ var defaultServerConfig = &ServerConfig{
 			MaxDays:    0,
 			MaxBackups: 0,
 		},
+		InternalErrOutput: "stderr",
 	},
 	DataDir: "",
 	GcTTL:   24 * 60 * 60, // 24H
