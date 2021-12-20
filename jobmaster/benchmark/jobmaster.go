@@ -3,7 +3,7 @@ package benchmark
 import (
 	"context"
 
-	"github.com/hanfei1991/microcosm/master/jobmaster/system"
+	"github.com/hanfei1991/microcosm/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
 )
 

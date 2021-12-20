@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -29,7 +28,7 @@ type Server struct {
 	// election *election.Election
 
 	// sched scheduler
-	executorManager *cluster.ExecutorManager
+	executorManager *ExecutorManager
 	jobManager      *JobManager
 	//
 	cfg *Config
@@ -43,7 +42,7 @@ type Server struct {
 // NewServer creates a new master-server.
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	executorNotifier := make(chan model.ExecutorID, 100)
-	executorManager := cluster.NewExecutorManager(executorNotifier, cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
+	executorManager := NewExecutorManager(executorNotifier, cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
 
 	urls, err := parseURLs(cfg.MasterAddr)
 	if err != nil {

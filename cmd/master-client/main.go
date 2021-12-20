@@ -9,7 +9,7 @@ import (
 	"strconv"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/master/jobmaster/benchmark"
+	"github.com/hanfei1991/microcosm/jobmaster/benchmark"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pkg/errors"
 )

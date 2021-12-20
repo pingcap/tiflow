@@ -6,8 +6,8 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/runtime"
-	"github.com/hanfei1991/microcosm/master/jobmaster/benchmark"
-	"github.com/hanfei1991/microcosm/master/jobmaster/system"
+	"github.com/hanfei1991/microcosm/jobmaster/benchmark"
+	"github.com/hanfei1991/microcosm/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 )
