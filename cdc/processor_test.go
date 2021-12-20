@@ -17,9 +17,9 @@ import (
 	"bytes"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type processorSuite struct{}
@@ -54,15 +54,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/entry"
 
 	"github.com/pingcap/check"
 	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/roles/storage"
-	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/roles/storage"
+	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/pkg/etcd"
 )
 
 type processorSuite struct{}
