@@ -31,21 +31,21 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/common"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
-	tifilter "github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/notify"
-	"github.com/pingcap/ticdc/pkg/quotes"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/common"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/cyclic"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
+	tifilter "github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/notify"
+	"github.com/pingcap/tiflow/pkg/quotes"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -331,7 +331,7 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 	err := db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
 	if err != nil && err != sql.ErrNoRows {
 		errMsg := "fail to query session variable " + variableName
-		return "", errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), errMsg)
+		return "", cerror.ErrMySQLQueryError.Wrap(err).GenWithStack(errMsg)
 	}
 	// session variable works, use given default value
 	if err == nil {
@@ -435,13 +435,12 @@ func parseSinkURI(ctx context.Context, sinkURI *url.URL, opts map[string]string)
 		}
 		tlsCfg, err := credential.ToTLSConfig()
 		if err != nil {
-			return nil, errors.Annotate(err, "fail to open MySQL connection")
+			return nil, errors.Trace(err)
 		}
 		name := "cdc_mysql_tls" + params.changefeedID
 		err = dmysql.RegisterTLSConfig(name, tlsCfg)
 		if err != nil {
-			return nil, errors.Annotate(
-				cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
+			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 		}
 		params.tls = "?tls=" + name
 	}
@@ -509,8 +508,7 @@ var getDBConnImpl = getDBConn
 func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsnStr)
 	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "Open database connection failed")
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 	}
 	err = db.PingContext(ctx)
 	if err != nil {
@@ -518,8 +516,7 @@ func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		if closeErr := db.Close(); closeErr != nil {
 			log.Warn("close db failed", zap.Error(err))
 		}
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 	}
 	return db, nil
 }
@@ -1357,12 +1354,12 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 		}
 		tlsCfg, err := credential.ToTLSConfig()
 		if err != nil {
-			return nil, errors.Annotate(err, "fail to open MySQL connection")
+			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 		}
 		name := "cdc_mysql_tls" + "syncpoint" + id
 		err = dmysql.RegisterTLSConfig(name, tlsCfg)
 		if err != nil {
-			return nil, errors.Annotate(err, "fail to open MySQL connection")
+			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 		}
 		tlsParam = "?tls=" + name
 	}
@@ -1402,8 +1399,7 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 	}
 	testDB, err := sql.Open("mysql", dsn.FormatDSN())
 	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection when configuring sink")
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection when configuring sink")
 	}
 	defer testDB.Close()
 	dsnStr, err = configureSinkURI(ctx, dsn, params, testDB)
@@ -1412,11 +1408,11 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 	}
 	syncDB, err = sql.Open("mysql", dsnStr)
 	if err != nil {
-		return nil, errors.Annotate(err, "Open database connection failed")
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 	}
 	err = syncDB.PingContext(ctx)
 	if err != nil {
-		return nil, errors.Annotate(err, "fail to open MySQL connection")
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 	}
 
 	log.Info("Start mysql syncpoint sink")

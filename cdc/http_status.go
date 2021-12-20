@@ -26,12 +26,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/capture"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.etcd.io/etcd/clientv3"
@@ -39,6 +39,7 @@ import (
 )
 
 func (s *Server) startStatusHTTP() error {
+	conf := config.GetGlobalServerConfig()
 	router := newRouter(capture.NewHTTPHandler(s.capture))
 
 	router.GET("/status", gin.WrapF(s.handleStatus))
@@ -58,7 +59,6 @@ func (s *Server) startStatusHTTP() error {
 	prometheus.DefaultGatherer = registry
 	router.Any("/metrics", gin.WrapH(promhttp.Handler()))
 
-	conf := config.GetGlobalServerConfig()
 	err := conf.Security.AddSelfCommonName()
 	if err != nil {
 		log.Error("status server set tls config failed", zap.Error(err))
