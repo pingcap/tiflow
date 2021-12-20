@@ -16,9 +16,9 @@ package ha
 import (
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/openapi"
-	"github.com/pingcap/ticdc/dm/openapi/fixtures"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/openapi"
+	"github.com/pingcap/tiflow/dm/openapi/fixtures"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 func (t *testForEtcd) TestOpenAPITaskConfigEtcd(c *C) {

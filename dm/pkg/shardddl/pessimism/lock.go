@@ -16,9 +16,9 @@ package pessimism
 import (
 	"sync"
 
-	"github.com/pingcap/ticdc/dm/dm/master/metrics"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/master/metrics"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // Lock represents the shard DDL lock in memory.

@@ -32,15 +32,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcfilter "github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/logutil"
-	"github.com/pingcap/ticdc/pkg/quotes"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcfilter "github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/quotes"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -441,6 +441,7 @@ ClaimMessages:
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
+				log.Info("Emit RowChangedEvent", zap.Any("row", row))
 				lastCommitTs, ok := sink.tablesMap.Load(row.Table.TableID)
 				if !ok || lastCommitTs.(uint64) < row.CommitTs {
 					sink.tablesMap.Store(row.Table.TableID, row.CommitTs)

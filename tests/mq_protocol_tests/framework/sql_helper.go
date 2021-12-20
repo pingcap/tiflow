@@ -24,7 +24,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/quotes"
+	"github.com/pingcap/tiflow/pkg/quotes"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"upper.io/db.v3/lib/sqlbuilder"

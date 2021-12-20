@@ -25,17 +25,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/checker"
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/master/scheduler"
-	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/openapi"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/checker"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
+	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/openapi"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 const (

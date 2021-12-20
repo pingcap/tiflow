@@ -16,7 +16,7 @@ package system
 import (
 	"context"
 
-	"github.com/pingcap/ticdc/pkg/actor"
+	"github.com/pingcap/tiflow/pkg/actor"
 )
 
 // System manages table pipeline global resource.
