@@ -111,7 +111,6 @@ func NewLock(cli *clientv3.Client, id, task, downSchema, downTable string, joine
 // FetchTableInfos fetch all table infos for a lock.
 func (l *Lock) FetchTableInfos(task, source, schema, table string) (*model.TableInfo, error) {
 	if l.downstreamMeta == nil {
-		log.L().Warn("nil downstream meta")
 		return nil, terror.ErrMasterOptimisticDownstreamMetaNotFound.Generate(task)
 	}
 

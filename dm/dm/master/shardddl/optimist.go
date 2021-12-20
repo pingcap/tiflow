@@ -341,6 +341,7 @@ func (o *Optimist) recoverLocks(
 	for _, info := range infos {
 		if info.IsDeleted {
 			// TODO: handle drop table
+			continue
 		}
 		if !o.tk.SourceTableExist(info.Task, info.Source, info.UpSchema, info.UpTable, info.DownSchema, info.DownTable) {
 			continue

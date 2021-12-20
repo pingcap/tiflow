@@ -556,10 +556,15 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 			// nolint:nilerr
 			return resp, nil
 		}
+
+		// delete meta data for optimist
 		if len(req.Sources) == 0 {
-			err = s.optimist.RemoveMetaDataWithTask(req.Name)
+			err2 = s.optimist.RemoveMetaDataWithTask(req.Name)
 		} else {
-			err = s.optimist.RemoveMetaDataWithTaskAndSources(req.Name, sources...)
+			err2 = s.optimist.RemoveMetaDataWithTaskAndSources(req.Name, sources...)
+		}
+		if err2 != nil {
+			log.L().Error("failed to delete metadata for task", zap.String("task name", req.Name), log.ShortError(err2))
 		}
 	} else {
 		err = s.scheduler.UpdateExpectSubTaskStage(expect, req.Name, sources...)
