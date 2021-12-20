@@ -398,6 +398,7 @@ func (s *AvroSchemaRegistrySuite) TestHTTPRetry(c *check.C) {
 }
 
 func (s *AvroSchemaRegistrySuite) TestTableNameToSchemaSubject(c *check.C) {
+	defer testleak.AfterTest(c)()
 	table := model.TableName{
 		Schema: "testdb",
 		Table:  "test1",

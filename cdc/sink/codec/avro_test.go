@@ -242,6 +242,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 }
 
 func (s *avroBatchEncoderSuite) TestnewAvroEventBatchEncoderBuilder(c *check.C) {
+	defer testleak.AfterTest(c)()
 	creds := &security.Credential{}
 
 	opts := map[string]string{}
