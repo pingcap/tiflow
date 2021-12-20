@@ -20,9 +20,9 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"golang.org/x/text/encoding/charmap"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
-	canal "github.com/pingcap/ticdc/proto/canal"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
+	canal "github.com/pingcap/tiflow/proto/canal"
 )
 
 type canalBatchSuite struct {

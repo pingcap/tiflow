@@ -16,7 +16,7 @@ package loader
 import (
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/pingcap/ticdc/dm/pkg/metricsproxy"
+	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 )
 
 var (

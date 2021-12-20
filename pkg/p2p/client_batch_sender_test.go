@@ -19,7 +19,7 @@ import (
 	"math"
 	"testing"
 
-	proto "github.com/pingcap/ticdc/proto/p2p"
+	proto "github.com/pingcap/tiflow/proto/p2p"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )

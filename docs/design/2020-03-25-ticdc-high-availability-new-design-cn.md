@@ -13,7 +13,7 @@ TiCDC 高可用是指任何一个 cdc 节点挂掉，都不影响集群整体的
 
 本文总结已有代码发现的一些问题，并给出解决方案。
 
-> 注意，本文分析代码基于 [v4.0.0-beta.2](https://github.com/pingcap/ticdc/tree/v4.0.0-beta.2) 版本
+> 注意，本文分析代码基于 [v4.0.0-beta.2](https://github.com/pingcap/tiflow/tree/v4.0.0-beta.2) 版本
 
 ## 问题
 
@@ -21,9 +21,9 @@ TiCDC 高可用是指任何一个 cdc 节点挂掉，都不影响集群整体的
 
 一个 Session 是指节点与 etcd 之间维持的一种保持连接的状态。Session 中含有 Lease，并在节点存活期间保持心跳。节点挂掉后，Session 失效，与其中 Lease 关联的 Key 都被删除。这常用来服务发现中对服务节点是否存活的标识。
 
-起初，Capture 并没有使用 Session，而是仅仅在竞选 Owner 的时候创建了 Session。这样导致 Capture 挂掉后，其注册信息是无法被清理的。Capture 节点挂掉后（非正常退出），其负责的任务没有及时重新分配。这个问题在 PR [Refactor/capture watcher](https://github.com/pingcap/ticdc/pull/319) 中解决。
+起初，Capture 并没有使用 Session，而是仅仅在竞选 Owner 的时候创建了 Session。这样导致 Capture 挂掉后，其注册信息是无法被清理的。Capture 节点挂掉后（非正常退出），其负责的任务没有及时重新分配。这个问题在 PR [Refactor/capture watcher](https://github.com/pingcap/tiflow/pull/319) 中解决。
 
-另外，为了减少 RTO，我们引入了 Processor 的 Session，用来及时发现挂掉的 Processor。PR：[Reduce the RTO by watching the liveness of processors](https://github.com/pingcap/ticdc/pull/312)
+另外，为了减少 RTO，我们引入了 Processor 的 Session，用来及时发现挂掉的 Processor。PR：[Reduce the RTO by watching the liveness of processors](https://github.com/pingcap/tiflow/pull/312)
 
 因此，我们目前有三个 Session，一个是 Capture Session，用来维持 Capture 存活信息，一个是 Processor Session，用来维护 Processor 存活信息，还有一个是原来存在的 Manager Session，用来竞选 Owner。
 

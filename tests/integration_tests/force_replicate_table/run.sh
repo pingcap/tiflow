@@ -72,7 +72,7 @@ function run() {
 		table="force_replicate_table.t$i"
 		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	done
-	# data could be duplicated due to https://github.com/pingcap/ticdc/issues/964,
+	# data could be duplicated due to https://github.com/pingcap/tiflow/issues/964,
 	# so we just check downstream contains all data in upstream.
 	for i in $(seq 0 6); do
 		ensure 10 check_data_subset "force_replicate_table.t$i" \
