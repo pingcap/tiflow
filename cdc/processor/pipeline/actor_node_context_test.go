@@ -19,11 +19,11 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
-	"github.com/pingcap/ticdc/pkg/actor"
-	"github.com/pingcap/ticdc/pkg/actor/message"
-	"github.com/pingcap/ticdc/pkg/context"
-	"github.com/pingcap/ticdc/pkg/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
+	"github.com/pingcap/tiflow/pkg/actor"
+	"github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/pipeline"
 	"github.com/stretchr/testify/require"
 )
 

@@ -18,17 +18,18 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/actor"
-	"github.com/pingcap/ticdc/pkg/actor/message"
-	"github.com/pingcap/ticdc/pkg/context"
-	"github.com/pingcap/ticdc/pkg/pipeline"
+	"github.com/pingcap/tiflow/pkg/actor"
+	"github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/pipeline"
 	"go.uber.org/zap"
 )
 
 // send a tick message to actor if we get 32 pipeline messages
 const messagesPerTick = 32
 
-// actorNodeContext implements the NodeContext interface, with this we do not need to change too much logic to implement the table actor
+// actorNodeContext implements the NodeContext interface, with this we do not need
+// to change too much logic to implement the table actor.
 // the SendToNextNode buffer the pipeline message and tick the actor system
 // the Throw function handle error and stop the actor
 type actorNodeContext struct {
@@ -42,7 +43,11 @@ type actorNodeContext struct {
 	noTickMessageCount   int32
 }
 
-func NewContext(stdCtx sdtContext.Context, tableActorRouter *actor.Router, tableActorID actor.ID, changefeedVars *context.ChangefeedVars, globalVars *context.GlobalVars) *actorNodeContext {
+func NewContext(stdCtx sdtContext.Context,
+	tableActorRouter *actor.Router,
+	tableActorID actor.ID,
+	changefeedVars *context.ChangefeedVars,
+	globalVars *context.GlobalVars) *actorNodeContext {
 	return &actorNodeContext{
 		Context:              stdCtx,
 		outputCh:             make(chan pipeline.Message, defaultOutputChannelSize),

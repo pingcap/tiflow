@@ -18,8 +18,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/actor"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/stretchr/testify/require"
 )
 
