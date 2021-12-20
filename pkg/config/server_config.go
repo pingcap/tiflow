@@ -117,7 +117,7 @@ var defaultServerConfig = &ServerConfig{
 			WriteL0SlowdownTrigger:      math.MaxInt32,
 			WriteL0PauseTrigger:         math.MaxInt32,
 			CompactionL0Trigger:         160,
-			CompactionDeletionThreshold: 960000,
+			CompactionDeletionThreshold: 160000,
 			CleanupSpeedLimit:           10000,
 		},
 		Messages: defaultMessageConfig.Clone(),

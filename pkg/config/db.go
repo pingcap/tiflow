@@ -68,7 +68,9 @@ type DBConfig struct {
 	// CompactionDeletionThreshold defines the threshold of the number of deletion that
 	// trigger compaction.
 	//
-	// The default value is 960000.
+	// The default value is 160000.
+	// Iterator.First() takes about 27ms to 149ms in this case,
+	// see pkg/db.BenchmarkNext.
 	CompactionDeletionThreshold int `toml:"compaction-deletion-threshold" json:"compaction-deletion-threshold"`
 	// CleanupSpeedLimit limits clean up speed, based on key value entry count.
 	//
