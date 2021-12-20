@@ -207,6 +207,9 @@ function test_shard_task() {
 	# get task list
 	openapi_task_check "get_task_list" 1
 
+	# get task list with status
+	openapi_task_check "get_task_list_with_status" 2
+
 	# stop task success
 	openapi_task_check "stop_task_success" "$task_name"
 

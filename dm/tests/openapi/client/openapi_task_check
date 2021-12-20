@@ -192,6 +192,15 @@ def get_task_list(task_count):
     assert data["total"] == int(task_count)
 
 
+def get_task_list_with_status(status_count):
+    url = API_ENDPOINT + "?with_status=true"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("get_task_list_with_status resp=", data)
+    assert len(data["data"][0]["status_list"]) == int(status_count)
+
+
 def pause_task_success(task_name, source_name):
     url = API_ENDPOINT + "/" + task_name + "/pause"
     resp = requests.post(
@@ -284,6 +293,7 @@ if __name__ == "__main__":
         "resume_task_success": resume_task_success,
         "stop_task_success": stop_task_success,
         "get_task_list": get_task_list,
+        "get_task_list_with_status": get_task_list_with_status,
         "get_task_status_failed": get_task_status_failed,
         "get_illegal_char_task_status_failed": get_illegal_char_task_status_failed,
         "get_task_status_success": get_task_status_success,
