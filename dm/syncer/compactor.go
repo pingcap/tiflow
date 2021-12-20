@@ -22,8 +22,8 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/syncer/metrics"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
 
 // compactor compacts multiple statements into one statement.
@@ -76,8 +76,13 @@ func (c *compactor) run() {
 			}
 			metrics.QueueSizeGauge.WithLabelValues(c.task, "compactor_input", c.source).Set(float64(len(c.inCh)))
 
-			if j.tp == flush {
+			if j.tp == flush || j.tp == asyncFlush {
 				c.flushBuffer()
+				c.outCh <- j
+				continue
+			}
+
+			if j.tp == gc {
 				c.outCh <- j
 				continue
 			}
