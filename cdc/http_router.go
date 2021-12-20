@@ -21,11 +21,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/ticdc/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/capture"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	// use for OpenAPI online docs
-	_ "github.com/pingcap/ticdc/docs/api"
+	_ "github.com/pingcap/tiflow/docs/api"
 )
 
 // newRouter create a router for OpenAPI
