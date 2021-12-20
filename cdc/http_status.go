@@ -59,7 +59,6 @@ func (s *Server) startStatusHTTP() error {
 	prometheus.DefaultGatherer = registry
 	router.Any("/metrics", gin.WrapH(promhttp.Handler()))
 
-	conf := config.GetGlobalServerConfig()
 	// if CertAllowedCN was specified, we should add server's common name
 	// otherwise, https requests sent to non-owner capture can't be forward
 	// to owner
@@ -69,6 +68,7 @@ func (s *Server) startStatusHTTP() error {
 			log.Error("status server set tls config failed", zap.Error(err))
 			return errors.Trace(err)
 		}
+	}
 
 	tlsConfig, err := conf.Security.ToTLSConfigWithVerify()
 	if err != nil {
