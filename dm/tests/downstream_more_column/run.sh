@@ -43,7 +43,7 @@ function run() {
 
 	# start DM task in incremental mode
 	# schemaTracker create table from downstream
-	master_status=($(get_master_status))
+	master_status=($(get_master_status $MYSQL_HOST1 $MYSQL_PORT1))
 	cp $cur/conf/dm-task-incremental.yaml $WORK_DIR/dm-task-incremental.yaml
 	sed -i "s/binlog-gtid-placeholder/${master_status[2]}/g" $WORK_DIR/dm-task-incremental.yaml
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
