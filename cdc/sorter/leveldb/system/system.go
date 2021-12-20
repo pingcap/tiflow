@@ -136,7 +136,7 @@ func (s *System) Start(ctx context.Context) error {
 	dbCount := s.cfg.Count
 	for id := 0; id < dbCount; id++ {
 		// Open db.
-		db, err := db.OpenLevelDB(ctx, id, s.dir, s.cfg)
+		db, err := db.OpenPebble(ctx, id, s.dir, s.cfg)
 		if err != nil {
 			return errors.Trace(err)
 		}
