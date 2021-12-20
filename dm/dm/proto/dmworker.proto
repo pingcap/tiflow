@@ -101,6 +101,11 @@ message CheckStatus {
 // DumpStatus represents status for dump unit
 // add fields later
 message DumpStatus {
+    int64 totalTables = 1;
+    double completedTables = 2;
+    double finishedBytes = 3;
+    double finishedRows = 4;
+    double estimateTotalRows = 5;
 }
 
 // LoadStatus represents status for load unit
