@@ -715,25 +715,26 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		}
 
 		// wait all tasks are paused before actually starting scheduling
-		keepQuery := true
 		maxRetryNum := 10
-		// the defaultRPCTimeout is 10m and we assume each task need 1s to pause
-		sleepTime := time.Second * time.Duration((len(runningTasks)))
-		for keepQuery && maxRetryNum > 0 {
+		for maxRetryNum > 0 {
 			maxRetryNum--
 			resp, err := queryWorkerF()
 			if err != nil {
 				return terror.Annotatef(err, "failed to query worker: %s status", oldWorker.baseInfo.Name)
 			}
+			notPausedTaskCount := 0
 			for _, status := range resp.QueryStatus.GetSubTaskStatus() {
 				if status.Stage != pb.Stage_Paused {
 					s.logger.Info(
 						"waiting task pausing", zap.String("task", status.Name), zap.Int("retry times", 10-maxRetryNum))
-					time.Sleep(sleepTime)
-					continue
+					notPausedTaskCount++
 				}
 			}
-			keepQuery = false
+			if notPausedTaskCount == 0 {
+				break
+			}
+			// the defaultRPCTimeout is 10m and we assume each task need 1s to pause
+			time.Sleep(time.Second * time.Duration(notPausedTaskCount))
 		}
 	}
 
