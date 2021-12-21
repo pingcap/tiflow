@@ -823,14 +823,14 @@ func (s *Server) DMAPIOperateTableStructure(c *gin.Context, taskName string, sou
 	}
 }
 
-// DMAPIBatchImportTaskConfig create task_config_template url is: (POST /api/v1/task_configs/batch_import).
-func (s *Server) DMAPIBatchImportTaskConfig(c *gin.Context) {
-	var req openapi.BatchImportTaskConfigRequest
+// DMAPIImportTaskConfig create task_config_template url is: (POST /api/v1/task/configs/import).
+func (s *Server) DMAPIImportTaskConfig(c *gin.Context) {
+	var req openapi.TaskConfigRequest
 	if err := c.Bind(&req); err != nil {
 		_ = c.Error(err)
 		return
 	}
-	resp := openapi.BatchImportTaskConfigResponse{
+	resp := openapi.TaskConfigResponse{
 		FailedTaskList: []struct {
 			ErrorMsg string `json:"error_msg"`
 			TaskName string `json:"task_name"`
@@ -853,7 +853,7 @@ func (s *Server) DMAPIBatchImportTaskConfig(c *gin.Context) {
 	c.IndentedJSON(http.StatusAccepted, resp)
 }
 
-// DMAPICreateTaskConfig create task_config_template url is: (POST /api/v1/task_configs/).
+// DMAPICreateTaskConfig create task_config_template url is: (POST /api/task/configs).
 func (s *Server) DMAPICreateTaskConfig(c *gin.Context) {
 	task := &openapi.Task{}
 	if err := c.Bind(task); err != nil {
@@ -878,7 +878,7 @@ func (s *Server) DMAPICreateTaskConfig(c *gin.Context) {
 	c.IndentedJSON(http.StatusCreated, task)
 }
 
-// DMAPIGetTaskConfigList get task_config_template list url is: (GET /api/v1/task_configs/).
+// DMAPIGetTaskConfigList get task_config_template list url is: (GET /api/v1/task/configs).
 func (s *Server) DMAPIGetTaskConfigList(c *gin.Context) {
 	TaskConfigList, err := ha.GetAllOpenAPITaskConfig(s.etcdClient)
 	if err != nil {
@@ -893,7 +893,7 @@ func (s *Server) DMAPIGetTaskConfigList(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, resp)
 }
 
-// DMAPIDeleteTaskConfig delete task_config_template url is: (DELETE /api/v1/task_configs/{task-name}).
+// DMAPIDeleteTaskConfig delete task_config_template url is: (DELETE /api/v1/task/configs/{task-name}).
 func (s *Server) DMAPIDeleteTaskConfig(c *gin.Context, taskName string) {
 	if err := ha.DeleteOpenAPITaskConfig(s.etcdClient, taskName); err != nil {
 		_ = c.Error(err)
@@ -902,7 +902,7 @@ func (s *Server) DMAPIDeleteTaskConfig(c *gin.Context, taskName string) {
 	c.Status(http.StatusNoContent)
 }
 
-// DMAPIGetTaskConfig get task_config_template url is: (GET /api/v1/task_configs/{task-name}).
+// DMAPIGetTaskConfig get task_config_template url is: (GET /api/v1/task/configs/{task-name}).
 func (s *Server) DMAPIGetTaskConfig(c *gin.Context, taskName string) {
 	task, err := ha.GetOpenAPITaskConfig(s.etcdClient, taskName)
 	if err != nil {
@@ -916,7 +916,7 @@ func (s *Server) DMAPIGetTaskConfig(c *gin.Context, taskName string) {
 	c.IndentedJSON(http.StatusOK, task)
 }
 
-// DMAPUpdateTaskConfig update task_config_template url is: (PUT /api/v1/task_configs/{task-name}).
+// DMAPUpdateTaskConfig update task_config_template url is: (PUT /api/v1/task/configs/{task-name}).
 func (s *Server) DMAPUpdateTaskConfig(c *gin.Context, taskName string) {
 	task := &openapi.Task{}
 	if err := c.Bind(task); err != nil {

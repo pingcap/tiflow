@@ -31,21 +31,6 @@ const (
 	TaskTaskModeIncremental TaskTaskMode = "incremental"
 )
 
-// BatchImportTaskConfigRequest defines model for BatchImportTaskConfigRequest.
-type BatchImportTaskConfigRequest struct {
-	// whether to overwrite task config template
-	Overwrite bool `json:"overwrite"`
-}
-
-// BatchImportTaskConfigResponse defines model for BatchImportTaskConfigResponse.
-type BatchImportTaskConfigResponse struct {
-	FailedTaskList []struct {
-		ErrorMsg string `json:"error_msg"`
-		TaskName string `json:"task_name"`
-	} `json:"failed_task_list"`
-	SuccessTaskList []string `json:"success_task_list"`
-}
-
 // ClusterMaster defines model for ClusterMaster.
 type ClusterMaster struct {
 	// address of the current master node
@@ -410,6 +395,21 @@ type TaskBinLogFilterRule struct {
 	IgnoreSql *[]string `json:"ignore_sql,omitempty"`
 }
 
+// TaskConfigRequest defines model for TaskConfigRequest.
+type TaskConfigRequest struct {
+	// whether to overwrite task config template
+	Overwrite bool `json:"overwrite"`
+}
+
+// TaskConfigResponse defines model for TaskConfigResponse.
+type TaskConfigResponse struct {
+	FailedTaskList []struct {
+		ErrorMsg string `json:"error_msg"`
+		TaskName string `json:"task_name"`
+	} `json:"failed_task_list"`
+	SuccessTaskList []string `json:"success_task_list"`
+}
+
 // configuration of full migrate tasks
 type TaskFullMigrateConf struct {
 	// to control the way in which data is exported for consistency assurance
@@ -540,8 +540,8 @@ type DMAPITransferSourceJSONBody WorkerNameRequest
 // DMAPICreateTaskConfigJSONBody defines parameters for DMAPICreateTaskConfig.
 type DMAPICreateTaskConfigJSONBody Task
 
-// DMAPIBatchImportTaskConfigJSONBody defines parameters for DMAPIBatchImportTaskConfig.
-type DMAPIBatchImportTaskConfigJSONBody BatchImportTaskConfigRequest
+// DMAPIImportTaskConfigJSONBody defines parameters for DMAPIImportTaskConfig.
+type DMAPIImportTaskConfigJSONBody TaskConfigRequest
 
 // DMAPIStartTaskJSONBody defines parameters for DMAPIStartTask.
 type DMAPIStartTaskJSONBody CreateTaskRequest
@@ -582,8 +582,8 @@ type DMAPITransferSourceJSONRequestBody DMAPITransferSourceJSONBody
 // DMAPICreateTaskConfigJSONRequestBody defines body for DMAPICreateTaskConfig for application/json ContentType.
 type DMAPICreateTaskConfigJSONRequestBody DMAPICreateTaskConfigJSONBody
 
-// DMAPIBatchImportTaskConfigJSONRequestBody defines body for DMAPIBatchImportTaskConfig for application/json ContentType.
-type DMAPIBatchImportTaskConfigJSONRequestBody DMAPIBatchImportTaskConfigJSONBody
+// DMAPIImportTaskConfigJSONRequestBody defines body for DMAPIImportTaskConfig for application/json ContentType.
+type DMAPIImportTaskConfigJSONRequestBody DMAPIImportTaskConfigJSONBody
 
 // DMAPIStartTaskJSONRequestBody defines body for DMAPIStartTask for application/json ContentType.
 type DMAPIStartTaskJSONRequestBody DMAPIStartTaskJSONBody

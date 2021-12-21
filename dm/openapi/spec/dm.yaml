@@ -20,8 +20,6 @@ tags:
       url: "https://docs.pingcap.com/zh/tidb-data-migration/stable/quick-create-migration-task"
   - name: cluster
     description: cluster
-  - name: task_config
-    description: the config of task
 
 paths:
   /api/v1/docs:
@@ -725,6 +723,149 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
+  /api/v1/task/configs:
+    post:
+      tags:
+        - task
+      summary: "create task config"
+      operationId: "DMAPICreateTaskConfig"
+      requestBody:
+        description: "request body"
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/Task"
+      responses:
+        "201":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+    get:
+      tags:
+        - task
+      summary: "get task config list"
+      operationId: "DMAPIGetTaskConfigList"
+      responses:
+        "200":
+          description: "task list"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GetTaskListResponse"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+  /api/v1/task/configs/import:
+    post:
+      tags:
+        - task
+      summary: "import task config"
+      operationId: "DMAPIImportTaskConfig"
+      requestBody:
+        description: "request body"
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/TaskConfigRequest"
+      responses:
+        "202":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/TaskConfigResponse"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+  /api/v1/task/configs/{task-name}:
+    get:
+      tags:
+        - task
+      summary: "get task_config"
+      operationId: "DMAPIGetTaskConfig"
+      parameters:
+        - name: task-name
+          in: path
+          description: "globally unique task name"
+          required: true
+          schema:
+            type: string
+            example: "task-1"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+    put:
+      tags:
+        - task
+      summary: "update task_config"
+      operationId: "DMAPUpdateTaskConfig"
+      parameters:
+        - name: task-name
+          in: path
+          description: "globally unique task name"
+          required: true
+          schema:
+            type: string
+            example: "task-1"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+    delete:
+      tags:
+        - task
+      summary: "delete task_config"
+      operationId: "DMAPIDeleteTaskConfig"
+      parameters:
+        - name: task-name
+          in: path
+          description: "globally unique task name"
+          required: true
+          schema:
+            type: string
+            example: "task-1"
+      responses:
+        "204":
+          description: "success"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
 
   /api/v1/cluster/masters:
     get:
@@ -801,151 +942,6 @@ paths:
           schema:
             type: string
             example: "master1"
-      responses:
-        "204":
-          description: "success"
-        "400":
-          description: "failed"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorWithMessage"
-
-  /api/v1/task_configs/batch_import:
-    post:
-      tags:
-        - task_config
-      summary: "batch import task config"
-      operationId: "DMAPIBatchImportTaskConfig"
-      requestBody:
-        description: "request body"
-        content:
-          "application/json":
-            schema:
-              $ref: "#/components/schemas/BatchImportTaskConfigRequest"
-      responses:
-        "202":
-          description: "success"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/BatchImportTaskConfigResponse"
-        "400":
-          description: "failed"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorWithMessage"
-
-  /api/v1/task_configs:
-    post:
-      tags:
-        - task_config
-      summary: "create task config"
-      operationId: "DMAPICreateTaskConfig"
-      requestBody:
-        description: "request body"
-        content:
-          "application/json":
-            schema:
-              $ref: "#/components/schemas/Task"
-      responses:
-        "201":
-          description: "success"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/Task"
-        "400":
-          description: "failed"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorWithMessage"
-    get:
-      tags:
-        - task_config
-      summary: "get task config list"
-      operationId: "DMAPIGetTaskConfigList"
-      responses:
-        "200":
-          description: "task list"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/GetTaskListResponse"
-        "400":
-          description: "failed"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/task_configs/{task-name}:
-    get:
-      tags:
-        - task_config
-      summary: "get task_config"
-      operationId: "DMAPIGetTaskConfig"
-      parameters:
-        - name: task-name
-          in: path
-          description: "globally unique task name"
-          required: true
-          schema:
-            type: string
-            example: "task-1"
-      responses:
-        "200":
-          description: "success"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/Task"
-        "400":
-          description: "failed"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorWithMessage"
-    put:
-      tags:
-        - task_config
-      summary: "update task_config"
-      operationId: "DMAPUpdateTaskConfig"
-      parameters:
-        - name: task-name
-          in: path
-          description: "globally unique task name"
-          required: true
-          schema:
-            type: string
-            example: "task-1"
-      responses:
-        "200":
-          description: "success"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/Task"
-        "400":
-          description: "failed"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorWithMessage"
-    delete:
-      tags:
-        - task_config
-      summary: "delete task_config"
-      operationId: "DMAPIDeleteTaskConfig"
-      parameters:
-        - name: task-name
-          in: path
-          description: "globally unique task name"
-          required: true
-          schema:
-            type: string
-            example: "task-1"
       responses:
         "204":
           description: "success"
@@ -1766,7 +1762,7 @@ components:
         - "total"
         - "data"
 
-    BatchImportTaskConfigRequest:
+    TaskConfigRequest:
       type: object
       properties:
         overwrite:
@@ -1775,7 +1771,7 @@ components:
           description: whether to overwrite task config template
       required:
         - "overwrite"
-    BatchImportTaskConfigResponse:
+    TaskConfigResponse:
       type: object
       properties:
         success_task_list:
