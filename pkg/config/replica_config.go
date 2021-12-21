@@ -36,7 +36,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		WorkerNum: 16,
 	},
 	Sink: &SinkConfig{
-		Protocol: "default",
+		Protocol: ProtocolOpen.String(),
 	},
 	Cyclic: &CyclicConfig{
 		Enable: false,
