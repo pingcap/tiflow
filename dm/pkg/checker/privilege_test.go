@@ -45,14 +45,6 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 			grants:    []string{"CREATE DATABASE db1"}, // non GRANT statement
 			dumpState: StateFailure,
 		},
-		// {
-		// 	grants:    []string{"GRANT SELECT, REPLICATION SLAVE ON *.* TO 'user'@'%'"}, // lack REPLICATION CLIENT privilege
-		// 	dumpState: StateFailure,
-		// },
-		// {
-		// 	grants:    []string{"GRANT SELECT, REPLICATION CLIENT ON *.* TO 'user'@'%'"}, // lack REPLICATION SLAVE privilege
-		// 	dumpState: StateFailure,
-		// },
 		{
 			grants:    []string{"GRANT REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'user'@'%'"}, // lack SELECT privilege
 			dumpState: StateFailure,
