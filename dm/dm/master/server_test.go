@@ -2052,7 +2052,7 @@ func (t *testMaster) TestGetCfg(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(ha.PutOpenAPITaskConfig(t.etcdTestCli, openapiTask, true), check.IsNil)
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
-	resp2, err = server.GetCfg(context.Background(), &pb.GetCfgRequest{Name: notExistTaskName, Type: pb.CfgType_TaskConfig})
+	resp2, err = server.GetCfg(context.Background(), &pb.GetCfgRequest{Name: notExistTaskName, Type: pb.CfgType_TaskTemplateType})
 	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp2.Result, check.IsTrue)

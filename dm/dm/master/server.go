@@ -2158,7 +2158,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 	// For the get-config command, you want to filter out fields that are not easily readable by humans,
 	// such as SSLXXBytes field in `Security` struct
 	switch req.Type {
-	case pb.CfgType_TaskConfig:
+	case pb.CfgType_TaskTemplateType:
 		task, err := ha.GetOpenAPITaskConfig(s.etcdClient, req.Name)
 		if err != nil {
 			resp2.Msg = err.Error()
