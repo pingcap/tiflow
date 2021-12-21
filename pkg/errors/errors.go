@@ -31,6 +31,7 @@ var (
 	ErrDecodeEtcdKeyFail     = errors.Normalize("failed to decode etcd key: %s", errors.RFCCodeText("DFLOW:ErrDecodeEtcdKeyFail"))
 	ErrInvalidMetaStoreKey   = errors.Normalize("invalid metastore key %s", errors.RFCCodeText("DFLOW:ErrInvalidMetaStoreKey"))
 	ErrInvalidMetaStoreKeyTp = errors.Normalize("invalid metastore key type %s", errors.RFCCodeText("DFLOW:ErrInvalidMetaStoreKeyTp"))
+	ErrEtcdAPIError          = errors.Normalize("etcd api returns error", errors.RFCCodeText("DFLOW:ErrEtcdAPIError"))
 
 	// master related errors
 	ErrMasterConfigParseFlagSet     = errors.Normalize("parse config flag set failed", errors.RFCCodeText("DFLOW:ErrMasterConfigParseFlagSet"))
@@ -42,6 +43,9 @@ var (
 	ErrMasterStartEmbedEtcdFail     = errors.Normalize("failed to start embed etcd", errors.RFCCodeText("DFLOW:ErrMasterStartEmbedEtcdFail"))
 	ErrMasterParseURLFail           = errors.Normalize("failed to parse URL %s", errors.RFCCodeText("DFLOW:ErrMasterParseURLFail"))
 	ErrMasterScheduleMissTask       = errors.Normalize("task %d is not found after scheduling", errors.RFCCodeText("DFLOW:ErrMasterScheduleMissTask"))
+	ErrMasterNewServer              = errors.Normalize("master create new server failed", errors.RFCCodeText("DFLOW:ErrMasterNewServer"))
+	ErrMasterCampaignLeader         = errors.Normalize("master campaign to be leader failed", errors.RFCCodeText("DFLOW:ErrMasterCampaignLeader"))
+	ErrMasterSessionDone            = errors.Normalize("master session is done", errors.RFCCodeText("DFLOW:ErrMasterSessionDone"))
 
 	// executor related errors
 	ErrExecutorConfigParseFlagSet = errors.Normalize("parse config flag set failed", errors.RFCCodeText("DFLOW:ErrExecutorConfigParseFlagSet"))

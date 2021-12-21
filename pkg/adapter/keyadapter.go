@@ -9,6 +9,8 @@ import (
 )
 
 var (
+	MasterCampaignKey      KeyAdapter = keyHexEncoderDecoder("/data-flow/master/leader")
+	MasterInfoKey          KeyAdapter = keyHexEncoderDecoder("/data-flow/master/info")
 	ExecutorInfoKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/executor/info")
 	JobKeyAdapter          KeyAdapter = keyHexEncoderDecoder("/data-flow/job")
 )

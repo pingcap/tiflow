@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/hanfei1991/microcosm/test"
@@ -14,6 +16,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -25,7 +28,10 @@ type Server struct {
 	etcd *embed.Etcd
 
 	etcdClient *clientv3.Client
-	// election *election.Election
+	session    *concurrency.Session
+	election   *concurrency.Election
+	leaderName atomic.String
+	members    []*Member
 
 	// sched scheduler
 	executorManager *ExecutorManager
@@ -64,47 +70,35 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 
 // Heartbeat implements pb interface.
 func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	if !s.initialized.Load() {
-		return &pb.HeartbeatResponse{
-			Err: &pb.Error{
-				Code: pb.ErrorCode_MasterNotReady,
-			},
-		}, nil
+	err := s.apiPreCheck()
+	if err != nil {
+		return &pb.HeartbeatResponse{Err: err}, nil
 	}
 	return s.executorManager.HandleHeartbeat(req)
 }
 
 // SubmitJob passes request onto "JobManager".
 func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
-	if !s.initialized.Load() {
-		return &pb.SubmitJobResponse{
-			Err: &pb.Error{
-				Code: pb.ErrorCode_MasterNotReady,
-			},
-		}, nil
+	err := s.apiPreCheck()
+	if err != nil {
+		return &pb.SubmitJobResponse{Err: err}, nil
 	}
 	return s.jobManager.SubmitJob(ctx, req), nil
 }
 
 func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
-	if !s.initialized.Load() {
-		return &pb.CancelJobResponse{
-			Err: &pb.Error{
-				Code: pb.ErrorCode_MasterNotReady,
-			},
-		}, nil
+	err := s.apiPreCheck()
+	if err != nil {
+		return &pb.CancelJobResponse{Err: err}, nil
 	}
 	return s.jobManager.CancelJob(ctx, req), nil
 }
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
-	if !s.initialized.Load() {
-		return &pb.RegisterExecutorResponse{
-			Err: &pb.Error{
-				Code: pb.ErrorCode_MasterNotReady,
-			},
-		}, nil
+	ckErr := s.apiPreCheck()
+	if ckErr != nil {
+		return &pb.RegisterExecutorResponse{Err: ckErr}, nil
 	}
 	// register executor to scheduler
 	// TODO: check leader, if not leader, return notLeader error.
@@ -183,6 +177,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
+	s.leaderName.Store(s.name())
 	s.initialized.Store(true)
 	return
 }
@@ -195,8 +190,8 @@ func (s *Server) Stop() {
 	}
 }
 
-// Start the master-server.
-func (s *Server) Start(ctx context.Context) (err error) {
+// Run the master-server.
+func (s *Server) Run(ctx context.Context) (err error) {
 	if test.GlobalTestFlag {
 		return s.startForTest(ctx)
 	}
@@ -205,26 +200,10 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-
-	// start leader election
-	// TODO: Consider election. And Notify workers when leader changes.
-	// s.election, err = election.NewElection(ctx, )
-
-	// rebuild states from existing meta if needed
-	err = s.resetExecutor(ctx)
-	if err != nil {
-		return err
-	}
-
-	// start background managers
-	s.executorManager.Start(ctx)
-	err = s.jobManager.Start(ctx)
-	if err != nil {
-		return
-	}
+	go s.bgUpdateServerMembers(ctx)
 	s.initialized.Store(true)
 
-	return
+	return s.campaignLeaderLoop(ctx)
 }
 
 func (s *Server) startGrpcSrv() (err error) {
@@ -264,13 +243,96 @@ func (s *Server) startGrpcSrv() (err error) {
 	if err != nil {
 		return
 	}
-
 	log.L().Logger.Info("start etcd successfully")
 
 	// start grpc server
-
 	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
 	return
+}
+
+// name is a shortcut to etcd name
+func (s *Server) name() string {
+	return s.cfg.Etcd.Name
+}
+
+func (s *Server) reset(ctx context.Context) error {
+	sess, err := concurrency.NewSession(
+		s.etcdClient, concurrency.WithTTL(int(s.cfg.KeepAliveTTL.Seconds())))
+	if err != nil {
+		return errors.Wrap(errors.ErrMasterNewServer, err)
+	}
+	_, err = s.etcdClient.Put(ctx, adapter.MasterInfoKey.Encode(s.name()),
+		s.cfg.String(), clientv3.WithLease(sess.Lease()))
+	if err != nil {
+		return errors.Wrap(errors.ErrEtcdAPIError, err)
+	}
+
+	s.session = sess
+	s.election = concurrency.NewElection(sess, adapter.MasterCampaignKey.Path())
+	return nil
+}
+
+func (s *Server) runLeaderService(ctx context.Context) (err error) {
+	// rebuild states from existing meta if needed
+	err = s.resetExecutor(ctx)
+	if err != nil {
+		return
+	}
+
+	// start background managers
+	s.executorManager.Start(ctx)
+	err = s.jobManager.Start(ctx)
+	if err != nil {
+		return
+	}
+
+	s.leaderName.Store(s.name())
+	defer func() {
+		s.leaderName.Store("")
+		s.resign()
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.session.Done():
+		return errors.ErrMasterSessionDone.GenWithStackByArgs()
+	}
+}
+
+func (s *Server) apiPreCheck() *pb.Error {
+	if s.leaderName.Load() != s.name() {
+		return &pb.Error{
+			Code: pb.ErrorCode_MasterNotLeader,
+			NotLeader: &pb.NotLeader{
+				Request: s.cfg.AdvertiseAddr,
+				Leader:  s.leaderName.Load(),
+			},
+		}
+	}
+	if !s.initialized.Load() {
+		return &pb.Error{
+			Code: pb.ErrorCode_MasterNotReady,
+		}
+	}
+	return nil
+}
+
+func (s *Server) bgUpdateServerMembers(ctx context.Context) {
+	// TODO: refine background gourtine of server master, add exit notification
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			err := s.updateServerMasterMembers(ctx)
+			if err != nil {
+				log.L().Warn("update server members failed", zap.Error(err))
+			}
+		}
+	}
 }
 
 func withHost(addr string) string {

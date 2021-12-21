@@ -40,7 +40,7 @@ func TestClientManager(t *testing.T) {
 
 	masterCtx, masterCancel := context.WithCancel(ctx)
 	defer masterCancel()
-	err = masterServer.Start(masterCtx)
+	err = masterServer.Run(masterCtx)
 	require.Nil(t, err)
 
 	err = manager.AddMasterClient(ctx, []string{"127.0.0.1:1992"})

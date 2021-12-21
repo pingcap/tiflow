@@ -27,7 +27,7 @@ func (c *MiniCluster) CreateMaster(cfg *master.Config) (*test.Context, error) {
 func (c *MiniCluster) AsyncStartMaster() error {
 	ctx := context.Background()
 	masterCtx, masterCancel := context.WithCancel(ctx)
-	err := c.master.Start(masterCtx)
+	err := c.master.Run(masterCtx)
 	c.masterCancel = masterCancel
 	return err
 }

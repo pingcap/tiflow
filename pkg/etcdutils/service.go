@@ -1,10 +1,13 @@
 package etcdutils
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"google.golang.org/grpc"
 )
@@ -43,4 +46,15 @@ func StartEtcd(etcdCfg *embed.Config,
 		return nil, errors.ErrMasterStartEmbedEtcdFail.GenWithStack("start embed etcd timeout %v", startTimeout)
 	}
 	return e, nil
+}
+
+func GetLeaderID(ctx context.Context, cli *clientv3.Client, campKey string) (string, error) {
+	resp, err := cli.Get(ctx, campKey, clientv3.WithFirstCreate()...)
+	if err != nil {
+		return "", errors.Wrap(errors.ErrEtcdAPIError, err)
+	}
+	if len(resp.Kvs) == 0 {
+		return "", concurrency.ErrElectionNoLeader
+	}
+	return string(resp.Kvs[0].Value), nil
 }

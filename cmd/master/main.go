@@ -9,8 +9,8 @@ import (
 	"syscall"
 
 	"github.com/hanfei1991/microcosm/master"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -44,16 +44,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	server, err := master.NewServer(cfg, nil)
 	if err != nil {
-		log.L().Error("fail to start dm-master", zap.Error(err))
-		os.Exit(2)
-	}
-	err = server.Start(ctx)
-	if err != nil {
-		log.L().Error("fail to start dm-master", zap.Error(err))
+		log.L().Error("fail to start dataflow master", zap.Error(err))
 		os.Exit(2)
 	}
 
-	// 4. wait for stopping the process
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
 		syscall.SIGHUP,
@@ -61,9 +55,18 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 	go func() {
-		sig := <-sc
-		log.L().Info("got signal to exit", zap.Stringer("signal", sig))
-		cancel()
+		select {
+		case <-ctx.Done():
+		case sig := <-sc:
+			log.L().Info("got signal to exit", zap.Stringer("signal", sig))
+			cancel()
+		}
 	}()
-	<-ctx.Done()
+
+	err = server.Run(ctx)
+	if err != nil && errors.Cause(err) != context.Canceled {
+		log.L().Error("run dataflow master with error", zap.Error(err))
+		os.Exit(2)
+	}
+	log.L().Info("server exits normally")
 }
