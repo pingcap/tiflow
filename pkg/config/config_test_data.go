@@ -121,7 +121,7 @@ const (
       "write-l0-slowdown-trigger": 2147483647,
       "write-l0-pause-trigger": 2147483647,
       "compaction-l0-trigger": 160,
-      "compaction-deletion-threshold": 960000,
+      "compaction-deletion-threshold": 160000,
       "cleanup-speed-limit": 10000
     },
     "messages": {
