@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/dm/pkg/log"
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -32,6 +31,8 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 const (
@@ -376,7 +377,8 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 
 	checkFunc := func(instance string, tables []*filter.Table) {
 		defer checkWg.Done()
-		log.L().Logger.Info("check table", zap.String("instance", instance))
+		startTime := time.Now()
+		log.L().Logger.Info("check table thread start", zap.String("instance", instance), zap.Time("start time", startTime))
 		db, ok := c.dbs[instance]
 		if !ok {
 			errCh <- errors.NotFoundf("client for instance %s", instance)
@@ -434,6 +436,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 				return
 			}
 		}
+		log.L().Logger.Info("check table thread over", zap.String("instance", instance), zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
 	}
 
 	log.L().Logger.Info("before check table")
