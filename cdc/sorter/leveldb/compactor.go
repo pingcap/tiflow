@@ -80,7 +80,9 @@ func (c *CompactActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 		}
 	}
 
-	start, end := []byte{0x0}, bytes.Repeat([]byte{0xff}, 16)
+	// A range that is large enough to cover entire db effectively.
+	// See see sorter/encoding/key.go.
+	start, end := []byte{0x0}, bytes.Repeat([]byte{0xff}, 128)
 	now := time.Now()
 	if err := c.db.Compact(start, end); err != nil {
 		log.Error("db compact error", zap.Error(err))
