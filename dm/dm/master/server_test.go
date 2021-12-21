@@ -53,6 +53,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/pbmock"
+	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -2034,15 +2035,28 @@ func (t *testMaster) TestGetCfg(c *check.C) {
 	c.Assert(resp1.Result, check.IsTrue)
 	c.Assert(strings.Contains(resp1.Cfg, "name: test"), check.IsTrue)
 
-	// wrong task name
+	// not exist task name
+	notExistTaskName := "wrong"
 	req2 := &pb.GetCfgRequest{
-		Name: "haha",
+		Name: notExistTaskName,
 		Type: pb.CfgType_TaskType,
 	}
 	resp2, err := server.GetCfg(context.Background(), req2)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp2.Result, check.IsFalse)
 	c.Assert(resp2.Msg, check.Equals, "task not found")
+
+	// test get task config
+	openapiTask, err := fixtures.GenNoShardOpenAPITaskForTest()
+	openapiTask.Name = notExistTaskName
+	c.Assert(err, check.IsNil)
+	c.Assert(ha.PutOpenAPITaskConfig(t.etcdTestCli, openapiTask, true), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
+	resp2, err = server.GetCfg(context.Background(), &pb.GetCfgRequest{Name: notExistTaskName, Type: pb.CfgType_TaskConfig})
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp2.Result, check.IsTrue)
+	c.Assert(strings.Contains(resp2.Cfg, fmt.Sprintf("name: %s", notExistTaskName)), check.IsTrue)
 
 	// test restart master
 	server.scheduler.Close()

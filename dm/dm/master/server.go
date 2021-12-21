@@ -51,6 +51,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/election"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -2141,9 +2142,58 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 	if shouldRet {
 		return resp2, err2
 	}
+
+	formartTaskString := func(subCfgList []*config.SubTaskConfig) string {
+		sort.Slice(subCfgList, func(i, j int) bool {
+			return subCfgList[i].SourceID < subCfgList[j].SourceID
+		})
+		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
+		taskCfg.TargetDB.Password = "******"
+		if taskCfg.TargetDB.Security != nil {
+			taskCfg.TargetDB.Security.ClearSSLBytesData()
+		}
+		return taskCfg.String()
+	}
+
 	// For the get-config command, you want to filter out fields that are not easily readable by humans,
 	// such as SSLXXBytes field in `Security` struct
 	switch req.Type {
+	case pb.CfgType_TaskConfig:
+		task, err := ha.GetOpenAPITaskConfig(s.etcdClient, req.Name)
+		if err != nil {
+			resp2.Msg = err.Error()
+			return resp2, nil
+		}
+		if task == nil {
+			resp2.Msg = "task not found"
+			return resp2, nil
+		}
+		toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
+		if adjustDBErr := adjustTargetDB(ctx, toDBCfg); adjustDBErr != nil {
+			if err != nil {
+				resp2.Msg = err.Error()
+				return resp2, nil
+			}
+		}
+		sourceCfgMap := make(map[string]*config.SourceConfig)
+		for _, cfg := range task.SourceConfig.SourceConf {
+			if sourceCfg := s.scheduler.GetSourceCfgByID(cfg.SourceName); sourceCfg != nil {
+				sourceCfgMap[cfg.SourceName] = sourceCfg
+			} else {
+				resp2.Msg = fmt.Sprintf("the source: %s of task not found", cfg.SourceName)
+				return resp2, nil
+			}
+		}
+		subTaskConfigList, err := config.OpenAPITaskToSubTaskConfigs(task, toDBCfg, sourceCfgMap)
+		if err != nil {
+			resp2.Msg = err.Error()
+			return resp2, nil
+		}
+		subCfgList := make([]*config.SubTaskConfig, len(subTaskConfigList))
+		for i, subTaskConfig := range subTaskConfigList {
+			subCfgList[i] = &subTaskConfig
+		}
+		cfg = formartTaskString(subCfgList)
 	case pb.CfgType_TaskType:
 		subCfgMap := s.scheduler.GetSubTaskCfgsByTask(req.Name)
 		if len(subCfgMap) == 0 {
@@ -2154,16 +2204,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		for _, subCfg := range subCfgMap {
 			subCfgList = append(subCfgList, subCfg)
 		}
-		sort.Slice(subCfgList, func(i, j int) bool {
-			return subCfgList[i].SourceID < subCfgList[j].SourceID
-		})
-
-		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
-		taskCfg.TargetDB.Password = "******"
-		if taskCfg.TargetDB.Security != nil {
-			taskCfg.TargetDB.Security.ClearSSLBytesData()
-		}
-		cfg = taskCfg.String()
+		cfg = formartTaskString(subCfgList)
 	case pb.CfgType_MasterType:
 		if req.Name == s.cfg.Name {
 			cfg, err2 = s.cfg.Toml()
