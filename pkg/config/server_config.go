@@ -23,8 +23,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
 
@@ -121,6 +121,7 @@ var defaultServerConfig = &ServerConfig{
 			WriteL0PauseTrigger:    math.MaxInt32,
 			CleanupSpeedLimit:      10000,
 		},
+		Messages: defaultMessageConfig.Clone(),
 	},
 }
 
@@ -251,6 +252,13 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if c.KVClient.RegionScanLimit <= 0 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
+	}
+
+	if c.Debug == nil {
+		c.Debug = defaultCfg.Debug
+	}
+	if err = c.Debug.ValidateAndAdjust(); err != nil {
+		return errors.Trace(err)
 	}
 
 	return nil

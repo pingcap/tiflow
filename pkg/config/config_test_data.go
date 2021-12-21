@@ -47,7 +47,7 @@ const (
         "rule": "r2"
       }
     ],
-    "protocol": "default"
+    "protocol": "open-protocol"
   },
   "cyclic-replication": {
     "enable": false,
@@ -122,6 +122,15 @@ const (
       "write-l0-slowdown-trigger": 2147483647,
       "write-l0-pause-trigger": 2147483647,
       "cleanup-speed-limit": 10000
+    },
+    "messages": {
+      "client-max-batch-interval": 100000000,
+      "client-max-batch-size": 8192,
+      "client-max-batch-count": 128,
+      "client-retry-rate-limit": 1,
+      "server-max-pending-message-count": 102400,
+      "server-ack-interval": 100000000,
+      "server-worker-pool-size": 4
     }
   }
 }`
@@ -142,7 +151,7 @@ const (
   },
   "sink": {
     "dispatchers": null,
-    "protocol": "default",
+    "protocol": "open-protocol",
     "column-selectors": [
       {
         "matcher": [
@@ -190,7 +199,7 @@ const (
   },
   "sink": {
     "dispatchers": null,
-    "protocol": "default",
+    "protocol": "open-protocol",
     "column-selectors": [
       {
         "matcher": [

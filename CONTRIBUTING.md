@@ -14,7 +14,7 @@ your contribution accepted.
 
 Developing TiDB-CDC requires:
 
-* [Go 1.13+](http://golang.org/doc/code.html)
+* [Go 1.16+](https://go.dev/doc/code)
 * An internet connection to download the dependencies
 
 Simply run `make` to build the program.
@@ -32,7 +32,7 @@ For more information on how to trigger these tests, please see the [command help
 
 ### Updating dependencies
 
-TiDB-CDC uses [Go 1.11 module](https://github.com/golang/go/wiki/Modules) to manage dependencies. To add or update a
+TiDB-CDC uses [Go Modules](https://github.com/golang/go/wiki/Modules) to manage dependencies. To add or update a
 dependency: use the `go mod edit` command to change the dependency.
 
 ## Contribution flow
@@ -63,7 +63,7 @@ questions: what changed and why. The subject line should feature the what and
 the body of the commit should describe the why.
 
 ```
-capture: add comment for variable declaration
+capture(ticdc): add comment for variable declaration
 
 Improve documentation.
 ```
@@ -71,22 +71,23 @@ Improve documentation.
 The format can be described more formally as follows:
 
 ```
-<subsystem>: <what changed>
+<subsystem>(ticdc|dm|both): <what changed>
 <BLANK LINE>
 <why this change was made>
 <BLANK LINE>
 <footer>(optional)
 ```
 
-The first line is the subject and should be no longer than 70 characters, the
-second line is always blank, and other lines should be wrapped at 80 characters.
-This allows the message to be easier to read on GitHub as well as in various
+The first line is the subject and should be no longer than 70 characters, the second line is always blank, and other
+lines should be wrapped at 80 characters. This allows the message to be easier to read on GitHub as well as in various
 git tools.
 
-If the change affects more than one subsystem, you can use comma to separate them like `capture,puller:`.
+If the change affects more than one subsystem, you can use comma to separate them like ```capture,puller:```. If the
+change affects many subsystems, you can use ```*``` instead, like ```*:```.
 
-If the change affects many subsystems, you can use ```*``` instead, like ```*:```.
+If this change affects ticdc, fill in ```<subsystem>(ticdc)```, if it affects dm, fill in ```<subsystem>(dm)```. If it
+involves a code that is used by both products, fill in ```<subsystem>(both)```.
 
-For the why part, if no specific reason for the change,
-you can use one of some generic reasons like "Improve documentation.",
+For the why part, if no specific reason for the change, you can use one of some generic reasons like "Improve
+documentation.",
 "Improve performance.", "Improve robustness.", "Improve test coverage."

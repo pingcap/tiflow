@@ -18,7 +18,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 // ExitWithError forces to exist the process, it's often used in integration tests.

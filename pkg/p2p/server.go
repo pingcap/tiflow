@@ -24,9 +24,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/workerpool"
-	"github.com/pingcap/ticdc/proto/p2p"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/workerpool"
+	"github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -252,6 +252,13 @@ func (m *MessageServer) run(ctx context.Context) error {
 							close(task.done)
 						}
 					}()
+				} else {
+					// This is to make deregistering a handler idempotent.
+					// Idempotency here will simplify error handling for the callers of this package.
+					log.Warn("handler not found", zap.String("topic", task.topic))
+					if task.done != nil {
+						close(task.done)
+					}
 				}
 			case taskOnRegisterPeer:
 				log.Debug("taskOnRegisterPeer",

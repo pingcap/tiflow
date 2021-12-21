@@ -27,10 +27,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/kafka"
-	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/notify"
 	"go.uber.org/zap"
 )
 
@@ -193,6 +193,7 @@ func (k *kafkaSaramaProducer) stop() {
 	if atomic.SwapInt32(&k.closing, kafkaProducerClosing) == kafkaProducerClosing {
 		return
 	}
+	log.Info("kafka producer closing...")
 	close(k.closeCh)
 }
 
@@ -257,8 +258,8 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 }
 
 var (
-	newSaramaConfigImpl                                      = newSaramaConfig
-	NewSaramaAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
+	newSaramaConfigImpl                                 = newSaramaConfig
+	NewAdminClientImpl  kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
 )
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
@@ -269,7 +270,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, e
 		return nil, err
 	}
 
-	admin, err := NewSaramaAdminClientImpl(config.BrokerEndpoints, cfg)
+	admin, err := NewAdminClientImpl(config.BrokerEndpoints, cfg)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}

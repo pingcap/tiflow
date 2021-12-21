@@ -24,19 +24,20 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/owner"
-	"github.com/pingcap/ticdc/cdc/processor"
-	"github.com/pingcap/ticdc/cdc/processor/pipeline/system"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/pdtime"
-	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/cdc/processor"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
+	ssystem "github.com/pingcap/tiflow/cdc/sorter/leveldb/system"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -64,6 +65,7 @@ type Capture struct {
 	grpcPool     kv.GrpcPool
 	regionCache  *tikv.RegionCache
 	TimeAcquirer pdtime.TimeAcquirer
+	sorterSystem *ssystem.System
 
 	tableActorSystem *system.System
 
@@ -86,6 +88,12 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.C
 	}
 }
 
+func NewCapture4Test() *Capture {
+	return &Capture{
+		info: &model.CaptureInfo{ID: "capture-for-test", AdvertiseAddr: "127.0.0.1", Version: "test"},
+	}
+}
+
 func (c *Capture) reset(ctx context.Context) error {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
@@ -103,7 +111,9 @@ func (c *Capture) reset(ctx context.Context) error {
 	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
 		concurrency.WithTTL(conf.CaptureSessionTTL))
 	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"create capture session")
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
@@ -113,9 +123,6 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
 
-	if c.grpcPool != nil {
-		c.grpcPool.Close()
-	}
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
 		if err != nil {
@@ -126,15 +133,40 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.tableActorSystem = system.NewSystem()
 		err = c.tableActorSystem.Start(ctx)
 		if err != nil {
-			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
+			return errors.Annotate(
+				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+				"create table actor system")
 		}
+	}
+	if conf.Debug.EnableDBSorter {
+		if c.sorterSystem != nil {
+			err := c.sorterSystem.Stop()
+			if err != nil {
+				log.Warn("stop sorter system failed", zap.Error(err))
+			}
+		}
+		// Sorter dir has been set and checked when server starts.
+		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
+		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
+		c.sorterSystem = ssystem.NewSystem(sortDir, conf.Debug.DB)
+		err = c.sorterSystem.Start(ctx)
+		if err != nil {
+			return errors.Annotate(
+				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+				"create sorter system")
+		}
+	}
+	if c.grpcPool != nil {
+		c.grpcPool.Close()
 	}
 	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
 	if c.regionCache != nil {
 		c.regionCache.Close()
 	}
 	c.regionCache = tikv.NewRegionCache(c.pdClient)
-	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
+	log.Info("init capture",
+		zap.String("capture-id", c.info.ID),
+		zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
 
@@ -186,6 +218,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		RegionCache:      c.regionCache,
 		TimeAcquirer:     c.TimeAcquirer,
 		TableActorSystem: c.tableActorSystem,
+		SorterSystem:     c.sorterSystem,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -420,6 +453,13 @@ func (c *Capture) AsyncClose() {
 			log.Warn("stop table actor system failed", zap.Error(err))
 		}
 		c.tableActorSystem = nil
+	}
+	if c.sorterSystem != nil {
+		err := c.sorterSystem.Stop()
+		if err != nil {
+			log.Warn("stop sorter system failed", zap.Error(err))
+		}
+		c.sorterSystem = nil
 	}
 }
 

@@ -13,7 +13,7 @@
 
 package config
 
-import cerror "github.com/pingcap/ticdc/pkg/errors"
+import cerror "github.com/pingcap/tiflow/pkg/errors"
 
 // DBConfig represents leveldb sorter config.
 type DBConfig struct {
@@ -71,7 +71,7 @@ type DBConfig struct {
 	CleanupSpeedLimit int `toml:"cleanup-speed-limit" json:"cleanup-speed-limit"`
 }
 
-// ValidateAndAdjust validates and adjusts the sorter configuration
+// ValidateAndAdjust validates and adjusts the db configuration
 func (c *DBConfig) ValidateAndAdjust() error {
 	if c.Compression != "none" && c.Compression != "snappy" {
 		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.leveldb.compression must be \"none\" or \"snappy\"")
