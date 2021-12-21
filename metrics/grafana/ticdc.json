@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1640006571774,
+  "iteration": 1640100379607,
   "links": [],
   "panels": [
     {
@@ -2148,6 +2148,14 @@
               "intervalFactor": 1,
               "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "B"
+            },
+            {
+              "expr": "sum(ticdc_processor_resolved_ts_lag{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture,changefeed)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}-{{capture}}-resolvedts",
+              "refId": "C"
             }
           ],
           "thresholds": [],
@@ -3479,7 +3487,7 @@
           "datasource": "${DS_TEST-CLUSTER}",
           "fill": 1,
           "gridPos": {
-            "h": 8,
+            "h": 7,
             "w": 12,
             "x": 0,
             "y": 69
@@ -3835,7 +3843,7 @@
             {
               "alias": "Time",
               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-              "pattern": "Time",
+              "pattern": "Value",
               "type": "date"
             },
             {
@@ -3931,7 +3939,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 3
+            "y": 4
           },
           "hiddenSeries": false,
           "id": 218,
@@ -3964,10 +3972,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum (rate(ticdc_puller_txn_collect_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (instance, type)",
+              "expr": "sum (rate(ticdc_puller_txn_collect_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (changefeed, capture, type)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-{{type}}",
+              "legendFormat": "{{changefeed}}-{{capture}}-{{type}}",
               "refId": "A"
             }
           ],
@@ -4025,7 +4033,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 3
+            "y": 4
           },
           "hiddenSeries": false,
           "id": 229,
@@ -4058,10 +4066,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_puller_txn_collect_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (instance, type)",
+              "expr": "sum(ticdc_puller_txn_collect_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture, type)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-{{type}}",
+              "legendFormat": "{{changefeed}}-{{capture}}-{{type}}",
               "refId": "A"
             }
           ],
@@ -4119,7 +4127,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 7
+            "y": 8
           },
           "hiddenSeries": false,
           "id": 228,
@@ -4152,10 +4160,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_sorter_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (capture,changefeed,type)",
+              "expr": "sum(rate(ticdc_sorter_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (changefeed, capture, type)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{type}}",
+              "legendFormat": "{{changefeed}}-{{capture}}-{{type}}",
               "refId": "A"
             }
           ],
@@ -4213,7 +4221,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 7
+            "y": 8
           },
           "hiddenSeries": false,
           "id": 220,
@@ -4246,10 +4254,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_sorter_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (capture, changefeed, type)",
+              "expr": "sum(ticdc_sorter_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture, changefeed, type)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{type}}",
+              "legendFormat": "{{changefeed}}-{{capture}}-{{type}}",
               "refId": "A"
             }
           ],
@@ -4307,7 +4315,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 11
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 219,
@@ -4343,7 +4351,7 @@
               "expr": "sum(rate(ticdc_mounter_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (capture,changefeed)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -4401,7 +4409,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 11
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 224,
@@ -4434,10 +4442,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_mounter_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (instance)",
+              "expr": "sum(ticdc_mounter_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -4495,7 +4503,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 15
+            "y": 16
           },
           "hiddenSeries": false,
           "id": 223,
@@ -4528,10 +4536,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_sink_table_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (instance)",
+              "expr": "sum(rate(ticdc_sink_table_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (changefeed, capture)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -4589,7 +4597,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 15
+            "y": 16
           },
           "hiddenSeries": false,
           "id": 221,
@@ -4622,10 +4630,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_sink_table_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (instance)",
+              "expr": "sum(ticdc_sink_table_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -4683,7 +4691,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 19
+            "y": 20
           },
           "hiddenSeries": false,
           "id": 222,
@@ -4716,10 +4724,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_sink_buffer_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (instance)",
+              "expr": "sum(rate(ticdc_sink_buffer_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (changefeed, capture)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -4777,7 +4785,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 19
+            "y": 20
           },
           "hiddenSeries": false,
           "id": 226,
@@ -4810,10 +4818,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_sink_buffer_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (instance)",
+              "expr": "sum(ticdc_sink_buffer_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -4871,7 +4879,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 23
+            "y": 24
           },
           "hiddenSeries": false,
           "id": 227,
@@ -4905,11 +4913,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum (rate(ticdc_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (capture)",
+              "expr": "sum (rate(ticdc_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (changefeed, capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -4967,7 +4975,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 23
+            "y": 24
           },
           "hiddenSeries": false,
           "id": 225,
@@ -5001,11 +5009,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (capture, type)",
+              "expr": "sum(ticdc_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -5063,7 +5071,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 27
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 108,
@@ -5097,10 +5105,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_sink_total_flushed_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture)",
+              "expr": "sum(rate(ticdc_sink_total_flushed_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (changefeed, capture)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -5158,7 +5166,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 27
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 240,
@@ -5192,11 +5200,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_sink_total_flushed_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (capture, type)",
+              "expr": "sum(ticdc_sink_total_flushed_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed, capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -5251,7 +5259,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 5
       },
       "id": 13,
       "panels": [
@@ -5268,7 +5276,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 32
+            "y": 5
           },
           "hiddenSeries": false,
           "id": 15,
@@ -5392,7 +5400,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 32
+            "y": 5
           },
           "hiddenSeries": false,
           "id": 17,
@@ -5493,7 +5501,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 32
+            "y": 5
           },
           "hiddenSeries": false,
           "id": 28,
@@ -5608,7 +5616,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 39
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 29,
@@ -5704,7 +5712,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 39
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 5,
@@ -5798,7 +5806,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 39
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 107,
@@ -5907,7 +5915,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 46
+            "y": 19
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -5976,7 +5984,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 46
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 53,
@@ -6086,7 +6094,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 53
+            "y": 26
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -6155,7 +6163,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 53
+            "y": 26
           },
           "hiddenSeries": false,
           "id": 106,
@@ -6265,7 +6273,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 60
+            "y": 33
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -6334,7 +6342,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 60
+            "y": 33
           },
           "hiddenSeries": false,
           "id": 55,
@@ -6440,7 +6448,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 67
+            "y": 40
           },
           "hiddenSeries": false,
           "id": 31,
@@ -6555,7 +6563,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 67
+            "y": 40
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -6624,7 +6632,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 74
+            "y": 47
           },
           "hiddenSeries": false,
           "id": 177,
@@ -6720,7 +6728,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 74
+            "y": 47
           },
           "hiddenSeries": false,
           "id": 188,
@@ -6822,7 +6830,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 81
+            "y": 54
           },
           "hiddenSeries": false,
           "id": 251,
@@ -6926,7 +6934,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 81
+            "y": 54
           },
           "hiddenSeries": false,
           "id": 252,
@@ -7021,7 +7029,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 6
       },
       "id": 130,
       "panels": [
@@ -7505,7 +7513,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 6
+        "y": 7
       },
       "id": 58,
       "panels": [
@@ -7522,7 +7530,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 5
+            "y": 7
           },
           "id": 60,
           "legend": {
@@ -7648,7 +7656,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 5
+            "y": 7
           },
           "id": 74,
           "legend": {
@@ -7756,7 +7764,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 12
+            "y": 14
           },
           "id": 147,
           "legend": {
@@ -7855,7 +7863,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 12
+            "y": 14
           },
           "id": 194,
           "legend": {
@@ -8019,7 +8027,7 @@
             "h": 7,
             "w": 7,
             "x": 0,
-            "y": 19
+            "y": 21
           },
           "id": 152,
           "legend": {
@@ -8150,7 +8158,7 @@
             "h": 7,
             "w": 5,
             "x": 7,
-            "y": 19
+            "y": 21
           },
           "id": 153,
           "legend": {
@@ -8246,7 +8254,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 19
+            "y": 21
           },
           "id": 70,
           "legend": {
@@ -8348,7 +8356,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 26
+            "y": 28
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -8420,7 +8428,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 26
+            "y": 28
           },
           "id": 72,
           "legend": {
@@ -8515,7 +8523,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 26
+            "y": 28
           },
           "id": 140,
           "legend": {
@@ -8627,7 +8635,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 33
+            "y": 35
           },
           "id": 78,
           "legend": {
@@ -8735,7 +8743,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 33
+            "y": 35
           },
           "id": 76,
           "legend": {
@@ -8836,7 +8844,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 33
+            "y": 35
           },
           "id": 139,
           "legend": {
@@ -8934,7 +8942,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 40
+            "y": 42
           },
           "id": 143,
           "legend": {
@@ -9061,7 +9069,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 40
+            "y": 42
           },
           "id": 145,
           "legend": {
@@ -9182,7 +9190,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 47
+            "y": 49
           },
           "id": 141,
           "legend": {
@@ -9287,7 +9295,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 47
+            "y": 49
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -9358,7 +9366,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 47
+            "y": 49
           },
           "id": 142,
           "legend": {
@@ -9464,7 +9472,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 7
+        "y": 8
       },
       "id": 155,
       "panels": [
@@ -9521,8 +9529,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.32:47800",
-              "value": "172.16.5.32:47800"
+              "text": "172.16.5.37:47912",
+              "value": "172.16.5.37:47912"
             }
           },
           "seriesOverrides": [
@@ -9707,8 +9715,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.32:47800",
-              "value": "172.16.5.32:47800"
+              "text": "172.16.5.37:47912",
+              "value": "172.16.5.37:47912"
             }
           },
           "seriesOverrides": [],
@@ -9814,8 +9822,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.32:47800",
-              "value": "172.16.5.32:47800"
+              "text": "172.16.5.37:47912",
+              "value": "172.16.5.37:47912"
             }
           },
           "seriesOverrides": [
@@ -9936,8 +9944,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.32:47800",
-              "value": "172.16.5.32:47800"
+              "text": "172.16.5.37:47912",
+              "value": "172.16.5.37:47912"
             }
           },
           "seriesOverrides": [
@@ -10040,7 +10048,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 9
       },
       "id": 187,
       "panels": [
@@ -10606,5 +10614,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 27
+  "version": 28
 }
