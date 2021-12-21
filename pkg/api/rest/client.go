@@ -12,7 +12,7 @@ type HTTPMethod int
 
 // Valid HTTP methods.
 const (
-	HTTPMethodPost = iota
+	HTTPMethodPost = iota + 1
 	HTTPMethodPut
 	HTTPMethodGet
 	HTTPMethodDelete
