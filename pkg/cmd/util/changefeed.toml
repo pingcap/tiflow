@@ -37,10 +37,10 @@ column-selectors = [
     { matcher = ['test3.*', 'test4.*'], columns = ["!a", "column3"] },
 ]
 # 对于 MQ 类的 Sink，可以指定消息的协议格式
-# 协议目前支持 default, canal, avro 和 maxwell 四种，default 为 ticdc-open-protocol
+# 协议目前支持 open-protocol, canal, avro 和 maxwell 四种。
 # For MQ Sinks, you can configure the protocol of the messages sending to MQ
-# Currently the protocol support default, canal, avro and maxwell. Default is ticdc-open-protocol
-protocol = "default"
+# Currently the protocol support open-protocol, canal, avro and maxwell.
+protocol = "open-protocol"
 
 [cyclic-replication]
 # 是否开启环形复制
