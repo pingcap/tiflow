@@ -67,7 +67,7 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 	c.Assert(err, IsNil)
 
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: syncer.cfg, BaseConn: s.baseConn}
-	syncer.schemaTracker, err = schema.NewTracker(context.Background(), syncer.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn.BaseConn)
+	syncer.schemaTracker, err = schema.NewTracker(context.Background(), syncer.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
 	c.Assert(err, IsNil)
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 
