@@ -34,19 +34,15 @@ If we have a large number of tables in source, we will take too much time in che
 
 1. Auto_increment_ID only be checked in sharding mode.
     - If table exists auto increment ID, report a warning to user and tell them the method that can resolve the PK/UK conflict;
-        1. If you set PK to AUTO_INCREMENT, you must make sure that the primary key in sharding tables is not duplicated;
+        1. If you set PK to AUTO INCREMENT, you must make sure that the primary key in sharding tables is not duplicated;
         2. If sharding tables have duplicated PK, you can refer to [document](https://docs.pingcap.com/tidb-data-migration/stable/shard-merge-best-practices#handle-conflicts-of-auto-increment-primary-key).
+    - And if they have finished the resolving, such as manually created the table and removed AUTO INCREMENT, we should not report the warning.
 2. Dump_privilege will check different privileges according to different [consistency](https://docs.pingcap.com/tidb/stable/dumpling-overview#adjust-dumplings-data-consistency-options) on source.
     - For all consistency, we will check
-        - REPLICATION CLIENT (global)
         - SELECT (only INFORMATION_SCHEMA's tables and dump tables)
     - For flush consistency:
         - RELOAD (global)
     - For flush/lock consistency:
-        - LOCK TABLES (only dump tables)
-    
-    As we know, TiDB is different from MySQL in some place. If source is TiDB, we also need:
-    - PROCESS (global)
 3. Add OnlineDDLChecker to check if a DDL of tables in allow list exists in online-ddl stage when DM task is all mode and online-ddl is true.
 4. Enhance schema_of_shard_tables. 
     - If a task has passed the pre-checking when starting and exited, DM should keep the consistency during the task running. So we **don't check it** when restart the task.
@@ -58,6 +54,7 @@ If we have a large number of tables in source, we will take too much time in che
     - MySQL < 5.6.0
     - MySQL >= 8.0.0
     - Mariadb
+    - Others
 
 ### Restrict user usage
 1. Remove all `ignore_check_items` settings from the [document](https://docs.pingcap.com/tidb-data-migration/stable/precheck#disable-checking-items). If the following items are detected to be set in the configuration, a warning will be reported.
