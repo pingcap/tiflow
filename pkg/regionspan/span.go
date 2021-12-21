@@ -48,6 +48,12 @@ func (s ComparableSpan) String() string {
 	return Span(s).String()
 }
 
+// TableID returns a table id that is decoded from the span.
+func (s ComparableSpan) TableID() int64 {
+	_, b, _ := codec.DecodeBytes(s.Start, nil)
+	return tablecodec.DecodeTableID(b)
+}
+
 // Hack will set End as UpperBoundKey if End is Nil.
 func (s ComparableSpan) Hack() ComparableSpan {
 	s.Start, s.End = hackSpan(s.Start, s.End)

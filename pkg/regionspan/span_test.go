@@ -143,3 +143,16 @@ func TestSpanClone(t *testing.T) {
 	require.Equal(t, "[01, 02)", sp.String())
 	require.Equal(t, "[01, 09)", sp2.String())
 }
+
+func TestTableID(t *testing.T) {
+	t.Parallel()
+
+	span := ToComparableSpan(GetTableSpan(123))
+	require.EqualValues(t, 123, span.TableID())
+
+	span = ToComparableSpan(GetTableSpan(0))
+	require.EqualValues(t, 0, span.TableID())
+
+	span = ToComparableSpan(Span{Start: []byte("invalid")})
+	require.EqualValues(t, 0, span.TableID())
+}
