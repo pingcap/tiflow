@@ -33,10 +33,10 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	dmterror "github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	dmterror "github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 const (

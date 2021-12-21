@@ -17,7 +17,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/tiflow/integration/framework"
 	"github.com/stretchr/testify/require"
 )
 

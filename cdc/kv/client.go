@@ -29,14 +29,14 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/txnutil"
-	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/txnutil"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	tidbkv "github.com/tikv/client-go/v2/kv"
 	"github.com/tikv/client-go/v2/tikv"
@@ -130,21 +130,6 @@ func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.ComparableSpan,
 		ts:     ts,
 		rpcCtx: rpcCtx,
 	}
-}
-
-// partialClone clones part fields of singleRegionInfo, this is used when error
-// happens, kv client needs to recover region request from singleRegionInfo
-func (s *singleRegionInfo) partialClone() singleRegionInfo {
-	sri := singleRegionInfo{
-		verID:  s.verID,
-		span:   s.span.Clone(),
-		ts:     s.ts,
-		rpcCtx: &tikv.RPCContext{},
-	}
-	if s.rpcCtx != nil {
-		sri.rpcCtx.Addr = s.rpcCtx.Addr
-	}
-	return sri
 }
 
 type regionErrorInfo struct {
@@ -358,10 +343,6 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		}
 		err = version.CheckStoreVersion(ctx, c.pd, storeID)
 		if err != nil {
-			// TODO: we don't close gPRC conn here, let it goes into TransientFailure
-			// state. If the store recovers, the gPRC conn can be reused. But if
-			// store goes away forever, the conn will be leaked, we need a better
-			// connection pool.
 			log.Error("check tikv version failed", zap.Error(err), zap.Uint64("storeID", storeID))
 			return
 		}
@@ -369,10 +350,6 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		var streamClient cdcpb.ChangeData_EventFeedClient
 		streamClient, err = client.EventFeed(ctx)
 		if err != nil {
-			// TODO: we don't close gPRC conn here, let it goes into TransientFailure
-			// state. If the store recovers, the gPRC conn can be reused. But if
-			// store goes away forever, the conn will be leaked, we need a better
-			// connection pool.
 			err = cerror.WrapError(cerror.ErrTiKVEventFeed, err)
 			log.Info("establish stream to store failed, retry later", zap.String("addr", addr), zap.Error(err))
 			return
@@ -383,7 +360,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		}
 		log.Debug("created stream to store", zap.String("addr", addr))
 		return nil
-	}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(8), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(2), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	return
 }
 
@@ -1025,7 +1002,6 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		innerErr := eerr.err
 		if notLeader := innerErr.GetNotLeader(); notLeader != nil {
 			metricFeedNotLeaderCounter.Inc()
-			// TODO: Handle the case that notleader.GetLeader() is nil.
 			s.regionCache.UpdateLeader(errInfo.verID, notLeader.GetLeader(), errInfo.rpcCtx.AccessIdx)
 		} else if innerErr.GetEpochNotMatch() != nil {
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
@@ -1064,10 +1040,12 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 	case *sendRequestToStoreErr:
 		metricStoreSendRequestErr.Inc()
 	default:
+		//[TODO] Move all OnSendFail logic here
+		// We expect some unknown error to trigger RegionCache recheck its store state and change leader to peer to
+		// make some detection(peer may tell us where new leader is)
+		// RegionCache.OnSendFail is thread_safe inner.
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-		if errInfo.rpcCtx.Meta != nil {
-			s.regionCache.OnSendFail(bo, errInfo.rpcCtx, regionScheduleReload, err)
-		}
+		s.regionCache.OnSendFail(bo, errInfo.rpcCtx, regionScheduleReload, err)
 	}
 
 	failpoint.Inject("kvClientRegionReentrantErrorDelay", nil)
@@ -1165,6 +1143,9 @@ func (s *eventFeedSession) receiveFromStream(
 					zap.Uint64("storeID", storeID),
 					zap.Error(err),
 				)
+				// Note that pd need at lease 10s+ to tag a kv node as disconnect if kv node down
+				// tikv raft need wait (raft-base-tick-interval * raft-election-timeout-ticks) 10s to start a new
+				// election
 			}
 
 			// Use the same delay mechanism as `stream.Send` error handling, since
