@@ -796,6 +796,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
+
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 

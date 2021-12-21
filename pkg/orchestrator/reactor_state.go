@@ -100,6 +100,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 }
 
 // GetPatches implements the ReactorState interface
+// Every []DataPatch slice in [][]DataPatch slice is the patches of a ChangefeedReactorState
 func (s *GlobalReactorState) GetPatches() [][]DataPatch {
 	pendingPatches := s.pendingPatches
 	for _, changefeedState := range s.Changefeeds {
