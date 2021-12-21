@@ -25,6 +25,7 @@ import (
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -43,12 +44,12 @@ var _ actor.Actor = (*CompactActor)(nil)
 
 // NewCompactActor returns a compactor actor.
 func NewCompactActor(
-	id int, db db.DB, cfg *config.DBConfig,
-	wg *sync.WaitGroup, captureAddr string,
+	id int, db db.DB, wg *sync.WaitGroup, captureAddr string,
 ) (*CompactActor, actor.Mailbox, error) {
 	wg.Add(1)
 	idTag := strconv.Itoa(id)
-	mb := actor.NewMailbox(actor.ID(id), cfg.Concurrency)
+	// Compact is CPU intensive, set capacity to 1 to reduce unnecessary tasks.
+	mb := actor.NewMailbox(actor.ID(id), 1)
 	return &CompactActor{
 		id:       actor.ID(id),
 		db:       db,
@@ -108,6 +109,7 @@ func NewCompactScheduler(
 	}
 }
 
+// CompactScheduler schedules compact tasks to compactors.
 type CompactScheduler struct {
 	// A router to compactors.
 	router *actor.Router
@@ -120,8 +122,9 @@ func (s *CompactScheduler) maybeCompact(id actor.ID, deleteCount int) bool {
 		return false
 	}
 	err := s.router.Send(id, actormsg.TickMessage())
-	if err != nil {
-		// An ongoing compaction may block compactor and cause channel full.
+	// An ongoing compaction may block compactor and cause channel full,
+	// skip send the task as there is a pending task.
+	if err != nil && cerrors.ErrMailboxFull.NotEqual(err) {
 		log.Warn("schedule compact failed", zap.Error(err))
 		return false
 	}

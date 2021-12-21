@@ -46,7 +46,7 @@ func TestCompactorPoll(t *testing.T) {
 	require.Nil(t, err)
 	mockDB := mockCompactDB{DB: db, compact: make(chan struct{}, 1)}
 	closedWg := new(sync.WaitGroup)
-	compactor, _, err := NewCompactActor(1, &mockDB, cfg, closedWg, "")
+	compactor, _, err := NewCompactActor(1, &mockDB, closedWg, "")
 	require.Nil(t, err)
 
 	closed := !compactor.Poll(ctx, []actormsg.Message{actormsg.TickMessage()})
@@ -73,7 +73,7 @@ func TestComactorContextCancel(t *testing.T) {
 	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewCompactActor(0, db, cfg, closedWg, "")
+	ldb, _, err := NewCompactActor(0, db, closedWg, "")
 	require.Nil(t, err)
 
 	cancel()
@@ -101,4 +101,13 @@ func TestScheduleCompact(t *testing.T) {
 	msg, ok := mb.Receive()
 	require.True(t, ok)
 	require.EqualValues(t, actormsg.TickMessage(), msg)
+
+	// Skip sending unnecessary tasks.
+	require.True(t, compact.maybeCompact(mb.ID(), 3))
+	require.True(t, compact.maybeCompact(mb.ID(), 3))
+	msg, ok = mb.Receive()
+	require.True(t, ok)
+	require.EqualValues(t, actormsg.TickMessage(), msg)
+	_, ok = mb.Receive()
+	require.False(t, ok)
 }

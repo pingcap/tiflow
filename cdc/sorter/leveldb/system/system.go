@@ -143,7 +143,7 @@ func (s *System) Start(ctx context.Context) error {
 		s.dbs = append(s.dbs, db)
 		// Create and spawn compactor actor.
 		compactor, cmb, err :=
-			lsorter.NewCompactActor(id, db, s.cfg, s.closedWg, captureAddr)
+			lsorter.NewCompactActor(id, db, s.closedWg, captureAddr)
 		if err != nil {
 			return errors.Trace(err)
 		}
