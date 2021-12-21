@@ -411,7 +411,7 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	s := sinkURI.Query().Get("protocol")
+	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
 	}
