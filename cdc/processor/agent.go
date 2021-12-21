@@ -288,6 +288,9 @@ func (a *agentImpl) trySendMessage(
 	topic p2p.Topic,
 	value interface{},
 ) (bool, error) {
+	// TODO (zixiong): abstract this function out together with the similar method in cdc/owner/scheduler.go
+	// We probably need more advanced logic to handle and mitigate complex failure situations.
+
 	client := a.messageRouter.GetClient(target)
 	if client == nil {
 		a.printNoClientWarning(target)
@@ -297,6 +300,13 @@ func (a *agentImpl) trySendMessage(
 	seq, err := client.TrySendMessage(ctx, topic, value)
 	if err != nil {
 		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
+			return false, nil
+		}
+		if cerror.ErrPeerMessageClientClosed.Equal(err) {
+			log.Warn("peer messaging client is closed while trying to send a message through it. "+
+				"Report a bug if this warning repeats",
+				zap.String("changefeed-id", a.changeFeed),
+				zap.String("target", target))
 			return false, nil
 		}
 		return false, errors.Trace(err)
