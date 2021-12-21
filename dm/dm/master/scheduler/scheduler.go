@@ -813,6 +813,20 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 		m[stage.Source] = stage
 	}
 
+	// 6. check if we can resolve load task by scheduling the source to the worker which has dump files on local disk.
+	for _, cfg := range newCfgs {
+		source := cfg.SourceID
+		worker, ok := s.bounds[source]
+		if !ok {
+			continue
+		}
+
+		if err2 := s.tryResolveLoadTask(worker.BaseInfo().Name, source); err2 != nil {
+			s.logger.Error("in AddSubTasks, error when try resolve load task",
+				zap.String("worker", worker.BaseInfo().Name),
+				zap.String("source", source))
+		}
+	}
 	return nil
 }
 
@@ -2269,14 +2283,37 @@ func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, stri
 	return "", ""
 }
 
-// hasLoadTaskByWorkerAndSource check whether there is a load subtask for the worker and source.
+// hasLoadTaskByWorkerAndSource check whether there is an existing load subtask for the worker and source.
 func (s *Scheduler) hasLoadTaskByWorkerAndSource(worker, source string) bool {
-	for _, sourceWorkerMap := range s.loadTasks {
-		if workerName, ok := sourceWorkerMap[source]; ok && workerName == worker {
+	for taskName, sourceWorkerMap := range s.loadTasks {
+		// don't consider removed subtask
+		subtasksV, ok := s.subTaskCfgs.Load(taskName)
+		if !ok {
+			continue
+		}
+		subtasks := subtasksV.(map[string]config.SubTaskConfig)
+		if _, ok2 := subtasks[source]; !ok2 {
+			continue
+		}
+
+		if workerName, ok2 := sourceWorkerMap[source]; ok2 && workerName == worker {
 			return true
 		}
 	}
 	return false
+}
+
+func (s *Scheduler) tryResolveLoadTask(originWorker, originSource string) error {
+	if s.hasLoadTaskByWorkerAndSource(originWorker, originSource) {
+		return nil
+	}
+
+	worker, source := s.getNextLoadTaskTransfer(originWorker, originSource)
+	if worker == "" && source == "" {
+		return nil
+	}
+
+	return s.transferWorkerAndSource(originWorker, originSource, worker, source)
 }
 
 func (s *Scheduler) handleLoadTaskDel(loadTask ha.LoadTask) error {
@@ -2296,16 +2333,7 @@ func (s *Scheduler) handleLoadTaskDel(loadTask ha.LoadTask) error {
 		delete(s.loadTasks, loadTask.Task)
 	}
 
-	if s.hasLoadTaskByWorkerAndSource(originWorker, loadTask.Source) {
-		return nil
-	}
-
-	worker, source := s.getNextLoadTaskTransfer(originWorker, loadTask.Source)
-	if worker == "" && source == "" {
-		return nil
-	}
-
-	return s.transferWorkerAndSource(originWorker, loadTask.Source, worker, source)
+	return s.tryResolveLoadTask(originWorker, loadTask.Source)
 }
 
 func (s *Scheduler) handleLoadTaskPut(loadTask ha.LoadTask) {
