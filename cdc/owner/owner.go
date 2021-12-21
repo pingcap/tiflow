@@ -278,7 +278,7 @@ func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
 
 // Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
 func (o *Owner) Bootstrap(state *orchestrator.GlobalReactorState) {
-	log.Info("Start bootstrapping", zap.Any("state", state))
+	log.Info("Start bootstrapping")
 	fixChangefeedInfos(state)
 }
 
