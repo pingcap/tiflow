@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -29,8 +30,9 @@ type Server struct {
 
 	etcdClient *clientv3.Client
 	session    *concurrency.Session
-	election   *concurrency.Election
+	election   cluster.Election
 	leaderName atomic.String
+	resignFn   context.CancelFunc
 	members    []*Member
 
 	// sched scheduler
@@ -268,7 +270,14 @@ func (s *Server) reset(ctx context.Context) error {
 	}
 
 	s.session = sess
-	s.election = concurrency.NewElection(sess, adapter.MasterCampaignKey.Path())
+	s.election, err = cluster.NewEtcdElection(ctx, s.etcdClient, sess, cluster.EtcdElectionConfig{
+		CreateSessionTimeout: s.cfg.RPCTimeout, // FIXME (zixiong): use a separate timeout here
+		TTL:                  s.cfg.KeepAliveTTL,
+		Prefix:               adapter.MasterCampaignKey.Path(),
+	})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

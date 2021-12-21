@@ -47,6 +47,10 @@ var (
 	ErrMasterCampaignLeader         = errors.Normalize("master campaign to be leader failed", errors.RFCCodeText("DFLOW:ErrMasterCampaignLeader"))
 	ErrMasterSessionDone            = errors.Normalize("master session is done", errors.RFCCodeText("DFLOW:ErrMasterSessionDone"))
 
+	// master etcd related errors
+	ErrMasterEtcdCreateSessionFail    = errors.Normalize("failed to create Etcd session", errors.RFCCodeText("DFLOW:ErrMasterEtcdCreateSessionFail"))
+	ErrMasterEtcdElectionCampaignFail = errors.Normalize("failed to campaign for leader", errors.RFCCodeText("DFLOW:ErrMasterEtcdElectionCampaignFail"))
+
 	// executor related errors
 	ErrExecutorConfigParseFlagSet = errors.Normalize("parse config flag set failed", errors.RFCCodeText("DFLOW:ErrExecutorConfigParseFlagSet"))
 	ErrExecutorConfigInvalidFlag  = errors.Normalize("'%s' is an invalid flag", errors.RFCCodeText("DFLOW:ErrExecutorConfigInvalidFlag"))
