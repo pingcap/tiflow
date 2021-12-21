@@ -11,7 +11,7 @@ body:
           required: true
         - label: Googled your question
           required: true
-        - label: Searched open and closed [GitHub issues](https://github.com/pingcap/ticdc/issues?q=is%3Aissue)
+        - label: Searched open and closed [GitHub issues](https://github.com/pingcap/tiflow/issues?q=is%3Aissue)
           required: true
         - label:  Read the [documentation](https://docs.pingcap.com/tidb/stable)
           required: true
