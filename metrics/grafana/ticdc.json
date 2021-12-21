@@ -1343,7 +1343,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_etcd_worker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, capture)",
+              "expr": "sum(rate(ticdc_etcd_worker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "interval": "",
@@ -1353,7 +1353,7 @@
               "refId": "A"
             }
           ],
-          "title": "EtcdWorker txn size ",
+          "title": "EtcdWorker txn size",
           "tooltip": {
             "show": true,
             "showHistogram": true
