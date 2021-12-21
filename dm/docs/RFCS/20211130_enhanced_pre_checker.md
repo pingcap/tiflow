@@ -28,15 +28,15 @@ If we have a large number of tables in source, we will take too much time in che
     - table_schema
     - schema_of_shard_tables
     - auto_increment_ID
-2. We casn adjust the concurrency by table numbers.
+2. We can adjust the concurrency by table numbers.
 
 ### Optimize some check
 
-1. **auto_increment_ID** only checked in sharding mode.
-    - If table exist auto increment ID, report a warning to user and tell them the method that can resolve the PK/UK conflict;
+1. Auto_increment_ID only be checked in sharding mode.
+    - If table exists auto increment ID, report a warning to user and tell them the method that can resolve the PK/UK conflict;
         1. If you set PK to AUTO_INCREMENT, you must make sure that the primary key in sharding tables is not duplicated;
         2. If sharding tables have duplicated PK, you can refer to [document](https://docs.pingcap.com/tidb-data-migration/stable/shard-merge-best-practices#handle-conflicts-of-auto-increment-primary-key).
-2. Dump_privilege will check different privileges according to different [consistency](https://docs.pingcap.com/tidb/stable/dumpling-overview#adjust-dumplings-data-consistency-options) and downstream on source.
+2. Dump_privilege will check different privileges according to different [consistency](https://docs.pingcap.com/tidb/stable/dumpling-overview#adjust-dumplings-data-consistency-options) on source.
     - For all consistency, we will check
         - REPLICATION CLIENT (global)
         - SELECT (only INFORMATION_SCHEMA's tables and dump tables)
@@ -50,11 +50,11 @@ If we have a large number of tables in source, we will take too much time in che
 3. Add OnlineDDLChecker to check if a DDL of tables in allow list exists in online-ddl stage when DM task is all mode and online-ddl is true.
 4. Enhance schema_of_shard_tables. 
     - If a task has passed the pre-checking when starting and exited, DM should keep the consistency during the task running. So we **don't check it** when restart the task.
-    - If not exist checkpoint:
+    - If there does not exist checkpoints:
         - For all/full mode (pessimistic task): we keep **the original check**;
         - For all/full mode (optimistic task): we check whether the shard tables schema meets **the definition of [Optimistic Schema Compatibility](20191209_optimistic_ddl.md)**. If that meets, we can create tables by the compatible schema in the dump stage.
         - For incremental mode: **not check** the sharding tables’ schema, because the table schema obtained from show create table is not the schema at the point of binlog.
-5.  Version checker will report a warning in the following cases:
+5. Version checker will report a warning in the following cases:
     - MySQL < 5.6.0
     - MySQL >= 8.0.0
     - Mariadb
@@ -71,7 +71,7 @@ If we have a large number of tables in source, we will take too much time in che
     - binlog_format
     - binlog_row_image
     - online_ddl(new added)
-4. If task is full/increment/all mode, the following items will be forced to check:
+4. The following items will be forced to check:
     - version
     - table_schema
     - auto_increment_ID(only for sharding mode)
@@ -82,7 +82,7 @@ If we have a large number of tables in source, we will take too much time in che
 
 ### Move checker from [tidb-tools](https://github.com/pingcap/tidb-tools/tree/master/pkg/check) to DM
 
-After this change, checker is deeply coupled to DM, both with dump Privilege and optimistic pessimistic coordination. And checker is only used by DM (TiCDC and TiDB all don’t use it). So removing checkers from tidb-tools to DM is more convenient for development work。
+After this change, checker is deeply coupled to DM, both with dump privilege checking and optimistic pessimistic coordination. And checker is only used by DM (TiCDC and TiDB all don’t use it). So removing checkers from tidb-tools to DM is more convenient for development work。
 
 In detail, we do not take the initiative to submit pr to the tidb-tools repository. Instead, we will replace the checker in tidb-tools step by step during the development of this feature.
 
