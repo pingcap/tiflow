@@ -73,9 +73,9 @@ If we have a large number of tables in source, we will take too much time in che
     - table_schema
     - auto_increment_ID(only for sharding mode)
 5. Make the fail state more gentle, which is from `StateFailure` to `StateWarning`.
-    - checkVersion(same as version)
-    - checkAutoIncrementKey(same as auto_increment_ID)
-    - checkPK/UK
+    - VersionChecker(same as version)
+    - AutoIncrementKeyChecker(same as auto_increment_ID)
+    - PK/UKChecker
 
 ### Move checker from [tidb-tools](https://github.com/pingcap/tidb-tools/tree/master/pkg/check) to DM
 
