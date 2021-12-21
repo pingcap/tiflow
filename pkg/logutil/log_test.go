@@ -85,7 +85,7 @@ func TestZapInternalErrorOutput(t *testing.T) {
 		error     bool
 	}{
 		{"test valid error output path", "stderr", false},
-		{"test invalid error output path", "/tmp/not-there/foo.log", true},
+		{"test invalid error output path", filepath.Join(t.TempDir(), "/not-there/foo.log"), true},
 	}
 
 	dir, err := ioutil.TempDir("", "zap-error-test")
