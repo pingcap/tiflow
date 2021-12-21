@@ -705,7 +705,6 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 			if status.GetUnit() != pb.UnitType_Sync {
 				return terror.ErrSchedulerRequireRunningTaskInSyncUnit.Generate(runningTasks, source)
 			}
-			continue
 		}
 
 		// pause this running tasks
@@ -719,17 +718,16 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		keepQuery := true
 		maxRetryNum := 10
 		for keepQuery && maxRetryNum > 0 {
-			maxRetryNum -= 1
+			maxRetryNum--
 			resp, err := queryWorkerF()
 			if err != nil {
 				return terror.Annotatef(err, "failed to query worker: %s status", oldWorker.baseInfo.Name)
 			}
 			for _, status := range resp.QueryStatus.GetSubTaskStatus() {
 				if status.Stage != pb.Stage_Paused {
-					s.logger.Warn(
+					s.logger.Info(
 						"waiting task pausing", zap.String("task", status.Name), zap.Int("retry times", 10-maxRetryNum))
 				}
-				continue
 			}
 			keepQuery = false
 		}
