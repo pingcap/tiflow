@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb/br/pkg/version"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -30,40 +29,26 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	dumpPrivileges = map[mysql.PrivilegeType]struct{}{
-		mysql.SelectPriv: {},
-	}
-	replicationPrivileges = map[mysql.PrivilegeType]struct{}{
-		mysql.ReplicationClientPriv: {},
-		mysql.ReplicationSlavePriv:  {},
-	}
-)
-
-/*****************************************************/
-
 // SourceDumpPrivilegeChecker checks dump privileges of source DB.
 type SourceDumpPrivilegeChecker struct {
 	db          *sql.DB
 	dbinfo      *dbutil.DBConfig
 	checkTables map[string][]string
 	consistency string
-	serverType  version.ServerType
 }
 
 // NewSourceDumpPrivilegeChecker returns a RealChecker.
-func NewSourceDumpPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig, checkTables map[string][]string, consistency string, serverType version.ServerType) RealChecker {
+func NewSourceDumpPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig, checkTables map[string][]string, consistency string) RealChecker {
 	return &SourceDumpPrivilegeChecker{
 		db:          db,
 		dbinfo:      dbinfo,
 		checkTables: checkTables,
 		consistency: consistency,
-		serverType:  serverType,
 	}
 }
 
 // Check implements the RealChecker interface.
-// We only check RELOAD, SELECT privileges.
+// We check RELOAD, SELECT, LOCK TABLES privileges according to consistency.
 func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
@@ -78,19 +63,19 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 		return result
 	}
 
+	dumpPrivileges := map[mysql.PrivilegeType]struct{}{
+		mysql.SelectPriv: {},
+	}
+
 	switch pc.consistency {
 	case "auto", "flush":
-		if pc.serverType == version.ServerTypeMySQL {
-			dumpPrivileges[mysql.ReloadPriv] = struct{}{}
-			dumpPrivileges[mysql.LockTablesPriv] = struct{}{}
-		}
+		dumpPrivileges[mysql.ReloadPriv] = struct{}{}
+		dumpPrivileges[mysql.LockTablesPriv] = struct{}{}
 	case "lock":
 		dumpPrivileges[mysql.LockTablesPriv] = struct{}{}
 	}
-	if pc.serverType == version.ServerTypeTiDB {
-		dumpPrivileges[mysql.ProcessPriv] = struct{}{}
-	}
-	lackGrants := genDumpGrants(pc.checkTables)
+
+	lackGrants := genDumpGrants(dumpPrivileges, pc.checkTables)
 	verifyPrivileges(result, grants, lackGrants)
 	return result
 }
@@ -128,7 +113,11 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 		markCheckError(result, err)
 		return result
 	}
-	lackGrants := genReplicationGrants()
+	replicationPrivileges := map[mysql.PrivilegeType]struct{}{
+		mysql.ReplicationClientPriv: {},
+		mysql.ReplicationSlavePriv:  {},
+	}
+	lackGrants := genReplicationGrants(replicationPrivileges)
 	verifyPrivileges(result, grants, lackGrants)
 	return result
 }

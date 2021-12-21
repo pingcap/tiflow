@@ -119,9 +119,14 @@ func (v MySQLVersion) String() string {
 	return fmt.Sprintf("%d.%d.%d", v[0], v[1], v[2])
 }
 
-// IsMariaDB tells whether the version is from mariadb.
+// IsMariaDB tells whether the version is mariadb.
 func IsMariaDB(version string) bool {
 	return strings.Contains(strings.ToUpper(version), "MARIADB")
+}
+
+// IsTiDBFromVersion tells whether the version is tidb.
+func IsTiDBFromVersion(version string) bool {
+	return strings.Contains(strings.ToUpper(version), "TIDB")
 }
 
 func markCheckError(result *Result, err error) {
@@ -164,10 +169,10 @@ func genExpectGrants(privileges map[pmysql.PrivilegeType]struct{}, checkTables m
 	return lackGrants
 }
 
-func genReplicationGrants() map[pmysql.PrivilegeType]map[string]map[string]struct{} {
+func genReplicationGrants(replicationPrivileges map[pmysql.PrivilegeType]struct{}) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
 	return genExpectGrants(replicationPrivileges, nil)
 }
 
-func genDumpGrants(checkTables map[string][]string) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
+func genDumpGrants(dumpPrivileges map[pmysql.PrivilegeType]struct{}, checkTables map[string][]string) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
 	return genExpectGrants(dumpPrivileges, checkTables)
 }

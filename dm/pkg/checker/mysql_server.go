@@ -34,8 +34,7 @@ func NewMySQLVersionChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 }
 
 // SupportedVersion defines the MySQL/MariaDB version that DM/syncer supports
-// * 5.6.0 <= MySQL Version
-// * 10.1.2 <= Mariadb Version.
+// * 5.6.0 <= MySQL Version < 8.0.0
 var SupportedVersion = map[string]struct {
 	Min MySQLVersion
 	Max MySQLVersion
@@ -62,34 +61,38 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 		return result
 	}
 
-	pc.checkVersion(value, result)
+	err2 := pc.checkVersion(value, result)
+	if err2 != nil {
+		result.Errors = append(result.Errors, err2)
+	}
 	return result
 }
 
-func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) {
+func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) *Error {
 	needVersion := SupportedVersion["mysql"]
 	if IsMariaDB(value) {
-		result.Errors = append(result.Errors, NewWarn("Migrating from MariaDB is experimentally supported"))
-		return
+		return NewWarn("Migrating from MariaDB is experimentally supported")
+	}
+	if IsTiDBFromVersion(value) {
+		return NewWarn("Not support migrate from TiDB")
 	}
 
 	version, err := toMySQLVersion(value)
 	if err != nil {
 		markCheckError(result, err)
-		return
+		return nil
 	}
 
 	if !version.Ge(needVersion.Min) {
-		result.Errors = append(result.Errors, NewWarn("version suggested at least %v but got %v", needVersion.Min, version))
-		return
+		return NewWarn("version suggested at least %v but got %v", needVersion.Min, version)
 	}
 
 	if !version.Lt(needVersion.Max) {
-		result.Errors = append(result.Errors, NewWarn("version suggested less than %v but got %v", needVersion.Max, version))
-		return
+		return NewWarn("version suggested less than %v but got %v", needVersion.Max, version)
 	}
 
 	result.State = StateSuccess
+	return nil
 }
 
 // Name implements the RealChecker interface.

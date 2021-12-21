@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	tc "github.com/pingcap/check"
+	"github.com/pingcap/tidb/parser/mysql"
 )
 
 func TestClient(t *testing.T) {
@@ -155,12 +156,14 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 			dumpState: StateSuccess,
 		},
 	}
-
+	dumpPrivileges := map[mysql.PrivilegeType]struct{}{
+		mysql.SelectPriv: {},
+	}
 	for _, cs := range cases {
 		result := &Result{
 			State: StateFailure,
 		}
-		dumpLackGrants := genDumpGrants(cs.checkTables)
+		dumpLackGrants := genDumpGrants(dumpPrivileges, cs.checkTables)
 		verifyPrivileges(result, cs.grants, dumpLackGrants)
 		c.Assert(result.State, tc.Equals, cs.dumpState)
 	}
@@ -252,11 +255,15 @@ func (t *testCheckSuite) TestVerifyReplicationPrivileges(c *tc.C) {
 		},
 	}
 
+	replicationPrivileges := map[mysql.PrivilegeType]struct{}{
+		mysql.ReplicationClientPriv: {},
+		mysql.ReplicationSlavePriv:  {},
+	}
 	for _, cs := range cases {
 		result := &Result{
 			State: StateFailure,
 		}
-		replicationLackGrants := genReplicationGrants()
+		replicationLackGrants := genReplicationGrants(replicationPrivileges)
 		verifyPrivileges(result, cs.grants, replicationLackGrants)
 		c.Assert(result.State, tc.Equals, cs.replicationState)
 	}
