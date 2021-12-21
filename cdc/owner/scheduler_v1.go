@@ -309,6 +309,11 @@ func (s *oldScheduler) handleJobs(jobs []*schedulerJob) {
 func (s *oldScheduler) cleanUpFinishedOperations() {
 	for captureID := range s.state.TaskStatuses {
 		s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+			if status == nil {
+				log.Warn("task status of the capture is not found, may be the key in etcd was deleted.")
+				return status, false, nil
+			}
+
 			changed := false
 			for tableID, operation := range status.Operation {
 				if operation.Status == model.OperFinished {
