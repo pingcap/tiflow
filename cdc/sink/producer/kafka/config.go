@@ -184,7 +184,7 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		producerConfig.AutoCreate = autoCreate
 	}
 
-	s = params.Get("protocol")
+	s = params.Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
 	}
