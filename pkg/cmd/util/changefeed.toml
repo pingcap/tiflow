@@ -37,7 +37,7 @@ column-selectors = [
     { matcher = ['test3.*', 'test4.*'], columns = ["!a", "column3"] },
 ]
 # 对于 MQ 类的 Sink，可以指定消息的协议格式
-# 协议目前支持 open-protocol, canal, avro 和 maxwell 四种。
+# 协议目前支持 open-protocol, canal, canal-json, avro 和 maxwell 五种。
 # For MQ Sinks, you can configure the protocol of the messages sending to MQ
 # Currently the protocol support open-protocol, canal, avro and maxwell.
 protocol = "open-protocol"
