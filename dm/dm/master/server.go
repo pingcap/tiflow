@@ -1541,7 +1541,10 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
 		dbutil.TableName(metaSchema, cputil.SyncerOnlineDDL(taskName))))
 
-	_, err = dbConn.ExecuteSQL(ctctx, nil, taskName, sqls)
+	if _, err = dbConn.ExecuteSQL(ctctx, nil, taskName, sqls); err != nil {
+		return err
+	}
+	err = s.scheduler.RemoveLoadTask(taskName)
 	if err == nil {
 		metrics.RemoveDDLPending(taskName)
 	}
