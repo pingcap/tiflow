@@ -14,10 +14,10 @@
 package checker
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -104,7 +104,7 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check replication privileges of source DB",
-		State: StateFailure,
+		State: StateSuccess,
 		Extra: fmt.Sprintf("address of db instance - %s:%d", pc.dbinfo.Host, pc.dbinfo.Port),
 	}
 
@@ -118,7 +118,11 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 		mysql.ReplicationSlavePriv:  {},
 	}
 	lackGrants := genReplicationGrants(replicationPrivileges)
-	verifyPrivileges(result, grants, lackGrants)
+	err2 := verifyPrivileges(result, grants, lackGrants)
+	if err2 != nil {
+		result.Errors = append(result.Errors, err2)
+		result.State = StateFailure
+	}
 	return result
 }
 
@@ -127,23 +131,21 @@ func (pc *SourceReplicatePrivilegeChecker) Name() string {
 	return "source db replication privilege checker"
 }
 
-// TODO: if we add more privilege in future, we might add special checks (globally granted?) for that new privilege.
-func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.PrivilegeType]map[string]map[string]struct{}) {
-	result.State = StateFailure
+func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.PrivilegeType]map[string]map[string]struct{}) *Error {
 	if len(grants) == 0 {
-		result.Errors = append(result.Errors, NewError("there is no such grant defined for current user on host '%%'"))
-		return
+		return NewError("there is no such grant defined for current user on host '%%'")
 	}
 
 	var user string
 
 	p := parser.New()
 	for i, grant := range grants {
-		// get username and hostname
+		if len(lackGrants) == 0 {
+			break
+		}
 		node, err := p.ParseOneStmt(grant, "", "")
 		if err != nil {
-			result.Errors = append(result.Errors, NewError(errors.Annotatef(err, "grant %s, grant after replace %s", grants[i], grant).Error()))
-			return
+			return NewError(errors.Annotatef(err, "grant %s, grant after replace %s", grants[i], grant).Error())
 		}
 		grantStmt, ok := node.(*ast.GrantStmt)
 		if !ok {
@@ -151,14 +153,12 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 			case *ast.GrantProxyStmt, *ast.GrantRoleStmt:
 				continue
 			default:
-				result.Errors = append(result.Errors, NewError("%s is not grant statement", grants[i]))
-				return
+				return NewError("%s is not grant statement", grants[i])
 			}
 		}
 
 		if len(grantStmt.Users) == 0 {
-			result.Errors = append(result.Errors, NewError("grant has no user %s", grantStmt.Text()))
-			return
+			return NewError("grant has no user %s", grantStmt.Text())
 		} else if user == "" {
 			// show grants will only output grants for requested user
 			user = grantStmt.Users[0].User.Username
@@ -172,13 +172,10 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 			for _, privElem := range grantStmt.Privs {
 				switch privElem.Priv {
 				case mysql.AllPriv:
-					result.State = StateSuccess
-					return
-				// some privileges are only effective on global level. in other words, GRANT ALL ON test.* is not enough for them
-				// mysql.ReloadPriv, mysql.ReplicationClientPriv, mysql.ReplicationSlavePriv
-				// https://dev.mysql.com/doc/refman/5.7/en/grant.html#grant-global-privileges
-				case mysql.ReloadPriv, mysql.ReplicationClientPriv, mysql.ReplicationSlavePriv, mysql.SelectPriv,
-					mysql.LockTablesPriv, mysql.ProcessPriv:
+					return nil
+				default:
+					// some privileges are only effective on global level. in other words, GRANT ALL ON test.* is not enough for them
+					// https://dev.mysql.com/doc/refman/5.7/en/grant.html#grant-global-privileges
 					if _, ok := lackGrants[privElem.Priv]; !ok {
 						continue
 					}
@@ -239,24 +236,34 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 	}
 
 	if len(lackGrants) != 0 {
-		lackGrantsStr := make([]string, 0, len(lackGrants))
+		var buffer bytes.Buffer
 		for g, tableMap := range lackGrants {
-			lackGrantsStr = append(lackGrantsStr, fmt.Sprintf("lack of %s privilege", mysql.Priv2Str[g]))
-			lackGrantsStr[len(lackGrantsStr)-1] += ":"
+			buffer.WriteString("lack of ")
+			buffer.WriteString(mysql.Priv2Str[g])
+			buffer.WriteString(" privilege")
+			i := 0
 			for schema, tables := range tableMap {
-				lackGrantsStr[len(lackGrantsStr)-1] += "{schema(" + schema + "), table("
-				for table := range tables {
-					lackGrantsStr[len(lackGrantsStr)-1] += table + ","
+				if i == 0 {
+					buffer.WriteString(": {")
 				}
-				lackGrantsStr[len(lackGrantsStr)-1] += ")}, "
+				j := 0
+				for table := range tables {
+					buffer.WriteString(dbutil.TableName(schema, table))
+					if j != len(tables)-1 {
+						buffer.WriteString(", ")
+					}
+					j++
+				}
+				if i == len(tableMap)-1 {
+					buffer.WriteString("}")
+				}
+				i++
 			}
+			buffer.WriteString(";")
 		}
-		privileges := strings.Join(lackGrantsStr, ",")
-		result.Errors = append(result.Errors, NewError(privileges))
+		privileges := buffer.String()
 		result.Instruction = "You need grant related privileges."
-		log.Info(privileges)
-		return
+		return NewError(privileges)
 	}
-
-	result.State = StateSuccess
+	return nil
 }

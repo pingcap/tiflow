@@ -63,7 +63,6 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 		},
 		{
 			grants: []string{ // have privileges
-				// "GRANT REPLICATION SLAVE, REPLICATION CLIENT, SELECT ON *.* TO 'user'@'%'",
 				"GRANT SELECT ON *.* TO 'user'@'%'",
 			},
 			dumpState: StateSuccess,
@@ -164,8 +163,8 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 			State: StateFailure,
 		}
 		dumpLackGrants := genDumpGrants(dumpPrivileges, cs.checkTables)
-		verifyPrivileges(result, cs.grants, dumpLackGrants)
-		c.Assert(result.State, tc.Equals, cs.dumpState)
+		err := verifyPrivileges(result, cs.grants, dumpLackGrants)
+		c.Assert(err == nil, tc.Equals, cs.dumpState == StateSuccess)
 	}
 }
 
@@ -264,7 +263,7 @@ func (t *testCheckSuite) TestVerifyReplicationPrivileges(c *tc.C) {
 			State: StateFailure,
 		}
 		replicationLackGrants := genReplicationGrants(replicationPrivileges)
-		verifyPrivileges(result, cs.grants, replicationLackGrants)
-		c.Assert(result.State, tc.Equals, cs.replicationState)
+		err := verifyPrivileges(result, cs.grants, replicationLackGrants)
+		c.Assert(err == nil, tc.Equals, cs.replicationState == StateSuccess)
 	}
 }
