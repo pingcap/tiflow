@@ -3125,7 +3125,7 @@ workaround = "Please use `query-status` command to see tasks."
 tags = ["internal", "medium"]
 
 [error.DM-scheduler-46019]
-message = "transfer with running tasks %v on source %s should in sync unit"
+message = "running tasks %v to be transferred on source %s should in sync unit"
 description = ""
 workaround = "Please use `pause-task [-s source ...] task` to pause them first."
 tags = ["internal", "high"]

@@ -676,7 +676,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	})
 	if len(runningTasks) > 0 {
 		queryWorkerF := func() (*workerrpc.Response, error) {
-			rpcTimeOut := time.Hour * 24 // we relay on ctx.Done() to cancel the rpc, so just set a very long timeout
+			rpcTimeOut := time.Second * 10 // we relay on ctx.Done() to cancel the rpc, so just set a very long timeout
 			req := &workerrpc.Request{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusRequest{}}
 			failpoint.Inject("operateQueryWorkerF", func(v failpoint.Value) {
 				resp := &workerrpc.Response{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusResponse{}}
@@ -717,6 +717,8 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		// wait all tasks are paused before actually starting scheduling
 		keepQuery := true
 		maxRetryNum := 10
+		// the defaultRPCTimeout is 10m and we assume each task need 1s to pause
+		sleepTime := time.Second * time.Duration((len(runningTasks)))
 		for keepQuery && maxRetryNum > 0 {
 			maxRetryNum--
 			resp, err := queryWorkerF()
@@ -727,6 +729,8 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 				if status.Stage != pb.Stage_Paused {
 					s.logger.Info(
 						"waiting task pausing", zap.String("task", status.Name), zap.Int("retry times", 10-maxRetryNum))
+					time.Sleep(sleepTime)
+					continue
 				}
 			}
 			keepQuery = false
