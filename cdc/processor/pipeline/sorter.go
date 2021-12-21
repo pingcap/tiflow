@@ -79,6 +79,7 @@ func newSorterNode(
 		flowController: flowController,
 		mounter:        mounter,
 		resolvedTs:     startTs,
+		barrierTs:      startTs,
 		replConfig:     replConfig,
 	}
 }

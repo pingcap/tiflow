@@ -138,6 +138,10 @@ func (ls *Sorter) wait(
 	inputCount, kvEventCount, resolvedEventCount := 0, 0, 0
 	appendInputEvent := func(ev *model.PolymorphicEvent) {
 		if ls.lastSentResolvedTs != 0 && ev.CRTs < ls.lastSentResolvedTs {
+			// Since TiKV/Puller may send out of order or duplicated events,
+			// we should not panic here.
+			// Regression is not a common case, use warn level to rise our
+			// attention.
 			log.Warn("commit ts < resolved ts",
 				zap.Uint64("lastSentResolvedTs", ls.lastSentResolvedTs),
 				zap.Any("event", ev), zap.Uint64("regionID", ev.RegionID()))
