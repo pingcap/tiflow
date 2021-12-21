@@ -38,6 +38,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
+	testutils "github.com/pingcap/tiflow/tests/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -449,12 +450,7 @@ func mockDBWithAdjustedSQLMode() (*sql.DB, sqlmock.Sqlmock, error) {
 	if err != nil {
 		return db, mock, err
 	}
-	// sql mode is adjust for compatibility.
-	mock.ExpectQuery("SELECT @@SESSION.sql_mode;").
-		WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
-			AddRow("STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
-	mock.ExpectExec("SET sql_mode = 'ALLOW_INVALID_DATES,IGNORE_SPACE,NO_AUTO_VALUE_ON_ZERO';").
-		WillReturnResult(sqlmock.NewResult(0, 0))
+	testutils.MustAdjustSQLMode(mock)
 	return db, mock, err
 }
 

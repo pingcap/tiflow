@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
 	"github.com/pingcap/tiflow/cdc/sink"
+	testutils "github.com/pingcap/tiflow/tests/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -140,6 +141,7 @@ func TestApplyDMLs(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
+		testutils.MustAdjustSQLMode(mock)
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)").
 			WithArgs(1, "2").
