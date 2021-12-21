@@ -11,7 +11,7 @@ function run() {
 
 	# with a 5 rows insert txn: 1 * FormatDesc + 1 * PreviousGTID + 1 * GTID + 1 * BEGIN + 5 * (Table_map + Write_rows) + 1 * XID
 	# here we fail at the third write rows event, sync should retry and auto recover without any duplicate event
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/GetEventErrorInTxn=13*return(3)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/GetEventErrorInTxn=13*return(3)"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'

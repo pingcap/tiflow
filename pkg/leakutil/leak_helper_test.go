@@ -29,7 +29,7 @@ func TestSetUpLeakTest(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	opts := []goleak.Option{
-		goleak.IgnoreTopFunction("github.com/pingcap/ticdc/pkg/leakutil.TestSetUpLeakTest.func1"),
+		goleak.IgnoreTopFunction("github.com/pingcap/tiflow/pkg/leakutil.TestSetUpLeakTest.func1"),
 	}
 
 	SetUpLeakTest(m, opts...)

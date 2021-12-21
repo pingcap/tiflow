@@ -24,15 +24,15 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/mackerelio/go-osstat/memory"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	sorterencoding "github.com/pingcap/ticdc/cdc/sorter/encoding"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filelock"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/util/memory"
+	sorterencoding "github.com/pingcap/tiflow/cdc/sorter/encoding"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filelock"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -97,6 +97,13 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 		metricSorterOnDiskDataSizeGauge := sorterOnDiskDataSizeGauge.WithLabelValues(captureAddr)
 		metricSorterOpenFileCountGauge := sorterOpenFileCountGauge.WithLabelValues(captureAddr)
 
+		// TODO: The underlaying implementation only recognizes cgroups set by
+		// containers, we need to support cgroups set by systemd or manually.
+		// See https://github.com/pingcap/tidb/issues/22132
+		totalMemory, err := memory.MemTotal()
+		if err != nil {
+			log.Panic("read memory stat failed", zap.Error(err))
+		}
 		for {
 			select {
 			case <-ret.cancelCh:
@@ -110,14 +117,8 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 			metricSorterOpenFileCountGauge.Set(float64(atomic.LoadInt64(&openFDCount)))
 
 			// update memPressure
-			m, err := memory.Get()
-
-			failpoint.Inject("getMemoryPressureFails", func() {
-				m = nil
-				err = errors.New("injected get memory pressure failure")
-			})
-
-			if err != nil {
+			usedMemory, err := memory.MemUsed()
+			if err != nil || totalMemory == 0 {
 				failpoint.Inject("sorterDebug", func() {
 					log.Panic("unified sorter: getting system memory usage failed", zap.Error(err))
 				})
@@ -128,7 +129,7 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 				// encountered, we can fail gracefully.
 				atomic.StoreInt32(&ret.memPressure, 100)
 			} else {
-				memPressure := m.Used * 100 / m.Total
+				memPressure := usedMemory * 100 / totalMemory
 				atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 			}
 
