@@ -171,7 +171,7 @@ function test_worker_download_certs_from_master() {
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT3 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
 
 	# add failpoint to make loader always fail
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/loader/lightningAlwaysErr=return()"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/lightningAlwaysErr=return()"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
 

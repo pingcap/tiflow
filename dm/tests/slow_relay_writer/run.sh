@@ -27,7 +27,7 @@ function incremental_data() {
 function run() {
 	prepare_data
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/relay/SlowDownWriteDMLRelayLog=10*return();github.com/pingcap/ticdc/dm/relay/SetHeartbeatInterval=return(5)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/relay/SlowDownWriteDMLRelayLog=10*return();github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval=return(5)'
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
