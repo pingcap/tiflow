@@ -18,7 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
 
@@ -67,11 +67,6 @@ func (b *blackHoleSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 
 func (b *blackHoleSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	log.Debug("BlockHoleSink: DDL Event", zap.Any("ddl", ddl))
-	return nil
-}
-
-// Initialize is no-op for blackhole
-func (b *blackHoleSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	return nil
 }
 

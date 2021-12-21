@@ -25,8 +25,8 @@ import (
 	"github.com/pingcap/errors"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type managerSuite struct{}
@@ -38,10 +38,6 @@ type checkSink struct {
 	rows           []*model.RowChangedEvent
 	rowsMu         sync.Mutex
 	lastResolvedTs uint64
-}
-
-func (c *checkSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	panic("unreachable")
 }
 
 func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -249,7 +245,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 }
 
 // Run the benchmark
-// go test -benchmem -run='^$' -bench '^(BenchmarkManagerFlushing)$' github.com/pingcap/ticdc/cdc/sink
+// go test -benchmem -run='^$' -bench '^(BenchmarkManagerFlushing)$' github.com/pingcap/tiflow/cdc/sink
 func BenchmarkManagerFlushing(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 16)
@@ -329,10 +325,6 @@ func BenchmarkManagerFlushing(b *testing.B) {
 
 type errorSink struct {
 	*check.C
-}
-
-func (e *errorSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	panic("unreachable")
 }
 
 func (e *errorSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
