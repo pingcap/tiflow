@@ -29,19 +29,15 @@ import (
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
-
-// ErrorMaybeDuplicateEvent indicates that there may be duplicate event in next binlog file
-// this is mainly happened when upstream master changed when relay log not finish reading a transaction.
-var ErrorMaybeDuplicateEvent = errors.New("truncate binlog file found, event may be duplicated")
 
 // Meta represents binlog meta information in relay.meta.
 type Meta struct {
@@ -560,15 +556,6 @@ func (r *BinlogReader) parseFile(
 	if err != nil {
 		if possibleLast && isIgnorableParseError(err) {
 			r.tctx.L().Warn("fail to parse relay log file, meet some ignorable error", zap.String("file", fullPath), zap.Int64("offset", offset), zap.Error(err))
-			// the file is truncated, we send a mock event with `IGNORABLE_EVENT` to notify the the consumer
-			// TODO: should add a integration test for this
-			e := &replication.BinlogEvent{
-				RawData: []byte(ErrorMaybeDuplicateEvent.Error()),
-				Header: &replication.EventHeader{
-					EventType: replication.IGNORABLE_EVENT,
-				},
-			}
-			s.ch <- e
 		} else {
 			r.tctx.L().Error("parse relay log file", zap.String("file", fullPath), zap.Int64("offset", offset), zap.Error(err))
 			return false, false, 0, "", "", false, terror.ErrParserParseRelayLog.Delegate(err, fullPath)

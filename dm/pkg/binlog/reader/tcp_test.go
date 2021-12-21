@@ -24,8 +24,8 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 
-	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )
 
 var (
@@ -41,19 +41,19 @@ func TestSuite(t *testing.T) {
 type testTCPReaderSuite struct{}
 
 func (t *testTCPReaderSuite) SetUpSuite(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockTCPReaderStartSyncByPos", "return(true)"), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockTCPReaderStartSyncByGTID", "return(true)"), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockTCPReaderClose", "return(true)"), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockTCPReaderGetEvent", "return(true)"), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockTCPReaderStatus", "return(true)"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByPos", "return(true)"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByGTID", "return(true)"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderClose", "return(true)"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderGetEvent", "return(true)"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStatus", "return(true)"), IsNil)
 }
 
 func (t *testTCPReaderSuite) TearDownSuite(c *C) {
-	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockTCPReaderStartSyncByPos"), IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockTCPReaderStartSyncByGTID"), IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockTCPReaderClose"), IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockTCPReaderGetEvent"), IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockTCPReaderStatus"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByPos"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByGTID"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderClose"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderGetEvent"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStatus"), IsNil)
 }
 
 func (t *testTCPReaderSuite) TestSyncPos(c *C) {

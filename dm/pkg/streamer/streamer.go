@@ -14,15 +14,14 @@
 package streamer
 
 import (
-	"bytes"
 	"context"
 	"time"
 
-	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/failpoint"
@@ -67,12 +66,6 @@ func (s *LocalStreamer) GetEvent(ctx context.Context) (*replication.BinlogEvent,
 		heartbeatHeader := &replication.EventHeader{}
 		return event.GenHeartbeatEvent(heartbeatHeader), nil
 	case c := <-s.ch:
-		// special check for maybe truncated relay log
-		if c.Header.EventType == replication.IGNORABLE_EVENT {
-			if bytes.Equal(c.RawData, []byte(ErrorMaybeDuplicateEvent.Error())) {
-				return nil, ErrorMaybeDuplicateEvent
-			}
-		}
 		return c, nil
 	case s.err = <-s.ech:
 		return nil, s.err

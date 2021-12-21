@@ -14,8 +14,8 @@
 package main
 
 import (
-	"github.com/pingcap/ticdc/pkg/cmd"
 	_ "github.com/pingcap/tidb/types/parser_driver"
+	"github.com/pingcap/tiflow/pkg/cmd"
 )
 
 func main() {

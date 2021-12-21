@@ -19,8 +19,7 @@ check-struct-only = false
 
 [table-configs]
 [table-configs.config1]
-schema = "print_status"
-table = "t_1"
+target-tables = ["print_status.t_1"]
 # currently ignore check float and timestamp field
 ignore-columns = ["c5", "c9", "c11", "c15"]
 

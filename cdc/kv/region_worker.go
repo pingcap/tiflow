@@ -25,12 +25,12 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/ticdc/pkg/workerpool"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -784,9 +784,8 @@ func (w *regionWorker) evictAllRegions() error {
 			}
 			state.markStopped()
 			w.delRegionState(state.sri.verID.GetID())
-			singleRegionInfo := state.sri.partialClone()
-			if state.lastResolvedTs > singleRegionInfo.ts {
-				singleRegionInfo.ts = state.lastResolvedTs
+			if state.lastResolvedTs > state.sri.ts {
+				state.sri.ts = state.lastResolvedTs
 			}
 			revokeToken := !state.initialized
 			state.lock.Unlock()
@@ -794,7 +793,7 @@ func (w *regionWorker) evictAllRegions() error {
 			// region worker exits, we must use the parent context to prevent
 			// regionErrorInfo loss.
 			err = w.session.onRegionFail(w.parentCtx, regionErrorInfo{
-				singleRegionInfo: singleRegionInfo,
+				singleRegionInfo: state.sri,
 				err:              cerror.ErrEventFeedAborted.FastGenByArgs(),
 			}, revokeToken)
 			return err == nil

@@ -18,15 +18,14 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo"
-	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/cdc/sink/common"
-	serverConfig "github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/pipeline"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/common"
+	serverConfig "github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pipeline"
 	"go.uber.org/zap"
 )
 
@@ -89,10 +88,15 @@ func (t *tablePipelineImpl) ResolvedTs() model.Ts {
 	// will be able to cooperate replication status directly. Then we will add
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
-	if redo.IsConsistentEnabled(t.replConfig.Consistent.Level) {
-		return t.sinkNode.ResolvedTs()
-	}
-	return t.sorterNode.ResolvedTs()
+
+	// Always report resolved ts from sink for resolving #3503.
+	// TODO uncomment the following lines.
+	// if redo.IsConsistentEnabled(t.replConfig.Consistent.Level) {
+	// 	return t.sinkNode.ResolvedTs()
+	// }
+	// return t.sorterNode.ResolvedTs()
+
+	return t.sinkNode.ResolvedTs()
 }
 
 // CheckpointTs returns the checkpoint ts in this table pipeline

@@ -28,9 +28,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/redo/common"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/cdc/redo/common"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/uber-go/atomic"
 	pioutil "go.etcd.io/etcd/pkg/ioutil"
 	"go.uber.org/multierr"
@@ -255,13 +255,14 @@ func (w *Writer) Close() error {
 	}
 	w.Lock()
 	defer w.Unlock()
+	// always set to false when closed, since if having err may not get fixed just by retry
+	defer w.running.Store(false)
 
 	err := w.close()
 	if err != nil {
 		return err
 	}
 
-	w.running.Store(false)
 	return nil
 }
 

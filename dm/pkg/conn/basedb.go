@@ -26,10 +26,10 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/failpoint"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/retry"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/retry"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 
 	"github.com/go-sql-driver/mysql"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"

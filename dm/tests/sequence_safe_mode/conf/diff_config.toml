@@ -25,8 +25,7 @@ target-table = "t_target"
 
 [table-configs]
 [table-configs.config1]
-schema = "sequence_safe_mode_target"
-table = "t_target"
+target-tables = ["sequence_safe_mode_target.t_target"]
 ignore-columns = ["id"]
 
 [data-sources]
