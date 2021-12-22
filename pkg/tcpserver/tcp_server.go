@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -35,6 +37,8 @@ var cmuxReadTimeout = 10 * time.Second
 // serve both plain HTTP and gRPC at the same time.
 type TCPServer interface {
 	// Run runs the TCPServer.
+	// For a given instance of TCPServer, Run is expected
+	// to be called only once.
 	Run(ctx context.Context) error
 	// GrpcListener returns the gRPC listener that
 	// can be listened on by a gRPC server.
@@ -44,6 +48,10 @@ type TCPServer interface {
 	// IsTLSEnabled returns whether TLS has been enabled.
 	IsTLSEnabled() bool
 	// Close closed the TCPServer.
+	// The listeners returned by GrpcListener and HTTP1Listener
+	// will be closed, which will force the consumers of these
+	// listeners to stop. This provides a reliable mechanism to
+	// cancel all related components.
 	Close() error
 }
 
@@ -53,6 +61,8 @@ type tcpServerImpl struct {
 	rootListener  net.Listener
 	grpcListener  net.Listener
 	http1Listener net.Listener
+
+	isClosed atomic.Bool
 
 	credentials  *security.Credential
 	isTLSEnabled bool // read only
@@ -95,7 +105,14 @@ func NewTCPServer(address string, credentials *security.Credential) (TCPServer, 
 
 // Run runs the mux. The mux has to be running to accept connections.
 func (s *tcpServerImpl) Run(ctx context.Context) error {
+	if s.isClosed.Load() {
+		return cerror.ErrTCPServerClosed.GenWithStackByArgs()
+	}
+
 	defer func() {
+		s.isClosed.Store(true)
+		// Closing the rootListener provides a reliable way
+		// for telling downstream components to exit.
 		_ = s.rootListener.Close()
 	}()
 	errg, ctx := errgroup.WithContext(ctx)
@@ -134,6 +151,12 @@ func (s *tcpServerImpl) IsTLSEnabled() bool {
 }
 
 func (s *tcpServerImpl) Close() error {
+	if s.isClosed.Swap(true) {
+		// ignore double closing
+		return nil
+	}
+	// Closing the rootListener provides a reliable way
+	// for telling downstream components to exit.
 	return errors.Trace(s.rootListener.Close())
 }
 
