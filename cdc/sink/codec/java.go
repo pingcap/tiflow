@@ -115,6 +115,8 @@ func mySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
 		return JavaSQLTypeBIT
 
 	// Blob related is not identical to the official implementation, since we do not know `meta` at the moment.
+	// see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L222-L231
+	// But this does not matter, they will be `JavaSQLTypeBlob` or `JavaSQLTypeClob` finally.
 	case mysql.TypeTinyBlob:
 		return JavaSQLTypeVARBINARY
 

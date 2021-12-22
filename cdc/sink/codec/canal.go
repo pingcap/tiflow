@@ -145,7 +145,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 		return JavaSQLTypeBLOB
 	}
 
-	// flag `isUnsigned` only for `Int`, `Real` related and `bit`, `year` data type.
+	// flag `isUnsigned` only for `numerical` and `bit`, `year` data type.
 	if !c.Flag.IsUnsigned() {
 		return javaType
 	}
@@ -160,7 +160,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 		return javaType
 	}
 
-	// for **unsigned** `Int` related data type, should have type in `uint64`. see reference:
+	// for **unsigned** integral types, should have type in `uint64`. see reference:
 	// https://github.com/pingcap/ticdc/blob/f0a38a7aaf9f3b11a4d807da275b567642733f58/cdc/entry/mounter.go#L493
 	// https://github.com/pingcap/tidb/blob/6495a5a116a016a3e077d181b8c8ad81f76ac31b/types/datum.go#L423-L455
 	number, ok := c.Value.(uint64)
@@ -250,7 +250,7 @@ func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {
 }
 
 // when decoding the canal format, remove `unsigned` to get the original `mysql type`.
-func dropUnsignedFromMySQLType(mysqlType string) string {
+func trimUnsignedFromMySQLType(mysqlType string) string {
 	return strings.TrimSuffix(mysqlType, " unsigned")
 }
 

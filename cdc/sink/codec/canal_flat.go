@@ -168,48 +168,6 @@ type canalFlatMessageWithTiDBExtension struct {
 	Extensions *tidbExtension `json:"_tidb"`
 }
 
-func (c *canalFlatMessageWithTiDBExtension) getTikvTs() uint64 {
-	return c.tikvTs
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getSchema() *string {
-	return &c.Schema
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getTable() *string {
-	return &c.Table
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getCommitTs() uint64 {
-	return c.Extensions.CommitTs
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getQuery() string {
-	return c.Query
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getOld() map[string]interface{} {
-	if c.Old == nil {
-		return nil
-	}
-	return c.Old[0]
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getData() map[string]interface{} {
-	if c.Data == nil {
-		return nil
-	}
-	return c.Data[0]
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getMySQLType() map[string]string {
-	return c.MySQLType
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getJavaSQLType() map[string]int32 {
-	return c.SQLType
-}
-
 func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEvent) (canalFlatMessageInterface, error) {
 	eventType := convertRowEventType(e)
 	header := c.builder.buildHeader(e.CommitTs, e.Table.Schema, e.Table.Table, eventType, 1)
@@ -287,8 +245,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 	} else if e.IsInsert() {
 		flatMessage.Data = append(flatMessage.Data, data)
 	} else if e.IsUpdate() {
-		flatMessage.Old = make([]map[string]interface{}, 0)
-		flatMessage.Old = append(flatMessage.Old, oldData)
+		flatMessage.Old = []map[string]interface{}{oldData}
 		flatMessage.Data = append(flatMessage.Data, data)
 	} else {
 		log.Panic("unreachable event type", zap.Any("event", e))
@@ -560,7 +517,7 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		mysqlTypeStr = dropUnsignedFromMySQLType(mysqlTypeStr)
+		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
 		col := NewColumn(value, mysqlType).decodeCanalJSONColumn(name, JavaSQLType(javaType))
 		result = append(result, col)
