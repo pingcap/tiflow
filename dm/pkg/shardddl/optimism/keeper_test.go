@@ -80,6 +80,13 @@ func (t *testKeeper) TestLockKeeper(c *C) {
 	c.Assert(lock1, NotNil)
 	c.Assert(lock1.ID, Equals, lockID1)
 	c.Assert(lk.FindLockByInfo(i11).ID, Equals, lockID1)
+
+	lks := lk.FindLocksByTask("hahaha")
+	c.Assert(len(lks), Equals, 0)
+	lks = lk.FindLocksByTask(task1)
+	c.Assert(len(lks), Equals, 1)
+	c.Assert(lks[0].ID, Equals, lockID1)
+
 	synced, remain := lock1.IsSynced()
 	c.Assert(synced, IsFalse)
 	c.Assert(remain, Equals, 1)
@@ -108,6 +115,13 @@ func (t *testKeeper) TestLockKeeper(c *C) {
 	synced, remain = lock2.IsSynced()
 	c.Assert(synced, IsTrue)
 	c.Assert(remain, Equals, 0)
+
+	lks = lk.FindLocksByTask(task1)
+	c.Assert(len(lks), Equals, 1)
+	c.Assert(lks[0].ID, Equals, lockID1)
+	lks = lk.FindLocksByTask(task2)
+	c.Assert(len(lks), Equals, 1)
+	c.Assert(lks[0].ID, Equals, lockID2)
 
 	// try to find not-exists lock.
 	lockIDNotExists := "lock-not-exists"
@@ -276,6 +290,11 @@ func (t *testKeeper) TestTableKeeper(c *C) {
 
 	// no tables exist before Init/Update.
 	c.Assert(tk.FindTables(task1, downSchema, downTable), IsNil)
+	for schema, tables := range tt11.UpTables {
+		for table := range tables {
+			c.Assert(tk.SourceTableExist(tt11.Task, tt11.Source, schema, table, downSchema, downTable), IsFalse)
+		}
+	}
 
 	// Init with `nil` is fine.
 	tk.Init(nil)
@@ -287,6 +306,11 @@ func (t *testKeeper) TestTableKeeper(c *C) {
 	c.Assert(tts, HasLen, 2)
 	c.Assert(tts[0], DeepEquals, tt11)
 	c.Assert(tts[1], DeepEquals, tt12)
+	for schema, tables := range tt11.UpTables {
+		for table := range tables {
+			c.Assert(tk.SourceTableExist(tt11.Task, tt11.Source, schema, table, downSchema, downTable), IsTrue)
+		}
+	}
 
 	// adds new tables.
 	c.Assert(tk.Update(st21), IsTrue)
@@ -299,11 +323,21 @@ func (t *testKeeper) TestTableKeeper(c *C) {
 	tts = tk.FindTables(task2, downSchema, downTable)
 	c.Assert(tts, HasLen, 1)
 	c.Assert(tts[0], DeepEquals, tt22)
+	for schema, tables := range tt22.UpTables {
+		for table := range tables {
+			c.Assert(tk.SourceTableExist(tt22.Task, tt22.Source, schema, table, downSchema, downTable), IsTrue)
+		}
+	}
 
 	// deletes tables.
 	st22.IsDeleted = true
 	c.Assert(tk.Update(st22), IsTrue)
 	c.Assert(tk.FindTables(task2, downSchema, downTable), IsNil)
+	for schema, tables := range tt22.UpTables {
+		for table := range tables {
+			c.Assert(tk.SourceTableExist(tt22.Task, tt22.Source, schema, table, downSchema, downTable), IsFalse)
+		}
+	}
 
 	// try to delete, but not exist.
 	c.Assert(tk.Update(st22), IsFalse)
@@ -315,6 +349,11 @@ func (t *testKeeper) TestTableKeeper(c *C) {
 	c.Assert(tts, HasLen, 2)
 	c.Assert(tts[0], DeepEquals, tt11)
 	c.Assert(tts[1], DeepEquals, tt12)
+	for schema, tables := range tt11.UpTables {
+		for table := range tables {
+			c.Assert(tk.SourceTableExist(tt11.Task, tt11.Source, schema, table, downSchema, downTable), IsTrue)
+		}
+	}
 
 	// add a table for st11.
 	c.Assert(tk.AddTable(task1, st11.Source, "db-2", "tbl-3", downSchema, downTable), IsTrue)
@@ -345,6 +384,19 @@ func (t *testKeeper) TestTableKeeper(c *C) {
 	c.Assert(tk.RemoveTable(task1, "not-exit", "db", "tbl-1", downSchema, downTable), IsFalse)
 	tts = tk.FindTables(task1, downSchema, downTable)
 	c.Assert(tts[1], DeepEquals, tt12)
+
+	c.Assert(tk.RemoveTableByTask("hahaha"), IsFalse)
+	tk.RemoveTableByTaskAndSources("hahaha", nil)
+	tts = tk.FindTables(task1, downSchema, downTable)
+	c.Assert(tts, HasLen, 3)
+	tk.RemoveTableByTaskAndSources(task1, []string{"hahaha"})
+	tts = tk.FindTables(task1, downSchema, downTable)
+	c.Assert(tts, HasLen, 3)
+	tk.RemoveTableByTaskAndSources(task1, []string{source1, source2})
+	tts = tk.FindTables(task1, downSchema, downTable)
+	c.Assert(tts, HasLen, 1)
+	c.Assert(tts[0].Source, Equals, "new-source")
+	c.Assert(tts[0].UpTables["db-2"], HasKey, "tbl-3")
 }
 
 func (t *testKeeper) TestTargetTablesForTask(c *C) {

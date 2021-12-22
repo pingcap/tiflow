@@ -120,11 +120,11 @@ func (l *Lock) FetchTableInfos(task, source, schema, table string) (*model.Table
 	query := `SELECT table_info FROM ` + dbutil.TableName(l.downstreamMeta.meta, cputil.SyncerCheckpoint(task)) + ` WHERE id = ? AND cp_schema = ? AND cp_table = ?`
 	row := db.DB.QueryRowContext(ctx, query, source, schema, table)
 	if row.Err() != nil {
-		return nil, row.Err()
+		return nil, terror.ErrDBExecuteFailed.Delegate(row.Err(), query)
 	}
 	var tiBytes []byte
 	if err := row.Scan(&tiBytes); err != nil {
-		return nil, err
+		return nil, terror.ErrDBExecuteFailed.Delegate(err, query)
 	}
 	var ti *model.TableInfo
 	if bytes.Equal(tiBytes, []byte("null")) {
@@ -443,6 +443,14 @@ func (l *Lock) TryRemoveTableBySources(sources []string) []string {
 	defer l.mu.Unlock()
 
 	dropColumns := make([]string, 0)
+	for col, sourceColumns := range l.columns {
+		for _, source := range sources {
+			if _, ok := sourceColumns[source]; ok {
+				dropColumns = append(dropColumns, col)
+			}
+		}
+	}
+
 	for _, source := range sources {
 		if _, ok := l.tables[source]; !ok {
 			continue

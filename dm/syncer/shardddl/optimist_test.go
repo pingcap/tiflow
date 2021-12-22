@@ -95,6 +95,9 @@ func (t *testOptimist) TestOptimist(c *C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	tables := o.Tables()
+	c.Assert(len(tables), Equals, 0)
+
 	// init with some source tables.
 	err := o.Init(sourceTables)
 	c.Assert(err, IsNil)
@@ -103,6 +106,9 @@ func (t *testOptimist) TestOptimist(c *C) {
 	c.Assert(stm, HasLen, 1)
 	c.Assert(stm[task], HasLen, 1)
 	c.Assert(stm[task][source], DeepEquals, o.tables)
+
+	tables = o.Tables()
+	c.Assert(len(tables), Equals, 4)
 
 	// no info and operation in pending.
 	c.Assert(o.PendingInfo(), IsNil)
