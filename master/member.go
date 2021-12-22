@@ -19,6 +19,8 @@ type Member struct {
 	Addrs        []string
 }
 
+// TODO: we can watch leader election to observe leader change, and don't need
+// to list members
 func (s *Server) updateServerMasterMembers(ctx context.Context) error {
 	leader, err := etcdutils.GetLeaderID(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
 	if err != nil {
@@ -47,10 +49,17 @@ func (s *Server) updateServerMasterMembers(ctx context.Context) error {
 		return err
 	}
 	members := make([]*Member, 0, len(resp.Members))
+	currLeader, exist := s.checkLeader()
 	for _, m := range resp.Members {
 		isServLeader := m.Name == leader
-		if isServLeader {
-			s.leaderName.Store(m.Name)
+		if isServLeader && (!exist || currLeader.Name != m.Name) {
+			s.leader.Store(&Member{
+				Name:         m.Name,
+				IsServLeader: true,
+				IsEtcdLeader: true,
+				Addrs:        m.ClientURLs,
+			})
+			s.createLeaderClient(ctx, m.ClientURLs)
 		}
 		members = append(members, &Member{
 			Name:         m.Name,

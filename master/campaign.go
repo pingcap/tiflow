@@ -2,7 +2,9 @@ package master
 
 import (
 	"context"
+	"strings"
 
+	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -36,4 +38,29 @@ func (s *Server) campaignLeaderLoop(ctx context.Context) error {
 
 func (s *Server) resign() {
 	s.resignFn()
+}
+
+func (s *Server) createLeaderClient(ctx context.Context, addrs []string) {
+	s.closeLeaderClient()
+
+	endpoints := make([]string, 0, len(addrs))
+	for _, addr := range addrs {
+		endpoints = append(endpoints, strings.Replace(addr, "http://", "", 1))
+	}
+	cli, err := client.NewMasterClient(ctx, endpoints)
+	if err != nil {
+		log.L().Error("create server master client failed", zap.Strings("addrs", addrs), zap.Error(err))
+		return
+	}
+	s.leaderClient = cli
+}
+
+func (s *Server) closeLeaderClient() {
+	if s.leaderClient != nil {
+		err := s.leaderClient.Close()
+		if err != nil {
+			log.L().Warn("close leader client met error", zap.Error(err))
+		}
+		s.leaderClient = nil
+	}
 }

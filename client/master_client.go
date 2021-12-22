@@ -100,3 +100,13 @@ func (c *MasterClient) RequestForSchedule(
 	defer cancel()
 	return c.client.ScheduleTask(ctx1, req)
 }
+
+// Close closes underlying resources
+func (c *MasterClient) Close() error {
+	return c.conn.Close()
+}
+
+// Client returns inner grpc client impl
+func (c *MasterClient) Client() pb.MasterClient {
+	return c.client
+}
