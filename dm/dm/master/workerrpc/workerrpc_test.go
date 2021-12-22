@@ -23,10 +23,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/tikv/pd/pkg/tempurl"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/pbmock"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/pbmock"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var _ = Suite(&testWorkerRPCSuite{})

@@ -23,8 +23,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
 
@@ -255,7 +255,7 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.Debug == nil {
 		c.Debug = defaultCfg.Debug
 	}
-	if err := c.Debug.Messages.ValidateAndAdjust(); err != nil {
+	if err = c.Debug.ValidateAndAdjust(); err != nil {
 		return errors.Trace(err)
 	}
 

@@ -19,21 +19,21 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sorter"
-	"github.com/pingcap/ticdc/cdc/sorter/encoding"
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
-	"github.com/pingcap/ticdc/pkg/actor"
-	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
-	"github.com/pingcap/ticdc/pkg/db"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/pingcap/tiflow/cdc/sorter/encoding"
+	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/pkg/actor"
+	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/db"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 const (
-	// Capacity of leveldb sorter input and output channels.
+	// Capacity of db sorter input and output channels.
 	sorterInputCap, sorterOutputCap = 64, 64
 	// Max size of received event batch.
 	batchReceiveEventSize = 32
@@ -65,8 +65,8 @@ type Sorter struct {
 	metricTotalEventsResolvedTs prometheus.Counter
 }
 
-// NewLevelDBSorter creates a new LevelDBSorter
-func NewLevelDBSorter(
+// NewSorter creates a new Sorter
+func NewSorter(
 	ctx context.Context, tableID int64, startTs uint64,
 	router *actor.Router, actorID actor.ID,
 ) *Sorter {
@@ -138,9 +138,14 @@ func (ls *Sorter) wait(
 	inputCount, kvEventCount, resolvedEventCount := 0, 0, 0
 	appendInputEvent := func(ev *model.PolymorphicEvent) {
 		if ls.lastSentResolvedTs != 0 && ev.CRTs < ls.lastSentResolvedTs {
-			log.Panic("commit ts < resolved ts",
+			// Since TiKV/Puller may send out of order or duplicated events,
+			// we should not panic here.
+			// Regression is not a common case, use warn level to rise our
+			// attention.
+			log.Warn("commit ts < resolved ts",
 				zap.Uint64("lastSentResolvedTs", ls.lastSentResolvedTs),
 				zap.Any("event", ev), zap.Uint64("regionID", ev.RegionID()))
+			return
 		}
 		if ev.RawKV.OpType == model.OpTypeResolved {
 			if maxResolvedTs < ev.CRTs {
@@ -527,7 +532,7 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	return nil
 }
 
-// Run runs LevelDBSorter
+// Run runs Sorter
 func (ls *Sorter) Run(ctx context.Context) error {
 	state := &pollState{
 		eventsBuf: make([]*model.PolymorphicEvent, batchReceiveEventSize),
