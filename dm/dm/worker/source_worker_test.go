@@ -79,12 +79,12 @@ func (t *testServer) testWorker(c *C) {
 	defer func() {
 		NewRelayHolder = NewRealRelayHolder
 	}()
-	w, err := NewSourceWorker(cfg, etcdCli, "")
+	w, err := NewSourceWorker(cfg, etcdCli, "", "")
 	c.Assert(err, IsNil)
 	c.Assert(w.EnableRelay(false), ErrorMatches, "init error")
 
 	NewRelayHolder = NewDummyRelayHolder
-	w, err = NewSourceWorker(cfg, etcdCli, "")
+	w, err = NewSourceWorker(cfg, etcdCli, "", "")
 	c.Assert(err, IsNil)
 	c.Assert(w.GetUnitAndSourceStatusJSON("", nil), HasLen, emptyWorkerStatusInfoJSONLength)
 
@@ -292,7 +292,7 @@ func (t *testWorkerFunctionalities) TestWorkerFunctionalities(c *C) {
 	c.Assert(err, IsNil)
 
 	// start worker
-	w, err := NewSourceWorker(sourceCfg, etcdCli, "")
+	w, err := NewSourceWorker(sourceCfg, etcdCli, "", "")
 	c.Assert(err, IsNil)
 	defer w.Close()
 	go func() {
@@ -463,7 +463,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	sourceCfg.EnableRelay = false
 
 	// step 1: start worker
-	w, err := NewSourceWorker(sourceCfg, etcdCli, "")
+	w, err := NewSourceWorker(sourceCfg, etcdCli, "", "")
 	c.Assert(err, IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -582,7 +582,7 @@ func (t *testWorkerEtcdCompact) TestWatchRelayStageEtcdCompact(c *C) {
 	sourceCfg.MetaDir = c.MkDir()
 
 	// step 1: start worker
-	w, err := NewSourceWorker(sourceCfg, etcdCli, "")
+	w, err := NewSourceWorker(sourceCfg, etcdCli, "", "")
 	c.Assert(err, IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
