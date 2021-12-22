@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/text/encoding/charmap"
 )
 
 const (
@@ -89,6 +90,37 @@ func (c *column) FromSinkColumn(col *model.Column) {
 	default:
 		c.Value = col.Value
 	}
+}
+
+func (c *column) decodeCanalJSONColumn(name string, javaType JavaSQLType) *model.Column {
+	col := new(model.Column)
+	col.Type = c.Type
+	col.Flag = c.Flag
+	col.Name = name
+	col.Value = c.Value
+	if c.Value == nil {
+		return col
+	}
+
+	value, ok := col.Value.(string)
+	if !ok {
+		log.Panic("canal-json encoded message should have type in `string`")
+	}
+
+	if javaType != JavaSQLTypeBLOB {
+		col.Value = value
+		return col
+	}
+
+	// when encoding the `JavaSQLTypeBLOB`, use `ISO8859_1` decoder, now reverse it back.
+	encoder := charmap.ISO8859_1.NewEncoder()
+	value, err := encoder.String(value)
+	if err != nil {
+		log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+	}
+
+	col.Value = value
+	return col
 }
 
 func (c *column) ToSinkColumn(name string) *model.Column {
