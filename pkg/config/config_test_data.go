@@ -47,7 +47,7 @@ const (
         "rule": "r2"
       }
     ],
-    "protocol": "default"
+    "protocol": "open-protocol"
   },
   "cyclic-replication": {
     "enable": false,
@@ -152,7 +152,7 @@ const (
   },
   "sink": {
     "dispatchers": null,
-    "protocol": "default",
+    "protocol": "open-protocol",
     "column-selectors": [
       {
         "matcher": [
@@ -200,7 +200,7 @@ const (
   },
   "sink": {
     "dispatchers": null,
-    "protocol": "default",
+    "protocol": "open-protocol",
     "column-selectors": [
       {
         "matcher": [
