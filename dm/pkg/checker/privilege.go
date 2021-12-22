@@ -20,13 +20,14 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
 	_ "github.com/pingcap/tidb/types/parser_driver" // for parser driver
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 // SourceDumpPrivilegeChecker checks dump privileges of source DB.
@@ -53,7 +54,7 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check dump privileges of source DB",
-		State: StateFailure,
+		State: StateSuccess,
 		Extra: fmt.Sprintf("address of db instance - %s:%d", pc.dbinfo.Host, pc.dbinfo.Port),
 	}
 
@@ -70,13 +71,16 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 	switch pc.consistency {
 	case "auto", "flush":
 		dumpPrivileges[mysql.ReloadPriv] = struct{}{}
-		dumpPrivileges[mysql.LockTablesPriv] = struct{}{}
 	case "lock":
 		dumpPrivileges[mysql.LockTablesPriv] = struct{}{}
 	}
 
 	lackGrants := genDumpGrants(dumpPrivileges, pc.checkTables)
-	verifyPrivileges(result, grants, lackGrants)
+	err2 := verifyPrivileges(result, grants, lackGrants)
+	if err2 != nil {
+		result.Errors = append(result.Errors, err2)
+		result.State = StateFailure
+	}
 	return result
 }
 
@@ -166,7 +170,6 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 
 		dbName := grantStmt.Level.DBName
 		tableName := grantStmt.Level.TableName
-		log.Info("privilege", zap.String("grant", grant), zap.Int("level", int(grantStmt.Level.Level)), zap.String("db name", dbName), zap.String("table name", tableName))
 		switch grantStmt.Level.Level {
 		case ast.GrantLevelGlobal:
 			for _, privElem := range grantStmt.Privs {
@@ -263,6 +266,7 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 		}
 		privileges := buffer.String()
 		result.Instruction = "You need grant related privileges."
+		log.L().Info("lack privilege", zap.String("err msg", privileges))
 		return NewError(privileges)
 	}
 	return nil
