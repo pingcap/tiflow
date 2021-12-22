@@ -506,6 +506,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	})
 
 	tableID, tableName := util.TableIDFromCtx(ctx)
+	cfID := util.ChangefeedIDFromCtx(ctx)
 	g.Go(func() error {
 		checkRateLimitInterval := 50 * time.Millisecond
 		timer := time.NewTimer(checkRateLimitInterval)
@@ -525,9 +526,8 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 					log.Info("EventFeed retry rate limited",
 						zap.Uint64("regionID", errInfo.singleRegionInfo.verID.GetID()),
 						zap.Uint64("ts", errInfo.singleRegionInfo.ts),
-						zap.Stringer("span", errInfo.span),
-						zap.Int64("tableID", tableID),
-						zap.String("tableName", tableName),
+						zap.String("changefeed", cfID), zap.Stringer("span", errInfo.span),
+						zap.Int64("tableID", tableID), zap.String("tableName", tableName),
 						zap.String("addr", errInfo.singleRegionInfo.rpcCtx.Addr))
 					s.rateLimitQueue = append(s.rateLimitQueue, errInfo)
 				} else {
