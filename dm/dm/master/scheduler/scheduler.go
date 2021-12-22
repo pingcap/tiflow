@@ -628,10 +628,12 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	// 1. check existence or no need
 	s.mu.RLock()
 	if _, ok := s.sourceCfgs[source]; !ok {
+		s.mu.RUnlock()
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
 	w, ok := s.workers[worker]
 	if !ok {
+		s.mu.RUnlock()
 		return terror.ErrSchedulerWorkerNotExist.Generate(worker)
 	}
 	oldWorker, hasOldWorker := s.bounds[source]
