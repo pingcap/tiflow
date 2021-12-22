@@ -34,7 +34,7 @@ import (
 type SourceDumpPrivilegeChecker struct {
 	db          *sql.DB
 	dbinfo      *dbutil.DBConfig
-	checkTables map[string][]string
+	checkTables map[string][]string // map schema => {table1, table2, ...}
 	consistency string
 }
 
@@ -240,6 +240,8 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 
 	if len(lackGrants) != 0 {
 		var buffer bytes.Buffer
+		// generate error message, for example
+		// lack of privilege1: {tableID1, tableID2, ...};lack of privilege2...
 		for g, tableMap := range lackGrants {
 			buffer.WriteString("lack of ")
 			buffer.WriteString(mysql.Priv2Str[g])

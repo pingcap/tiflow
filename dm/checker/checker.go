@@ -194,6 +194,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 
+		// checkTables map schema => {table1, table2, ...}
 		checkTables := make(map[string][]string)
 		for name, tables := range mapping {
 			for _, table := range tables {

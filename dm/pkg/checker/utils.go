@@ -148,6 +148,7 @@ func isMySQLError(err error, code uint16) bool {
 	return ok && e.Number == code
 }
 
+// checkTables map schema => {table1, table2, ...}
 func genExpectGrants(privileges map[pmysql.PrivilegeType]struct{}, checkTables map[string][]string) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
 	lackGrants := make(map[pmysql.PrivilegeType]map[string]map[string]struct{}, len(privileges))
 	for p := range privileges {
