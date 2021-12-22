@@ -85,7 +85,7 @@ type canalFlatMessageInterface interface {
 	getJavaSQLType() map[string]int32
 }
 
-// adapted from https://github.com/alibaba/canal/blob/master/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java
+// adapted from https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java#L1
 type canalFlatMessage struct {
 	// ignored by consumers
 	ID        int64    `json:"id"`

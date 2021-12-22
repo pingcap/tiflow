@@ -275,7 +275,7 @@ func getMySQLType(c *model.Column) string {
 }
 
 // build the Column in the canal RowData
-// reference: https://github.com/alibaba/canal/blob/master/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
+// see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	mysqlType := getMySQLType(c)
 	javaType := getJavaSQLType(c, mysqlType)
