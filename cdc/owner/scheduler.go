@@ -127,11 +127,6 @@ func (s *schedulerV2) DispatchTable(
 	captureID model.CaptureID,
 	isDelete bool,
 ) (done bool, err error) {
-	client, ok := s.GetClient(ctx, captureID)
-	if !ok {
-		return false, nil
-	}
-
 	topic := model.DispatchTableTopic(changeFeedID)
 	message := &model.DispatchTableMessage{
 		OwnerRev: ctx.GlobalVars().OwnerRevision,
@@ -139,13 +134,12 @@ func (s *schedulerV2) DispatchTable(
 		IsDelete: isDelete,
 	}
 
-	_, err = client.TrySendMessage(ctx, topic, message)
+	ok, err := s.trySendMessage(ctx, captureID, topic, message)
 	if err != nil {
-		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
-			log.Warn("scheduler: send message failed, retry later", zap.Error(err))
-			return false, nil
-		}
 		return false, errors.Trace(err)
+	}
+	if !ok {
+		return false, nil
 	}
 
 	s.stats.RecordDispatch()
@@ -161,24 +155,18 @@ func (s *schedulerV2) Announce(
 	changeFeedID model.ChangeFeedID,
 	captureID model.CaptureID,
 ) (bool, error) {
-	client, ok := s.GetClient(ctx, captureID)
-	if !ok {
-		return false, nil
-	}
-
 	topic := model.AnnounceTopic(changeFeedID)
 	message := &model.AnnounceMessage{
 		OwnerRev:     ctx.GlobalVars().OwnerRevision,
 		OwnerVersion: version.ReleaseSemver(),
 	}
 
-	_, err := client.TrySendMessage(ctx, topic, message)
+	ok, err := s.trySendMessage(ctx, captureID, topic, message)
 	if err != nil {
-		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
-			log.Warn("scheduler: send message failed, retry later", zap.Error(err))
-			return false, nil
-		}
 		return false, errors.Trace(err)
+	}
+	if !ok {
+		return false, nil
 	}
 
 	s.stats.RecordAnnounce()
@@ -189,7 +177,7 @@ func (s *schedulerV2) Announce(
 	return true, nil
 }
 
-func (s *schedulerV2) GetClient(ctx context.Context, target model.CaptureID) (*p2p.MessageClient, bool) {
+func (s *schedulerV2) getClient(target model.CaptureID) (*p2p.MessageClient, bool) {
 	client := s.messageRouter.GetClient(target)
 	if client == nil {
 		log.Warn("scheduler: no message client found, retry later",
@@ -197,6 +185,38 @@ func (s *schedulerV2) GetClient(ctx context.Context, target model.CaptureID) (*p
 		return nil, false
 	}
 	return client, true
+}
+
+func (s *schedulerV2) trySendMessage(
+	ctx context.Context,
+	target model.CaptureID,
+	topic p2p.Topic,
+	value interface{},
+) (bool, error) {
+	// TODO (zixiong): abstract this function out together with the similar method in cdc/processor/agent.go
+	// We probably need more advanced logic to handle and mitigate complex failure situations.
+
+	client, ok := s.getClient(target)
+	if !ok {
+		return false, nil
+	}
+
+	_, err := client.TrySendMessage(ctx, topic, value)
+	if err != nil {
+		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
+			return false, nil
+		}
+		if cerror.ErrPeerMessageClientClosed.Equal(err) {
+			log.Warn("peer messaging client is closed while trying to send a message through it. "+
+				"Report a bug if this warning repeats",
+				zap.String("changefeed-id", s.changeFeedID),
+				zap.String("target", target))
+			return false, nil
+		}
+		return false, errors.Trace(err)
+	}
+
+	return true, nil
 }
 
 func (s *schedulerV2) Close(ctx context.Context) {
