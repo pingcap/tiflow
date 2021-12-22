@@ -25,12 +25,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/quotes"
-	"go.uber.org/zap"
 )
 
 func init() {
@@ -176,7 +178,7 @@ func (s *simpleMySQLSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent)
 		sql = fmt.Sprintf("use %s;%s", ddl.TableInfo.Schema, ddl.Query)
 	}
 	_, err := s.db.ExecContext(ctx, sql)
-	if err != nil && isIgnorableDDLError(err) {
+	if err != nil && errorutil.IsIgnorableMySQLDDLError(err) {
 		log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
 		return nil
 	}
