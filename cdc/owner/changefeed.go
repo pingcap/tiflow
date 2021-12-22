@@ -15,13 +15,15 @@ package owner
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/parser"
+	"github.com/pingcap/parser/format"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -422,7 +424,11 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
+		ddlEvent.Query, err = addSpecialComment(ddlEvent.Query)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+
 		c.ddlEventCache = ddlEvent
 	}
 	if job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
@@ -479,4 +485,28 @@ func (c *changefeed) updateStatus(currentTs int64, barrierTs model.Ts) {
 
 func (c *changefeed) Close() {
 	c.releaseResources()
+}
+
+// addSpecialComment translate tidb feature to comment
+func addSpecialComment(ddlQuery string) (string, error) {
+	stms, _, err := parser.New().Parse(ddlQuery, "", "")
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	if len(stms) != 1 {
+		log.Panic("invalid ddlQuery statement size", zap.String("ddlQuery", ddlQuery))
+	}
+	var sb strings.Builder
+	// translate TiDB feature to special comment
+	restoreFlags := format.RestoreTiDBSpecialComment
+	// escape the keyword
+	restoreFlags |= format.RestoreNameBackQuotes
+	// upper case keyword
+	restoreFlags |= format.RestoreKeyWordUppercase
+	// wrap string with single quote
+	restoreFlags |= format.RestoreStringSingleQuotes
+	if err = stms[0].Restore(format.NewRestoreCtx(restoreFlags, &sb)); err != nil {
+		return "", errors.Trace(err)
+	}
+	return sb.String(), nil
 }
