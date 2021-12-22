@@ -4,46 +4,33 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 )
 
+// Member stores server member information
+// TODO: make it a protobuf field and can be shared by gRPC API
 type Member struct {
-	IsServLeader bool
-	IsEtcdLeader bool
-	Name         string
-	Addrs        []string
+	IsServLeader bool     `json:"-"`
+	IsEtcdLeader bool     `json:"-"`
+	Name         string   `json:"name"`
+	Addrs        []string `json:"addrs"`
 }
 
-// TODO: we can watch leader election to observe leader change, and don't need
-// to list members
+// String implements json marshal
+func (m *Member) String() (string, error) {
+	b, err := json.Marshal(m)
+	return string(b), err
+}
+
+// Unmarshal unmarshals data into a member
+func (m *Member) Unmarshal(data []byte) error {
+	return json.Unmarshal(data, m)
+}
+
+// nolint:unused
 func (s *Server) updateServerMasterMembers(ctx context.Context) error {
-	leader, err := etcdutils.GetLeaderID(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
-	if err != nil {
-		if err == concurrency.ErrElectionNoLeader {
-			log.L().Warn("etcd election no leader")
-		} else {
-			return err
-		}
-	}
-	if leader != "" {
-		resp, err := s.etcdClient.Get(ctx, adapter.MasterInfoKey.Encode(leader))
-		if err != nil {
-			return errors.Wrap(errors.ErrEtcdAPIError, err)
-		}
-		if resp.Count > 0 {
-			cfg := &Config{}
-			err = json.Unmarshal(resp.Kvs[0].Value, cfg)
-			if err != nil {
-				return err
-			}
-			leader = cfg.Etcd.Name
-		}
-	}
+	leader, exists := s.checkLeader()
 	resp, err := s.etcdClient.MemberList(ctx)
 	if err != nil {
 		return err
@@ -51,7 +38,7 @@ func (s *Server) updateServerMasterMembers(ctx context.Context) error {
 	members := make([]*Member, 0, len(resp.Members))
 	currLeader, exist := s.checkLeader()
 	for _, m := range resp.Members {
-		isServLeader := m.Name == leader
+		isServLeader := exists && m.Name == leader.Name
 		if isServLeader && (!exist || currLeader.Name != m.Name) {
 			s.leader.Store(&Member{
 				Name:         m.Name,

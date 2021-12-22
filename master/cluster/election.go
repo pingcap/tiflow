@@ -21,7 +21,7 @@ type Election interface {
 	// - leaderCtx: a context that is canceled when the current node is no longer the leader.
 	// - resign: a function used to resign the leader.
 	// - err: indicates an IRRECOVERABLE error during election.
-	Campaign(ctx context.Context, selfID NodeID) (leaderCtx context.Context, resignFn context.CancelFunc, err error)
+	Campaign(ctx context.Context, selfID NodeID, timeout time.Duration) (leaderCtx context.Context, resignFn context.CancelFunc, err error)
 }
 
 type EtcdElectionConfig struct {
@@ -75,7 +75,7 @@ func NewEtcdElection(
 	}, nil
 }
 
-func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID) (context.Context, context.CancelFunc, error) {
+func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID, timeout time.Duration) (context.Context, context.CancelFunc, error) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -90,7 +90,7 @@ func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID) (context.Con
 			return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(err)
 		}
 
-		retCtx, resign, err := e.doCampaign(ctx, selfID)
+		retCtx, resign, err := e.doCampaign(ctx, selfID, timeout)
 		if err != nil {
 			if errors.Cause(err) != mvcc.ErrCompacted {
 				return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(err)
@@ -102,8 +102,10 @@ func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID) (context.Con
 	}
 }
 
-func (e *EtcdElection) doCampaign(ctx context.Context, selfID NodeID) (context.Context, context.CancelFunc, error) {
-	err := e.election.Campaign(ctx, selfID)
+func (e *EtcdElection) doCampaign(ctx context.Context, selfID NodeID, timeout time.Duration) (context.Context, context.CancelFunc, error) {
+	cctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	err := e.election.Campaign(cctx, selfID)
 	if err != nil {
 		return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(err)
 	}

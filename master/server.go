@@ -35,9 +35,10 @@ type Server struct {
 	etcdClient   *clientv3.Client
 	session      *concurrency.Session
 	election     cluster.Election
+	leaderCtx    context.Context
 	resignFn     context.CancelFunc
 	leader       atomic.Value
-	members      []*Member
+	members      []*Member //nolint:unused
 	leaderClient *client.MasterClient
 
 	// sched scheduler
@@ -244,10 +245,15 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	go s.bgUpdateServerMembers(ctx)
+	err = s.reset(ctx)
+	if err != nil {
+		return
+	}
 	s.initialized.Store(true)
 
-	return s.campaignLeaderLoop(ctx)
+	s.leaderLoop(ctx)
+
+	return nil
 }
 
 func (s *Server) startGrpcSrv() (err error) {
@@ -292,6 +298,19 @@ func (s *Server) startGrpcSrv() (err error) {
 	// start grpc server
 	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
 	return
+}
+
+// member returns member information of the server
+func (s *Server) member() string {
+	m := &Member{
+		Name:  s.name(),
+		Addrs: []string{s.cfg.AdvertiseAddr},
+	}
+	val, err := m.String()
+	if err != nil {
+		return s.name()
+	}
+	return val
 }
 
 // name is a shortcut to etcd name
@@ -345,14 +364,26 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	})
 	defer func() {
 		s.leader.Store(&Member{})
-		s.resign()
+		// FIXME: call resign here will cause
+		// `panic: context: internal error: missing cancel error`, fix it later
+		// s.resign()
 	}()
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-s.session.Done():
-		return errors.ErrMasterSessionDone.GenWithStackByArgs()
+	leaderTicker := time.NewTicker(time.Millisecond * 200)
+	defer leaderTicker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-s.session.Done():
+			return errors.ErrMasterSessionDone.GenWithStackByArgs()
+		case <-leaderTicker.C:
+			if !s.isEtcdLeader() {
+				log.L().Info("etcd leader changed, resigns server master leader",
+					zap.String("old-leader-name", s.name()))
+				return errors.ErrEtcdLeaderChanged.GenWithStackByArgs()
+			}
+		}
 	}
 }
 
@@ -446,23 +477,6 @@ func (s *Server) apiPreCheck() *pb.Error {
 		}
 	}
 	return nil
-}
-
-func (s *Server) bgUpdateServerMembers(ctx context.Context) {
-	// TODO: refine background gourtine of server master, add exit notification
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			err := s.updateServerMasterMembers(ctx)
-			if err != nil {
-				log.L().Warn("update server members failed", zap.Error(err))
-			}
-		}
-	}
 }
 
 func withHost(addr string) string {

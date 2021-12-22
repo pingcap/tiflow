@@ -7,7 +7,6 @@ import (
 
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"google.golang.org/grpc"
 )
@@ -48,13 +47,22 @@ func StartEtcd(etcdCfg *embed.Config,
 	return e, nil
 }
 
-func GetLeaderID(ctx context.Context, cli *clientv3.Client, campKey string) (string, error) {
-	resp, err := cli.Get(ctx, campKey, clientv3.WithFirstCreate()...)
+// GetLeader returns the campaign value and revision based on given campaign key
+func GetLeader(ctx context.Context, cli *clientv3.Client, campKey string) (
+	key []byte, val []byte, rev int64, err error,
+) {
+	opts := append([]clientv3.OpOption{clientv3.WithPrefix()}, clientv3.WithFirstCreate()...)
+	resp, err := cli.Get(ctx, campKey, opts...)
 	if err != nil {
-		return "", errors.Wrap(errors.ErrEtcdAPIError, err)
+		err = errors.Wrap(errors.ErrEtcdAPIError, err)
+		return
 	}
 	if len(resp.Kvs) == 0 {
-		return "", concurrency.ErrElectionNoLeader
+		err = errors.ErrMasterNoLeader.GenWithStackByArgs()
+		return
 	}
-	return string(resp.Kvs[0].Value), nil
+	key = resp.Kvs[0].Key
+	val = resp.Kvs[0].Value
+	rev = resp.Header.Revision
+	return
 }

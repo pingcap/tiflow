@@ -70,7 +70,7 @@ func TestEtcdElectionCampaign(t *testing.T) {
 			require.NoError(t, err)
 
 			nodeID := fmt.Sprintf("node-%d", i)
-			sessCtx, resignFn, err := election.Campaign(ctx, nodeID)
+			sessCtx, resignFn, err := election.Campaign(ctx, nodeID, time.Second*5)
 			require.NoError(t, err)
 
 			// We have been elected
