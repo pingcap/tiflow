@@ -1550,6 +1550,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		return nil
 	}
 
+	inFinerRetry := false
+	// in release branch, we only use eventIndex to test a bug
+	eventIndex := 0
 	for {
 		if s.execError.Load() != nil {
 			return nil
@@ -1591,6 +1594,14 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				err = errors.New("connect: connection refused")
 			}
 		})
+		failpoint.Inject("GetEventErrorInTxn", func(val failpoint.Value) {
+			if intVal, ok := val.(int); ok && intVal == eventIndex {
+				err = errors.New("failpoint triggered")
+				s.tctx.L().Warn("failed to get event", zap.Int("event_index", eventIndex),
+					zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
+					zap.Any("pos", e.Header.LogPos), log.ShortError(err))
+			}
+		})
 		switch {
 		case err == context.Canceled:
 			tctx.L().Info("binlog replication main routine quit(context canceled)!", zap.Stringer("last location", lastLocation))
@@ -1617,11 +1628,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 			if s.streamerController.CanRetry(err) {
 				// lastLocation is the last finished GTID
-				err = s.streamerController.ResetReplicationSyncer(tctx, lastLocation)
+				err = s.streamerController.ResetReplicationSyncer(tctx, s.checkpoint.GlobalPoint())
 				if err != nil {
 					return err
 				}
 				log.L().Info("reset replication binlog puller", zap.Any("pos", s.checkpoint.GlobalPoint()))
+				inFinerRetry = true
 				continue
 			}
 
@@ -1760,7 +1772,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			shardingReSync:      shardingReSync,
 			closeShardingResync: closeShardingResync,
 			traceSource:         traceSource,
-			safeMode:            s.safeMode.Enable(),
+			safeMode:            s.safeMode.Enable() || inFinerRetry,
 			tryReSync:           tryReSync,
 			startTime:           startTime,
 			shardingReSyncCh:    &shardingReSyncCh,
@@ -1773,12 +1785,17 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.RotateEvent:
 			err2 = s.handleRotateEvent(ev, ec)
 		case *replication.RowsEvent:
+			eventIndex++
 			metrics.BinlogEventRowHistogram.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID).Observe(float64(len(ev.Rows)))
 			err2 = s.handleRowsEvent(ev, ec)
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
 			err2 = s.handleQueryEvent(ev, ec, originSQL)
 		case *replication.XIDEvent:
+			eventIndex = 0
+			if inFinerRetry {
+				inFinerRetry = false
+			}
 			if shardingReSync != nil {
 				shardingReSync.currLocation.Position.Pos = e.Header.LogPos
 				shardingReSync.currLocation.Suffix = currentLocation.Suffix
