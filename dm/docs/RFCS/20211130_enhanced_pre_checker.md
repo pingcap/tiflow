@@ -42,7 +42,7 @@ If we have a large number of tables in source, we will take too much time in che
         - SELECT (only INFORMATION_SCHEMA's tables and dump tables)
     - For flush consistency:
         - RELOAD (global)
-    - For flush/lock consistency:
+    - For lock consistency:
         - LOCK TABLES (only dump tables)
 3. Add OnlineDDLChecker to check if a DDL of tables in allow list exists in online-ddl stage when DM task is all mode and online-ddl is true.
 4. Enhance schema_of_shard_tables. 
