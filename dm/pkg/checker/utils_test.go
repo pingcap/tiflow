@@ -78,3 +78,24 @@ func (t *testCheckSuite) TestIsMariaDB(c *tc.C) {
 	c.Assert(IsMariaDB("5.5.50-MariaDB-1~wheezy"), tc.IsTrue)
 	c.Assert(IsMariaDB("5.7.19-17-log"), tc.IsFalse)
 }
+
+func (t *testCheckSuite) TestGetConcurrency(c *tc.C) {
+	cases := []struct {
+		tableNum    int
+		concurrency int
+	}{
+		{tableNum: 1, concurrency: 1},
+		{tableNum: 100, concurrency: 4},
+		{tableNum: 624, concurrency: 4},
+		{tableNum: 625, concurrency: 4},
+		{tableNum: 2499, concurrency: 4},
+		{tableNum: 2500, concurrency: 8},
+		{tableNum: 4999, concurrency: 8},
+		{tableNum: 5000, concurrency: 16},
+		{tableNum: 9999, concurrency: 16},
+		{tableNum: 10000, concurrency: 32},
+	}
+	for _, ca := range cases {
+		c.Assert(getConcurrency(ca.tableNum), tc.Equals, ca.concurrency)
+	}
+}
