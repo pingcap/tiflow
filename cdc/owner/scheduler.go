@@ -303,7 +303,7 @@ func (s *scheduler) cleanUpFinishedOperations() {
 	for captureID := range s.state.TaskStatuses {
 		s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			if status == nil {
-				log.Warn("task status of the capture is not found, may be the key in etcd was deleted", zap.Any("captureID", captureID), zap.Any("changeFeedID", s.state.ID))
+				log.Warn("task status of the capture is not found, may be the key in etcd was deleted", zap.String("captureID", captureID), zap.String("changeFeedID", s.state.ID))
 				return status, false, nil
 			}
 
