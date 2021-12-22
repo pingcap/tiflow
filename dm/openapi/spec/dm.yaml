@@ -1224,6 +1224,31 @@ components:
         - "synced"
         - "binlog_type"
         - "seconds_behind_master"
+    DumpStatus:
+      type: object
+      description: "status of dump unit"
+      properties:
+        total_tables:
+          type: integer
+          format: int64
+        completed_tables:
+          type: float
+          format: float64
+        finished_bytes:
+          type: float
+          format: float64
+        finished_rows:
+          type: float
+          format: float64
+        estimate_total_rows:
+          type: float
+          format: float64
+      required:
+        - "total_tables"
+        - "completed_tables"
+        - "finished_bytes"
+        - "finished_rows"
+        - "estimate_total_rows" 
     SubTaskStatus:
       type: object
       properties:
