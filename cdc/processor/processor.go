@@ -347,7 +347,10 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
-	p.handleWorkload()
+
+	if !p.newSchedulerEnabled {
+		p.handleWorkload()
+	}
 	p.doGCSchemaStorage(ctx)
 
 	if p.newSchedulerEnabled {
