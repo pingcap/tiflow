@@ -20,13 +20,12 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/atomic"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/soheilhy/cmux"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
