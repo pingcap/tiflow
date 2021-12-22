@@ -360,6 +360,7 @@ enum ErrorOp {
     Skip = 1; // skip the error event
     Replace = 2; // replace the error event with a specified SQL
     Revert = 3; // remove the error operator
+    Inject = 4; // inject a specified SQL
 }
 
 message HandleWorkerErrorRequest {

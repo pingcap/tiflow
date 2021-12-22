@@ -32,9 +32,10 @@ import (
 // Operator contains an operation for specified binlog pos
 // used by `handle-error`.
 type Operator struct {
-	uuid   string // add a UUID, make it more friendly to be traced in log
-	op     pb.ErrorOp
-	events []*replication.BinlogEvent // startLocation -> events
+	uuid          string // add a UUID, make it more friendly to be traced in log
+	op            pb.ErrorOp
+	isAllInjected bool                       // is all injected, used by inject
+	events        []*replication.BinlogEvent // startLocation -> events
 }
 
 // newOperator creates a new operator with a random UUID.
@@ -94,6 +95,30 @@ func (h *Holder) Set(pos string, op pb.ErrorOp, events []*replication.BinlogEven
 	return nil
 }
 
+func (h *Holder) SetHasAllInjected(startLocation binlog.Location) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	key := startLocation.Position.String()
+	operator, ok := h.operators[key]
+	if !ok {
+		return
+	}
+	operator.isAllInjected = true
+}
+
+func (h *Holder) IsInject(startLocation binlog.Location) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	key := startLocation.Position.String()
+	operator, ok := h.operators[key]
+	if !ok {
+		return false
+	}
+	return operator.op == pb.ErrorOp_Inject
+}
+
 // GetEvent return a replace binlog event
 // for example:
 //			startLocation		endLocation
@@ -110,17 +135,17 @@ func (h *Holder) GetEvent(startLocation binlog.Location) (*replication.BinlogEve
 	key := startLocation.Position.String()
 	operator, ok := h.operators[key]
 	if !ok {
-		return nil, terror.ErrSyncerReplaceEventNotExist.Generate(startLocation)
+		return nil, terror.ErrSyncerEventNotExist.Generate(startLocation)
 	}
 
 	if len(operator.events) <= startLocation.Suffix {
-		return nil, terror.ErrSyncerReplaceEvent.Generatef("replace events out of range, index: %d, total: %d", startLocation.Suffix, len(operator.events))
+		return nil, terror.ErrSyncerEvent.Generatef("replace or inject events out of range, index: %d, total: %d", startLocation.Suffix, len(operator.events))
 	}
 
 	e := operator.events[startLocation.Suffix]
 	buf := new(bytes.Buffer)
 	e.Dump(buf)
-	h.logger.Info("get replace event", zap.Stringer("event", buf))
+	h.logger.Info("get replace or inject event", zap.Stringer("event", buf))
 
 	return e, nil
 }
@@ -136,7 +161,11 @@ func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, realE
 		return false, pb.ErrorOp_InvalidErrorOp
 	}
 
-	if operator.op == pb.ErrorOp_Replace {
+	if operator.isAllInjected {
+		return false, pb.ErrorOp_InvalidErrorOp
+	}
+
+	if operator.op == pb.ErrorOp_Replace || operator.op == pb.ErrorOp_Inject {
 		if len(operator.events) == 0 {
 			// this should not happen
 			return false, pb.ErrorOp_InvalidErrorOp

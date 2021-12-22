@@ -51,7 +51,7 @@ func (s *Syncer) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReque
 
 	events := make([]*replication.BinlogEvent, 0)
 	var err error
-	if req.Op == pb.ErrorOp_Replace {
+	if req.Op == pb.ErrorOp_Replace || req.Op == pb.ErrorOp_Inject {
 		events, err = s.genEvents(ctx, req.Sqls)
 		if err != nil {
 			return err
@@ -101,7 +101,7 @@ func (s *Syncer) genEvents(ctx context.Context, sqls []string) ([]*replication.B
 			events = append(events, genQueryEvent([]byte(schema), []byte(sql)))
 		default:
 			// TODO: support DML
-			return nil, terror.ErrSyncerReplaceEvent.New("only support replace with DDL currently")
+			return nil, terror.ErrSyncerEvent.New("only support replace or inject with DDL currently")
 		}
 	}
 	return events, nil

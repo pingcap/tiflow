@@ -17,7 +17,6 @@ import (
 	"github.com/pingcap/ticdc/dm/dm/ctl/common"
 	"github.com/pingcap/ticdc/dm/dm/pb"
 
-	"github.com/pingcap/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -90,11 +89,18 @@ func newBinlogRevertCmd() *cobra.Command {
 // FIXME: implement this later.
 func newBinlogInjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:    "inject <task-name> <inject-sql1> <inject-sql2>...",
-		Short:  "inject the current error event or a specific binlog position (binlog-pos) ddl event with some ddls",
-		Hidden: true,
+		Use:   "inject <task-name> <inject-sql1> <inject-sql2>...",
+		Short: "inject the current error event or a specific binlog position (binlog-pos) ddl event with some ddls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errors.Errorf("this function will be supported later")
+			if len(args) <= 1 {
+				return cmd.Help()
+			}
+			taskName := common.GetTaskNameFromArgOrFile(cmd.Flags().Arg(0))
+			sqls, err := common.ExtractSQLsFromArgs(cmd.Flags().Args()[1:])
+			if err != nil {
+				return err
+			}
+			return sendHandleErrorRequest(cmd, pb.ErrorOp_Inject, taskName, sqls)
 		},
 	}
 	return cmd

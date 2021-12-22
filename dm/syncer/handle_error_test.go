@@ -51,10 +51,26 @@ func (s *testSyncerSuite) TestHandleError(c *C) {
 			},
 			{
 				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"insert into db.tb values(1,2);"}},
-				errMsg: ".*only support replace with DDL currently.*",
+				errMsg: ".*only support replace or inject with DDL currently.*",
 			},
 			{
 				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"alter table db.tb add column a int;"}},
+				errMsg: "",
+			},
+			{
+				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Inject, Task: task, BinlogPos: "", Sqls: []string{""}},
+				errMsg: fmt.Sprintf("source '%s' has no error", syncer.cfg.SourceID),
+			},
+			{
+				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Inject, Task: task, BinlogPos: "wrong_binlog_pos", Sqls: []string{""}},
+				errMsg: ".*invalid --binlog-pos .* in handle-error operation.*",
+			},
+			{
+				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Inject, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"wrong_sql"}},
+				errMsg: ".* sql wrong_sql: .*",
+			},
+			{
+				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Inject, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"alter table db.tb add column a int;"}},
 				errMsg: "",
 			},
 			{
