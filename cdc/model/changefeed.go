@@ -16,6 +16,7 @@ package model
 import (
 	"encoding/json"
 	"math"
+	"net/url"
 	"regexp"
 	"sort"
 	"time"
@@ -159,7 +160,18 @@ func (info *ChangeFeedInfo) String() (str string) {
 		log.Error("failed to unmarshal changefeed info", zap.Error(err))
 		return
 	}
-	clone.SinkURI = "***"
+	sinkURIParsed, err := url.Parse(clone.SinkURI)
+	if err != nil {
+		log.Error("failed to parse sink URI", zap.Error(err))
+		return
+	}
+	if sinkURIParsed.User != nil && sinkURIParsed.User.String() != "" {
+		sinkURIParsed.User = url.UserPassword("username", "password")
+	}
+	if sinkURIParsed.Host != "" {
+		sinkURIParsed.Host = "***"
+	}
+	clone.SinkURI = sinkURIParsed.String()
 	str, err = clone.Marshal()
 	if err != nil {
 		log.Error("failed to marshal changefeed info", zap.Error(err))
@@ -261,9 +273,15 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 func (info *ChangeFeedInfo) FixIncompatible() {
 	creatorVersionGate := version.NewCreatorVersionGate(info.CreatorVersion)
 	if creatorVersionGate.ChangefeedStateFromAdminJob() {
-		log.Info("Start fixing incompatible changefeed state", zap.Any("changefeed", info))
+		log.Info("Start fixing incompatible changefeed state", zap.String("changefeed", info.String()))
 		info.fixState()
-		log.Info("Fix incompatibility changefeed state completed", zap.Any("changefeed", info))
+		log.Info("Fix incompatibility changefeed state completed", zap.String("changefeed", info.String()))
+	}
+
+	if creatorVersionGate.ChangefeedAcceptUnknownProtocols() {
+		log.Info("Start fixing incompatible changefeed sink protocol", zap.String("changefeed", info.String()))
+		info.fixSinkProtocol()
+		log.Info("Fix incompatibility changefeed sink protocol completed", zap.String("changefeed", info.String()))
 	}
 }
 
@@ -302,6 +320,57 @@ func (info *ChangeFeedInfo) fixState() {
 			zap.String("admin job type", info.AdminJobType.String()),
 			zap.String("new state", string(state)))
 		info.State = state
+	}
+}
+
+// fixSinkProtocol attempts to fix protocol incompatible.
+// We no longer support the acceptance of protocols that are not known.
+// The ones that were already accepted need to be fixed.
+func (info *ChangeFeedInfo) fixSinkProtocol() {
+	sinkURIParsed, err := url.Parse(info.SinkURI)
+	if err != nil {
+		log.Warn("parse sink URI failed", zap.Error(err))
+		// SAFETY: It is safe to ignore this unresolvable sink URI here,
+		// as it is almost impossible for this to happen.
+		// If we ignore it when fixing it after it happens,
+		// it will expose the problem when starting the changefeed,
+		// which is easier to troubleshoot than reporting the error directly in the bootstrap process.
+		return
+	}
+	rawQuery := sinkURIParsed.Query()
+	protocolStr := rawQuery.Get(config.ProtocolKey)
+
+	needsFix := func(protocolStr string) bool {
+		var protocol config.Protocol
+		err = protocol.FromString(protocolStr)
+		// There are two cases:
+		// 1. there is an error indicating that the old ticdc accepts
+		//    a protocol that is not known. It needs to be fixed as open protocol.
+		// 2. If it is default, then it needs to be fixed as open protocol.
+		return err != nil || protocolStr == config.ProtocolDefault.String()
+	}
+
+	openProtocolStr := config.ProtocolOpen.String()
+	// The sinkURI always has a higher priority.
+	if protocolStr != "" {
+		if needsFix(protocolStr) {
+			rawQuery.Set(config.ProtocolKey, openProtocolStr)
+			oldRawQuery := sinkURIParsed.RawQuery
+			newRawQuery := rawQuery.Encode()
+			sinkURIParsed.RawQuery = newRawQuery
+			fixedSinkURI := sinkURIParsed.String()
+			log.Info("handle incompatible protocol from sink URI",
+				zap.String("old URI query", oldRawQuery),
+				zap.String("fixed URI query", newRawQuery))
+			info.SinkURI = fixedSinkURI
+		}
+	} else {
+		if needsFix(info.Config.Sink.Protocol) {
+			log.Info("handle incompatible protocol from sink config",
+				zap.String("old protocol", info.Config.Sink.Protocol),
+				zap.String("fixed protocol", openProtocolStr))
+			info.Config.Sink.Protocol = openProtocolStr
+		}
 	}
 }
 
