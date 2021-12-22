@@ -18,12 +18,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	pscheduler "github.com/pingcap/ticdc/cdc/scheduler"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/p2p"
-	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/cdc/model"
+	pscheduler "github.com/pingcap/tiflow/cdc/scheduler"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3"
@@ -333,4 +334,46 @@ func TestAgentNoOwnerAtStartUp(t *testing.T) {
 	// double close
 	err = agent.Close()
 	require.NoError(t, err)
+}
+
+func TestAgentTolerateClientClosed(t *testing.T) {
+	suite := newAgentTestSuite(t)
+	defer suite.Close()
+
+	suite.etcdKVClient.On("Get", mock.Anything, etcd.CaptureOwnerKey, mock.Anything).Return(&clientv3.GetResponse{
+		Kvs: []*mvccpb.KeyValue{
+			{
+				Key:         []byte(etcd.CaptureOwnerKey),
+				Value:       []byte(ownerCaptureID),
+				ModRevision: 1,
+			},
+		},
+	}, nil).Once()
+
+	// Test Point 1: Create an agent.
+	agent, err := suite.CreateAgent(t)
+	require.NoError(t, err)
+
+	_ = failpoint.Enable("github.com/pingcap/tiflow/pkg/p2p/ClientInjectClosed", "5*return(true)")
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/p2p/ClientInjectClosed")
+	}()
+
+	// Test Point 2: We should tolerate the error ErrPeerMessageClientClosed
+	for i := 0; i < 6; i++ {
+		err = agent.Tick(suite.cdcCtx)
+		require.NoError(t, err)
+	}
+
+	select {
+	case <-suite.ctx.Done():
+		require.Fail(t, "context should not be canceled")
+	case syncMsg := <-suite.syncCh:
+		require.Equal(t, &model.SyncMessage{
+			ProcessorVersion: version.ReleaseSemver(),
+			Running:          nil,
+			Adding:           nil,
+			Removing:         nil,
+		}, syncMsg)
+	}
 }

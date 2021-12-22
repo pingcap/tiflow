@@ -16,7 +16,12 @@ package config
 import (
 	"strings"
 
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+)
+
+const (
+	// ProtocolKey specifies the key of the protocol in the SinkURI.
+	ProtocolKey = "protocol"
 )
 
 // Protocol is the protocol of the mq message.

@@ -20,14 +20,14 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/scheduler"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/p2p"
-	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/version"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -288,6 +288,9 @@ func (a *agentImpl) trySendMessage(
 	topic p2p.Topic,
 	value interface{},
 ) (bool, error) {
+	// TODO (zixiong): abstract this function out together with the similar method in cdc/owner/scheduler.go
+	// We probably need more advanced logic to handle and mitigate complex failure situations.
+
 	client := a.messageRouter.GetClient(target)
 	if client == nil {
 		a.printNoClientWarning(target)
@@ -297,6 +300,13 @@ func (a *agentImpl) trySendMessage(
 	seq, err := client.TrySendMessage(ctx, topic, value)
 	if err != nil {
 		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
+			return false, nil
+		}
+		if cerror.ErrPeerMessageClientClosed.Equal(err) {
+			log.Warn("peer messaging client is closed while trying to send a message through it. "+
+				"Report a bug if this warning repeats",
+				zap.String("changefeed-id", a.changeFeed),
+				zap.String("target", target))
 			return false, nil
 		}
 		return false, errors.Trace(err)
