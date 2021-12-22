@@ -16,6 +16,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -77,6 +78,7 @@ type SourceWorker struct {
 	relayWg      sync.WaitGroup
 	relayHolder  RelayHolder
 	relayPurger  relay.Purger
+	relayDir     string
 
 	startedRelayBySourceCfg bool
 
@@ -89,13 +91,19 @@ type SourceWorker struct {
 
 // NewSourceWorker creates a new SourceWorker. The functionality of relay and subtask is disabled by default, need call EnableRelay
 // and EnableSubtask later.
-func NewSourceWorker(cfg *config.SourceConfig, etcdClient *clientv3.Client, name string) (w *SourceWorker, err error) {
+func NewSourceWorker(
+	cfg *config.SourceConfig,
+	etcdClient *clientv3.Client,
+	name string,
+	relayDir string,
+) (w *SourceWorker, err error) {
 	w = &SourceWorker{
 		cfg:           cfg,
 		subTaskHolder: newSubTaskHolder(),
 		l:             log.With(zap.String("component", "worker controller")),
 		etcdClient:    etcdClient,
 		name:          name,
+		relayDir:      relayDir,
 	}
 	// keep running until canceled in `Close`.
 	w.ctx, w.cancel = context.WithCancel(context.Background())
@@ -334,6 +342,13 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 	}
 
 	// 2. initial relay holder, the cfg's password need decrypt
+	// worker's relay-dir has higher priority than source's relay-dir
+	if w.relayDir != "" {
+		workerRelayDir := filepath.Join(w.relayDir, w.name)
+		log.L().Info("use worker's relay-dir", zap.String("RelayDir", workerRelayDir))
+		w.cfg.RelayDir = workerRelayDir
+	}
+
 	w.relayHolder = NewRelayHolder(w.cfg)
 	relayPurger, err := w.relayHolder.Init(w.relayCtx, []relay.PurgeInterceptor{
 		w,

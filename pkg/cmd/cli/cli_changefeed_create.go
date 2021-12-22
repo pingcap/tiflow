@@ -204,7 +204,7 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 			return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 		}
 
-		protocol := sinkURIParsed.Query().Get("protocol")
+		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
 		if protocol != "" {
 			cfg.Sink.Protocol = protocol
 		}
