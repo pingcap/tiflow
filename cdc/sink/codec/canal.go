@@ -92,7 +92,6 @@ func convertDdlEventType(e *model.DDLEvent) canal.EventType {
 }
 
 func isCanalDdl(t canal.EventType) bool {
-	// EventType_QUERY is not a ddl type in canal, but in cdc it is.
 	// see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L297
 	switch t {
 	case canal.EventType_CREATE,
