@@ -141,9 +141,12 @@ func mySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
 
 	case mysql.TypeJSON:
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 		// json: see jdbc 8.0, https://github.com/mysql/mysql-connector-j/blob/8.0.20/src/main/core-api/java/com/mysql/cj/MysqlType.java
 >>>>>>> 53a36b25c (type fix.)
+=======
+>>>>>>> ca1ba0084 (fix conflicts.)
 		return JavaSQLTypeVARCHAR
 
 	default:
