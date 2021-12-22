@@ -41,7 +41,7 @@ const (
 	JavaSQLTypeCLOB          JavaSQLType = 2005
 
 	// unused
-	// JavaSQLTypeLONGVARCHAR   		  JavaSQLType = -1
+	// JavaSQLTypeLONGVARCHAR             JavaSQLType = -1
 	// JavaSQLTypeFLOAT                   JavaSQLType = 6
 	// JavaSQLTypeNUMERIC                 JavaSQLType = 2
 	// JavaSQLTypeOTHER                   JavaSQLType = 1111
