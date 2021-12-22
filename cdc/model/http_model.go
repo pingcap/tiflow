@@ -27,13 +27,13 @@ type JSONTime time.Time
 
 // MarshalJSON use to specify the time format
 func (t JSONTime) MarshalJSON() ([]byte, error) {
-	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006-01-02 15:04:05"))
+	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006-01-02 15:04:05.000"))
 	return []byte(stamp), nil
 }
 
 // UnmarshalJSON used to parse time.Time from bytes
 func (t *JSONTime) UnmarshalJSON(data []byte) error {
-	tm, err := time.Parse(`"2006-01-02 15:04:05"`, string(data))
+	tm, err := time.Parse(`"2006-01-02 15:04:05.000"`, string(data))
 	if err != nil {
 		return err
 	}

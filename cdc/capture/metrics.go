@@ -11,10 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package capture
 
 import (
-	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -34,28 +33,28 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var Registry = prometheus.NewRegistry()
+var registry = prometheus.NewRegistry()
 
 func init() {
-	Registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	Registry.MustRegister(prometheus.NewGoCollector())
+	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	registry.MustRegister(prometheus.NewGoCollector())
 
-	kv.InitMetrics(Registry)
-	puller.InitMetrics(Registry)
-	sink.InitMetrics(Registry)
-	entry.InitMetrics(Registry)
-	processor.InitMetrics(Registry)
-	tablepipeline.InitMetrics(Registry)
-	owner.InitMetrics(Registry)
-	etcd.InitMetrics(Registry)
-	capture.InitServerMetrics(Registry)
-	actor.InitMetrics(Registry)
-	orchestrator.InitMetrics(Registry)
+	kv.InitMetrics(registry)
+	puller.InitMetrics(registry)
+	sink.InitMetrics(registry)
+	entry.InitMetrics(registry)
+	processor.InitMetrics(registry)
+	tablepipeline.InitMetrics(registry)
+	owner.InitMetrics(registry)
+	etcd.InitMetrics(registry)
+	InitServerMetrics(registry)
+	actor.InitMetrics(registry)
+	orchestrator.InitMetrics(registry)
 	// Sorter metrics
-	sorter.InitMetrics(Registry)
-	memory.InitMetrics(Registry)
-	unified.InitMetrics(Registry)
-	leveldb.InitMetrics(Registry)
-	redowriter.InitMetrics(Registry)
-	db.InitMetrics(Registry)
+	sorter.InitMetrics(registry)
+	memory.InitMetrics(registry)
+	unified.InitMetrics(registry)
+	leveldb.InitMetrics(registry)
+	redowriter.InitMetrics(registry)
+	db.InitMetrics(registry)
 }
