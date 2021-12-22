@@ -394,6 +394,11 @@ func (c *MessageClient) TrySendMessage(ctx context.Context, topic Topic, value i
 		failpoint.Return(0, cerrors.ErrPeerMessageSendTryAgain.GenWithStackByArgs())
 	})
 
+	// FIXME (zixiong): This is a temporary way for testing whether the caller can handler this error.
+	failpoint.Inject("ClientInjectClosed", func() {
+		failpoint.Return(0, cerrors.ErrPeerMessageClientClosed.GenWithStackByArgs())
+	})
+
 	return c.sendMessage(ctx, topic, value, true)
 }
 
