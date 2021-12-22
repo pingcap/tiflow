@@ -43,12 +43,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// forceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
-var forceEnableOldValueProtocols = []string{
-	"canal",
-	"maxwell",
-}
-
 // changefeedCommonOptions defines common changefeed flags.
 type changefeedCommonOptions struct {
 	noConfirm              bool
@@ -208,7 +202,7 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 		if protocol != "" {
 			cfg.Sink.Protocol = protocol
 		}
-		for _, fp := range forceEnableOldValueProtocols {
+		for _, fp := range config.ForceEnableOldValueProtocols {
 			if cfg.Sink.Protocol == fp {
 				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", cfg.Sink.Protocol))
 				cfg.EnableOldValue = true
