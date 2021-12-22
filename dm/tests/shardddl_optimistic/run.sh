@@ -50,15 +50,15 @@ function DM_DIFFERENT_SCHEMA_FULL() {
 	# create table with different schema, init data, and create table in downstream manually
 	run_case DIFFERENT_SCHEMA_FULL "double-source-optimistic" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key);\"; \
-     run_sql_source1 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10));\"; \
-     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, c text);\"; \
-     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10), c text);\"; \
-     run_sql_source1 \"insert into ${shardddl1}.${tb1} values(1);\"; \
-     run_sql_source1 \"insert into ${shardddl1}.${tb2} values(2,'22');\"; \
-     run_sql_source2 \"insert into ${shardddl1}.${tb1} values(3,'333');\"; \
-     run_sql_source2 \"insert into ${shardddl1}.${tb2} values(4,'44','444');\"; \
-     run_sql_tidb \"create database if not exists ${shardddl};\"; \
-     run_sql_tidb \"create table ${shardddl}.${tb} (a int primary key, b varchar(10), c text);\"" \
+    run_sql_source1 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10));\"; \
+    run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, c text);\"; \
+    run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10), c text);\"; \
+    run_sql_source1 \"insert into ${shardddl1}.${tb1} values(1);\"; \
+    run_sql_source1 \"insert into ${shardddl1}.${tb2} values(2,'22');\"; \
+    run_sql_source2 \"insert into ${shardddl1}.${tb1} values(3,'333');\"; \
+    run_sql_source2 \"insert into ${shardddl1}.${tb2} values(4,'44','444');\"; \
+    run_sql_tidb \"create database if not exists ${shardddl};\"; \
+    run_sql_tidb \"create table ${shardddl}.${tb} (a int primary key, b varchar(10), c text);\"" \
 		"clean_table" "optimistic"
 }
 
@@ -153,15 +153,15 @@ function DM_DIFFERENT_SCHEMA_INCREMENTAL() {
 	# create table with different schema, init data, and create table in downstream manually
 	run_case DIFFERENT_SCHEMA_INCREMENTAL "double-source-optimistic" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key);\"; \
-     run_sql_source1 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10));\"; \
-     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, c text);\"; \
-     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10), c text);\"; \
-     run_sql_source1 \"insert into ${shardddl1}.${tb1} values(1);\"; \
-     run_sql_source1 \"insert into ${shardddl1}.${tb2} values(2,'22');\"; \
-     run_sql_source2 \"insert into ${shardddl1}.${tb1} values(3,'333');\"; \
-     run_sql_source2 \"insert into ${shardddl1}.${tb2} values(4,'44','444');\"; \
-     run_sql_tidb \"create database if not exists ${shardddl};\"; \
-     run_sql_tidb \"create table ${shardddl}.${tb} (a int primary key, b varchar(10), c text);\"" \
+    run_sql_source1 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10));\"; \
+    run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, c text);\"; \
+    run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10), c text);\"; \
+    run_sql_source1 \"insert into ${shardddl1}.${tb1} values(1);\"; \
+    run_sql_source1 \"insert into ${shardddl1}.${tb2} values(2,'22');\"; \
+    run_sql_source2 \"insert into ${shardddl1}.${tb1} values(3,'333');\"; \
+    run_sql_source2 \"insert into ${shardddl1}.${tb2} values(4,'44','444');\"; \
+    run_sql_tidb \"create database if not exists ${shardddl};\"; \
+    run_sql_tidb \"create table ${shardddl}.${tb} (a int primary key, b varchar(10), c text);\"" \
 		"clean_table" "optimistic"
 }
 
@@ -216,15 +216,15 @@ function DM_RESTART_TASK_MASTER_WORKER() {
 	# create table with different schema, init data, and create table in downstream manually
 	run_case RESTART_TASK_MASTER_WORKER "double-source-optimistic" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key);\"; \
-   		run_sql_source1 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10));\"; \
-   		run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, c text);\"; \
-   		run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10), c text);\"; \
-   		run_sql_source1 \"insert into ${shardddl1}.${tb1} values(1);\"; \
-   		run_sql_source1 \"insert into ${shardddl1}.${tb2} values(2,'22');\"; \
-   		run_sql_source2 \"insert into ${shardddl1}.${tb1} values(3,'333');\"; \
-   		run_sql_source2 \"insert into ${shardddl1}.${tb2} values(4,'44','444');\"; \
-   		run_sql_tidb \"create database if not exists ${shardddl};\"; \
-   		run_sql_tidb \"create table ${shardddl}.${tb} (a int primary key, b varchar(10), c text);\"" \
+   	run_sql_source1 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10));\"; \
+   	run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, c text);\"; \
+   	run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10), c text);\"; \
+   	run_sql_source1 \"insert into ${shardddl1}.${tb1} values(1);\"; \
+   	run_sql_source1 \"insert into ${shardddl1}.${tb2} values(2,'22');\"; \
+   	run_sql_source2 \"insert into ${shardddl1}.${tb1} values(3,'333');\"; \
+   	run_sql_source2 \"insert into ${shardddl1}.${tb2} values(4,'44','444');\"; \
+   	run_sql_tidb \"create database if not exists ${shardddl};\"; \
+   	run_sql_tidb \"create table ${shardddl}.${tb} (a int primary key, b varchar(10), c text);\"" \
 		"clean_table" "optimistic"
 }
 
