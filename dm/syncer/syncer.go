@@ -1024,6 +1024,7 @@ func (s *Syncer) handleJob(job *job) (err error) {
 		// DMl events will generate many jobs and only caller knows all jobs has been sent, so many logics are done by
 		// caller
 		s.isTransactionEnd = false
+		skipCheckFlush = true
 		return nil
 	case ddl:
 		s.jobWg.Wait()
