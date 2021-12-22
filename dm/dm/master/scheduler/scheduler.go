@@ -2364,6 +2364,23 @@ func (s *Scheduler) hasLoadTaskByWorkerAndSource(worker, source string) bool {
 	return false
 }
 
+// TryResolveLoadTask checks if there are sources whose load task has local files and not bound to the worker which is
+// accessible to the local files. If so, trigger a transfer source.
+func (s *Scheduler) TryResolveLoadTask(sources []string) {
+	for _, source := range sources {
+		s.mu.Lock()
+		worker, ok := s.bounds[source]
+		if !ok {
+			s.mu.Unlock()
+			continue
+		}
+		if err := s.tryResolveLoadTask(worker.baseInfo.Name, source); err != nil {
+			s.logger.Error("tryResolveLoadTask failed", zap.Error(err))
+		}
+		s.mu.Unlock()
+	}
+}
+
 func (s *Scheduler) tryResolveLoadTask(originWorker, originSource string) error {
 	if s.hasLoadTaskByWorkerAndSource(originWorker, originSource) {
 		return nil
