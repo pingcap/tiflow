@@ -35,6 +35,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
+	conf.Sink.Protocol = "open-protocol"
 	conf.Sink.ColumnSelectors = []*ColumnSelector{
 		{
 			Matcher: []string{"1.1"},
@@ -74,6 +75,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
+	conf.Sink.Protocol = "open-protocol"
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, Dispatcher: "r1"},
 		{Matcher: []string{"a.c"}, Dispatcher: "r2"},
