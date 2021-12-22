@@ -104,7 +104,7 @@ func (c *column) decodeCanalJSONColumn(name string, javaType JavaSQLType) *model
 
 	value, ok := col.Value.(string)
 	if !ok {
-		log.Panic("canal-json encoded message should have type int `string`")
+		log.Panic("canal-json encoded message should have type in `string`")
 	}
 
 	if javaType != JavaSQLTypeBLOB {
