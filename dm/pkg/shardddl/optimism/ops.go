@@ -84,12 +84,21 @@ func DeleteInfosOperationsTablesByTask(cli *clientv3.Client, task string, lockID
 }
 
 // DeleteInfosOperationsTablesByTaskAndSource deletes the shard DDL infos and operations in etcd by task and source.
-// This function should often be called by DM-master when stop a task for a certain source.
-func DeleteInfosOperationsTablesByTaskAndSource(cli *clientv3.Client, task string, source string) (int64, error) {
+// This function should often be called by DM-master when stop a task for sources.
+func DeleteInfosOperationsTablesByTaskAndSource(cli *clientv3.Client, task string, sources []string, dropColumns map[string][]string) (int64, error) {
 	opsDel := make([]clientv3.Op, 0, 5)
-	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Encode(task, source), clientv3.WithPrefix()))
-	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismOperationKeyAdapter.Encode(task, source), clientv3.WithPrefix()))
-	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismSourceTablesKeyAdapter.Encode(task, source), clientv3.WithPrefix()))
+	for _, source := range sources {
+		opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Encode(task, source), clientv3.WithPrefix()))
+		opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismOperationKeyAdapter.Encode(task, source), clientv3.WithPrefix()))
+		opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismSourceTablesKeyAdapter.Encode(task, source), clientv3.WithPrefix()))
+		for lockID, cols := range dropColumns {
+			for _, col := range cols {
+				for _, source := range sources {
+					opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismDroppedColumnsKeyAdapter.Encode(lockID, col, source), clientv3.WithPrefix()))
+				}
+			}
+		}
+	}
 	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, opsDel...)
 	return rev, err
 }

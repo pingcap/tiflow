@@ -54,3 +54,39 @@ function restart_master() {
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 }
+
+function restart_worker1() {
+	echo "restart dm-worker1"
+	ps aux | grep worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+}
+
+function restart_worker2() {
+	echo "restart dm-worker2"
+	ps aux | grep worker2 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER2_PORT 20
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+}
+
+function restart_task() {
+	echo "restart task"
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test"
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $1"
+
+	if [[ "$task_conf" == *"single"* ]]; then
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"\"unit\": \"Sync\"" 1
+	elif [[ "$task_conf" == *"double"* ]]; then
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"\"unit\": \"Sync\"" 2
+	fi
+}

@@ -200,33 +200,27 @@ func (o *Optimist) RemoveMetaDataWithTaskAndSources(task string, sources ...stri
 		return terror.ErrMasterOptimistNotStarted.Generate()
 	}
 
-	for _, source := range sources {
-		// gets all infos for this task and source.
-		infos, _, err := optimism.GetInfosByTaskAndSource(o.cli, task, source)
-		if err != nil {
-			return err
+	dropColumns := make(map[string][]string)
+
+	// gets all locks for this task
+	locks := o.lk.FindLocksByTask(task)
+	for _, lock := range locks {
+		// remove table by sources for related lock
+		if lock != nil {
+			cols := lock.TryRemoveTableBySources(sources)
+			dropColumns[lock.ID] = cols
+			o.logger.Debug("the tables removed from the lock", zap.String("task", task), zap.Strings("sources", sources))
 		}
-		for _, info := range infos {
-			lock := o.lk.FindLockByInfo(info)
-			// remove table for related lock
-			if lock != nil {
-				removed := lock.TryRemoveTable(info.Source, info.UpSchema, info.UpTable)
-				o.logger.Debug("the table name remove from the table keeper", zap.Bool("removed", removed), zap.String("info", info.ShortString()))
-			}
-			if !lock.HasTables() {
-				o.lk.RemoveLock(lock.ID)
-			}
-		}
-		// remove source table in table keeper
-		removed := o.tk.RemoveTableByTaskAndSource(task, source)
-		o.logger.Debug("a table removed for info from the lock", zap.Bool("removed", removed), zap.String("task", task), zap.String("source", source))
-		// clear meta data in etcd
-		_, err = optimism.DeleteInfosOperationsTablesByTaskAndSource(o.cli, task, source)
-		if err != nil {
-			return err
+		if !lock.HasTables() {
+			o.lk.RemoveLock(lock.ID)
 		}
 	}
-	return nil
+	// remove source table in table keeper
+	o.tk.RemoveTableByTaskAndSources(task, sources)
+	o.logger.Debug("the tables removed from the table keeper", zap.String("task", task), zap.Strings("source", sources))
+	// clear meta data in etcd
+	_, err := optimism.DeleteInfosOperationsTablesByTaskAndSource(o.cli, task, sources, dropColumns)
+	return err
 }
 
 // run runs jobs in the background.
@@ -302,6 +296,7 @@ func (o *Optimist) rebuildLocks() (revSource, revInfo, revOperation int64, err e
 		// then these unexpected locks can be handled by the user.
 		o.logger.Error("fail to recover locks", log.ShortError(err))
 	}
+	o.lk.SetDropColumns(nil)
 
 	return revSource, revInfo, revOperation, nil
 }

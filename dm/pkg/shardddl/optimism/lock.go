@@ -436,6 +436,31 @@ func (l *Lock) TryRemoveTable(source, schema, table string) bool {
 	return true
 }
 
+// TryRemoveTable tries to remove tables in the lock by sources.
+// return drop columns for later use.
+func (l *Lock) TryRemoveTableBySources(sources []string) []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	dropColumns := make([]string, 0)
+	for _, source := range sources {
+		if _, ok := l.tables[source]; !ok {
+			continue
+		}
+
+		delete(l.tables, source)
+		_, remain := l.syncStatus()
+		l.synced = remain == 0
+		delete(l.done, source)
+		delete(l.versions, source)
+		for _, sourceColumns := range l.columns {
+			delete(sourceColumns, source)
+		}
+		log.L().Info("tables removed from the lock", zap.String("lock", l.ID), zap.String("source", source))
+	}
+	return dropColumns
+}
+
 // HasTables check whether a lock has tables.
 func (l *Lock) HasTables() bool {
 	l.mu.Lock()

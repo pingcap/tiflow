@@ -56,9 +56,7 @@ func NewLockKeeper(getDownstreamMetaFunc func(string) (*config.DBConfig, string)
 
 // SetDropColumns set drop columns for lock keeper.
 func (lk *LockKeeper) SetDropColumns(dropColumns map[string]map[string]map[string]map[string]map[string]DropColumnStage) {
-	if dropColumns != nil {
-		lk.dropColumns = dropColumns
-	}
+	lk.dropColumns = dropColumns
 }
 
 // getDownstreamMeta gets and cached downstream meta.
@@ -103,10 +101,11 @@ func (lk *LockKeeper) TrySync(cli *clientv3.Client, info Info, tts []TargetTable
 		lk.locks[lockID] = NewLock(cli, lockID, info.Task, info.DownSchema, info.DownTable, schemacmp.Encode(info.TableInfoBefore), tts, downstreamMeta)
 		l = lk.locks[lockID]
 
-		// set drop columns
-		if cols, ok := lk.dropColumns[lockID]; ok {
-			l.columns = cols
-			delete(lk.dropColumns, lockID)
+		// set drop columns, only when recover locks
+		if lk.dropColumns != nil {
+			if cols, ok := lk.dropColumns[lockID]; ok {
+				l.columns = cols
+			}
 		}
 	}
 
@@ -136,6 +135,21 @@ func (lk *LockKeeper) FindLock(lockID string) *Lock {
 	defer lk.mu.RUnlock()
 
 	return lk.locks[lockID]
+}
+
+// FindLocksByTask finds locks by task.
+func (lk *LockKeeper) FindLocksByTask(task string) []*Lock {
+	lk.mu.RLock()
+	defer lk.mu.RUnlock()
+
+	locks := make([]*Lock, 0)
+	for _, lock := range lk.locks {
+		if lock.Task == task {
+			locks = append(locks, lock)
+		}
+	}
+
+	return locks
 }
 
 // FindLockByInfo finds a lock with a shard DDL info.
@@ -295,20 +309,18 @@ func (tk *TableKeeper) RemoveTableByTask(task string) bool {
 	return true
 }
 
-// RemoveTableByTaskAndSource removes tables from the source tables through task name and source.
-// it returns whether removed (exit before).
-func (tk *TableKeeper) RemoveTableByTaskAndSource(task, source string) bool {
+// RemoveTableByTaskAndSource removes tables from the source tables through task name and sources.
+func (tk *TableKeeper) RemoveTableByTaskAndSources(task string, sources []string) {
 	tk.mu.Lock()
 	defer tk.mu.Unlock()
 
 	if _, ok := tk.tables[task]; !ok {
-		return false
+		return
 	}
-	if _, ok := tk.tables[task][source]; !ok {
-		return false
+
+	for _, source := range sources {
+		delete(tk.tables[task], source)
 	}
-	delete(tk.tables[task], source)
-	return true
 }
 
 // FindTables finds source tables by task name and downstream table name.
