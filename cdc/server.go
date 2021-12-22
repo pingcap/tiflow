@@ -45,8 +45,7 @@ import (
 )
 
 const (
-	ownerRunInterval = time.Millisecond * 500
-	defaultDataDir   = "/tmp/cdc_data"
+	defaultDataDir = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	dataDirThreshold = 500
 )
