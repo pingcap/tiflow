@@ -34,7 +34,6 @@ const ownershipCheckDuration = 1 * time.Second
 func (s *Server) startStatusServer() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.closeStatusServer()
 	// discard gin log output
 	gin.DefaultWriter = io.Discard
 	var router *gin.Engine

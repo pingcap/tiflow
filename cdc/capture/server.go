@@ -249,6 +249,8 @@ func (s *Server) Close() {
 	if s.capture != nil {
 		s.capture.AsyncClose()
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.closeStatusServer()
 }
 
