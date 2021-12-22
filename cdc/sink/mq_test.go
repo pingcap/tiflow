@@ -54,7 +54,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
-		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=default"
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=open-protocol"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
@@ -158,7 +158,7 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	prodSuccess := new(sarama.ProduceResponse)
 	prodSuccess.AddTopicPartition(topic, 0, sarama.ErrNoError)
 
-	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&auto-create-topic=false&protocol=default"
+	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&auto-create-topic=false&protocol=open-protocol"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
@@ -257,7 +257,7 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
-		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=default"
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=open-protocol"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
