@@ -17,8 +17,8 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/sorter/encoding"
-	"github.com/pingcap/ticdc/pkg/db"
+	"github.com/pingcap/tiflow/cdc/sorter/encoding"
+	"github.com/pingcap/tiflow/pkg/db"
 	"golang.org/x/sync/semaphore"
 )
 

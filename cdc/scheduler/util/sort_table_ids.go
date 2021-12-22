@@ -16,7 +16,7 @@ package util
 import (
 	"sort"
 
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // SortTableIDs sorts a slice of table IDs in ascending order.

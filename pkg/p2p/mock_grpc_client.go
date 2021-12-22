@@ -17,7 +17,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/pingcap/ticdc/proto/p2p"
+	"github.com/pingcap/tiflow/proto/p2p"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
 )
