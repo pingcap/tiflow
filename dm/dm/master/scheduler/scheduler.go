@@ -621,12 +621,12 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 // TransferSource unbinds the `source` and binds it to a free or same-source-relay `worker`.
 // If fails halfway, the old worker should try recover.
 func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) error {
+	s.mu.RLock()
 	if !s.started {
+		s.mu.RUnlock()
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
-
 	// 1. check existence or no need
-	s.mu.RLock()
 	if _, ok := s.sourceCfgs[source]; !ok {
 		s.mu.RUnlock()
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
@@ -736,8 +736,8 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 			if notPausedTaskCount == 0 {
 				break
 			}
-			// the defaultRPCTimeout is 10m and we assume each task need 1s to pause
-			time.Sleep(time.Second * time.Duration(notPausedTaskCount))
+			// NOTE: the defaultRPCTimeout is 10m, use 1s * retry times to increase the waiting time
+			time.Sleep(time.Second * time.Duration(10-maxRetryNum))
 		}
 	}
 
