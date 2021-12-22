@@ -81,8 +81,7 @@ func (l *locationRecorder) setCurEndLocation(location binlog.Location) {
 }
 
 func (l *locationRecorder) saveTxnEndLocation() {
-	l.txnEndLocation = l.curEndLocation
-	_ = l.txnEndLocation.SetGTID(l.curEndLocation.GetGTID().Origin().Clone())
+	l.txnEndLocation = l.curEndLocation.Clone()
 }
 
 // shouldUpdatePos returns true when the given event is from a real upstream writing, returns false when the event is
@@ -123,7 +122,6 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 	l.curStartLocation = l.curEndLocation
 
 	if !shouldUpdatePos(e) {
-		// so for these events, we'll set streamer to let curStartLocation equals curEndLocation
 		return
 	}
 
@@ -131,7 +129,7 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 		nextName := string(event.NextLogName)
 		if l.curEndLocation.Position.Name != nextName {
 			l.curEndLocation.Position.Name = nextName
-			l.curEndLocation.Position.Pos = 4
+			l.curEndLocation.Position.Pos = binlog.FileHeaderLen
 			l.saveTxnEndLocation()
 		}
 		return
