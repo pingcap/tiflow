@@ -500,6 +500,8 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			release()
 		}
 
+		go s.scheduler.TryResolveLoadTask(sources)
+
 		resp.Result = true
 		if cfg.RemoveMeta {
 			resp.Msg = "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
@@ -1467,10 +1469,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
 		dbutil.TableName(metaSchema, cputil.SyncerOnlineDDL(taskName))))
 
-	if _, err = dbConn.ExecuteSQL(ctctx, nil, taskName, sqls); err != nil {
-		return err
-	}
-	err = s.scheduler.RemoveLoadTask(taskName)
+	_, err = dbConn.ExecuteSQL(ctctx, nil, taskName, sqls)
 	if err == nil {
 		metrics.RemoveDDLPending(taskName)
 	}
