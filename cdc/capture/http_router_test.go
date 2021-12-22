@@ -24,7 +24,7 @@ import (
 
 func TestPProfPath(t *testing.T) {
 	t.Parallel()
-	router := NewRouter(NewHTTPHandler(nil))
+	router := NewRouter(NewHTTPHandler(nil, nil))
 
 	apis := []*openAPI{
 		{"/debug/pprof/", http.MethodGet},

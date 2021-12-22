@@ -20,8 +20,9 @@ import (
 	"strings"
 	"time"
 
+	capture2 "github.com/pingcap/tiflow/cdc/capture"
+
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -136,7 +137,7 @@ func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClien
 	}
 
 	resp, err := httpClient.PostForm(url, map[string][]string{
-		cdc.APIOpVarChangefeedID: {id},
+		capture2.APIOpVarChangefeedID: {id},
 	})
 	if err != nil {
 		return "", err
@@ -178,9 +179,9 @@ func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClie
 	}
 
 	resp, err := httpClient.PostForm(url, map[string][]string{
-		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
-		cdc.APIOpVarChangefeedID:       {job.CfID},
-		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
+		capture2.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
+		capture2.APIOpVarChangefeedID:       {job.CfID},
+		capture2.APIOpForceRemoveChangefeed: {forceRemoveOpt},
 	})
 	if err != nil {
 		return err

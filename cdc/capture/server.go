@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package capture
 
 import (
 	"context"
@@ -20,12 +20,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -54,7 +54,8 @@ const (
 
 // Server is the capture server
 type Server struct {
-	capture      *capture.Capture
+	mu           sync.Mutex
+	capture      *Capture
 	statusServer *http.Server
 	pdClient     pd.Client
 	etcdClient   *etcd.CDCEtcdClient
@@ -167,12 +168,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.kvStorage = kvStore
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
-	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
-
-	err = s.startStatusHTTP()
-	if err != nil {
-		return err
-	}
+	s.capture = NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
 
 	return s.run(ctx)
 }
@@ -230,6 +226,10 @@ func (s *Server) run(ctx context.Context) (err error) {
 	})
 
 	wg.Go(func() error {
+		return s.runStatusServer(cctx)
+	})
+
+	wg.Go(func() error {
 		return s.etcdHealthChecker(cctx)
 	})
 
@@ -249,13 +249,7 @@ func (s *Server) Close() {
 	if s.capture != nil {
 		s.capture.AsyncClose()
 	}
-	if s.statusServer != nil {
-		err := s.statusServer.Close()
-		if err != nil {
-			log.Error("close status server", zap.Error(err))
-		}
-		s.statusServer = nil
-	}
+	s.closeStatusServer()
 }
 
 func (s *Server) initDir(ctx context.Context) error {

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package capture
 
 import (
 	"bytes"
@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/br/pkg/httputil"
-	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -36,7 +35,6 @@ import (
 	security2 "github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
 type httpStatusSuite struct{}
@@ -69,8 +67,9 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	conf.AdvertiseAddr = advertiseAddr4Test
 	config.StoreGlobalServerConfig(conf)
 	server, err := NewServer([]string{"http://127.0.0.1:2379"})
+	server.capture = NewCapture4Test()
 	c.Assert(err, check.IsNil)
-	err = server.startStatusHTTP()
+	err = server.startStatusServer()
 	c.Assert(err, check.IsNil)
 	defer func() {
 		c.Assert(server.statusServer.Close(), check.IsNil)
@@ -130,11 +129,9 @@ func testHandleChangefeedQuery(c *check.C) {
 func testRequestNonOwnerFailed(c *check.C, uri string) {
 	resp, err := http.PostForm(uri, url.Values{})
 	c.Assert(err, check.IsNil)
-	data, err := io.ReadAll(resp.Body)
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
-	c.Assert(string(data), check.Equals, concurrency.ErrElectionNotLeader.Error())
 }
 
 func testHandleFailpoint(c *check.C) {
@@ -184,9 +181,9 @@ func (s *httpStatusSuite) TestServerTLSWithoutCommonName(c *check.C) {
 	config.StoreGlobalServerConfig(conf)
 
 	server, err := NewServer([]string{"https://127.0.0.1:2379"})
-	server.capture = capture.NewCapture4Test()
+	server.capture = NewCapture4Test()
 	c.Assert(err, check.IsNil)
-	err = server.startStatusHTTP()
+	err = server.startStatusServer()
 	c.Assert(err, check.IsNil)
 	defer func() {
 		c.Assert(server.statusServer.Close(), check.IsNil)
@@ -252,9 +249,9 @@ func (s *httpStatusSuite) TestServerTLSWithCommonName(c *check.C) {
 	config.StoreGlobalServerConfig(conf)
 
 	server, err := NewServer([]string{"https://127.0.0.1:2379"})
-	server.capture = capture.NewCapture4Test()
+	server.capture = NewCapture4Test()
 	c.Assert(err, check.IsNil)
-	err = server.startStatusHTTP()
+	err = server.startStatusServer()
 	c.Assert(err, check.IsNil)
 	defer func() {
 		c.Assert(server.statusServer.Close(), check.IsNil)

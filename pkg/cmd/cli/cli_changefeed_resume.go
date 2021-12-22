@@ -17,7 +17,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/pingcap/tiflow/cdc"
+	capture2 "github.com/pingcap/tiflow/cdc/capture"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
@@ -79,7 +80,7 @@ func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Conte
 		return err
 	}
 
-	info := &cdc.ChangefeedResp{}
+	info := &capture2.ChangefeedResp{}
 	err = json.Unmarshal([]byte(resp), info)
 	if err != nil {
 		return err

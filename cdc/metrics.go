@@ -14,6 +14,7 @@
 package cdc
 
 import (
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -33,28 +34,28 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var registry = prometheus.NewRegistry()
+var Registry = prometheus.NewRegistry()
 
 func init() {
-	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	registry.MustRegister(prometheus.NewGoCollector())
+	Registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	Registry.MustRegister(prometheus.NewGoCollector())
 
-	kv.InitMetrics(registry)
-	puller.InitMetrics(registry)
-	sink.InitMetrics(registry)
-	entry.InitMetrics(registry)
-	processor.InitMetrics(registry)
-	tablepipeline.InitMetrics(registry)
-	owner.InitMetrics(registry)
-	etcd.InitMetrics(registry)
-	initServerMetrics(registry)
-	actor.InitMetrics(registry)
-	orchestrator.InitMetrics(registry)
+	kv.InitMetrics(Registry)
+	puller.InitMetrics(Registry)
+	sink.InitMetrics(Registry)
+	entry.InitMetrics(Registry)
+	processor.InitMetrics(Registry)
+	tablepipeline.InitMetrics(Registry)
+	owner.InitMetrics(Registry)
+	etcd.InitMetrics(Registry)
+	capture.InitServerMetrics(Registry)
+	actor.InitMetrics(Registry)
+	orchestrator.InitMetrics(Registry)
 	// Sorter metrics
-	sorter.InitMetrics(registry)
-	memory.InitMetrics(registry)
-	unified.InitMetrics(registry)
-	leveldb.InitMetrics(registry)
-	redowriter.InitMetrics(registry)
-	db.InitMetrics(registry)
+	sorter.InitMetrics(Registry)
+	memory.InitMetrics(Registry)
+	unified.InitMetrics(Registry)
+	leveldb.InitMetrics(Registry)
+	redowriter.InitMetrics(Registry)
+	db.InitMetrics(Registry)
 }

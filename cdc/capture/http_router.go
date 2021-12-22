@@ -21,8 +21,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
@@ -92,6 +97,24 @@ func NewRouter(handler HTTPHandler) *gin.Engine {
 		pprofGroup.GET("/trace", gin.WrapF(pprof.Trace))
 		pprofGroup.GET("/threadcreate", gin.WrapF(pprof.Handler("threadcreate").ServeHTTP))
 	}
+
+	if util.FailpointBuild {
+		// `http.StripPrefix` is needed because `failpoint.HttpHandler` assumes that it handles the prefix `/`.
+		router.Any("/debug/fail/*any", gin.WrapH(http.StripPrefix("/debug/fail", &failpoint.HttpHandler{})))
+	}
+
+	prometheus.DefaultGatherer = cdc.Registry
+	router.Any("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// old api
+	router.GET("/status", gin.WrapF(handler.handleStatus))
+	router.GET("/debug/info", gin.WrapF(handler.handleDebugInfo))
+	router.POST("/capture/owner/resign", gin.WrapF(handler.handleResignOwner))
+	router.POST("/capture/owner/admin", gin.WrapF(handler.handleChangefeedAdmin))
+	router.POST("/capture/owner/rebalance_trigger", gin.WrapF(handler.handleRebalanceTrigger))
+	router.POST("/capture/owner/move_table", gin.WrapF(handler.handleMoveTable))
+	router.POST("/capture/owner/changefeed/query", gin.WrapF(handler.handleChangefeedQuery))
+	router.POST("/admin/log", gin.WrapF(handleAdminLogLevel))
 
 	return router
 }

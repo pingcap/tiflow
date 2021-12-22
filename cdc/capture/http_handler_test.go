@@ -22,18 +22,19 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/owner"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/owner"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 const (
-	changeFeedID       = "test-changeFeed"
-	captureID          = "test-capture"
-	nonExistChanfeedID = "non-exist-changfeed"
+	changeFeedID         = "test-changeFeed"
+	captureID            = "test-capture"
+	nonExistChangefeedID = "non-exist-changefeed"
 )
 
 type mockStatusProvider struct {
@@ -82,8 +83,8 @@ func (p *mockStatusProvider) GetCaptures(ctx context.Context) ([]*model.CaptureI
 
 func newRouter(p *mockStatusProvider) *gin.Engine {
 	capture := NewCapture4Test()
-	capture.owner = &owner.Owner{StatusProvider: p}
-	handler := HTTPHandler{capture: capture}
+	capture.owner = &owner.Owner{}
+	handler := HTTPHandler{capture: capture, statusProvider: p}
 	return NewRouter(handler)
 }
 
@@ -92,9 +93,9 @@ func newStatusServer() *mockStatusProvider {
 	statusProvider.On("GetChangeFeedStatus", mock.Anything, changeFeedID).
 		Return(&model.ChangeFeedStatus{CheckpointTs: 1}, nil)
 
-	statusProvider.On("GetChangeFeedStatus", mock.Anything, nonExistChanfeedID).
+	statusProvider.On("GetChangeFeedStatus", mock.Anything, nonExistChangefeedID).
 		Return(new(model.ChangeFeedStatus),
-			cerror.ErrChangeFeedNotExists.GenWithStackByArgs(nonExistChanfeedID))
+			cerror.ErrChangeFeedNotExists.GenWithStackByArgs(nonExistChangefeedID))
 
 	statusProvider.On("GetAllTaskStatuses", mock.Anything).
 		Return(map[model.CaptureID]*model.TaskStatus{captureID: {}}, nil)
@@ -174,7 +175,7 @@ func TestGetChangefeed(t *testing.T) {
 	require.Equal(t, model.StateNormal, resp.FeedState)
 
 	// test get changefeed failed
-	api = openAPI{url: fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChanfeedID), method: "GET"}
+	api = openAPI{url: fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChangefeedID), method: "GET"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -196,7 +197,7 @@ func TestPauseChangefeed(t *testing.T) {
 	require.Equal(t, 202, w.Code)
 
 	// test pause changefeed failed
-	api = openAPI{url: fmt.Sprintf("/api/v1/changefeeds/%s/pause", nonExistChanfeedID), method: "POST"}
+	api = openAPI{url: fmt.Sprintf("/api/v1/changefeeds/%s/pause", nonExistChangefeedID), method: "POST"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -218,7 +219,7 @@ func TestResumeChangefeed(t *testing.T) {
 	require.Equal(t, 202, w.Code)
 
 	// test resume changefeed failed
-	api = openAPI{url: fmt.Sprintf("/api/v1/changefeeds/%s/resume", nonExistChanfeedID), method: "POST"}
+	api = openAPI{url: fmt.Sprintf("/api/v1/changefeeds/%s/resume", nonExistChangefeedID), method: "POST"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -240,7 +241,7 @@ func TestRemoveChangefeed(t *testing.T) {
 	require.Equal(t, 202, w.Code)
 
 	// test remove changefeed failed
-	api = openAPI{url: fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChanfeedID), method: "DELETE"}
+	api = openAPI{url: fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChangefeedID), method: "DELETE"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -262,7 +263,7 @@ func TestRebalanceTable(t *testing.T) {
 	require.Equal(t, 202, w.Code)
 
 	// test rebalance table failed
-	api = openAPI{url: fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", nonExistChanfeedID), method: "POST"}
+	api = openAPI{url: fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", nonExistChangefeedID), method: "POST"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -293,7 +294,7 @@ func TestMoveTable(t *testing.T) {
 	require.Equal(t, 202, w.Code)
 
 	// test move table failed
-	api = openAPI{url: fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", nonExistChanfeedID), method: "POST"}
+	api = openAPI{url: fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", nonExistChangefeedID), method: "POST"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, body)
 	router.ServeHTTP(w, req)
@@ -373,7 +374,7 @@ func TestListCapture(t *testing.T) {
 
 func TestServerStatus(t *testing.T) {
 	t.Parallel()
-	// cpature is owner
+	// capture is owner
 	ownerRouter := newRouter(newStatusServer())
 	api := openAPI{url: "/api/v1/status", method: "GET"}
 	w := httptest.NewRecorder()
@@ -388,7 +389,7 @@ func TestServerStatus(t *testing.T) {
 
 	// capture is not owner
 	capture := NewCapture4Test()
-	router := NewRouter(NewHTTPHandler(capture))
+	router := NewRouter(NewHTTPHandler(capture, nil))
 	api = openAPI{url: "/api/v1/status", method: "GET"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
@@ -435,7 +436,7 @@ func TestSetLogLevel(t *testing.T) {
 	require.Contains(t, httpError.Error, "fail to change log level: foo")
 }
 
-// TODO: finished these two test case after we decouple these two API from etcdClient.
+// TODO: finished these test cases after we decouple the APIs it test from etcdClient.
 func TestCreateChangefeed(t *testing.T) {}
 func TestUpdateChangefeed(t *testing.T) {}
 func TestHealth(t *testing.T)           {}

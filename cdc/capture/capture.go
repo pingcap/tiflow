@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"sync"
 	"time"
 
@@ -66,6 +67,7 @@ type Capture struct {
 	regionCache  *tikv.RegionCache
 	TimeAcquirer pdtime.TimeAcquirer
 	sorterSystem *ssystem.System
+	httpServer   *http.Server
 
 	tableActorSystem *system.System
 
@@ -437,6 +439,15 @@ func (c *Capture) AsyncClose() {
 	})
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
+
+	if c.httpServer != nil {
+		err := c.httpServer.Close()
+		if err != nil {
+			log.Error("close http server", zap.Error(err))
+		}
+		c.httpServer = nil
+	}
+
 	if c.processorManager != nil {
 		c.processorManager.AsyncClose()
 	}

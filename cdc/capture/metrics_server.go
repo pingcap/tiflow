@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package capture
 
 import (
 	"os"
@@ -61,8 +61,8 @@ func RecordGoRuntimeSettings() {
 	goMaxProcs.Set(float64(maxProcs))
 }
 
-// initServerMetrics registers all metrics used in processor
-func initServerMetrics(registry *prometheus.Registry) {
+// InitServerMetrics registers all metrics used in processor
+func InitServerMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(etcdHealthCheckDuration)
 	registry.MustRegister(goGC)
 	registry.MustRegister(goMaxProcs)

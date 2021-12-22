@@ -27,13 +27,13 @@ type JSONTime time.Time
 
 // MarshalJSON use to specify the time format
 func (t JSONTime) MarshalJSON() ([]byte, error) {
-	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006-01-02 15:04:05.000"))
+	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006-01-02 15:04:05"))
 	return []byte(stamp), nil
 }
 
 // UnmarshalJSON used to parse time.Time from bytes
 func (t *JSONTime) UnmarshalJSON(data []byte) error {
-	tm, err := time.Parse(`"2006-01-02 15:04:05.000"`, string(data))
+	tm, err := time.Parse(`"2006-01-02 15:04:05"`, string(data))
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ type HTTPError struct {
 	Code  string `json:"error_code"`
 }
 
-// NewHTTPError wrap a err into HTTPError
+// NewHTTPError wrap an error into HTTPError
 func NewHTTPError(err error) HTTPError {
 	errCode, _ := cerror.RFCCode(err)
 	return HTTPError{

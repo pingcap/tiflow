@@ -135,6 +135,6 @@ func InitStatus(lis net.Listener) {
 	}
 	err := httpS.Serve(lis)
 	if err != nil && !common.IsErrNetClosing(err) && err != http.ErrServerClosed {
-		log.L().Error("status server returned", log.ShortError(err))
+		log.L().Error("http server returned", log.ShortError(err))
 	}
 }
