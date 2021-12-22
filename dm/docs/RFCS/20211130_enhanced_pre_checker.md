@@ -68,7 +68,7 @@ If we have a large number of tables in source, we will take too much time in che
     - binlog_format
     - binlog_row_image
     - online_ddl(new added)
-4. The following items will be forced to check:
+4. The following items will always be forced to check:
     - version
     - table_schema
     - auto_increment_ID(only for sharding mode)
