@@ -22,9 +22,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/proto/p2p"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -392,6 +392,11 @@ func (c *MessageClient) TrySendMessage(ctx context.Context, topic Topic, value i
 	// This failpoint will be removed once we abstract the MessageClient as an interface.
 	failpoint.Inject("ClientInjectSendMessageTryAgain", func() {
 		failpoint.Return(0, cerrors.ErrPeerMessageSendTryAgain.GenWithStackByArgs())
+	})
+
+	// FIXME (zixiong): This is a temporary way for testing whether the caller can handler this error.
+	failpoint.Inject("ClientInjectClosed", func() {
+		failpoint.Return(0, cerrors.ErrPeerMessageClientClosed.GenWithStackByArgs())
 	})
 
 	return c.sendMessage(ctx, topic, value, true)

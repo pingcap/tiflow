@@ -15,33 +15,26 @@ package sink
 
 import (
 	"context"
-	"math"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
-const (
-	defaultMetricInterval = time.Second * 15
-)
-
-// Manager manages table sinks, maintains the relationship between table sinks and backendSink.
+// Manager manages table sinks, maintains the relationship between table sinks
+// and backendSink.
+// Manager is thread-safe.
 type Manager struct {
-	backendSink            *bufferSink
+	bufSink                *bufferSink
 	tableCheckpointTsMap   sync.Map
 	tableSinks             map[model.TableID]*tableSink
 	tableSinksMu           sync.Mutex
 	changeFeedCheckpointTs uint64
-
-	flushMu  sync.Mutex
-	flushing int64
 
 	drawbackChan chan drawbackMsg
 
@@ -56,8 +49,10 @@ func NewManager(
 	captureAddr string, changefeedID model.ChangeFeedID,
 ) *Manager {
 	drawbackChan := make(chan drawbackMsg, 16)
+	bufSink := newBufferSink(backendSink, checkpointTs, drawbackChan)
+	go bufSink.run(ctx, errCh)
 	return &Manager{
-		backendSink:               newBufferSink(ctx, backendSink, errCh, checkpointTs, drawbackChan),
+		bufSink:                   bufSink,
 		changeFeedCheckpointTs:    checkpointTs,
 		tableSinks:                make(map[model.TableID]*tableSink),
 		drawbackChan:              drawbackChan,
@@ -78,7 +73,6 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 		tableID:     tableID,
 		manager:     m,
 		buffer:      make([]*model.RowChangedEvent, 0, 128),
-		emittedTs:   checkpointTs,
 		redoManager: redoManager,
 	}
 	m.tableSinks[tableID] = sink
@@ -87,43 +81,17 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
 func (m *Manager) Close(ctx context.Context) error {
+	m.tableSinksMu.Lock()
+	defer m.tableSinksMu.Unlock()
 	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
-	if m.backendSink != nil {
-		return m.backendSink.Close(ctx)
+	if m.bufSink != nil {
+		return m.bufSink.Close(ctx)
 	}
 	return nil
 }
 
-func (m *Manager) getMinEmittedTs(tableID model.TableID) model.Ts {
-	m.tableSinksMu.Lock()
-	defer m.tableSinksMu.Unlock()
-	if len(m.tableSinks) == 0 {
-		return m.getCheckpointTs(tableID)
-	}
-	minTs := model.Ts(math.MaxUint64)
-	for _, tblSink := range m.tableSinks {
-		resolvedTs := tblSink.getResolvedTs()
-		if minTs > resolvedTs {
-			minTs = resolvedTs
-		}
-	}
-	return minTs
-}
-
-func (m *Manager) flushBackendSink(ctx context.Context, tableID model.TableID) (model.Ts, error) {
-	// NOTICE: Because all table sinks will try to flush backend sink,
-	// which will cause a lot of lock contention and blocking in high concurrency cases.
-	// So here we use flushing as a lightweight lock to improve the lock competition problem.
-	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
-		return m.getCheckpointTs(tableID), nil
-	}
-	m.flushMu.Lock()
-	defer func() {
-		m.flushMu.Unlock()
-		atomic.StoreInt64(&m.flushing, 0)
-	}()
-	minEmittedTs := m.getMinEmittedTs(tableID)
-	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, tableID, minEmittedTs)
+func (m *Manager) flushBackendSink(ctx context.Context, tableID model.TableID, resolvedTs uint64) (model.Ts, error) {
+	checkpointTs, err := m.bufSink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
 	if err != nil {
 		return m.getCheckpointTs(tableID), errors.Trace(err)
 	}
@@ -146,7 +114,7 @@ func (m *Manager) destroyTableSink(ctx context.Context, tableID model.TableID) e
 		return ctx.Err()
 	case <-callback:
 	}
-	return m.backendSink.Barrier(ctx, tableID)
+	return m.bufSink.Barrier(ctx, tableID)
 }
 
 func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
@@ -161,8 +129,8 @@ func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
 
 func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
 	atomic.StoreUint64(&m.changeFeedCheckpointTs, checkpointTs)
-	if m.backendSink != nil {
-		m.backendSink.UpdateChangeFeedCheckpointTs(checkpointTs)
+	if m.bufSink != nil {
+		m.bufSink.UpdateChangeFeedCheckpointTs(checkpointTs)
 	}
 }
 

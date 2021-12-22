@@ -3,7 +3,7 @@
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	dm dm-master dm-worker dmctl dm-portal dm-syncer dm_coverage
 
-PROJECT=ticdc
+PROJECT=tiflow
 P=3
 
 FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
@@ -30,11 +30,11 @@ GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
 ARCH  := "$(shell uname -s)"
 LINUX := "Linux"
 MAC   := "Darwin"
-CDC_PKG := github.com/pingcap/ticdc
-DM_PKG := github.com/pingcap/ticdc/dm
-PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|ticdc\/tests|integration|testing_utils|pb|pbmock'
-PACKAGE_LIST_WITHOUT_DM := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/ticdc/dm'
-DM_PACKAGE_LIST := go list github.com/pingcap/ticdc/dm/... | grep -vE 'pb|pbmock|dm/cmd'
+CDC_PKG := github.com/pingcap/tiflow
+DM_PKG := github.com/pingcap/tiflow/dm
+PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow\/tests|integration|testing_utils|pb|pbmock'
+PACKAGE_LIST_WITHOUT_DM := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/tiflow/dm'
+DM_PACKAGE_LIST := go list github.com/pingcap/tiflow/dm/... | grep -vE 'pb|pbmock|dm/cmd'
 PACKAGES := $$($(PACKAGE_LIST))
 PACKAGES_WITHOUT_DM := $$($(PACKAGE_LIST_WITHOUT_DM))
 DM_PACKAGES := $$($(DM_PACKAGE_LIST))
@@ -152,8 +152,8 @@ check_third_party_binary:
 integration_test_build: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/ticdc/... \
-		-o bin/cdc.test github.com/pingcap/ticdc/cmd/cdc \
+		-coverpkg=github.com/pingcap/tiflow/... \
+		-o bin/cdc.test github.com/pingcap/tiflow/cmd/cdc \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc/main.go \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
@@ -297,20 +297,20 @@ dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/goc
 dm_integration_test_build: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/ticdc/dm/... \
-		-o bin/dm-worker.test github.com/pingcap/ticdc/dm/cmd/dm-worker \
+		-coverpkg=github.com/pingcap/tiflow/dm/... \
+		-o bin/dm-worker.test github.com/pingcap/tiflow/dm/cmd/dm-worker \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/ticdc/dm/... \
-		-o bin/dm-master.test github.com/pingcap/ticdc/dm/cmd/dm-master \
+		-coverpkg=github.com/pingcap/tiflow/dm/... \
+		-o bin/dm-master.test github.com/pingcap/tiflow/dm/cmd/dm-master \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(GOTESTNORACE) -ldflags '$(LDFLAGS)' -c -cover -covermode=count \
-		-coverpkg=github.com/pingcap/ticdc/dm/... \
-		-o bin/dmctl.test github.com/pingcap/ticdc/dm/cmd/dm-ctl \
+		-coverpkg=github.com/pingcap/tiflow/dm/... \
+		-o bin/dmctl.test github.com/pingcap/tiflow/dm/cmd/dm-ctl \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/ticdc/dm/... \
-		-o bin/dm-syncer.test github.com/pingcap/ticdc/dm/cmd/dm-syncer \
+		-coverpkg=github.com/pingcap/tiflow/dm/... \
+		-o bin/dm-syncer.test github.com/pingcap/tiflow/dm/cmd/dm-syncer \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh
@@ -318,8 +318,8 @@ dm_integration_test_build: check_failpoint_ctl
 dm_integration_test_build_worker: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/ticdc/dm/... \
-		-o bin/dm-worker.test github.com/pingcap/ticdc/dm/cmd/dm-worker \
+		-coverpkg=github.com/pingcap/tiflow/dm/... \
+		-o bin/dm-worker.test github.com/pingcap/tiflow/dm/cmd/dm-worker \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh
@@ -327,8 +327,8 @@ dm_integration_test_build_worker: check_failpoint_ctl
 dm_integration_test_build_master: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/ticdc/dm/... \
-		-o bin/dm-master.test github.com/pingcap/ticdc/dm/cmd/dm-master \
+		-coverpkg=github.com/pingcap/tiflow/dm/... \
+		-o bin/dm-master.test github.com/pingcap/tiflow/dm/cmd/dm-master \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh

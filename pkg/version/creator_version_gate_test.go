@@ -40,6 +40,10 @@ func TestChangefeedStateFromAdminJob(t *testing.T) {
 		},
 		{
 			creatorVersion: "4.0.15",
+			expected:       true,
+		},
+		{
+			creatorVersion: "4.0.16",
 			expected:       false,
 		},
 		{
@@ -49,6 +53,10 @@ func TestChangefeedStateFromAdminJob(t *testing.T) {
 		{
 			creatorVersion: "5.0.1",
 			expected:       true,
+		},
+		{
+			creatorVersion: "5.0.6",
+			expected:       false,
 		},
 		{
 			creatorVersion: "5.1.0",
@@ -67,5 +75,60 @@ func TestChangefeedStateFromAdminJob(t *testing.T) {
 	for _, tc := range testCases {
 		creatorVersionGate := CreatorVersionGate{version: tc.creatorVersion}
 		require.Equal(t, tc.expected, creatorVersionGate.ChangefeedStateFromAdminJob())
+	}
+}
+
+func TestChangefeedAcceptUnknownProtocols(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		creatorVersion string
+		expected       bool
+	}{
+		{
+			creatorVersion: "",
+			expected:       true,
+		},
+		{
+			creatorVersion: "4.0.12",
+			expected:       true,
+		},
+		{
+			creatorVersion: "4.0.14",
+			expected:       true,
+		},
+		{
+			creatorVersion: "4.0.15",
+			expected:       true,
+		},
+		{
+			creatorVersion: "5.0.0",
+			expected:       true,
+		},
+		{
+			creatorVersion: "5.0.1",
+			expected:       true,
+		},
+		{
+			creatorVersion: "5.1.0",
+			expected:       true,
+		},
+		{
+			creatorVersion: "5.2.0",
+			expected:       true,
+		},
+		{
+			creatorVersion: "5.3.0",
+			expected:       true,
+		},
+		{
+			creatorVersion: "5.4.0",
+			expected:       false,
+		},
+	}
+
+	for _, tc := range testCases {
+		creatorVersionGate := CreatorVersionGate{version: tc.creatorVersion}
+		require.Equal(t, tc.expected, creatorVersionGate.ChangefeedAcceptUnknownProtocols())
 	}
 }

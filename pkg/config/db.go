@@ -13,7 +13,7 @@
 
 package config
 
-import cerror "github.com/pingcap/ticdc/pkg/errors"
+import cerror "github.com/pingcap/tiflow/pkg/errors"
 
 // DBConfig represents leveldb sorter config.
 type DBConfig struct {

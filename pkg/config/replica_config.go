@@ -17,11 +17,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pingcap/ticdc/pkg/config/outdated"
+	"github.com/pingcap/tiflow/pkg/config/outdated"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +36,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		WorkerNum: 16,
 	},
 	Sink: &SinkConfig{
-		Protocol: "default",
+		Protocol: ProtocolOpen.String(),
 	},
 	Cyclic: &CyclicConfig{
 		Enable: false,

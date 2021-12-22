@@ -16,7 +16,7 @@ package fixtures
 import (
 	"encoding/json"
 
-	"github.com/pingcap/ticdc/dm/openapi"
+	"github.com/pingcap/tiflow/dm/openapi"
 )
 
 var (

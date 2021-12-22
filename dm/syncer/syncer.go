@@ -46,33 +46,33 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	common2 "github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	fr "github.com/pingcap/ticdc/dm/pkg/func-rollback"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
-	"github.com/pingcap/ticdc/dm/pkg/schema"
-	"github.com/pingcap/ticdc/dm/pkg/shardddl/pessimism"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay"
-	"github.com/pingcap/ticdc/dm/syncer/dbconn"
-	operator "github.com/pingcap/ticdc/dm/syncer/err-operator"
-	"github.com/pingcap/ticdc/dm/syncer/metrics"
-	onlineddl "github.com/pingcap/ticdc/dm/syncer/online-ddl-tools"
-	sm "github.com/pingcap/ticdc/dm/syncer/safe-mode"
-	"github.com/pingcap/ticdc/dm/syncer/shardddl"
-	"github.com/pingcap/ticdc/pkg/errorutil"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	common2 "github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
+	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
+	"github.com/pingcap/tiflow/dm/pkg/streamer"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/relay"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	operator "github.com/pingcap/tiflow/dm/syncer/err-operator"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
+	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
+	sm "github.com/pingcap/tiflow/dm/syncer/safe-mode"
+	"github.com/pingcap/tiflow/dm/syncer/shardddl"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
 var (
@@ -141,7 +141,8 @@ type Syncer struct {
 
 	schemaTracker *schema.Tracker
 
-	fromDB *dbconn.UpStreamConn
+	fromDB   *dbconn.UpStreamConn
+	fromConn *dbconn.DBConn
 
 	toDB                *conn.BaseDB
 	toDBConns           []*dbconn.DBConn
@@ -233,6 +234,7 @@ type Syncer struct {
 
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
+	idAndCollationMap          map[int]string
 }
 
 // NewSyncer creates a new Syncer.
@@ -335,7 +337,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
-	s.charsetAndDefaultCollation, err = s.fromDB.GetCharsetAndDefaultCollation(ctx)
+	s.charsetAndDefaultCollation, s.idAndCollationMap, err = dbconn.GetCharsetAndCollationInfo(tctx, s.fromConn)
 	if err != nil {
 		return err
 	}
@@ -3046,10 +3048,12 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	var err error
 	dbCfg := s.cfg.From
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	s.fromDB, err = dbconn.NewUpStreamConn(&dbCfg)
+	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 1)
 	if err != nil {
 		return err
 	}
+	s.fromDB = &dbconn.UpStreamConn{BaseDB: fromDB}
+	s.fromConn = fromConns[0]
 	conn, err := s.fromDB.BaseDB.GetBaseConn(ctx)
 	if err != nil {
 		return err
