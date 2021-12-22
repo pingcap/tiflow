@@ -351,6 +351,10 @@ func (s *schemaSnapshot) IsIneligibleTableID(id int64) bool {
 
 // FillSchemaName fills the schema name in ddl job
 func (s *schemaSnapshot) FillSchemaName(job *timodel.Job) error {
+	if job.Type == timodel.ActionRenameTables {
+		// DDLs on multiple schema or tables, ignore them.
+		return nil
+	}
 	if job.Type == timodel.ActionCreateSchema ||
 		job.Type == timodel.ActionDropSchema {
 		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
@@ -589,12 +593,12 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 		}
 	case timodel.ActionRenameTables:
 		var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
-		var NewTableNames, oldSchemaNames []*timodel.CIStr
-		err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs, &NewTableNames, &oldTableIDs, &oldSchemaNames)
+		var newTableNames, oldSchemaNames []*timodel.CIStr
+		err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs, &newTableNames, &oldTableIDs, &oldSchemaNames)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if len(job.BinlogInfo.MultipleTableInfo) < len(NewTableNames) {
+		if len(job.BinlogInfo.MultipleTableInfo) < len(newTableNames) {
 			err := errors.New("Invalid binlog info for rename tables")
 			return errors.Trace(err)
 		}
