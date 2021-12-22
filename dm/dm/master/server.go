@@ -1535,6 +1535,8 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
 		dbutil.TableName(metaSchema, cputil.LoaderCheckpoint(taskName))))
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
+		dbutil.TableName(metaSchema, cputil.LightningCheckpoint(taskName))))
+	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
 		dbutil.TableName(metaSchema, cputil.SyncerCheckpoint(taskName))))
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
 		dbutil.TableName(metaSchema, cputil.SyncerShardMeta(taskName))))
