@@ -8,3 +8,5 @@ only_dml
 adjust_gtid
 checkpoint_transaction
 lightning_mode
+downstream_diff_index
+
