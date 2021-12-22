@@ -621,14 +621,12 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 // TransferSource unbinds the `source` and binds it to a free or same-source-relay `worker`.
 // If fails halfway, the old worker should try recover.
 func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if !s.started {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
 	// 1. check existence or no need
+	s.mu.RLock()
 	if _, ok := s.sourceCfgs[source]; !ok {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
@@ -638,8 +636,10 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	}
 	oldWorker, hasOldWorker := s.bounds[source]
 	if hasOldWorker && oldWorker.BaseInfo().Name == worker {
+		s.mu.RUnlock()
 		return nil
 	}
+	s.mu.RUnlock()
 
 	// 2. check new worker is free and not started relay for another source
 	switch w.Stage() {
@@ -660,7 +660,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		return s.boundSourceToWorker(source, w)
 	}
 
-	// 4. check if oldworker have running tasks
+	// 4. check if old worker has running tasks
 	var runningTasks []string
 	s.expectSubTaskStages.Range(func(k, v interface{}) bool {
 		task := k.(string)
@@ -708,16 +708,17 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		}
 
 		// pause this running tasks
+		s.mu.Lock()
 		for _, taskName := range runningTasks {
 			if err := s.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName, source); err != nil {
+				s.mu.Unlock()
 				return err
 			}
 		}
+		s.mu.Unlock()
 
 		// wait all tasks are paused before actually starting scheduling
-		maxRetryNum := 10
-		for maxRetryNum > 0 {
-			maxRetryNum--
+		for maxRetryNum := 10; maxRetryNum > 0; maxRetryNum-- {
 			resp, err := queryWorkerF()
 			if err != nil {
 				return terror.Annotatef(err, "failed to query worker: %s status", oldWorker.baseInfo.Name)
@@ -742,8 +743,10 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	failpoint.Inject("failToReplaceSourceBound", func(_ failpoint.Value) {
 		failpoint.Return(errors.New("failToPutSourceBound"))
 	})
+	s.mu.Lock()
 	_, err := ha.ReplaceSourceBound(s.etcdCli, source, oldWorker.BaseInfo().Name, worker)
 	if err != nil {
+		s.mu.Unlock()
 		return err
 	}
 	if err2 := oldWorker.Unbound(); err2 != nil {
@@ -752,6 +755,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	if err2 := s.updateStatusToBound(w, ha.NewSourceBound(source, worker)); err2 != nil {
 		s.logger.DPanic("we have checked w.stage is free, so there should not be an error", zap.Error(err2))
 	}
+	s.mu.Unlock()
 
 	// 6. now this old worker is free, try bound source to it
 	_, err = s.tryBoundForWorker(oldWorker)
@@ -761,6 +765,8 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	// we need resume tasks that we just paused, we use another goroutine to do this because if error happens
 	// just logging this message and let user handle it manually
 	go func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		for _, task := range runningTasks {
 			if err := s.UpdateExpectSubTaskStage(pb.Stage_Running, task, source); err != nil {
 				s.logger.Warn(
