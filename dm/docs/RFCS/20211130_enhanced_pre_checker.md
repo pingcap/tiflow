@@ -55,7 +55,6 @@ If we have a large number of tables in source, we will take too much time in che
     - MySQL < 5.6.0
     - MySQL >= 8.0.0
     - Mariadb
-    - Others we don't support
 
 ### Restrict user usage
 1. Remove all `ignore_check_items` settings from the [document](https://docs.pingcap.com/tidb-data-migration/stable/precheck#disable-checking-items). If the following items are detected to be set in the configuration, a warning will be reported.
