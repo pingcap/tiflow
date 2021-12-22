@@ -168,6 +168,10 @@ type canalFlatMessageWithTiDBExtension struct {
 	Extensions *tidbExtension `json:"_tidb"`
 }
 
+func (c *canalFlatMessageWithTiDBExtension) getCommitTs() uint64 {
+	return c.Extensions.CommitTs
+}
+
 func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEvent) (canalFlatMessageInterface, error) {
 	eventType := convertRowEventType(e)
 	header := c.builder.buildHeader(e.CommitTs, e.Table.Schema, e.Table.Table, eventType, 1)
