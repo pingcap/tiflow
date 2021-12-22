@@ -45,7 +45,7 @@ dispatchers = [
     {matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
 ]
 
-protocol = "default"
+protocol = "open-protocol"
 
 column-selectors = [
     {matcher = ['test1.*', 'test2.*'], columns = ["Column selector expression"]},
