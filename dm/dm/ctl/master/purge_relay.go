@@ -22,9 +22,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // NewPurgeRelayCmd creates a PurgeRelay command

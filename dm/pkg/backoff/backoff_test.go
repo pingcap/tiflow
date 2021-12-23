@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 func TestT(t *testing.T) {

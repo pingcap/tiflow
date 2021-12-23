@@ -21,14 +21,14 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/txnutil/gc"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
@@ -56,12 +56,12 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 	}
 	owner := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
-	}, func(ctx cdcContext.Context) (AsyncSink, error) {
-		return &mockAsyncSink{}, nil
+	}, func() DDLSink {
+		return &mockDDLSink{}
 	},
 		ctx.GlobalVars().PDClient,
 	)
-	state := orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
+	state := orchestrator.NewGlobalState()
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// set captures
@@ -78,6 +78,9 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	owner, state, tester := createOwner4Test(ctx, c)
 
 	changefeedID := "test-changefeed"
@@ -146,6 +149,9 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
@@ -187,7 +193,7 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	c.Assert(state.Changefeeds, check.Not(check.HasKey), changefeedID)
 }
 
-func (s *ownerSuite) TestFixChangefeedInfos(c *check.C) {
+func (s *ownerSuite) TestFixChangefeedState(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
@@ -196,11 +202,10 @@ func (s *ownerSuite) TestFixChangefeedInfos(c *check.C) {
 	changefeedID := "test-changefeed"
 	// Mismatched state and admin job.
 	changefeedInfo := &model.ChangeFeedInfo{
-		State:          model.StateNormal,
-		AdminJobType:   model.AdminStop,
-		StartTs:        oracle.GoTimeToTS(time.Now()),
-		Config:         config.GetDefaultReplicaConfig(),
-		CreatorVersion: "4.0.14",
+		State:        model.StateNormal,
+		AdminJobType: model.AdminStop,
+		StartTs:      oracle.GoTimeToTS(time.Now()),
+		Config:       config.GetDefaultReplicaConfig(),
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
 	c.Assert(err, check.IsNil)
@@ -225,10 +230,56 @@ func (s *ownerSuite) TestFixChangefeedInfos(c *check.C) {
 	c.Assert(owner.changefeeds[changefeedID].state.Info.State, check.Equals, model.StateStopped)
 }
 
+func (s *ownerSuite) TestFixChangefeedSinkProtocol(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(false)
+	owner, state, tester := createOwner4Test(ctx, c)
+	// We need to do bootstrap.
+	owner.bootstrapped = false
+	changefeedID := "test-changefeed"
+	// Unknown protocol.
+	changefeedInfo := &model.ChangeFeedInfo{
+		State:          model.StateNormal,
+		AdminJobType:   model.AdminStop,
+		StartTs:        oracle.GoTimeToTS(time.Now()),
+		CreatorVersion: "5.3.0",
+		SinkURI:        "kafka://127.0.0.1:9092/ticdc-test2?protocol=random",
+		Config: &config.ReplicaConfig{
+			Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+		},
+	}
+	changefeedStr, err := changefeedInfo.Marshal()
+	c.Assert(err, check.IsNil)
+	cdcKey := etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.bootstrapped, check.IsTrue)
+	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
+
+	// Start tick normally.
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+	// The meta information is fixed correctly.
+	c.Assert(owner.changefeeds[changefeedID].state.Info.SinkURI,
+		check.Equals,
+		"kafka://127.0.0.1:9092/ticdc-test2?protocol=open-protocol")
+}
+
 func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	tester.MustUpdate("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"v6.0.0"}`))
 
 	changefeedID := "test-changefeed"
@@ -263,6 +314,9 @@ func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 func (s *ownerSuite) TestAdminJob(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	owner, _, _ := createOwner4Test(ctx, c)
 	owner.EnqueueJob(model.AdminJob{
 		CfID: "test-changefeed1",
@@ -310,7 +364,9 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	o := NewOwner(mockPDClient)
 	o.gcManager = gc.NewManager(mockPDClient)
 	ctx := cdcContext.NewBackendContext4Test(true)
-	state := orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+	state := orchestrator.NewGlobalState()
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
@@ -407,6 +463,8 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
 	owner, state, tester := createOwner4Test(ctx, c)
 
 	statusProvider := owner.StatusProvider()

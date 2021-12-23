@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/ticdc/pkg/security"
-	proto "github.com/pingcap/ticdc/proto/p2p"
+	"github.com/pingcap/tiflow/pkg/security"
+	proto "github.com/pingcap/tiflow/proto/p2p"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )

@@ -25,24 +25,23 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/redo"
-	"github.com/pingcap/ticdc/cdc/scheduler"
-	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/cdc/sorter/memory"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -76,10 +75,11 @@ type processor struct {
 
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
+	newAgent            func(ctx cdcContext.Context) (processorAgent, error)
 
 	// fields for integration with Scheduler(V2).
 	newSchedulerEnabled bool
-	agent               scheduler.Agent
+	agent               processorAgent
 	checkpointTs        model.Ts
 	resolvedTs          model.Ts
 
@@ -244,7 +244,31 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
+	p.newAgent = p.newAgentImpl
 	return p
+}
+
+var processorIgnorableError = []*errors.Error{
+	cerror.ErrAdminStopProcessor,
+	cerror.ErrReactorFinished,
+	cerror.ErrRedoWriterStopped,
+}
+
+// isProcessorIgnorableError returns true if the error means the processor exits
+// normally, caused by changefeed pause, remove, etc.
+func isProcessorIgnorableError(err error) bool {
+	if err == nil {
+		return true
+	}
+	if errors.Cause(err) == context.Canceled {
+		return true
+	}
+	for _, e := range processorIgnorableError {
+		if e.Equal(err) {
+			return true
+		}
+	}
+	return false
 }
 
 // Tick implements the `orchestrator.State` interface
@@ -261,8 +285,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err == nil {
 		return state, nil
 	}
-	cause := errors.Cause(err)
-	if cause == context.Canceled || cerror.ErrAdminStopProcessor.Equal(cause) || cerror.ErrReactorFinished.Equal(cause) {
+	if isProcessorIgnorableError(err) {
 		log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
@@ -448,9 +471,27 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if err != nil {
 		return err
 	}
+
+	if p.newSchedulerEnabled {
+		p.agent, err = p.newAgent(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
 	p.initialized = true
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil
+}
+
+func (p *processor) newAgentImpl(ctx cdcContext.Context) (processorAgent, error) {
+	messageServer := ctx.GlobalVars().MessageServer
+	messageRouter := ctx.GlobalVars().MessageRouter
+	ret, err := newAgent(ctx, messageServer, messageRouter, p, p.changefeedID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return ret, nil
 }
 
 // handleErrorCh listen the error channel and throw the error if it is not expected.
@@ -461,8 +502,7 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 	default:
 		return nil
 	}
-	cause := errors.Cause(err)
-	if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
+	if !isProcessorIgnorableError(err) {
 		log.Error("error on running processor",
 			cdcContext.ZapFieldCapture(ctx),
 			cdcContext.ZapFieldChangefeed(ctx),
@@ -664,7 +704,7 @@ func (p *processor) sendError(err error) {
 	select {
 	case p.errCh <- err:
 	default:
-		if errors.Cause(err) != context.Canceled {
+		if !isProcessorIgnorableError(err) {
 			log.Error("processor receives redundant error", zap.Error(err))
 		}
 	}
@@ -879,7 +919,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			}
 			markTableID = tableInfo.ID
 			return nil
-		}, retry.WithBackoffMaxDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
+		}, retry.WithBackoffBaseDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -1000,8 +1040,20 @@ func (p *processor) Close() error {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		return p.sinkManager.Close(ctx)
+		if err := p.sinkManager.Close(ctx); err != nil {
+			return errors.Trace(err)
+		}
 	}
+	if p.newSchedulerEnabled {
+		if p.agent == nil {
+			return nil
+		}
+		if err := p.agent.Close(); err != nil {
+			return errors.Trace(err)
+		}
+		p.agent = nil
+	}
+
 	return nil
 }
 

@@ -1,0 +1,392 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package processor
+
+import (
+	stdContext "context"
+	"time"
+
+	"github.com/benbjohnson/clock"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/version"
+	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
+)
+
+const (
+	getOwnerFromEtcdTimeout         = time.Second * 5
+	messageHandlerOperationsTimeout = time.Second * 5
+	barrierNotAdvancingWarnDuration = time.Second * 10
+	printWarnLogMinInterval         = time.Second * 1
+)
+
+// processorAgent is a data structure in the Processor that serves as a bridge with
+// the Owner.
+//
+// processorAgent has a BaseAgent embedded in it, which handles the high-level logic of receiving
+// commands from the Owner. It also implements ProcessorMessenger interface, which
+// provides the BaseAgent with the necessary methods to send messages to the Owner.
+//
+// The reason for this design is to decouple the scheduling algorithm with the underlying
+// RPC server/client.
+//
+// Note that Agent is not thread-safe, and it is not necessary for it to be thread-safe.
+type processorAgent interface {
+	scheduler.Agent
+	scheduler.ProcessorMessenger
+}
+
+type agentImpl struct {
+	*scheduler.BaseAgent
+
+	messageServer *p2p.MessageServer
+	messageRouter p2p.MessageRouter
+
+	changeFeed     model.ChangeFeedID
+	ownerCaptureID model.CaptureID
+
+	clock              clock.Clock
+	barrierSeqs        map[p2p.Topic]p2p.Seq
+	barrierLastCleared time.Time
+
+	// TODO (zixiong): remove these limiters after we have a better way to handle this
+	barrierLogRateLimiter  *rate.Limiter
+	noClientLogRateLimiter *rate.Limiter
+
+	handlerErrChs []<-chan error
+}
+
+func newAgent(
+	ctx context.Context,
+	messageServer *p2p.MessageServer,
+	messageRouter p2p.MessageRouter,
+	executor scheduler.TableExecutor,
+	changeFeedID model.ChangeFeedID,
+) (processorAgent, error) {
+	ret := &agentImpl{
+		messageServer: messageServer,
+		messageRouter: messageRouter,
+
+		changeFeed: changeFeedID,
+
+		clock:                 clock.New(),
+		barrierSeqs:           map[p2p.Topic]p2p.Seq{},
+		barrierLogRateLimiter: rate.NewLimiter(rate.Every(printWarnLogMinInterval), 1),
+
+		noClientLogRateLimiter: rate.NewLimiter(rate.Every(printWarnLogMinInterval), 1),
+	}
+
+	conf := config.GetGlobalServerConfig()
+	flushInterval := time.Duration(conf.ProcessorFlushInterval)
+
+	log.Debug("creating processor agent",
+		zap.String("changefeed-id", changeFeedID),
+		zap.Duration("send-checkpoint-ts-interval", flushInterval))
+
+	ret.BaseAgent = scheduler.NewBaseAgent(
+		changeFeedID,
+		executor,
+		ret,
+		&scheduler.BaseAgentConfig{SendCheckpointTsInterval: flushInterval})
+
+	// Note that registerPeerMessageHandlers sets handlerErrChs.
+	if err := ret.registerPeerMessageHandlers(); err != nil {
+		log.Warn("failed to register processor message handlers",
+			zap.String("changefeed-id", changeFeedID),
+			zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	etcdCliCtx, cancel := stdContext.WithTimeout(ctx, getOwnerFromEtcdTimeout)
+	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
+	cancel()
+	if err != nil {
+		if err != concurrency.ErrElectionNoLeader {
+			return nil, errors.Trace(err)
+		}
+		// We tolerate the situation where there is no owner.
+		// If we are registered in Etcd, an elected Owner will have to
+		// contact us before it can schedule any table.
+		log.Info("no owner found. We will wait for an owner to contact us.",
+			zap.String("changefeed-id", changeFeedID),
+			zap.Error(err))
+	} else {
+		ret.ownerCaptureID = ownerCaptureID
+		log.Debug("found owner",
+			zap.String("changefeed-id", changeFeedID),
+			zap.String("owner-capture-id", ownerCaptureID))
+	}
+	return ret, nil
+}
+
+func (a *agentImpl) Tick(ctx context.Context) error {
+	for _, errCh := range a.handlerErrChs {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case err := <-errCh:
+			log.Warn("Processor Agent received error from message handler",
+				zap.Error(err))
+			return errors.Trace(err)
+		default:
+		}
+	}
+
+	if err := a.BaseAgent.Tick(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (a *agentImpl) FinishTableOperation(
+	ctx context.Context,
+	tableID model.TableID,
+) (bool, error) {
+	done, err := a.trySendMessage(
+		ctx, a.ownerCaptureID,
+		model.DispatchTableResponseTopic(a.changeFeed),
+		&model.DispatchTableResponseMessage{ID: tableID})
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return done, nil
+}
+
+func (a *agentImpl) SyncTaskStatuses(
+	ctx context.Context,
+	running, adding, removing []model.TableID,
+) (bool, error) {
+	done, err := a.trySendMessage(
+		ctx,
+		a.ownerCaptureID,
+		model.SyncTopic(a.changeFeed),
+		&model.SyncMessage{
+			ProcessorVersion: version.ReleaseSemver(),
+			Running:          running,
+			Adding:           adding,
+			Removing:         removing,
+		})
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return done, nil
+}
+
+func (a *agentImpl) SendCheckpoint(
+	ctx context.Context,
+	checkpointTs model.Ts,
+	resolvedTs model.Ts,
+) (bool, error) {
+	done, err := a.trySendMessage(
+		ctx,
+		a.ownerCaptureID,
+		model.CheckpointTopic(a.changeFeed),
+		&model.CheckpointMessage{
+			CheckpointTs: checkpointTs,
+			ResolvedTs:   resolvedTs,
+		})
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return done, nil
+}
+
+// Barrier returns whether there is a pending message not yet acknowledged by the owner.
+// Please refer to the documentation on the ProcessorMessenger interface.
+func (a *agentImpl) Barrier(_ context.Context) (done bool) {
+	defer func() {
+		if done {
+			return
+		}
+
+		sinceLastAdvanced := a.clock.Since(a.barrierLastCleared)
+		if sinceLastAdvanced > barrierNotAdvancingWarnDuration && a.barrierLogRateLimiter.Allow() {
+			log.Warn("processor send barrier not advancing, report a bug if this log repeats",
+				zap.String("changefeed-id", a.changeFeed),
+				zap.String("owner-id", a.ownerCaptureID),
+				zap.Duration("duration", sinceLastAdvanced))
+		}
+	}()
+
+	if a.barrierLastCleared.IsZero() {
+		a.barrierLastCleared = a.clock.Now()
+	}
+
+	if a.ownerCaptureID == "" {
+		// We should wait for the first owner to contact us.
+		// We need to wait for the sync request anyways, and
+		// there would not be any table to replicate for now.
+		log.Debug("waiting for owner to request sync",
+			zap.String("changefeed-id", a.changeFeed))
+		return false
+	}
+
+	client := a.messageRouter.GetClient(a.ownerCaptureID)
+	if client == nil {
+		// Client not found for owner.
+		// Note that if the owner is eventually gone,
+		// OnOwnerChanged will reset the barriers.
+		a.printNoClientWarning(a.ownerCaptureID)
+		return false
+	}
+	for topic, waitSeq := range a.barrierSeqs {
+		actualSeq, ok := client.CurrentAck(topic)
+		if !ok {
+			return false
+		}
+		if actualSeq >= waitSeq {
+			delete(a.barrierSeqs, topic)
+		} else {
+			return false
+		}
+	}
+
+	a.barrierLastCleared = a.clock.Now()
+	return true
+}
+
+func (a *agentImpl) OnOwnerChanged(ctx context.Context, newOwnerCaptureID model.CaptureID) {
+	a.ownerCaptureID = newOwnerCaptureID
+	// Note that we clear the pending barriers.
+	a.barrierSeqs = map[p2p.Topic]p2p.Seq{}
+}
+
+func (a *agentImpl) Close() error {
+	log.Debug("processor messenger: closing", zap.Stack("stack"))
+	if err := a.deregisterPeerMessageHandlers(); err != nil {
+		log.Warn("failed to deregister processor message handlers",
+			zap.String("changefeed-id", a.changeFeed),
+			zap.Error(err))
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (a *agentImpl) trySendMessage(
+	ctx context.Context,
+	target model.CaptureID,
+	topic p2p.Topic,
+	value interface{},
+) (bool, error) {
+	// TODO (zixiong): abstract this function out together with the similar method in cdc/owner/scheduler.go
+	// We probably need more advanced logic to handle and mitigate complex failure situations.
+
+	client := a.messageRouter.GetClient(target)
+	if client == nil {
+		a.printNoClientWarning(target)
+		return false, nil
+	}
+
+	seq, err := client.TrySendMessage(ctx, topic, value)
+	if err != nil {
+		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
+			return false, nil
+		}
+		if cerror.ErrPeerMessageClientClosed.Equal(err) {
+			log.Warn("peer messaging client is closed while trying to send a message through it. "+
+				"Report a bug if this warning repeats",
+				zap.String("changefeed-id", a.changeFeed),
+				zap.String("target", target))
+			return false, nil
+		}
+		return false, errors.Trace(err)
+	}
+
+	a.barrierSeqs[topic] = seq
+	return true, nil
+}
+
+func (a *agentImpl) registerPeerMessageHandlers() (ret error) {
+	defer func() {
+		if ret != nil {
+			if err := a.deregisterPeerMessageHandlers(); err != nil {
+				log.Error("failed to deregister handlers", zap.Error(err))
+			}
+		}
+	}()
+
+	ctx, cancel := stdContext.WithTimeout(stdContext.Background(), messageHandlerOperationsTimeout)
+	defer cancel()
+
+	errCh, err := a.messageServer.SyncAddHandler(
+		ctx,
+		model.DispatchTableTopic(a.changeFeed),
+		&model.DispatchTableMessage{},
+		func(sender string, value interface{}) error {
+			ownerCapture := sender
+			message := value.(*model.DispatchTableMessage)
+			a.OnOwnerDispatchedTask(
+				ownerCapture,
+				message.OwnerRev,
+				message.ID,
+				message.IsDelete)
+			return nil
+		})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	a.handlerErrChs = append(a.handlerErrChs, errCh)
+
+	errCh, err = a.messageServer.SyncAddHandler(
+		ctx,
+		model.AnnounceTopic(a.changeFeed),
+		&model.AnnounceMessage{},
+		func(sender string, value interface{}) error {
+			ownerCapture := sender
+			message := value.(*model.AnnounceMessage)
+			a.OnOwnerAnnounce(
+				ownerCapture,
+				message.OwnerRev)
+			return nil
+		})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	a.handlerErrChs = append(a.handlerErrChs, errCh)
+	return nil
+}
+
+func (a *agentImpl) deregisterPeerMessageHandlers() error {
+	ctx, cancel := stdContext.WithTimeout(stdContext.Background(), messageHandlerOperationsTimeout)
+	defer cancel()
+
+	err := a.messageServer.SyncRemoveHandler(ctx, model.DispatchTableTopic(a.changeFeed))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = a.messageServer.SyncRemoveHandler(ctx, model.AnnounceTopic(a.changeFeed))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (a *agentImpl) printNoClientWarning(target model.CaptureID) {
+	if !a.noClientLogRateLimiter.Allow() {
+		return
+	}
+	log.Warn("processor: no message client found for owner, retry later",
+		zap.String("owner-id", target))
+}

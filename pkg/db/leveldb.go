@@ -21,10 +21,10 @@ import (
 	"strconv"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/sorter"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
@@ -96,6 +96,10 @@ func (p *levelDB) Batch(cap int) Batch {
 		db:    p.db,
 		Batch: leveldb.MakeBatch(cap),
 	}
+}
+
+func (p *levelDB) Compact(start, end []byte) error {
+	return p.db.CompactRange(util.Range{Start: start, Limit: end})
 }
 
 func (p *levelDB) Close() error {
