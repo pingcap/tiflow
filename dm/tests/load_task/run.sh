@@ -195,7 +195,7 @@ function stop_task_left_load() {
 		"query-status load_task1" \
 		"different worker in load stage, previous worker: worker1, current worker: worker2" 1
 
-	# now left a load_task KV in etcd
+	# now stop this task without clean meta (left a load_task KV in etcd)
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task load_task1" \
 		"\"result\": true" 2

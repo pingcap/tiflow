@@ -813,20 +813,6 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 		m[stage.Source] = stage
 	}
 
-	// 6. check if we can resolve load task by scheduling the source to the worker which has dump files on local disk.
-	for _, cfg := range newCfgs {
-		source := cfg.SourceID
-		worker, ok := s.bounds[source]
-		if !ok {
-			continue
-		}
-
-		if err2 := s.tryResolveLoadTask(worker.BaseInfo().Name, source); err2 != nil {
-			s.logger.Error("in AddSubTasks, error when try resolve load task",
-				zap.String("worker", worker.BaseInfo().Name),
-				zap.String("source", source))
-		}
-	}
 	return nil
 }
 
