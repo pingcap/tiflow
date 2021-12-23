@@ -838,7 +838,7 @@ func (s *Server) DMAPIImportTaskTemplate(c *gin.Context) {
 		SuccessTaskList: []string{},
 	}
 	for _, task := range config.SubTaskConfigsToOpenAPITask(s.scheduler.GetSubTaskCfgs()) {
-		if err := ha.PutOpenAPITaskConfig(s.etcdClient, task, req.Overwrite); err != nil {
+		if err := ha.PutOpenAPITaskTemplate(s.etcdClient, task, req.Overwrite); err != nil {
 			resp.FailedTaskList = append(resp.FailedTaskList, struct {
 				ErrorMsg string `json:"error_msg"`
 				TaskName string `json:"task_name"`
@@ -871,7 +871,7 @@ func (s *Server) DMAPICreateTaskTemplate(c *gin.Context) {
 		_ = c.Error(terror.WithClass(adjustDBErr, terror.ClassDMMaster))
 		return
 	}
-	if err := ha.PutOpenAPITaskConfig(s.etcdClient, *task, false); err != nil {
+	if err := ha.PutOpenAPITaskTemplate(s.etcdClient, *task, false); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -880,7 +880,7 @@ func (s *Server) DMAPICreateTaskTemplate(c *gin.Context) {
 
 // DMAPIGetTaskTemplateList get task_config_template list url is: (GET /api/v1/task/templates).
 func (s *Server) DMAPIGetTaskTemplateList(c *gin.Context) {
-	TaskConfigList, err := ha.GetAllOpenAPITaskConfig(s.etcdClient)
+	TaskConfigList, err := ha.GetAllOpenAPITaskTemplate(s.etcdClient)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -895,7 +895,7 @@ func (s *Server) DMAPIGetTaskTemplateList(c *gin.Context) {
 
 // DMAPIDeleteTaskTemplate delete task_config_template url is: (DELETE /api/v1/task/templates/{task-name}).
 func (s *Server) DMAPIDeleteTaskTemplate(c *gin.Context, taskName string) {
-	if err := ha.DeleteOpenAPITaskConfig(s.etcdClient, taskName); err != nil {
+	if err := ha.DeleteOpenAPITaskTemplate(s.etcdClient, taskName); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -904,7 +904,7 @@ func (s *Server) DMAPIDeleteTaskTemplate(c *gin.Context, taskName string) {
 
 // DMAPIGetTaskTemplate get task_config_template url is: (GET /api/v1/task/templates/{task-name}).
 func (s *Server) DMAPIGetTaskTemplate(c *gin.Context, taskName string) {
-	task, err := ha.GetOpenAPITaskConfig(s.etcdClient, taskName)
+	task, err := ha.GetOpenAPITaskTemplate(s.etcdClient, taskName)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -933,7 +933,7 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 		_ = c.Error(terror.WithClass(adjustDBErr, terror.ClassDMMaster))
 		return
 	}
-	if err := ha.UpdateOpenAPITaskConfig(s.etcdClient, *task); err != nil {
+	if err := ha.UpdateOpenAPITaskTemplate(s.etcdClient, *task); err != nil {
 		_ = c.Error(err)
 		return
 	}
