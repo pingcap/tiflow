@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor"
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/puller"
-	"github.com/pingcap/tiflow/cdc/puller/sorter"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,20 +36,8 @@ func init() {
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
 	orchestrator.InitMetrics(registry)
-<<<<<<< HEAD
-	sorter.InitMetrics(registry)
-	if config.NewReplicaImpl {
-		processor.InitMetrics(registry)
-		tablepipeline.InitMetrics(registry)
-		owner.InitMetrics(registry)
-	} else {
-		initProcessorMetrics(registry)
-		initOwnerMetrics(registry)
-	}
-=======
 	processor.InitMetrics(registry)
 	tablepipeline.InitMetrics(registry)
 	owner.InitMetrics(registry)
->>>>>>> 6591f62df (Clean old owner and old processor in release 5.2 branch (#4019))
 	initServerMetrics(registry)
 }

@@ -163,12 +163,7 @@ function run() {
 	cleanup_process $CDC_BINARY
 
 	# updating GC safepoint failure case
-<<<<<<< HEAD
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/pkg/txnutil/gc/InjectActualGCSafePoint=return(9223372036854775807)' # new owner
-	# export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/InjectActualGCSafePoint=return(9223372036854775807)' # old owner
-=======
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/pkg/txnutil/gc/InjectActualGCSafePoint=return(9223372036854775807)'
->>>>>>> 6591f62df (Clean old owner and old processor in release 5.2 branch (#4019))
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
 	changefeedid_2="changefeed-error-2"
