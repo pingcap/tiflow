@@ -20,9 +20,9 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/quotes"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/pkg/quotes"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -270,6 +270,16 @@ type RowChangedEvent struct {
 // IsDelete returns true if the row is a delete event
 func (r *RowChangedEvent) IsDelete() bool {
 	return len(r.PreColumns) != 0 && len(r.Columns) == 0
+}
+
+// IsInsert returns true if the row is an insert event
+func (r *RowChangedEvent) IsInsert() bool {
+	return len(r.PreColumns) == 0 && len(r.Columns) != 0
+}
+
+// IsUpdate returns true if the row is an update event
+func (r *RowChangedEvent) IsUpdate() bool {
+	return len(r.PreColumns) != 0 && len(r.Columns) != 0
 }
 
 // PrimaryKeyColumns returns the column(s) corresponding to the handle key(s)

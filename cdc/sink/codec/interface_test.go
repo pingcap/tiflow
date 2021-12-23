@@ -15,12 +15,12 @@ package codec
 
 import (
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type codecInterfaceSuite struct{}
@@ -55,7 +55,7 @@ func (s *codecInterfaceSuite) TestCreate(c *check.C) {
 		CommitTs: 5678,
 	}
 
-	msg := NewMQMessage(config.ProtocolDefault, []byte("key1"), []byte("value1"), rowEvent.CommitTs, model.MqMessageTypeRow, &rowEvent.Table.Schema, &rowEvent.Table.Table)
+	msg := NewMQMessage(config.ProtocolOpen, []byte("key1"), []byte("value1"), rowEvent.CommitTs, model.MqMessageTypeRow, &rowEvent.Table.Schema, &rowEvent.Table.Table)
 
 	c.Assert(msg.Key, check.BytesEquals, []byte("key1"))
 	c.Assert(msg.Value, check.BytesEquals, []byte("value1"))
@@ -63,7 +63,7 @@ func (s *codecInterfaceSuite) TestCreate(c *check.C) {
 	c.Assert(msg.Type, check.Equals, model.MqMessageTypeRow)
 	c.Assert(*msg.Schema, check.Equals, rowEvent.Table.Schema)
 	c.Assert(*msg.Table, check.Equals, rowEvent.Table.Table)
-	c.Assert(msg.Protocol, check.Equals, config.ProtocolDefault)
+	c.Assert(msg.Protocol, check.Equals, config.ProtocolOpen)
 
 	job := &timodel.Job{
 		ID:         1071,

@@ -92,6 +92,7 @@ var (
 	ErrPrepareAvroFailed        = errors.Normalize("prepare avro failed", errors.RFCCodeText("CDC:ErrPrepareAvroFailed"))
 	ErrAsyncBroadcastNotSupport = errors.Normalize("Async broadcasts not supported", errors.RFCCodeText("CDC:ErrAsyncBroadcastNotSupport"))
 	ErrSinkURIInvalid           = errors.Normalize("sink uri invalid", errors.RFCCodeText("CDC:ErrSinkURIInvalid"))
+	ErrMQSinkUnknownProtocol    = errors.Normalize("unknown '%s' protocol for Message Queue sink", errors.RFCCodeText("CDC:ErrMQSinkUnknownProtocol"))
 	ErrMySQLTxnError            = errors.Normalize("MySQL txn error", errors.RFCCodeText("CDC:ErrMySQLTxnError"))
 	ErrMySQLQueryError          = errors.Normalize("MySQL query error", errors.RFCCodeText("CDC:ErrMySQLQueryError"))
 	ErrMySQLConnectionError     = errors.Normalize("MySQL connection error", errors.RFCCodeText("CDC:ErrMySQLConnectionError"))
