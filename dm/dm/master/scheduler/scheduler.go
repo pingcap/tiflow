@@ -715,26 +715,39 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 				return err
 			}
 		}
-
+		defer func() {
+			// we need resume tasks that we just paused, we use another goroutine to do this because if error happens
+			// just logging this message and let user handle it manually
+			go func() {
+				for _, task := range runningTasks {
+					if err := s.UpdateExpectSubTaskStage(pb.Stage_Running, task, source); err != nil {
+						s.logger.Warn(
+							"auto resume task failed", zap.String("task", task),
+							zap.String("source", source), zap.String("worker", worker), zap.Error(err))
+					}
+				}
+			}()
+		}()
 		// wait all tasks are paused before actually starting scheduling
+	WaitLoop:
 		for maxRetryNum := 10; maxRetryNum > 0; maxRetryNum-- {
 			resp, err := queryWorkerF()
 			if err != nil {
 				return terror.Annotatef(err, "failed to query worker: %s status", oldWorker.baseInfo.Name)
 			}
-			notPausedTaskCount := 0
 			for _, status := range resp.QueryStatus.GetSubTaskStatus() {
 				if status.Stage != pb.Stage_Paused {
+					// NOTE: the defaultRPCTimeout is 10m, use 1s * retry times to increase the waiting time
+					sleepTime := time.Second * time.Duration(10-maxRetryNum)
 					s.logger.Info(
-						"waiting task pausing", zap.String("task", status.Name), zap.Int("retry times", 10-maxRetryNum))
-					notPausedTaskCount++
+						"waiting task pausing",
+						zap.String("task", status.Name),
+						zap.Int("retry times", 10-maxRetryNum),
+						zap.Duration("sleep time", sleepTime))
+					time.Sleep(sleepTime)
+					goto WaitLoop
 				}
 			}
-			if notPausedTaskCount == 0 {
-				break
-			}
-			// NOTE: the defaultRPCTimeout is 10m, use 1s * retry times to increase the waiting time
-			time.Sleep(time.Second * time.Duration(10-maxRetryNum))
 		}
 	}
 
@@ -754,25 +767,12 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	if err2 := s.updateStatusToBound(w, ha.NewSourceBound(source, worker)); err2 != nil {
 		s.logger.DPanic("we have checked w.stage is free, so there should not be an error", zap.Error(err2))
 	}
-
 	// 6. now this old worker is free, try bound source to it
 	_, err = s.tryBoundForWorker(oldWorker)
 	if err != nil {
-		s.mu.Unlock()
 		s.logger.Warn("in transfer source, error when try bound the old worker", zap.Error(err))
 	}
 	s.mu.Unlock()
-	// we need resume tasks that we just paused, we use another goroutine to do this because if error happens
-	// just logging this message and let user handle it manually
-	go func() {
-		for _, task := range runningTasks {
-			if err := s.UpdateExpectSubTaskStage(pb.Stage_Running, task, source); err != nil {
-				s.logger.Warn(
-					"auto resume task failed", zap.String("task", task),
-					zap.String("source", source), zap.String("worker", worker), zap.Error(err))
-			}
-		}
-	}()
 	return nil
 }
 
