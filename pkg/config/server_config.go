@@ -102,7 +102,7 @@ var defaultServerConfig = &ServerConfig{
 		RegionScanLimit:  40,
 	},
 	Debug: &DebugConfig{
-		EnableTableActor: true,
+		EnableTableActor: false,
 		// Default leveldb sorter config
 		EnableDBSorter: false,
 		DB: &DBConfig{
