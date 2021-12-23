@@ -442,11 +442,13 @@ func (l *Lock) TryRemoveTableBySources(sources []string) []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	// record drop columns for sources
 	dropColumns := make([]string, 0)
 	for col, sourceColumns := range l.columns {
 		for _, source := range sources {
 			if _, ok := sourceColumns[source]; ok {
 				dropColumns = append(dropColumns, col)
+				break
 			}
 		}
 	}

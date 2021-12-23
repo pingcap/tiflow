@@ -163,6 +163,8 @@ func (o *Optimist) ShowLocks(task string, sources []string) []*pb.DDLLock {
 
 // RemoveMetaData removes meta data for a specified task
 // NOTE: this function can only be used when the specified task is not running.
+// This function only be used when --remove-meta or stop-task
+// NOTE: For stop-task, we still delete drop columns in etcd though user may restart the task again later.
 func (o *Optimist) RemoveMetaDataWithTask(task string) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()

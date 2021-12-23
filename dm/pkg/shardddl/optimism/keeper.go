@@ -74,6 +74,7 @@ func (lk *LockKeeper) getDownstreamMeta(task string) (*DownstreamMeta, error) {
 		return nil, err
 	}
 	downstreamMeta := &DownstreamMeta{db: db, meta: meta}
+	lk.downstreamMetaMap[task] = downstreamMeta
 	return downstreamMeta, nil
 }
 
