@@ -148,7 +148,8 @@ func isMySQLError(err error, code uint16) bool {
 	return ok && e.Number == code
 }
 
-// checkTables map schema => {table1, table2, ...}
+// checkTables map schema => {table1, table2, ...}.
+// lackGrant map privilege => schema => table.
 func genExpectGrants(privileges map[pmysql.PrivilegeType]struct{}, checkTables map[string][]string) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
 	lackGrants := make(map[pmysql.PrivilegeType]map[string]map[string]struct{}, len(privileges))
 	for p := range privileges {
@@ -171,9 +172,13 @@ func genExpectGrants(privileges map[pmysql.PrivilegeType]struct{}, checkTables m
 }
 
 func genReplicationGrants(replicationPrivileges map[pmysql.PrivilegeType]struct{}) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
+	// replication privilege only check replication client and replication slave which are global level privilege
+	// so don't need check tables
 	return genExpectGrants(replicationPrivileges, nil)
 }
 
 func genDumpGrants(dumpPrivileges map[pmysql.PrivilegeType]struct{}, checkTables map[string][]string) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
+	// due to dump privilege checker need check db/table level privilege
+	// so we need know the check tables
 	return genExpectGrants(dumpPrivileges, checkTables)
 }

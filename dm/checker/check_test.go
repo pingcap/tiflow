@@ -91,7 +91,7 @@ func (s *testCheckerSuite) TestDumpPrivilegeChecking(c *tc.C) {
 
 	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
-		AddRow("GRANT SELECT ON *.* TO 'haha'@'%'"))
+		AddRow("GRANT SELECT, RELOAD ON *.* TO 'haha'@'%'"))
 	c.Assert(CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt), tc.IsNil)
 }
 
