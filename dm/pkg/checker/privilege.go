@@ -190,9 +190,9 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 					if _, ok := lackGrants[privElem.Priv][dbName]; !ok {
 						continue
 					}
-					// currently, only SELECT/LOCK TABLES privilege goes here. we didn't require SELECT/LOCK TABLES to be granted globally,
+					// currently, only SELECT privilege goes here. we didn't require SELECT to be granted globally,
 					// dumpling could report error if an allow-list table is lack of privilege.
-					// we only check that SELECT/LOCK TABLES is granted on all columns, otherwise we can't SHOW CREATE TABLE
+					// we only check that SELECT is granted on all columns, otherwise we can't SHOW CREATE TABLE
 					if len(privElem.Cols) != 0 {
 						continue
 					}
@@ -215,9 +215,9 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 					if _, ok := lackGrants[privElem.Priv][dbName][tableName]; !ok {
 						continue
 					}
-					// currently, only SELECT/LOCK TABLES privilege goes here. we didn't require SELECT/LOCK TABLES to be granted globally,
+					// currently, only SELECT privilege goes here. we didn't require SELECT to be granted globally,
 					// dumpling could report error if an allow-list table is lack of privilege.
-					// we only check that SELECT/LOCK TABLES is granted on all columns, otherwise we can't SHOW CREATE TABLE
+					// we only check that SELECT is granted on all columns, otherwise we can't SHOW CREATE TABLE
 					if len(privElem.Cols) != 0 {
 						continue
 					}
