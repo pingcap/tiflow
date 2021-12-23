@@ -48,11 +48,14 @@ import (
 )
 
 const (
+<<<<<<< HEAD
 	ownerRunInterval = time.Millisecond * 500
 
 	// DefaultCDCGCSafePointTTL is the default value of cdc gc safe-point ttl, specified in seconds.
 	DefaultCDCGCSafePointTTL = 24 * 60 * 60
 
+=======
+>>>>>>> 6591f62df (Clean old owner and old processor in release 5.2 branch (#4019))
 	defaultDataDir = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	dataDirThreshold = 500
@@ -409,6 +412,7 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		return nil
 	}
 
+<<<<<<< HEAD
 	// s.etcdClient maybe nil if NewReplicaImpl is not set to true
 	// todo: remove this after NewReplicaImpl set to true in a specific branch, and use server.etcdClient instead.
 	cli := s.etcdClient
@@ -428,6 +432,10 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 
 	// data-dir will be decide by exist changefeed for backward compatibility
 	allInfo, err := cli.GetAllChangeFeedInfo(ctx)
+=======
+	// data-dir will be decided by exist changefeed for backward compatibility
+	allInfo, err := s.etcdClient.GetAllChangeFeedInfo(ctx)
+>>>>>>> 6591f62df (Clean old owner and old processor in release 5.2 branch (#4019))
 	if err != nil {
 		return errors.Trace(err)
 	}
