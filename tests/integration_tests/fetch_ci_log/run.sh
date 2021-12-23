@@ -11,7 +11,7 @@ SINK_TYPE=$1
 
 function run() {
 	i=0
-	check_time=12
+	check_time=1200
 	set +e
 	while [ $i -lt $check_time ]; do
 		((i++))
