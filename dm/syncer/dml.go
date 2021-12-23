@@ -105,7 +105,6 @@ func extractValueFromData(data []interface{}, columns []*model.ColumnInfo, sourc
 		case decimal.Decimal:
 			d = v.String()
 		case string:
-			// TODO: add an unit test
 			// convert string to []byte so that go-sql-driver/mysql can use _binary'value' for DML
 			if columns[i].Charset == charset.CharsetGBK {
 				d = []byte(v)
