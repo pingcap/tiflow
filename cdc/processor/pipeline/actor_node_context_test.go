@@ -28,6 +28,7 @@ import (
 )
 
 func TestContext(t *testing.T) {
+	t.Parallel()
 	ctx := NewContext(sdtContext.TODO(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{})
 	require.NotNil(t, ctx.GlobalVars())
 	require.Equal(t, "zzz", ctx.ChangefeedVars().ID)
@@ -41,6 +42,7 @@ func TestContext(t *testing.T) {
 }
 
 func TestTryGetProcessedMessageFromChan(t *testing.T) {
+	t.Parallel()
 	ctx := NewContext(sdtContext.TODO(), nil, 1, nil, nil)
 	ctx.outputCh = make(chan pipeline.Message, 1)
 	require.Nil(t, ctx.tryGetProcessedMessage())
@@ -51,6 +53,7 @@ func TestTryGetProcessedMessageFromChan(t *testing.T) {
 }
 
 func TestThrow(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := sdtContext.WithCancel(sdtContext.TODO())
 	sys := system.NewSystem()
 	defer func() {
@@ -79,6 +82,7 @@ func TestThrow(t *testing.T) {
 }
 
 func TestActorNodeContextTrySendToNextNode(t *testing.T) {
+	t.Parallel()
 	ctx := NewContext(sdtContext.TODO(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{})
 	ctx.outputCh = make(chan pipeline.Message, 1)
 	require.True(t, ctx.TrySendToNextNode(pipeline.BarrierMessage(1)))
@@ -89,6 +93,7 @@ func TestActorNodeContextTrySendToNextNode(t *testing.T) {
 }
 
 func TestSendToNextNodeNoTickMessage(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := sdtContext.WithCancel(sdtContext.TODO())
 	sys := system.NewSystem()
 	defer func() {

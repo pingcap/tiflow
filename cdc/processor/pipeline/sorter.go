@@ -67,6 +67,7 @@ type sorterNode struct {
 
 	replConfig *config.ReplicaConfig
 
+	// isTableActorMode identify if the sorter node is run is actor mode, todo: remove it after GA
 	isTableActorMode bool
 }
 
@@ -280,6 +281,7 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 					model.NewResolvedPolymorphicEvent(0, n.barrierTs))
 			}
 		}
+		// todo: remove feature switcher after GA
 		if n.isTableActorMode {
 			return n.sorter.TryAddEntry(ctx, msg.PolymorphicEvent)
 		}
@@ -291,6 +293,7 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 		}
 		fallthrough
 	default:
+		// todo: remove feature switcher after GA
 		if n.isTableActorMode {
 			return ctx.(*actorNodeContext).TrySendToNextNode(msg), nil
 		}
