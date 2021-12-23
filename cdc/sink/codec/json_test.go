@@ -14,11 +14,12 @@
 package codec
 
 import (
-	"github.com/pingcap/tiflow/pkg/config"
 	"math"
 	"sort"
 	"strconv"
 	"testing"
+
+	"github.com/pingcap/tiflow/pkg/config"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/mysql"
