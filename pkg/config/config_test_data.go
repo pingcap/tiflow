@@ -107,7 +107,7 @@ const (
     "region-scan-limit": 40
   },
   "debug": {
-    "enable-table-actor": true,
+    "enable-table-actor": false,
     "enable-db-sorter": false,
     "db": {
       "count": 16,
