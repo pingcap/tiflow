@@ -16,6 +16,7 @@ package kafka
 import (
 	"context"
 	"fmt"
+	"github.com/cznic/mathutil"
 	"regexp"
 	"strconv"
 	"strings"
@@ -384,21 +385,17 @@ func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic
 		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
 	}
 
-	// when try to create the topic, we don't know how to set the `max.message.bytes` for the topic.
-	// Kafka would create the topic with broker's `message.max.bytes`,
-	// we have to make sure it's not greater than `max-message-bytes`.
 	brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
 	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 		return errors.Trace(err)
 	}
 
-	if brokerMessageMaxBytes < config.MaxMessageBytes {
-		return cerror.ErrKafkaInvalidConfig.GenWithStack(
-			"broker's message.max.bytes(%d) less than max-message-bytes(%d). "+
-				"Please make sure `max-message-bytes` not greater than broker's `message.max.bytes`",
-			brokerMessageMaxBytes, config.MaxMessageBytes)
-	}
+	// when create the topic, `max.message.bytes` is decided by the broker,
+	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
+	// TiCDC need to make sure that the producer's `max-message-byte` won't larger than
+	// topic's `max.message.bytes`.
+	config.MaxMessageBytes = mathutil.Min(config.MaxMessageBytes, brokerMessageMaxBytes)
 
 	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
 	if config.PartitionNum == 0 {
