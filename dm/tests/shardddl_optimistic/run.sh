@@ -229,7 +229,7 @@ function DM_RESTART_TASK_MASTER_WORKER() {
 }
 
 function random_restart() {
-	mod=$(($RANDOM%4))
+	mod=$(($RANDOM % 4))
 	if [[ "$mod" == "0" ]]; then
 		restart_master
 	elif [[ "$mod" == "1" ]]; then
