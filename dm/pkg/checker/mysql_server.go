@@ -124,13 +124,12 @@ func (pc *MySQLServerIDChecker) Check(ctx context.Context) (*Result, error) {
 
 	serverID, err := dbutil.ShowServerID(ctx, pc.db)
 	if err != nil {
-		if utils.OriginError(err) == sql.ErrNoRows {
-			result.Errors = append(result.Errors, NewError("server_id not set"))
-			result.Instruction = "please set server_id in your database"
-			return result, nil
-		} else {
+		if utils.OriginError(err) != sql.ErrNoRows {
 			return result, err
 		}
+		result.Errors = append(result.Errors, NewError("server_id not set"))
+		result.Instruction = "please set server_id in your database"
+		return result, nil
 	}
 
 	if serverID == 0 {
