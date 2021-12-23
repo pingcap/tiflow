@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -55,7 +54,6 @@ const (
 type Server struct {
 	capture *capture.Capture
 
-	ownerLock    sync.RWMutex
 	statusServer *http.Server
 	pdClient     pd.Client
 	etcdClient   *kv.CDCEtcdClient
