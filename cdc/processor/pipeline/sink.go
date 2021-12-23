@@ -123,6 +123,7 @@ func (n *sinkNode) stop(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
+	log.Info("sink is closed", zap.Int64("tableID", n.tableID))
 	err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	return
 }
