@@ -380,6 +380,9 @@ create table t (
 		c.Assert(exprs, HasLen, 1)
 		expr := exprs[0]
 
+		ca.skippedRow = extractValueFromData(ca.skippedRow, ti.Columns, ti)
+		ca.passedRow = extractValueFromData(ca.passedRow, ti.Columns, ti)
+
 		skip, err := SkipDMLByExpression(sessCtx, ca.skippedRow, expr, ti.Columns)
 		c.Assert(err, IsNil)
 		c.Assert(skip, Equals, true)

@@ -80,12 +80,12 @@ type genDMLParam struct {
 
 // extractValueFromData adjust the values obtained from go-mysql so that
 // - the values can be correctly converted to TiDB datum
-// - the values are in the correct type that go-sql-driver/mysql uses
+// - the values are in the correct type that go-sql-driver/mysql uses.
 func extractValueFromData(data []interface{}, columns []*model.ColumnInfo, sourceTI *model.TableInfo) []interface{} {
 	value := make([]interface{}, 0, len(data))
 
 	for i, d := range data {
-		d = castUnsigned(data[i], &columns[i].FieldType)
+		d = castUnsigned(d, &columns[i].FieldType)
 
 		switch v := d.(type) {
 		case int8:
