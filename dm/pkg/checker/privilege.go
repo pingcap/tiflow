@@ -140,8 +140,6 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 		return NewError("there is no such grant defined for current user on host '%%'")
 	}
 
-	var user string
-
 	p := parser.New()
 	for i, grant := range grants {
 		if len(lackGrants) == 0 {
@@ -163,9 +161,6 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 
 		if len(grantStmt.Users) == 0 {
 			return NewError("grant has no user %s", grantStmt.Text())
-		} else if user == "" {
-			// show grants will only output grants for requested user
-			user = grantStmt.Users[0].User.Username
 		}
 
 		dbName := grantStmt.Level.DBName
@@ -177,10 +172,10 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 				case mysql.AllPriv:
 					return nil
 				default:
-					// some privileges are only effective on global level. in other words, GRANT ALL ON test.* is not enough for them
-					// https://dev.mysql.com/doc/refman/5.7/en/grant.html#grant-global-privileges
-					if _, ok := lackGrants[privElem.Priv]; !ok {
-						continue
+					// mysql> show master status;
+					// ERROR 1227 (42000): Access denied; you need (at least one of) the SUPER, REPLICATION CLIENT privilege(s) for this operation
+					if privElem.Priv == mysql.SuperPriv {
+						delete(lackGrants, mysql.ReplicationClientPriv)
 					}
 					delete(lackGrants, privElem.Priv)
 				}

@@ -130,6 +130,7 @@ function empty_data() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
 
+	sleep 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Finished\"" 2 \
