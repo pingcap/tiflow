@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/sorter"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 )
 
@@ -146,6 +146,10 @@ func (p *pebbleDB) Batch(cap int) Batch {
 	return pebbleBatch{
 		Batch: p.db.NewBatch(),
 	}
+}
+
+func (p *pebbleDB) Compact(start, end []byte) error {
+	return p.db.Compact(start, end)
 }
 
 func (p *pebbleDB) Close() error {

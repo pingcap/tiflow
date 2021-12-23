@@ -16,6 +16,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -27,17 +28,17 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/streamer"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/relay"
 )
 
 // SourceWorker manages a source(upstream) which is mainly related to subtasks and relay.
@@ -77,6 +78,7 @@ type SourceWorker struct {
 	relayWg      sync.WaitGroup
 	relayHolder  RelayHolder
 	relayPurger  relay.Purger
+	relayDir     string
 
 	startedRelayBySourceCfg bool
 
@@ -89,13 +91,19 @@ type SourceWorker struct {
 
 // NewSourceWorker creates a new SourceWorker. The functionality of relay and subtask is disabled by default, need call EnableRelay
 // and EnableSubtask later.
-func NewSourceWorker(cfg *config.SourceConfig, etcdClient *clientv3.Client, name string) (w *SourceWorker, err error) {
+func NewSourceWorker(
+	cfg *config.SourceConfig,
+	etcdClient *clientv3.Client,
+	name string,
+	relayDir string,
+) (w *SourceWorker, err error) {
 	w = &SourceWorker{
 		cfg:           cfg,
 		subTaskHolder: newSubTaskHolder(),
 		l:             log.With(zap.String("component", "worker controller")),
 		etcdClient:    etcdClient,
 		name:          name,
+		relayDir:      relayDir,
 	}
 	// keep running until canceled in `Close`.
 	w.ctx, w.cancel = context.WithCancel(context.Background())
@@ -334,6 +342,13 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 	}
 
 	// 2. initial relay holder, the cfg's password need decrypt
+	// worker's relay-dir has higher priority than source's relay-dir
+	if w.relayDir != "" {
+		workerRelayDir := filepath.Join(w.relayDir, w.name)
+		log.L().Info("use worker's relay-dir", zap.String("RelayDir", workerRelayDir))
+		w.cfg.RelayDir = workerRelayDir
+	}
+
 	w.relayHolder = NewRelayHolder(w.cfg)
 	relayPurger, err := w.relayHolder.Init(w.relayCtx, []relay.PurgeInterceptor{
 		w,

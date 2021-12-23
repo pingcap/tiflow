@@ -33,7 +33,7 @@
 
 1. Run `make dm_integration_test_build` to generate DM related binary for integration test
 
-2. Setup two MySQL servers (the first one: 5.6 ~ 5.7; the second one: 8.0) with [binlog enabled first](https://dev.mysql.com/doc/refman/5.7/en/replication-howto-masterbaseconfig.html) and [set `GTID_MODE=ON`](https://dev.mysql.com/doc/refman/5.7/en/replication-mode-change-online-enable-gtids.html), You need set the mysql port and root password according to the following table.
+2. Setup two MySQL servers (the first one: 5.6 ~ 5.7; the second one: 8.0.21, suggest you are same as [CI](https://github.com/PingCAP-QE/ci/blob/main/jenkins/pipelines/ci/dm/dm_ghpr_new_test.groovy#L164-L172)) with [binlog enabled first](https://dev.mysql.com/doc/refman/5.7/en/replication-howto-masterbaseconfig.html) and [set `GTID_MODE=ON`](https://dev.mysql.com/doc/refman/5.7/en/replication-mode-change-online-enable-gtids.html), You need set the mysql port and root password according to the following table.
 
     | MySQL | Host | Port| PASSWORD |
     | :------------ | :---------- | :------ | :---- |

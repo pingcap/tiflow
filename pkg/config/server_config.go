@@ -23,8 +23,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
 
@@ -107,17 +107,18 @@ var defaultServerConfig = &ServerConfig{
 			Count: 16,
 			// Following configs are optimized for write throughput.
 			// Users should not change them.
-			Concurrency:            256,
-			MaxOpenFiles:           10000,
-			BlockSize:              65536,
-			BlockCacheSize:         4294967296,
-			WriterBufferSize:       8388608,
-			Compression:            "snappy",
-			TargetFileSizeBase:     8388608,
-			CompactionL0Trigger:    160,
-			WriteL0SlowdownTrigger: math.MaxInt32,
-			WriteL0PauseTrigger:    math.MaxInt32,
-			CleanupSpeedLimit:      10000,
+			Concurrency:                 256,
+			MaxOpenFiles:                10000,
+			BlockSize:                   65536,
+			BlockCacheSize:              4294967296,
+			WriterBufferSize:            8388608,
+			Compression:                 "snappy",
+			TargetFileSizeBase:          8388608,
+			WriteL0SlowdownTrigger:      math.MaxInt32,
+			WriteL0PauseTrigger:         math.MaxInt32,
+			CompactionL0Trigger:         160,
+			CompactionDeletionThreshold: 160000,
+			CleanupSpeedLimit:           10000,
 		},
 		Messages: defaultMessageConfig.Clone(),
 	},

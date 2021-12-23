@@ -1,7 +1,7 @@
 # TiCDC Design Documents
 
 - Author(s): [hi-rustin](https://github.com/hi-rustin)
-- Tracking Issue: https://github.com/pingcap/ticdc/issues/3082
+- Tracking Issue: https://github.com/pingcap/tiflow/issues/3082
 
 ## Table of Contents
 
@@ -45,7 +45,7 @@ dispatchers = [
     {matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
 ]
 
-protocol = "default"
+protocol = "open-protocol"
 
 column-selectors = [
     {matcher = ['test1.*', 'test2.*'], columns = ["Column selector expression"]},

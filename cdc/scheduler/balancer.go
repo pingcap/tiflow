@@ -16,8 +16,8 @@ package scheduler
 import (
 	"math"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/scheduler/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/util"
 	"go.uber.org/zap"
 )
 
