@@ -497,11 +497,11 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(resultTaskList.Data[0].Name, check.Equals, task.Name)
 
 	// test batch import task config
-	taskBatchImportURL := "/api/v1/task/configs/import"
-	req := openapi.TaskConfigRequest{Overwrite: false}
+	taskBatchImportURL := "/api/v1/task/templates/import"
+	req := openapi.TaskTemplateRequest{Overwrite: false}
 	result = testutil.NewRequest().Post(taskBatchImportURL).WithJsonBody(req).GoWithHTTPHandler(t.testT, s.openapiHandles)
 	c.Assert(result.Code(), check.Equals, http.StatusAccepted)
-	var resp openapi.TaskConfigResponse
+	var resp openapi.TaskTemplateResponse
 	c.Assert(result.UnmarshalBodyToObject(&resp), check.IsNil)
 	c.Assert(resp.SuccessTaskList, check.HasLen, 1)
 	c.Assert(resp.SuccessTaskList[0], check.Equals, task.Name)
@@ -661,7 +661,7 @@ func (t *openAPISuite) TestClusterAPI(c *check.C) {
 	cancel1()
 }
 
-func (t *openAPISuite) TestTaskConfigsAPI(c *check.C) {
+func (t *openAPISuite) TestTaskTemplatesAPI(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := setupServer(ctx, c)
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
@@ -689,7 +689,7 @@ func (t *openAPISuite) TestTaskConfigsAPI(c *check.C) {
 	c.Assert(result.Code(), check.Equals, http.StatusCreated)
 
 	// create task config template
-	url := "/api/v1/task/configs"
+	url := "/api/v1/task/templates"
 
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
