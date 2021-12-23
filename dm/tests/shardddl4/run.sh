@@ -31,6 +31,8 @@ function DM_119_CASE {
 	#         "query-status test" \
 	#         "because schema conflict detected" 1
 	# fi
+
+	# TODO: wait https://github.com/pingcap/tiflow/issues/4029 to close, then will revoke this comment
 	# check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 10 "fail"
 }
 
@@ -109,6 +111,8 @@ function DM_121_CASE {
 	#         "query-status test" \
 	#         "because schema conflict detected" 1
 	# fi
+
+	# TODO: wait https://github.com/pingcap/tiflow/issues/4029 to close, then will revoke this comment
 	# check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 10 "fail"
 }
 
