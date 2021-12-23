@@ -3,15 +3,19 @@ package master
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"sync"
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/autoid"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 )
 
@@ -24,18 +28,53 @@ type JobManager struct {
 
 	mu          sync.Mutex
 	jobMasters  map[model.ID]*model.Task
-	idAllocater autoid.JobIDAllocator
+	idAllocator autoid.JobIDAllocator
 	clients     *client.Manager
 	masterAddrs []string
 }
 
-func (j *JobManager) Start(ctx context.Context) error {
+func (j *JobManager) recover(ctx context.Context) error {
+	resp, err := j.MetaKV.Get(ctx, adapter.JobKeyAdapter.Path())
+	if err != nil {
+		return err
+	}
+	result := resp.(*clientv3.GetResponse)
+	for _, kv := range result.Kvs {
+		jobID, err := strconv.Atoi(string(kv.Key))
+		if err != nil {
+			return err
+		}
+		jobTask := &model.Task{
+			ID:   model.ID(jobID),
+			OpTp: model.JobMasterType,
+			Op:   kv.Value,
+			Cost: 1,
+		}
+		err = j.RestoreTask(ctx, jobTask)
+		if err != nil {
+			return err
+		}
+		j.jobMasters[model.ID(jobID)] = jobTask
+	}
+	return nil
+}
+
+func (j *JobManager) persistJobInfo(ctx context.Context, jobID model.ID, jobBytes []byte) error {
+	_, err := j.MetaKV.Put(ctx, adapter.JobKeyAdapter.Encode(strconv.Itoa(int(jobID))), string(jobBytes))
+	return err
+}
+
+func (j *JobManager) Start(ctx context.Context, metaKV metadata.MetaKV) error {
+	j.MetaKV = metaKV
 	err := j.clients.AddMasterClient(ctx, j.masterAddrs)
 	if err != nil {
 		return err
 	}
-	j.Master = system.New(ctx, JobMasterID, j.clients)
-	j.Master.StartInternal()
+	err = j.recover(ctx)
+	if err != nil {
+		return err
+	}
+	j.Master.StartInternal(ctx)
 	return nil
 }
 
@@ -61,7 +100,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 	resp := &pb.SubmitJobResponse{}
 	switch req.Tp {
 	case pb.SubmitJobRequest_Benchmark:
-		id := j.idAllocater.AllocJobID()
+		id := j.idAllocator.AllocJobID()
 		// TODO: supposing job master will be running independently, then the
 		// addresses of server can change because of failover, the job master
 		// should have ways to detect and adapt automatically.
@@ -72,6 +111,11 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 			MasterAddrs: j.masterAddrs,
 		}
 		masterConfigBytes, err := json.Marshal(masterConfig)
+		if err != nil {
+			resp.Err = errors.ToPBError(err)
+			return resp
+		}
+		err = j.persistJobInfo(ctx, masterConfig.ID, masterConfigBytes)
 		if err != nil {
 			resp.Err = errors.ToPBError(err)
 			return resp
@@ -90,23 +134,21 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.jobMasters[jobTask.ID] = jobTask
-	err := j.Master.DispatchTasks(ctx, []*model.Task{jobTask})
-	if err != nil {
-		resp.Err = errors.ToPBError(err)
-		return resp
-	}
-	log.L().Logger.Info("finished dispatch job")
 	resp.JobId = int32(jobTask.ID)
+	j.Master.DispatchTasks(jobTask)
+	log.L().Logger.Info("finished dispatch job")
 	return resp
 }
 
 func NewJobManager(
 	masterAddrs []string,
 ) *JobManager {
+	clients := client.NewClientManager()
 	return &JobManager{
+		Master:      system.New(JobMasterID, clients),
 		jobMasters:  make(map[model.ID]*model.Task),
-		idAllocater: autoid.NewJobIDAllocator(),
-		clients:     client.NewClientManager(),
+		idAllocator: autoid.NewJobIDAllocator(),
+		clients:     clients,
 		masterAddrs: masterAddrs,
 	}
 }

@@ -1,7 +1,6 @@
 package benchmark
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -127,7 +126,7 @@ func BuildBenchmarkJobMaster(
 		connectTwoTask(hashTask, sinkTask)
 	}
 
-	systemJobMaster := system.New(context.Background(), jobID, clients)
+	systemJobMaster := system.New(jobID, clients)
 	master := &jobMaster{
 		Master: systemJobMaster,
 		config: config,

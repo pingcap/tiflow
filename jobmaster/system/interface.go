@@ -4,18 +4,18 @@ import (
 	"context"
 
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 )
 
 // JobMaster maintains and manages the submitted job.
 type JobMaster interface {
 	// DispatchJob dispatches new tasks.
-	DispatchTasks(ctx context.Context, tasks []*model.Task) error
+	DispatchTasks(tasks ...*model.Task)
 	// Start the job master.
-	Start(ctx context.Context) error
+	// TODO: the set of metaKV should happen when initializing.
+	Start(ctx context.Context, metaKV metadata.MetaKV) error
 	// Stop the job master.
 	Stop(ctx context.Context) error
-	// OfflineExecutor notifies the offlined executor to all the job masters.
-	OfflineExecutor(eid model.ExecutorID)
 	// ID returns the current job id.
 	ID() model.ID
 }

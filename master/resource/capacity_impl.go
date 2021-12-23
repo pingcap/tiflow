@@ -6,7 +6,7 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
 

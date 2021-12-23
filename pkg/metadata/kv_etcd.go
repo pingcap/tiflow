@@ -7,6 +7,8 @@ import (
 	"go.etcd.io/etcd/clientv3"
 )
 
+var _ MetaKV = &MetaEtcd{}
+
 type MetaEtcd struct {
 	cli *clientv3.Client
 }

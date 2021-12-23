@@ -26,17 +26,19 @@ type JobMaster struct {
 
 type Task struct {
 	// FlowID is unique for a same dataflow, passed from submitted job
-	FlowID string
+	FlowID string `json:"flow_id"`
 
-	ID      ID
-	Outputs []ID
-	Inputs  []ID
+	ID      ID   `json:"id"`
+	Outputs []ID `json:"outputs"`
+	Inputs  []ID `json:"inputs"`
 
 	// TODO: operator or operator tree
-	OpTp              OperatorType
-	Op                Operator
-	Cost              int
-	PreferredLocation string
+	OpTp              OperatorType `json:"type"`
+	Op                Operator     `json:"op"`
+	Cost              int          `json:"cost"`
+	PreferredLocation string       `json:"location"`
+
+	Exec ExecutorID `json:"exec"`
 }
 
 func (t *Task) ToPB() *pb.TaskRequest {

@@ -88,7 +88,7 @@ type taskContainer struct {
 func (t *taskContainer) prepare() error {
 	t.inputCache = make([]Chunk, len(t.inputs))
 	t.outputCache = make([]Chunk, len(t.outputs))
-	return t.op.Prepare()
+	return t.op.Prepare(t.ctx)
 }
 
 func (t *taskContainer) tryAwake() bool {

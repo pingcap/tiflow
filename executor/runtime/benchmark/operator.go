@@ -107,7 +107,7 @@ func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 	return
 }
 
-func (o *opReceive) Prepare() error {
+func (o *opReceive) Prepare(_ *runtime.TaskContext) error {
 	return nil
 }
 
@@ -181,7 +181,7 @@ type opSyncer struct{}
 func (o *opSyncer) Close() error { return nil }
 
 // TODO communicate with master.
-func (o *opSyncer) Prepare() error { return nil }
+func (o *opSyncer) Prepare(_ *runtime.TaskContext) error { return nil }
 
 func (o *opSyncer) syncDDL(ctx *runtime.TaskContext) {
 	time.Sleep(1 * time.Second)
@@ -218,7 +218,7 @@ func (o *opSink) Close() error {
 	return o.writer.writeStats(o.stats)
 }
 
-func (o *opSink) Prepare() error {
+func (o *opSink) Prepare(_ *runtime.TaskContext) error {
 	o.stats = new(recordStats)
 	return o.writer.Prepare()
 }
@@ -249,7 +249,7 @@ type opProducer struct {
 
 func (o *opProducer) Close() error { return nil }
 
-func (o *opProducer) Prepare() error { return nil }
+func (o *opProducer) Prepare(_ *runtime.TaskContext) error { return nil }
 
 func (o *opProducer) NextWantedInputIdx() int { return runtime.DontNeedData }
 
@@ -325,7 +325,7 @@ func (o *opBinlog) Close() error {
 	return nil
 }
 
-func (o *opBinlog) Prepare() (err error) {
+func (o *opBinlog) Prepare(_ *runtime.TaskContext) (err error) {
 	o.binlogChan = make(chan *runtime.Record, 1024)
 	if test.GlobalTestFlag {
 		o.server, err = mock.NewTestServer(o.addr, o)

@@ -5,16 +5,23 @@ import (
 
 	"github.com/hanfei1991/microcosm/executor/runtime"
 	"github.com/hanfei1991/microcosm/jobmaster/system"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/test"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
 
 type jobMasterAgent struct {
+	metaKV metadata.MetaKV
 	master system.JobMaster
 }
 
-func (j *jobMasterAgent) Prepare() error {
-	return j.master.Start(context.Background())
+func (j *jobMasterAgent) Prepare(ctx *runtime.TaskContext) error {
+	if test.GlobalTestFlag {
+		j.metaKV = ctx.TestCtx.GetMetaKV()
+	}
+	// TODO: the starting routine cannot be cancelled here.
+	return j.master.Start(context.Background(), j.metaKV)
 }
 
 func (j *jobMasterAgent) Next(_ *runtime.TaskContext, _ *runtime.Record, _ int) ([]runtime.Chunk, bool, error) {

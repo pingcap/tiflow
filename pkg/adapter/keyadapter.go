@@ -13,6 +13,7 @@ var (
 	MasterInfoKey          KeyAdapter = keyHexEncoderDecoder("/data-flow/master/info")
 	ExecutorInfoKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/executor/info")
 	JobKeyAdapter          KeyAdapter = keyHexEncoderDecoder("/data-flow/job")
+	TaskKeyAdapter         KeyAdapter = keyHexEncoderDecoder("/data-flow/task")
 )
 
 type KeyAdapter interface {

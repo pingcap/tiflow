@@ -5,6 +5,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 )
 
 type jobMaster struct {
@@ -15,18 +16,22 @@ type jobMaster struct {
 	stage2 []*model.Task
 }
 
-func (m *jobMaster) Start(ctx context.Context) error {
-	m.StartInternal()
-	// start stage1
-	err := m.DispatchTasks(ctx, m.stage1)
-	// start stage2
-	if err != nil {
-		return err
-	}
-	err = m.DispatchTasks(ctx, m.stage2)
-	if err != nil {
-		return err
-	}
+// TODO: Shall we pass an argument to indicate whether to recover from etcd?
+func (m *jobMaster) Start(ctx context.Context, metaKV metadata.MetaKV) error {
+	m.MetaKV = metaKV
+	//for _, task := range m.stage1 {
+	//	if err := m.RestoreTask(ctx, task); err != nil {
+	//		return err
+	//	}
+	//}
+	//for _, task := range m.stage2 {
+	//	if err := m.RestoreTask(ctx, task); err != nil {
+	//		return err
+	//	}
+	//}
+	m.StartInternal(ctx)
+	m.DispatchTasks(m.stage1...)
+	m.DispatchTasks(m.stage2...)
 	// TODO: Start the tasks manager to communicate.
 	return nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -51,6 +52,8 @@ type Server struct {
 
 	// mocked server for test
 	mockGrpcServer mock.GrpcServer
+
+	testCtx *test.Context
 }
 
 // NewServer creates a new master-server.
@@ -72,6 +75,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		executorManager: executorManager,
 		jobManager:      jobManager,
 		initialized:     *atomic.NewBool(false),
+		testCtx:         ctx,
 		leader:          atomic.Value{},
 	}
 	return server, nil
@@ -218,7 +222,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 
 	s.executorManager.Start(ctx)
-	err = s.jobManager.Start(ctx)
+	err = s.jobManager.Start(ctx, s.testCtx.GetMetaKV())
 	if err != nil {
 		return
 	}
@@ -351,7 +355,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 
 	// start background managers
 	s.executorManager.Start(ctx)
-	err = s.jobManager.Start(ctx)
+	err = s.jobManager.Start(ctx, metadata.NewMetaEtcd(s.etcdClient))
 	if err != nil {
 		return
 	}

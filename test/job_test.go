@@ -11,9 +11,12 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/benchmark"
 	"github.com/hanfei1991/microcosm/master"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 )
 
@@ -41,8 +44,8 @@ func (t *testJobSuite) TestSubmit(c *C) {
 		RPCTimeout:        time.Second,
 	}
 
-	cluster := new(MiniCluster)
-	_, err := cluster.CreateMaster(masterCfg)
+	cluster := NewEmptyMiniCluster()
+	masterCtx, err := cluster.CreateMaster(masterCfg)
 	c.Assert(err, IsNil)
 	executorCtx := cluster.CreateExecutor(executorCfg)
 	// Start cluster
@@ -84,9 +87,21 @@ func (t *testJobSuite) TestSubmit(c *C) {
 	for _, cnt := range tablesCnt {
 		c.Assert(cnt, Equals, testJobConfig.RecordCnt)
 	}
+
+	// check job and task info written successfully.
+	checkMetaStoreKeyNum(masterCtx.GetMetaKV(), adapter.JobKeyAdapter.Path(), 1, c)
+	checkMetaStoreKeyNum(masterCtx.GetMetaKV(), adapter.TaskKeyAdapter.Path(), 1+int(testJobConfig.TableNum)+4*len(testJobConfig.Servers), c)
+
 	resp1, err := client.CancelJob(context.Background(), &pb.CancelJobRequest{
 		JobId: resp.JobId,
 	})
 	c.Assert(err, IsNil)
 	c.Assert(resp1.Err, IsNil)
+}
+
+func checkMetaStoreKeyNum(store metadata.MetaKV, key string, valueNum int, c *C) {
+	result, err := store.Get(context.Background(), key)
+	c.Assert(err, IsNil)
+	kvs := result.(*clientv3.GetResponse).Kvs
+	c.Assert(len(kvs), Equals, valueNum)
 }
