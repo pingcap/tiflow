@@ -32,12 +32,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 )
 
 const (
-	ownerDDLPullerStuckWarnTimeout  = 30 * time.Second
-	ownerDDLPullerStuckWarnInterval = 10 * time.Second
+	ownerDDLPullerStuckWarnTimeout = 30 * time.Second
 )
 
 // DDLPuller is a wrapper of the Puller interface for the owner
@@ -141,7 +139,6 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 
 	ticker := h.clock.Ticker(ownerDDLPullerStuckWarnTimeout)
 	defer ticker.Stop()
-	warnLogRateLimiter := rate.NewLimiter(rate.Every(ownerDDLPullerStuckWarnInterval), 1 /* burst */)
 
 	errg.Go(func() error {
 		for {
@@ -151,9 +148,6 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			case <-ticker.C:
 				duration := h.clock.Since(lastResolvedTsAdanvcedTime)
 				if duration > ownerDDLPullerStuckWarnTimeout {
-					if !warnLogRateLimiter.Allow() {
-						continue
-					}
 					log.Warn("ddl puller resolved ts has not advanced",
 						zap.String("changefeed-id", ctx.ChangefeedVars().ID),
 						zap.Duration("duration", duration),
