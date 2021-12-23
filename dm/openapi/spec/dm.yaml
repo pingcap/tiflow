@@ -1232,17 +1232,17 @@ components:
           type: integer
           format: int64
         completed_tables:
-          type: float
-          format: float64
+          type: number
+          format: double
         finished_bytes:
-          type: float
-          format: float64
+          type: number
+          format: double
         finished_rows:
-          type: float
-          format: float64
+          type: number
+          format: double
         estimate_total_rows:
-          type: float
-          format: float64
+          type: number
+          format: double
       required:
         - "total_tables"
         - "completed_tables"
@@ -1277,6 +1277,9 @@ components:
         sync_status:
           nullable: true
           $ref: "#/components/schemas/SyncStatus"
+        dump_status:
+          nullable: true
+          $ref: "#/components/schemas/DumpStatus"
       required:
         - "name"
         - "source_name"

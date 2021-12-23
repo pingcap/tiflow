@@ -614,6 +614,16 @@ func (s *Server) DMAPIGetTaskStatus(c *gin.Context, taskName string, params open
 				}
 			}
 		}
+		// add dump status
+		if dumpS := subTaskStatus.GetDump(); dumpS != nil {
+			openapiSubTaskStatus.DumpStatus = &openapi.DumpStatus{
+				CompletedTables:   dumpS.CompletedTables,
+				EstimateTotalRows: dumpS.EstimateTotalRows,
+				FinishedBytes:     dumpS.FinishedBytes,
+				FinishedRows:      dumpS.FinishedRows,
+				TotalTables:       dumpS.TotalTables,
+			}
+		}
 		subTaskStatusList[i] = openapiSubTaskStatus
 	}
 	resp := openapi.GetTaskStatusResponse{Total: len(subTaskStatusList), Data: subTaskStatusList}
