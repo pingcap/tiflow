@@ -38,7 +38,6 @@ import (
 const (
 	// AutoIncrementKeyChecking is an identification for auto increment key checking.
 	AutoIncrementKeyChecking = "auto-increment key checking"
-	CHECK_TIMEOUT            = 10 * time.Second
 	MaxOptions               = 4
 )
 
