@@ -480,7 +480,7 @@ func newTempDir() string {
 	defer lck.Unlock()
 	time.Now().UnixMicro()
 	path := fmt.Sprintf("%s%ccheck-%d-%d", os.TempDir(), os.PathSeparator, time.Now().UnixMicro(), rand.Int())
-	if err := os.Mkdir(path, 0700); err != nil {
+	if err := os.Mkdir(path, 0o700); err != nil {
 		panic("Couldn't create temporary directory: " + err.Error())
 	}
 	return path
