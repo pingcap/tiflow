@@ -12,7 +12,7 @@
 // limitations under the License.
 
 // Package cyclic contains scaffolds for implementing cyclic replication
-// among mutliple TiDB clusters/MySQL. It uses a mark table to identify and
+// among multiple TiDB clusters/MySQL. It uses a mark table to identify and
 // filter duplicate DMLs.
 // CDC needs to watch DMLs to mark tables and ignore all DDLs to mark tables.
 //
