@@ -89,10 +89,10 @@ func (t *testServer) testWorker(c *C) {
 	c.Assert(w.GetUnitAndSourceStatusJSON("", nil), HasLen, emptyWorkerStatusInfoJSONLength)
 
 	// close twice
-	w.Close()
+	w.Close(true)
 	c.Assert(w.closed.Load(), IsTrue)
 	c.Assert(w.subTaskHolder.getAllSubTasks(), HasLen, 0)
-	w.Close()
+	w.Close(true)
 	c.Assert(w.closed.Load(), IsTrue)
 	c.Assert(w.subTaskHolder.getAllSubTasks(), HasLen, 0)
 	c.Assert(w.closed.Load(), IsTrue)
@@ -294,7 +294,7 @@ func (t *testWorkerFunctionalities) TestWorkerFunctionalities(c *C) {
 	// start worker
 	w, err := NewSourceWorker(sourceCfg, etcdCli, "", "")
 	c.Assert(err, IsNil)
-	defer w.Close()
+	defer w.Close(true)
 	go func() {
 		w.Start()
 	}()
@@ -467,7 +467,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	c.Assert(err, IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	defer w.Close()
+	defer w.Close(true)
 	go func() {
 		w.Start()
 	}()
@@ -530,7 +530,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	c.Assert(status[0].Stage, Equals, pb.Stage_Running)
 	cancel1()
 	wg.Wait()
-	w.subTaskHolder.closeAllSubTasks()
+	w.subTaskHolder.closeAllSubTasks(true)
 	// step 5: restart observe and start from startRev, this subtask should be added
 	ctx2, cancel2 := context.WithCancel(ctx)
 	wg.Add(1)
@@ -548,7 +548,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	c.Assert(status, HasLen, 1)
 	c.Assert(status[0].Name, Equals, subtaskCfg.Name)
 	c.Assert(status[0].Stage, Equals, pb.Stage_Running)
-	w.Close()
+	w.Close(true)
 	cancel2()
 	wg.Wait()
 }
@@ -586,7 +586,7 @@ func (t *testWorkerEtcdCompact) TestWatchRelayStageEtcdCompact(c *C) {
 	c.Assert(err, IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	defer w.Close()
+	defer w.Close(true)
 	go func() {
 		c.Assert(w.EnableRelay(false), IsNil)
 		w.Start()

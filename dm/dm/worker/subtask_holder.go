@@ -55,7 +55,7 @@ func (h *subTaskHolder) resetAllSubTasks(relay relay.Process) {
 	defer h.mu.Unlock()
 	for _, st := range h.subTasks {
 		stage := st.Stage()
-		st.Close()
+		st.Close(true)
 		// TODO: make a st.reset
 		st.ctx, st.cancel = context.WithCancel(context.Background())
 		st.cfg.UseRelay = relay != nil
@@ -64,11 +64,11 @@ func (h *subTaskHolder) resetAllSubTasks(relay relay.Process) {
 }
 
 // closeAllSubTasks closes all subtask instances.
-func (h *subTaskHolder) closeAllSubTasks() {
+func (h *subTaskHolder) closeAllSubTasks(graceful bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, st := range h.subTasks {
-		st.Close()
+		st.Close(graceful)
 	}
 	h.subTasks = make(map[string]*SubTask)
 }

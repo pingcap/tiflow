@@ -358,7 +358,7 @@ func (st *SubTask) PrevUnit() unit.Unit {
 }
 
 // closeUnits closes all un-closed units (current unit and all the subsequent units).
-func (st *SubTask) closeUnits() {
+func (st *SubTask) closeUnits(graceful bool) {
 	st.cancel()
 	st.resultWg.Wait()
 
@@ -379,8 +379,8 @@ func (st *SubTask) closeUnits() {
 
 	for i := cui; i < len(st.units); i++ {
 		u := st.units[i]
-		st.l.Info("closing unit process", zap.Stringer("unit", cu.Type()))
-		u.Close(true)
+		st.l.Info("closing unit process", zap.Stringer("unit", cu.Type()), zap.Bool("graceful", graceful))
+		u.Close(graceful)
 	}
 }
 
@@ -477,14 +477,14 @@ func (st *SubTask) Result() *pb.ProcessResult {
 }
 
 // Close stops the sub task.
-func (st *SubTask) Close() {
+func (st *SubTask) Close(graceful bool) {
 	st.l.Info("closing")
 	if !st.setStageIfNotIn([]pb.Stage{pb.Stage_Stopped, pb.Stage_Stopping, pb.Stage_Finished}, pb.Stage_Stopping) {
 		st.l.Info("subTask is already closed, no need to close")
 		return
 	}
 
-	st.closeUnits() // close all un-closed units
+	st.closeUnits(graceful) // close all un-closed units
 	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, pb.Stage_Stopped, st.workerName)
 }
 

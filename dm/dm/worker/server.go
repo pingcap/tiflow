@@ -452,7 +452,7 @@ func (s *Server) doClose() {
 	}
 	// close worker and wait for return
 	if w := s.getWorker(false); w != nil {
-		w.Close()
+		w.Close(true)
 	}
 	s.closed.Store(true)
 }
@@ -531,7 +531,7 @@ func (s *Server) stopWorker(sourceID string, needLock bool) error {
 	s.UpdateKeepAliveTTL(s.cfg.KeepAliveTTL)
 	s.setWorker(nil, false)
 	s.setSourceStatus("", nil, false)
-	w.Close()
+	w.Close(true)
 	return nil
 }
 

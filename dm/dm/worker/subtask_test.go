@@ -512,7 +512,7 @@ func (t *testSubTask) TestSubtaskFastQuit(c *C) {
 		return st.Stage() == pb.Stage_Running
 	}), IsTrue)
 	// test Close
-	st.Close()
+	st.Close(true)
 	select {
 	case <-time.After(500 * time.Millisecond):
 		c.Fatal("fail to stop subtask in 0.5s when stuck into unitTransWaitCondition")
