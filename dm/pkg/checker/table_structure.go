@@ -39,6 +39,7 @@ const (
 	// AutoIncrementKeyChecking is an identification for auto increment key checking.
 	AutoIncrementKeyChecking = "auto-increment key checking"
 	CHECK_TIMEOUT            = 10 * time.Second
+	MaxOptions               = 4
 )
 
 // hold information of incompatibility option.
@@ -95,8 +96,8 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 	var (
 		concurrency = getConcurrency(len(c.tables))
 		onethread   = len(c.tables) / concurrency
-		optCh       = make(chan *incompatibilityOption, len(c.tables))
-		errCh       = make(chan error)
+		optCh       = make(chan *incompatibilityOption, MaxOptions*len(c.tables))
+		errCh       = make(chan error, len(c.tables))
 		checkWg     sync.WaitGroup
 	)
 	defer func() {
@@ -337,7 +338,8 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 		stmtNode      *ast.CreateTableStmt
 		firstTable    string
 		firstInstance string
-		errCh         = make(chan error)
+		errCh         = make(chan error, 10)
+		errDoneCh = 
 		checkWg       sync.WaitGroup
 	)
 	defer func() {
@@ -391,7 +393,13 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 	}
 
 	checkFunc := func(instance string, tables []*filter.Table) {
-		defer checkWg.Done()
+		var err error
+		defer func() {
+			if len(errCh) == 0 {
+				errCh <- err
+			}
+			checkWg.Done()
+		}()
 		startTime := time.Now()
 		// log.L().Logger.Info("check table thread start", zap.String("instance", instance), zap.Time("start time", startTime))
 		db, ok := c.dbs[instance]
@@ -454,6 +462,14 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 		log.L().Logger.Info("check table thread over", zap.String("instance", instance), zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
 	}
 
+	var err error
+	go func() {
+		for {
+			err := <-errCh
+			return r, err
+		}
+	}
+
 	for instance, tables := range c.tableMap {
 		// log.L().Logger.Info("this source have", zap.String("source", instance), zap.Int("table num", len(tables)))
 		concurrency := getConcurrency(len(tables))
@@ -483,8 +499,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 	checkWg.Wait()
 	// log.L().Logger.Info("wait sharding over", zap.Int("err nums", len(errCh)))
 	if len(errCh) != 0 {
-		err := <-errCh
-		return r, err
+		
 	}
 
 	return r, nil
