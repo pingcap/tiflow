@@ -23,6 +23,8 @@ import (
 	"go.etcd.io/etcd/integration"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 type testKeeper struct{}
@@ -467,4 +469,63 @@ func (t *testKeeper) TestTargetTablesForTask(c *C) {
 
 func getDownstreamMeta(string) (*config.DBConfig, string) {
 	return nil, ""
+}
+
+func (t *testKeeper) TestGetDownstreamMeta(c *C) {
+	var (
+		task1 = "hahaha"
+		task2 = "hihihi"
+		task3 = "hehehe"
+	)
+	getDownstreamMetaFunc := func(task string) (*config.DBConfig, string) {
+		switch task {
+		case task1, task2:
+			return &config.DBConfig{}, "meta"
+		default:
+			return nil, ""
+		}
+	}
+
+	conn.InitMockDB(c)
+	lk := NewLockKeeper(getDownstreamMetaFunc)
+	c.Assert(lk.downstreamMetaMap, HasLen, 0)
+
+	downstreamMeta, err := lk.getDownstreamMeta(task3)
+	c.Assert(downstreamMeta, IsNil)
+	c.Assert(terror.ErrMasterOptimisticDownstreamMetaNotFound.Equal(err), IsTrue)
+
+	downstreamMeta, err = lk.getDownstreamMeta(task1)
+	c.Assert(err, IsNil)
+	c.Assert(lk.downstreamMetaMap, HasLen, 1)
+	c.Assert(downstreamMeta, Equals, lk.downstreamMetaMap[task1])
+	downstreamMeta2, err := lk.getDownstreamMeta(task1)
+	c.Assert(err, IsNil)
+	c.Assert(lk.downstreamMetaMap, HasLen, 1)
+	c.Assert(downstreamMeta, Equals, downstreamMeta2)
+
+	downstreamMeta3, err := lk.getDownstreamMeta(task2)
+	c.Assert(err, IsNil)
+	c.Assert(lk.downstreamMetaMap, HasLen, 2)
+	c.Assert(lk.downstreamMetaMap, HasKey, task1)
+	c.Assert(lk.downstreamMetaMap, HasKey, task2)
+	c.Assert(downstreamMeta3, Equals, lk.downstreamMetaMap[task2])
+
+	lk.RemoveDownstreamMeta(task3)
+	c.Assert(lk.downstreamMetaMap, HasLen, 2)
+	c.Assert(lk.downstreamMetaMap, HasKey, task1)
+	c.Assert(lk.downstreamMetaMap, HasKey, task2)
+
+	lk.RemoveDownstreamMeta(task1)
+	c.Assert(lk.downstreamMetaMap, HasLen, 1)
+	c.Assert(lk.downstreamMetaMap, HasKey, task2)
+	c.Assert(downstreamMeta3, Equals, lk.downstreamMetaMap[task2])
+
+	downstreamMeta, err = lk.getDownstreamMeta(task1)
+	c.Assert(err, IsNil)
+	c.Assert(lk.downstreamMetaMap, HasLen, 2)
+	c.Assert(downstreamMeta, Equals, lk.downstreamMetaMap[task1])
+	c.Assert(downstreamMeta3, Equals, lk.downstreamMetaMap[task2])
+
+	lk.Clear()
+	c.Assert(lk.downstreamMetaMap, HasLen, 0)
 }

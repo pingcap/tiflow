@@ -186,6 +186,7 @@ func (o *Optimist) RemoveMetaDataWithTask(task string) error {
 		o.lk.RemoveLock(op.ID)
 	}
 
+	o.lk.RemoveDownstreamMeta(task)
 	o.tk.RemoveTableByTask(task)
 
 	// clear meta data in etcd
@@ -217,6 +218,8 @@ func (o *Optimist) RemoveMetaDataWithTaskAndSources(task string, sources ...stri
 			o.lk.RemoveLock(lock.ID)
 		}
 	}
+
+	o.lk.RemoveDownstreamMeta(task)
 	// remove source table in table keeper
 	o.tk.RemoveTableByTaskAndSources(task, sources)
 	o.logger.Debug("the tables removed from the table keeper", zap.String("task", task), zap.Strings("source", sources))

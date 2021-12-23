@@ -78,6 +78,11 @@ func (lk *LockKeeper) getDownstreamMeta(task string) (*DownstreamMeta, error) {
 	return downstreamMeta, nil
 }
 
+// RemoveDownstreamMeta removes downstream mate by task.
+func (lk *LockKeeper) RemoveDownstreamMeta(task string) {
+	delete(lk.downstreamMetaMap, task)
+}
+
 // TrySync tries to sync the lock.
 func (lk *LockKeeper) TrySync(cli *clientv3.Client, info Info, tts []TargetTable) (string, []string, []string, error) {
 	var (
@@ -176,6 +181,7 @@ func (lk *LockKeeper) Clear() {
 	defer lk.mu.Unlock()
 
 	lk.locks = make(map[string]*Lock)
+	lk.downstreamMetaMap = make(map[string]*DownstreamMeta)
 }
 
 // genDDLLockID generates DDL lock ID from its info.
