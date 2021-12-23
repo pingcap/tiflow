@@ -325,7 +325,7 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 								}
 								return nil
 							}
-							err = s.stopWorker("", false)
+							err = s.stopWorker("", false, true)
 							if err != nil {
 								log.L().Error("fail to stop worker", zap.Error(err))
 								return err // return if failed to stop the worker.
@@ -414,7 +414,7 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 								}
 								return nil
 							}
-							err = s.stopWorker("", false)
+							err = s.stopWorker("", false, true)
 							if err != nil {
 								log.L().Error("fail to stop worker", zap.Error(err))
 								return err // return if failed to stop the worker.
@@ -515,7 +515,7 @@ func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 
 // if sourceID is set to "", worker will be closed directly
 // if sourceID is not "", we will check sourceID with w.cfg.SourceID.
-func (s *Server) stopWorker(sourceID string, needLock bool) error {
+func (s *Server) stopWorker(sourceID string, needLock, graceful bool) error {
 	if needLock {
 		s.Lock()
 		defer s.Unlock()
@@ -531,7 +531,7 @@ func (s *Server) stopWorker(sourceID string, needLock bool) error {
 	s.UpdateKeepAliveTTL(s.cfg.KeepAliveTTL)
 	s.setWorker(nil, false)
 	s.setSourceStatus("", nil, false)
-	w.Close(true)
+	w.Close(graceful)
 	return nil
 }
 
@@ -676,7 +676,7 @@ func (s *Server) disableHandleSubtasks(source string) error {
 	var err error
 	if !w.relayEnabled.Load() {
 		log.L().Info("relay is not enabled after disabling subtask, so stop worker")
-		err = s.stopWorker(source, false)
+		err = s.stopWorker(source, false, true)
 	}
 	return err
 }
@@ -731,7 +731,7 @@ func (s *Server) disableRelay(source string) error {
 	var err error
 	if !w.subTaskEnabled.Load() {
 		log.L().Info("subtask is not enabled after disabling relay, so stop worker")
-		err = s.stopWorker(source, false)
+		err = s.stopWorker(source, false, true)
 	}
 	return err
 }

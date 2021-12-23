@@ -426,7 +426,7 @@ func (t *testServer) TestWatchSourceBoundEtcdCompact(c *C) {
 	c.Assert(cfg2, DeepEquals, sourceCfg)
 	cancel1()
 	wg.Wait()
-	c.Assert(s.stopWorker(sourceCfg.SourceID, true), IsNil)
+	c.Assert(s.stopWorker(sourceCfg.SourceID, true, true), IsNil)
 	// step 5: start observeSourceBound from compacted revision again, should start worker
 	ctx2, cancel2 := context.WithCancel(ctx)
 	wg.Add(1)
