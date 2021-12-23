@@ -195,16 +195,18 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	defer func() {
 		_ = adminClient.Close()
 	}()
+	cfg, err := newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
 
 	// When topic exists and max message bytes is set correctly.
 	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes()
-	err := validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg)
 	c.Assert(err, check.IsNil)
 
 	// When topic exists and max message bytes is not set correctly.
 	// It is larger than the value of topic.
 	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg)
 	c.Assert(
 		errors.Cause(err),
 		check.ErrorMatches,
@@ -213,7 +215,7 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 
 	// When topic does not exist and auto-create is not enabled.
 	config.AutoCreate = false
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "non-exist", config)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "non-exist", config, cfg)
 	c.Assert(
 		errors.Cause(err),
 		check.ErrorMatches,
@@ -224,14 +226,14 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	// It is less than the value of broker.
 	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() - 1024
 	config.AutoCreate = true
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-success", config)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-success", config, cfg)
 	c.Assert(err, check.IsNil)
 
 	// When the topic does not exist, use the broker's configuration to create the topic.
 	// It is larger than the value of broker.
 	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
 	config.AutoCreate = true
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-fail", config)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-fail", config, cfg)
 	c.Assert(
 		errors.Cause(err),
 		check.ErrorMatches,
@@ -249,14 +251,14 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	}
 	err = adminClient.CreateTopic("test-topic", detail, false)
 	c.Assert(err, check.IsNil)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config, cfg)
 	c.Assert(err, check.IsNil)
 
 	// When the topic exists, but the topic does not store max message bytes info,
 	// the check of parameter fails.
 	// It is larger than the value of broker.
 	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config, cfg)
 	c.Assert(
 		errors.Cause(err),
 		check.ErrorMatches,
