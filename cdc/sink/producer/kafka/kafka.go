@@ -58,8 +58,10 @@ type Config struct {
 func NewConfig() *Config {
 	return &Config{
 		Version: "2.4.0",
-		// MaxMessageBytes will be used to initialize producer, we set the default value (1M) identical to kafka broker.
-		MaxMessageBytes:   1 * 1024 * 1024,
+		// MaxMessageBytes will be used to initialize producer, we set the
+		// default value to (8M) because the max size limit of a single row in
+		// TiDB is 6M and we plus some overhead of kafka message.
+		MaxMessageBytes:   8 * 1024 * 1024,
 		ReplicationFactor: 1,
 		Compression:       "none",
 		Credential:        &security.Credential{},
