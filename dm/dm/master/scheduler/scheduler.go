@@ -710,14 +710,11 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		}
 
 		// pause this running tasks
-		s.mu.Lock()
 		for _, taskName := range runningTasks {
 			if err := s.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName, source); err != nil {
-				s.mu.Unlock()
 				return err
 			}
 		}
-		s.mu.Unlock()
 
 		// wait all tasks are paused before actually starting scheduling
 		for maxRetryNum := 10; maxRetryNum > 0; maxRetryNum-- {
@@ -757,18 +754,17 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	if err2 := s.updateStatusToBound(w, ha.NewSourceBound(source, worker)); err2 != nil {
 		s.logger.DPanic("we have checked w.stage is free, so there should not be an error", zap.Error(err2))
 	}
-	s.mu.Unlock()
 
 	// 6. now this old worker is free, try bound source to it
 	_, err = s.tryBoundForWorker(oldWorker)
 	if err != nil {
+		s.mu.Unlock()
 		s.logger.Warn("in transfer source, error when try bound the old worker", zap.Error(err))
 	}
+	s.mu.Unlock()
 	// we need resume tasks that we just paused, we use another goroutine to do this because if error happens
 	// just logging this message and let user handle it manually
 	go func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
 		for _, task := range runningTasks {
 			if err := s.UpdateExpectSubTaskStage(pb.Stage_Running, task, source); err != nil {
 				s.logger.Warn(
