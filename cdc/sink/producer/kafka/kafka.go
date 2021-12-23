@@ -361,7 +361,7 @@ func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic
 		}
 
 		if topicMaxMessageBytes < config.MaxMessageBytes {
-			log.Warn("topic's `max.message.bytes` less than user set `max-message-bytes`,"+
+			log.Warn("topic's `max.message.bytes` less than the user set `max-message-bytes`,"+
 				"use topic's `max.message.bytes` to initialize the Kafka producer",
 				zap.Int("max.message.bytes", topicMaxMessageBytes),
 				zap.Int("max-message-bytes", config.MaxMessageBytes))
@@ -396,7 +396,7 @@ func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic
 	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
 	// broker's `message.max.bytes`.
 	if brokerMessageMaxBytes < config.MaxMessageBytes {
-		log.Warn("broker's `message.max.bytes` less than user set `max-message-bytes`,"+
+		log.Warn("broker's `message.max.bytes` less than the user set `max-message-bytes`,"+
 			"use broker's `message.max.bytes` to initialize the Kafka producer",
 			zap.Int("message.max.bytes", brokerMessageMaxBytes),
 			zap.Int("max-message-bytes", config.MaxMessageBytes))
