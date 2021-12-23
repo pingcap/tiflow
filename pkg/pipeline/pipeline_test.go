@@ -60,7 +60,7 @@ func (e echoNode) Destroy(ctx NodeContext) error {
 	ctx.SendToNextNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
-				Schema: "destory function is called in echo node",
+				Schema: "destroy function is called in echo node",
 			},
 		},
 	}))
@@ -147,7 +147,7 @@ func TestPipelineUsage(t *testing.T) {
 			PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
-						Schema: "destory function is called in echo node",
+						Schema: "destroy function is called in echo node",
 					},
 				},
 			}),
@@ -412,7 +412,7 @@ func TestPipelineAppendNode(t *testing.T) {
 			PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
-						Schema: "destory function is called in echo node",
+						Schema: "destroy function is called in echo node",
 					},
 				},
 			}),
