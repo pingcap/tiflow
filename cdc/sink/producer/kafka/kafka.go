@@ -16,7 +16,6 @@ package kafka
 import (
 	"context"
 	"fmt"
-	"github.com/cznic/mathutil"
 	"regexp"
 	"strconv"
 	"strings"
@@ -360,8 +359,14 @@ func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic
 		if err != nil {
 			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
-		topicMaxMessageBytes = mathutil.Min(config.MaxMessageBytes, topicMaxMessageBytes)
-		saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
+
+		if topicMaxMessageBytes < config.MaxMessageBytes {
+			log.Warn("topic's `max.message.bytes` less than user set `max-message-bytes`,"+
+				"use topic's `max.message.bytes` to initialize the Kafka producer",
+				zap.Int("max.message.bytes", topicMaxMessageBytes),
+				zap.Int("max-message-bytes", config.MaxMessageBytes))
+			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
+		}
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
 		if config.AutoCreate {
@@ -389,8 +394,14 @@ func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic
 	// when create the topic, `max.message.bytes` is decided by the broker,
 	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
 	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
-	// topic's `max.message.bytes`.
-	saramaConfig.Producer.MaxMessageBytes = mathutil.Min(config.MaxMessageBytes, brokerMessageMaxBytes)
+	// broker's `message.max.bytes`.
+	if brokerMessageMaxBytes < config.MaxMessageBytes {
+		log.Warn("broker's `message.max.bytes` less than user set `max-message-bytes`,"+
+			"use broker's `message.max.bytes` to initialize the Kafka producer",
+			zap.Int("message.max.bytes", brokerMessageMaxBytes),
+			zap.Int("max-message-bytes", config.MaxMessageBytes))
+		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
+	}
 
 	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
 	if config.PartitionNum == 0 {
