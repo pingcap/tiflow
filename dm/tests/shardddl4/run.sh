@@ -31,7 +31,7 @@ function DM_119_CASE {
 	#         "query-status test" \
 	#         "because schema conflict detected" 1
 	# fi
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 10 "fail"
+	# check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 10 "fail"
 }
 
 # Add index with the same name but with different fields.
@@ -109,7 +109,7 @@ function DM_121_CASE {
 	#         "query-status test" \
 	#         "because schema conflict detected" 1
 	# fi
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 10 "fail"
+	# check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 10 "fail"
 }
 
 # Add index with the same name but with different fields.
