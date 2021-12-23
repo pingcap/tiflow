@@ -116,7 +116,7 @@ func (m *MockUnit) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	}
 }
 
-func (m *MockUnit) Close(gracefulStop bool) {}
+func (m *MockUnit) Close(graceful bool) {}
 
 func (m MockUnit) Pause() {}
 

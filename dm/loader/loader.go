@@ -787,7 +787,7 @@ func (l *Loader) loadFinishedSize() {
 }
 
 // Close does graceful shutdown.
-func (l *Loader) Close(gracefulStop bool) {
+func (l *Loader) Close(graceful bool) {
 	l.Lock()
 	defer l.Unlock()
 	if l.isClosed() {

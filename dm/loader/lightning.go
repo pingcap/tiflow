@@ -279,7 +279,7 @@ func (l *LightningLoader) IsFreshTask(ctx context.Context) (bool, error) {
 }
 
 // Close does graceful shutdown.
-func (l *LightningLoader) Close(gracefulStop bool) {
+func (l *LightningLoader) Close(graceful bool) {
 	l.Pause()
 	l.checkPointList.Close()
 	l.closed.Store(true)
