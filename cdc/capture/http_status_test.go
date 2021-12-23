@@ -135,7 +135,7 @@ func testRequestNonOwnerFailed(c *check.C, uri string) {
 }
 
 func testHandleFailpoint(c *check.C) {
-	fp := "github.com/pingcap/tiflow/cdc/TestHandleFailpoint"
+	fp := "github.com/pingcap/tiflow/cdc/capture/TestHandleFailpoint"
 	uri := fmt.Sprintf("http://%s/debug/fail/%s", advertiseAddr4Test, fp)
 	body := bytes.NewReader([]byte("return(true)"))
 	req, err := http.NewRequest("PUT", uri, body)
