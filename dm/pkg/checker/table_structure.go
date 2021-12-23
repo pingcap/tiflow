@@ -105,7 +105,7 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 	}()
 	log.L().Logger.Info("start to check tables", zap.Int("concurrency", concurrency), zap.Int("onthread", onethread), zap.Int("table num", len(c.tables)))
 	checkFunc := func(tables []*filter.Table) {
-		log.L().Logger.Info("structureChecker: thread start", zap.Int("table length", len(tables)))
+		// log.L().Logger.Info("structureChecker: thread start", zap.Int("table length", len(tables)))
 		defer func() {
 			checkWg.Done()
 			log.L().Logger.Info("structureChecker: thread end", zap.Int("table length", len(tables)))
@@ -132,7 +132,7 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 	for i := 0; i < concurrency; i++ {
 		if onethread == 0 {
 			checkWg.Add(1)
-			log.L().Logger.Info("structureChecker: onethread == 0", zap.Int("table length", len(c.tables)))
+			// log.L().Logger.Info("structureChecker: onethread == 0", zap.Int("table length", len(c.tables)))
 			go checkFunc(c.tables[0:])
 			break
 		}
@@ -145,22 +145,23 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 		} else {
 			checkTables = c.tables[onethread*i : onethread*(i+1)]
 		}
-		log.L().Logger.Info("tableChecker: check table nums", zap.Int("cnt", i), zap.Int("table length", len(checkTables)))
+		// log.L().Logger.Info("tableChecker: check table nums", zap.Int("cnt", i), zap.Int("table length", len(checkTables)))
 		checkWg.Add(1)
 		go checkFunc(checkTables)
 	}
 
-	log.L().Logger.Info("start wait tables")
+	// log.L().Logger.Info("start wait tables")
 	checkWg.Wait()
-	log.L().Logger.Info("wait over", zap.Int("err nums", len(errCh)), zap.Int("opt nums", len(optCh)))
-	if len(errCh) != 0 {
-		for err := range errCh {
-			return r, err
-		}
-	}
+	// log.L().Logger.Info("wait over", zap.Int("err nums", len(errCh)), zap.Int("opt nums", len(optCh)))
 
-	if len(optCh) != 0 {
-		for option := range optCh {
+	for {
+		if len(optCh) == 0 && len(errCh) == 0 {
+			return r, nil
+		}
+		select {
+		case err := <-errCh:
+			return r, err
+		case option := <-optCh:
 			tableMsg := "table " + option.tableID + " "
 			switch option.state {
 			case StateWarning:
@@ -179,8 +180,6 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 			}
 		}
 	}
-
-	return r, nil
 }
 
 // Name implements RealChecker interface.
@@ -394,7 +393,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 	checkFunc := func(instance string, tables []*filter.Table) {
 		defer checkWg.Done()
 		startTime := time.Now()
-		log.L().Logger.Info("check table thread start", zap.String("instance", instance), zap.Time("start time", startTime))
+		// log.L().Logger.Info("check table thread start", zap.String("instance", instance), zap.Time("start time", startTime))
 		db, ok := c.dbs[instance]
 		if !ok {
 			errCh <- errors.NotFoundf("client for instance %s", instance)
@@ -456,7 +455,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 	}
 
 	for instance, tables := range c.tableMap {
-		log.L().Logger.Info("this source have", zap.String("source", instance), zap.Int("table num", len(tables)))
+		// log.L().Logger.Info("this source have", zap.String("source", instance), zap.Int("table num", len(tables)))
 		concurrency := getConcurrency(len(tables))
 		onethread := len(tables) / concurrency
 		for i := 0; i < concurrency; i++ {
@@ -474,19 +473,18 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 			} else {
 				checkTables = tables[onethread*i : onethread*(i+1)]
 			}
-			log.L().Logger.Info("every thread should check how many tables", zap.Int("cnt", i), zap.Int("table length", len(checkTables)), zap.Stringer("table", checkTables[0]))
+			// log.L().Logger.Info("every thread should check how many tables", zap.Int("cnt", i), zap.Int("table length", len(checkTables)), zap.Stringer("table", checkTables[0]))
 			checkWg.Add(1)
 			go checkFunc(instance, checkTables)
 		}
 	}
 
-	log.L().Logger.Info("start wait sharding")
+	// log.L().Logger.Info("start wait sharding")
 	checkWg.Wait()
-	log.L().Logger.Info("wait sharding over", zap.Int("err nums", len(errCh)))
+	// log.L().Logger.Info("wait sharding over", zap.Int("err nums", len(errCh)))
 	if len(errCh) != 0 {
-		for err := range errCh {
-			return r, err
-		}
+		err := <-errCh
+		return r, err
 	}
 
 	return r, nil
