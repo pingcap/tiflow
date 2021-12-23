@@ -78,7 +78,8 @@ const (
       "max-size": 300,
       "max-days": 0,
       "max-backups": 0
-    }
+    },
+    "error-output": "stderr"
   },
   "data-dir": "",
   "gc-ttl": 86400,
