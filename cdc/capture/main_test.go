@@ -17,13 +17,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/leakutil"
-	"go.uber.org/goleak"
 )
 
 func TestMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
-	opts := []goleak.Option{
-		goleak.IgnoreTopFunction("google.golang.org/grpc.(*ccBalancerWrapper).watcher"),
-	}
-	goleak.VerifyTestMain(m, opts...)
 }

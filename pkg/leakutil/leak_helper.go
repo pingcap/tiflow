@@ -25,8 +25,9 @@ func SetUpLeakTest(m *testing.M, options ...goleak.Option) {
 	opts := []goleak.Option{
 		goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"),
 		goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
+		goleak.IgnoreTopFunction("google.golang.org/grpc.(*ccBalancerWrapper).watcher"),
+		goleak.IgnoreTopFunction("google.golang.org/grpc.(*addrConn).resetTransport"),
 	}
-
 	opts = append(opts, options...)
 
 	goleak.VerifyTestMain(m, opts...)

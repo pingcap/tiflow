@@ -16,6 +16,7 @@ package model
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -65,4 +66,18 @@ func TestChangefeedDetailMarshalJSON(t *testing.T) {
 	cfInfoJSON, err = json.Marshal(cfDetail)
 	require.Nil(t, err)
 	require.Contains(t, string(cfInfoJSON), string(cerror.ErrProcessorUnknown.RFCCode()))
+}
+
+func TestJSONTimeMarshal(t *testing.T) {
+	now := time.Now()
+	t1 := JSONTime(now)
+	b1, err := json.Marshal(&t1)
+	require.Nil(t, err)
+
+	t2 := &JSONTime{}
+	err = t2.UnmarshalJSON(b1)
+	require.Nil(t, err)
+	b2, err := json.Marshal(t2)
+	require.Nil(t, err)
+	require.Equal(t, b1, b2)
 }

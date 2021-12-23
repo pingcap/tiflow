@@ -15,7 +15,6 @@ package model
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/pingcap/tiflow/pkg/config"
@@ -25,15 +24,17 @@ import (
 // JSONTime used to wrap time into json format
 type JSONTime time.Time
 
+const timeFormat = `"2006-01-02 15:04:05.000"`
+
 // MarshalJSON use to specify the time format
 func (t JSONTime) MarshalJSON() ([]byte, error) {
-	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006-01-02 15:04:05.000"))
+	stamp := time.Time(t).Format(timeFormat)
 	return []byte(stamp), nil
 }
 
 // UnmarshalJSON used to parse time.Time from bytes
 func (t *JSONTime) UnmarshalJSON(data []byte) error {
-	tm, err := time.Parse(`"2006-01-02 15:04:05.000"`, string(data))
+	tm, err := time.Parse(timeFormat, string(data))
 	if err != nil {
 		return err
 	}

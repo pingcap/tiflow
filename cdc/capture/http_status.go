@@ -15,6 +15,7 @@ package capture
 
 import (
 	"context"
+	"github.com/prometheus/client_golang/prometheus"
 	"io"
 	"net"
 	"net/http"
@@ -36,6 +37,8 @@ func (s *Server) startStatusServer() error {
 	defer s.mu.Unlock()
 	// discard gin log output
 	gin.DefaultWriter = io.Discard
+	prometheus.DefaultGatherer = registry
+
 	var router *gin.Engine
 	if s.capture.IsOwner() {
 		router = NewRouter(NewHTTPHandler(s.capture, s.capture.owner.StatusProvider))
@@ -89,6 +92,7 @@ func (s *Server) runStatusServer(ctx context.Context) error {
 
 	ownership := s.capture.IsOwner()
 	err := s.startStatusServer()
+	defer s.closeStatusServer()
 	if err != nil {
 		return err
 	}
