@@ -281,7 +281,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, e
 		}
 	}()
 
-	if err := validateMaxMessageBytesAndCreateTopic(admin, topic, config); err != nil {
+	if err := validateMaxMessageBytesAndCreateTopic(admin, topic, config, cfg); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -346,7 +346,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config) error {
+func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -395,7 +395,7 @@ func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic
 	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
 	// TiCDC need to make sure that the producer's `max-message-byte` won't larger than
 	// topic's `max.message.bytes`.
-	config.MaxMessageBytes = mathutil.Min(config.MaxMessageBytes, brokerMessageMaxBytes)
+	saramaConfig.Producer.MaxMessageBytes = mathutil.Min(config.MaxMessageBytes, brokerMessageMaxBytes)
 
 	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
 	if config.PartitionNum == 0 {
