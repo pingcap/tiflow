@@ -94,6 +94,8 @@ func (t *testCheckSuite) TestGetConcurrency(c *tc.C) {
 		{tableNum: 5000, concurrency: 16},
 		{tableNum: 9999, concurrency: 16},
 		{tableNum: 10000, concurrency: 32},
+		{tableNum: 20000, concurrency: 32},
+		{tableNum: 100000, concurrency: 32},
 	}
 	for _, ca := range cases {
 		c.Assert(getConcurrency(ca.tableNum), tc.Equals, ca.concurrency)

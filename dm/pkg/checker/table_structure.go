@@ -97,7 +97,7 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 		concurrency = getConcurrency(len(c.tables))
 		onethread   = len(c.tables) / concurrency
 		optCh       = make(chan *incompatibilityOption, MaxOptions*len(c.tables))
-		errCh       = make(chan error, len(c.tables))
+		errCh       = make(chan error, 1)
 		checkWg     sync.WaitGroup
 	)
 	defer func() {
@@ -118,7 +118,9 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 				if isMySQLError(err, mysql.ErrNoSuchTable) {
 					continue
 				}
-				errCh <- err
+				if len(errCh) == 0 {
+					errCh <- err
+				}
 				break
 			}
 
@@ -338,8 +340,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 		stmtNode      *ast.CreateTableStmt
 		firstTable    string
 		firstInstance string
-		errCh         = make(chan error, 10)
-		errDoneCh = 
+		errCh         = make(chan error, 1)
 		checkWg       sync.WaitGroup
 	)
 	defer func() {
@@ -393,25 +394,25 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 	}
 
 	checkFunc := func(instance string, tables []*filter.Table) {
-		var err error
 		defer func() {
-			if len(errCh) == 0 {
-				errCh <- err
-			}
 			checkWg.Done()
 		}()
 		startTime := time.Now()
 		// log.L().Logger.Info("check table thread start", zap.String("instance", instance), zap.Time("start time", startTime))
 		db, ok := c.dbs[instance]
 		if !ok {
-			errCh <- errors.NotFoundf("client for instance %s", instance)
+			if len(errCh) == 0 {
+				errCh <- errors.NotFoundf("client for instance %s", instance)
+			}
 			return
 		}
 
 		parser2, err := dbutil.GetParserForDB(ctx, db)
 		if err != nil {
-			errCh <- err
 			r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
+			if len(errCh) == 0 {
+				errCh <- err
+			}
 			return
 		}
 		r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
@@ -422,24 +423,32 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 				if isMySQLError(err, mysql.ErrNoSuchTable) {
 					continue
 				}
-				errCh <- err
+				if len(errCh) == 0 {
+					errCh <- err
+				}
 				return
 			}
 
 			info, err := dbutil.GetTableInfoBySQL(statement, parser2)
 			if err != nil {
-				errCh <- err
+				if len(errCh) == 0 {
+					errCh <- err
+				}
 				return
 			}
 			stmt, err := parser2.ParseOneStmt(statement, "", "")
 			if err != nil {
-				errCh <- errors.Annotatef(err, "statement %s", statement)
+				if len(errCh) == 0 {
+					errCh <- errors.Annotatef(err, "statement %s", statement)
+				}
 				return
 			}
 
 			ctStmt, ok := stmt.(*ast.CreateTableStmt)
 			if !ok {
-				errCh <- errors.Errorf("Expect CreateTableStmt but got %T", stmt)
+				if len(errCh) == 0 {
+					errCh <- errors.Errorf("Expect CreateTableStmt but got %T", stmt)
+				}
 				return
 			}
 
@@ -460,14 +469,6 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 			}
 		}
 		log.L().Logger.Info("check table thread over", zap.String("instance", instance), zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
-	}
-
-	var err error
-	go func() {
-		for {
-			err := <-errCh
-			return r, err
-		}
 	}
 
 	for instance, tables := range c.tableMap {
@@ -499,7 +500,8 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 	checkWg.Wait()
 	// log.L().Logger.Info("wait sharding over", zap.Int("err nums", len(errCh)))
 	if len(errCh) != 0 {
-		
+		err := <-errCh
+		return r, err
 	}
 
 	return r, nil
