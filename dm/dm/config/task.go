@@ -212,9 +212,9 @@ const (
 
 // LoaderConfig represents loader process unit's specific config.
 type LoaderConfig struct {
-	PoolSize int    `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
-	Dir      string `yaml:"dir" toml:"dir" json:"dir"`
-	SQLMode  string `yaml:"-" toml:"-" json:"-"` // wrote by dump unit
+	PoolSize   int      `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
+	Dir        string   `yaml:"dir" toml:"dir" json:"dir"`
+	SQLMode    string   `yaml:"-" toml:"-" json:"-"` // wrote by dump unit
 	ImportMode LoadMode `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
 }
 

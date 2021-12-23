@@ -220,9 +220,9 @@ type SubTaskConfig struct {
 	RelayDir string `toml:"relay-dir" json:"relay-dir"`
 
 	// UseRelay get value from dm-worker's relayEnabled
-	UseRelay bool            `toml:"use-relay" json:"use-relay"`
-	From     DBConfig        `toml:"from" json:"from"`
-	To       DBConfig        `toml:"to" json:"to"`
+	UseRelay bool     `toml:"use-relay" json:"use-relay"`
+	From     DBConfig `toml:"from" json:"from"`
+	To       DBConfig `toml:"to" json:"to"`
 
 	RouteRules         []*router.TableRule   `toml:"route-rules" json:"route-rules"`
 	FilterRules        []*bf.BinlogEventRule `toml:"filter-rules" json:"filter-rules"`

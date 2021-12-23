@@ -81,7 +81,6 @@ func newLoadUnit(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, workerN
 	} else {
 		return loader.NewLightning(cfg, etcdClient, workerName)
 	}
-
 }
 
 // SubTask represents a sub task of data migration.
