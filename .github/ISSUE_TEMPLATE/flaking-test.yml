@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Please only use this template for submitting reports about flaky tests or jobs (pass or fail with no underlying change in code) in DM/TiCDC CI.
-        Please link this report to https://github.com/pingcap/ticdc/issues/2246 as a subtask.
+        Please link this report to https://github.com/pingcap/tiflow/issues/2246 as a subtask.
   - type: textarea
     id: jobs
     attributes:

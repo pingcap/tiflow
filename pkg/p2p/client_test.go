@@ -300,7 +300,7 @@ func TestClientSendAnomalies(t *testing.T) {
 	client.connector = connector
 	connector.On("Connect", mock.Anything).Return(grpcClient, func() {}, nil)
 
-	grpcStream := newMockSendMessageClient(ctx)
+	grpcStream := newMockSendMessageClient(runCtx)
 	grpcClient.On("SendMessage", mock.Anything, []grpc.CallOption(nil)).Return(
 		grpcStream,
 		nil,
@@ -315,7 +315,6 @@ func TestClientSendAnomalies(t *testing.T) {
 			ClientVersion:        "v5.4.0",
 			SenderAdvertisedAddr: "fake-addr:8300",
 		}, packet.Meta)
-		closeClient()
 	})
 
 	grpcStream.On("Recv").Return(nil, nil)
@@ -335,11 +334,14 @@ func TestClientSendAnomalies(t *testing.T) {
 	require.Regexp(t, ".*ErrPeerMessageSendTryAgain.*", err.Error())
 
 	// Test point 2: close the client while SendMessage is blocking.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		closeClient()
+	}()
 	_, err = client.SendMessage(ctx, "test-topic", &testMessage{Value: 1})
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrPeerMessageClientClosed.*", err.Error())
 
-	closeClient()
 	wg.Wait()
 
 	// Test point 3: call SendMessage after the client is closed.
