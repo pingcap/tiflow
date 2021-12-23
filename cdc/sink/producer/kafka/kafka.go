@@ -355,18 +355,13 @@ func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic
 	info, exists := topics[topic]
 	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
 	if exists {
-		// make sure that topic's `max.message.bytes` is not less than given `max-message-bytes`
-		// else the producer will send message that too large to make topic reject, then changefeed would error.
+		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
 		topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
-		if topicMaxMessageBytes < config.MaxMessageBytes {
-			return cerror.ErrKafkaInvalidConfig.GenWithStack(
-				"topic already exist, and topic's max.message.bytes(%d) less than max-message-bytes(%d). "+
-					"Please make sure `max-message-bytes` not greater than topic's `max.message.bytes`",
-				topicMaxMessageBytes, config.MaxMessageBytes)
-		}
+		topicMaxMessageBytes = mathutil.Min(config.MaxMessageBytes, topicMaxMessageBytes)
+		saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
 		if config.AutoCreate {
@@ -393,7 +388,7 @@ func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic
 
 	// when create the topic, `max.message.bytes` is decided by the broker,
 	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
-	// TiCDC need to make sure that the producer's `max-message-byte` won't larger than
+	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
 	// topic's `max.message.bytes`.
 	saramaConfig.Producer.MaxMessageBytes = mathutil.Min(config.MaxMessageBytes, brokerMessageMaxBytes)
 

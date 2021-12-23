@@ -204,14 +204,15 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// When topic exists and max message bytes is not set correctly.
-	// It is larger than the value of topic.
-	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
+	// use the smaller one.
+	defaultMaxMessageBytes := adminClient.GetDefaultMaxMessageBytes()
+	config.MaxMessageBytes = defaultMaxMessageBytes + 1
 	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg)
-	c.Assert(
-		errors.Cause(err),
-		check.ErrorMatches,
-		".*Please make sure `max-message-bytes` not greater than topic's `max.message.bytes`.*",
-	)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
+
+	config.MaxMessageBytes = defaultMaxMessageBytes - 1
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
 
 	// When topic does not exist and auto-create is not enabled.
 	config.AutoCreate = false
@@ -224,26 +225,24 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 
 	// When the topic does not exist, use the broker's configuration to create the topic.
 	// It is less than the value of broker.
-	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() - 1024
 	config.AutoCreate = true
+	config.MaxMessageBytes = defaultMaxMessageBytes - 1
 	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-success", config, cfg)
 	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
 
 	// When the topic does not exist, use the broker's configuration to create the topic.
 	// It is larger than the value of broker.
-	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
+	config.MaxMessageBytes = defaultMaxMessageBytes + 1
 	config.AutoCreate = true
 	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-fail", config, cfg)
-	c.Assert(
-		errors.Cause(err),
-		check.ErrorMatches,
-		".*Please make sure `max-message-bytes` not greater than broker's `message.max.bytes`.*",
-	)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
 
 	// When the topic exists, but the topic does not store max message bytes info,
 	// the check of parameter succeeds.
 	// It is less than the value of broker.
-	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() - 1024
+	config.MaxMessageBytes = defaultMaxMessageBytes - 1
 	detail := &sarama.TopicDetail{
 		NumPartitions: 3,
 		// Does not contain max message bytes information.
@@ -257,13 +256,10 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	// When the topic exists, but the topic does not store max message bytes info,
 	// the check of parameter fails.
 	// It is larger than the value of broker.
-	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
+	config.MaxMessageBytes = defaultMaxMessageBytes + 1
 	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config, cfg)
-	c.Assert(
-		errors.Cause(err),
-		check.ErrorMatches,
-		".*Please make sure `max-message-bytes` not greater than topic's `max.message.bytes`.*",
-	)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
