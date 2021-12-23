@@ -112,7 +112,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: c.closeDBs})
 
-	// target name => source => [tableIDs]
+	// targetTableID => source => [tableIDs]
 	sharding := make(map[string]map[string][]*filter.Table)
 	shardingCounter := make(map[string]int)
 	dbs := make(map[string]*sql.DB)
