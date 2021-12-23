@@ -551,21 +551,7 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 	}
 	var err error
 	if expect == pb.Stage_Stopped {
-		if err = s.scheduler.RemoveSubTasks(req.Name, sources...); err != nil {
-			resp.Msg = err.Error()
-			// nolint:nilerr
-			return resp, nil
-		}
-
-		// delete meta data for optimist
-		if len(req.Sources) == 0 {
-			err2 = s.optimist.RemoveMetaDataWithTask(req.Name)
-		} else {
-			err2 = s.optimist.RemoveMetaDataWithTaskAndSources(req.Name, sources...)
-		}
-		if err2 != nil {
-			log.L().Error("failed to delete metadata for task", zap.String("task name", req.Name), log.ShortError(err2))
-		}
+		err = s.scheduler.RemoveSubTasks(req.Name, sources...)
 	} else {
 		err = s.scheduler.UpdateExpectSubTaskStage(expect, req.Name, sources...)
 	}
@@ -577,6 +563,18 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 
 	resp.Result = true
 	resp.Sources = s.getSourceRespsAfterOperation(ctx, req.Name, sources, []string{}, req)
+
+	if expect == pb.Stage_Stopped {
+		// delete meta data for optimist
+		if len(req.Sources) == 0 {
+			err2 = s.optimist.RemoveMetaDataWithTask(req.Name)
+		} else {
+			err2 = s.optimist.RemoveMetaDataWithTaskAndSources(req.Name, sources...)
+		}
+		if err2 != nil {
+			log.L().Error("failed to delete metadata for task", zap.String("task name", req.Name), log.ShortError(err2))
+		}
+	}
 	return resp, nil
 }
 
