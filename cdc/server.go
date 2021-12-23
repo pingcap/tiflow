@@ -45,8 +45,7 @@ import (
 )
 
 const (
-	ownerRunInterval = time.Millisecond * 500
-	defaultDataDir   = "/tmp/cdc_data"
+	defaultDataDir = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	dataDirThreshold = 500
 )
@@ -283,23 +282,6 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		config.StoreGlobalServerConfig(conf)
 
 		return nil
-	}
-
-	// s.etcdClient maybe nil if NewReplicaImpl is not set to true
-	// todo: remove this after NewReplicaImpl set to true in a specific branch, and use server.etcdClient instead.
-	cli := s.etcdClient
-	if cli == nil {
-		client, err := clientv3.New(clientv3.Config{
-			Endpoints:   s.pdEndpoints,
-			Context:     ctx,
-			DialTimeout: 5 * time.Second,
-		})
-		if err != nil {
-			return err
-		}
-		etcdClient := kv.NewCDCEtcdClient(ctx, client)
-		cli = &etcdClient
-		defer cli.Close()
 	}
 
 	// data-dir will be decided by exist changefeed for backward compatibility
