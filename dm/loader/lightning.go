@@ -95,12 +95,13 @@ func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg.TiDB.Psw = cfg.To.Password
 	lightningCfg.TiDB.User = cfg.To.User
 	lightningCfg.TiDB.Port = cfg.To.Port
-	lightningCfg.TiDB.StatusPort = cfg.TiDB.StatusPort
-	lightningCfg.TiDB.PdAddr = cfg.TiDB.PdAddr
-	lightningCfg.TiDB.LogLevel = cfg.LogLevel
-	lightningCfg.TikvImporter.Backend = cfg.TiDB.Backend
+	// tidb backend currently don't need following configs
+	// lightningCfg.TiDB.StatusPort = cfg.TiDB.StatusPort
+	// lightningCfg.TiDB.PdAddr = cfg.TiDB.PdAddr
+	// lightningCfg.TiDB.LogLevel = cfg.LogLevel
+	lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
-	if cfg.TiDB.Backend == lcfg.BackendLocal {
+	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
 		lightningCfg.TikvImporter.SortedKVDir = cfg.Dir
 	}
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
@@ -204,7 +205,11 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			}
 		}
 		cfg.TiDB.StrSQLMode = l.cfg.LoaderConfig.SQLMode
-		cfg.TiDB.Vars = map[string]string{"time_zone": l.timeZone}
+		cfg.TiDB.Vars = map[string]string{
+			"time_zone": l.timeZone,
+			// always set transaction mode to optimistic
+			"tidb_txn_mode": "optimistic",
+		}
 		err = l.runLightning(ctx, cfg)
 		if err == nil {
 			l.finish.Store(true)

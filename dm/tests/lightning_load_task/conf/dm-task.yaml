@@ -25,9 +25,6 @@ mysql-instances:
     loader-config-name: "global"
     syncer-config-name: "global"
 
-tidb:
-  backend: "tidb"
-
 block-allow-list:
   instance:
     do-dbs: ["load_task1"]
@@ -43,6 +40,7 @@ loaders:
   global:
     pool-size: 16
     dir: "./dumped_data"
+    import-mode: "sql"
 
 syncers:
   global:

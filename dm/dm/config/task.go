@@ -200,11 +200,22 @@ func (m *MydumperConfig) UnmarshalYAML(unmarshal func(interface{}) error) error 
 	return nil
 }
 
+// LoadMode defines different mode used in load phase
+type LoadMode string
+
+const (
+	// write data by sql statements, uses tidb-lightning tidb backend to load data
+	LoadModeSQL LoadMode = "sql"
+	// the legacy sql mode, use loader to load data. this should be replaced by sql mode in new version.
+	LoadModeLoader = "loader"
+)
+
 // LoaderConfig represents loader process unit's specific config.
 type LoaderConfig struct {
 	PoolSize int    `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
 	Dir      string `yaml:"dir" toml:"dir" json:"dir"`
 	SQLMode  string `yaml:"-" toml:"-" json:"-"` // wrote by dump unit
+	ImportMode LoadMode `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
@@ -225,6 +236,16 @@ func (m *LoaderConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return terror.ErrConfigYamlTransform.Delegate(err, "unmarshal loader config")
 	}
 	*m = LoaderConfig(raw) // raw used only internal, so no deep copy
+	return nil
+}
+
+func (m *LoaderConfig) adjust() error {
+	if m.ImportMode == "" {
+		m.ImportMode = LoadModeSQL
+	}
+	if m.ImportMode != LoadModeSQL && m.ImportMode != LoadModeLoader {
+		return terror.ErrConfigInvalidLoadMode.Generate(m.ImportMode)
+	}
 	return nil
 }
 
@@ -332,9 +353,6 @@ type TaskConfig struct {
 
 	// deprecated, replaced by `start-task --remove-meta`
 	RemoveMeta bool `yaml:"remove-meta"`
-
-	// extra config when target db is TiDB
-	TiDB *TiDBExtraConfig `yaml:"tidb" toml:"tidb" json:"tidb"`
 }
 
 // NewTaskConfig creates a TaskConfig.
@@ -673,7 +691,10 @@ func (c *TaskConfig) adjust() error {
 			unusedConfigs = append(unusedConfigs, mydumper)
 		}
 	}
-	for loader := range c.Loaders {
+	for loader, cfg := range c.Loaders {
+		if err1 := cfg.adjust(); err1 != nil {
+			return err1
+		}
 		if globalConfigReferCount[configRefPrefixes[loaderIdx]+loader] == 0 {
 			unusedConfigs = append(unusedConfigs, loader)
 		}

@@ -61,26 +61,27 @@ func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, wor
 	switch cfg.Mode {
 	case config.ModeAll:
 		us = append(us, dumpling.NewDumpling(cfg))
-		if cfg.NeedUseLightning() {
-			us = append(us, loader.NewLightning(cfg, etcdClient, workerName))
-		} else {
-			us = append(us, loader.NewLoader(cfg, etcdClient, workerName))
-		}
+		us = append(us, newLoadUnit(cfg, etcdClient, workerName))
 		us = append(us, syncer.NewSyncer(cfg, etcdClient, relay))
 	case config.ModeFull:
 		// NOTE: maybe need another checker in the future?
 		us = append(us, dumpling.NewDumpling(cfg))
-		if cfg.NeedUseLightning() {
-			us = append(us, loader.NewLightning(cfg, etcdClient, workerName))
-		} else {
-			us = append(us, loader.NewLoader(cfg, etcdClient, workerName))
-		}
+		us = append(us, newLoadUnit(cfg, etcdClient, workerName))
 	case config.ModeIncrement:
 		us = append(us, syncer.NewSyncer(cfg, etcdClient, relay))
 	default:
 		log.L().Error("unsupported task mode", zap.String("subtask", cfg.Name), zap.String("task mode", cfg.Mode))
 	}
 	return us
+}
+
+func newLoadUnit(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, workerName string) unit.Unit {
+	if cfg.ImportMode == config.LoadModeLoader {
+		return loader.NewLoader(cfg, etcdClient, workerName)
+	} else {
+		return loader.NewLightning(cfg, etcdClient, workerName)
+	}
+
 }
 
 // SubTask represents a sub task of data migration.
