@@ -78,6 +78,10 @@ const (
       "max-size": 300,
       "max-days": 0,
       "max-backups": 0
+    },
+    "sampling": {
+      "initial": 100,
+      "thereafter": 100
     }
   },
   "data-dir": "",

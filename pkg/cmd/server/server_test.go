@@ -161,6 +161,10 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 				MaxDays:    0,
 				MaxBackups: 0,
 			},
+			Sampling: &config.LogSamplingConfig{
+				Initial:    100,
+				Thereafter: 100,
+			},
 		},
 		DataDir:                dataDir,
 		GcTTL:                  10,
@@ -244,6 +248,10 @@ max-size = 200
 max-days = 1
 max-backups = 1
 
+[log.sampling]
+initial = 100
+thereafter = 100
+
 [sorter]
 chunk-size-limit = 10000000
 max-memory-consumption = 2000000
@@ -301,6 +309,10 @@ server-worker-pool-size = 16
 				MaxSize:    200,
 				MaxDays:    1,
 				MaxBackups: 1,
+			},
+			Sampling: &config.LogSamplingConfig{
+				Initial:    100,
+				Thereafter: 100,
 			},
 		},
 		DataDir:                dataDir,
@@ -380,6 +392,10 @@ max-size = 200
 max-days = 1
 max-backups = 1
 
+[log.sampling]
+initial = 100
+thereafter = 100
+
 [sorter]
 chunk-size-limit = 10000000
 max-memory-consumption = 2000000
@@ -432,6 +448,10 @@ cert-allowed-cn = ["dd","ee"]
 				MaxSize:    200,
 				MaxDays:    1,
 				MaxBackups: 1,
+			},
+			Sampling: &config.LogSamplingConfig{
+				Initial:    100,
+				Thereafter: 100,
 			},
 		},
 		DataDir:                dataDir,

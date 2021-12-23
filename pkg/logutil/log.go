@@ -31,9 +31,11 @@ import (
 var _globalP *log.ZapProperties
 
 const (
-	defaultLogLevel   = "info"
-	defaultLogMaxDays = 7
-	defaultLogMaxSize = 512 // MB
+	defaultLogLevel           = "info"
+	defaultLogMaxDays         = 7
+	defaultLogMaxSize         = 512 // MB
+	defaultSamplingInitial    = 100
+	defaultSamplingThereafter = 100
 )
 
 // Config serializes log related config in toml/json.
@@ -48,6 +50,12 @@ type Config struct {
 	FileMaxDays int `toml:"max-days" json:"max-days"`
 	// Maximum number of old log files to retain.
 	FileMaxBackups int `toml:"max-backups" json:"max-backups"`
+	// Number of the initial sample entries with the same message and log level
+	SamplingInitial int `toml:"initial" json:"initial"`
+	// Number of the following entries which will be either dropped or logged
+	// eg. given a sequence of 1~20 to be logged, if initial is 5 and thereafter is 5,
+	//     the eventual logged sequence will be 1,2,3,4,5,10,15,20
+	SamplingThereafter int `toml:"thereafter" json:"thereafter"`
 }
 
 // Adjust adjusts config
@@ -63,6 +71,12 @@ func (cfg *Config) Adjust() {
 	}
 	if cfg.FileMaxDays == 0 {
 		cfg.FileMaxDays = defaultLogMaxDays
+	}
+	if cfg.SamplingInitial == 0 {
+		cfg.SamplingInitial = defaultSamplingInitial
+	}
+	if cfg.SamplingThereafter == 0 {
+		cfg.SamplingThereafter = defaultSamplingThereafter
 	}
 }
 
@@ -90,6 +104,10 @@ func InitLogger(cfg *Config) error {
 			MaxSize:    cfg.FileMaxSize,
 			MaxDays:    cfg.FileMaxDays,
 			MaxBackups: cfg.FileMaxBackups,
+		},
+		Sampling: &zap.SamplingConfig{
+			Initial:    cfg.SamplingInitial,
+			Thereafter: cfg.SamplingThereafter,
 		},
 	}
 
