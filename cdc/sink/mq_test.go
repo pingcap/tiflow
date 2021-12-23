@@ -22,14 +22,14 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
-	kafkap "github.com/pingcap/ticdc/cdc/sink/producer/kafka"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/kafka"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	kafkap "github.com/pingcap/tiflow/cdc/sink/producer/kafka"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type mqSinkSuite struct{}
@@ -54,7 +54,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
-		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=default"
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=open-protocol"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
@@ -64,9 +64,9 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
-	kafkap.NewSaramaAdminClientImpl = kafka.NewMockAdminClient
+	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		kafkap.NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
+		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
@@ -158,7 +158,7 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	prodSuccess := new(sarama.ProduceResponse)
 	prodSuccess.AddTopicPartition(topic, 0, sarama.ErrNoError)
 
-	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&auto-create-topic=false&protocol=default"
+	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&auto-create-topic=false&protocol=open-protocol"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
@@ -171,9 +171,9 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
-	kafkap.NewSaramaAdminClientImpl = kafka.NewMockAdminClient
+	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		kafkap.NewSaramaAdminClientImpl = kafka.NewSaramaAdminClient
+		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
@@ -214,7 +214,7 @@ func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/pulsar/MockPulsar", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/pulsar/MockPulsar", "return(true)")
 	c.Assert(err, check.IsNil)
 
 	uri := "pulsar://127.0.0.1:1234/kafka-test?" +
@@ -235,4 +235,112 @@ func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
 	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageSize(), check.Equals, 4194304)
+}
+
+func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	topic := kafka.DefaultMockTopicName
+	leader := sarama.NewMockBroker(c, 1)
+	defer leader.Close()
+
+	metadataResponse := new(sarama.MetadataResponse)
+	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
+	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
+	leader.Returns(metadataResponse)
+	leader.Returns(metadataResponse)
+
+	prodSuccess := new(sarama.ProduceResponse)
+	prodSuccess.AddTopicPartition(topic, 0, sarama.ErrNoError)
+
+	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
+		"&max-message-bytes=1048576&partition-num=1" +
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=open-protocol"
+	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
+	sinkURI, err := url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	fr, err := filter.NewFilter(replicaConfig)
+	c.Assert(err, check.IsNil)
+	opts := map[string]string{}
+	errCh := make(chan error, 1)
+
+	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
+	defer func() {
+		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
+	}()
+
+	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
+	c.Assert(err, check.IsNil)
+
+	// mock kafka broker processes 1 row changed event
+	leader.Returns(prodSuccess)
+	tableID1 := model.TableID(1)
+	row1 := &model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema:  "test",
+			Table:   "t1",
+			TableID: tableID1,
+		},
+		StartTs:  100,
+		CommitTs: 120,
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+	err = sink.EmitRowChangedEvents(ctx, row1)
+	c.Assert(err, check.IsNil)
+
+	tableID2 := model.TableID(2)
+	row2 := &model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema:  "test",
+			Table:   "t2",
+			TableID: tableID2,
+		},
+		StartTs:  90,
+		CommitTs: 110,
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+	err = sink.EmitRowChangedEvents(ctx, row2)
+	c.Assert(err, check.IsNil)
+
+	tableID3 := model.TableID(3)
+	row3 := &model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema:  "test",
+			Table:   "t3",
+			TableID: tableID3,
+		},
+		StartTs:  110,
+		CommitTs: 130,
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+
+	err = sink.EmitRowChangedEvents(ctx, row3)
+	c.Assert(err, check.IsNil)
+
+	// mock kafka broker processes 1 row resolvedTs event
+	leader.Returns(prodSuccess)
+	checkpointTs1, err := sink.FlushRowChangedEvents(ctx, tableID1, row1.CommitTs)
+	c.Assert(err, check.IsNil)
+	c.Assert(checkpointTs1, check.Equals, row1.CommitTs)
+
+	checkpointTs2, err := sink.FlushRowChangedEvents(ctx, tableID2, row2.CommitTs)
+	c.Assert(err, check.IsNil)
+	c.Assert(checkpointTs2, check.Equals, row2.CommitTs)
+
+	checkpointTs3, err := sink.FlushRowChangedEvents(ctx, tableID3, row3.CommitTs)
+	c.Assert(err, check.IsNil)
+	c.Assert(checkpointTs3, check.Equals, row3.CommitTs)
+
+	// flush older resolved ts
+	checkpointTsOld, err := sink.FlushRowChangedEvents(ctx, tableID1, uint64(110))
+	c.Assert(err, check.IsNil)
+	c.Assert(checkpointTsOld, check.Equals, row1.CommitTs)
+
+	err = sink.Close(ctx)
+	if err != nil {
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+	}
 }

@@ -17,11 +17,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pingcap/ticdc/pkg/config/outdated"
+	"github.com/pingcap/tiflow/pkg/config/outdated"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -35,9 +35,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Mounter: &MounterConfig{
 		WorkerNum: 16,
 	},
-	Sink: &SinkConfig{
-		Protocol: "default",
-	},
+	Sink: &SinkConfig{},
 	Cyclic: &CyclicConfig{
 		Enable: false,
 	},
@@ -129,7 +127,18 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 	}
 }
 
-// GetDefaultReplicaConfig returns the default replica config
+// Validate verifies that each parameter is valid.
+func (c *ReplicaConfig) Validate() error {
+	if c.Sink != nil {
+		err := c.Sink.validate(c.EnableOldValue)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetDefaultReplicaConfig returns the default replica config.
 func GetDefaultReplicaConfig() *ReplicaConfig {
 	return defaultReplicaConfig.Clone()
 }

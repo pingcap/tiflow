@@ -22,9 +22,9 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	ticonfig "github.com/pingcap/tidb/config"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/spf13/cobra"
 )
 
@@ -191,18 +191,29 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 			EnableTableActor: true,
 			EnableDBSorter:   false,
 			DB: &config.DBConfig{
-				Count:                  16,
-				Concurrency:            256,
-				MaxOpenFiles:           10000,
-				BlockSize:              65536,
-				BlockCacheSize:         4294967296,
-				WriterBufferSize:       8388608,
-				Compression:            "snappy",
-				TargetFileSizeBase:     8388608,
-				CompactionL0Trigger:    160,
-				WriteL0SlowdownTrigger: math.MaxInt32,
-				WriteL0PauseTrigger:    math.MaxInt32,
-				CleanupSpeedLimit:      10000,
+				Count:                       16,
+				Concurrency:                 256,
+				MaxOpenFiles:                10000,
+				BlockSize:                   65536,
+				BlockCacheSize:              4294967296,
+				WriterBufferSize:            8388608,
+				Compression:                 "snappy",
+				TargetFileSizeBase:          8388608,
+				WriteL0SlowdownTrigger:      math.MaxInt32,
+				WriteL0PauseTrigger:         math.MaxInt32,
+				CompactionL0Trigger:         160,
+				CompactionDeletionThreshold: 160000,
+				CleanupSpeedLimit:           10000,
+			},
+			// We expect the default configuration here.
+			Messages: &config.MessagesConfig{
+				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 100),
+				ClientMaxBatchSize:           8 * 1024,
+				ClientMaxBatchCount:          128,
+				ClientRetryRateLimit:         1.0,
+				ServerMaxPendingMessageCount: 102400,
+				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
+				ServerWorkerPoolSize:         4,
 			},
 		},
 	})
@@ -253,9 +264,19 @@ writer-buffer-size = 9
 compression = "none"
 target-file-size-base = 10
 compaction-l0-trigger = 11
+compaction-deletion-threshold = 15
 write-l0-slowdown-trigger = 12
 write-l0-pause-trigger = 13
 cleanup-speed-limit = 14
+
+[debug.messages]
+client-max-batch-interval = "500ms"
+client-max-batch-size = 999
+client-max-batch-count = 888
+client-retry-rate-limit = 100.0
+server-max-pending-message-count = 1024
+server-ack-interval = "1s"
+server-worker-pool-size = 16
 `, dataDir)
 	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
@@ -307,18 +328,28 @@ cleanup-speed-limit = 14
 			EnableTableActor: true,
 			EnableDBSorter:   false,
 			DB: &config.DBConfig{
-				Count:                  5,
-				Concurrency:            6,
-				MaxOpenFiles:           7,
-				BlockSize:              32768,
-				BlockCacheSize:         8,
-				WriterBufferSize:       9,
-				Compression:            "none",
-				TargetFileSizeBase:     10,
-				CompactionL0Trigger:    11,
-				WriteL0SlowdownTrigger: 12,
-				WriteL0PauseTrigger:    13,
-				CleanupSpeedLimit:      14,
+				Count:                       5,
+				Concurrency:                 6,
+				MaxOpenFiles:                7,
+				BlockSize:                   32768,
+				BlockCacheSize:              8,
+				WriterBufferSize:            9,
+				Compression:                 "none",
+				TargetFileSizeBase:          10,
+				CompactionL0Trigger:         11,
+				WriteL0SlowdownTrigger:      12,
+				WriteL0PauseTrigger:         13,
+				CleanupSpeedLimit:           14,
+				CompactionDeletionThreshold: 15,
+			},
+			Messages: &config.MessagesConfig{
+				ClientMaxBatchInterval:       config.TomlDuration(500 * time.Millisecond),
+				ClientMaxBatchSize:           999,
+				ClientMaxBatchCount:          888,
+				ClientRetryRateLimit:         100.0,
+				ServerMaxPendingMessageCount: 1024,
+				ServerAckInterval:            config.TomlDuration(1 * time.Second),
+				ServerWorkerPoolSize:         16,
 			},
 		},
 	})
@@ -432,18 +463,29 @@ cert-allowed-cn = ["dd","ee"]
 			EnableTableActor: true,
 			EnableDBSorter:   false,
 			DB: &config.DBConfig{
-				Count:                  16,
-				Concurrency:            256,
-				MaxOpenFiles:           10000,
-				BlockSize:              65536,
-				BlockCacheSize:         4294967296,
-				WriterBufferSize:       8388608,
-				Compression:            "snappy",
-				TargetFileSizeBase:     8388608,
-				CompactionL0Trigger:    160,
-				WriteL0SlowdownTrigger: math.MaxInt32,
-				WriteL0PauseTrigger:    math.MaxInt32,
-				CleanupSpeedLimit:      10000,
+				Count:                       16,
+				Concurrency:                 256,
+				MaxOpenFiles:                10000,
+				BlockSize:                   65536,
+				BlockCacheSize:              4294967296,
+				WriterBufferSize:            8388608,
+				Compression:                 "snappy",
+				TargetFileSizeBase:          8388608,
+				WriteL0SlowdownTrigger:      math.MaxInt32,
+				WriteL0PauseTrigger:         math.MaxInt32,
+				CompactionL0Trigger:         160,
+				CompactionDeletionThreshold: 160000,
+				CleanupSpeedLimit:           10000,
+			},
+			// We expect the default configuration here.
+			Messages: &config.MessagesConfig{
+				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 100),
+				ClientMaxBatchSize:           8 * 1024,
+				ClientMaxBatchCount:          128,
+				ClientRetryRateLimit:         1.0,
+				ServerMaxPendingMessageCount: 102400,
+				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
+				ServerWorkerPoolSize:         4,
 			},
 		},
 	})

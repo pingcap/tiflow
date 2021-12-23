@@ -25,12 +25,13 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/ticdc/cdc/model"
+	"golang.org/x/text/encoding/charmap"
 )
 
 const (
@@ -89,6 +90,37 @@ func (c *column) FromSinkColumn(col *model.Column) {
 	default:
 		c.Value = col.Value
 	}
+}
+
+func (c *column) decodeCanalJSONColumn(name string, javaType JavaSQLType) *model.Column {
+	col := new(model.Column)
+	col.Type = c.Type
+	col.Flag = c.Flag
+	col.Name = name
+	col.Value = c.Value
+	if c.Value == nil {
+		return col
+	}
+
+	value, ok := col.Value.(string)
+	if !ok {
+		log.Panic("canal-json encoded message should have type in `string`")
+	}
+
+	if javaType != JavaSQLTypeBLOB {
+		col.Value = value
+		return col
+	}
+
+	// when encoding the `JavaSQLTypeBLOB`, use `ISO8859_1` decoder, now reverse it back.
+	encoder := charmap.ISO8859_1.NewEncoder()
+	value, err := encoder.String(value)
+	if err != nil {
+		log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+	}
+
+	col.Value = value
+	return col
 }
 
 func (c *column) ToSinkColumn(name string) *model.Column {
@@ -405,7 +437,7 @@ func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, er
 	valueBuf := new(bytes.Buffer)
 	valueBuf.Write(valueLenByte[:])
 
-	ret := newResolvedMQMessage(ProtocolDefault, keyBuf.Bytes(), valueBuf.Bytes(), ts)
+	ret := newResolvedMQMessage(config.ProtocolOpen, keyBuf.Bytes(), valueBuf.Bytes(), ts)
 	return ret, nil
 }
 
@@ -449,7 +481,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 			versionHead := make([]byte, 8)
 			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
 
-			d.messageBuf = append(d.messageBuf, NewMQMessage(ProtocolDefault, versionHead, nil, 0, model.MqMessageTypeRow, nil, nil))
+			d.messageBuf = append(d.messageBuf, NewMQMessage(config.ProtocolOpen, versionHead, nil, 0, model.MqMessageTypeRow, nil, nil))
 			d.curBatchSize = 0
 		}
 
@@ -461,6 +493,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		message.Ts = e.CommitTs
 		message.Schema = &e.Table.Schema
 		message.Table = &e.Table.Table
+		message.IncRowsCount()
 
 		if message.Length() > d.maxMessageSize {
 			// `len(d.messageBuf) == 1` is implied
@@ -508,7 +541,7 @@ func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, e
 	valueBuf.Write(valueLenByte[:])
 	valueBuf.Write(value)
 
-	ret := newDDLMQMessage(ProtocolDefault, keyBuf.Bytes(), valueBuf.Bytes(), e)
+	ret := newDDLMQMessage(config.ProtocolOpen, keyBuf.Bytes(), valueBuf.Bytes(), e)
 	return ret, nil
 }
 
@@ -519,7 +552,7 @@ func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 			return nil
 		}
 		/* there could be multiple types of event encoded within a single message which means the type is not sure */
-		ret := NewMQMessage(ProtocolDefault, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeUnknown, nil, nil)
+		ret := NewMQMessage(config.ProtocolOpen, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeUnknown, nil, nil)
 		return []*MQMessage{ret}
 	}
 

@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/proto/p2p"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/proto/p2p"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -127,7 +127,6 @@ func TestMessageClientBasics(t *testing.T) {
 
 	connector.AssertExpectations(t)
 	grpcClient.AssertExpectations(t)
-	grpcStream.AssertExpectations(t)
 
 	// Test point 2: Send a message
 	sender.On("Append", &p2p.MessageEntry{
@@ -218,11 +217,10 @@ func TestMessageClientBasics(t *testing.T) {
 			LastSeq: 1,
 		}},
 	}
-	// We expect the connection to be closed
+	// We expect the message to be resent
 	require.Eventually(t, func() bool {
 		return atomic.LoadInt32(&sender.sendCnt) == 1
-	}, time.Second*1, time.Millisecond*10, "connection should have been closed")
-	grpcStream.AssertExpectations(t)
+	}, time.Second*1, time.Millisecond*10, "message should have been resent")
 	sender.AssertExpectations(t)
 
 	cancel()
@@ -302,7 +300,7 @@ func TestClientSendAnomalies(t *testing.T) {
 	client.connector = connector
 	connector.On("Connect", mock.Anything).Return(grpcClient, func() {}, nil)
 
-	grpcStream := newMockSendMessageClient(ctx)
+	grpcStream := newMockSendMessageClient(runCtx)
 	grpcClient.On("SendMessage", mock.Anything, []grpc.CallOption(nil)).Return(
 		grpcStream,
 		nil,
@@ -317,7 +315,6 @@ func TestClientSendAnomalies(t *testing.T) {
 			ClientVersion:        "v5.4.0",
 			SenderAdvertisedAddr: "fake-addr:8300",
 		}, packet.Meta)
-		closeClient()
 	})
 
 	grpcStream.On("Recv").Return(nil, nil)
@@ -337,11 +334,14 @@ func TestClientSendAnomalies(t *testing.T) {
 	require.Regexp(t, ".*ErrPeerMessageSendTryAgain.*", err.Error())
 
 	// Test point 2: close the client while SendMessage is blocking.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		closeClient()
+	}()
 	_, err = client.SendMessage(ctx, "test-topic", &testMessage{Value: 1})
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrPeerMessageClientClosed.*", err.Error())
 
-	closeClient()
 	wg.Wait()
 
 	// Test point 3: call SendMessage after the client is closed.

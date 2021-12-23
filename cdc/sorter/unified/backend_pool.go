@@ -27,13 +27,13 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/sorter"
-	sorterencoding "github.com/pingcap/ticdc/cdc/sorter/encoding"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filelock"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/util/memory"
+	"github.com/pingcap/tiflow/cdc/sorter"
+	sorterencoding "github.com/pingcap/tiflow/cdc/sorter/encoding"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/fsutil"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -58,7 +58,7 @@ type backEndPool struct {
 	filePrefix        string
 
 	// to prevent `dir` from being accidentally used by another TiCDC server process.
-	fileLock *filelock.FileLock
+	fileLock *fsutil.FileLock
 
 	// cancelCh needs to be unbuffered to prevent races
 	cancelCh chan struct{}
@@ -193,7 +193,7 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 		zap.Int64("table-id", tableID),
 		zap.String("table-name", tableName))
 
-	if err := util.CheckDataDirSatisfied(); err != nil {
+	if err := checkDataDirSatisfied(); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -319,7 +319,7 @@ func (p *backEndPool) memoryPressure() int32 {
 
 func (p *backEndPool) lockSortDir() error {
 	lockFileName := fmt.Sprintf("%s/%s", p.dir, sortDirLockFileName)
-	fileLock, err := filelock.NewFileLock(lockFileName)
+	fileLock, err := fsutil.NewFileLock(lockFileName)
 	if err != nil {
 		return cerrors.ErrSortDirLockError.Wrap(err).GenWithStackByCause()
 	}
@@ -376,6 +376,28 @@ func (p *backEndPool) cleanUpStaleFiles() error {
 				log.Panic("panicking", zap.Error(err))
 			})
 		}
+	}
+
+	return nil
+}
+
+// checkDataDirSatisfied check if the data-dir meet the requirement during server running
+// the caller should guarantee that dir exist
+func checkDataDirSatisfied() error {
+	const dataDirAvailLowThreshold = 10 // percentage
+
+	conf := config.GetGlobalServerConfig()
+	diskInfo, err := fsutil.GetDiskInfo(conf.DataDir)
+	if err != nil {
+		return cerrors.WrapError(cerrors.ErrCheckDataDirSatisfied, err)
+	}
+	if diskInfo.AvailPercentage < dataDirAvailLowThreshold {
+		failpoint.Inject("InjectCheckDataDirSatisfied", func() {
+			log.Info("inject check data dir satisfied error")
+			failpoint.Return(nil)
+		})
+		return cerrors.WrapError(cerrors.ErrCheckDataDirSatisfied, errors.Errorf("disk is almost full, TiCDC require that the disk mount data-dir "+
+			"have 10%% available space, and the total amount has at least 500GB is preferred. disk info: %+v", diskInfo))
 	}
 
 	return nil

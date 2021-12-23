@@ -15,14 +15,17 @@ package etcd
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"sort"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
@@ -30,7 +33,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 )
@@ -359,4 +362,74 @@ func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
 	queryLeases, err = s.client.GetCaptureLeases(ctx)
 	c.Assert(err, check.IsNil)
 	c.Check(queryLeases, check.DeepEquals, map[string]int64{})
+}
+
+const (
+	testOwnerRevisionForMaxEpochs = 16
+)
+
+func (s *etcdSuite) TestGetOwnerRevision(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// First we check that GetOwnerRevision correctly reports errors
+	// Note that there is no owner for now.
+	_, err := s.client.GetOwnerRevision(ctx, "fake-capture-id")
+	c.Check(err, check.ErrorMatches, ".*ErrOwnerNotFound.*")
+
+	var (
+		ownerRev int64
+		epoch    int32
+		wg       sync.WaitGroup
+	)
+
+	// We will create 3 mock captures and they take turns to be the owner.
+	// While each is the owner, it tries to get its owner revision, and
+	// checks that the global monotonicity is guaranteed.
+
+	wg.Add(3)
+	for i := 0; i < 3; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			sess, err := concurrency.NewSession(s.client.Client.Unwrap(),
+				concurrency.WithTTL(10 /* seconds */))
+			c.Check(err, check.IsNil)
+			election := concurrency.NewElection(sess, CaptureOwnerKey)
+
+			mockCaptureID := fmt.Sprintf("capture-%d", i)
+
+			for {
+				err = election.Campaign(ctx, mockCaptureID)
+				if err != nil {
+					c.Check(err, check.ErrorMatches, ".*context canceled.*")
+					return
+				}
+
+				rev, err := s.client.GetOwnerRevision(ctx, mockCaptureID)
+				c.Check(err, check.IsNil)
+
+				_, err = s.client.GetOwnerRevision(ctx, "fake-capture-id")
+				c.Check(err, check.ErrorMatches, ".*ErrNotOwner.*")
+
+				lastRev := atomic.SwapInt64(&ownerRev, rev)
+				c.Check(lastRev, check.Less, rev)
+
+				err = election.Resign(ctx)
+				if err != nil {
+					c.Check(err, check.ErrorMatches, ".*context canceled.*")
+					return
+				}
+
+				if atomic.AddInt32(&epoch, 1) >= testOwnerRevisionForMaxEpochs {
+					return
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 }

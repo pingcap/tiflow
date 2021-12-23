@@ -20,10 +20,11 @@ import (
 
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/proto/p2p"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -170,6 +171,10 @@ func (c *MessageClient) Run(
 }
 
 func (c *MessageClient) launchStream(ctx context.Context, gRPCClient p2p.CDCPeerToPeerClient, meta *p2p.StreamMeta) error {
+	failpoint.Inject("InjectClientPermanentFailure", func() {
+		failpoint.Return(cerrors.ErrPeerMessageClientPermanentFail.GenWithStackByArgs())
+	})
+
 	cancelCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 
@@ -252,6 +257,9 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 
 			metricsClientMessageCount.Inc()
 
+			log.Debug("Sending Message",
+				zap.String("topic", msg.Topic),
+				zap.Int64("seq", msg.Sequence))
 			if err := batchSender.Append(msg); err != nil {
 				return errors.Trace(err)
 			}
@@ -275,7 +283,7 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 	c.topicMu.RUnlock()
 
 	batcher := c.newSenderFn(stream)
-	for _, tpk := range topicsCloned {
+	for topic, tpk := range topicsCloned {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
@@ -283,6 +291,14 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 		}
 
 		tpk.sentMessageMu.Lock()
+
+		if !tpk.sentMessages.Empty() {
+			retryFromSeq := tpk.sentMessages.Front().(*p2p.MessageEntry).Sequence
+			log.Info("peer-to-peer client retrying",
+				zap.String("topic", topic),
+				zap.Int64("from-seq", retryFromSeq))
+		}
+
 		for i := 0; i < tpk.sentMessages.Len(); i++ {
 			msg := tpk.sentMessages.Peek(i).(*p2p.MessageEntry)
 			log.Debug("retry sending msg",
@@ -295,11 +311,13 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 				Sequence: msg.Sequence,
 			})
 			if err != nil {
+				tpk.sentMessageMu.Unlock()
 				return errors.Trace(err)
 			}
 		}
 
 		if err := batcher.Flush(); err != nil {
+			tpk.sentMessageMu.Unlock()
 			return errors.Trace(err)
 		}
 
@@ -370,6 +388,17 @@ func (c *MessageClient) SendMessage(ctx context.Context, topic Topic, value inte
 // TrySendMessage tries to send a message. It will return ErrPeerMessageSendTryAgain
 // if the client is not ready to accept the message.
 func (c *MessageClient) TrySendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
+	// FIXME (zixiong): This is a temporary way for testing client congestion.
+	// This failpoint will be removed once we abstract the MessageClient as an interface.
+	failpoint.Inject("ClientInjectSendMessageTryAgain", func() {
+		failpoint.Return(0, cerrors.ErrPeerMessageSendTryAgain.GenWithStackByArgs())
+	})
+
+	// FIXME (zixiong): This is a temporary way for testing whether the caller can handler this error.
+	failpoint.Inject("ClientInjectClosed", func() {
+		failpoint.Return(0, cerrors.ErrPeerMessageClientClosed.GenWithStackByArgs())
+	})
+
 	return c.sendMessage(ctx, topic, value, true)
 }
 

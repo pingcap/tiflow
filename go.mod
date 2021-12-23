@@ -1,4 +1,4 @@
-module github.com/pingcap/ticdc
+module github.com/pingcap/tiflow
 
 go 1.16
 
@@ -26,7 +26,7 @@ require (
 	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/getkin/kin-openapi v0.80.0
 	github.com/gin-gonic/gin v1.7.4
-	github.com/go-mysql-org/go-mysql v1.1.3-0.20211111092245-d7f36836d6b7
+	github.com/go-mysql-org/go-mysql v1.4.1-0.20211217061939-06f932768788
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/protobuf v1.3.2
@@ -54,11 +54,11 @@ require (
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20211009033009-93128226aaa3
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
-	github.com/pingcap/kvproto v0.0.0-20211029081837-3c7bd947cf9b
+	github.com/pingcap/kvproto v0.0.0-20211202065422-a412f7a319c3
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
-	github.com/pingcap/tidb v1.1.0-beta.0.20211115203106-b076e193b320
+	github.com/pingcap/tidb v1.1.0-beta.0.20211209055157-9f744cdf8266
 	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20211117085347-276721877cf8
+	github.com/pingcap/tidb/parser v0.0.0-20211209055157-9f744cdf8266
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -74,8 +74,8 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tidwall/gjson v1.9.1
 	github.com/tidwall/sjson v1.2.2
-	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20211115071040-a3f1c41ac1a0
-	github.com/tikv/pd v1.1.0-beta.0.20211104095303-69c86d05d379
+	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20211206072923-c0e876615440
+	github.com/tikv/pd v1.1.0-beta.0.20211118054146-02848d2660ee
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
 	github.com/unrolled/render v1.0.1
@@ -83,7 +83,7 @@ require (
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20210512015243-d19fbe541bf9
 	go.uber.org/atomic v1.9.0
-	go.uber.org/goleak v1.1.11-0.20210813005559-691160354723
+	go.uber.org/goleak v1.1.12
 	go.uber.org/multierr v1.7.0
 	go.uber.org/zap v1.19.1
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309

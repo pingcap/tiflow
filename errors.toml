@@ -471,6 +471,11 @@ error = '''
 locate region by id
 '''
 
+["CDC:ErrMQSinkUnknownProtocol"]
+error = '''
+unknown '%s' protocol for Message Queue sink
+'''
+
 ["CDC:ErrMailboxFull"]
 error = '''
 mailbox is full, please try again. Internal use only, report a bug if seen externally
@@ -659,6 +664,11 @@ peer-to-peer message client reported illegal version: %s
 ["CDC:ErrPeerMessageIllegalMeta"]
 error = '''
 peer-to-peer message server received an RPC call with illegal metadata
+'''
+
+["CDC:ErrPeerMessageInjectedServerRestart"]
+error = '''
+peer-to-peer message server injected error
 '''
 
 ["CDC:ErrPeerMessageInternalSenderClosed"]
@@ -974,6 +984,11 @@ generate tls config failed
 ["CDC:ErrURLFormatInvalid"]
 error = '''
 url format is invalid
+'''
+
+["CDC:ErrUnexpectedSnapshot"]
+error = '''
+unexpected snapshot, table %d
 '''
 
 ["CDC:ErrUnifiedSorterBackendTerminating"]

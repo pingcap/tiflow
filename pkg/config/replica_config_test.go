@@ -35,6 +35,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
+	conf.Sink.Protocol = "open-protocol"
 	conf.Sink.ColumnSelectors = []*ColumnSelector{
 		{
 			Matcher: []string{"1.1"},
@@ -74,10 +75,23 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
+	conf.Sink.Protocol = "open-protocol"
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, Dispatcher: "r1"},
 		{Matcher: []string{"a.c"}, Dispatcher: "r2"},
 		{Matcher: []string{"a.d"}, Dispatcher: "r2"},
 	}
 	require.Equal(t, conf, conf2)
+}
+
+func TestReplicaConfigValidate(t *testing.T) {
+	t.Parallel()
+	conf := GetDefaultReplicaConfig()
+	require.Nil(t, conf.Validate())
+
+	// Incorrect sink configuration.
+	conf = GetDefaultReplicaConfig()
+	conf.Sink.Protocol = "canal"
+	conf.EnableOldValue = false
+	require.Regexp(t, ".*canal protocol requires old value to be enabled.*", conf.Validate())
 }

@@ -24,15 +24,16 @@ import (
 	"sync/atomic"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/pingcap/failpoint"
-
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/retry"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-
 	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/failpoint"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/retry"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var customID int64
@@ -180,6 +181,13 @@ func (d *BaseDB) CloseBaseConn(conn *BaseConn) error {
 	defer d.mu.Unlock()
 	delete(d.conns, conn)
 	return conn.close()
+}
+
+// CloseBaseConnWithoutErr close the base connect and output a warn log if meets an error.
+func CloseBaseConnWithoutErr(d *BaseDB, conn *BaseConn) {
+	if err1 := d.CloseBaseConn(conn); err1 != nil {
+		log.L().Warn("close db connection failed", zap.Error(err1))
+	}
 }
 
 // Close release *BaseDB resource.

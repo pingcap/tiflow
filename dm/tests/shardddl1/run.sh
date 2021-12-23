@@ -153,7 +153,7 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 
 	# third, set schema to be same with upstream
 	# TODO: support set schema automatically base on upstream schema
-	echo 'CREATE TABLE `tb1` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1' >${WORK_DIR}/schema1.sql
+	echo 'CREATE TABLE `tb1` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema1.sql
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog-schema update -s mysql-replica-01 test ${shardddl1} ${tb1} ${WORK_DIR}/schema1.sql --flush --sync" \
 		"\"result\": true" 2
@@ -175,7 +175,7 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 	# Actually it should be tb2(a,b), dml is {a: 9, b: 'iii'}
 	# Now we set it to tb2(c,b), dml become {c: 9, b: 'iii'}
 	# This may only work for a "rename ddl"
-	echo 'CREATE TABLE `tb2` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1' >${WORK_DIR}/schema2.sql
+	echo 'CREATE TABLE `tb2` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema2.sql
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog-schema update -s mysql-replica-02 test ${shardddl1} ${tb2} ${WORK_DIR}/schema2.sql --flush --sync" \
 		"\"result\": true" 2
@@ -228,9 +228,9 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 # maybe also work for some other unsupported ddls in optimistic mode
 function DM_RENAME_COLUMN_OPTIMISTIC() {
 	run_case RENAME_COLUMN_OPTIMISTIC "double-source-optimistic" \
-		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b varchar(10)) DEFAULT CHARSET=latin1;\"; \
-     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b varchar(10)) DEFAULT CHARSET=latin1;\"; \
-     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10)) DEFAULT CHARSET=latin1;\"" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b varchar(10)) DEFAULT CHARSET=latin1 COLLATE=latin1_bin;\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b varchar(10)) DEFAULT CHARSET=latin1 COLLATE=latin1_bin;\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10)) DEFAULT CHARSET=latin1 COLLATE=latin1_bin;\"" \
 		"clean_table" "optimistic"
 }
 
@@ -264,7 +264,7 @@ function DM_RemoveLock_CASE() {
 function DM_RemoveLock() {
 	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
 	check_master_port_offline 1
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/dm/master/shardddl/SleepWhenRemoveLock=return(30)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/master/shardddl/SleepWhenRemoveLock=return(30)"
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -600,7 +600,7 @@ function DM_COMPACT() {
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/BlockExecuteSQLs=return(1);github.com/pingcap/ticdc/dm/syncer/SafeModeInitPhaseSeconds=return(5)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/BlockExecuteSQLs=return(1);github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(5)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
@@ -647,7 +647,7 @@ function DM_COMPACT_USE_DOWNSTREAM_SCHEMA() {
 	# This goal is check whether it use downstream schema in compator.
 	# if use downstream schema, key will be 'b' with value less than 20.
 	# If use upstream schema, key will be 'a' with value greater than 100.
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/SkipFlushCompactor=return();github.com/pingcap/ticdc/dm/syncer/DownstreamIdentifyKeyCheckInCompact=return(20)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SkipFlushCompactor=return();github.com/pingcap/tiflow/dm/syncer/DownstreamIdentifyKeyCheckInCompact=return(20)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
@@ -722,7 +722,7 @@ function DM_MULTIPLE_ROWS() {
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/BlockExecuteSQLs=return(1);github.com/pingcap/ticdc/dm/syncer/SafeModeInitPhaseSeconds=return(5)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/BlockExecuteSQLs=return(1);github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(5)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT

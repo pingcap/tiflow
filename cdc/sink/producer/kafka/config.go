@@ -23,10 +23,10 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -66,117 +66,6 @@ func NewConfig() *Config {
 	}
 }
 
-// CompleteByOpts the kafka producer configuration.
-func (c *Config) CompleteByOpts(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
-	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
-	params := sinkURI.Query()
-	s := params.Get("partition-num")
-	if s != "" {
-		a, err := strconv.ParseInt(s, 10, 32)
-		if err != nil {
-			return err
-		}
-		c.PartitionNum = int32(a)
-		if c.PartitionNum <= 0 {
-			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
-		}
-	}
-
-	s = params.Get("replication-factor")
-	if s != "" {
-		a, err := strconv.ParseInt(s, 10, 16)
-		if err != nil {
-			return err
-		}
-		c.ReplicationFactor = int16(a)
-	}
-
-	s = params.Get("kafka-version")
-	if s != "" {
-		c.Version = s
-	}
-
-	s = params.Get("max-message-bytes")
-	if s != "" {
-		a, err := strconv.Atoi(s)
-		if err != nil {
-			return err
-		}
-		c.MaxMessageBytes = a
-		opts["max-message-bytes"] = s
-	}
-
-	s = params.Get("max-batch-size")
-	if s != "" {
-		opts["max-batch-size"] = s
-	}
-
-	s = params.Get("compression")
-	if s != "" {
-		c.Compression = s
-	}
-
-	c.ClientID = params.Get("kafka-client-id")
-
-	s = params.Get("ca")
-	if s != "" {
-		c.Credential.CAPath = s
-	}
-
-	s = params.Get("cert")
-	if s != "" {
-		c.Credential.CertPath = s
-	}
-
-	s = params.Get("key")
-	if s != "" {
-		c.Credential.KeyPath = s
-	}
-
-	s = params.Get("sasl-user")
-	if s != "" {
-		c.SaslScram.SaslUser = s
-	}
-
-	s = params.Get("sasl-password")
-	if s != "" {
-		c.SaslScram.SaslPassword = s
-	}
-
-	s = params.Get("sasl-mechanism")
-	if s != "" {
-		c.SaslScram.SaslMechanism = s
-	}
-
-	s = params.Get("auto-create-topic")
-	if s != "" {
-		autoCreate, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		c.AutoCreate = autoCreate
-	}
-
-	s = params.Get("protocol")
-	if s != "" {
-		replicaConfig.Sink.Protocol = s
-	}
-
-	s = params.Get("enable-tidb-extension")
-	if s != "" {
-		_, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		if replicaConfig.Sink.Protocol != "canal-json" {
-			return cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("enable-tidb-extension only support canal-json protocol"))
-		}
-		opts["enable-tidb-extension"] = s
-	}
-
-	return nil
-}
-
 // set the partition-num by the topic's partition count.
 func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	// user does not specify the `partition-num` in the sink-uri
@@ -201,6 +90,117 @@ func (c *Config) setPartitionNum(realPartitionCount int32) error {
 			"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)",
 			c.PartitionNum, realPartitionCount)
 	}
+	return nil
+}
+
+// CompleteConfigsAndOpts the kafka producer configuration, replication configuration and opts.
+func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
+	producerConfig.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
+	params := sinkURI.Query()
+	s := params.Get("partition-num")
+	if s != "" {
+		a, err := strconv.ParseInt(s, 10, 32)
+		if err != nil {
+			return err
+		}
+		producerConfig.PartitionNum = int32(a)
+		if producerConfig.PartitionNum <= 0 {
+			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(producerConfig.PartitionNum)
+		}
+	}
+
+	s = params.Get("replication-factor")
+	if s != "" {
+		a, err := strconv.ParseInt(s, 10, 16)
+		if err != nil {
+			return err
+		}
+		producerConfig.ReplicationFactor = int16(a)
+	}
+
+	s = params.Get("kafka-version")
+	if s != "" {
+		producerConfig.Version = s
+	}
+
+	s = params.Get("max-message-bytes")
+	if s != "" {
+		a, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		producerConfig.MaxMessageBytes = a
+		opts["max-message-bytes"] = s
+	}
+
+	s = params.Get("max-batch-size")
+	if s != "" {
+		opts["max-batch-size"] = s
+	}
+
+	s = params.Get("compression")
+	if s != "" {
+		producerConfig.Compression = s
+	}
+
+	producerConfig.ClientID = params.Get("kafka-client-id")
+
+	s = params.Get("ca")
+	if s != "" {
+		producerConfig.Credential.CAPath = s
+	}
+
+	s = params.Get("cert")
+	if s != "" {
+		producerConfig.Credential.CertPath = s
+	}
+
+	s = params.Get("key")
+	if s != "" {
+		producerConfig.Credential.KeyPath = s
+	}
+
+	s = params.Get("sasl-user")
+	if s != "" {
+		producerConfig.SaslScram.SaslUser = s
+	}
+
+	s = params.Get("sasl-password")
+	if s != "" {
+		producerConfig.SaslScram.SaslPassword = s
+	}
+
+	s = params.Get("sasl-mechanism")
+	if s != "" {
+		producerConfig.SaslScram.SaslMechanism = s
+	}
+
+	s = params.Get("auto-create-topic")
+	if s != "" {
+		autoCreate, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		producerConfig.AutoCreate = autoCreate
+	}
+
+	s = params.Get(config.ProtocolKey)
+	if s != "" {
+		replicaConfig.Sink.Protocol = s
+	}
+
+	s = params.Get("enable-tidb-extension")
+	if s != "" {
+		_, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		if replicaConfig.Sink.Protocol != "canal-json" {
+			return cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("enable-tidb-extension only support canal-json protocol"))
+		}
+		opts["enable-tidb-extension"] = s
+	}
+
 	return nil
 }
 
@@ -240,7 +240,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// Metadata.Retry.Backoff * Metadata.Retry.Max`
 	// to fail.
 	// See: https://github.com/Shopify/sarama/issues/765
-	// and https://github.com/pingcap/ticdc/issues/3352.
+	// and https://github.com/pingcap/tiflow/issues/3352.
 	config.Metadata.Timeout = 1 * time.Minute
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
