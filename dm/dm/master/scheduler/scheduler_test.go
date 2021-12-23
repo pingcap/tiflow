@@ -902,7 +902,7 @@ func (t *testScheduler) TestWatchWorkerEventEtcdCompact(c *C) {
 	defer cancel()
 
 	// step 1: start an empty scheduler without listening the worker event
-	s.started = true
+	s.started.Store(true)
 	s.cancel = cancel
 	s.etcdCli = etcdTestCli
 
@@ -1044,7 +1044,7 @@ func (t *testScheduler) TestLastBound(c *C) {
 	worker4 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName4}}
 
 	// step 1: start an empty scheduler without listening the worker event
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
@@ -1114,7 +1114,7 @@ func (t *testScheduler) TestInvalidLastBound(c *C) {
 	worker1 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName1}}
 
 	// step 1: start an empty scheduler without listening the worker event
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	s.workers[workerName1] = worker1
 	// sourceID2 doesn't have a source config and not in unbound
@@ -1151,7 +1151,7 @@ func (t *testScheduler) TestTransferSource(c *C) {
 	worker4 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName4}}
 
 	// step 1: start an empty scheduler
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
@@ -1261,7 +1261,7 @@ func (t *testScheduler) TestStartStopRelay(c *C) {
 	worker4 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName4}}
 
 	// step 1: start an empty scheduler
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
@@ -1383,7 +1383,7 @@ func (t *testScheduler) TestRelayWithWithoutWorker(c *C) {
 	worker2 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName2}}
 
 	// step 1: start an empty scheduler
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
@@ -1504,7 +1504,7 @@ func (t *testScheduler) TestStartSourcesWithoutSourceConfigsInEtcd(c *C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	// found source configs before bound
 	s.sourceCfgs[sourceID1] = &config.SourceConfig{}
@@ -1533,7 +1533,7 @@ func (t *testScheduler) TestStartSourcesWithoutSourceConfigsInEtcd(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(bounded, IsTrue)
 
-	s.started = false
+	s.started.Store(false)
 	sbm, _, err := ha.GetSourceBound(etcdTestCli, "")
 	c.Assert(err, IsNil)
 	c.Assert(sbm, HasLen, 2)
@@ -1576,7 +1576,7 @@ func (t *testScheduler) TestTransferWorkerAndSource(c *C) {
 	worker4 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName4}}
 
 	// step 1: start an empty scheduler
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
@@ -1655,7 +1655,7 @@ func (t *testScheduler) TestWatchLoadTask(c *C) {
 	)
 
 	// step 1: start an empty scheduler
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 
 	worker1 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName1}}

@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/failpoint"
 	"go.etcd.io/etcd/clientv3"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -84,7 +85,7 @@ type Scheduler struct {
 
 	logger log.Logger
 
-	started bool // whether the scheduler already started for work.
+	started atomic.Bool // whether the scheduler already started for work.
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
 
@@ -207,7 +208,7 @@ func (s *Scheduler) Start(pCtx context.Context, etcdCli *clientv3.Client) (err e
 		s.mu.Unlock()
 	}()
 
-	if s.started {
+	if s.started.Load() {
 		return terror.ErrSchedulerStarted.Generate()
 	}
 
@@ -273,7 +274,7 @@ func (s *Scheduler) Start(pCtx context.Context, etcdCli *clientv3.Client) (err e
 		s.observeLoadTask(ctx, etcdCli, rev1)
 	}(loadTaskRev)
 
-	s.started = true // started now
+	s.started.Store(true) // started now
 	s.cancel = cancel
 	s.logger.Info("the scheduler has started")
 	return nil
@@ -283,7 +284,7 @@ func (s *Scheduler) Start(pCtx context.Context, etcdCli *clientv3.Client) (err e
 func (s *Scheduler) Close() {
 	s.mu.Lock()
 
-	if !s.started {
+	if !s.started.Load() {
 		s.mu.Unlock()
 		return
 	}
@@ -301,7 +302,7 @@ func (s *Scheduler) Close() {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.started = false // closed now.
+	s.started.Store(false) // closed now.
 	s.logger.Info("the scheduler has closed")
 }
 
@@ -318,7 +319,7 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -348,7 +349,7 @@ func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -392,7 +393,7 @@ func (s *Scheduler) RemoveSourceCfg(source string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -621,11 +622,10 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 // TransferSource unbinds the `source` and binds it to a free or same-source-relay `worker`.
 // If fails halfway, the old worker should try recover.
 func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) error {
-	s.mu.RLock()
-	if !s.started {
-		s.mu.RUnlock()
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
+	s.mu.RLock()
 	// 1. check existence or no need
 	if _, ok := s.sourceCfgs[source]; !ok {
 		s.mu.RUnlock()
@@ -792,7 +792,7 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -889,7 +889,7 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 
 // RemoveSubTasks removes the information of one or more subtasks for one task.
 func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1032,7 +1032,7 @@ func (s *Scheduler) AddWorker(name, addr string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1066,7 +1066,7 @@ func (s *Scheduler) RemoveWorker(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1091,7 +1091,7 @@ func (s *Scheduler) GetAllWorkers() ([]*Worker, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return nil, terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1146,7 +1146,7 @@ func (s *Scheduler) StartRelay(source string, workers []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1260,7 +1260,7 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1358,7 +1358,7 @@ func (s *Scheduler) GetRelayWorkers(source string) ([]*Worker, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return nil, terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1390,7 +1390,7 @@ func (s *Scheduler) UpdateExpectRelayStage(newStage pb.Stage, sources ...string)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1469,7 +1469,7 @@ func (s *Scheduler) GetExpectRelayStage(source string) ha.Stage {
 // because some user may want to update `{Running, Paused, ...}` to `{Running, Running, ...}`.
 // so, this should be also supported in DM-worker.
 func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, task string, sources ...string) error {
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1561,9 +1561,7 @@ func (s *Scheduler) GetExpectSubTaskStage(task, source string) ha.Stage {
 
 // Started returns if the scheduler is started.
 func (s *Scheduler) Started() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.started
+	return s.started.Load()
 }
 
 // recoverSourceCfgs recovers history source configs and expectant relay stages from etcd.
@@ -2351,7 +2349,7 @@ func (s *Scheduler) RemoveLoadTask(task string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 	_, _, err := ha.DelLoadTaskByTask(s.etcdCli, task)
