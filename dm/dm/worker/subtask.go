@@ -157,7 +157,7 @@ func (st *SubTask) initUnits(relay relay.Process) error {
 	var needCloseUnits []unit.Unit
 	defer func() {
 		for _, u := range needCloseUnits {
-			u.Close()
+			u.Close(true)
 		}
 
 		st.initialized.Store(initializeUnitSuccess)
@@ -311,7 +311,7 @@ func (st *SubTask) fetchResultAndUpdateStage(pr chan pb.ProcessResult) {
 
 	switch stage {
 	case pb.Stage_Finished:
-		cu.Close()
+		cu.Close(true)
 		nu := st.getNextUnit()
 		if nu == nil {
 			// Now, when finished, it only stops the process
@@ -380,7 +380,7 @@ func (st *SubTask) closeUnits() {
 	for i := cui; i < len(st.units); i++ {
 		u := st.units[i]
 		st.l.Info("closing unit process", zap.Stringer("unit", cu.Type()))
-		u.Close()
+		u.Close(true)
 	}
 }
 

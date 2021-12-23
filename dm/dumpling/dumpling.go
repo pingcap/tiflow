@@ -165,7 +165,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 }
 
 // Close implements Unit.Close.
-func (m *Dumpling) Close() {
+func (m *Dumpling) Close(gracefulStop bool) {
 	if m.closed.Load() {
 		return
 	}

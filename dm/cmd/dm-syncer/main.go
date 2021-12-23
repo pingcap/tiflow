@@ -102,7 +102,7 @@ func main() {
 	}
 
 	// 5. close the syncer
-	sync.Close()
+	sync.Close(true)
 	log.L().Info("dm-syncer exit")
 
 	// 6. flush log

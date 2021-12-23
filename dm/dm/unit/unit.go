@@ -47,7 +47,8 @@ type Unit interface {
 	Process(ctx context.Context, pr chan pb.ProcessResult)
 	// Close shuts down the process and closes the unit, after that can not call Process to resume
 	// The implementation should not block for a long time.
-	Close()
+	// if gracefulStop is true, unit is allowed to wait for its internal logic to complete, otherwise it should be closed immediately
+	Close(gracefulStop bool)
 	// Pause does some cleanups and the unit can be resumed later. The caller will make sure Process has returned.
 	// The implementation should not block for a long time.
 	Pause()

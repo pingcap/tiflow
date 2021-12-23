@@ -3160,7 +3160,7 @@ func (s *Syncer) isClosed() bool {
 }
 
 // Close closes syncer.
-func (s *Syncer) Close() {
+func (s *Syncer) Close(gracefulStop bool) {
 	s.Lock()
 	defer s.Unlock()
 
