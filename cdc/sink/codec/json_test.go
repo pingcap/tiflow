@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"github.com/pingcap/tiflow/pkg/config"
 	"math"
 	"sort"
 	"strconv"
@@ -203,7 +204,7 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err := encoder.SetParams(map[string]string{})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxMessageBytes, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
@@ -230,12 +231,12 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxInt32)
-	c.Assert(encoder.maxMessageBytes, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 
 	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxUint32)
-	c.Assert(encoder.maxMessageBytes, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 }
 
 func (s *batchSuite) TestMaxMessageBytes(c *check.C) {

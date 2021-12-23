@@ -37,8 +37,6 @@ import (
 const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
-	// DefaultMaxMessageBytes sets the default value for max-message-bytes
-	DefaultMaxMessageBytes int = 10 * 1024 * 1024 // 10M
 	// DefaultMaxBatchSize sets the default value for max-batch-size
 	DefaultMaxBatchSize int = 16
 )
@@ -617,7 +615,7 @@ func (d *JSONEventBatchEncoder) Reset() {
 func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
 
-	d.maxMessageBytes = DefaultMaxMessageBytes
+	d.maxMessageBytes = config.DefaultMaxMessageBytes
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
 		d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {

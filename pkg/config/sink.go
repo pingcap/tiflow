@@ -21,6 +21,11 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+var (
+	// DefaultMaxMessageBytes sets the default value for max-message-bytes
+	DefaultMaxMessageBytes int = 10 * 1024 * 1024 // 10M
+)
+
 // ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
 var ForceEnableOldValueProtocols = []string{
 	ProtocolCanal.String(),

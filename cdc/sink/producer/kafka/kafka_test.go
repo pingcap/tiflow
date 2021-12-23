@@ -264,6 +264,7 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	c.Assert(err, check.IsNil)
 	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config, cfg)
 	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
 
 	// When the topic exists, but the topic does not store max message bytes info,
 	// the check of parameter fails.

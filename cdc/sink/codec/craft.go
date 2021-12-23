@@ -102,7 +102,7 @@ func (e *CraftEventBatchEncoder) Reset() {
 func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
 
-	e.maxMessageBytes = DefaultMaxMessageBytes
+	e.maxMessageBytes = config.DefaultMaxMessageBytes
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
 		e.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {

@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"github.com/pingcap/tiflow/pkg/config"
 	"math"
 	"strconv"
 
@@ -141,7 +142,7 @@ func (s *craftBatchSuite) TestParamsEdgeCases(c *check.C) {
 	err := encoder.SetParams(map[string]string{})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxMessageBytes, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
@@ -166,7 +167,7 @@ func (s *craftBatchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxUint16)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, int(math.MaxUint16))
-	c.Assert(encoder.maxMessageBytes, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 
 	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.NotNil)
