@@ -96,7 +96,7 @@ func CreateMarkTables(ctx context.Context, upstreamDSN string, upstreamCred *sec
 	db, err := sql.Open("mysql", upstreamDSN)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCreateMarkTableFailed,
-			errors.Annotate(err, "Open upsteam database connection failed"))
+			errors.Annotate(err, "Open upstream database connection failed"))
 	}
 	err = db.PingContext(ctx)
 	if err != nil {
