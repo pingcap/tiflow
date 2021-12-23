@@ -17,6 +17,7 @@ package db
 type DB interface {
 	Snapshot() (Snapshot, error)
 	Batch(cap int) Batch
+	Compact(start, end []byte) error
 	Close() error
 	CollectMetrics(captureAddr string, id int)
 }

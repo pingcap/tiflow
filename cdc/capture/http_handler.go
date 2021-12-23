@@ -20,14 +20,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/owner"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/logutil"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/tidb/br/pkg/httputil"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -672,11 +672,6 @@ func (h *HTTPHandler) ListCapture(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/status [get]
 func (h *HTTPHandler) ServerStatus(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		h.forwardToOwner(c)
-		return
-	}
-
 	status := model.ServerStatus{
 		Version: version.ReleaseVersion,
 		GitHash: version.GitHash,
@@ -697,11 +692,6 @@ func (h *HTTPHandler) ServerStatus(c *gin.Context) {
 // @Failure 500 {object} model.HTTPError
 // @Router	/api/v1/health [get]
 func (h *HTTPHandler) Health(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		h.forwardToOwner(c)
-		return
-	}
-
 	ctx := c.Request.Context()
 
 	if _, err := h.capture.GetOwner(ctx); err != nil {

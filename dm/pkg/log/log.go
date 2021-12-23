@@ -24,8 +24,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/pingcap/ticdc/dm/pkg/helper"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/helper"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 const (
