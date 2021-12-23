@@ -482,8 +482,7 @@ var lck sync.Mutex
 func newTempDir() string {
 	lck.Lock()
 	defer lck.Unlock()
-	time.Now().UnixMicro()
-	path := fmt.Sprintf("%s%ccheck-%d-%d", os.TempDir(), os.PathSeparator, time.Now().UnixMicro(), rand.Int())
+	path := fmt.Sprintf("%s%ccheck-%d-%d", os.TempDir(), os.PathSeparator, time.Now().Unix(), rand.Uint64())
 	if err := os.Mkdir(path, 0o700); err != nil {
 		panic("Couldn't create temporary directory: " + err.Error())
 	}
