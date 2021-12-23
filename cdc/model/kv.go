@@ -39,7 +39,7 @@ type RegionFeedEvent struct {
 	Val      *RawKVEntry
 	Resolved *ResolvedSpan
 
-	// Additonal debug info
+	// Additional debug info
 	RegionID uint64
 }
 
@@ -79,7 +79,7 @@ type RawKVEntry struct {
 	// Commit or resolved TS
 	CRTs uint64 `msg:"crts"`
 
-	// Additonal debug info
+	// Additional debug info
 	RegionID uint64 `msg:"region_id"`
 }
 
