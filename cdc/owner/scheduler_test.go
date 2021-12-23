@@ -40,6 +40,11 @@ func TestSchedulerBasics(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/p2p/ClientInjectSendMessageTryAgain")
 	}()
 
+	_ = failpoint.Enable("github.com/pingcap/tiflow/pkg/p2p/ClientInjectClosed", "5*return(true)")
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/p2p/ClientInjectClosed")
+	}()
+
 	stdCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

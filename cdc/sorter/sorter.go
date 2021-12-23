@@ -23,6 +23,7 @@ import (
 // sorted PolymorphicEvents in Output channel
 type EventSorter interface {
 	Run(ctx context.Context) error
+	// TODO add constraints to entries, e.g., order and duplication guarantees.
 	AddEntry(ctx context.Context, entry *model.PolymorphicEvent)
 	// TryAddEntry tries to add and entry to the sorter.
 	// Returns false if the entry can not be added; otherwise it returns true
