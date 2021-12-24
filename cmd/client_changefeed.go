@@ -43,6 +43,7 @@ import (
 
 var forceEnableOldValueProtocols = []string{
 	"canal",
+	"canal-json",
 	"maxwell",
 }
 
@@ -305,9 +306,12 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 		}
 
 		protocol := sinkURIParsed.Query().Get("protocol")
+		if protocol != "" {
+			cfg.Sink.Protocol = protocol
+		}
 		for _, fp := range forceEnableOldValueProtocols {
-			if protocol == fp {
-				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", protocol))
+			if cfg.Sink.Protocol == fp {
+				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", cfg.Sink.Protocol))
 				cfg.EnableOldValue = true
 				break
 			}
