@@ -169,3 +169,17 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
 	printJSON(result)
 }
+
+func initShardingMock(mock sqlmock.Sqlmock) sqlmock.Sqlmock {
+	sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
+	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+"c" int(11) NOT NULL,
+PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+
+	return mock
+}

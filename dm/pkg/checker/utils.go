@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/utils"
@@ -147,7 +146,7 @@ func isMySQLError(err error, code uint16) bool {
 
 const tablesWithOneThread = 10000 / 16
 
-var cunrrencies = []int{4, 8, 16, 32}
+var concurrencies = []int{4, 8, 12, 16, 20, 24, 28, 32}
 
 func getConcurrency(tableNum int) int {
 	// if tableNum < 100, one thread is enough
@@ -155,24 +154,10 @@ func getConcurrency(tableNum int) int {
 		return 1
 	}
 	threads := tableNum/tablesWithOneThread + 1
-	for _, num := range cunrrencies {
+	for _, num := range concurrencies {
 		if num >= threads {
 			return num
 		}
 	}
-	return cunrrencies[len(cunrrencies)-1]
-}
-
-func initShardingMock(mock sqlmock.Sqlmock) sqlmock.Sqlmock {
-	sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("sql_mode", "ANSI_QUOTES")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
-	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
-"c" int(11) NOT NULL,
-PRIMARY KEY ("c")
-) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
-
-	return mock
+	return concurrencies[len(concurrencies)-1]
 }
