@@ -37,8 +37,6 @@ import (
 const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
-	// DefaultMaxMessageBytes sets the default value for max-message-bytes
-	DefaultMaxMessageBytes int = 1 * 1024 * 1024 // 1M
 	// DefaultMaxBatchSize sets the default value for max-batch-size
 	DefaultMaxBatchSize int = 16
 )
@@ -383,13 +381,13 @@ type JSONEventBatchEncoder struct {
 	messageBuf   []*MQMessage
 	curBatchSize int
 	// configs
-	maxMessageSize int
-	maxBatchSize   int
+	maxMessageBytes int
+	maxBatchSize    int
 }
 
 // GetMaxMessageSize is only for unit testing.
 func (d *JSONEventBatchEncoder) GetMaxMessageSize() int {
-	return d.maxMessageSize
+	return d.maxMessageBytes
 }
 
 // GetMaxBatchSize is only for unit testing.
@@ -468,15 +466,15 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		// for single message that longer than max-message-size, do not send it.
 		// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 		length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
-		if length > d.maxMessageSize {
+		if length > d.maxMessageBytes {
 			log.Warn("Single message too large",
-				zap.Int("max-message-size", d.maxMessageSize), zap.Int("length", length), zap.Any("table", e.Table))
+				zap.Int("max-message-size", d.maxMessageBytes), zap.Int("length", length), zap.Any("table", e.Table))
 			return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
 		}
 
 		if len(d.messageBuf) == 0 ||
 			d.curBatchSize >= d.maxBatchSize ||
-			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxMessageSize {
+			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxMessageBytes {
 
 			versionHead := make([]byte, 8)
 			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
@@ -495,10 +493,10 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		message.Table = &e.Table.Table
 		message.IncRowsCount()
 
-		if message.Length() > d.maxMessageSize {
+		if message.Length() > d.maxMessageBytes {
 			// `len(d.messageBuf) == 1` is implied
 			log.Debug("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
-				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxMessageSize))
+				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxMessageBytes))
 		}
 		d.curBatchSize++
 	}
@@ -617,15 +615,15 @@ func (d *JSONEventBatchEncoder) Reset() {
 func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
 
-	d.maxMessageSize = DefaultMaxMessageBytes
+	d.maxMessageBytes = config.DefaultMaxMessageBytes
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
-		d.maxMessageSize, err = strconv.Atoi(maxMessageBytes)
+		d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
 	}
-	if d.maxMessageSize <= 0 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageSize))
+	if d.maxMessageBytes <= 0 {
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageBytes))
 	}
 
 	d.maxBatchSize = DefaultMaxBatchSize
