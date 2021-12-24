@@ -71,7 +71,7 @@ func convertDdlEventType(e *model.DDLEvent) canal.EventType {
 		return canal.EventType_QUERY
 	case mm.ActionCreateTable:
 		return canal.EventType_CREATE
-	case mm.ActionRenameTable:
+	case mm.ActionRenameTable, mm.ActionRenameTables:
 		return canal.EventType_RENAME
 	case mm.ActionAddIndex, mm.ActionAddForeignKey, mm.ActionAddPrimaryKey:
 		return canal.EventType_CINDEX
