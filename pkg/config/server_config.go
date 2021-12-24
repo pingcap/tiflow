@@ -102,12 +102,12 @@ var defaultServerConfig = &ServerConfig{
 	Debug: &DebugConfig{
 		EnableTableActor: true,
 		// Default leveldb sorter config
-		EnableDBSorter: false,
+		EnableDBSorter: true,
 		DB: &DBConfig{
-			Count: 16,
+			Count: 8,
 			// Following configs are optimized for write throughput.
 			// Users should not change them.
-			Concurrency:                 256,
+			Concurrency:                 128,
 			MaxOpenFiles:                10000,
 			BlockSize:                   65536,
 			BlockCacheSize:              4294967296,
@@ -118,6 +118,8 @@ var defaultServerConfig = &ServerConfig{
 			WriteL0PauseTrigger:         math.MaxInt32,
 			CompactionL0Trigger:         160,
 			CompactionDeletionThreshold: 160000,
+			IteratorMaxAliveDuration:    10000,
+			IteratorSlowReadDuration:    256,
 			CleanupSpeedLimit:           10000,
 		},
 		Messages: defaultMessageConfig.Clone(),
