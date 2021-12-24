@@ -1222,19 +1222,19 @@ func (t *testScheduler) TestTransferSource(c *C) {
 	s.expectSubTaskStages.Store("test", map[string]ha.Stage{sourceID1: {Expect: pb.Stage_Running}})
 
 	// test can't transfer when running tasks not in sync unit
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateQueryWorkerF", `return("notInSyncUnit")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus", `return("notInSyncUnit")`), IsNil)
 	c.Assert(terror.ErrSchedulerRequireRunningTaskInSyncUnit.Equal(s.TransferSource(ctx, sourceID1, workerName1)), IsTrue)
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateQueryWorkerF"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus"), IsNil)
 
 	// test can't transfer when query status met error
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateQueryWorkerF", `return("error")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus", `return("error")`), IsNil)
 	c.Assert(s.TransferSource(ctx, sourceID1, workerName1), ErrorMatches, "failed to query worker.*")
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateQueryWorkerF"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus"), IsNil)
 
 	// test can transfer when all running task is in sync unit
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateQueryWorkerF", `return("allTaskIsPaused")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus", `return("allTaskIsPaused")`), IsNil)
 	c.Assert(s.TransferSource(ctx, sourceID1, workerName1), IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateQueryWorkerF"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus"), IsNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker1)
 	c.Assert(worker1.Stage(), Equals, WorkerBound)
 }

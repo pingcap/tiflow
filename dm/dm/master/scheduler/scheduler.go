@@ -677,29 +677,8 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		return true
 	})
 	if len(runningTasks) > 0 {
-		queryWorkerF := func() (*workerrpc.Response, error) {
-			rpcTimeOut := time.Second * 10 // we relay on ctx.Done() to cancel the rpc, so just set a very long timeout
-			req := &workerrpc.Request{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusRequest{}}
-			failpoint.Inject("operateQueryWorkerF", func(v failpoint.Value) {
-				resp := &workerrpc.Response{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusResponse{}}
-				switch v.(string) {
-				case "notInSyncUnit":
-					resp.QueryStatus.SubTaskStatus = append(
-						resp.QueryStatus.SubTaskStatus, &pb.SubTaskStatus{Unit: pb.UnitType_Dump})
-					failpoint.Return(resp, nil)
-				case "allTaskIsPaused":
-					resp.QueryStatus.SubTaskStatus = append(
-						resp.QueryStatus.SubTaskStatus, &pb.SubTaskStatus{Stage: pb.Stage_Paused, Unit: pb.UnitType_Sync})
-					failpoint.Return(resp, nil)
-				default:
-					failpoint.Return(nil, errors.New("query error"))
-				}
-			})
-			return oldWorker.SendRequest(ctx, req, rpcTimeOut)
-		}
-
 		// we only allow automatically transfer-source if all subtasks are in the sync phase.
-		resp, err := queryWorkerF()
+		resp, err := oldWorker.queryStatus(ctx)
 		if err != nil {
 			return terror.Annotatef(err, "failed to query worker: %s status err", oldWorker.baseInfo.Name)
 		}
@@ -708,47 +687,21 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 				return terror.ErrSchedulerRequireRunningTaskInSyncUnit.Generate(runningTasks, source)
 			}
 		}
-
 		// pause this running tasks
-		for _, taskName := range runningTasks {
-			if err := s.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName, source); err != nil {
-				return err
-			}
+		if batchPauseErr := s.batchOperateTaskOnWorker(ctx, oldWorker, runningTasks, source, pb.Stage_Paused, true); batchPauseErr != nil {
+			return batchPauseErr
 		}
+		// we need resume tasks that we just paused, we use another goroutine to do this because if error happens
+		// just logging this message and let user handle it manually
 		defer func() {
-			// we need resume tasks that we just paused, we use another goroutine to do this because if error happens
-			// just logging this message and let user handle it manually
 			go func() {
-				for _, task := range runningTasks {
-					if err := s.UpdateExpectSubTaskStage(pb.Stage_Running, task, source); err != nil {
-						s.logger.Warn(
-							"auto resume task failed", zap.String("task", task),
-							zap.String("source", source), zap.String("worker", worker), zap.Error(err))
-					}
+				if err := s.batchOperateTaskOnWorker(context.Background(), w, runningTasks, source, pb.Stage_Running, false); err != nil {
+					s.logger.Warn(
+						"auto resume task failed", zap.Any("tasks", runningTasks),
+						zap.String("source", source), zap.String("worker", worker), zap.Error(err))
 				}
 			}()
 		}()
-		// wait all tasks are paused before actually starting scheduling
-	WaitLoop:
-		for maxRetryNum := 10; maxRetryNum > 0; maxRetryNum-- {
-			resp, err := queryWorkerF()
-			if err != nil {
-				return terror.Annotatef(err, "failed to query worker: %s status", oldWorker.baseInfo.Name)
-			}
-			for _, status := range resp.QueryStatus.GetSubTaskStatus() {
-				if status.Stage != pb.Stage_Paused {
-					// NOTE: the defaultRPCTimeout is 10m, use 1s * retry times to increase the waiting time
-					sleepTime := time.Second * time.Duration(10-maxRetryNum)
-					s.logger.Info(
-						"waiting task pausing",
-						zap.String("task", status.Name),
-						zap.Int("retry times", 10-maxRetryNum),
-						zap.Duration("sleep time", sleepTime))
-					time.Sleep(sleepTime)
-					goto WaitLoop
-				}
-			}
-		}
 	}
 
 	// 5. replace the source bound
@@ -773,6 +726,44 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		s.logger.Warn("in transfer source, error when try bound the old worker", zap.Error(err))
 	}
 	s.mu.Unlock()
+	return nil
+}
+
+// batchOperateTaskOnWorker batch operate tasks in one worker and use query-status to make sure all tasks are in expected stage if needWait=true.
+func (s *Scheduler) batchOperateTaskOnWorker(
+	ctx context.Context, worker *Worker, tasks []string, source string, stage pb.Stage, needWait bool) error {
+	for _, taskName := range tasks {
+		if err := s.UpdateExpectSubTaskStage(stage, taskName, source); err != nil {
+			return err
+		}
+	}
+	if !needWait {
+		return nil
+	}
+	// wait all tasks are in expected stage before actually starting scheduling
+WaitLoop:
+	for maxRetryNum := 10; maxRetryNum > 0; maxRetryNum-- {
+		resp, err := worker.queryStatus(ctx)
+		if err != nil {
+			return terror.Annotatef(err, "failed to query worker: %s status", worker.baseInfo.Name)
+		}
+		for _, status := range resp.QueryStatus.GetSubTaskStatus() {
+			if status.Stage != stage {
+				// NOTE: the defaultRPCTimeout is 10m, use 1s * retry times to increase the waiting time
+				sleepTime := time.Second * time.Duration(10-maxRetryNum)
+				s.logger.Info(
+					"waiting task",
+					zap.String("task", status.Name),
+					zap.Int("retry times", 10-maxRetryNum),
+					zap.Duration("sleep time", sleepTime),
+					zap.String("want stage", stage.String()),
+					zap.String("current stage", status.Stage.String()),
+				)
+				time.Sleep(sleepTime)
+				goto WaitLoop
+			}
+		}
+	}
 	return nil
 }
 
