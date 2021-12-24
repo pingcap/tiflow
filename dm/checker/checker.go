@@ -30,10 +30,12 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/binlog"
 	"github.com/pingcap/ticdc/dm/pkg/checker"
 	"github.com/pingcap/ticdc/dm/pkg/conn"
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 	fr "github.com/pingcap/ticdc/dm/pkg/func-rollback"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/pingcap/ticdc/dm/pkg/terror"
 	"github.com/pingcap/ticdc/dm/pkg/utils"
+	onlineddl "github.com/pingcap/ticdc/dm/syncer/online-ddl-tools"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
@@ -66,7 +68,7 @@ type mysqlInstance struct {
 type Checker struct {
 	closed atomic.Bool
 
-	logger log.Logger
+	tctx *tcontext.Context
 
 	instances []*mysqlInstance
 
@@ -78,17 +80,21 @@ type Checker struct {
 	}
 	errCnt  int64
 	warnCnt int64
+
+	onlineDDL onlineddl.OnlinePlugin
 }
 
 // NewChecker returns a checker.
 func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, errCnt, warnCnt int64) *Checker {
+	logger := log.With(zap.String("unit", "task check"))
 	c := &Checker{
 		instances:     make([]*mysqlInstance, 0, len(cfgs)),
 		checkingItems: checkingItems,
-		logger:        log.With(zap.String("unit", "task check")),
-		errCnt:        errCnt,
-		warnCnt:       warnCnt,
+
+		errCnt:  errCnt,
+		warnCnt: warnCnt,
 	}
+	c.tctx = tcontext.Background().WithLogger(logger)
 
 	for _, cfg := range cfgs {
 		// we have verify it in SubTaskConfig.Adjust
@@ -112,6 +118,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: c.closeDBs})
 
+	tctx := c.tctx.WithContext(ctx)
 	// target name => source => schema => [tables]
 	sharding := make(map[string]map[string]map[string][]string)
 	shardingCounter := make(map[string]int)
@@ -129,6 +136,14 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		r, err := router.NewTableRouter(instance.cfg.CaseSensitive, instance.cfg.RouteRules)
 		if err != nil {
 			return terror.ErrTaskCheckGenTableRouter.Delegate(err)
+		}
+
+		if instance.cfg.OnlineDDL && c.onlineDDL == nil {
+			c.onlineDDL, err = onlineddl.NewRealOnlinePlugin(tctx, instance.cfg)
+			if err != nil {
+				return err
+			}
+			rollbackHolder.Add(fr.FuncRollback{Name: "close-onlineDDL", Fn: c.closeOnlineDDL})
 		}
 
 		columnMapping[instance.cfg.SourceID], err = column.NewMapping(instance.cfg.CaseSensitive, instance.cfg.ColumnMappingRules)
@@ -219,7 +234,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
 
 		if checkSchema {
-			c.checkList = append(c.checkList, checker.NewTablesChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables))
+			c.checkList = append(c.checkList, checker.NewTablesChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables, c.onlineDDL))
 		}
 	}
 
@@ -233,7 +248,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 	}
 
-	c.logger.Info(c.displayCheckingItems())
+	c.tctx.Logger.Info(c.displayCheckingItems())
 	return nil
 }
 
@@ -364,6 +379,7 @@ func (c *Checker) Close() {
 	}
 
 	c.closeDBs()
+	c.closeOnlineDDL()
 
 	c.closed.Store(true)
 }
@@ -372,24 +388,31 @@ func (c *Checker) closeDBs() {
 	for _, instance := range c.instances {
 		if instance.sourceDB != nil {
 			if err := instance.sourceDB.Close(); err != nil {
-				c.logger.Error("close source db", zap.Stringer("db", instance.sourceDBinfo), log.ShortError(err))
+				c.tctx.Logger.Error("close source db", zap.Stringer("db", instance.sourceDBinfo), log.ShortError(err))
 			}
 			instance.sourceDB = nil
 		}
 
 		if instance.targetDB != nil {
 			if err := instance.targetDB.Close(); err != nil {
-				c.logger.Error("close target db", zap.Stringer("db", instance.targetDBInfo), log.ShortError(err))
+				c.tctx.Logger.Error("close target db", zap.Stringer("db", instance.targetDBInfo), log.ShortError(err))
 			}
 			instance.targetDB = nil
 		}
 	}
 }
 
+func (s *Checker) closeOnlineDDL() {
+	if s.onlineDDL != nil {
+		s.onlineDDL.Close()
+		s.onlineDDL = nil
+	}
+}
+
 // Pause implements Unit interface.
 func (c *Checker) Pause() {
 	if c.closed.Load() {
-		c.logger.Warn("try to pause, but already closed")
+		c.tctx.Logger.Warn("try to pause, but already closed")
 		return
 	}
 }
@@ -397,7 +420,7 @@ func (c *Checker) Pause() {
 // Resume resumes the paused process.
 func (c *Checker) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	if c.closed.Load() {
-		c.logger.Warn("try to resume, but already closed")
+		c.tctx.Logger.Warn("try to resume, but already closed")
 		return
 	}
 

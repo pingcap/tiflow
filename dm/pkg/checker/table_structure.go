@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	onlineddl "github.com/pingcap/ticdc/dm/syncer/online-ddl-tools"
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser/ast"
@@ -61,14 +62,17 @@ type TablesChecker struct {
 	db     *sql.DB
 	dbinfo *dbutil.DBConfig
 	tables map[string][]string // schema => []table; if []table is empty, query tables from db
+
+	onlineDDL onlineddl.OnlinePlugin
 }
 
 // NewTablesChecker returns a RealChecker.
-func NewTablesChecker(db *sql.DB, dbinfo *dbutil.DBConfig, tables map[string][]string) RealChecker {
+func NewTablesChecker(db *sql.DB, dbinfo *dbutil.DBConfig, tables map[string][]string, onlineDDL onlineddl.OnlinePlugin) RealChecker {
 	return &TablesChecker{
-		db:     db,
-		dbinfo: dbinfo,
-		tables: tables,
+		db:        db,
+		dbinfo:    dbinfo,
+		tables:    tables,
+		onlineDDL: onlineDDL,
 	}
 }
 
@@ -184,6 +188,17 @@ func (c *TablesChecker) checkAST(stmt ast.StmtNode) []*incompatibilityOption {
 	}
 
 	var options []*incompatibilityOption
+	// check table name
+	if c.onlineDDL != nil {
+		if c.onlineDDL.TableType(st.Table.Schema.O) != onlineddl.RealTable {
+			options = append(options, &incompatibilityOption{
+				state:       StateFailure,
+				instruction: "please wait the online-ddl over",
+				errMessage:  "your ddl is in pt/ghost online-ddl",
+			})
+		}
+	}
+
 	// check columns
 	for _, def := range st.Cols {
 		option := c.checkColumnDef(def)
