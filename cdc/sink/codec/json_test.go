@@ -228,11 +228,7 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err := encoder.SetParams(map[string]string{})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-<<<<<<< HEAD
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, DefaultMaxMessageBytes)
-=======
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
@@ -243,20 +239,12 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-<<<<<<< HEAD
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, math.MaxInt32)
-=======
 	c.Assert(encoder.maxMessageBytes, check.Equals, math.MaxInt32)
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-<<<<<<< HEAD
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, math.MaxUint32)
-=======
 	c.Assert(encoder.maxMessageBytes, check.Equals, math.MaxUint32)
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 
 	err = encoder.SetParams(map[string]string{"max-batch-size": "0"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
@@ -267,20 +255,12 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxInt32)
-<<<<<<< HEAD
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, DefaultMaxMessageBytes)
-=======
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 
 	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxUint32)
-<<<<<<< HEAD
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, DefaultMaxMessageBytes)
-=======
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 }
 
 func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
