@@ -64,7 +64,7 @@ func main() {
 	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	switchAsyncCommit(ctx, sourceDB0)
+	go switchAsyncCommit(ctx, sourceDB0)
 	util.MustExec(sourceDB0, "create database mark;")
 	runDDLTest([]*sql.DB{sourceDB0, sourceDB1})
 	util.MustExec(sourceDB0, "create table mark.finish_mark(a int primary key);")
