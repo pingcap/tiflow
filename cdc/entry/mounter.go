@@ -25,15 +25,15 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/kv"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -313,25 +313,24 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		colName := colInfo.Name.O
 		colDatums, exist := datums[colInfo.ID]
 		var colValue interface{}
-		if exist {
-			var err error
-			var warn string
-			var size int
-			colValue, size, warn, err = formatColVal(colDatums, colInfo.Tp)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			if warn != "" {
-				log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
-			}
-			colSize += size
-		} else if fillWithDefaultValue {
-			var size int
-			colValue, size = getDefaultOrZeroValue(colInfo)
-			colSize += size
-		} else {
+		if !exist && !fillWithDefaultValue {
 			continue
 		}
+		var err error
+		var warn string
+		var size int
+		if exist {
+			colValue, size, warn, err = formatColVal(colDatums, colInfo.Tp)
+		} else if fillWithDefaultValue {
+			colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+		}
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if warn != "" {
+			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
+		}
+		colSize += size
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:  colName,
 			Type:  colInfo.Tp,
@@ -437,6 +436,7 @@ func sizeOfBytes(b []byte) int {
 	return len(b) + sizeOfEmptyBytes
 }
 
+// formatColVal return interface{} need to meet the same requirement as getDefaultOrZeroValue
 func formatColVal(datum types.Datum, tp byte) (
 	value interface{}, size int, warn string, err error,
 ) {
@@ -490,36 +490,39 @@ func formatColVal(datum types.Datum, tp byte) (
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), warn, nil
 	default:
+		// FIXME: GetValue() may return some types that go sql not support, which will cause sink DML fail
+		// Make specified convert upper if you need
+		// Go sql support type ref to: https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
 		return datum.GetValue(), sizeOfDatum(datum), "", nil
 	}
 }
 
-func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int) {
-	// see https://github.com/pingcap/tidb/issues/9304
-	// must use null if TiDB not write the column value when default value is null
-	// and the value is null
+// getDefaultOrZeroValue return interface{} need to meet to require type in
+// https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
+// Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
+func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, error) {
+	var d types.Datum
 	if !mysql.HasNotNullFlag(col.Flag) {
-		d := types.NewDatum(nil)
-		const size = unsafe.Sizeof(d.GetValue())
-		return d.GetValue(), int(size)
+		// see https://github.com/pingcap/tidb/issues/9304
+		// must use null if TiDB not write the column value when default value is null
+		// and the value is null
+		d = types.NewDatum(nil)
+	} else if col.GetDefaultValue() != nil {
+		d = types.NewDatum(col.GetDefaultValue())
+	} else {
+		switch col.Tp {
+		case mysql.TypeEnum:
+			// For enum type, if no default value and not null is set,
+			// the default value is the first element of the enum list
+			d = types.NewDatum(col.FieldType.Elems[0])
+		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+			return emptyBytes, sizeOfEmptyBytes, "", nil
+		default:
+			d = table.GetZeroValue(col)
+		}
 	}
 
-	if col.GetDefaultValue() != nil {
-		d := types.NewDatum(col.GetDefaultValue())
-		return d.GetValue(), sizeOfDatum(d)
-	}
-	switch col.Tp {
-	case mysql.TypeEnum:
-		// For enum type, if no default value and not null is set,
-		// the default value is the first element of the enum list
-		d := types.NewDatum(col.FieldType.Elems[0])
-		return d.GetValue(), sizeOfDatum(d)
-	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-		return emptyBytes, sizeOfEmptyBytes
-	}
-
-	d := table.GetZeroValue(col)
-	return d.GetValue(), sizeOfDatum(d)
+	return formatColVal(d, col.Tp)
 }
 
 // DecodeTableID decodes the raw key to a table ID

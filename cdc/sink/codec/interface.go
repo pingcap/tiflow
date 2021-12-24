@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -167,7 +167,7 @@ type EncoderBuilder interface {
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
 func NewEventBatchEncoderBuilder(p config.Protocol, credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
 	switch p {
-	case config.ProtocolDefault:
+	case config.ProtocolDefault, config.ProtocolOpen:
 		return newJSONEventBatchEncoderBuilder(opts), nil
 	case config.ProtocolCanal:
 		return newCanalEventBatchEncoderBuilder(opts), nil

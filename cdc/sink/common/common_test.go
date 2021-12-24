@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,7 +31,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 		input         []*model.RowChangedEvent
 		resolvedTsMap map[model.TableID]uint64
 		expected      map[model.TableID][]*model.SingleTableTxn
-	}{{{ // Testing basic transaction collocation, no txns with the same committs
+	}{{{ // Testing basic transaction collocation, no txns with the same commitTs
 		input: []*model.RowChangedEvent{
 			{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
 			{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},

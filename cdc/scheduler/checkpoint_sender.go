@@ -18,8 +18,8 @@ import (
 
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/context"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/context"
 	"go.uber.org/zap"
 )
 

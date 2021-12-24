@@ -47,7 +47,7 @@ const (
         "rule": "r2"
       }
     ],
-    "protocol": "default"
+    "protocol": "open-protocol"
   },
   "cyclic-replication": {
     "enable": false,
@@ -78,7 +78,8 @@ const (
       "max-size": 300,
       "max-days": 0,
       "max-backups": 0
-    }
+    },
+    "error-output": "stderr"
   },
   "data-dir": "",
   "gc-ttl": 86400,
@@ -107,7 +108,7 @@ const (
     "region-scan-limit": 40
   },
   "debug": {
-    "enable-table-actor": true,
+    "enable-table-actor": false,
     "enable-db-sorter": false,
     "db": {
       "count": 16,
@@ -118,9 +119,10 @@ const (
       "writer-buffer-size": 8388608,
       "compression": "snappy",
       "target-file-size-base": 8388608,
-      "compaction-l0-trigger": 160,
       "write-l0-slowdown-trigger": 2147483647,
       "write-l0-pause-trigger": 2147483647,
+      "compaction-l0-trigger": 160,
+      "compaction-deletion-threshold": 160000,
       "cleanup-speed-limit": 10000
     },
     "messages": {
@@ -151,7 +153,7 @@ const (
   },
   "sink": {
     "dispatchers": null,
-    "protocol": "default",
+    "protocol": "open-protocol",
     "column-selectors": [
       {
         "matcher": [
@@ -199,7 +201,7 @@ const (
   },
   "sink": {
     "dispatchers": null,
-    "protocol": "default",
+    "protocol": "open-protocol",
     "column-selectors": [
       {
         "matcher": [

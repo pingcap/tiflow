@@ -25,7 +25,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 const (

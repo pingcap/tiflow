@@ -20,9 +20,10 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -203,7 +204,7 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err := encoder.SetParams(map[string]string{})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxMessageSize, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
@@ -214,12 +215,12 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxMessageSize, check.Equals, math.MaxInt32)
+	c.Assert(encoder.maxMessageBytes, check.Equals, math.MaxInt32)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxMessageSize, check.Equals, math.MaxUint32)
+	c.Assert(encoder.maxMessageBytes, check.Equals, math.MaxUint32)
 
 	err = encoder.SetParams(map[string]string{"max-batch-size": "0"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
@@ -230,12 +231,12 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxInt32)
-	c.Assert(encoder.maxMessageSize, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 
 	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxUint32)
-	c.Assert(encoder.maxMessageSize, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 }
 
 func (s *batchSuite) TestMaxMessageBytes(c *check.C) {

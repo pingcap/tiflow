@@ -19,7 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/config"
 )
 
 // FetchTimeZoneSetting fetch target db global time_zone setting.
