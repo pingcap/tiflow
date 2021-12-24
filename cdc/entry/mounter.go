@@ -506,7 +506,7 @@ func formatColVal(datum types.Datum) (
 // https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
 // Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
 // FIXME: Dynamic Timestamp will cause data inconsistency here
-// [TODO]: Check default expr support
+// TODO: Check default expr support
 func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, error) {
 	var d types.Datum
 	// NOTICE: In TiDB, default value type may not consistent with the column type
@@ -515,6 +515,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 	// NOTICE: SHOULD use OriginDefaultValue here, more info pls ref to
 	// https://github.com/pingcap/tiflow/issues/4048
 	if col.GetOriginDefaultValue() != nil {
+		// TODO: add timezone support for default time like type
 		d = types.NewDatum(col.GetOriginDefaultValue())
 		log.Debug("default column type", zap.String("detail", d.String()))
 	} else if !mysql.HasNotNullFlag(col.Flag) {
