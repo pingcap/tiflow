@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -132,7 +133,7 @@ func CdcHealthCheck(cdcContainer, pdEndpoint string) error {
 func execInController(controller, shellCmd string) ([]byte, error) {
 	log.Info("Start executing in the Controller container",
 		zap.String("shellCmd", shellCmd), zap.String("container", controller))
-	cmd := exec.Command("docker", "exec", controller, "sh", "-c", shellCmd)
+	cmd := exec.Command("docker", "exec", controller, "sh", "-c", strconv.Quote(shellCmd))
 	defer log.Info("Finished executing in the Controller container",
 		zap.String("shellCmd", shellCmd), zap.String("container", controller))
 	return cmd.Output()

@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql" // imported for side effects
@@ -83,20 +84,19 @@ func (c *TaskContext) SQLHelper() *SQLHelper {
 func (p *CDCProfile) String() string {
 	builder := strings.Builder{}
 	builder.WriteString("cli changefeed create ")
+
 	if p.PDUri == "" {
 		p.PDUri = "http://127.0.0.1:2379"
 	}
-
-	builder.WriteString("--pd=" + p.PDUri + " ")
+	builder.WriteString(fmt.Sprint("--pd=%s ", strconv.Quote(p.PDUri)))
 
 	if p.SinkURI == "" {
 		log.Fatal("SinkURI cannot be empty!")
 	}
-
-	builder.WriteString(fmt.Sprintf(`--sink-uri='%s' `, p.SinkURI))
+	builder.WriteString(fmt.Sprintf("--sink-uri=%s ", strconv.Quote(p.SinkURI)))
 
 	if p.ConfigFile != "" {
-		builder.WriteString("--config=" + p.ConfigFile + " ")
+		builder.WriteString(fmt.Sprintf("--config=%s ", strconv.Quote(p.ConfigFile)))
 	}
 
 	if p.Opts == nil || len(p.Opts) == 0 {
