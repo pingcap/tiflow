@@ -18,9 +18,9 @@ import (
 	"path"
 
 	"github.com/pingcap/errors"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/httputil"
-	"github.com/pingcap/ticdc/pkg/security"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/security"
 )
 
 // Config holds the common attributes that can be passed to a cdc REST client
@@ -35,8 +35,8 @@ type Config struct {
 	Version string
 }
 
-// defaultServerUrlFromConfig is used to build base URL and api path.
-func defaultServerUrlFromConfig(config *Config) (*url.URL, string, error) {
+// defaultServerURLFromConfig is used to build base URL and api path.
+func defaultServerURLFromConfig(config *Config) (*url.URL, string, error) {
 	host := config.Host
 	if host == "" {
 		host = "127.0.0.1:8300"
@@ -60,13 +60,13 @@ func defaultServerUrlFromConfig(config *Config) (*url.URL, string, error) {
 	return hostURL, versionedPath, nil
 }
 
-// RESTClientFromConfig creates a RESTClient from specific config items.
-func RESTClientFromConfig(config *Config) (*RESTClient, error) {
+// CDCRESTClientFromConfig creates a CDCRESTClient from specific config items.
+func CDCRESTClientFromConfig(config *Config) (*CDCRESTClient, error) {
 	if config.Version == "" {
-		return nil, errors.New("Version is required when initializing a RESTClient")
+		return nil, errors.New("Version is required when initializing a CDCRESTClient")
 	}
 	if config.APIPath == "" {
-		return nil, errors.New("APIPath is required when initializing a RESTClient")
+		return nil, errors.New("APIPath is required when initializing a CDCRESTClient")
 	}
 
 	httpClient, err := httputil.NewClient(config.Credential)
@@ -74,12 +74,12 @@ func RESTClientFromConfig(config *Config) (*RESTClient, error) {
 		return nil, errors.Trace(err)
 	}
 
-	baseURL, versionedAPIPath, err := defaultServerUrlFromConfig(config)
+	baseURL, versionedAPIPath, err := defaultServerURLFromConfig(config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	restClient, err := NewRESTClient(baseURL, versionedAPIPath, httpClient)
+	restClient, err := NewCDCRESTClient(baseURL, versionedAPIPath, httpClient)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

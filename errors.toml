@@ -356,6 +356,11 @@ error = '''
 invalid key: %s
 '''
 
+["CDC:ErrInvalidHost"]
+error = '''
+host must be a URL or a host:port pair: %q
+'''
+
 ["CDC:ErrInvalidRecordKey"]
 error = '''
 invalid record key - %q
@@ -821,6 +826,11 @@ error = '''
 resolve locks failed
 '''
 
+["CDC:ErrRewindRequestBodyError"]
+error = '''
+failed to seek to the beginning of request body
+'''
+
 ["CDC:ErrS3StorageAPI"]
 error = '''
 s3 storage api
@@ -1054,6 +1064,11 @@ write ts conflict
 ["CDC:ErrWrongTableInfo"]
 error = '''
 wrong table info in unflatten, table id %d, index table id: %d
+'''
+
+["CDC:ErrZeroLengthResponseBody"]
+error = '''
+0-length response with status code: %d
 '''
 
 ["ErrConflictingFileLocks"]

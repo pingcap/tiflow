@@ -17,7 +17,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/ticdc/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/httputil"
 )
 
 // Enum types for HTTP methods.
@@ -47,8 +47,8 @@ func (h HTTPMethod) String() string {
 	}
 }
 
-// RESTInterface includes a set of operations to interact with TiCDC RESTful apis.
-type RESTInterface interface {
+// CDCRESTInterface includes a set of operations to interact with TiCDC RESTful apis.
+type CDCRESTInterface interface {
 	Method(method HTTPMethod) *Request
 	Post() *Request
 	Put() *Request
@@ -56,8 +56,8 @@ type RESTInterface interface {
 	Delete() *Request
 }
 
-// RESTClient defines a TiCDC RESTful client
-type RESTClient struct {
+// CDCRESTClient defines a TiCDC RESTful client
+type CDCRESTClient struct {
 	// base is the root URL for all invocations of the client.
 	base *url.URL
 
@@ -68,15 +68,15 @@ type RESTClient struct {
 	Client *httputil.Client
 }
 
-// NewRESTClient creates a new RESTClient.
-func NewRESTClient(baseURL *url.URL, versionedAPIPath string, client *httputil.Client) (*RESTClient, error) {
+// NewCDCRESTClient creates a new CDCRESTClient.
+func NewCDCRESTClient(baseURL *url.URL, versionedAPIPath string, client *httputil.Client) (*CDCRESTClient, error) {
 	if !strings.HasSuffix(baseURL.Path, "/") {
 		baseURL.Path += "/"
 	}
 	baseURL.RawQuery = ""
 	baseURL.Fragment = ""
 
-	return &RESTClient{
+	return &CDCRESTClient{
 		base:             baseURL,
 		versionedAPIPath: versionedAPIPath,
 		Client:           client,
@@ -84,26 +84,26 @@ func NewRESTClient(baseURL *url.URL, versionedAPIPath string, client *httputil.C
 }
 
 // Method begins a request with a http method (GET, POST, PUT, DELETE).
-func (c *RESTClient) Method(method HTTPMethod) *Request {
+func (c *CDCRESTClient) Method(method HTTPMethod) *Request {
 	return NewRequest(c).WithMethod(method)
 }
 
 // Post begins a POST request. Short for c.Method(HTTPMethodPost).
-func (c *RESTClient) Post() *Request {
+func (c *CDCRESTClient) Post() *Request {
 	return c.Method(HTTPMethodPost)
 }
 
 // Put begins a PUT request. Short for c.Method(HTTPMethodPut).
-func (c *RESTClient) Put() *Request {
+func (c *CDCRESTClient) Put() *Request {
 	return c.Method(HTTPMethodPut)
 }
 
 // Delete begins a DELETE request. Short for c.Method(HTTPMethodDelete).
-func (c *RESTClient) Delete() *Request {
+func (c *CDCRESTClient) Delete() *Request {
 	return c.Method(HTTPMethodDelete)
 }
 
 // Get begins a GET request. Short for c.Method(HTTPMethodGet).
-func (c *RESTClient) Get() *Request {
+func (c *CDCRESTClient) Get() *Request {
 	return c.Method(HTTPMethodGet)
 }

@@ -16,36 +16,36 @@ package rest
 import (
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
 
-func TestRESTClientCommonConfigs(t *testing.T) {
-	_, err := RESTClientFromConfig(&Config{Host: "127.0.0.1"})
+func TestCDCRESTClientCommonConfigs(t *testing.T) {
+	_, err := CDCRESTClientFromConfig(&Config{Host: "127.0.0.1"})
 	require.NotNil(t, err)
 
-	_, err = RESTClientFromConfig(&Config{Host: "127.0.0.1", Version: "v1"})
+	_, err = CDCRESTClientFromConfig(&Config{Host: "127.0.0.1", Version: "v1"})
 	require.NotNil(t, err)
 
-	_, err = RESTClientFromConfig(&Config{Host: "127.0.0.1", APIPath: "/api"})
+	_, err = CDCRESTClientFromConfig(&Config{Host: "127.0.0.1", APIPath: "/api"})
 	require.NotNil(t, err)
 
-	_, err = RESTClientFromConfig(&Config{Host: "http://127.0.0.1:2379", APIPath: "/api", Version: "v1"})
+	_, err = CDCRESTClientFromConfig(&Config{Host: "http://127.0.0.1:2379", APIPath: "/api", Version: "v1"})
 	require.Nil(t, err)
 
-	_, err = RESTClientFromConfig(&Config{Host: "127.0.0.1:2379", APIPath: "/api", Version: "v2"})
+	_, err = CDCRESTClientFromConfig(&Config{Host: "127.0.0.1:2379", APIPath: "/api", Version: "v2"})
 	require.Nil(t, err)
 }
 
 func checkTLS(config *Config) bool {
-	baseURL, _, err := defaultServerUrlFromConfig(config)
+	baseURL, _, err := defaultServerURLFromConfig(config)
 	if err != nil {
 		return false
 	}
 	return baseURL.Scheme == "https"
 }
 
-func TestRESTClientUsingTLS(t *testing.T) {
+func TestCDCRESTClientUsingTLS(t *testing.T) {
 	testCases := []struct {
 		Config   *Config
 		UsingTLS bool

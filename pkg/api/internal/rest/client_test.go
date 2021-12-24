@@ -22,8 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func restClient(testServer *httptest.Server) (*RESTClient, error) {
-	c, err := RESTClientFromConfig(&Config{
+func restClient(testServer *httptest.Server) (*CDCRESTClient, error) {
+	c, err := CDCRESTClientFromConfig(&Config{
 		Host:    testServer.URL,
 		APIPath: "/api",
 		Version: "v1",
@@ -36,7 +36,7 @@ func TestRestRequestSuccess(t *testing.T) {
 		rw.Header().Set("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusOK)
 		if r.URL.Path == "/api/v1/test" {
-			rw.Write([]byte(`{"cdc": "hello world"}`))
+			_, _ = rw.Write([]byte(`{"cdc": "hello world"}`))
 		}
 	}))
 	defer testServer.Close()
@@ -45,12 +45,13 @@ func TestRestRequestSuccess(t *testing.T) {
 	require.Nil(t, err)
 	body, err := c.Get().WithPrefix("test").Do(context.Background()).Raw()
 	require.Equal(t, `{"cdc": "hello world"}`, string(body))
+	require.NoError(t, err)
 }
 
 func TestRestRequestFailed(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusNotFound)
-		rw.Write([]byte(`{
+		_, _ = rw.Write([]byte(`{
 			"error_msg": "test rest request failed",
 			"error_code": "test rest request failed"
 		}`))
@@ -66,7 +67,7 @@ func TestRestRequestFailed(t *testing.T) {
 func TestRestRawRequestFailed(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusNotFound)
-		rw.Write([]byte(`{
+		_, _ = rw.Write([]byte(`{
 			"error_msg": "test rest request failed",
 			"error_code": "test rest request failed"
 		}`))

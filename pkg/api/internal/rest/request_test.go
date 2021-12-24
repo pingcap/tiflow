@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -115,7 +115,7 @@ func TestRequestDoContext(t *testing.T) {
 		<-received
 		cancel()
 	}()
-	c, err := RESTClientFromConfig(&Config{
+	c, err := CDCRESTClientFromConfig(&Config{
 		Host:    testServer.URL,
 		APIPath: "/api",
 		Version: "v1",
@@ -139,7 +139,7 @@ func TestRequestDoContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c, err := RESTClientFromConfig(&Config{
+	c, err := CDCRESTClientFromConfig(&Config{
 		Host:    testServer.URL,
 		APIPath: "/api",
 		Version: "v1",

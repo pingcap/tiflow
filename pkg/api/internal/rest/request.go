@@ -26,10 +26,10 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/httputil"
-	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 )
 
@@ -45,7 +45,7 @@ const (
 // Any errors are stored until the end of your call, so you only have to
 // check once.
 type Request struct {
-	c       *RESTClient
+	c       *CDCRESTClient
 	timeout time.Duration
 
 	// generic components accessible via setters
@@ -65,7 +65,7 @@ type Request struct {
 }
 
 // NewRequest creates a new request.
-func NewRequest(c *RESTClient) *Request {
+func NewRequest(c *CDCRESTClient) *Request {
 	var pathPrefix string
 	if c.base != nil {
 		pathPrefix = path.Join("/", c.base.Path, c.versionedAPIPath)
@@ -88,9 +88,9 @@ func NewRequest(c *RESTClient) *Request {
 	return r
 }
 
-// NewRequestWithClient creates a Request with an embedded RESTClient for test.
+// NewRequestWithClient creates a Request with an embedded CDCRESTClient for test.
 func NewRequestWithClient(base *url.URL, versionedAPIPath string, client *httputil.Client) *Request {
-	return NewRequest(&RESTClient{
+	return NewRequest(&CDCRESTClient{
 		base:             base,
 		versionedAPIPath: versionedAPIPath,
 		Client:           client,
@@ -244,7 +244,7 @@ func (r *Request) URL() *url.URL {
 	return finalURL
 }
 
-func (r *Request) newHttpRequest(ctx context.Context) (*http.Request, error) {
+func (r *Request) newHTTPRequest(ctx context.Context) (*http.Request, error) {
 	url := r.URL().String()
 	req, err := http.NewRequest(r.method.String(), url, r.body)
 	if err != nil {
@@ -287,7 +287,7 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 	}
 
 	fn := func() error {
-		req, err := r.newHttpRequest(ctx)
+		req, err := r.newHTTPRequest(ctx)
 		if err != nil {
 			return err
 		}
@@ -309,7 +309,7 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 				return
 			}
 			// close the body to let the TCP connection be reused after reconnecting
-			io.Copy(ioutil.Discard, resp.Body)
+			_, _ = io.Copy(ioutil.Discard, resp.Body)
 			resp.Body.Close()
 		}()
 
@@ -401,9 +401,5 @@ func (r Result) Into(obj interface{}) error {
 		return cerrors.ErrZeroLengthResponseBody.GenWithStackByArgs(r.statusCode)
 	}
 
-	if err := json.Unmarshal(r.body, obj); err != nil {
-		return err
-	}
-
-	return nil
+	return json.Unmarshal(r.body, obj)
 }
