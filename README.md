@@ -51,8 +51,11 @@ the job of demo workload is devided to two parts:
 We can also start multiple masters
 
 ```[shell]
+# start two server masters
 ./bin/master --config ./cmd/master/example1.toml &
 ./bin/master --config ./cmd/master/example2.toml &
+# join a new one
+./bin/master --config ./cmd/master/example3.toml &
 ```
 
 #### Start Executor 1, 2
