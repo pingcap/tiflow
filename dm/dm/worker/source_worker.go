@@ -175,7 +175,11 @@ func (w *SourceWorker) Start() {
 				}
 			}
 			if err2 := w.updateSourceStatus(w.ctx); err2 != nil {
-				w.l.Error("failed to update source status", zap.Error(err2))
+				if terror.ErrNoMasterStatus.Equal(err2) {
+					w.l.Warn("This source's bin_log is OFF, so it only supports full_mode.", zap.String("sourceID", w.cfg.SourceID), zap.Error(err2))
+				} else {
+					w.l.Error("failed to update source status", zap.Error(err2))
+				}
 				continue
 			}
 
@@ -623,6 +627,10 @@ func (w *SourceWorker) QueryStatus(ctx context.Context, name string) ([]*pb.SubT
 	)
 
 	if err := w.updateSourceStatus(ctx); err != nil {
+		if terror.ErrNoMasterStatus.Equal(err) {
+			w.l.Warn("This source's bin_log is OFF, so it only supports full_mode.", zap.String("sourceID", w.cfg.SourceID), zap.Error(err))
+			return nil, nil, nil
+		}
 		w.l.Error("failed to update source status", zap.Error(err))
 	} else {
 		sourceStatus = w.sourceStatus.Load().(*binlog.SourceStatus)
