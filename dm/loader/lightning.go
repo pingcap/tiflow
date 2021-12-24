@@ -269,7 +269,12 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		isCanceled = true
 	default:
 	}
-	l.logger.Info("lightning load end", zap.Bool("IsCanceled", isCanceled))
+	s := l.status()
+	l.logger.Info("lightning load end",
+		zap.Bool("IsCanceled", isCanceled),
+		zap.Int64("finished_bytes", s.FinishedBytes),
+		zap.Int64("total_bytes", s.TotalBytes),
+		zap.String("progress", s.Progress))
 	pr <- pb.ProcessResult{IsCanceled: isCanceled, Errors: errs}
 }
 
@@ -329,8 +334,7 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 	return nil
 }
 
-// Status returns the unit's current status.
-func (l *LightningLoader) Status(_ *binlog.SourceStatus) interface{} {
+func (l *LightningLoader) status() *pb.LoadStatus {
 	finished, total := l.core.Status()
 	progress := percent(finished, total, l.finish.Load())
 	s := &pb.LoadStatus{
@@ -341,4 +345,9 @@ func (l *LightningLoader) Status(_ *binlog.SourceStatus) interface{} {
 		MetaBinlogGTID: l.metaBinlogGTID.Load(),
 	}
 	return s
+}
+
+// Status returns the unit's current status.
+func (l *LightningLoader) Status(_ *binlog.SourceStatus) interface{} {
+	return l.status()
 }
