@@ -30,8 +30,8 @@ type CraftEventBatchEncoder struct {
 	messageBuf       []*MQMessage
 
 	// configs
-	maxMessageSize int
-	maxBatchSize   int
+	maxMessageBytes int
+	maxBatchSize    int
 
 	allocator *craft.SliceAllocator
 }
@@ -52,7 +52,7 @@ func (e *CraftEventBatchEncoder) flush() {
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) AppendRowChangedEvent(ev *model.RowChangedEvent) (EncoderResult, error) {
 	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)
-	if size > e.maxMessageSize || rows >= e.maxBatchSize {
+	if size > e.maxMessageBytes || rows >= e.maxBatchSize {
 		e.flush()
 	}
 	return EncoderNoOperation, nil
@@ -98,15 +98,15 @@ func (e *CraftEventBatchEncoder) Reset() {
 func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
 
-	e.maxMessageSize = DefaultMaxMessageBytes
+	e.maxMessageBytes = config.DefaultMaxMessageBytes
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
-		e.maxMessageSize, err = strconv.Atoi(maxMessageBytes)
+		e.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
 	}
-	if e.maxMessageSize <= 0 || e.maxMessageSize > math.MaxInt32 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", e.maxMessageSize))
+	if e.maxMessageBytes <= 0 || e.maxMessageBytes > math.MaxInt32 {
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", e.maxMessageBytes))
 	}
 
 	e.maxBatchSize = DefaultMaxBatchSize
