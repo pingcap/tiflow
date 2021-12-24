@@ -431,6 +431,11 @@ error = '''
 locate region by id
 '''
 
+["CDC:ErrMQSinkUnknownProtocol"]
+error = '''
+unknown '%s' protocol for Message Queue sink
+'''
+
 ["CDC:ErrMarshalFailed"]
 error = '''
 marshal failed
