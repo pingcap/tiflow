@@ -401,7 +401,7 @@ func (s *schemaSnapshot) createSchema(db *timodel.DBInfo) error {
 	s.schemaNameToID[db.Name.O] = db.ID
 	s.tableInSchema[db.ID] = []int64{}
 
-	log.Debug("create schema success, schema id", zap.String("name", db.Name.O), zap.Int64("id", db.ID))
+	log.Info("create schema success, schema id", zap.String("name", db.Name.O), zap.Int64("id", db.ID))
 	return nil
 }
 
@@ -444,7 +444,7 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 	delete(s.tableNameToID, tableName)
 	delete(s.ineligibleTableID, id)
 
-	log.Debug("drop table success", zap.String("name", table.Name.O), zap.Int64("id", id))
+	log.Info("drop table success", zap.String("name", table.Name.O), zap.Int64("id", id))
 	return nil
 }
 
@@ -471,7 +471,7 @@ func (s *schemaSnapshot) updatePartition(tbl *model.TableInfo) error {
 	for _, partition := range newPi.Definitions {
 		// update table info.
 		if _, ok := s.partitionTable[partition.ID]; ok {
-			log.Debug("add table partition success",
+			log.Info("add table partition success",
 				zap.String("name", tbl.Name.O), zap.Int64("tid", id),
 				zap.Int64("add partition id", partition.ID))
 		}
@@ -487,7 +487,7 @@ func (s *schemaSnapshot) updatePartition(tbl *model.TableInfo) error {
 		s.truncateTableID[pid] = struct{}{}
 		delete(s.partitionTable, pid)
 		delete(s.ineligibleTableID, pid)
-		log.Debug("drop table partition success",
+		log.Info("drop table partition success",
 			zap.String("name", tbl.Name.O), zap.Int64("tid", id),
 			zap.Int64("truncated partition id", pid))
 	}
@@ -526,7 +526,7 @@ func (s *schemaSnapshot) createTable(table *model.TableInfo) error {
 	}
 	s.tableNameToID[table.TableName] = table.ID
 
-	log.Debug("create table success", zap.String("name", schema.Name.O+"."+table.Name.O), zap.Int64("id", table.ID))
+	log.Info("create table success", zap.String("name", schema.Name.O+"."+table.Name.O), zap.Int64("id", table.ID))
 	return nil
 }
 
@@ -798,6 +798,7 @@ func (s *schemaStorageImpl) GetLastSnapshot() *schemaSnapshot {
 
 // HandleDDLJob creates a new snapshot in storage and handles the ddl job
 func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
+	log.Debug("handle original DDL job", zap.String("DDL", job.Query), zap.Stringer("job", job))
 	if s.skipJob(job) {
 		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 		return nil
