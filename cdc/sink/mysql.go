@@ -361,7 +361,7 @@ func querySQLMode(db *sql.DB, ctx context.Context) (sqlMode string, err error) {
 	row := db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
 	err = row.Scan(&sqlMode)
 	if err != nil {
-		return "", cerror.WrapError(cerror.ErrMySQLQueryError, err)
+		err = cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
 	return
 }

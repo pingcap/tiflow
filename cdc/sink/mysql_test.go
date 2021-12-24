@@ -38,7 +38,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
-	testutils "github.com/pingcap/tiflow/tests/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -428,11 +427,16 @@ func TestReduceReplace(t *testing.T) {
 	}
 }
 
-func mockTestDB() (*sql.DB, error) {
+func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 	// mock for test db, which is used querying TiDB session variable
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		return nil, err
+	}
+	if adjustSQLMode {
+		mock.ExpectQuery("SELECT @@SESSION.sql_mode;").
+			WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
+				AddRow("ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
 	}
 	columns := []string{"Variable_name", "Value"}
 	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
@@ -443,15 +447,6 @@ func mockTestDB() (*sql.DB, error) {
 	)
 	mock.ExpectClose()
 	return db, nil
-}
-
-func mockDBWithAdjustedSQLMode() (*sql.DB, sqlmock.Sqlmock, error) {
-	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-	if err != nil {
-		return db, mock, err
-	}
-	testutils.MustAdjustSQLMode(mock)
-	return db, mock, err
 }
 
 func TestAdjustSQLMode(t *testing.T) {
@@ -465,20 +460,13 @@ func TestAdjustSQLMode(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
 		// normal db
-		db, mock, err := mockDBWithAdjustedSQLMode()
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
-
-		// sql mode is adjust for cyclic.
-		mock.ExpectQuery("SELECT @@SESSION.sql_mode;").
-			WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
-				AddRow("ALLOW_INVALID_DATES,IGNORE_SPACE,NO_AUTO_VALUE_ON_ZERO"))
-		mock.ExpectExec("SET sql_mode = 'ALLOW_INVALID_DATES,IGNORE_SPACE,NO_AUTO_VALUE_ON_ZERO';").
-			WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectClose()
 		return db, nil
 	}
@@ -584,12 +572,12 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
 		// normal db
-		db, mock, err := mockDBWithAdjustedSQLMode()
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?),(?,?)").
@@ -728,12 +716,12 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
 		// normal db
-		db, mock, err := mockDBWithAdjustedSQLMode()
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
@@ -794,12 +782,12 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
 		// normal db
-		db, mock, err := mockDBWithAdjustedSQLMode()
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
@@ -860,12 +848,12 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
 		// normal db
-		db, mock, err := mockDBWithAdjustedSQLMode()
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		for i := 0; i < defaultDMLMaxRetryTime; i++ {
 			mock.ExpectBegin()
@@ -909,12 +897,12 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
 		// normal db
-		db, mock, err := mockDBWithAdjustedSQLMode()
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
 		mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
@@ -1039,13 +1027,12 @@ func TestNewMySQLSink(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
 		// normal db
-		db, mock, err := mockDBWithAdjustedSQLMode()
-		require.Nil(t, err)
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		mock.ExpectClose()
 		require.Nil(t, err)
 		return db, nil
@@ -1079,13 +1066,12 @@ func TestMySQLSinkClose(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
 		// normal db
-		db, mock, err := mockDBWithAdjustedSQLMode()
-		require.Nil(t, err)
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		mock.ExpectClose()
 		require.Nil(t, err)
 		return db, nil
@@ -1120,13 +1106,12 @@ func TestMySQLSinkFlushResovledTs(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
 		// normal db
-		db, mock, err := mockDBWithAdjustedSQLMode()
-		require.Nil(t, err)
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?)").
 			WithArgs(1).
