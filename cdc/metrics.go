@@ -36,21 +36,10 @@ func init() {
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
-	orchestrator.InitMetrics(registry)
-<<<<<<< HEAD
 	sorter.InitMetrics(registry)
-	if config.NewReplicaImpl {
-		processor.InitMetrics(registry)
-		tablepipeline.InitMetrics(registry)
-		owner.InitMetrics(registry)
-	} else {
-		initProcessorMetrics(registry)
-		initOwnerMetrics(registry)
-	}
-=======
+	orchestrator.InitMetrics(registry)
 	processor.InitMetrics(registry)
 	tablepipeline.InitMetrics(registry)
 	owner.InitMetrics(registry)
->>>>>>> 6591f62df (Clean old owner and old processor in release 5.2 branch (#4019))
 	initServerMetrics(registry)
 }
