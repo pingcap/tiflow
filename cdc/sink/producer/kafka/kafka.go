@@ -387,7 +387,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
-func topicPreProcess(topic string, protocol codec.Protocol, config *Config, saramaConfig *sarama.Config) error {
+func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) error {
 	// FIXME: find a way to remove this failpoint for workload the unit test
 	failpoint.Inject("SkipTopicAutoCreate", func() {
 		failpoint.Return(nil)
@@ -485,14 +485,14 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 var newSaramaConfigImpl = newSaramaConfig
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, topic string, protocol codec.Protocol, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := topicPreProcess(topic, protocol, config, cfg); err != nil {
+	if err := topicPreProcess(topic, config, cfg); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
