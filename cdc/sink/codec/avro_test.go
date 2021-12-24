@@ -23,12 +23,12 @@ import (
 	"github.com/pingcap/log"
 	model2 "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"go.uber.org/zap"
 )
 
@@ -88,6 +88,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 		{Name: "myfloat", Value: float64(3.14), Type: mysql.TypeFloat},
 		{Name: "mybytes", Value: []byte("Hello World"), Type: mysql.TypeBlob},
 		{Name: "ts", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
+		{Name: "myjson", Value: "{\"foo\": \"bar\"}", Type: mysql.TypeJSON},
 	}, time.Local)
 	c.Assert(err, check.IsNil)
 

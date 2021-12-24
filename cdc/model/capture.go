@@ -17,7 +17,7 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // CaptureInfo store in etcd.

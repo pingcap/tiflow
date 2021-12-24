@@ -24,7 +24,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"golang.org/x/sync/errgroup"
 )
 

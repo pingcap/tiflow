@@ -31,21 +31,21 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/common"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
-	tifilter "github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/notify"
-	"github.com/pingcap/ticdc/pkg/quotes"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/common"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/cyclic"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
+	tifilter "github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/notify"
+	"github.com/pingcap/tiflow/pkg/quotes"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -166,13 +166,6 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			}
 			s.txnCache.UpdateCheckpoint(resolvedTs)
 			continue
-		}
-
-		if !config.NewReplicaImpl && s.cyclic != nil {
-			// Filter rows if it is origined from downstream.
-			skippedRowCount := cyclic.FilterAndReduceTxns(
-				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
-			s.statistics.SubRowsCount(skippedRowCount)
 		}
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
 		for _, worker := range s.workers {
