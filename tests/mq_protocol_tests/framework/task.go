@@ -16,6 +16,7 @@ package framework
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql" // imported for side effects
@@ -92,7 +93,7 @@ func (p *CDCProfile) String() string {
 		log.Fatal("SinkURI cannot be empty!")
 	}
 
-	builder.WriteString("--sink-uri=\"" + p.SinkURI + "\" ")
+	builder.WriteString(fmt.Sprintf(`--sink-uri='%s' `, p.SinkURI))
 
 	if p.ConfigFile != "" {
 		builder.WriteString("--config=" + p.ConfigFile + " ")
