@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
@@ -38,10 +37,16 @@ import (
 	"go.uber.org/zap"
 )
 
-func (s *Server) startStatusHTTP() error {
+// startStatusHTTP starts the HTTP server.
+// `lis` is a listener that gives us plain-text HTTP requests.
+// TODO can we decouple the HTTP server from the capture server?
+func (s *Server) startStatusHTTP(lis net.Listener) error {
 	conf := config.GetGlobalServerConfig()
+
+	// OpenAPI handling logic is injected here.
 	router := newRouter(capture.NewHTTPHandler(s.capture))
 
+	// Inject the legacy API handlers.
 	router.GET("/status", gin.WrapF(s.handleStatus))
 	router.GET("/debug/info", gin.WrapF(s.handleDebugInfo))
 	router.POST("/capture/owner/resign", gin.WrapF(s.handleResignOwner))
@@ -59,36 +64,12 @@ func (s *Server) startStatusHTTP() error {
 	prometheus.DefaultGatherer = registry
 	router.Any("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// if CertAllowedCN was specified, we should add server's common name
-	// otherwise, https requests sent to non-owner capture can't be forward
-	// to owner
-	if len(conf.Security.CertAllowedCN) != 0 {
-		err := conf.Security.AddSelfCommonName()
-		if err != nil {
-			log.Error("status server set tls config failed", zap.Error(err))
-			return errors.Trace(err)
-		}
-	}
+	// No need to configure TLS because it is already handled by `s.tcpServer`.
+	s.statusServer = &http.Server{Handler: router}
 
-	tlsConfig, err := conf.Security.ToTLSConfigWithVerify()
-	if err != nil {
-		log.Error("status server get tls config failed", zap.Error(err))
-		return errors.Trace(err)
-	}
-
-	s.statusServer = &http.Server{Addr: conf.Addr, Handler: router, TLSConfig: tlsConfig}
-
-	ln, err := net.Listen("tcp", conf.Addr)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrServeHTTP, err)
-	}
 	go func() {
 		log.Info("http server is running", zap.String("addr", conf.Addr))
-		if tlsConfig != nil {
-			err = s.statusServer.ServeTLS(ln, conf.Security.CertPath, conf.Security.KeyPath)
-		} else {
-			err = s.statusServer.Serve(ln)
-		}
+		err := s.statusServer.Serve(lis)
 		if err != nil && err != http.ErrServerClosed {
 			log.Error("http server error", zap.Error(cerror.WrapError(cerror.ErrServeHTTP, err)))
 		}
