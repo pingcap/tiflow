@@ -13,7 +13,7 @@
 
 package pipeline
 
-import "github.com/pingcap/ticdc/pkg/context"
+import "github.com/pingcap/tiflow/pkg/context"
 
 // SendMessageToNode4Test sends messages to specified `Node` through `Receive` in order.
 // This function is only for testing.

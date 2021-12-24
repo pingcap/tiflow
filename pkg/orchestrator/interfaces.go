@@ -16,7 +16,7 @@ package orchestrator
 import (
 	"context"
 
-	"github.com/pingcap/ticdc/pkg/orchestrator/util"
+	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 )
 
 // Reactor is a stateful transform of states.
@@ -68,10 +68,10 @@ func (s *SingleDataPatch) Patch(valueMap map[util.EtcdKey][]byte, changedSet map
 	return nil
 }
 
-// MultiDatePatch represents an update to many keys
-type MultiDatePatch func(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error
+// MultiDataPatch represents an update to many keys
+type MultiDataPatch func(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error
 
 // Patch implements the DataPatch interface
-func (m MultiDatePatch) Patch(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error {
+func (m MultiDataPatch) Patch(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error {
 	return m(valueMap, changedSet)
 }

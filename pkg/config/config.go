@@ -23,16 +23,13 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/config/outdated"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/pkg/config/outdated"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
 
 const (
-	// NewReplicaImpl is true if we using new processor
-	// new owner should be also switched on after it implemented
-	NewReplicaImpl = true
 	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
 	DefaultSortDir = "/tmp/sorter"
 )
