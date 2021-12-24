@@ -28,8 +28,7 @@ import {
   useDmapiDeleteSourceMutation,
   useDmapiGetSourceListQuery,
 } from '~/models/source'
-
-const { confirm } = Modal
+import i18n from '~/i18n'
 
 const SourceList: React.FC = () => {
   const [t] = useTranslation()
@@ -56,6 +55,9 @@ const SourceList: React.FC = () => {
           message.success({ content: t('saved'), key, duration: 6 })
           setShowModal(false)
         })
+        .catch(() => {
+          message.destroy(key)
+        })
     },
     [currentSource]
   )
@@ -63,10 +65,10 @@ const SourceList: React.FC = () => {
   const handleRemoveSource = useCallback(async () => {
     const key = 'removeSource-' + Date.now()
 
-    confirm({
+    Modal.confirm({
       title: (
         <span>
-          {t('confirm to delete')}
+          {t('confirm to delete source')}
           <strong>{selectedSources.join(', ')}</strong>?
         </span>
       ),
@@ -118,14 +120,15 @@ const SourceList: React.FC = () => {
       render(data: Source) {
         return (
           <Space>
-            <a
+            <Button
+              type="link"
               onClick={() => {
                 setCurrentSource(data)
                 setShowModal(true)
               }}
             >
               {t('edit')}
-            </a>
+            </Button>
           </Space>
         )
       },
@@ -160,7 +163,7 @@ const SourceList: React.FC = () => {
               {t('import')}
             </Button>
             {selectedSources.length > 0 && (
-              <Button onClick={handleRemoveSource} danger type="primary">
+              <Button onClick={handleRemoveSource} danger className="ml-4">
                 {t('delete')}
               </Button>
             )}
@@ -205,6 +208,11 @@ const SourceList: React.FC = () => {
       </Modal>
     </div>
   )
+}
+
+export const meta = {
+  title: () => i18n.t('source list'),
+  index: 1,
 }
 
 export default SourceList
