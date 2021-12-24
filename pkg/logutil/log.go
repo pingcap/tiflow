@@ -48,6 +48,8 @@ type Config struct {
 	FileMaxDays int `toml:"max-days" json:"max-days"`
 	// Maximum number of old log files to retain.
 	FileMaxBackups int `toml:"max-backups" json:"max-backups"`
+	// ZapInternalErrOutput specify where the internal error of zap logger should be send to.
+	ZapInternalErrOutput string `toml:"error-output" json:"error-output"`
 }
 
 // Adjust adjusts config
@@ -91,6 +93,7 @@ func InitLogger(cfg *Config) error {
 			MaxDays:    cfg.FileMaxDays,
 			MaxBackups: cfg.FileMaxBackups,
 		},
+		ErrorOutputPath: cfg.ZapInternalErrOutput,
 	}
 
 	var lg *zap.Logger

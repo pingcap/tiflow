@@ -2629,7 +2629,7 @@ func (s *clientSuite) TestOutOfRegionRangeEvent(c *check.C) {
 }
 
 // TestResolveLockNoCandidate tests the resolved ts manager can work normally
-// when no region exceeds reslove lock interval, that is what candidate means.
+// when no region exceeds resolve lock interval, that is what candidate means.
 func (s *clientSuite) TestResolveLockNoCandidate(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
@@ -2701,7 +2701,7 @@ func (s *clientSuite) TestResolveLockNoCandidate(c *check.C) {
 			case event := <-eventCh:
 				c.Assert(event.Resolved, check.NotNil)
 			case <-time.After(time.Second):
-				c.Error("resovled event not received")
+				c.Error("resolved event not received")
 			}
 			// will sleep 6s totally, to ensure resolve lock fired once
 			time.Sleep(time.Second)
