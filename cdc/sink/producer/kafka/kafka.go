@@ -402,6 +402,7 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 		}
 	}()
 
+<<<<<<< HEAD
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -495,6 +496,9 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, protocol codec.Pr
 	}
 
 	if err := topicPreProcess(topic, protocol, config, cfg); err != nil {
+=======
+	if err := validateMaxMessageBytesAndCreateTopic(admin, topic, config, cfg); err != nil {
+>>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -563,6 +567,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
+<<<<<<< HEAD
 // NewSaramaConfig return the default config and set the according version and metrics
 func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config := sarama.NewConfig()
@@ -570,6 +575,42 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	version, err := sarama.ParseKafkaVersion(c.Version)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
+=======
+func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config) error {
+	topics, err := admin.ListTopics()
+	if err != nil {
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	info, exists := topics[topic]
+	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
+	if exists {
+		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
+		topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
+
+		if topicMaxMessageBytes < config.MaxMessageBytes {
+			log.Warn("topic's `max.message.bytes` less than the user set `max-message-bytes`,"+
+				"use topic's `max.message.bytes` to initialize the Kafka producer",
+				zap.Int("max.message.bytes", topicMaxMessageBytes),
+				zap.Int("max-message-bytes", config.MaxMessageBytes))
+			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
+		}
+
+		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
+		if config.AutoCreate {
+			log.Warn("topic already exist, TiCDC will not create the topic",
+				zap.String("topic", topic), zap.Any("detail", info))
+		}
+
+		if err := config.setPartitionNum(info.NumPartitions); err != nil {
+			return errors.Trace(err)
+		}
+
+		return nil
+>>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 	}
 	var role string
 	if util.IsOwnerFromCtx(ctx) {
@@ -580,7 +621,11 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
+<<<<<<< HEAD
 	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID, c.ClientID)
+=======
+	brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
+>>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -628,10 +673,24 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		config.Producer.Compression = sarama.CompressionNone
 	}
 
+<<<<<<< HEAD
 	// Time out in one minute(120 * 500ms).
 	config.Admin.Retry.Max = 120
 	config.Admin.Retry.Backoff = 500 * time.Millisecond
 	config.Admin.Timeout = 20 * time.Second
+=======
+	// when create the topic, `max.message.bytes` is decided by the broker,
+	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
+	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
+	// broker's `message.max.bytes`.
+	if brokerMessageMaxBytes < config.MaxMessageBytes {
+		log.Warn("broker's `message.max.bytes` less than the user set `max-message-bytes`,"+
+			"use broker's `message.max.bytes` to initialize the Kafka producer",
+			zap.Int("message.max.bytes", brokerMessageMaxBytes),
+			zap.Int("max-message-bytes", config.MaxMessageBytes))
+		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
+	}
+>>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 
 	if c.Credential != nil && len(c.Credential.CAPath) != 0 {
 		config.Net.TLS.Enable = true
