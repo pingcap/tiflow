@@ -47,6 +47,7 @@ var (
 	ErrMasterCampaignLeader         = errors.Normalize("master campaign to be leader failed", errors.RFCCodeText("DFLOW:ErrMasterCampaignLeader"))
 	ErrMasterSessionDone            = errors.Normalize("master session is done", errors.RFCCodeText("DFLOW:ErrMasterSessionDone"))
 	ErrMasterRPCNotForward          = errors.Normalize("server grpc is not forwarded to leader", errors.RFCCodeText("DFLOW:ErrMasterRPCNotForward"))
+	ErrLeaderCtxCanceled            = errors.Normalize("leader context is canceled", errors.RFCCodeText("DFLOW:ErrLeaderCtxCanceled"))
 
 	// master etcd related errors
 	ErrMasterEtcdCreateSessionFail    = errors.Normalize("failed to create Etcd session", errors.RFCCodeText("DFLOW:ErrMasterEtcdCreateSessionFail"))

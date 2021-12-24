@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
@@ -124,8 +125,12 @@ func (e *EtcdElection) doCampaign(ctx context.Context, selfID NodeID, timeout ti
 
 type leaderCtx struct {
 	context.Context
-	sess    *concurrency.Session
-	closeCh chan struct{}
+	sess     *concurrency.Session
+	closeCh  chan struct{}
+	innerErr struct {
+		sync.RWMutex
+		err error
+	}
 }
 
 func newLeaderCtx(parent context.Context, session *concurrency.Session) *leaderCtx {
@@ -149,10 +154,27 @@ func (c *leaderCtx) Done() <-chan struct{} {
 			// the upstream context is canceled
 		case <-c.sess.Done():
 			// the session goes out
+			c.setError(derror.ErrMasterSessionDone.GenWithStackByArgs())
 		case <-c.closeCh:
 			// we voluntarily resigned
+			c.setError(derror.ErrLeaderCtxCanceled.GenWithStackByArgs())
 		}
 		close(doneCh)
 	}()
 	return doneCh
+}
+
+func (c *leaderCtx) Err() error {
+	c.innerErr.RLock()
+	defer c.innerErr.RUnlock()
+	if c.innerErr.err != nil {
+		return c.innerErr.err
+	}
+	return c.Context.Err()
+}
+
+func (c *leaderCtx) setError(err error) {
+	c.innerErr.Lock()
+	defer c.innerErr.Unlock()
+	c.innerErr.err = err
 }

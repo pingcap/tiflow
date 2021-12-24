@@ -100,3 +100,25 @@ func TestEtcdElectionCampaign(t *testing.T) {
 
 // TODO (zixiong) add tests for failure cases
 // We need a mock Etcd client.
+
+func TestLeaderCtxCancelPropagate(t *testing.T) {
+	newClient, closeFn := setUpTest(t)
+	defer closeFn()
+
+	ctx := context.Background()
+	client := newClient()
+	election, err := NewEtcdElection(ctx, client, nil, EtcdElectionConfig{
+		CreateSessionTimeout: 1 * time.Second,
+		TTL:                  5,
+		Prefix:               "/test-election",
+	})
+	require.NoError(t, err)
+
+	nodeID := "node-cancel-propagate"
+	sessCtx, resignFn, err := election.Campaign(ctx, nodeID, time.Second*5)
+	require.NoError(t, err)
+	_, cancel := context.WithCancel(sessCtx)
+	defer cancel()
+	resignFn()
+	require.EqualError(t, sessCtx.Err(), "[DFLOW:ErrMasterSessionDone]master session is done")
+}
