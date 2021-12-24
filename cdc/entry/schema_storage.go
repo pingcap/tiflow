@@ -598,7 +598,7 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if len(job.BinlogInfo.MultipleTableInfo) < len(newTableNames) {
+		if len(job.BinlogInfo.MultipleTableInfos) < len(newTableNames) {
 			err := errors.New("Invalid binlog info for rename tables")
 			return errors.Trace(err)
 		}
@@ -608,7 +608,7 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 				return errors.Trace(err)
 			}
 		}
-		for i, tableInfo := range job.BinlogInfo.MultipleTableInfo {
+		for i, tableInfo := range job.BinlogInfo.MultipleTableInfos {
 			newSchema, ok := s.SchemaByID(newSchemaIDs[i])
 			if !ok {
 				err := errors.New("Can't find schema for rename tables")

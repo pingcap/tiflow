@@ -56,9 +56,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
 	github.com/pingcap/kvproto v0.0.0-20211202065422-a412f7a319c3
 	github.com/pingcap/log v0.0.0-20211207084639-71a2e5860834
-	github.com/pingcap/tidb v1.1.0-beta.0.20211209055157-9f744cdf8266
+	github.com/pingcap/tidb v1.1.0-beta.0.20211224045547-6e6db1fd356e
 	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20211209055157-9f744cdf8266
+	github.com/pingcap/tidb/parser v0.0.0-20211224045547-6e6db1fd356e
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -74,7 +74,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tidwall/gjson v1.9.1
 	github.com/tidwall/sjson v1.2.2
-	github.com/tikv/client-go/v2 v2.0.0-rc.0.20211221041211-e9de5625c45c
+	github.com/tikv/client-go/v2 v2.0.0-rc.0.20211223062159-300275dee63e
 	github.com/tikv/pd v1.1.0-beta.0.20211118054146-02848d2660ee
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
@@ -106,7 +106,3 @@ replace (
 	// we need keep the replacement until go.etcd.io supports the higher version of grpc.
 	google.golang.org/grpc v1.40.0 => google.golang.org/grpc v1.29.1
 )
-
-replace github.com/pingcap/tidb/parser v0.0.0-20211209055157-9f744cdf8266 => github.com/hicqu/tidb/parser v0.0.0-20211222061617-9ed2971fd2d8
-
-replace github.com/pingcap/tidb v1.1.0-beta.0.20211209055157-9f744cdf8266 => github.com/hicqu/tidb v1.1.0-alpha.0.20211222061617-9ed2971fd2d8
