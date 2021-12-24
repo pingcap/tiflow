@@ -144,7 +144,7 @@ func isMySQLError(err error, code uint16) bool {
 	return ok && e.Number == code
 }
 
-const tablesWithOneThread = 10000 / 16
+const tablesWithOneThread = 10000 / 32
 
 var concurrencies = []int{4, 8, 12, 16, 20, 24, 28, 32}
 

@@ -458,3 +458,18 @@ func (t *testDBSuite) TestAddGSetWithPurged(c *C) {
 		c.Assert(originSet, DeepEquals, tc.originGSet)
 	}
 }
+
+func (t *testDBSuite) TestGetMaxConnections(c *C) {
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
+	defer cancel()
+
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+
+	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "151")
+	mock.ExpectQuery(`SHOW VARIABLES LIKE 'max_connections'`).WillReturnRows(rows)
+	maxConnections, err := GetMaxConnections(ctx, db)
+	c.Assert(err, IsNil)
+	c.Assert(maxConnections, Equals, 151)
+	c.Assert(mock.ExpectationsWereMet(), IsNil)
+}

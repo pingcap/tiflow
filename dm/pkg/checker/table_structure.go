@@ -33,6 +33,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 const (
@@ -94,12 +95,19 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 
 	startTime := time.Now()
 	var (
-		concurrency = getConcurrency(len(c.tables))
-		onethread   = len(c.tables) / concurrency
-		optCh       = make(chan *incompatibilityOption, MaxOptions*len(c.tables))
-		errCh       = make(chan error, 1)
-		checkWg     sync.WaitGroup
+		optCh   = make(chan *incompatibilityOption, MaxOptions*len(c.tables))
+		errCh   = make(chan error, 1)
+		checkWg sync.WaitGroup
 	)
+	concurrency := getConcurrency(len(c.tables))
+	maxConnections, err := utils.GetMaxConnections(ctx, c.db)
+	if err != nil {
+		return r, err
+	}
+	if concurrency > maxConnections {
+		concurrency = maxConnections
+	}
+	onethread := len(c.tables) / concurrency
 	defer func() {
 		close(optCh)
 		close(errCh)
@@ -466,6 +474,13 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 
 	for instance, tables := range c.tableMap {
 		concurrency := getConcurrency(len(tables))
+		maxConnections, err := utils.GetMaxConnections(ctx, c.dbs[instance])
+		if err != nil {
+			return r, err
+		}
+		if concurrency > maxConnections {
+			concurrency = maxConnections
+		}
 		onethread := len(tables) / concurrency
 		log.L().Logger.Info("this source have", zap.String("source", instance), zap.Int("concurrency", concurrency), zap.Int("onthread check num", onethread), zap.Int("table num", len(tables)))
 		for i := 0; i < concurrency; i++ {
