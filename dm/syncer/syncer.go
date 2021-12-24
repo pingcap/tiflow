@@ -157,6 +157,8 @@ type Syncer struct {
 	waitXIDJob          atomic.Int64
 	isTransactionEnd    bool
 	waitTransactionLock sync.Mutex
+	noWaitCtx           context.Context // when this cancel, syncer will exit quickly no need to wait transaction end
+	noWaitCancel        context.CancelFunc
 
 	tableRouter     *router.Table
 	binlogFilter    *bf.BinlogEvent
@@ -273,6 +275,10 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	}
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
+
+	noWaitCtx, noWaitCancel := context.WithCancel(context.Background())
+	syncer.noWaitCtx = noWaitCtx
+	syncer.noWaitCancel = noWaitCancel
 	return syncer
 }
 
@@ -564,7 +570,9 @@ func (s *Syncer) reset() {
 	s.waitXIDJob.Store(int64(noWait))
 	s.isTransactionEnd = true
 	s.flushSeq = 0
-
+	noWaitCtx, noWaitCancel := context.WithCancel(context.Background())
+	s.noWaitCtx = noWaitCtx
+	s.noWaitCancel = noWaitCancel
 	switch s.cfg.ShardMode {
 	case config.ShardPessimistic:
 		// every time start to re-sync from resume, we reset status to make it like a fresh syncing
@@ -1385,6 +1393,37 @@ func (s *Syncer) syncDML() {
 	}
 }
 
+func (s *Syncer) waitTransactionEndBeforeExit(ctx, runCtx context.Context, cancel context.CancelFunc) {
+	<-ctx.Done()
+	select {
+	case <-runCtx.Done():
+	default:
+		log.L().Info("received subtask's done")
+
+		s.waitTransactionLock.Lock()
+		if s.isTransactionEnd {
+			s.waitXIDJob.Store(int64(waitComplete))
+			log.L().Info("the last job is transaction end, done directly")
+			cancel()
+			s.waitTransactionLock.Unlock()
+			return
+		}
+		s.waitXIDJob.Store(int64(waiting))
+		s.waitTransactionLock.Unlock()
+
+		select {
+		case <-runCtx.Done():
+			log.L().Info("received syncer's done")
+		case <-s.noWaitCtx.Done():
+			log.L().Info("received no wait ctx done")
+			cancel()
+		case <-time.After(maxPauseOrStopWaitTime):
+			log.L().Info("wait transaction end timeout")
+			cancel()
+		}
+	}
+}
+
 // Run starts running for sync, we should guarantee it can rerun when paused.
 func (s *Syncer) Run(ctx context.Context) (err error) {
 	runCtx, runCancel := context.WithCancel(context.Background())
@@ -1397,33 +1436,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 	}()
 
-	go func() {
-		<-ctx.Done()
-		select {
-		case <-runCtx.Done():
-		default:
-			tctx.L().Info("received subtask's done")
-
-			s.waitTransactionLock.Lock()
-			if s.isTransactionEnd {
-				s.waitXIDJob.Store(int64(waitComplete))
-				tctx.L().Info("the last job is transaction end, done directly")
-				runCancel()
-				s.waitTransactionLock.Unlock()
-				return
-			}
-			s.waitXIDJob.Store(int64(waiting))
-			s.waitTransactionLock.Unlock()
-
-			select {
-			case <-runCtx.Done():
-				tctx.L().Info("received syncer's done")
-			case <-time.After(maxPauseOrStopWaitTime):
-				tctx.L().Info("wait transaction end timeout")
-				runCancel()
-			}
-		}
-	}()
+	// start another goroutine to wait until transaction end.
+	go s.waitTransactionEndBeforeExit(ctx, runCtx, runCancel)
 
 	// some initialization that can't be put in Syncer.Init
 	fresh, err := s.IsFreshTask(runCtx)
@@ -3168,6 +3182,9 @@ func (s *Syncer) Close(graceful bool) {
 		return
 	}
 
+	if !graceful {
+		s.noWaitCancel()
+	}
 	s.stopSync()
 	s.closeDBs()
 
