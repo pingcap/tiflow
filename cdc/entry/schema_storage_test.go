@@ -414,13 +414,13 @@ func TestHandleRenameTables(t *testing.T) {
 		RawArgs:    rawArgs,
 		BinlogInfo: &timodel.HistoryInfo{},
 	}
-	job.BinlogInfo.MultipleTableInfo = append(job.BinlogInfo.MultipleTableInfo,
+	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
 		&timodel.TableInfo{
 			ID:    13,
 			Name:  timodel.NewCIStr("x"),
 			State: timodel.StatePublic,
 		})
-	job.BinlogInfo.MultipleTableInfo = append(job.BinlogInfo.MultipleTableInfo,
+	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
 		&timodel.TableInfo{
 			ID:    14,
 			Name:  timodel.NewCIStr("y"),
