@@ -842,7 +842,7 @@ func (p *processor) pushResolvedTs2Table() {
 	if schemaResolvedTs < resolvedTs {
 		// Do not update barrier ts that is larger than
 		// DDL puller's resolved ts.
-		// When DDL puller stall, resolved events that outputed by sorter
+		// When DDL puller stall, resolved events that outputted by sorter
 		// may pile up in memory, as they have to wait DDL.
 		resolvedTs = schemaResolvedTs
 	}
@@ -919,7 +919,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			}
 			markTableID = tableInfo.ID
 			return nil
-		}, retry.WithBackoffMaxDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
+		}, retry.WithBackoffBaseDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
