@@ -59,7 +59,7 @@ type Request struct {
 	backoffMaxDelay  time.Duration
 	maxRetries       int64
 
-	//output
+	// output
 	err  error
 	body io.Reader
 }
