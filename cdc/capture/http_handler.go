@@ -585,19 +585,19 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 		return
 	}
 	position, exist := positions[captureID]
-	// Note: for the case that no tables are attached to a newly created changefeed,
-	//       we just do not record any error and return
-	if !exist {
-		return
-	}
 
-	processorDetail := &model.ProcessorDetail{CheckPointTs: position.CheckPointTs, ResolvedTs: position.ResolvedTs, Error: position.Error}
-	tables := make([]int64, 0)
-	for tableID := range status.Tables {
-		tables = append(tables, tableID)
+	// Note: for the case that no tables are attached to a newly created changefeed,
+	//       we just do not report an error.
+	var processorDetail model.ProcessorDetail
+	if exist {
+		processorDetail = model.ProcessorDetail{CheckPointTs: position.CheckPointTs, ResolvedTs: position.ResolvedTs, Error: position.Error}
+		tables := make([]int64, 0)
+		for tableID := range status.Tables {
+			tables = append(tables, tableID)
+		}
+		processorDetail.Tables = tables
 	}
-	processorDetail.Tables = tables
-	c.IndentedJSON(http.StatusOK, processorDetail)
+	c.IndentedJSON(http.StatusOK, &processorDetail)
 }
 
 // ListProcessor lists all processors in the TiCDC cluster
