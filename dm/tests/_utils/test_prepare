@@ -219,7 +219,9 @@ function run_sql_tidb() {
 function run_sql_tidb_with_retry() {
     rc=0
     for ((k=1; k<11; k++)); do
+        set +e
         run_sql_tidb "$1"
+        set -e
         if grep -Fq "$2" "$TEST_DIR/sql_res.$TEST_NAME.txt"; then
             rc=1
             break
