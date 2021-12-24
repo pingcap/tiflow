@@ -20,10 +20,10 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var _ = Suite(&testLocationSuite{})
