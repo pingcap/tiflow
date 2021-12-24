@@ -203,6 +203,8 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 				WriteL0PauseTrigger:         math.MaxInt32,
 				CompactionL0Trigger:         160,
 				CompactionDeletionThreshold: 160000,
+				IteratorMaxAliveDuration:    10000,
+				IteratorSlowReadDuration:    256,
 				CleanupSpeedLimit:           10000,
 			},
 			// We expect the default configuration here.
@@ -340,6 +342,8 @@ server-worker-pool-size = 16
 				WriteL0SlowdownTrigger:      12,
 				WriteL0PauseTrigger:         13,
 				CleanupSpeedLimit:           14,
+				IteratorMaxAliveDuration:    10000,
+				IteratorSlowReadDuration:    256,
 				CompactionDeletionThreshold: 15,
 			},
 			Messages: &config.MessagesConfig{
@@ -475,6 +479,8 @@ cert-allowed-cn = ["dd","ee"]
 				WriteL0PauseTrigger:         math.MaxInt32,
 				CompactionL0Trigger:         160,
 				CompactionDeletionThreshold: 160000,
+				IteratorMaxAliveDuration:    10000,
+				IteratorSlowReadDuration:    256,
 				CleanupSpeedLimit:           10000,
 			},
 			// We expect the default configuration here.

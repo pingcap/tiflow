@@ -102,12 +102,12 @@ var defaultServerConfig = &ServerConfig{
 	Debug: &DebugConfig{
 		EnableTableActor: true,
 		// Default leveldb sorter config
-		EnableDBSorter: true,
+		EnableDBSorter: false,
 		DB: &DBConfig{
-			Count: 8,
+			Count: 16,
 			// Following configs are optimized for write throughput.
 			// Users should not change them.
-			Concurrency:                 128,
+			Concurrency:                 256,
 			MaxOpenFiles:                10000,
 			BlockSize:                   65536,
 			BlockCacheSize:              4294967296,
