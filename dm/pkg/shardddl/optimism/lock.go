@@ -103,7 +103,8 @@ func NewLock(cli *clientv3.Client, id, task, downSchema, downTable string, joine
 	}
 	l.addTables(tts)
 	metrics.ReportDDLPending(task, metrics.DDLPendingNone, metrics.DDLPendingSynced)
-
+	// pre join because tables may have different schema at the beginning
+	l.joinTable()
 	return l
 }
 
@@ -135,6 +136,32 @@ func (l *Lock) FetchTableInfos(task, source, schema, table string) (*model.Table
 		return nil, err
 	}
 	return ti, nil
+}
+
+// joinTable join tables for a lock and update l.joined.
+func (l *Lock) joinTable() {
+	var (
+		joined     = l.joined
+		firstTable = true
+	)
+	for _, schemaTables := range l.tables {
+		for _, tables := range schemaTables {
+			for _, ti := range tables {
+				if firstTable {
+					joined = ti
+					firstTable = false
+				} else {
+					newJoined, err := joined.Join(ti)
+					if err != nil {
+						log.L().Error(fmt.Sprintf("fail to join table info %s with %s", joined, ti), zap.String("lockID", l.ID), log.ShortError(err))
+						return
+					}
+					joined = newJoined
+				}
+			}
+		}
+	}
+	l.joined = joined
 }
 
 // TrySync tries to sync the lock, re-entrant.
