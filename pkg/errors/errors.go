@@ -151,6 +151,7 @@ var (
 	ErrSnapshotTableNotFound   = errors.Normalize("table %d not found in schema snapshot", errors.RFCCodeText("CDC:ErrSnapshotTableNotFound"))
 	ErrSnapshotSchemaExists    = errors.Normalize("schema %s(%d) already exists", errors.RFCCodeText("CDC:ErrSnapshotSchemaExists"))
 	ErrSnapshotTableExists     = errors.Normalize("table %s.%s already exists", errors.RFCCodeText("CDC:ErrSnapshotTableExists"))
+	ErrInvalidDDLJob           = errors.Normalize("invalid ddl job(%d)", errors.RFCCodeText("CDC:ErrInvalidDDLJob"))
 
 	// puller related errors
 	ErrBufferReachLimit = errors.Normalize("puller mem buffer reach size limit", errors.RFCCodeText("CDC:ErrBufferReachLimit"))
