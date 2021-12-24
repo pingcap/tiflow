@@ -22,7 +22,7 @@ import (
 )
 
 // DefaultMaxMessageBytes sets the default value for max-message-bytes
-var DefaultMaxMessageBytes int = 10 * 1024 * 1024 // 10M
+const DefaultMaxMessageBytes  = 10 * 1024 * 1024 // 10M
 
 // ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
 var ForceEnableOldValueProtocols = []string{
