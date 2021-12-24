@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 
