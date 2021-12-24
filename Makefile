@@ -197,7 +197,7 @@ else
 endif
 
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen
+	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs tests
 
 data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
