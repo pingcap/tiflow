@@ -21,13 +21,14 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	onlineddl "github.com/pingcap/ticdc/dm/syncer/online-ddl-tools"
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+
+	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 )
 
 // AutoIncrementKeyChecking is an identification for auto increment key checking.

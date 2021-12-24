@@ -138,7 +138,8 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 
 	checker := NewTablesChecker(db,
 		&dbutil.DBConfig{},
-		map[string][]string{"test-db": {"test-table-1"}})
+		map[string][]string{"test-db": {"test-table-1"}},
+		nil)
 	result := checker.Check(ctx)
 
 	c.Assert(result.State, tc.Equals, StateSuccess)
