@@ -437,6 +437,11 @@ func TestHandleRenameTables(t *testing.T) {
 	require.False(t, ok)
 	_, ok = snap.TableByID(12)
 	require.False(t, ok)
+
+	t1 := model.TableName{Schema: "db_2", Table: "x"}
+	t2 := model.TableName{Schema: "db_1", Table: "y"}
+	require.Equal(t, snap.tableNameToID[t1], int64(13))
+	require.Equal(t, snap.tableNameToID[t2], int64(14))
 }
 
 func testDoDDLAndCheck(t *testing.T, snap *schemaSnapshot, job *timodel.Job, isErr bool) {
