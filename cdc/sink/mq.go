@@ -15,6 +15,7 @@ package sink
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -68,9 +69,10 @@ func newMqSink(
 ) (*mqSink, error) {
 	var protocol codec.Protocol
 	protocol.FromString(config.Sink.Protocol)
-	if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
-		log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
+	if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON || protocol == codec.ProtocolMaxwell) && !config.EnableOldValue {
+		log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
+			"Please update changefeed config", protocol.String()))
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", protocol.String())))
 	}
 
 	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(protocol, credential, opts)
