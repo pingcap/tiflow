@@ -256,7 +256,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 				!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
 				// Do not send resolved ts events that is larger than
 				// barrier ts.
-				// When DDL puller stall, resolved events that outputed by
+				// When DDL puller stall, resolved events that outputted by
 				// sorter may pile up in memory, as they have to wait DDL.
 				//
 				// Disabled if redolog is on, it requires sink reports

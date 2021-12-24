@@ -57,7 +57,7 @@ func (o *cyclicCreateMarktablesOptions) getUpstreamCredential() *security.Creden
 // flags related to template printing to it.
 func (o *cyclicCreateMarktablesOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "Start ts of changefeed")
-	cmd.PersistentFlags().StringVar(&o.cyclicUpstreamDSN, "cyclic-upstream-dsn", "", "(Expremental) Upsteam TiDB DSN in the form of [user[:password]@][net[(addr)]]/")
+	cmd.PersistentFlags().StringVar(&o.cyclicUpstreamDSN, "cyclic-upstream-dsn", "", "(Expremental) Upstream TiDB DSN in the form of [user[:password]@][net[(addr)]]/")
 	cmd.PersistentFlags().StringVar(&o.upstreamSslCaPath, "cyclic-upstream-ssl-ca", "", "CA certificate path for TLS connection")
 	cmd.PersistentFlags().StringVar(&o.upstreamSslCertPath, "cyclic-upstream-ssl-cert", "", "Certificate path for TLS connection")
 	cmd.PersistentFlags().StringVar(&o.upstreamSslKeyPath, "cyclic-upstream-ssl-key", "", "Private key path for TLS connection")
