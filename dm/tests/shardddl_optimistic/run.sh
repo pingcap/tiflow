@@ -124,7 +124,7 @@ function DM_DIFFERENT_SCHEMA_INCREMENTAL_CASE() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $WORK_DIR/task.yaml --remove-meta"
 
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"Column count doesn't match" 2
 
