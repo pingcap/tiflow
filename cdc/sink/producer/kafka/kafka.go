@@ -441,21 +441,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	if config.PartitionNum < 0 {
 		return nil, cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(config.PartitionNum)
 	}
-<<<<<<< HEAD
 	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
-=======
-	defer func() {
-		if err := admin.Close(); err != nil {
-			log.Warn("close kafka cluster admin failed", zap.Error(err))
-		}
-	}()
-
-	if err := validateMaxMessageBytesAndCreateTopic(admin, topic, config, cfg); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	asyncClient, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -528,106 +514,19 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-<<<<<<< HEAD
 // NewSaramaConfig return the default config and set the according version and metrics
 func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
 	version, err := sarama.ParseKafkaVersion(c.Version)
-=======
-func validateMaxMessageBytesAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config) error {
-	topics, err := admin.ListTopics()
-	if err != nil {
-		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	info, exists := topics[topic]
-	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
-	if exists {
-		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
-		topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-		}
-
-		if topicMaxMessageBytes < config.MaxMessageBytes {
-			log.Warn("topic's `max.message.bytes` less than the user set `max-message-bytes`,"+
-				"use topic's `max.message.bytes` to initialize the Kafka producer",
-				zap.Int("max.message.bytes", topicMaxMessageBytes),
-				zap.Int("max-message-bytes", config.MaxMessageBytes))
-			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
-		}
-
-		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
-		if config.AutoCreate {
-			log.Warn("topic already exist, TiCDC will not create the topic",
-				zap.String("topic", topic), zap.Any("detail", info))
-		}
-
-		if err := config.setPartitionNum(info.NumPartitions); err != nil {
-			return errors.Trace(err)
-		}
-
-		return nil
-	}
-
-	if !config.AutoCreate {
-		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
-	}
-
-	brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
 	}
-<<<<<<< HEAD
 	var role string
 	if util.IsOwnerFromCtx(ctx) {
 		role = "owner"
 	} else {
 		role = "processor"
-=======
-
-	// when create the topic, `max.message.bytes` is decided by the broker,
-	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
-	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
-	// broker's `message.max.bytes`.
-	if brokerMessageMaxBytes < config.MaxMessageBytes {
-		log.Warn("broker's `message.max.bytes` less than the user set `max-message-bytes`,"+
-			"use broker's `message.max.bytes` to initialize the Kafka producer",
-			zap.Int("message.max.bytes", brokerMessageMaxBytes),
-			zap.Int("max-message-bytes", config.MaxMessageBytes))
-		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
-	}
-
-	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
-	if config.PartitionNum == 0 {
-		config.PartitionNum = defaultPartitionNum
-		log.Warn("partition-num is not set, use the default partition count",
-			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
-	}
-
-	err = admin.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     config.PartitionNum,
-		ReplicationFactor: config.ReplicationFactor,
-	}, false)
-	// TODO identify the cause of "Topic with this name already exists"
-	if err != nil && !strings.Contains(err.Error(), "already exists") {
-		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	log.Info("TiCDC create the topic",
-		zap.Int32("partition-num", config.PartitionNum),
-		zap.Int16("replication-factor", config.ReplicationFactor))
-
-	return nil
-}
-
-func getBrokerMessageMaxBytes(admin kafka.ClusterAdminClient) (int, error) {
-	_, controllerID, err := admin.DescribeCluster()
-	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 	}
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
