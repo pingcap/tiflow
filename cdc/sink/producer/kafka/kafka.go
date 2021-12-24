@@ -459,7 +459,7 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
 	}
 
-	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
+	// topic not created yet, and user does not specify the `partition-num` in the sink uri.
 	if config.PartitionNum == 0 {
 		config.PartitionNum = defaultPartitionNum
 		log.Warn("partition-num is not set, use the default partition count",
