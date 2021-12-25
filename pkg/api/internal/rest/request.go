@@ -97,7 +97,7 @@ func NewRequestWithClient(base *url.URL, versionedAPIPath string, client *httput
 	})
 }
 
-// WithPrefix adds segments to the begining of request url.
+// WithPrefix adds segments to the beginning of request url.
 func (r *Request) WithPrefix(segments ...string) *Request {
 	if r.err != nil {
 		return r
