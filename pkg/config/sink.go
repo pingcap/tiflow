@@ -13,27 +13,9 @@
 
 package config
 
-<<<<<<< HEAD
-=======
-import (
-	"fmt"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-)
-
 // DefaultMaxMessageBytes sets the default value for max-message-bytes
 const DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
 
-// ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
-var ForceEnableOldValueProtocols = []string{
-	ProtocolCanal.String(),
-	ProtocolCanalJSON.String(),
-	ProtocolMaxwell.String(),
-}
-
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
 	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers"`
