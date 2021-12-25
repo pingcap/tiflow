@@ -2224,21 +2224,30 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "max(ticdc_owner_checkpoint_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed) > 0",
-              "format": "time_series",
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{changefeed}}",
-              "refId": "A"
-            },
-            {
               "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"})",
               "format": "time_series",
               "hide": false,
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "approximate current time (s)",
+              "refId": "A"
+            },
+            {
+              "expr": "max(ticdc_owner_checkpoint_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed) > 0",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}",
               "refId": "B"
+            },
+            {
+              "expr": "max(ticdc_owner_resolved_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed) > 0",
+              "format": "time_series",
+              "hide": true,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}-resolvedts",
+              "refId": "C"
             }
           ],
           "thresholds": [],
@@ -2530,12 +2539,20 @@
               "refId": "B"
             },
             {
+              "expr": "max(ticdc_owner_resolved_ts_lag{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}-resolvedts",
+              "refId": "C"
+            },
+            {
               "expr": "sum(ticdc_processor_resolved_ts_lag{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture,changefeed)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{changefeed}}-{{capture}}-resolvedts",
-              "refId": "C"
+              "refId": "D"
             }
           ],
           "thresholds": [],
