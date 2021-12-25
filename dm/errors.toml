@@ -3202,6 +3202,12 @@ description = ""
 workaround = "Please use `stop-relay` without worker name."
 tags = ["internal", "low"]
 
+[error.DM-scheduler-46032]
+message = "failed to auto pause task when transfer-source"
+description = ""
+workaround = "Please pause task by `dmctl pause-task`."
+tags = ["internal", "low"]
+
 [error.DM-dmctl-48001]
 message = "can not create grpc connection"
 description = ""

@@ -687,7 +687,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 				return terror.ErrSchedulerRequireRunningTaskInSyncUnit.Generate(runningTasks, source)
 			}
 		}
-		// pause this running tasks
+		// pause running tasks
 		if batchPauseErr := s.batchOperateTaskOnWorker(ctx, oldWorker, runningTasks, source, pb.Stage_Paused, true); batchPauseErr != nil {
 			return batchPauseErr
 		}
@@ -747,6 +747,16 @@ WaitLoop:
 		if err != nil {
 			return terror.Annotatef(err, "failed to query worker: %s status", worker.baseInfo.Name)
 		}
+
+		failpoint.Inject("batchOperateTaskOnWorkerMustRetry", func(v failpoint.Value) {
+			if maxRetryNum != v.(int) {
+				resp.QueryStatus.SubTaskStatus[0].Stage = pb.Stage_InvalidStage
+				log.L().Info("batchOperateTaskOnWorkerMustRetry failpoint triggered", zap.Int("maxRetryNum", maxRetryNum))
+			} else {
+				log.L().Info("batchOperateTaskOnWorkerMustRetry passed", zap.Int("maxRetryNum", maxRetryNum))
+			}
+		})
+
 		for _, status := range resp.QueryStatus.GetSubTaskStatus() {
 			if status.Stage != stage {
 				// NOTE: the defaultRPCTimeout is 10m, use 1s * retry times to increase the waiting time
@@ -759,12 +769,16 @@ WaitLoop:
 					zap.String("want stage", stage.String()),
 					zap.String("current stage", status.Stage.String()),
 				)
+				failpoint.Inject("skipBatchOperateTaskOnWorkerSleep", func(_ failpoint.Value) {
+					failpoint.Continue("WaitLoop")
+				})
 				time.Sleep(sleepTime)
-				goto WaitLoop
+				continue WaitLoop
 			}
 		}
+		return nil // all task are in expected stage
 	}
-	return nil
+	return terror.ErrSchedulerPauseTaskForTransferSource // failed to pause tasks, need user to handle it manually
 }
 
 // AcquireSubtaskLatch tries acquiring a latch for subtask name.
