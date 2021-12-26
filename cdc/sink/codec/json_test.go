@@ -20,12 +20,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-<<<<<<< HEAD
-	"github.com/pingcap/parser/mysql"
-=======
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/parser/mysql"
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
