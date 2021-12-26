@@ -491,7 +491,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, e
 	if err != nil {
 		return nil, err
 	}
-
+	log.Info("for test")
 	if err := topicPreProcess(topic, config, cfg); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
