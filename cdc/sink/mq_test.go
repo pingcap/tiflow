@@ -69,7 +69,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
-	//c.Assert(err, check.IsNil)
+	c.Assert(err, check.IsNil)
 
 	encoder := sink.newEncoder()
 	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
@@ -172,7 +172,7 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
-	//c.Assert(err, check.IsNil)
+	c.Assert(err, check.IsNil)
 
 	row := &model.RowChangedEvent{
 		Table: &model.TableName{
