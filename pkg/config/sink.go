@@ -21,6 +21,16 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+// DefaultMaxMessageBytes sets the default value for max-message-bytes
+const DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
+
+// ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
+var ForceEnableOldValueProtocols = []string{
+	ProtocolCanal.String(),
+	ProtocolCanalJSON.String(),
+	ProtocolMaxwell.String(),
+}
+
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
 	DispatchRules   []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
@@ -40,14 +50,14 @@ type ColumnSelector struct {
 }
 
 func (s *SinkConfig) validate(enableOldValue bool) error {
-	protocol := s.Protocol
 	if !enableOldValue {
-		switch protocol {
-		case ProtocolCanal.String(), ProtocolCanalJSON.String(), ProtocolMaxwell.String():
-			log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
-				"Please update changefeed config", protocol))
-			return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-				errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", protocol)))
+		for _, protocolStr := range ForceEnableOldValueProtocols {
+			if protocolStr == s.Protocol {
+				log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
+					"Please update changefeed config", s.Protocol))
+				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
+					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", s.Protocol)))
+			}
 		}
 	}
 

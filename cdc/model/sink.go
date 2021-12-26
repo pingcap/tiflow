@@ -272,6 +272,16 @@ func (r *RowChangedEvent) IsDelete() bool {
 	return len(r.PreColumns) != 0 && len(r.Columns) == 0
 }
 
+// IsInsert returns true if the row is an insert event
+func (r *RowChangedEvent) IsInsert() bool {
+	return len(r.PreColumns) == 0 && len(r.Columns) != 0
+}
+
+// IsUpdate returns true if the row is an update event
+func (r *RowChangedEvent) IsUpdate() bool {
+	return len(r.PreColumns) != 0 && len(r.Columns) != 0
+}
+
 // PrimaryKeyColumns returns the column(s) corresponding to the handle key(s)
 func (r *RowChangedEvent) PrimaryKeyColumns() []*Column {
 	pkeyCols := make([]*Column, 0)
@@ -455,7 +465,17 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 	d.CommitTs = job.BinlogInfo.FinishedTS
 	d.Query = job.Query
 	d.Type = job.Type
+	d.fillPreTableInfo(preTableInfo)
 
+	switch d.Type {
+	case model.ActionRenameTables:
+		// DDLs update multiple target tables, in which case `TableInfo` isn't meaningful.
+		// So we can skip to fill TableInfo for the event.
+		return
+	default:
+	}
+
+	// Fill TableInfo for the event.
 	if job.BinlogInfo.TableInfo != nil {
 		tableName := job.BinlogInfo.TableInfo.Name.O
 		tableInfo := job.BinlogInfo.TableInfo
@@ -469,7 +489,6 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 		d.TableInfo.Table = tableName
 		d.TableInfo.TableID = job.TableID
 	}
-	d.fillPreTableInfo(preTableInfo)
 }
 
 func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {

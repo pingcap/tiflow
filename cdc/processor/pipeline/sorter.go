@@ -79,6 +79,7 @@ func newSorterNode(
 		flowController: flowController,
 		mounter:        mounter,
 		resolvedTs:     startTs,
+		barrierTs:      startTs,
 		replConfig:     replConfig,
 	}
 }
@@ -101,7 +102,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			startTs := ctx.ChangefeedVars().Info.StartTs
 			actorID := ctx.GlobalVars().SorterSystem.ActorID(uint64(n.tableID))
 			router := ctx.GlobalVars().SorterSystem.Router()
-			levelSorter := leveldb.NewLevelDBSorter(ctx, n.tableID, startTs, router, actorID)
+			levelSorter := leveldb.NewSorter(ctx, n.tableID, startTs, router, actorID)
 			n.cleanID = actorID
 			n.cleanTask = levelSorter.CleanupTask()
 			n.cleanRouter = ctx.GlobalVars().SorterSystem.CleanerRouter()
@@ -255,7 +256,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 				!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
 				// Do not send resolved ts events that is larger than
 				// barrier ts.
-				// When DDL puller stall, resolved events that outputed by
+				// When DDL puller stall, resolved events that outputted by
 				// sorter may pile up in memory, as they have to wait DDL.
 				//
 				// Disabled if redolog is on, it requires sink reports

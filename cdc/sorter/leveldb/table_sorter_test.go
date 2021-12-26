@@ -31,15 +31,41 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-func newTestLeveldbSorter(
+func newTestSorter(
 	ctx context.Context, capacity int,
 ) (*Sorter, actor.Mailbox) {
 	id := actor.ID(1)
 	router := actor.NewRouter("teet")
 	mb := actor.NewMailbox(1, capacity)
 	router.InsertMailbox4Test(id, mb)
-	ls := NewLevelDBSorter(ctx, 1, 1, router, id)
+	ls := NewSorter(ctx, 1, 1, router, id)
 	return ls, mb
+}
+
+func TestInputOutOfOrder(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Poll twice.
+	capacity := 2
+	require.Greater(t, batchReceiveEventSize, capacity)
+	ls, _ := newTestSorter(ctx, capacity)
+
+	ls.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, 2))
+	ls.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, 3))
+	require.Nil(t, ls.poll(ctx, &pollState{
+		eventsBuf: make([]*model.PolymorphicEvent, 1),
+		outputBuf: newOutputBuffer(1),
+	}))
+	require.EqualValues(t, model.NewResolvedPolymorphicEvent(0, 3), <-ls.Output())
+
+	ls.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, 2))
+	require.Nil(t, ls.poll(ctx, &pollState{
+		eventsBuf: make([]*model.PolymorphicEvent, 1),
+		outputBuf: newOutputBuffer(1),
+	}))
 }
 
 func TestWaitInput(t *testing.T) {
@@ -53,7 +79,7 @@ func TestWaitInput(t *testing.T) {
 
 	capacity := 8
 	require.Greater(t, batchReceiveEventSize, capacity)
-	ls, _ := newTestLeveldbSorter(ctx, capacity)
+	ls, _ := newTestSorter(ctx, capacity)
 	// Nonbuffered channel is unavailable during the test.
 	ls.outputCh = make(chan *model.PolymorphicEvent)
 
@@ -158,7 +184,7 @@ func TestWaitOutput(t *testing.T) {
 
 	capacity := 4
 	require.Greater(t, batchReceiveEventSize, capacity)
-	ls, _ := newTestLeveldbSorter(ctx, capacity)
+	ls, _ := newTestSorter(ctx, capacity)
 
 	eventsBuf := make([]*model.PolymorphicEvent, batchReceiveEventSize)
 
@@ -191,7 +217,7 @@ func TestAsyncWrite(t *testing.T) {
 
 	capacity := 4
 	require.Greater(t, batchReceiveEventSize, capacity)
-	ls, mb := newTestLeveldbSorter(ctx, capacity)
+	ls, mb := newTestSorter(ctx, capacity)
 
 	cases := []struct {
 		events     []*model.PolymorphicEvent
@@ -299,7 +325,7 @@ func TestOutput(t *testing.T) {
 	defer cancel()
 
 	capacity := 4
-	ls, _ := newTestLeveldbSorter(ctx, capacity)
+	ls, _ := newTestSorter(ctx, capacity)
 
 	ls.outputCh = make(chan *model.PolymorphicEvent, 1)
 	ok := ls.output(&model.PolymorphicEvent{CRTs: 1})
@@ -326,7 +352,7 @@ func TestOutputBufferedResolvedEvents(t *testing.T) {
 	defer cancel()
 
 	capacity := 4
-	ls, _ := newTestLeveldbSorter(ctx, capacity)
+	ls, _ := newTestSorter(ctx, capacity)
 
 	buf := newOutputBuffer(capacity)
 
@@ -534,7 +560,7 @@ func TestOutputIterEvents(t *testing.T) {
 	defer cancel()
 
 	capacity := 4
-	ls, _ := newTestLeveldbSorter(ctx, capacity)
+	ls, _ := newTestSorter(ctx, capacity)
 
 	// Prepare data, 3 txns, 3 events for each.
 	// CRTs 2, StartTs 1, keys (0|1|2)
@@ -702,7 +728,7 @@ func TestPoll(t *testing.T) {
 	defer cancel()
 
 	capacity := 4
-	ls, mb := newTestLeveldbSorter(ctx, capacity)
+	ls, mb := newTestSorter(ctx, capacity)
 
 	// Prepare data, 3 txns, 3 events for each.
 	// CRTs 2, StartTs 1, keys (0|1|2)
@@ -766,7 +792,7 @@ func TestPoll(t *testing.T) {
 			expectMaxResolvedTs: 2,
 			expectExhaustedRTs:  2,
 		},
-		// exhaustedResolvedTs must advance if all resolved events are outputed.
+		// exhaustedResolvedTs must advance if all resolved events are outputted.
 		// Output: CRTs 2, StartTs 1, keys (0|1|2)
 		{
 			inputEvents: []*model.PolymorphicEvent{
@@ -941,7 +967,7 @@ func TestTryAddEntry(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	capacity := 1
-	ls, _ := newTestLeveldbSorter(ctx, capacity)
+	ls, _ := newTestSorter(ctx, capacity)
 
 	resolvedTs1 := model.NewResolvedPolymorphicEvent(0, 1)
 	sent, err := ls.TryAddEntry(ctx, resolvedTs1)
