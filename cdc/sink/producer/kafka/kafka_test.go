@@ -287,6 +287,13 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.Background()
+	// Test default values.
+	defaultConfig := NewConfig()
+	c.Assert(defaultConfig.MaxMessageBytes, check.Equals, 10*1024*1024)
+	c.Assert(defaultConfig.ReplicationFactor, check.Equals, int16(1))
+	c.Assert(defaultConfig.Compression, check.Equals, "none")
+	c.Assert(defaultConfig.AutoCreate, check.Equals, true)
+	// Exception testing
 	config := NewConfig()
 	config.Version = "invalid"
 	_, err := newSaramaConfigImpl(ctx, config)
