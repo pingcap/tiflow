@@ -387,7 +387,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
-func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config, opts map[string]string) error {
+func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) error {
 	// FIXME: find a way to remove this failpoint for workload the unit test
 	failpoint.Inject("SkipTopicAutoCreate", func() {
 		failpoint.Return(nil)
@@ -423,7 +423,6 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config, 
 				zap.Int("max-message-bytes", config.MaxMessageBytes))
 			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
 		}
-		opts["max-message-bytes"] = strconv.Itoa(saramaConfig.Producer.MaxMessageBytes)
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
 		if config.AutoCreate {
@@ -459,7 +458,6 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config, 
 			zap.Int("max-message-bytes", config.MaxMessageBytes))
 		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
 	}
-	opts["max-message-bytes"] = strconv.Itoa(saramaConfig.Producer.MaxMessageBytes)
 
 	// topic not created yet, and user does not specify the `partition-num` in the sink uri.
 	if config.PartitionNum == 0 {
@@ -494,9 +492,10 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		return nil, err
 	}
 
-	if err := topicPreProcess(topic, config, cfg, opts); err != nil {
+	if err := topicPreProcess(topic, config, cfg); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+	opts["max-message-bytes"] = strconv.Itoa(cfg.Producer.MaxMessageBytes)
 
 	asyncClient, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)
 	if err != nil {
