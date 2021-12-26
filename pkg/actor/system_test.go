@@ -220,7 +220,7 @@ func TestActorSendReceive(t *testing.T) {
 		t.Fatal("Timed out")
 	}
 
-	wait(t, time.Second, func() {
+	wait(t, 5*time.Second, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -257,7 +257,7 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	wait(t, time.Second, func() {
+	wait(t, 5*time.Second, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -302,7 +302,7 @@ func TestSystemStopCancelActors(t *testing.T) {
 	// Do not receive ch.
 	_ = ch
 
-	wait(t, time.Second, func() {
+	wait(t, 5*time.Second, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -354,7 +354,7 @@ func TestActorManyMessageOneSchedule(t *testing.T) {
 		}
 	}
 
-	wait(t, time.Second, func() {
+	wait(t, 5*time.Second, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -418,7 +418,7 @@ func TestConcurrentPollSameActor(t *testing.T) {
 		case acc := <-ch:
 			require.Equal(t, total, acc)
 		case <-timer:
-			wait(t, time.Second, func() {
+			wait(t, 5*time.Second, func() {
 				err := sys.Stop()
 				require.Nil(t, err)
 			})
@@ -463,7 +463,7 @@ func TestPollStoppedActor(t *testing.T) {
 	case <-ch:
 		t.Fatal("must timeout")
 	}
-	wait(t, time.Second, func() {
+	wait(t, 5*time.Second, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -501,7 +501,7 @@ func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 		}
 	}
 
-	wait(t, time.Second, func() {
+	wait(t, 5*time.Second, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -565,7 +565,7 @@ func TestSendBeforeClose(t *testing.T) {
 	// Let send and close race
 	// sys.rd.Lock()
 
-	wait(t, time.Second, func() {
+	wait(t, 5*time.Second, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -638,7 +638,7 @@ func TestSendAfterClose(t *testing.T) {
 	dropped := int(*m.Counter.Value)
 	require.Equal(t, dropCount, dropped)
 
-	wait(t, time.Second, func() {
+	wait(t, 5*time.Second, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
