@@ -285,7 +285,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 	}
 	opts["max-message-bytes"] = strconv.Itoa(cfg.Producer.MaxMessageBytes)
 
-	if err := createTopic(admin, topic, config, false); err != nil {
+	if err := createTopic(admin, topic, config); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -350,6 +350,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
+// adjustConfig will adjust `Config` and `sarama.Config` by check whether the topic exist or not.
 func adjustConfig(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
@@ -407,10 +408,18 @@ func adjustConfig(admin kafka.ClusterAdminClient, topic string, config *Config, 
 	return nil
 }
 
-func createTopic(admin kafka.ClusterAdminClient, topic string, config *Config, topicExist bool) error {
-	// no need to create the topic, but we would have to log user if they found enter wrong topic name later
-	if topicExist && config.AutoCreate {
-		log.Warn("topic already exist, TiCDC will not create the topic", zap.String("topic", topic))
+func createTopic(admin kafka.ClusterAdminClient, topic string, config *Config) error {
+	topics, err := admin.ListTopics()
+	if err != nil {
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	_, exists := topics[topic]
+	if exists {
+		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
+		if config.AutoCreate {
+			log.Warn("topic already exist, TiCDC will not create the topic", zap.String("topic", topic))
+		}
 		return nil
 	}
 
@@ -418,7 +427,7 @@ func createTopic(admin kafka.ClusterAdminClient, topic string, config *Config, t
 		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
 	}
 
-	err := admin.CreateTopic(topic, &sarama.TopicDetail{
+	err = admin.CreateTopic(topic, &sarama.TopicDetail{
 		NumPartitions:     config.PartitionNum,
 		ReplicationFactor: config.ReplicationFactor,
 	}, false)
