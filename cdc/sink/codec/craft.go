@@ -97,13 +97,23 @@ func (e *CraftEventBatchEncoder) Reset() {
 // SetParams reads relevant parameters for craft protocol
 func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
+	maxMessageBytes, ok := params["max-message-bytes"]
+	if !ok {
+		return cerror.ErrSinkInvalidConfig.GenWithStack("max-message-bytes not found")
+	}
 
+<<<<<<< HEAD
 	e.maxMessageSize = DefaultMaxMessageBytes
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
 		e.maxMessageSize, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
+=======
+	e.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
+>>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 	}
 	if e.maxMessageSize <= 0 || e.maxMessageSize > math.MaxInt32 {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", e.maxMessageSize))

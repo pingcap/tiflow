@@ -348,9 +348,15 @@ type JSONEventBatchEncoder struct {
 	maxBatchSize   int
 }
 
+<<<<<<< HEAD
 // GetMaxMessageSize is only for unit testing.
 func (d *JSONEventBatchEncoder) GetMaxMessageSize() int {
 	return d.maxMessageSize
+=======
+// GetMaxMessageBytes is only for unit testing.
+func (d *JSONEventBatchEncoder) GetMaxMessageBytes() int {
+	return d.maxMessageBytes
+>>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 }
 
 // GetMaxBatchSize is only for unit testing.
@@ -577,12 +583,23 @@ func (d *JSONEventBatchEncoder) Reset() {
 func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
 
+<<<<<<< HEAD
 	d.maxMessageSize = DefaultMaxMessageBytes
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
 		d.maxMessageSize, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
+=======
+	maxMessageBytes, ok := params["max-message-bytes"]
+	if !ok {
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.New("max-message-bytes not found"))
+	}
+
+	d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
+	if err != nil {
+		return cerror.ErrSinkInvalidConfig.Wrap(err)
+>>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 	}
 	if d.maxMessageSize <= 0 {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageSize))
