@@ -539,8 +539,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	tableID, tableName := util.TableIDFromCtx(ctx)
 	cfID := util.ChangefeedIDFromCtx(ctx)
 	g.Go(func() error {
-		checkRateLimitInterval := 50 * time.Millisecond
-		timer := time.NewTimer(checkRateLimitInterval)
+		timer := time.NewTimer(defaultCheckRegionRateLimitInterval)
 		defer timer.Stop()
 		for {
 			select {
@@ -548,7 +547,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				return ctx.Err()
 			case <-timer.C:
 				s.handleRateLimit(ctx)
-				timer.Reset(checkRateLimitInterval)
+				timer.Reset(defaultCheckRegionRateLimitInterval)
 			case errInfo := <-s.errCh:
 				s.errChSizeGauge.Dec()
 				allowed := s.checkRateLimit(errInfo.singleRegionInfo.verID.GetID())
