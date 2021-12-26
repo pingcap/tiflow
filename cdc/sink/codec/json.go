@@ -321,9 +321,15 @@ type JSONEventBatchEncoder struct {
 	maxBatchSize        int
 }
 
+<<<<<<< HEAD
 // GetMaxKafkaMessageSize is only for unit testing.
 func (d *JSONEventBatchEncoder) GetMaxKafkaMessageSize() int {
 	return d.maxKafkaMessageSize
+=======
+// GetMaxMessageBytes is only for unit testing.
+func (d *JSONEventBatchEncoder) GetMaxMessageBytes() int {
+	return d.maxMessageBytes
+>>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 }
 
 // GetMaxBatchSize is only for unit testing.
@@ -550,6 +556,7 @@ func (d *JSONEventBatchEncoder) Reset() {
 // SetParams reads relevant parameters for Open Protocol
 func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
+<<<<<<< HEAD
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
 		d.maxKafkaMessageSize, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
@@ -557,6 +564,17 @@ func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 		}
 	} else {
 		d.maxKafkaMessageSize = DefaultMaxMessageBytes
+=======
+
+	maxMessageBytes, ok := params["max-message-bytes"]
+	if !ok {
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.New("max-message-bytes not found"))
+	}
+
+	d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
+	if err != nil {
+		return cerror.ErrSinkInvalidConfig.Wrap(err)
+>>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 	}
 
 	if d.maxKafkaMessageSize <= 0 {
