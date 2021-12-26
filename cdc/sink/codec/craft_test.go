@@ -139,7 +139,7 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 func (s *craftBatchSuite) TestParamsEdgeCases(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := NewCraftEventBatchEncoder().(*CraftEventBatchEncoder)
-	err := encoder.SetParams(map[string]string{})
+	err := encoder.SetParams(map[string]string{"max-message-bytes": "10485760"})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
@@ -203,7 +203,7 @@ func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := NewCraftEventBatchEncoder()
-	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
+	err := encoder.SetParams(map[string]string{"max-message-bytes": "1048576", "max-batch-size": "64"})
 	c.Check(err, check.IsNil)
 
 	testEvent := &model.RowChangedEvent{

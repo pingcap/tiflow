@@ -203,7 +203,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := NewJSONEventBatchEncoder().(*JSONEventBatchEncoder)
-	err := encoder.SetParams(map[string]string{})
+	err := encoder.SetParams(map[string]string{"max-message-bytes": "10485760"})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
@@ -230,12 +230,12 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-batch-size": "-1"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
 
-	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxInt32)})
+	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxInt32)
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 
-	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxUint32)})
+	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxUint32)
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
@@ -311,9 +311,11 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 
 func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := NewJSONEventBatchEncoder()
-	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
-	c.Check(err, check.IsNil)
+	encoderBuilder := newJSONEventBatchEncoderBuilder(map[string]string{"max-message-bytes": "1048576", "max-batch-size": "64"})
+	c.Assert(encoderBuilder, check.NotNil)
+	encoder, err := encoderBuilder.Build(context.Background())
+	c.Assert(err, check.IsNil)
+	c.Assert(encoder, check.NotNil)
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
