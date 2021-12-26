@@ -33,7 +33,7 @@ func (c *Manager) ExecutorClient(id model.ExecutorID) ExecutorClient {
 	return c.executors[id]
 }
 
-// TODO Right now the interface and params are not consistant. We should abstract a "grpc pool"
+// TODO Right now the interface and params are not consistent. We should abstract a "grpc pool"
 // interface to maintain a pool of grpc connections.
 func (c *Manager) AddMasterClient(ctx context.Context, addrs []string) error {
 	if c.master != nil {

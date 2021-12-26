@@ -326,7 +326,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				}
 				continue
 			}
-			// We aim to keep lastHbTime of executor consistant with lastHbTime of Master.
+			// We aim to keep lastHbTime of executor consistent with lastHbTime of Master.
 			// If we set the heartbeat time of executor to the start time of rpc, it will
 			// be a little bit earlier than the heartbeat time of master, which is safe.
 			// In contrast, if we set it to the end time of rpc, it might be a little bit

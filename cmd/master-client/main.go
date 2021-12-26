@@ -71,7 +71,7 @@ func main() {
 	}
 	if cmd == "cancel-job" {
 		flag1 := os.Args[4]
-		jobID, err := strconv.Atoi(flag1)
+		jobID, err := strconv.ParseInt(flag1, 10, 32)
 		if err != nil {
 			fmt.Print(err.Error())
 			os.Exit(1)
