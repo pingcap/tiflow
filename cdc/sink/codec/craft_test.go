@@ -164,15 +164,15 @@ func (s *craftBatchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-batch-size": "-1"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
 
-	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxUint16)})
+	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": strconv.Itoa(math.MaxUint16)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, int(math.MaxUint16))
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 
-	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxInt32)})
+	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.NotNil)
 
-	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxUint32)})
+	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.NotNil)
 }
 
@@ -203,7 +203,7 @@ func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := NewCraftEventBatchEncoder()
-	err := encoder.SetParams(map[string]string{"max-message-bytes": "1048576", "max-batch-size": "64"})
+	err := encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": "64"})
 	c.Check(err, check.IsNil)
 
 	testEvent := &model.RowChangedEvent{
