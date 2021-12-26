@@ -429,7 +429,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 		causality.add(keys, idx)
 		s.workers[idx].appendTxn(ctx, txn)
 	}
-	resolveConflict := func(txn *model.SingleTableTxn) {
+	dispatchTableTxn := func(txn *model.SingleTableTxn) {
 		keys := genTxnKeys(txn)
 		if conflict, idx := causality.detectConflict(keys); conflict {
 			if idx >= 0 {
@@ -446,7 +446,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 	h := newTxnsHeap(txnsGroup)
 	h.iter(func(txn *model.SingleTableTxn) {
 		startTime := time.Now()
-		resolveConflict(txn)
+		dispatchTableTxn(txn)
 		s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
 	})
 	s.notifyAndWaitExec(ctx)
