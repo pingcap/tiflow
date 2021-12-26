@@ -331,8 +331,9 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := NewJSONEventBatchEncoder()
-	encoder.SetParams(map[string]string{"max-message-bytes": "1048576", "max-batch-size": "64"})
+	err := encoder.SetParams(map[string]string{"max-message-bytes": "1048576", "max-batch-size": "64"})
 	c.Assert(encoder, check.NotNil)
+	c.Assert(err, check.IsNil)
 
 	jsonEncoder, ok := encoder.(*JSONEventBatchEncoder)
 	c.Assert(ok, check.IsTrue)
