@@ -77,8 +77,12 @@ const (
 	// frequency of creating new goroutine.
 	defaultRegionChanSize = 128
 
-	// initial size for region rate limit queue
+	// initial size for region rate limit queue.
 	defaultRegionRateLimitQueueSize = 128
+	// Interval of check region retry rate limit queue.
+	defaultCheckRegionRateLimitInterval = 50 * time.Millisecond
+	// Duration of warning region retry rate limited too long.
+	defaultLogRegionRateLimitDuration = 10 * time.Second
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -135,6 +139,33 @@ func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.ComparableSpan,
 type regionErrorInfo struct {
 	singleRegionInfo
 	err error
+
+	retryLimitTime       *time.Time
+	logRateLimitDuration time.Duration
+}
+
+func newRegionErrorInfo(info singleRegionInfo, err error) regionErrorInfo {
+	return regionErrorInfo{
+		singleRegionInfo: info,
+		err:              err,
+
+		logRateLimitDuration: defaultLogRegionRateLimitDuration,
+	}
+}
+
+func (r *regionErrorInfo) logRateLimitedHint() bool {
+	now := time.Now()
+	if r.retryLimitTime == nil {
+		// Caller should log on the first rate limited.
+		r.retryLimitTime = &now
+		return true
+	}
+	if now.Sub(*r.retryLimitTime) > r.logRateLimitDuration {
+		// Caller should log if it lasts too long.
+		r.retryLimitTime = &now
+		return true
+	}
+	return false
 }
 
 type regionFeedState struct {
@@ -522,13 +553,15 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				s.errChSizeGauge.Dec()
 				allowed := s.checkRateLimit(errInfo.singleRegionInfo.verID.GetID())
 				if !allowed {
+					if errInfo.logRateLimitedHint() {
+						log.Info("EventFeed retry rate limited",
+							zap.Uint64("regionID", errInfo.singleRegionInfo.verID.GetID()),
+							zap.Uint64("ts", errInfo.singleRegionInfo.ts),
+							zap.String("changefeed", cfID), zap.Stringer("span", errInfo.span),
+							zap.Int64("tableID", tableID), zap.String("tableName", tableName),
+							zap.String("addr", errInfo.singleRegionInfo.rpcCtx.Addr))
+					}
 					// rate limit triggers, add the error info to the rate limit queue.
-					log.Info("EventFeed retry rate limited",
-						zap.Uint64("regionID", errInfo.singleRegionInfo.verID.GetID()),
-						zap.Uint64("ts", errInfo.singleRegionInfo.ts),
-						zap.String("changefeed", cfID), zap.Stringer("span", errInfo.span),
-						zap.Int64("tableID", tableID), zap.String("tableName", tableName),
-						zap.String("addr", errInfo.singleRegionInfo.rpcCtx.Addr))
 					s.rateLimitQueue = append(s.rateLimitQueue, errInfo)
 				} else {
 					err := s.handleError(ctx, errInfo)
@@ -722,10 +755,8 @@ func (s *eventFeedSession) requestRegionToStore(
 				}
 				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 				s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
-				err = s.onRegionFail(ctx, regionErrorInfo{
-					singleRegionInfo: sri,
-					err:              &connectToStoreErr{},
-				}, false /* revokeToken */)
+				errInfo := newRegionErrorInfo(sri, &connectToStoreErr{})
+				err = s.onRegionFail(ctx, errInfo, false /* revokeToken */)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -782,12 +813,8 @@ func (s *eventFeedSession) requestRegionToStore(
 				continue
 			}
 
-			// Wait for a while and retry sending the request
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
-			err = s.onRegionFail(ctx, regionErrorInfo{
-				singleRegionInfo: sri,
-				err:              &sendRequestToStoreErr{},
-			}, false /* revokeToken */)
+			errInfo := newRegionErrorInfo(sri, &sendRequestToStoreErr{})
+			err = s.onRegionFail(ctx, errInfo, false /* revokeToken */)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -851,12 +878,8 @@ func (s *eventFeedSession) dispatchRequest(
 			log.Info("cannot get rpcCtx, retry span",
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Stringer("span", sri.span))
-			err = s.onRegionFail(ctx, regionErrorInfo{
-				singleRegionInfo: sri,
-				err: &rpcCtxUnavailableErr{
-					verID: sri.verID,
-				},
-			}, false /* revokeToken */)
+			errInfo := newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID})
+			err = s.onRegionFail(ctx, errInfo, false /* revokeToken */)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -1077,10 +1100,8 @@ func (s *eventFeedSession) receiveFromStream(
 
 		remainingRegions := pendingRegions.takeAll()
 		for _, state := range remainingRegions {
-			err := s.onRegionFail(ctx, regionErrorInfo{
-				singleRegionInfo: state.sri,
-				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
-			}, true /* revokeToken */)
+			errInfo := newRegionErrorInfo(state.sri, cerror.ErrPendingRegionCancel.FastGenByArgs())
+			err := s.onRegionFail(ctx, errInfo, true /* revokeToken */)
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
 				return
