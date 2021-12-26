@@ -103,7 +103,7 @@ func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
 	maxMessageBytes, ok := params["max-message-bytes"]
 	if !ok {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("max-message-bytes not found"))
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.New("max-message-bytes not found"))
 	}
 
 	e.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)

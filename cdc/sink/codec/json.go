@@ -617,7 +617,7 @@ func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 
 	maxMessageBytes, ok := params["max-message-bytes"]
 	if !ok {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("max-message-bytes not found"))
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.New("max-message-bytes not found"))
 	}
 
 	d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
