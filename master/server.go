@@ -26,6 +26,7 @@ import (
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
@@ -255,9 +256,13 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	}
 	s.initialized.Store(true)
 
-	s.leaderLoop(ctx)
+	wg, ctx := errgroup.WithContext(ctx)
 
-	return nil
+	wg.Go(func() error {
+		return s.leaderLoop(ctx)
+	})
+
+	return wg.Wait()
 }
 
 func (s *Server) startGrpcSrv() (err error) {
@@ -368,9 +373,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	})
 	defer func() {
 		s.leader.Store(&Member{})
-		// FIXME: call resign here will cause
-		// `panic: context: internal error: missing cancel error`, fix it later
-		// s.resign()
+		s.resign()
 	}()
 
 	leaderTicker := time.NewTicker(time.Millisecond * 200)
@@ -378,9 +381,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	for {
 		select {
 		case <-ctx.Done():
+			// ctx is a leaderCtx actually
 			return ctx.Err()
-		case <-s.session.Done():
-			return errors.ErrMasterSessionDone.GenWithStackByArgs()
 		case <-leaderTicker.C:
 			if !s.isEtcdLeader() {
 				log.L().Info("etcd leader changed, resigns server master leader",

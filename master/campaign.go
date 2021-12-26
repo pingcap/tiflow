@@ -16,18 +16,18 @@ import (
 	"go.uber.org/zap"
 )
 
-func (s *Server) leaderLoop(ctx context.Context) {
+func (s *Server) leaderLoop(ctx context.Context) error {
 	retryInterval := time.Millisecond * 200
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		default:
 		}
 		key, data, rev, err := etcdutils.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
 		if err != nil {
 			if perrors.Cause(err) == context.Canceled {
-				return
+				return nil
 			}
 			if !errors.ErrMasterNoLeader.Equal(err) {
 				log.L().Warn("get leader failed", zap.Error(err))
@@ -79,9 +79,14 @@ func (s *Server) leaderLoop(ctx context.Context) {
 		err = s.runLeaderService(s.leaderCtx)
 		if err != nil {
 			if perrors.Cause(err) == context.Canceled ||
-				errors.ErrMasterSessionDone.Equal(err) ||
 				errors.ErrEtcdLeaderChanged.Equal(err) {
 				log.L().Info("leader service exits", zap.Error(err))
+			} else if errors.ErrMasterSessionDone.Equal(err) {
+				log.L().Info("server master session done, reset session now", zap.Error(err))
+				err2 := s.reset(ctx)
+				if err2 != nil {
+					return err2
+				}
 			} else {
 				log.L().Error("run leader service failed", zap.Error(err))
 			}
