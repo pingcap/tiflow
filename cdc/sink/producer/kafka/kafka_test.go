@@ -191,7 +191,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	}
 }
 
-func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
+func (s *kafkaSuite) TestAdjustConfig(c *check.C) {
 	defer testleak.AfterTest(c)
 	config := NewConfig()
 	adminClient := kafka.NewClusterAdminClientMockImpl()
@@ -287,6 +287,15 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
 	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
+}
+
+func (s *kafkaSuite) TestCreateTopics(c *check.C) {
+	defer testleak.AfterTest(c)
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer func() {
+		_ = adminClient.Close()
+	}()
+
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
