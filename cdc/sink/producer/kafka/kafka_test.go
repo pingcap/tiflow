@@ -311,7 +311,6 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	}()
 	opts := make(map[string]string)
 	_, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
-	c.Assert(opts, check.HasKey, "max-message-bytes")
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 }
 
