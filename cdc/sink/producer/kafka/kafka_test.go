@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -279,12 +278,11 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
-	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
 
 	config.BrokerEndpoints = []string{""}
 	cfg.Metadata.Retry.Max = 1
 
-	err = topicPreProcess(topic, config, cfg)
+	err = topicPreProcess(topic, config, cfg, map[string]string{})
 	c.Assert(errors.Cause(err), check.Equals, sarama.ErrOutOfBrokers)
 }
 
@@ -360,7 +358,7 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
 	topic := "topic"
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
-	_, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	_, err := NewKafkaSaramaProducer(ctx, topic, config, map[string]string{}, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 
 	_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate")
