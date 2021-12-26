@@ -385,8 +385,8 @@ type JSONEventBatchEncoder struct {
 	maxBatchSize    int
 }
 
-// GetMaxMessageSize is only for unit testing.
-func (d *JSONEventBatchEncoder) GetMaxMessageSize() int {
+// GetMaxMessageBytes is only for unit testing.
+func (d *JSONEventBatchEncoder) GetMaxMessageBytes() int {
 	return d.maxMessageBytes
 }
 

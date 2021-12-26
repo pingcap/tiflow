@@ -14,12 +14,14 @@
 package codec
 
 import (
+	"context"
 	"math"
 	"sort"
 	"strconv"
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -237,6 +239,32 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxUint32)
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
+}
+
+func (s *batchSuite) TestSetParams(c *check.C) {
+	defer testleak.AfterTest(c)
+
+	opts := make(map[string]string)
+	encoderBuilder := newJSONEventBatchEncoderBuilder(opts)
+	c.Assert(encoderBuilder, check.NotNil)
+	encoder, err := encoderBuilder.Build(context.Background())
+	c.Assert(encoder, check.IsNil)
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*max-message-bytes not found.*",
+	)
+
+	opts["max-message-bytes"] = "1"
+	encoderBuilder = newJSONEventBatchEncoderBuilder(opts)
+	c.Assert(encoderBuilder, check.NotNil)
+	encoder, err = encoderBuilder.Build(context.Background())
+	c.Assert(err, check.IsNil)
+	c.Assert(encoder, check.NotNil)
+
+	jsonEncoder, ok := encoder.(*JSONEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(jsonEncoder.GetMaxMessageBytes(), check.Equals, 1)
 }
 
 func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
