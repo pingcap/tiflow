@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 
@@ -320,8 +319,8 @@ type JSONEventBatchEncoder struct {
 	maxBatchSize    int
 }
 
-// GetMaxMessageSize is only for unit testing.
-func (d *JSONEventBatchEncoder) GetMaxMessageSize() int {
+// GetMaxMessageBytes is only for unit testing.
+func (d *JSONEventBatchEncoder) GetMaxMessageBytes() int {
 	return d.maxMessageBytes
 }
 
@@ -550,12 +549,14 @@ func (d *JSONEventBatchEncoder) Reset() {
 func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
 
-	d.maxMessageBytes = config.DefaultMaxMessageBytes
-	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
-		d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
-		if err != nil {
-			return cerror.ErrKafkaInvalidConfig.Wrap(err)
-		}
+	maxMessageBytes, ok := params["max-message-bytes"]
+	if !ok {
+		return cerror.ErrKafkaInvalidConfig.Wrap(errors.New("max-message-bytes not found"))
+	}
+
+	d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
+	if err != nil {
+		return cerror.ErrKafkaInvalidConfig.Wrap(err)
 	}
 	if d.maxMessageBytes <= 0 {
 		return cerror.ErrKafkaInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageBytes))
