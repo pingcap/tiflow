@@ -74,11 +74,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	encoder := sink.newEncoder()
 	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
-<<<<<<< HEAD
-	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageSize(), check.Equals, 4194304)
-=======
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes(), check.Equals, 1048576)
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 
 	// mock kafka broker processes 1 row changed event
 	leader.Returns(prodSuccess)
