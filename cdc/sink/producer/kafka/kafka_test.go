@@ -406,7 +406,6 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	errCh := make(chan error, 1)
 	opts := make(map[string]string)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
-	c.Assert(opts, check.HasKey, "max-message-bytes")
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 		err := producer.Close()
@@ -473,7 +472,6 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	errCh := make(chan error, 1)
 	opts := make(map[string]string)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
-	c.Assert(opts, check.HasKey, "max-message-bytes")
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
