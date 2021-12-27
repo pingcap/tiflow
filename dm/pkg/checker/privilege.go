@@ -30,15 +30,13 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
-var (
-	// some privileges are only effective on global level. in other words, GRANT ALL ON test.* is not enough for them
-	// https://dev.mysql.com/doc/refman/5.7/en/grant.html#grant-global-privileges
-	privNeedGlobal = map[mysql.PrivilegeType]struct{}{
-		mysql.ReloadPriv:            {},
-		mysql.ReplicationClientPriv: {},
-		mysql.ReplicationSlavePriv:  {},
-	}
-)
+// some privileges are only effective on global level. in other words, GRANT ALL ON test.* is not enough for them
+// https://dev.mysql.com/doc/refman/5.7/en/grant.html#grant-global-privileges
+var privNeedGlobal = map[mysql.PrivilegeType]struct{}{
+	mysql.ReloadPriv:            {},
+	mysql.ReplicationClientPriv: {},
+	mysql.ReplicationSlavePriv:  {},
+}
 
 // SourceDumpPrivilegeChecker checks dump privileges of source DB.
 type SourceDumpPrivilegeChecker struct {
