@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 )
 
@@ -127,6 +128,7 @@ func (n *sinkNode) stop(ctx context.Context) (err error) {
 	err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	return
 }
+
 // the caller should retry until it success, otherwise the event will lost
 // when flushSink return a ErrRedoLogBufferBlocking error
 func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err error) {
@@ -152,11 +154,11 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 		return errors.Trace(err)
 	}
 	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, n.tableID, resolvedTs)
-		// we can ignore ErrFlushTsBlocking error because resolvedTs will continue
-		// to come
-		if err != nil && cerror.ErrFlushTsBlocking.NotEqual(err) {
-			return errors.Trace(err)
-		}
+	// we can ignore ErrFlushTsBlocking error because resolvedTs will continue
+	// to come
+	if err != nil && cerror.ErrFlushTsBlocking.NotEqual(err) {
+		return errors.Trace(err)
+	}
 
 	if checkpointTs <= n.checkpointTs {
 		return nil
@@ -166,6 +168,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 	n.flowController.Release(checkpointTs)
 	return nil
 }
+
 // emitEvent would return a ErrRedoLogBufferBlocking error,
 // the caller should retry until it success, otherwise the event will lost
 func (n *sinkNode) emitEvent(ctx context.Context, event *model.PolymorphicEvent) error {
@@ -338,17 +341,14 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 			})
 			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
 				return false, errors.Trace(err)
+			}
 			err := n.retryFlushSink(ctx, event.CRTs)
 			if err != nil {
-				return errors.Trace(err)
+				return false, errors.Trace(err)
 			}
-			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
-			return true, nil
 			atomic.StoreUint64(&n.resolvedTs, event.CRTs)
-			return nil
+			return true, nil
 		}
-		if err := n.emitEvent(ctx, event); err != nil {
-			return false, errors.Trace(err)
 		start := time.Now()
 		err := retry.Do(ctx, func() error {
 			err := n.emitEvent(ctx, event)
@@ -361,17 +361,16 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 			retry.WithInfiniteTries(),
 			retry.WithIsRetryableErr(isRetryableError))
 		if err != nil {
-			return errors.Trace(err)
+			return false, errors.Trace(err)
 		}
-
 	case pipeline.MessageTypeTick:
 		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
 			return false, errors.Trace(err)
+		}
 		err := n.retryFlushSink(ctx, n.resolvedTs)
 		if err != nil {
-			return errors.Trace(err)
+			return false, errors.Trace(err)
 		}
-
 	case pipeline.MessageTypeCommand:
 		if msg.Command.Tp == pipeline.CommandTypeStop {
 			if err := n.stop(ctx); err != nil {
@@ -382,7 +381,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 		n.barrierTs = msg.BarrierTs
 		err := n.retryFlushSink(ctx, n.resolvedTs)
 		if err != nil {
-			return errors.Trace(err)
+			return false, errors.Trace(err)
 		}
 	}
 	return true, nil
@@ -394,7 +393,7 @@ func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 	return n.sink.Close(ctx)
 }
 
-func (n *sinkNode) retryFlushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) error {
+func (n *sinkNode) retryFlushSink(ctx context.Context, resolvedTs model.Ts) error {
 	start := time.Now()
 	err := retry.Do(ctx, func() error {
 		// when flushSink return a ErrRedoLogBufferBlocking error

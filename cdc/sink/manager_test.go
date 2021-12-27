@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -188,7 +190,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				c.Assert(err, check.IsNil)
 			}
 			_, err := sink.FlushRowChangedEvents(ctx, sink.(*tableSink).tableID, resolvedTs)
-			if err != nil && cerror.ErrFlushTsBlocking.NotEqual(err) {
+			if err != nil && cerrors.ErrFlushTsBlocking.NotEqual(err) {
 				c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 			}
 			lastResolvedTs = resolvedTs

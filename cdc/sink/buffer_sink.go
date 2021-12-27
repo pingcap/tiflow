@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -197,8 +199,7 @@ func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, tableID model.Ta
 	// since n.checkpoints is refreshed asynchronously in a background goroutine,
 	// we return a n.checkpoints every time FlushRowChangedEvents be called
 	// the caller will always check the returned checkpointTs
-	return b.getTableCheckpointTs(tableID), cerror.ErrFlushTsBlocking.FastGenByArgs()
-
+	return b.getTableCheckpointTs(tableID), cerrors.ErrFlushTsBlocking.FastGenByArgs()
 }
 
 type flushMsg struct {
