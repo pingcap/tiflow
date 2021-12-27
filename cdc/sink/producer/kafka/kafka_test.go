@@ -15,13 +15,8 @@ package kafka
 
 import (
 	"context"
-<<<<<<< HEAD
 	"fmt"
 	"net/url"
-=======
-	"strconv"
-	"strings"
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 	"sync"
 	"testing"
 	"time"
@@ -146,12 +141,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 		newSaramaConfigImpl = newSaramaConfigImplBak
 	}()
 
-<<<<<<< HEAD
 	producer, err := NewKafkaSaramaProducer(ctx, leader.Addr(), topic, config, errCh)
-=======
-	opts := make(map[string]string)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
 	c.Assert(opts, check.HasKey, "max-message-bytes")
@@ -240,7 +230,6 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-<<<<<<< HEAD
 	broker := sarama.NewMockBroker(c, 1)
 	defer broker.Close()
 	metaResponse := sarama.NewMockMetadataResponse(c).
@@ -252,22 +241,11 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 		"MetadataRequest":        metaResponse,
 		"DescribeConfigsRequest": sarama.NewMockDescribeConfigsResponse(c),
 	})
-=======
-	// When topic exists and max message bytes is set correctly.
-	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes()
-	cfg, err := newSaramaConfigImpl(context.Background(), config)
-	c.Assert(err, check.IsNil)
-	opts := make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
-	c.Assert(err, check.IsNil)
-	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 
 	config := NewConfig()
 	config.PartitionNum = int32(0)
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
-<<<<<<< HEAD
 	num, err := kafkaTopicPreProcess(topic, broker.Addr(), config, cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(num, check.Equals, int32(2))
@@ -280,46 +258,6 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	_, err = kafkaTopicPreProcess(topic, broker.Addr(), config, cfg)
 	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
 }
-=======
-	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
-	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
-
-	config.MaxMessageBytes = defaultMaxMessageBytes - 1
-	cfg, err = newSaramaConfigImpl(context.Background(), config)
-	c.Assert(err, check.IsNil)
-	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
-	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
-
-	// When topic does not exist and auto-create is not enabled.
-	config.AutoCreate = false
-	cfg, err = newSaramaConfigImpl(context.Background(), config)
-	c.Assert(err, check.IsNil)
-	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "non-exist", config, cfg, opts)
-	c.Assert(
-		errors.Cause(err),
-		check.ErrorMatches,
-		".*auto-create-topic` is false, and topic not found.*",
-	)
-
-	// When the topic does not exist, use the broker's configuration to create the topic.
-	// It is less than the value of broker.
-	config.AutoCreate = true
-	config.MaxMessageBytes = defaultMaxMessageBytes - 1
-	cfg, err = newSaramaConfigImpl(context.Background(), config)
-	c.Assert(err, check.IsNil)
-	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-success", config, cfg, opts)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
-	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 
 func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 	defer testleak.AfterTest(c)()
@@ -341,18 +279,10 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 	config.PartitionNum = int32(0)
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
-<<<<<<< HEAD
 	num, err := kafkaTopicPreProcess(topic, broker.Addr(), config, cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(num, check.Equals, int32(4))
 }
-=======
-	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-fail", config, cfg, opts)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
-	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 
 func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	defer testleak.AfterTest(c)()
@@ -386,7 +316,6 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 		c.Assert(err, check.IsNil)
 		c.Assert(cfg.Producer.Compression, check.Equals, cc.expected)
 	}
-<<<<<<< HEAD
 
 	config.Credential = &security.Credential{
 		CAPath: "/invalid/ca/path",
@@ -409,27 +338,6 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	c.Assert(cfg.Net.SASL.User, check.Equals, "user")
 	c.Assert(cfg.Net.SASL.Password, check.Equals, "password")
 	c.Assert(cfg.Net.SASL.Mechanism, check.Equals, sarama.SASLMechanism("SCRAM-SHA-256"))
-=======
-	err = adminClient.CreateTopic("test-topic", detail, false)
-	c.Assert(err, check.IsNil)
-	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config, cfg, opts)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
-	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
-
-	// When the topic exists, but the topic does not store max message bytes info,
-	// the check of parameter fails.
-	// It is larger than the value of broker.
-	config.MaxMessageBytes = defaultMaxMessageBytes + 1
-	cfg, err = newSaramaConfigImpl(context.Background(), config)
-	c.Assert(err, check.IsNil)
-	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config, cfg, opts)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
-	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
@@ -438,18 +346,7 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	errCh := make(chan error, 1)
 	config := NewConfig()
 	config.Version = "invalid"
-<<<<<<< HEAD
 	_, err := NewKafkaSaramaProducer(ctx, "127.0.0.1:1111", "topic", config, errCh)
-=======
-	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
-	topic := "topic"
-	NewAdminClientImpl = kafka.NewMockAdminClient
-	defer func() {
-		NewAdminClientImpl = kafka.NewSaramaAdminClient
-	}()
-	opts := make(map[string]string)
-	_, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 
 	config.Version = "0.8.2.0"
@@ -495,13 +392,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	}()
 
 	errCh := make(chan error, 1)
-<<<<<<< HEAD
 	producer, err := NewKafkaSaramaProducer(ctx, leader.Addr(), topic, config, errCh)
-=======
-	opts := make(map[string]string)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
-	c.Assert(opts, check.HasKey, "max-message-bytes")
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
@@ -562,13 +453,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	config.TopicPreProcess = false
 
 	errCh := make(chan error, 1)
-<<<<<<< HEAD
 	producer, err := NewKafkaSaramaProducer(ctx, leader.Addr(), topic, config, errCh)
-=======
-	opts := make(map[string]string)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
-	c.Assert(opts, check.HasKey, "max-message-bytes")
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)

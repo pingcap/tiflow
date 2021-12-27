@@ -14,18 +14,13 @@
 package codec
 
 import (
-	"context"
 	"math"
 	"strconv"
 	"testing"
 
 	"github.com/pingcap/check"
-<<<<<<< HEAD
-	"github.com/pingcap/parser/mysql"
-=======
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/parser/mysql"
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
@@ -233,7 +228,7 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err := encoder.SetParams(map[string]string{"max-message-bytes": "10485760"})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageBytes, check.Equals, DefaultMaxMessageBytes)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
@@ -244,12 +239,12 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, math.MaxInt32)
+	c.Assert(encoder.maxMessageBytes, check.Equals, math.MaxInt32)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, math.MaxUint32)
+	c.Assert(encoder.maxMessageBytes, check.Equals, math.MaxUint32)
 
 	err = encoder.SetParams(map[string]string{"max-batch-size": "0"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
@@ -260,22 +255,20 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxInt32)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageBytes, check.Equals, DefaultMaxMessageBytes)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxUint32)
-	c.Assert(encoder.maxKafkaMessageSize, check.Equals, DefaultMaxMessageBytes)
+	c.Assert(encoder.maxMessageBytes, check.Equals, DefaultMaxMessageBytes)
 }
 
 func (s *batchSuite) TestSetParams(c *check.C) {
 	defer testleak.AfterTest(c)
 
 	opts := make(map[string]string)
-	encoderBuilder := newJSONEventBatchEncoderBuilder(opts)
-	c.Assert(encoderBuilder, check.NotNil)
-	encoder, err := encoderBuilder.Build(context.Background())
-	c.Assert(encoder, check.IsNil)
+	encoder := NewJSONEventBatchEncoder()
+	err := encoder.SetParams(opts)
 	c.Assert(
 		errors.Cause(err),
 		check.ErrorMatches,
@@ -283,12 +276,10 @@ func (s *batchSuite) TestSetParams(c *check.C) {
 	)
 
 	opts["max-message-bytes"] = "1"
-	encoderBuilder = newJSONEventBatchEncoderBuilder(opts)
-	c.Assert(encoderBuilder, check.NotNil)
-	encoder, err = encoderBuilder.Build(context.Background())
+	encoder = NewJSONEventBatchEncoder()
+	err = encoder.SetParams(opts)
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder, check.NotNil)
-
 	jsonEncoder, ok := encoder.(*JSONEventBatchEncoder)
 	c.Assert(ok, check.IsTrue)
 	c.Assert(jsonEncoder.GetMaxMessageBytes(), check.Equals, 1)
@@ -338,11 +329,14 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 
 func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoderBuilder := newJSONEventBatchEncoderBuilder(map[string]string{"max-message-bytes": "1048576", "max-batch-size": "64"})
-	c.Assert(encoderBuilder, check.NotNil)
-	encoder, err := encoderBuilder.Build(context.Background())
-	c.Assert(err, check.IsNil)
+	encoder := NewJSONEventBatchEncoder()
+	err := encoder.SetParams(map[string]string{"max-message-bytes": "1048576", "max-batch-size": "64"})
 	c.Assert(encoder, check.NotNil)
+	c.Assert(err, check.IsNil)
+
+	jsonEncoder, ok := encoder.(*JSONEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(jsonEncoder.GetMaxMessageBytes(), check.Equals, 1048576)
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
