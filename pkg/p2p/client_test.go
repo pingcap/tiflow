@@ -282,7 +282,12 @@ func TestClientSendAnomalies(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	client := NewMessageClient("node-1", clientConfigForUnitTesting)
+	// copies the config
+	config := &*clientConfigForUnitTesting
+	// disables flushing to make this case deterministic.
+	config.BatchSendInterval = 999 * time.Second
+
+	client := NewMessageClient("node-1", config)
 	sender := &mockClientBatchSender{}
 
 	runCtx, closeClient := context.WithCancel(ctx)
