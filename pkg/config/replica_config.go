@@ -16,6 +16,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 
@@ -141,4 +142,13 @@ func (c *ReplicaConfig) Validate() error {
 // GetDefaultReplicaConfig returns the default replica config.
 func GetDefaultReplicaConfig() *ReplicaConfig {
 	return defaultReplicaConfig.Clone()
+}
+
+func (c *ReplicaConfig) FillProtocol(url *url.URL) error {
+	s := url.Query().Get(ProtocolKey)
+	if s != "" {
+		c.Sink.Protocol = s
+	}
+
+	return nil
 }

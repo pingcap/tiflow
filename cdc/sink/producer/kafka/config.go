@@ -67,13 +67,6 @@ func NewConfig() *Config {
 	}
 }
 
-func (c *Config) Complete(url *url.URL) error {
-	if err := c.fillBySinkURI(url); err != nil {
-		return err
-	}
-	return nil
-}
-
 // set the partition-num by the topic's partition count.
 func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	// user does not specify the `partition-num` in the sink-uri
@@ -188,7 +181,8 @@ func (c *Config) fillBySinkURI(sinkURI *url.URL) error {
 	return nil
 }
 
-func completeOpts(opts map[string]string, saramaConfig *sarama.Config, replicaConfig *config.ReplicaConfig, params url.Values) error {
+func completeOpts(sinkURI *url.URL, opts map[string]string, saramaConfig *sarama.Config, replicaConfig *config.ReplicaConfig) error {
+	params := sinkURI.Query()
 	s := params.Get("enable-tidb-extension")
 	if s != "" {
 		_, err := strconv.ParseBool(s)
@@ -208,25 +202,30 @@ func completeOpts(opts map[string]string, saramaConfig *sarama.Config, replicaCo
 
 	opts["max-message-bytes"] = strconv.Itoa(saramaConfig.Producer.MaxMessageBytes)
 
-	s = params.Get(config.ProtocolKey)
-	if s != "" {
-		replicaConfig.Sink.Protocol = s
-	}
-
 	return nil
 }
 
-// CompleteConfigsAndOpts the kafka producer configuration, replication configuration and opts.
-func CompleteConfigsAndOpts(ctx context.Context, topic string, sinkURI *url.URL,
-	producerConfig *Config, replicaConfig *config.ReplicaConfig, opts map[string]string) (*sarama.Config, error) {
-	saramaConfig, err := newSaramaConfigImpl(ctx, producerConfig)
+// InitializeConfigurations the kafka producer configuration, replication configuration and opts.
+func InitializeConfigurations(
+	ctx context.Context,
+	topic string,
+	sinkURI *url.URL,
+	replicaConfig *config.ReplicaConfig,
+	opts map[string]string,
+) (producerConfig *Config, saramaConfig *sarama.Config, err error) {
+	producerConfig = NewConfig()
+	if err := producerConfig.fillBySinkURI(sinkURI); err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	saramaConfig, err = newSaramaConfigImpl(ctx, producerConfig)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	admin, err := NewAdminClientImpl(producerConfig.BrokerEndpoints, saramaConfig)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		return nil, nil, errors.Trace(err)
 	}
 	defer func() {
 		if err := admin.Close(); err != nil {
@@ -235,23 +234,22 @@ func CompleteConfigsAndOpts(ctx context.Context, topic string, sinkURI *url.URL,
 	}()
 
 	if err := adjustConfig(admin, topic, producerConfig); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	if err := adjustSaramaConfig(saramaConfig, producerConfig); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		return nil, nil, errors.Trace(err)
 	}
 
-	if err := completeOpts(opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	if err := replicaConfig.FillProtocol(sinkURI); err != nil {
+		return nil, nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	return saramaConfig, nil
-}
+	if err := completeOpts(sinkURI, opts, saramaConfig, replicaConfig); err != nil {
+		return nil, nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
 
-func adjustSaramaConfig(saramaConfig *sarama.Config, producerConfig *Config) error {
-	saramaConfig.Producer.MaxMessageBytes = producerConfig.MaxMessageBytes
-	return nil
+	return producerConfig, saramaConfig, nil
 }
 
 // adjustConfig will adjust `Config` and `sarama.Config` by check whether the topic exist or not.
@@ -309,6 +307,11 @@ func adjustConfig(admin kafka.ClusterAdminClient, topic string, config *Config) 
 		log.Warn("partition-num is not set, use the default partition count",
 			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
 	}
+	return nil
+}
+
+func adjustSaramaConfig(saramaConfig *sarama.Config, producerConfig *Config) error {
+	saramaConfig.Producer.MaxMessageBytes = producerConfig.MaxMessageBytes
 	return nil
 }
 
