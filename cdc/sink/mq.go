@@ -378,16 +378,6 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	producerConfig := kafka.NewConfig()
-	if err := kafka.CompleteConfigsAndOpts(sinkURI, producerConfig, replicaConfig, opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-	// NOTICE: Please check after the completion, as we may get the configuration from the sinkURI.
-	err := replicaConfig.Validate()
-	if err != nil {
-		return nil, err
-	}
-
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
@@ -395,7 +385,36 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, opts, errCh)
+	producerConfig := kafka.NewConfig().FillBySinkURI(sinkURI)
+	saramaConfig, err := newSaramaConfigImpl(ctx, producerConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	admin, err := kafka.NewAdminClientImpl(producerConfig.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+	defer func() {
+		if err := admin.Close(); err != nil {
+			log.Warn("close kafka cluster admin failed", zap.Error(err))
+		}
+	}()
+
+	saramaConfig, err := kafka.CompleteConfigsAndOpts(ctx, topic, sinkURI, producerConfig, replicaConfig, opts)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+	// NOTICE: Please check after the completion, as we may get the configuration from the sinkURI.
+	if err := replicaConfig.Validate(); err != nil {
+		return nil, err
+	}
+
+	if err := kafka.CreateTopic(admin, topic, producerConfig); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
+	}
+
+	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, saramaConfig, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

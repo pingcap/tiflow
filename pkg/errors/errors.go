@@ -78,6 +78,7 @@ var (
 	ErrKafkaInvalidClientID     = errors.Normalize("invalid kafka client ID '%s'", errors.RFCCodeText("CDC:ErrKafkaInvalidClientID"))
 	ErrKafkaInvalidVersion      = errors.Normalize("invalid kafka version", errors.RFCCodeText("CDC:ErrKafkaInvalidVersion"))
 	ErrKafkaInvalidConfig       = errors.Normalize("kafka config invalid", errors.RFCCodeText("CDC:ErrKafkaInvalidConfig"))
+	ErrKafkaCreateTopic         = errors.Normalize("kafka create topic failed", errors.RFCCodeText("CDC:ErrKafkaCreateTopic"))
 	ErrPulsarNewProducer        = errors.Normalize("new pulsar producer", errors.RFCCodeText("CDC:ErrPulsarNewProducer"))
 	ErrPulsarSendMessage        = errors.Normalize("pulsar send message failed", errors.RFCCodeText("CDC:ErrPulsarSendMessage"))
 	ErrRedoConfigInvalid        = errors.Normalize("redo log config invalid", errors.RFCCodeText("CDC:ErrRedoConfigInvalid"))

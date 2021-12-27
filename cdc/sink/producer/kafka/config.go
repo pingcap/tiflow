@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -93,9 +94,8 @@ func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	return nil
 }
 
-// CompleteConfigsAndOpts the kafka producer configuration, replication configuration and opts.
-func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
-	producerConfig.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
+func (c *Config) FillBySinkURI(sinkURI *url.URL) error {
+	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
 	if s != "" {
@@ -103,9 +103,9 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		if err != nil {
 			return err
 		}
-		producerConfig.PartitionNum = int32(a)
-		if producerConfig.PartitionNum <= 0 {
-			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(producerConfig.PartitionNum)
+		c.PartitionNum = int32(a)
+		if c.PartitionNum <= 0 {
+			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
 		}
 	}
 
@@ -115,12 +115,12 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		if err != nil {
 			return err
 		}
-		producerConfig.ReplicationFactor = int16(a)
+		c.ReplicationFactor = int16(a)
 	}
 
 	s = params.Get("kafka-version")
 	if s != "" {
-		producerConfig.Version = s
+		c.Version = s
 	}
 
 	s = params.Get("max-message-bytes")
@@ -129,50 +129,44 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		if err != nil {
 			return err
 		}
-		producerConfig.MaxMessageBytes = a
-		opts["max-message-bytes"] = s
-	}
-
-	s = params.Get("max-batch-size")
-	if s != "" {
-		opts["max-batch-size"] = s
+		c.MaxMessageBytes = a
 	}
 
 	s = params.Get("compression")
 	if s != "" {
-		producerConfig.Compression = s
+		c.Compression = s
 	}
 
-	producerConfig.ClientID = params.Get("kafka-client-id")
+	c.ClientID = params.Get("kafka-client-id")
 
 	s = params.Get("ca")
 	if s != "" {
-		producerConfig.Credential.CAPath = s
+		c.Credential.CAPath = s
 	}
 
 	s = params.Get("cert")
 	if s != "" {
-		producerConfig.Credential.CertPath = s
+		c.Credential.CertPath = s
 	}
 
 	s = params.Get("key")
 	if s != "" {
-		producerConfig.Credential.KeyPath = s
+		c.Credential.KeyPath = s
 	}
 
 	s = params.Get("sasl-user")
 	if s != "" {
-		producerConfig.SaslScram.SaslUser = s
+		c.SaslScram.SaslUser = s
 	}
 
 	s = params.Get("sasl-password")
 	if s != "" {
-		producerConfig.SaslScram.SaslPassword = s
+		c.SaslScram.SaslPassword = s
 	}
 
 	s = params.Get("sasl-mechanism")
 	if s != "" {
-		producerConfig.SaslScram.SaslMechanism = s
+		c.SaslScram.SaslMechanism = s
 	}
 
 	s = params.Get("auto-create-topic")
@@ -181,15 +175,14 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		if err != nil {
 			return err
 		}
-		producerConfig.AutoCreate = autoCreate
+		c.AutoCreate = autoCreate
 	}
 
-	s = params.Get(config.ProtocolKey)
-	if s != "" {
-		replicaConfig.Sink.Protocol = s
-	}
+	return nil
+}
 
-	s = params.Get("enable-tidb-extension")
+func completeOpts(opts map[string]string, saramaConfig *sarama.Config, replicaConfig *config.ReplicaConfig, params url.Values) error {
+	s := params.Get("enable-tidb-extension")
 	if s != "" {
 		_, err := strconv.ParseBool(s)
 		if err != nil {
@@ -201,6 +194,91 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		opts["enable-tidb-extension"] = s
 	}
 
+	s = params.Get("max-batch-size")
+	if s != "" {
+		opts["max-batch-size"] = s
+	}
+
+	opts["max-message-bytes"] = strconv.Itoa(saramaConfig.Producer.MaxMessageBytes)
+
+	s = params.Get(config.ProtocolKey)
+	if s != "" {
+		replicaConfig.Sink.Protocol = s
+	}
+
+	return nil
+}
+
+// CompleteConfigsAndOpts the kafka producer configuration, replication configuration and opts.
+func CompleteConfigsAndOpts(ctx context.Context, topic string, sinkURI *url.URL,
+	producerConfig *Config, replicaConfig *config.ReplicaConfig, opts map[string]string) (*sarama.Config, error) {
+
+	if err := adjustConfig(admin, topic, producerConfig, saramaConfig); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	if err := completeOpts(opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	return saramaConfig, nil
+}
+
+// adjustConfig will adjust `Config` and `sarama.Config` by check whether the topic exist or not.
+func adjustConfig(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config) error {
+	topics, err := admin.ListTopics()
+	if err != nil {
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	info, exists := topics[topic]
+	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
+	if exists {
+		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
+		topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
+
+		if topicMaxMessageBytes < config.MaxMessageBytes {
+			log.Warn("topic's `max.message.bytes` less than the user set `max-message-bytes`,"+
+				"use topic's `max.message.bytes` to initialize the Kafka producer",
+				zap.Int("max.message.bytes", topicMaxMessageBytes),
+				zap.Int("max-message-bytes", config.MaxMessageBytes))
+			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
+		}
+
+		if err := config.setPartitionNum(info.NumPartitions); err != nil {
+			return errors.Trace(err)
+		}
+
+		return nil
+	}
+
+	brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
+	if err != nil {
+		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
+		return errors.Trace(err)
+	}
+
+	// when create the topic, `max.message.bytes` is decided by the broker,
+	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
+	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
+	// broker's `message.max.bytes`.
+	if brokerMessageMaxBytes < config.MaxMessageBytes {
+		log.Warn("broker's `message.max.bytes` less than the user set `max-message-bytes`,"+
+			"use broker's `message.max.bytes` to initialize the Kafka producer",
+			zap.Int("message.max.bytes", brokerMessageMaxBytes),
+			zap.Int("max-message-bytes", config.MaxMessageBytes))
+		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
+	}
+
+	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
+	if config.PartitionNum == 0 {
+		config.PartitionNum = defaultPartitionNum
+		log.Warn("partition-num is not set, use the default partition count",
+			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
+	}
 	return nil
 }
 

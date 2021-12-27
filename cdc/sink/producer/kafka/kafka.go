@@ -263,31 +263,8 @@ var (
 )
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, opts map[string]string, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, cfg *sarama.Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
-	cfg, err := newSaramaConfigImpl(ctx, config)
-	if err != nil {
-		return nil, err
-	}
-
-	admin, err := NewAdminClientImpl(config.BrokerEndpoints, cfg)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-	defer func() {
-		if err := admin.Close(); err != nil {
-			log.Warn("close kafka cluster admin failed", zap.Error(err))
-		}
-	}()
-
-	if err := adjustConfig(admin, topic, config, cfg); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-	opts["max-message-bytes"] = strconv.Itoa(cfg.Producer.MaxMessageBytes)
-
-	if err := createTopic(admin, topic, config); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
 
 	asyncClient, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)
 	if err != nil {
@@ -350,65 +327,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-// adjustConfig will adjust `Config` and `sarama.Config` by check whether the topic exist or not.
-func adjustConfig(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config) error {
-	topics, err := admin.ListTopics()
-	if err != nil {
-		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	info, exists := topics[topic]
-	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
-	if exists {
-		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
-		topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-		}
-
-		if topicMaxMessageBytes < config.MaxMessageBytes {
-			log.Warn("topic's `max.message.bytes` less than the user set `max-message-bytes`,"+
-				"use topic's `max.message.bytes` to initialize the Kafka producer",
-				zap.Int("max.message.bytes", topicMaxMessageBytes),
-				zap.Int("max-message-bytes", config.MaxMessageBytes))
-			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
-		}
-
-		if err := config.setPartitionNum(info.NumPartitions); err != nil {
-			return errors.Trace(err)
-		}
-
-		return nil
-	}
-
-	brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
-	if err != nil {
-		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
-		return errors.Trace(err)
-	}
-
-	// when create the topic, `max.message.bytes` is decided by the broker,
-	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
-	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
-	// broker's `message.max.bytes`.
-	if brokerMessageMaxBytes < config.MaxMessageBytes {
-		log.Warn("broker's `message.max.bytes` less than the user set `max-message-bytes`,"+
-			"use broker's `message.max.bytes` to initialize the Kafka producer",
-			zap.Int("message.max.bytes", brokerMessageMaxBytes),
-			zap.Int("max-message-bytes", config.MaxMessageBytes))
-		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
-	}
-
-	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
-	if config.PartitionNum == 0 {
-		config.PartitionNum = defaultPartitionNum
-		log.Warn("partition-num is not set, use the default partition count",
-			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
-	}
-	return nil
-}
-
-func createTopic(admin kafka.ClusterAdminClient, topic string, config *Config) error {
+func CreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
