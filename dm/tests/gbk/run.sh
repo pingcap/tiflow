@@ -8,28 +8,32 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 TASK_NAME="gbk"
 
 function test_from_tidb() {
-  cleanup_data_upstream gbk3
+	cleanup_data_upstream gbk3
 
-  # check table can inherited charset from database
-  run_sql_source1 "use gbk; create table ddl1(b char(20));"
-  run_sql_tidb_with_retry "show create table gbk.ddl1;" "CHARSET=gbk"
+	# check table can inherited charset from database
+	run_sql_source1 "use gbk; create table ddl1(b char(20));"
+	run_sql_tidb_with_retry "show create table gbk.ddl1;" "CHARSET=gbk"
 
-  # can't test "create table as select", because it is not supported in GTID mode
+	# can't test "create table as select", because it is not supported in GTID mode
 
-  # test create table like
-  run_sql_source1 "use gbk; create table ddl2(a char(20) charset gbk, b char(20) charset utf8mb4);"
-  run_sql_source1 "use gbk; create table ddl2_copy like ddl2; insert into ddl2_copy values('一二三', '一二三');"
-  run_sql_tidb_with_retry "select hex(a) from gbk.ddl2_copy;" "D2BBB6FEC8FD"
-  run_sql_tidb_with_retry "select hex(b) from gbk.ddl2_copy;" "E4B880E4BA8CE4B889"
+	# test create table like
+	run_sql_source1 "use gbk; create table ddl2(a char(20) charset gbk, b char(20) charset utf8mb4);"
+	run_sql_source1 "use gbk; create table ddl2_copy like ddl2; insert into ddl2_copy values('一二三', '一二三');"
+	run_sql_tidb_with_retry "select hex(a) from gbk.ddl2_copy;" "D2BBB6FEC8FD"
+	run_sql_tidb_with_retry "select hex(b) from gbk.ddl2_copy;" "E4B880E4BA8CE4B889"
 
-  # test create partition table
-  run_sql_source1 "use gbk; create table ddl3(id int, a char(20) charset gbk) partition by hash(id) partitions 4;"
-  run_sql_tidb_with_retry "show create table gbk.ddl3;" "CHARSET=gbk"
-  run_sql_tidb_with_retry "show create table gbk.ddl3;" "ARTITION BY HASH (\`id\`) PARTITIONS 4"
+	# test create partition table
+	run_sql_source1 "use gbk; create table ddl3(id int, a char(20) charset gbk) partition by hash(id) partitions 4;"
+	run_sql_tidb_with_retry "show create table gbk.ddl3;" "CHARSET=gbk"
+	run_sql_tidb_with_retry "show create table gbk.ddl3;" "ARTITION BY HASH (\`id\`) PARTITIONS 4"
 
-  # test alter database charset
-  run_sql_source1 "create database gbk3 charset utf8; alter database gbk3 charset gbk;"
-  run_sql_tidb_with_retry "show create database gbk3;" "CHARACTER SET gbk"
+	# test alter database charset
+	run_sql_source1 "create database gbk3 charset utf8; alter database gbk3 charset gbk;"
+	run_sql_tidb_with_retry "show create database gbk3;" "CHARACTER SET gbk"
+
+	# test client use GBK encoding
+	run_sql "create table gbk.ddl4 (c int primary key comment '你好');" $MYSQL_PORT1 $MYSQL_PASSWORD1 "gbk"
+	run_sql_tidb_with_retry "show create table gbk.ddl4;" "COMMENT '你好'"
 }
 
 function run() {

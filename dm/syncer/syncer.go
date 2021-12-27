@@ -2333,6 +2333,19 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		return nil
 	}
 
+	codec, err := event.GetCharsetCodecByStatusVars(ev.StatusVars)
+	if err != nil {
+		s.tctx.L().Error("get charset codec failed, will treat query as utf8", zap.Error(err))
+	}
+	if codec != nil {
+		converted, err2 := codec.NewDecoder().String(originSQL)
+		if err2 != nil {
+			s.tctx.L().Error("convert query string failed, will treat query as utf8", zap.Error(err2))
+		} else {
+			originSQL = converted
+		}
+	}
+
 	qec := &queryEventContext{
 		eventContext:    &ec,
 		ddlSchema:       string(ev.Schema),
