@@ -120,7 +120,7 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 			dumpState: StateSuccess,
 		},
 		{
-			grants: []string{ // privilege on db/table level is not enough to execute SHOW MASTER STATUS
+			grants: []string{ // lack db/table level privilege
 				"GRANT ALL PRIVILEGES ON `medz`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 			},
 			dumpState: StateFailure,
@@ -130,9 +130,20 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 			errMatch: "lack of .* privilege.*;",
 		},
 		{
+			grants: []string{ // privilege on db/table level is not enough to execute SHOW MASTER STATUS
+				"GRANT ALL PRIVILEGES ON `medz`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
+				"GRANT ALL PRIVILEGES ON `INFORMATION_SCHEMA`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
+			},
+			dumpState: StateSuccess,
+			checkTables: map[string][]string{
+				"medz": {"medz"},
+			},
+		},
+		{
 			grants: []string{ // privilege on column level is not enough to execute SHOW CREATE TABLE
 				"GRANT REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'user'@'%'",
 				"GRANT SELECT (c) ON `lance`.`t` TO 'user'@'%'",
+				"GRANT SELECT ON `INFORMATION_SCHEMA`.* TO 'user'@'%'",
 			},
 			dumpState: StateFailure,
 			checkTables: map[string][]string{

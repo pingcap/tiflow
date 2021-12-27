@@ -23,7 +23,6 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/utils"
-	pmysql "github.com/pingcap/tidb/parser/mysql"
 )
 
 // MySQLVersion represents MySQL version number.
@@ -146,39 +145,4 @@ func isMySQLError(err error, code uint16) bool {
 	err = errors.Cause(err)
 	e, ok := err.(*mysql.MySQLError)
 	return ok && e.Number == code
-}
-
-// checkTables map schema => {table1, table2, ...}.
-// lackPriv map privilege => schema => table.
-func genExpectPriv(privileges map[pmysql.PrivilegeType]struct{}, checkTables map[string][]string) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
-	lackPriv := make(map[pmysql.PrivilegeType]map[string]map[string]struct{}, len(privileges))
-	for p := range privileges {
-		lackPriv[p] = make(map[string]map[string]struct{}, len(checkTables))
-		for schema, tables := range checkTables {
-			if _, ok := lackPriv[p][schema]; !ok {
-				lackPriv[p][schema] = make(map[string]struct{}, len(tables))
-			}
-			for _, table := range tables {
-				lackPriv[p][schema][table] = struct{}{}
-			}
-		}
-		if p == pmysql.SelectPriv {
-			if _, ok := lackPriv[p]["INFORMATION_SCHEMA"]; !ok {
-				lackPriv[p]["INFORMATION_SCHEMA"] = make(map[string]struct{}, 1)
-			}
-		}
-	}
-	return lackPriv
-}
-
-func genReplicPriv(replicationPrivileges map[pmysql.PrivilegeType]struct{}) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
-	// replication privilege only check replication client and replication slave which are global level privilege
-	// so don't need check tables
-	return genExpectPriv(replicationPrivileges, nil)
-}
-
-func genDumpPriv(dumpPrivileges map[pmysql.PrivilegeType]struct{}, checkTables map[string][]string) map[pmysql.PrivilegeType]map[string]map[string]struct{} {
-	// due to dump privilege checker need check db/table level privilege
-	// so we need know the check tables
-	return genExpectPriv(dumpPrivileges, checkTables)
 }
