@@ -32,7 +32,7 @@ func TestCheckCaptureAlive(t *testing.T) {
 	state := NewChangefeedReactorState("test")
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
-	require.Contains(t, stateTester.ApplyPatches(), ".*[CDC:ErrLeaseExpired].*")
+	require.Contains(t, stateTester.ApplyPatches(), "[CDC:ErrLeaseExpired]")
 	err := stateTester.Update("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`))
 	require.Nil(t, err)
 	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
@@ -317,7 +317,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 			err = state.Update(util.NewEtcdKey(k), value, false)
 			require.Nil(t, err)
 		}
-		require.Equal(t, cmp.Equal(state, &tc.expected, cmpopts.IgnoreUnexported(ChangefeedReactorState{})),
+		require.True(t, cmp.Equal(state, &tc.expected, cmpopts.IgnoreUnexported(ChangefeedReactorState{})),
 			fmt.Sprintf("%d,%s", i, cmp.Diff(state, &tc.expected, cmpopts.IgnoreUnexported(ChangefeedReactorState{}))))
 	}
 }

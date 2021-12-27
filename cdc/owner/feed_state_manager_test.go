@@ -248,5 +248,4 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 	tester.MustApplyPatches()
 	require.Nil(t, state.Info)
 	require.False(t, state.Exist())
-
 }
