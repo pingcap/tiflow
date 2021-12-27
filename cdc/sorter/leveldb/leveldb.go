@@ -21,12 +21,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
-	"github.com/pingcap/ticdc/pkg/actor"
-	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/db"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/pkg/actor"
+	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/db"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
@@ -34,12 +34,16 @@ import (
 
 // DBActor is a db actor, it reads, writes and deletes key value pair in its db.
 type DBActor struct {
-	id       actor.ID
-	db       db.DB
-	wb       db.Batch
-	wbSize   int
-	wbCap    int
-	iterSema *semaphore.Weighted
+	id      actor.ID
+	db      db.DB
+	wb      db.Batch
+	wbSize  int
+	wbCap   int
+	snapSem *semaphore.Weighted
+
+	deleteCount int
+	compact     *CompactScheduler
+
 	closedWg *sync.WaitGroup
 
 	metricWriteDuration prometheus.Observer
@@ -50,7 +54,7 @@ var _ actor.Actor = (*DBActor)(nil)
 
 // NewDBActor returns a db actor.
 func NewDBActor(
-	ctx context.Context, id int, db db.DB, cfg *config.DBConfig,
+	id int, db db.DB, cfg *config.DBConfig, compact *CompactScheduler,
 	wg *sync.WaitGroup, captureAddr string,
 ) (*DBActor, actor.Mailbox, error) {
 	idTag := strconv.Itoa(id)
@@ -66,18 +70,22 @@ func NewDBActor(
 	iterSema := semaphore.NewWeighted(int64(cfg.Concurrency))
 	mb := actor.NewMailbox(actor.ID(id), cfg.Concurrency)
 	wg.Add(1)
-	return &DBActor{
-		id:       actor.ID(id),
-		db:       db,
-		wb:       wb,
-		iterSema: iterSema,
-		wbSize:   wbSize,
-		wbCap:    wbCap,
+
+	dba := &DBActor{
+		id:      actor.ID(id),
+		db:      db,
+		wb:      wb,
+		snapSem: iterSema,
+		wbSize:  wbSize,
+		wbCap:   wbCap,
+		compact: compact,
+
 		closedWg: wg,
 
 		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(captureAddr, idTag),
 		metricWriteBytes:    sorterWriteBytesHistogram.WithLabelValues(captureAddr, idTag),
-	}, mb, nil
+	}
+	return dba, mb, nil
 }
 
 func (ldb *DBActor) close(err error) {
@@ -101,6 +109,12 @@ func (ldb *DBActor) maybeWrite(force bool) error {
 			ldb.wb.Reset()
 		} else {
 			ldb.wb = ldb.db.Batch(ldb.wbCap)
+		}
+
+		// Schedule a compact task when there are too many deletion.
+		if ldb.compact.maybeCompact(ldb.id, ldb.deleteCount) {
+			// Reset delete key count if schedule compaction successfully.
+			ldb.deleteCount = 0
 		}
 	}
 	return nil
@@ -136,6 +150,7 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 			} else {
 				// Delete the key if value is empty
 				ldb.wb.Delete([]byte(k))
+				ldb.deleteCount++
 			}
 
 			// Do not force write, batching for efficiency.
@@ -154,13 +169,14 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 
 	// Force write only if there is a task requires an iterator.
 	forceWrite := len(snapChs) != 0
-	if err := ldb.maybeWrite(forceWrite); err != nil {
+	err := ldb.maybeWrite(forceWrite)
+	if err != nil {
 		log.Panic("db error", zap.Error(err))
 	}
 	// Batch acquire iterators.
 	for i := range snapChs {
 		snapCh := snapChs[i]
-		err := ldb.iterSema.Acquire(ctx, 1)
+		err := ldb.snapSem.Acquire(ctx, 1)
 		if err != nil {
 			if errors.Cause(err) == context.Canceled ||
 				errors.Cause(err) == context.DeadlineExceeded {
@@ -174,7 +190,7 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 		}
 		snapCh <- message.LimitedSnapshot{
 			Snapshot: snap,
-			Sema:     ldb.iterSema,
+			Sema:     ldb.snapSem,
 		}
 		close(snapCh)
 	}

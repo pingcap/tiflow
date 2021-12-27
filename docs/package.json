@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com:pingcap/ticdc.git"
+    "url": "git+https://github.com:pingcap/tiflow.git"
   },
   "keywords": [
     "rfc"
@@ -16,9 +16,9 @@
   "author": "TiCDC Authors",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/pingcap/ticdc/issues"
+    "url": "https://github.com/pingcap/tiflow/issues"
   },
-  "homepage": "https://github.com/pingcap/ticdc/docs/",
+  "homepage": "https://github.com/pingcap/tiflow/docs/",
   "devDependencies": {
     "husky": "^5.0.9",
     "prettier": "^2.2.1"

@@ -14,12 +14,12 @@
 package filter
 
 import (
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	filterV1 "github.com/pingcap/tidb-tools/pkg/filter"
 	filterV2 "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Filter is an event filter implementation.
@@ -161,6 +161,7 @@ func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bo
 		model.ActionTruncateTable,
 		model.ActionModifyColumn,
 		model.ActionRenameTable,
+		model.ActionRenameTables,
 		model.ActionSetDefaultValue,
 		model.ActionModifyTableComment,
 		model.ActionRenameIndex,

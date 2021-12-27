@@ -22,17 +22,17 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/cdc/sorter/unified"
-	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
-	"github.com/pingcap/ticdc/pkg/cmd/util"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/logutil"
-	"github.com/pingcap/ticdc/pkg/security"
-	ticdcutil "github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/ticdc/pkg/version"
 	ticonfig "github.com/pingcap/tidb/config"
+	"github.com/pingcap/tiflow/cdc"
+	"github.com/pingcap/tiflow/cdc/sorter/unified"
+	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/security"
+	ticdcutil "github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
@@ -91,11 +91,12 @@ func (o *options) addFlags(cmd *cobra.Command) {
 // run runs the server cmd.
 func (o *options) run(cmd *cobra.Command) error {
 	cancel := util.InitCmd(cmd, &logutil.Config{
-		File:           o.serverConfig.LogFile,
-		Level:          o.serverConfig.LogLevel,
-		FileMaxSize:    o.serverConfig.Log.File.MaxSize,
-		FileMaxDays:    o.serverConfig.Log.File.MaxDays,
-		FileMaxBackups: o.serverConfig.Log.File.MaxBackups,
+		File:                 o.serverConfig.LogFile,
+		Level:                o.serverConfig.LogLevel,
+		FileMaxSize:          o.serverConfig.Log.File.MaxSize,
+		FileMaxDays:          o.serverConfig.Log.File.MaxDays,
+		FileMaxBackups:       o.serverConfig.Log.File.MaxBackups,
+		ZapInternalErrOutput: o.serverConfig.Log.InternalErrOutput,
 	})
 	defer cancel()
 

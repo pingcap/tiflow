@@ -20,8 +20,8 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser"
 
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var _ = Suite(&testParserSuite{})
@@ -149,17 +149,17 @@ var testCases = []testCase{
 	},
 	{
 		"drop index i1 on `s1`.`t1`",
-		[]string{"DROP INDEX IF EXISTS `i1` ON `s1`.`t1`"},
+		[]string{"DROP INDEX /*T! IF EXISTS  */`i1` ON `s1`.`t1`"},
 		[][]*filter.Table{{genTableName("s1", "t1")}},
 		[][]*filter.Table{{genTableName("xs1", "xt1")}},
-		[]string{"DROP INDEX IF EXISTS `i1` ON `xs1`.`xt1`"},
+		[]string{"DROP INDEX /*T! IF EXISTS  */`i1` ON `xs1`.`xt1`"},
 	},
 	{
 		"drop index i1 on `t1`",
-		[]string{"DROP INDEX IF EXISTS `i1` ON `test`.`t1`"},
+		[]string{"DROP INDEX /*T! IF EXISTS  */`i1` ON `test`.`t1`"},
 		[][]*filter.Table{{genTableName("test", "t1")}},
 		[][]*filter.Table{{genTableName("xtest", "xt1")}},
-		[]string{"DROP INDEX IF EXISTS `i1` ON `xtest`.`xt1`"},
+		[]string{"DROP INDEX /*T! IF EXISTS  */`i1` ON `xtest`.`xt1`"},
 	},
 	{
 		"create index i1 on `t1`(`c1`)",

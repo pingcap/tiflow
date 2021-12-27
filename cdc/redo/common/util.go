@@ -22,8 +22,8 @@ import (
 
 	"github.com/pingcap/errors"
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // InitS3storage init a storage used for s3,
@@ -49,7 +49,6 @@ var InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStor
 	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
 		SendCredentials: false,
 		HTTPClient:      nil,
-		SkipCheckPath:   true,
 	})
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, err)

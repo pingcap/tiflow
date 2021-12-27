@@ -24,17 +24,17 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/model"
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-	"github.com/pingcap/ticdc/cdc/redo"
-	"github.com/pingcap/ticdc/cdc/scheduler"
-	"github.com/pingcap/ticdc/cdc/sink"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/model"
+	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/sink"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -52,6 +52,9 @@ func newProcessor4Test(
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *processor {
 	p := newProcessor(ctx)
+	// disable new scheduler to pass old test cases
+	// TODO refactor the test cases so that new scheduler can be enabled
+	p.newSchedulerEnabled = false
 	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
 	p.sinkManager = &sink.Manager{}
 	p.redoManager = redo.NewDisabledManager()
@@ -73,7 +76,7 @@ func initProcessor4Test(ctx cdcContext.Context, c *check.C) (*processor, *orches
 	p.changefeed = orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	return p, orchestrator.NewReactorStateTester(c, p.changefeed, map[string]string{
 		"/tidb/cdc/capture/" + ctx.GlobalVars().CaptureInfo.ID:                                     `{"id":"` + ctx.GlobalVars().CaptureInfo.ID + `","address":"127.0.0.1:8300"}`,
-		"/tidb/cdc/changefeed/info/" + ctx.ChangefeedVars().ID:                                     `{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":0,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":".","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
+		"/tidb/cdc/changefeed/info/" + ctx.ChangefeedVars().ID:                                     `{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":0,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":".","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"open-protocol"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
 		"/tidb/cdc/job/" + ctx.ChangefeedVars().ID:                                                 `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
 		"/tidb/cdc/task/status/" + ctx.GlobalVars().CaptureInfo.ID + "/" + ctx.ChangefeedVars().ID: `{"tables":{},"operation":null,"admin-job-type":0}`,
 	})
@@ -155,8 +158,12 @@ func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
 }
 
 type mockAgent struct {
+	// dummy to satisfy the interface
+	processorAgent
+
 	executor         scheduler.TableExecutor
 	lastCheckpointTs model.Ts
+	isClosed         bool
 }
 
 func (a *mockAgent) Tick(_ cdcContext.Context) error {
@@ -169,6 +176,11 @@ func (a *mockAgent) Tick(_ cdcContext.Context) error {
 
 func (a *mockAgent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
 	return a.lastCheckpointTs
+}
+
+func (a *mockAgent) Close() error {
+	a.isClosed = true
+	return nil
 }
 
 func (s *processorSuite) TestCheckTablesNum(c *check.C) {
@@ -510,7 +522,10 @@ func (s *processorSuite) TestTableExecutor(c *check.C) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, c)
 	p.newSchedulerEnabled = true
-	p.agent = &mockAgent{executor: p}
+	p.lazyInit = func(ctx cdcContext.Context) error {
+		p.agent = &mockAgent{executor: p}
+		return nil
+	}
 
 	var err error
 	// init tick
@@ -658,6 +673,10 @@ func (s *processorSuite) TestTableExecutor(c *check.C) {
 
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
 	c.Assert(checkpointTs, check.Equals, uint64(75))
+
+	err = p.Close()
+	c.Assert(err, check.IsNil)
+	c.Assert(p.agent, check.IsNil)
 }
 
 func (s *processorSuite) TestInitTable(c *check.C) {
@@ -937,6 +956,26 @@ func updateChangeFeedPosition(c *check.C, tester *orchestrator.ReactorStateTeste
 	c.Assert(err, check.IsNil)
 
 	tester.MustUpdate(keyStr, valueBytes)
+}
+
+func (s *processorSuite) TestIgnorableError(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	testCases := []struct {
+		err       error
+		ignorable bool
+	}{
+		{nil, true},
+		{cerror.ErrAdminStopProcessor.GenWithStackByArgs(), true},
+		{cerror.ErrReactorFinished.GenWithStackByArgs(), true},
+		{cerror.ErrRedoWriterStopped.GenWithStackByArgs(), true},
+		{errors.Trace(context.Canceled), true},
+		{cerror.ErrProcessorTableNotFound.GenWithStackByArgs(), false},
+		{errors.New("test error"), false},
+	}
+	for _, tc := range testCases {
+		c.Assert(isProcessorIgnorableError(tc.err), check.Equals, tc.ignorable)
+	}
 }
 
 func (s *processorSuite) TestUpdateBarrierTs(c *check.C) {

@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

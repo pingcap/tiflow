@@ -21,18 +21,18 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo"
-	"github.com/pingcap/ticdc/cdc/sorter"
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb"
-	"github.com/pingcap/ticdc/cdc/sorter/memory"
-	"github.com/pingcap/ticdc/cdc/sorter/unified"
-	"github.com/pingcap/ticdc/pkg/actor"
-	"github.com/pingcap/ticdc/pkg/actor/message"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/pipeline"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
+	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/cdc/sorter/unified"
+	"github.com/pingcap/tiflow/pkg/actor"
+	"github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pipeline"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -79,6 +79,7 @@ func newSorterNode(
 		flowController: flowController,
 		mounter:        mounter,
 		resolvedTs:     startTs,
+		barrierTs:      startTs,
 		replConfig:     replConfig,
 	}
 }
@@ -101,14 +102,14 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			startTs := ctx.ChangefeedVars().Info.StartTs
 			actorID := ctx.GlobalVars().SorterSystem.ActorID(uint64(n.tableID))
 			router := ctx.GlobalVars().SorterSystem.Router()
-			levelSorter := leveldb.NewLevelDBSorter(ctx, n.tableID, startTs, router, actorID)
+			levelSorter := leveldb.NewSorter(ctx, n.tableID, startTs, router, actorID)
 			n.cleanID = actorID
 			n.cleanTask = levelSorter.CleanupTask()
 			n.cleanRouter = ctx.GlobalVars().SorterSystem.CleanerRouter()
 			sorter = levelSorter
 		} else {
 			// Sorter dir has been set and checked when server starts.
-			// See https://github.com/pingcap/ticdc/blob/9dad09/cdc/server.go#L275
+			// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 			sortDir := config.GetGlobalServerConfig().Sorter.SortDir
 			var err error
 			sorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
@@ -255,7 +256,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 				!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
 				// Do not send resolved ts events that is larger than
 				// barrier ts.
-				// When DDL puller stall, resolved events that outputed by
+				// When DDL puller stall, resolved events that outputted by
 				// sorter may pile up in memory, as they have to wait DDL.
 				//
 				// Disabled if redolog is on, it requires sink reports
