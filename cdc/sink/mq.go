@@ -385,21 +385,10 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	producerConfig := kafka.NewConfig().FillBySinkURI(sinkURI)
-	saramaConfig, err := newSaramaConfigImpl(ctx, producerConfig)
-	if err != nil {
+	producerConfig := kafka.NewConfig()
+	if err := producerConfig.Complete(); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-
-	admin, err := kafka.NewAdminClientImpl(producerConfig.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-	defer func() {
-		if err := admin.Close(); err != nil {
-			log.Warn("close kafka cluster admin failed", zap.Error(err))
-		}
-	}()
 
 	saramaConfig, err := kafka.CompleteConfigsAndOpts(ctx, topic, sinkURI, producerConfig, replicaConfig, opts)
 	if err != nil {

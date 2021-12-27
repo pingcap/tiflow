@@ -67,6 +67,13 @@ func NewConfig() *Config {
 	}
 }
 
+func (c *Config) Complete(url *url.URL) error {
+	if err := c.fillBySinkURI(url); err != nil {
+		return err
+	}
+	return nil
+}
+
 // set the partition-num by the topic's partition count.
 func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	// user does not specify the `partition-num` in the sink-uri
@@ -94,7 +101,7 @@ func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	return nil
 }
 
-func (c *Config) FillBySinkURI(sinkURI *url.URL) error {
+func (c *Config) fillBySinkURI(sinkURI *url.URL) error {
 	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
@@ -212,8 +219,26 @@ func completeOpts(opts map[string]string, saramaConfig *sarama.Config, replicaCo
 // CompleteConfigsAndOpts the kafka producer configuration, replication configuration and opts.
 func CompleteConfigsAndOpts(ctx context.Context, topic string, sinkURI *url.URL,
 	producerConfig *Config, replicaConfig *config.ReplicaConfig, opts map[string]string) (*sarama.Config, error) {
+	saramaConfig, err := newSaramaConfigImpl(ctx, producerConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
 
-	if err := adjustConfig(admin, topic, producerConfig, saramaConfig); err != nil {
+	admin, err := NewAdminClientImpl(producerConfig.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+	defer func() {
+		if err := admin.Close(); err != nil {
+			log.Warn("close kafka cluster admin failed", zap.Error(err))
+		}
+	}()
+
+	if err := adjustConfig(admin, topic, producerConfig); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	if err := adjustSaramaConfig(saramaConfig, producerConfig); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
@@ -224,8 +249,13 @@ func CompleteConfigsAndOpts(ctx context.Context, topic string, sinkURI *url.URL,
 	return saramaConfig, nil
 }
 
+func adjustSaramaConfig(saramaConfig *sarama.Config, producerConfig *Config) error {
+	saramaConfig.Producer.MaxMessageBytes = producerConfig.MaxMessageBytes
+	return nil
+}
+
 // adjustConfig will adjust `Config` and `sarama.Config` by check whether the topic exist or not.
-func adjustConfig(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config) error {
+func adjustConfig(admin kafka.ClusterAdminClient, topic string, config *Config) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -245,7 +275,7 @@ func adjustConfig(admin kafka.ClusterAdminClient, topic string, config *Config, 
 				"use topic's `max.message.bytes` to initialize the Kafka producer",
 				zap.Int("max.message.bytes", topicMaxMessageBytes),
 				zap.Int("max-message-bytes", config.MaxMessageBytes))
-			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
+			config.MaxMessageBytes = topicMaxMessageBytes
 		}
 
 		if err := config.setPartitionNum(info.NumPartitions); err != nil {
@@ -270,7 +300,7 @@ func adjustConfig(admin kafka.ClusterAdminClient, topic string, config *Config, 
 			"use broker's `message.max.bytes` to initialize the Kafka producer",
 			zap.Int("message.max.bytes", brokerMessageMaxBytes),
 			zap.Int("max-message-bytes", config.MaxMessageBytes))
-		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
+		config.MaxMessageBytes = brokerMessageMaxBytes
 	}
 
 	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
