@@ -660,7 +660,6 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // onRegionFail handles a region's failure, which means, unlock the region's range and send the error to the errCh for
 // error handling. This function is non blocking even if error channel is full.
 // CAUTION: Note that this should only be called in a context that the region has locked it's range.
-// TODO: remove context.Context as it is unused.
 func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, revokeToken bool) {
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
@@ -1110,9 +1109,7 @@ func (s *eventFeedSession) receiveFromStream(
 	// to call exactly once from outter code logic
 	worker := newRegionWorker(s, addr)
 
-	defer func() {
-		worker.evictAllRegions() //nolint:errcheck
-	}()
+	defer worker.evictAllRegions()
 
 	g.Go(func() error {
 		return worker.run(ctx)

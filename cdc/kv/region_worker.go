@@ -766,8 +766,7 @@ func (w *regionWorker) handleResolvedTs(
 
 // evictAllRegions is used when gRPC stream meets error and re-establish, notify
 // all existing regions to re-establish
-func (w *regionWorker) evictAllRegions() error {
-	var err error
+func (w *regionWorker) evictAllRegions() {
 	for _, states := range w.statesManager.states {
 		states.Range(func(_, value interface{}) bool {
 			state := value.(*regionFeedState)
@@ -792,7 +791,6 @@ func (w *regionWorker) evictAllRegions() error {
 			return true
 		})
 	}
-	return err
 }
 
 func getWorkerPoolSize() (size int) {
