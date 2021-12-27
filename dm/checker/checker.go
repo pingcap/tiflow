@@ -199,7 +199,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 
-		if !checkingShard && !checkSchema {
+		if !checkSchema {
 			continue
 		}
 

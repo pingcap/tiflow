@@ -27,7 +27,9 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 )
 
@@ -191,7 +193,8 @@ func (c *TablesChecker) checkAST(stmt ast.StmtNode) []*incompatibilityOption {
 	var options []*incompatibilityOption
 	// check table name
 	if c.onlineDDL != nil {
-		if c.onlineDDL.TableType(st.Table.Schema.O) != onlineddl.RealTable {
+		log.L().Info("", zap.String("table name", st.Table.Name.O))
+		if c.onlineDDL.TableType(st.Table.Name.O) != onlineddl.RealTable {
 			options = append(options, &incompatibilityOption{
 				state:       StateFailure,
 				instruction: "please wait the online-ddl over",
