@@ -163,7 +163,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 	// the checkpointTs may fall back in some situation such as:
 	//   1. This table is newly added to the processor
 	//   2. There is one table in the processor that has a smaller
-	// checkPointTs than this one
+	//   checkpointTs than this one
 	if checkpointTs <= n.checkpointTs {
 		return nil
 	}
