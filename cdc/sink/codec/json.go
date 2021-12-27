@@ -559,7 +559,7 @@ func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	}
 
 	if d.maxMessageBytes <= 0 {
-		return cerror.ErrKafkaInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageBytes))
+		return cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.Errorf("invalid max-message-bytes %d", d.maxMessageBytes))
 	}
 
 	if maxBatchSize, ok := params["max-batch-size"]; ok {
