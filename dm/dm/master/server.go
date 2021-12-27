@@ -789,10 +789,13 @@ func (s *Server) ShowDDLLocks(ctx context.Context, req *pb.ShowDDLLocksRequest) 
 	// show pessimistic locks.
 	resp.Locks = append(resp.Locks, s.pessimist.ShowLocks(req.Task, req.Sources)...)
 	// show optimistic locks.
-	resp.Locks = append(resp.Locks, s.optimist.ShowLocks(req.Task, req.Sources)...)
+	locks, err := s.optimist.ShowLocks(req.Task, req.Sources)
+	resp.Locks = append(resp.Locks, locks...)
 
 	if len(resp.Locks) == 0 {
 		resp.Msg = "no DDL lock exists"
+	} else if err != nil {
+		resp.Msg = fmt.Sprintf("may lost owner and ddls info for optimistic locks, err: %s", err)
 	}
 	return resp, nil
 }
@@ -817,22 +820,30 @@ func (s *Server) UnlockDDLLock(ctx context.Context, req *pb.UnlockDDLLockRequest
 		return resp, nil
 	}
 	subtasks := s.scheduler.GetSubTaskCfgsByTask(task)
+	unlockType := config.ShardPessimistic
 	if len(subtasks) > 0 {
 		// subtasks should have same ShardMode
 		for _, subtask := range subtasks {
 			if subtask.ShardMode == config.ShardOptimistic {
-				resp.Msg = "`unlock-ddl-lock` is only supported in pessimistic shard mode currently"
+				unlockType = config.ShardOptimistic
+			}
+			if unlockType != subtask.ShardMode {
+				resp.Msg = "subtasks has both optimistic and pessimistic modes which is invalid"
 				return resp, nil
 			}
-			break
 		}
 	} else {
 		// task is deleted so worker is not watching etcd, automatically set --force-remove
 		req.ForceRemove = true
 	}
 
-	// TODO: add `unlock-ddl-lock` support for Optimist later.
-	err := s.pessimist.UnlockLock(ctx, req.ID, req.ReplaceOwner, req.ForceRemove)
+	var err error
+	switch unlockType {
+	case config.ShardPessimistic:
+		err = s.pessimist.UnlockLock(ctx, req.ID, req.ReplaceOwner, req.ForceRemove)
+	case config.ShardOptimistic:
+		err = s.optimist.UnlockLock(ctx, req.ID, task, req.Sources[0], req.Database, req.Table, req.Op)
+	}
 	if err != nil {
 		resp.Msg = err.Error()
 	} else {

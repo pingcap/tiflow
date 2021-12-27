@@ -39,6 +39,9 @@ const (
 	// ConflictResolved indicates a conflict will be resolved after applied the shard DDL.
 	// in this stage, DM-worker should replay DML skipped in ConflictDetected to downstream.
 	ConflictResolved ConflictStage = "resolved"
+	// ConflictUnlocked indicates a conflict will be resolved after applied the shard DDL.
+	// in this stage, DM-worker should replay DML skipped in ConflictDetected to downstream.
+	ConflictUnlocked ConflictStage = "unlocked"
 )
 
 // Operation represents a shard DDL coordinate operation.
@@ -59,6 +62,9 @@ type Operation struct {
 	ConflictMsg   string        `json:"conflict-message"` // current conflict message
 	Done          bool          `json:"done"`             // whether the operation has done
 	Cols          []string      `json:"cols"`             // drop columns' name
+	// only set it when get from etcd
+	// use for sort infos in recoverlock
+	Revision int64 `json:"-"`
 }
 
 // NewOperation creates a new Operation instance.
@@ -159,8 +165,14 @@ func PutOperation(cli *clientv3.Client, skipDone bool, op Operation, infoModRev 
 // GetAllOperations gets all shard DDL operation in etcd currently.
 // This function should often be called by DM-master.
 // k/k/k/k/v: task-name -> source-ID -> upstream-schema-name -> upstream-table-name -> shard DDL operation.
-func GetAllOperations(cli *clientv3.Client) (map[string]map[string]map[string]map[string]Operation, int64, error) {
-	respTxn, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.ShardDDLOptimismOperationKeyAdapter.Path(), clientv3.WithPrefix()))
+func GetAllOperations(cli *clientv3.Client, task string) (map[string]map[string]map[string]map[string]Operation, int64, error) {
+	var queryKey string
+	if task == "" {
+		queryKey = common.ShardDDLOptimismOperationKeyAdapter.Path()
+	} else {
+		queryKey = common.ShardDDLOptimismOperationKeyAdapter.Encode(task)
+	}
+	respTxn, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(queryKey, clientv3.WithPrefix()))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -182,6 +194,7 @@ func GetAllOperations(cli *clientv3.Client) (map[string]map[string]map[string]ma
 		if _, ok := opm[op.Task][op.Source][op.UpSchema]; !ok {
 			opm[op.Task][op.Source][op.UpSchema] = make(map[string]Operation)
 		}
+		op.Revision = kv.ModRevision
 		opm[op.Task][op.Source][op.UpSchema][op.UpTable] = op
 	}
 
@@ -215,6 +228,7 @@ func GetInfosOperationsByTask(cli *clientv3.Client, task string) ([]Info, []Oper
 		if err2 != nil {
 			return nil, nil, 0, err2
 		}
+		op.Revision = kv.ModRevision
 		ops = append(ops, op)
 	}
 	return infos, ops, respTxn.Header.Revision, nil
@@ -260,6 +274,7 @@ func WatchOperationPut(ctx context.Context, cli *clientv3.Client,
 				}
 
 				op, err := operationFromJSON(string(ev.Kv.Value))
+				op.Revision = ev.Kv.ModRevision
 				if err != nil {
 					select {
 					case errCh <- err:
@@ -285,7 +300,7 @@ func deleteOperationOp(op Operation) clientv3.Op {
 
 // CheckOperations try to check and fix all the schema and table names for operation infos.
 func CheckOperations(cli *clientv3.Client, source string, schemaMap map[string]string, tablesMap map[string]map[string]string) error {
-	allOperations, rev, err := GetAllOperations(cli)
+	allOperations, rev, err := GetAllOperations(cli, "")
 	if err != nil {
 		return err
 	}
