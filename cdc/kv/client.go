@@ -553,19 +553,19 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				allowed := s.checkRateLimit(errInfo.singleRegionInfo.verID.GetID())
 				if !allowed {
 					if errInfo.logRateLimitedHint() {
-						addr := zap.Skip()
+						zapFieldAddr := zap.Skip()
 						if errInfo.singleRegionInfo.rpcCtx != nil {
 							// rpcCtx may be nil if we fails to get region info
 							// from pd. It could cause by pd down or the region
 							// has been merged.
-							addr = zap.String("addr", errInfo.singleRegionInfo.rpcCtx.Addr)
+							zapFieldAddr = zap.String("addr", errInfo.singleRegionInfo.rpcCtx.Addr)
 						}
 						log.Info("EventFeed retry rate limited",
 							zap.Uint64("regionID", errInfo.singleRegionInfo.verID.GetID()),
 							zap.Uint64("ts", errInfo.singleRegionInfo.ts),
 							zap.String("changefeed", cfID), zap.Stringer("span", errInfo.span),
 							zap.Int64("tableID", tableID), zap.String("tableName", tableName),
-							addr)
+							zapFieldAddr)
 					}
 					// rate limit triggers, add the error info to the rate limit queue.
 					s.rateLimitQueue = append(s.rateLimitQueue, errInfo)
