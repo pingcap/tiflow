@@ -660,14 +660,14 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // onRegionFail handles a region's failure, which means, unlock the region's range and send the error to the errCh for
 // error handling. This function is non blocking even if error channel is full.
 // CAUTION: Note that this should only be called in a context that the region has locked it's range.
-func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, revokeToken bool) error {
+// TODO: remove context.Context as it is unused.
+func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, revokeToken bool) {
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
 	if revokeToken {
 		s.regionRouter.Release(errorInfo.rpcCtx.Addr)
 	}
 	s.enqueueError(ctx, errorInfo)
-	return nil
 }
 
 // requestRegionToStore gets singleRegionInfo from regionRouter, which is a token
@@ -762,10 +762,7 @@ func (s *eventFeedSession) requestRegionToStore(
 				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 				s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
 				errInfo := newRegionErrorInfo(sri, &connectToStoreErr{})
-				err = s.onRegionFail(ctx, errInfo, false /* revokeToken */)
-				if err != nil {
-					return errors.Trace(err)
-				}
+				s.onRegionFail(ctx, errInfo, false /* revokeToken */)
 				continue
 			}
 			s.addStream(rpcCtx.Addr, stream, streamCancel)
@@ -820,10 +817,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			}
 
 			errInfo := newRegionErrorInfo(sri, &sendRequestToStoreErr{})
-			err = s.onRegionFail(ctx, errInfo, false /* revokeToken */)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			s.onRegionFail(ctx, errInfo, false /* revokeToken */)
 		} else {
 			s.regionRouter.Acquire(rpcCtx.Addr)
 		}
@@ -885,10 +879,7 @@ func (s *eventFeedSession) dispatchRequest(
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Stringer("span", sri.span))
 			errInfo := newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID})
-			err = s.onRegionFail(ctx, errInfo, false /* revokeToken */)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			s.onRegionFail(ctx, errInfo, false /* revokeToken */)
 			continue
 		}
 		sri.rpcCtx = rpcCtx
@@ -1107,11 +1098,7 @@ func (s *eventFeedSession) receiveFromStream(
 		remainingRegions := pendingRegions.takeAll()
 		for _, state := range remainingRegions {
 			errInfo := newRegionErrorInfo(state.sri, cerror.ErrPendingRegionCancel.FastGenByArgs())
-			err := s.onRegionFail(ctx, errInfo, true /* revokeToken */)
-			if err != nil {
-				// The only possible is that the ctx is cancelled. Simply return.
-				return
-			}
+			s.onRegionFail(ctx, errInfo, true /* revokeToken */)
 		}
 	}()
 

@@ -276,10 +276,7 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 	// since the context used in region worker will be cancelled after region
 	// worker exits, we must use the parent context to prevent regionErrorInfo loss.
 	errInfo := newRegionErrorInfo(state.sri, err)
-	err2 := w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
-	if err2 != nil {
-		return err2
-	}
+	w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
 
 	return retErr
 }
@@ -791,8 +788,8 @@ func (w *regionWorker) evictAllRegions() error {
 			// region worker exits, we must use the parent context to prevent
 			// regionErrorInfo loss.
 			errInfo := newRegionErrorInfo(state.sri, cerror.ErrEventFeedAborted.FastGenByArgs())
-			err = w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
-			return err == nil
+			w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
+			return true
 		})
 	}
 	return err
