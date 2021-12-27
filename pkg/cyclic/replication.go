@@ -12,7 +12,7 @@
 // limitations under the License.
 
 // Package cyclic contains scaffolds for implementing cyclic replication
-// among mutliple TiDB clusters/MySQL. It uses a mark table to identify and
+// among multiple TiDB clusters/MySQL. It uses a mark table to identify and
 // filter duplicate DMLs.
 // CDC needs to watch DMLs to mark tables and ignore all DDLs to mark tables.
 //
@@ -23,10 +23,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	"github.com/pingcap/ticdc/pkg/quotes"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	"github.com/pingcap/tiflow/pkg/quotes"
 )
 
 // RelaxSQLMode returns relaxed SQL mode, "STRICT_TRANS_TABLES" is removed.

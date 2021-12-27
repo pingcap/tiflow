@@ -15,21 +15,23 @@ package owner
 
 import (
 	"context"
+	"strings"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/txnutil/gc"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/format"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/sessionctx/binloginfo"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo"
+	schedulerv2 "github.com/pingcap/tiflow/cdc/scheduler"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -39,14 +41,14 @@ type changefeed struct {
 	id    model.ChangeFeedID
 	state *orchestrator.ChangefeedReactorState
 
-	scheduler        *scheduler
+	scheduler        scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
 	gcManager        gc.Manager
 	redoManager      redo.LogManager
 
 	schema      *schemaWrap4Owner
-	sink        AsyncSink
+	sink        DDLSink
 	ddlPuller   DDLPuller
 	initialized bool
 	// isRemoved is true if the changefeed is removed
@@ -57,27 +59,28 @@ type changefeed struct {
 	// After the DDL event has been executed, ddlEventCache will be set to nil.
 	ddlEventCache *model.DDLEvent
 
-	errCh  chan error
+	errCh chan error
+	// cancel the running goroutine start by `DDLPuller`
 	cancel context.CancelFunc
 
 	// The changefeed will start some backend goroutines in the function `initialize`,
-	// such as DDLPuller, Sink, etc.
+	// such as DDLPuller, DDLSink, etc.
 	// `wg` is used to manage those backend goroutines.
-	// But it only manages the DDLPuller for now.
-	// TODO: manage the Sink and other backend goroutines.
 	wg sync.WaitGroup
 
 	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
-	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
+	newSink      func() DDLSink
+	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler, error)
 }
 
 func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 	c := &changefeed{
-		id:               id,
-		scheduler:        newScheduler(),
+		id: id,
+		// The scheduler will be created lazily.
+		scheduler:        nil,
 		barriers:         newBarriers(),
 		feedStateManager: new(feedStateManager),
 		gcManager:        gcManager,
@@ -86,15 +89,16 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		cancel: func() {},
 
 		newDDLPuller: newDDLPuller,
+		newSink:      newDDLSink,
 	}
-	c.newSink = newAsyncSink
+	c.newScheduler = newScheduler
 	return c
 }
 
 func newChangefeed4Test(
 	id model.ChangeFeedID, gcManager gc.Manager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
-	newSink func(ctx cdcContext.Context) (AsyncSink, error),
+	newSink func() DDLSink,
 ) *changefeed {
 	c := newChangefeed(id, gcManager)
 	c.newDDLPuller = newDDLPuller
@@ -168,7 +172,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	default:
 	}
 
-	c.sink.EmitCheckpointTs(ctx, checkpointTs)
+	c.sink.emitCheckpointTs(ctx, checkpointTs)
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -179,12 +183,22 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// So we return here.
 		return nil
 	}
-	shouldUpdateState, err := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
+	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(ctx, c.state, c.schema.AllPhysicalTables(), captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if shouldUpdateState {
-		c.updateStatus(barrierTs)
+	// CheckpointCannotProceed implies that not all tables are being replicated normally,
+	// so in that case there is no need to advance the global watermarks.
+	if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
+		pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		currentTs := oracle.GetPhysical(pdTime)
+		if newResolvedTs > barrierTs {
+			newResolvedTs = barrierTs
+		}
+		if newCheckpointTs > barrierTs {
+			newCheckpointTs = barrierTs
+		}
+		c.updateStatus(currentTs, newCheckpointTs, newResolvedTs)
 	}
 	return nil
 }
@@ -249,16 +263,13 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
-	c.sink, err = c.newSink(cancelCtx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = c.sink.Initialize(cancelCtx, c.schema.SinkTableInfos())
-	if err != nil {
-		return errors.Trace(err)
-	}
+
+	c.sink = c.newSink()
+	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
+
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
@@ -281,12 +292,20 @@ LOOP:
 	// init metrics
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
+
+	// create scheduler
+	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	c.initialized = true
 	return nil
 }
 
-func (c *changefeed) releaseResources(ctx context.Context) {
+func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if !c.initialized {
+		c.redoManagerCleanup(ctx)
 		return
 	}
 	log.Info("close changefeed", zap.String("changefeed", c.state.ID),
@@ -295,24 +314,48 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
-	if c.isRemoved && c.redoManager.Enabled() {
-		err := c.redoManager.Cleanup(ctx)
-		if err != nil {
-			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id), zap.Error(err))
-		}
-	}
-	ctx, cancel := context.WithCancel(context.Background())
+	c.redoManagerCleanup(ctx)
+	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
-	if err := c.sink.Close(ctx); err != nil {
+	if err := c.sink.close(canceledCtx); err != nil {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
+	c.scheduler.Close(ctx)
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsGauge = nil
 	c.metricsChangefeedCheckpointTsLagGauge = nil
 	c.initialized = false
+}
+
+// redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
+func (c *changefeed) redoManagerCleanup(ctx context.Context) {
+	if c.isRemoved {
+		if c.state == nil || c.state.Info == nil || c.state.Info.Config == nil ||
+			c.state.Info.Config.Consistent == nil {
+			log.Warn("changefeed is removed, but state is not complete", zap.Any("state", c.state))
+			return
+		}
+		if !redo.IsConsistentEnabled(c.state.Info.Config.Consistent.Level) {
+			return
+		}
+		// when removing a paused changefeed, the redo manager is nil, create a new one
+		if c.redoManager == nil {
+			redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
+			redoManager, err := redo.NewManager(ctx, c.state.Info.Config.Consistent, redoManagerOpts)
+			if err != nil {
+				log.Error("create redo manager failed", zap.String("changefeed", c.id), zap.Error(err))
+				return
+			}
+			c.redoManager = redoManager
+		}
+		err := c.redoManager.Cleanup(ctx)
+		if err != nil {
+			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id), zap.Error(err))
+		}
+	}
 }
 
 // preflightCheck makes sure that the metadata in Etcd is complete enough to run the tick.
@@ -407,7 +450,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			return barrierTs, nil
 		}
 		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval))
-		if err := c.sink.SinkSyncpoint(ctx, barrierTs); err != nil {
+		if err := c.sink.emitSyncPoint(ctx, barrierTs); err != nil {
 			return 0, errors.Trace(err)
 		}
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
@@ -441,7 +484,11 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
+		ddlEvent.Query, err = addSpecialComment(ddlEvent.Query)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+
 		c.ddlEventCache = ddlEvent
 		if c.redoManager.Enabled() {
 			err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
@@ -454,7 +501,7 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		log.Warn("ignore the DDL job of ineligible table", zap.Reflect("job", job))
 		return true, nil
 	}
-	done, err = c.sink.EmitDDLEvent(ctx, c.ddlEventCache)
+	done, err = c.sink.emitDDLEvent(ctx, c.ddlEventCache)
 	if err != nil {
 		return false, err
 	}
@@ -464,26 +511,7 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	return done, nil
 }
 
-func (c *changefeed) updateStatus(barrierTs model.Ts) {
-	resolvedTs := barrierTs
-	for _, position := range c.state.TaskPositions {
-		if resolvedTs > position.ResolvedTs {
-			resolvedTs = position.ResolvedTs
-		}
-	}
-	for _, taskStatus := range c.state.TaskStatuses {
-		for _, opt := range taskStatus.Operation {
-			if resolvedTs > opt.BoundaryTs {
-				resolvedTs = opt.BoundaryTs
-			}
-		}
-	}
-	checkpointTs := resolvedTs
-	for _, position := range c.state.TaskPositions {
-		if checkpointTs > position.CheckPointTs {
-			checkpointTs = position.CheckPointTs
-		}
-	}
+func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs model.Ts) {
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
 		if status.ResolvedTs != resolvedTs {
@@ -496,14 +524,43 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 		}
 		return status, changed, nil
 	})
-
 	phyTs := oracle.ExtractPhysical(checkpointTs)
+
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
-	// It is more accurate to get tso from PD, but in most cases since we have
-	// deployed NTP service, a little bias is acceptable here.
-	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyTs) / 1e3)
 }
 
-func (c *changefeed) Close(ctx context.Context) {
+func (c *changefeed) Close(ctx cdcContext.Context) {
 	c.releaseResources(ctx)
+}
+
+func (c *changefeed) GetInfoProvider() schedulerv2.InfoProvider {
+	if provider, ok := c.scheduler.(schedulerv2.InfoProvider); ok {
+		return provider
+	}
+	return nil
+}
+
+// addSpecialComment translate tidb feature to comment
+func addSpecialComment(ddlQuery string) (string, error) {
+	stms, _, err := parser.New().ParseSQL(ddlQuery)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	if len(stms) != 1 {
+		log.Panic("invalid ddlQuery statement size", zap.String("ddlQuery", ddlQuery))
+	}
+	var sb strings.Builder
+	// translate TiDB feature to special comment
+	restoreFlags := format.RestoreTiDBSpecialComment
+	// escape the keyword
+	restoreFlags |= format.RestoreNameBackQuotes
+	// upper case keyword
+	restoreFlags |= format.RestoreKeyWordUppercase
+	// wrap string with single quote
+	restoreFlags |= format.RestoreStringSingleQuotes
+	if err = stms[0].Restore(format.NewRestoreCtx(restoreFlags, &sb)); err != nil {
+		return "", errors.Trace(err)
+	}
+	return sb.String(), nil
 }

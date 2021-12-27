@@ -16,7 +16,7 @@ package model
 import (
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,5 +56,5 @@ func TestRawKVEntry(t *testing.T) {
 	}
 
 	require.Equal(t, "OpType: 1, Key: 123, Value: 345, StartTs: 100, CRTs: 101, RegionID: 0", raw.String())
-	require.Equal(t, int64(6), raw.ApproximateSize())
+	require.Equal(t, int64(6), raw.ApproximateDataSize())
 }

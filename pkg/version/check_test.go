@@ -23,7 +23,6 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
@@ -188,56 +187,56 @@ func TestReleaseSemver(t *testing.T) {
 func TestGetTiCDCClusterVersion(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		captureInfos []*model.CaptureInfo
-		expected     TiCDCClusterVersion
+		captureVersions []string
+		expected        TiCDCClusterVersion
 	}{
 		{
-			captureInfos: []*model.CaptureInfo{},
-			expected:     TiCDCClusterVersionUnknown,
+			captureVersions: []string{},
+			expected:        TiCDCClusterVersionUnknown,
 		},
 		{
-			captureInfos: []*model.CaptureInfo{
-				{ID: "capture1", Version: ""},
-				{ID: "capture2", Version: ""},
-				{ID: "capture3", Version: ""},
+			captureVersions: []string{
+				"",
+				"",
+				"",
 			},
 			expected: TiCDCClusterVersion{defaultTiCDCVersion},
 		},
 		{
-			captureInfos: []*model.CaptureInfo{
-				{ID: "capture1", Version: "5.0.1"},
-				{ID: "capture2", Version: "4.0.7"},
-				{ID: "capture3", Version: "5.0.0-rc"},
+			captureVersions: []string{
+				"5.0.1",
+				"4.0.7",
+				"5.0.0-rc",
 			},
 			expected: TiCDCClusterVersion{semver.New("4.0.7")},
 		},
 		{
-			captureInfos: []*model.CaptureInfo{
-				{ID: "capture1", Version: "5.0.0-rc"},
+			captureVersions: []string{
+				"5.0.0-rc",
 			},
 			expected: TiCDCClusterVersion{semver.New("5.0.0-rc")},
 		},
 		{
-			captureInfos: []*model.CaptureInfo{
-				{ID: "capture1", Version: "5.0.0"},
+			captureVersions: []string{
+				"5.0.0",
 			},
 			expected: TiCDCClusterVersion{semver.New("5.0.0")},
 		},
 		{
-			captureInfos: []*model.CaptureInfo{
-				{ID: "capture1", Version: "4.1.0"},
+			captureVersions: []string{
+				"4.1.0",
 			},
 			expected: TiCDCClusterVersion{semver.New("4.1.0")},
 		},
 		{
-			captureInfos: []*model.CaptureInfo{
-				{ID: "capture1", Version: "4.0.10"},
+			captureVersions: []string{
+				"4.0.10",
 			},
 			expected: TiCDCClusterVersion{semver.New("4.0.10")},
 		},
 	}
 	for _, tc := range testCases {
-		ver, err := GetTiCDCClusterVersion(tc.captureInfos)
+		ver, err := GetTiCDCClusterVersion(tc.captureVersions)
 		require.Nil(t, err)
 		require.Equal(t, ver, tc.expected)
 	}

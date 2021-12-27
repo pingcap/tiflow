@@ -32,11 +32,11 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var _ = Suite(&testRelaySuite{})
@@ -122,6 +122,10 @@ type mockWriter struct {
 	latestEvent *replication.BinlogEvent
 }
 
+func (w *mockWriter) IsActive(uuid, filename string) (bool, int64) {
+	return false, 0
+}
+
 func (w *mockWriter) Close() error {
 	return nil
 }
@@ -154,9 +158,9 @@ func (t *testRelaySuite) TestTryRecoverLatestFile(c *C) {
 		relayCfg = newRelayCfg(c, gmysql.MySQLFlavor)
 		r        = NewRelay(relayCfg).(*Relay)
 	)
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/utils/GetGTIDPurged", `return("406a3f61-690d-11e7-87c5-6c92bf46f384:1-122")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/utils/GetGTIDPurged", `return("406a3f61-690d-11e7-87c5-6c92bf46f384:1-122")`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/utils/GetGTIDPurged")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/utils/GetGTIDPurged")
 	cfg := getDBConfigForTest()
 	conn.InitMockDB(c)
 	db, err := conn.DefaultDBProvider.Apply(cfg)
@@ -281,9 +285,9 @@ func (t *testRelaySuite) TestTryRecoverMeta(c *C) {
 	f.Close()
 
 	// recover with empty GTIDs.
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/utils/GetGTIDPurged", `return("")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/utils/GetGTIDPurged", `return("")`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/utils/GetGTIDPurged")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/utils/GetGTIDPurged")
 	c.Assert(r.tryRecoverLatestFile(context.Background(), parser2), IsNil)
 	_, latestPos := r.meta.Pos()
 	c.Assert(latestPos, DeepEquals, gmysql.Position{Name: filename, Pos: g.LatestPos})
@@ -437,7 +441,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		replication.ErrSyncClosed,
 		replication.ErrNeedSyncAgain,
 	} {
-		_, handleErr := r.handleEvents(context.Background(), reader2, parser2)
+		handleErr := r.handleEvents(context.Background(), reader2, parser2)
 		c.Assert(errors.Cause(handleErr), Equals, reader2.err)
 	}
 
@@ -447,7 +451,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// writer return error to force handleEvents return
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
-	_, err = r.handleEvents(context.Background(), reader2, parser2)
+	err = r.handleEvents(context.Background(), reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, writer2.err)
 	// after handle rotate event, we save and flush the meta immediately
 	c.Assert(r.meta.Dirty(), Equals, false)
@@ -466,7 +470,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		lm := r.meta.(*LocalMeta)
 		backupUUID := lm.currentUUID
 		lm.currentUUID = "not exist"
-		_, err = r.handleEvents(context.Background(), reader2, parser2)
+		err = r.handleEvents(context.Background(), reader2, parser2)
 		c.Assert(os.IsNotExist(errors.Cause(err)), Equals, true)
 		lm.currentUUID = backupUUID
 	}
@@ -478,7 +482,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	// writer return error
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
-	_, err = r.handleEvents(context.Background(), reader2, parser2)
+	err = r.handleEvents(context.Background(), reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, writer2.err)
 	c.Assert(r.meta.Dirty(), Equals, false)
 
@@ -486,7 +490,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	writer2.err = nil
-	_, err = r.handleEvents(ctx, reader2, parser2) // returned when ctx timeout
+	err = r.handleEvents(ctx, reader2, parser2) // returned when ctx timeout
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	// check written event
 	c.Assert(writer2.latestEvent, Equals, reader2.result.Event)
@@ -501,7 +505,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 
 	// write a QueryEvent with GTID sets
 	reader2.result.Event = queryEv
-	_, err = r.handleEvents(ctx2, reader2, parser2)
+	err = r.handleEvents(ctx2, reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	// check written event
 	c.Assert(writer2.latestEvent, Equals, reader2.result.Event)
@@ -520,7 +524,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	}
 	ctx4, cancel4 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel4()
-	_, err = r.handleEvents(ctx4, reader2, parser2)
+	err = r.handleEvents(ctx4, reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	select {
 	case <-ctx4.Done():
@@ -533,7 +537,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	writer2.result.Ignore = true
 	ctx5, cancel5 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel5()
-	_, err = r.handleEvents(ctx5, reader2, parser2)
+	err = r.handleEvents(ctx5, reader2, parser2)
 	c.Assert(errors.Cause(err), Equals, ctx.Err())
 	select {
 	case <-ctx5.Done():
@@ -584,9 +588,9 @@ func (t *testRelaySuite) TestReSetupMeta(c *C) {
 	mockGetRandomServerID(mockDB)
 	//  mock AddGSetWithPurged
 	mockDB.ExpectQuery("select @@GLOBAL.gtid_purged").WillReturnRows(sqlmock.NewRows([]string{"@@GLOBAL.gtid_purged"}).AddRow(""))
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockGetEmptyPreviousGTIDFromGTIDSet", "return()"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockGetEmptyPreviousGTIDFromGTIDSet", "return()"), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockGetEmptyPreviousGTIDFromGTIDSet")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockGetEmptyPreviousGTIDFromGTIDSet")
 	c.Assert(r.reSetupMeta(ctx), IsNil)
 	uuid001 := fmt.Sprintf("%s.000001", uuid)
 	t.verifyMetadata(c, r, uuid001, gmysql.Position{Name: r.cfg.BinLogName, Pos: 4}, emptyGTID.String(), []string{uuid001})
@@ -765,7 +769,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *C) {
 	})
 
 	// other event type with LOG_EVENT_ARTIFICIAL_F
-	ev, err = event.GenCommonGTIDEvent(gmysql.MySQLFlavor, header.ServerID, latestPos, gtidSet)
+	ev, err = event.GenTableMapEvent(header, latestPos, 0, []byte("testdb"), []byte("testtbl"), []byte("INT"))
 	c.Assert(err, IsNil)
 	ev.Header.Flags |= replication.LOG_EVENT_ARTIFICIAL_F
 	cases = append(cases, Case{

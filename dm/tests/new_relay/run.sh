@@ -24,11 +24,11 @@ function test_cant_dail_upstream() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	kill_dm_worker
 
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/pkg/conn/failDBPing=return()"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/pkg/conn/failDBPing=return()"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 
@@ -57,7 +57,7 @@ function test_cant_dail_downstream() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	dmctl_start_task_standalone $cur/conf/dm-task.yaml "--remove-meta"
 
 	kill_dm_worker
@@ -176,7 +176,7 @@ function test_kill_dump_connection() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID1" \
@@ -203,7 +203,7 @@ function run() {
 	test_cant_dail_downstream
 	test_cant_dail_upstream
 
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/relay/ReportRelayLogSpaceInBackground=return(1)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/ReportRelayLogSpaceInBackground=return(1)"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
@@ -223,7 +223,7 @@ function run() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 3
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"transfer-source $SOURCE_ID1 worker1" \
 		"\"result\": true" 1

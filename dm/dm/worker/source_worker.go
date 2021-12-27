@@ -16,6 +16,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -27,17 +28,17 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/streamer"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/relay"
 )
 
 // SourceWorker manages a source(upstream) which is mainly related to subtasks and relay.
@@ -77,6 +78,7 @@ type SourceWorker struct {
 	relayWg      sync.WaitGroup
 	relayHolder  RelayHolder
 	relayPurger  relay.Purger
+	relayDir     string
 
 	startedRelayBySourceCfg bool
 
@@ -89,13 +91,19 @@ type SourceWorker struct {
 
 // NewSourceWorker creates a new SourceWorker. The functionality of relay and subtask is disabled by default, need call EnableRelay
 // and EnableSubtask later.
-func NewSourceWorker(cfg *config.SourceConfig, etcdClient *clientv3.Client, name string) (w *SourceWorker, err error) {
+func NewSourceWorker(
+	cfg *config.SourceConfig,
+	etcdClient *clientv3.Client,
+	name string,
+	relayDir string,
+) (w *SourceWorker, err error) {
 	w = &SourceWorker{
 		cfg:           cfg,
 		subTaskHolder: newSubTaskHolder(),
 		l:             log.With(zap.String("component", "worker controller")),
 		etcdClient:    etcdClient,
 		name:          name,
+		relayDir:      relayDir,
 	}
 	// keep running until canceled in `Close`.
 	w.ctx, w.cancel = context.WithCancel(context.Background())
@@ -247,11 +255,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	status.Location.Position = pos
-	if err2 := status.Location.SetGTID(gtidSet.Origin()); err2 != nil {
-		return err2
-	}
-
+	status.Location = binlog.InitLocation(pos, gtidSet)
 	ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel2()
 	binlogs, err := binlog.GetBinaryLogs(ctx2, w.sourceDB.DB)
@@ -267,7 +271,19 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 }
 
 // EnableRelay enables the functionality of start/watch/handle relay.
-func (w *SourceWorker) EnableRelay() (err error) {
+// According to relay schedule of DM-master, a source worker will enable relay in two scenarios: its bound source has
+// `enable-relay: true` in config, or it has a UpstreamRelayWorkerKeyAdapter etcd KV.
+// The paths to EnableRelay are:
+// - source config `enable-relay: true`, which is checked in enableHandleSubtasks
+//   - when DM-worker Server.Start
+//   - when DM-worker Server watches a SourceBound change, which is to turn a free source worker to bound or notify a
+//     bound worker that source config has changed
+//   - when DM-worker Server fails watching and recovers from a snapshot
+// - UpstreamRelayWorkerKeyAdapter
+//   - when DM-worker Server.Start
+//   - when DM-worker Server watches a UpstreamRelayWorkerKeyAdapter change
+//   - when DM-worker Server fails watching and recovers from a snapshot
+func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 	w.l.Info("enter EnableRelay")
 	w.Lock()
 	defer w.Unlock()
@@ -275,6 +291,8 @@ func (w *SourceWorker) EnableRelay() (err error) {
 		w.l.Warn("already enabled relay")
 		return nil
 	}
+
+	w.startedRelayBySourceCfg = startBySourceCfg
 
 	var sourceCfg *config.SourceConfig
 	failpoint.Inject("MockGetSourceCfgFromETCD", func(_ failpoint.Value) {
@@ -324,6 +342,13 @@ func (w *SourceWorker) EnableRelay() (err error) {
 	}
 
 	// 2. initial relay holder, the cfg's password need decrypt
+	// worker's relay-dir has higher priority than source's relay-dir
+	if w.relayDir != "" {
+		workerRelayDir := filepath.Join(w.relayDir, w.name)
+		log.L().Info("use worker's relay-dir", zap.String("RelayDir", workerRelayDir))
+		w.cfg.RelayDir = workerRelayDir
+	}
+
 	w.relayHolder = NewRelayHolder(w.cfg)
 	relayPurger, err := w.relayHolder.Init(w.relayCtx, []relay.PurgeInterceptor{
 		w,
@@ -364,10 +389,21 @@ func (w *SourceWorker) EnableRelay() (err error) {
 }
 
 // DisableRelay disables the functionality of start/watch/handle relay.
+// a source worker will disable relay by the reason of EnableRelay is no longer valid.
+// The paths to DisableRelay are:
+// - source config `enable-relay: true` no longer valid
+//   - when DM-worker Server watches a SourceBound change, which is to notify that source config has changed, and the
+//     worker has started relay by that bound
+//   - when the source worker is unbound and has started relay by that bound
+// - UpstreamRelayWorkerKeyAdapter no longer valid
+//   - when DM-worker Server watches a UpstreamRelayWorkerKeyAdapter change
+//   - when DM-worker Server fails watching and recovers from a snapshot
 func (w *SourceWorker) DisableRelay() {
 	w.l.Info("enter DisableRelay")
 	w.Lock()
 	defer w.Unlock()
+
+	w.startedRelayBySourceCfg = false
 	if !w.relayEnabled.CAS(true, false) {
 		w.l.Warn("already disabled relay")
 		return

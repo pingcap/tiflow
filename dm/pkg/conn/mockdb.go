@@ -19,7 +19,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	check "github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/config"
 )
 
 type mockDBProvider struct {

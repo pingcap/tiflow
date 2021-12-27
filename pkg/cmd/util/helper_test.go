@@ -21,8 +21,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/spf13/cobra"
 )
 
@@ -189,7 +189,11 @@ func (s *utilsSuite) TestAndWriteExampleReplicaTOML(c *check.C) {
 			{Dispatcher: "ts", Matcher: []string{"test1.*", "test2.*"}},
 			{Dispatcher: "rowid", Matcher: []string{"test3.*", "test4.*"}},
 		},
-		Protocol: "default",
+		ColumnSelectors: []*config.ColumnSelector{
+			{Matcher: []string{"test1.*", "test2.*"}, Columns: []string{"column1", "column2"}},
+			{Matcher: []string{"test3.*", "test4.*"}, Columns: []string{"!a", "column3"}},
+		},
+		Protocol: "open-protocol",
 	})
 	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
 		Enable:          false,

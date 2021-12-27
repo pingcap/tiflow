@@ -27,8 +27,8 @@ import (
 	grpcTestingProto "github.com/grpc-ecosystem/go-grpc-middleware/testing/testproto"
 	"github.com/integralist/go-findroot/find"
 	"github.com/phayes/freeport"
-	"github.com/pingcap/ticdc/pkg/httputil"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -40,6 +40,10 @@ func TestTCPServerInsecureHTTP1(t *testing.T) {
 
 	server, err := NewTCPServer(addr, &security.Credential{})
 	require.NoError(t, err)
+	defer func() {
+		err := server.Close()
+		require.NoError(t, err)
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -73,6 +77,11 @@ func TestTCPServerTLSHTTP1(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, server.IsTLSEnabled())
 
+	defer func() {
+		err := server.Close()
+		require.NoError(t, err)
+	}()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
@@ -103,6 +112,11 @@ func TestTCPServerInsecureGrpc(t *testing.T) {
 
 	server, err := NewTCPServer(addr, &security.Credential{})
 	require.NoError(t, err)
+
+	defer func() {
+		err := server.Close()
+		require.NoError(t, err)
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -136,6 +150,11 @@ func TestTCPServerTLSGrpc(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, server.IsTLSEnabled())
 
+	defer func() {
+		err := server.Close()
+		require.NoError(t, err)
+	}()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
@@ -163,7 +182,7 @@ func makeCredential4Testing(t *testing.T) *security.Credential {
 	stat, err := find.Repo()
 	require.NoError(t, err)
 
-	tlsPath := fmt.Sprintf("%s/tests/_certificates/", stat.Path)
+	tlsPath := fmt.Sprintf("%s/tests/integration_tests/_certificates/", stat.Path)
 	return &security.Credential{
 		CAPath:        path.Join(tlsPath, "ca.pem"),
 		CertPath:      path.Join(tlsPath, "server.pem"),
@@ -281,6 +300,64 @@ func testWithGrpcWorkload(ctx context.Context, t *testing.T, server TCPServer, a
 			require.Equal(t, fmt.Sprintf("%d", i), received.Value)
 		}
 	}()
+
+	wg.Wait()
+}
+
+func TestTcpServerClose(t *testing.T) {
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	server, err := NewTCPServer(addr, &security.Credential{})
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(ctx)
+		require.Error(t, err)
+		require.Regexp(t, ".*ErrTCPServerClosed.*", err.Error())
+	}()
+
+	httpServer := &http.Server{}
+	http.HandleFunc("/", func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(200)
+		_, err := writer.Write([]byte("ok"))
+		require.NoError(t, err)
+	})
+	defer func() {
+		http.DefaultServeMux = http.NewServeMux()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := httpServer.Serve(server.HTTP1Listener())
+		require.Error(t, err)
+		require.Regexp(t, ".*mux: server closed.*", err.Error())
+	}()
+
+	cli, err := httputil.NewClient(&security.Credential{})
+	require.NoError(t, err)
+
+	uri := fmt.Sprintf("http://%s/", addr)
+	resp, err := cli.Get(uri)
+	require.NoError(t, err)
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	require.Equal(t, 200, resp.StatusCode)
+
+	// Close should be idempotent.
+	for i := 0; i < 3; i++ {
+		err := server.Close()
+		require.NoError(t, err)
+	}
 
 	wg.Wait()
 }

@@ -23,11 +23,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/ticdc/pkg/workerpool"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/zap"
 )
 
@@ -317,7 +317,7 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 		}
 
 		// 5 * 8 is for the 5 fields in PolymorphicEvent
-		state.heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 40
+		state.heapSizeBytesEstimate += event.RawKV.ApproximateDataSize() + 40
 		needFlush := state.heapSizeBytesEstimate >= int64(state.sorterConfig.ChunkSizeLimit) ||
 			(isResolvedEvent && state.rateCounter < flushRateLimitPerSecond)
 

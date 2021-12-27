@@ -17,13 +17,12 @@ import (
 	"context"
 	"runtime"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -35,7 +34,6 @@ type mysqlSinkWorker struct {
 	execDMLs         func(context.Context, []*model.RowChangedEvent, uint64, int) error
 	metricBucketSize prometheus.Counter
 	receiver         *notify.Receiver
-	checkpointTs     uint64
 	closedCh         chan struct{}
 }
 
@@ -78,10 +76,9 @@ func (w *mysqlSinkWorker) appendFinishTxn(wg *sync.WaitGroup) {
 
 func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	var (
-		toExecRows   []*model.RowChangedEvent
-		replicaID    uint64
-		txnNum       int
-		lastCommitTs uint64
+		toExecRows []*model.RowChangedEvent
+		replicaID  uint64
+		txnNum     int
 	)
 
 	// mark FinishWg before worker exits, all data txns can be omitted.
@@ -119,7 +116,6 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			txnNum = 0
 			return err
 		}
-		atomic.StoreUint64(&w.checkpointTs, lastCommitTs)
 		toExecRows = toExecRows[:0]
 		w.metricBucketSize.Add(float64(txnNum))
 		txnNum = 0
@@ -149,7 +145,6 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			}
 			replicaID = txn.ReplicaID
 			toExecRows = append(toExecRows, txn.Rows...)
-			lastCommitTs = txn.CommitTs
 			txnNum++
 		case <-w.receiver.C:
 			if err := flushRows(); err != nil {

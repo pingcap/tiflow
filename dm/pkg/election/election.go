@@ -29,8 +29,8 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 const (
@@ -246,9 +246,8 @@ func (e *Election) campaignLoop(ctx context.Context, session *concurrency.Sessio
 		elec := concurrency.NewElection(session, e.key)
 		ctx2, cancel2 := context.WithCancel(ctx)
 
-		campaignWg.Add(1)
-
 		e.campaignMu.Lock()
+		campaignWg.Add(1)
 		e.cancelCampaign = func() {
 			cancel2()
 			campaignWg.Wait()

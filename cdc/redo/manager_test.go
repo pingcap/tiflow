@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,7 +93,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 	}
 
 	cfg := &config.ConsistentConfig{
-		Level:   string(consistentLevelEventual),
+		Level:   string(ConsistentLevelEventual),
 		Storage: "blackhole://",
 	}
 	errCh := make(chan error, 1)
@@ -181,7 +181,7 @@ func TestLogManagerInOwner(t *testing.T) {
 	defer cancel()
 
 	cfg := &config.ConsistentConfig{
-		Level:   string(consistentLevelEventual),
+		Level:   string(ConsistentLevelEventual),
 		Storage: "blackhole://",
 	}
 	opts := &ManagerOptions{

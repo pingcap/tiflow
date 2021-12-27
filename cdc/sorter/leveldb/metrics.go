@@ -21,7 +21,7 @@ var (
 	sorterWriteBytesHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
-		Name:      "leveldb_write_bytes",
+		Name:      "db_write_bytes",
 		Help:      "Bucketed histogram of sorter write batch bytes",
 		Buckets:   prometheus.ExponentialBuckets(16, 2.0, 20),
 	}, []string{"capture", "id"})
@@ -29,15 +29,23 @@ var (
 	sorterWriteDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
-		Name:      "leveldb_write_duration_seconds",
+		Name:      "db_write_duration_seconds",
 		Help:      "Bucketed histogram of sorter write duration",
+		Buckets:   prometheus.ExponentialBuckets(0.004, 2.0, 20),
+	}, []string{"capture", "id"})
+
+	sorterCompactDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "ticdc",
+		Subsystem: "sorter",
+		Name:      "db_compact_duration_seconds",
+		Help:      "Bucketed histogram of sorter manual compact duration",
 		Buckets:   prometheus.ExponentialBuckets(0.004, 2.0, 20),
 	}, []string{"capture", "id"})
 
 	sorterCleanupKVCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
-		Name:      "leveldb_cleanup_kv_total",
+		Name:      "db_cleanup_kv_total",
 		Help:      "The total number of cleaned up kv entries",
 	}, []string{"capture", "id"})
 )
@@ -45,6 +53,7 @@ var (
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(sorterWriteDurationHistogram)
+	registry.MustRegister(sorterCompactDurationHistogram)
 	registry.MustRegister(sorterWriteBytesHistogram)
 	registry.MustRegister(sorterCleanupKVCounter)
 }

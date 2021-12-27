@@ -18,21 +18,22 @@ import (
 	"database/sql"
 	"net/url"
 	"strings"
+	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestSinkParamsClone(t *testing.T) {
+	defer testleak.AfterTestT(t)()
 	param1 := defaultParams.Clone()
 	param2 := param1.Clone()
 	param2.changefeedID = "123"
 	param2.batchReplaceEnabled = false
 	param2.maxTxnRow = 1
-	c.Assert(param1, check.DeepEquals, &sinkParams{
+	require.Equal(t, &sinkParams{
 		workerCount:         DefaultWorkerCount,
 		maxTxnRow:           DefaultMaxTxnRow,
 		tidbTxnMode:         defaultTiDBTxnMode,
@@ -42,8 +43,8 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		writeTimeout:        defaultWriteTimeout,
 		dialTimeout:         defaultDialTimeout,
 		safeMode:            defaultSafeMode,
-	})
-	c.Assert(param2, check.DeepEquals, &sinkParams{
+	}, param1)
+	require.Equal(t, &sinkParams{
 		changefeedID:        "123",
 		workerCount:         DefaultWorkerCount,
 		maxTxnRow:           1,
@@ -54,22 +55,22 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		writeTimeout:        defaultWriteTimeout,
 		dialTimeout:         defaultDialTimeout,
 		safeMode:            defaultSafeMode,
-	})
+	}, param2)
 }
 
-func (s MySQLSinkSuite) TestGenerateDSNByParams(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestGenerateDSNByParams(t *testing.T) {
+	defer testleak.AfterTestT(t)()
 
 	testDefaultParams := func() {
 		db, err := mockTestDB()
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		defer db.Close()
 
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		params := defaultParams.Clone()
 		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		expectedParams := []string{
 			"tidb_txn_mode=optimistic",
 			"readTimeout=2m",
@@ -77,45 +78,45 @@ func (s MySQLSinkSuite) TestGenerateDSNByParams(c *check.C) {
 			"allow_auto_random_explicit_insert=1",
 		}
 		for _, param := range expectedParams {
-			c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
+			require.True(t, strings.Contains(dsnStr, param))
 		}
-		c.Assert(strings.Contains(dsnStr, "time_zone"), check.IsFalse)
+		require.False(t, strings.Contains(dsnStr, "time_zone"))
 	}
 
 	testTimezoneParam := func() {
 		db, err := mockTestDB()
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		defer db.Close()
 
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		params := defaultParams.Clone()
 		params.timezone = `"UTC"`
 		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
-		c.Assert(err, check.IsNil)
-		c.Assert(strings.Contains(dsnStr, "time_zone=%22UTC%22"), check.IsTrue)
+		require.Nil(t, err)
+		require.True(t, strings.Contains(dsnStr, "time_zone=%22UTC%22"))
 	}
 
 	testTimeoutParams := func() {
 		db, err := mockTestDB()
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		defer db.Close()
 
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		uri, err := url.Parse("mysql://127.0.0.1:3306/?read-timeout=4m&write-timeout=5m&timeout=3m")
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		params, err := parseSinkURIToParams(context.TODO(), uri, map[string]string{})
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		expectedParams := []string{
 			"readTimeout=4m",
 			"writeTimeout=5m",
 			"timeout=3m",
 		}
 		for _, param := range expectedParams {
-			c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
+			require.True(t, strings.Contains(dsnStr, param))
 		}
 	}
 
@@ -124,8 +125,8 @@ func (s MySQLSinkSuite) TestGenerateDSNByParams(c *check.C) {
 	testTimeoutParams()
 }
 
-func (s MySQLSinkSuite) TestParseSinkURIToParams(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestParseSinkURIToParams(t *testing.T) {
+	defer testleak.AfterTestT(t)()
 	expected := defaultParams.Clone()
 	expected.workerCount = 64
 	expected.maxTxnRow = 20
@@ -144,14 +145,14 @@ func (s MySQLSinkSuite) TestParseSinkURIToParams(c *check.C) {
 		OptCaptureAddr:  expected.captureAddr,
 	}
 	uri, err := url.Parse(uriStr)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	params, err := parseSinkURIToParams(context.TODO(), uri, opts)
-	c.Assert(err, check.IsNil)
-	c.Assert(params, check.DeepEquals, expected)
+	require.Nil(t, err)
+	require.Equal(t, expected, params)
 }
 
-func (s MySQLSinkSuite) TestParseSinkURITimezone(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestParseSinkURITimezone(t *testing.T) {
+	defer testleak.AfterTestT(t)()
 	uris := []string{
 		"mysql://127.0.0.1:3306/?time-zone=Asia/Shanghai&worker-count=32",
 		"mysql://127.0.0.1:3306/?time-zone=&worker-count=32",
@@ -166,15 +167,15 @@ func (s MySQLSinkSuite) TestParseSinkURITimezone(c *check.C) {
 	opts := map[string]string{}
 	for i, uriStr := range uris {
 		uri, err := url.Parse(uriStr)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		params, err := parseSinkURIToParams(ctx, uri, opts)
-		c.Assert(err, check.IsNil)
-		c.Assert(params.timezone, check.Equals, expected[i])
+		require.Nil(t, err)
+		require.Equal(t, expected[i], params.timezone)
 	}
 }
 
-func (s MySQLSinkSuite) TestParseSinkURIBadQueryString(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestParseSinkURIBadQueryString(t *testing.T) {
+	defer testleak.AfterTestT(t)()
 	uris := []string{
 		"",
 		"postgre://127.0.0.1:3306",
@@ -192,19 +193,19 @@ func (s MySQLSinkSuite) TestParseSinkURIBadQueryString(c *check.C) {
 	for _, uriStr := range uris {
 		if uriStr != "" {
 			uri, err = url.Parse(uriStr)
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 		} else {
 			uri = nil
 		}
 		_, err = parseSinkURIToParams(ctx, uri, opts)
-		c.Assert(err, check.NotNil)
+		require.NotNil(t, err)
 	}
 }
 
-func (s MySQLSinkSuite) TestCheckTiDBVariable(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCheckTiDBVariable(t *testing.T) {
+	defer testleak.AfterTestT(t)()
 	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer db.Close() //nolint:errcheck
 	columns := []string{"Variable_name", "Value"}
 
@@ -212,15 +213,16 @@ func (s MySQLSinkSuite) TestCheckTiDBVariable(c *check.C) {
 		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
 	)
 	val, err := checkTiDBVariable(context.TODO(), db, "allow_auto_random_explicit_insert", "1")
-	c.Assert(err, check.IsNil)
-	c.Assert(val, check.Equals, "1")
+	require.Nil(t, err)
+	require.Equal(t, "1", val)
 
 	mock.ExpectQuery("show session variables like 'no_exist_variable';").WillReturnError(sql.ErrNoRows)
 	val, err = checkTiDBVariable(context.TODO(), db, "no_exist_variable", "0")
-	c.Assert(err, check.IsNil)
-	c.Assert(val, check.Equals, "")
+	require.Nil(t, err)
+	require.Equal(t, "", val)
 
 	mock.ExpectQuery("show session variables like 'version';").WillReturnError(sql.ErrConnDone)
 	_, err = checkTiDBVariable(context.TODO(), db, "version", "5.7.25-TiDB-v4.0.0")
-	c.Assert(err, check.ErrorMatches, ".*"+sql.ErrConnDone.Error())
+	require.NotNil(t, err)
+	require.Regexp(t, ".*"+sql.ErrConnDone.Error(), err.Error())
 }

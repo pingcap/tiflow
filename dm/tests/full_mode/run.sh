@@ -7,7 +7,7 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function fail_acquire_global_lock() {
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
@@ -36,10 +36,6 @@ function fail_acquire_global_lock() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
 
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i '/heartbeat-report-interval/i\ignore-checking-items: ["dump_privilege"]' $WORK_DIR/dm-task.yaml
@@ -87,7 +83,7 @@ function escape_schema() {
 	run_sql_file $cur/data/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_count 'Query OK, 0 rows affected' 7
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/dumpling/SkipRemovingDumplingMetrics=return("")'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/dumpling/SkipRemovingDumplingMetrics=return("")'
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT

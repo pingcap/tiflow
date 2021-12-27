@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,16 +24,20 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/capture"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/sorter/unified"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/httputil"
-	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/sorter/unified"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/fsutil"
+	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/tcpserver"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/version"
+	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
@@ -52,8 +56,12 @@ const (
 )
 
 // Server is the capture server
+// TODO: we need to make Server more unit testable and add more test cases.
+// Especially we need to decouple the HTTPServer out of Server.
 type Server struct {
 	capture      *capture.Capture
+	tcpServer    tcpserver.TCPServer
+	grpcService  *p2p.ServerWrapper
 	statusServer *http.Server
 	pdClient     pd.Client
 	etcdClient   *etcd.CDCEtcdClient
@@ -69,9 +77,31 @@ func NewServer(pdEndpoints []string) (*Server, error) {
 		zap.Stringer("config", conf),
 	)
 
+	// This is to make communication between nodes possible.
+	// In other words, the nodes have to trust each other.
+	if len(conf.Security.CertAllowedCN) != 0 {
+		err := conf.Security.AddSelfCommonName()
+		if err != nil {
+			log.Error("status server set tls config failed", zap.Error(err))
+			return nil, errors.Trace(err)
+		}
+	}
+
+	// tcpServer is the unified frontend of the CDC server that serves
+	// both RESTful APIs and gRPC APIs.
+	// Note that we pass the TLS config to the tcpServer, so there is no need to
+	// configure TLS elsewhere.
+	tcpServer, err := tcpserver.NewTCPServer(conf.Addr, conf.Security)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	s := &Server{
 		pdEndpoints: pdEndpoints,
+		grpcService: p2p.NewServerWrapper(),
+		tcpServer:   tcpServer,
 	}
+
 	return s, nil
 }
 
@@ -139,7 +169,7 @@ func (s *Server) Run(ctx context.Context) error {
 	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)
 	s.etcdClient = &cdcEtcdClient
 
-	err = s.initDataDir(ctx)
+	err = s.initDir(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -166,9 +196,9 @@ func (s *Server) Run(ctx context.Context) error {
 	s.kvStorage = kvStore
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
-	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
+	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcService)
 
-	err = s.startStatusHTTP()
+	err = s.startStatusHTTP(s.tcpServer.HTTP1Listener())
 	if err != nil {
 		return err
 	}
@@ -240,6 +270,24 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return kv.RunWorkerPool(cctx)
 	})
 
+	wg.Go(func() error {
+		return s.tcpServer.Run(cctx)
+	})
+
+	if config.SchedulerV2Enabled {
+		grpcServer := grpc.NewServer()
+		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
+
+		wg.Go(func() error {
+			return grpcServer.Serve(s.tcpServer.GrpcListener())
+		})
+		wg.Go(func() error {
+			<-cctx.Done()
+			grpcServer.Stop()
+			return nil
+		})
+	}
+
 	return wg.Wait()
 }
 
@@ -255,29 +303,38 @@ func (s *Server) Close() {
 		}
 		s.statusServer = nil
 	}
+	if s.tcpServer != nil {
+		err := s.tcpServer.Close()
+		if err != nil {
+			log.Error("close tcp server", zap.Error(err))
+		}
+		s.tcpServer = nil
+	}
 }
 
-func (s *Server) initDataDir(ctx context.Context) error {
-	if err := s.setUpDataDir(ctx); err != nil {
+func (s *Server) initDir(ctx context.Context) error {
+	if err := s.setUpDir(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	conf := config.GetGlobalServerConfig()
-	err := os.MkdirAll(conf.DataDir, 0o755)
+	// Ensure data dir exists and read-writable.
+	diskInfo, err := checkDir(conf.DataDir)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	diskInfo, err := util.GetDiskInfo(conf.DataDir)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	log.Info(fmt.Sprintf("%s is set as data-dir (%dGB available), sort-dir=%s. "+
-		"It is recommended that the disk for data-dir at least have %dGB available space", conf.DataDir, diskInfo.Avail, conf.Sorter.SortDir, dataDirThreshold))
+		"It is recommended that the disk for data-dir at least have %dGB available space",
+		conf.DataDir, diskInfo.Avail, conf.Sorter.SortDir, dataDirThreshold))
 
+	// Ensure sorter dir exists and read-writable.
+	_, err = checkDir(conf.Sorter.SortDir)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 
-func (s *Server) setUpDataDir(ctx context.Context) error {
+func (s *Server) setUpDir(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 	if conf.DataDir != "" {
 		conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
@@ -310,27 +367,24 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 	return nil
 }
 
+func checkDir(dir string) (*fsutil.DiskInfo, error) {
+	err := os.MkdirAll(dir, 0o700)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if err := fsutil.IsDirReadWritable(dir); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return fsutil.GetDiskInfo(dir)
+}
+
 // try to find the best data dir by rules
 // at the moment, only consider available disk space
 func findBestDataDir(candidates []string) (result string, ok bool) {
 	var low uint64 = 0
 
-	checker := func(dir string) (*util.DiskInfo, error) {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, err
-		}
-		if err := util.IsDirReadWritable(dir); err != nil {
-			return nil, err
-		}
-		info, err := util.GetDiskInfo(dir)
-		if err != nil {
-			return nil, err
-		}
-		return info, err
-	}
-
 	for _, dir := range candidates {
-		info, err := checker(dir)
+		info, err := checkDir(dir)
 		if err != nil {
 			log.Warn("check the availability of dir", zap.String("dir", dir), zap.Error(err))
 			continue

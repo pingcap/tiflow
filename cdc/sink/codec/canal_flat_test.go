@@ -17,10 +17,9 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	mm "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"golang.org/x/text/encoding/charmap"
 )
 
@@ -28,63 +27,117 @@ type canalFlatSuite struct{}
 
 var _ = check.Suite(&canalFlatSuite{})
 
-func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
+var (
+	testColumns = collectAllColumns(testColumnsTable)
+
+	testCaseInsert = &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "cdc",
+			Table:  "person",
+		},
+		Columns:    testColumns,
+		PreColumns: nil,
+	}
+
+	testCaseUpdate = &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "cdc",
+			Table:  "person",
+		},
+		Columns:    testColumns,
+		PreColumns: testColumns,
+	}
+
+	testCaseDelete = &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "cdc",
+			Table:  "person",
+		},
+		Columns:    nil,
+		PreColumns: testColumns,
+	}
+)
+
+var testCaseDDL = &model.DDLEvent{
+	CommitTs: 417318403368288260,
+	TableInfo: &model.SimpleTableInfo{
+		Schema: "cdc", Table: "person",
+	},
+	Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+	Type:  mm.ActionCreateTable,
+}
+
+func (s *canalFlatSuite) TestSetParams(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)
-	message, err := encoder.newFlatMessageForDML(testCaseUpdate)
-	c.Assert(err, check.IsNil)
+	c.Assert(encoder.enableTiDBExtension, check.IsFalse)
 
-	msg, ok := message.(*canalFlatMessage)
-	c.Assert(ok, check.IsTrue)
-	c.Assert(msg.EventType, check.Equals, "UPDATE")
-	c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(testCaseUpdate.CommitTs))
-	c.Assert(msg.tikvTs, check.Equals, testCaseUpdate.CommitTs)
-	c.Assert(msg.Schema, check.Equals, "cdc")
-	c.Assert(msg.Table, check.Equals, "person")
-	c.Assert(msg.IsDDL, check.IsFalse)
-	c.Assert(msg.SQLType, check.DeepEquals, map[string]int32{
-		"id":           int32(JavaSQLTypeBIGINT),
-		"name":         int32(JavaSQLTypeVARCHAR),
-		"tiny":         int32(JavaSQLTypeSMALLINT),
-		"comment":      int32(JavaSQLTypeVARCHAR),
-		"blob":         int32(JavaSQLTypeBLOB),
-		"binaryString": int32(JavaSQLTypeCHAR),
-		"binaryBlob":   int32(JavaSQLTypeVARCHAR),
-	})
-	c.Assert(msg.MySQLType, check.DeepEquals, map[string]string{
-		"id":           "int",
-		"name":         "varchar",
-		"tiny":         "tinyint",
-		"comment":      "text",
-		"blob":         "blob",
-		"binaryString": "binary",
-		"binaryBlob":   "varbinary",
-	})
-	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
+	params := make(map[string]string)
+	params["enable-tidb-extension"] = "true"
+	err := encoder.SetParams(params)
 	c.Assert(err, check.IsNil)
-	c.Assert(msg.Data, check.DeepEquals, []map[string]interface{}{
-		{
-			"id":           "1",
-			"name":         "Bob",
-			"tiny":         "255",
-			"comment":      "测试",
-			"blob":         string(encodedBytes),
-			"binaryString": "Chengdu International Airport",
-			"binaryBlob":   "你好，世界",
-		},
-	})
-	c.Assert(msg.Old, check.DeepEquals, []map[string]interface{}{
-		{
-			"id":           "1",
-			"name":         "Alice",
-			"tiny":         "255",
-			"comment":      "测试",
-			"blob":         string(encodedBytes),
-			"binaryString": "Chengdu International Airport",
-			"binaryBlob":   "你好，世界",
-		},
-	})
+	c.Assert(encoder.enableTiDBExtension, check.IsTrue)
+}
+
+func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
+	defer testleak.AfterTest(c)()
+	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
+	c.Assert(encoder, check.NotNil)
+
+	message, err := encoder.newFlatMessageForDML(testCaseInsert)
+	c.Assert(err, check.IsNil)
+	flatMessage, ok := message.(*canalFlatMessage)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(flatMessage.Data, check.NotNil)
+	c.Assert(flatMessage.Old, check.IsNil)
+	c.Assert(flatMessage.EventType, check.Equals, "INSERT")
+	c.Assert(flatMessage.ExecutionTime, check.Equals, convertToCanalTs(testCaseInsert.CommitTs))
+	c.Assert(flatMessage.tikvTs, check.Equals, testCaseInsert.CommitTs)
+	c.Assert(flatMessage.Schema, check.Equals, "cdc")
+	c.Assert(flatMessage.Table, check.Equals, "person")
+	c.Assert(flatMessage.IsDDL, check.IsFalse)
+
+	// check data is enough
+	obtainedDataMap := flatMessage.getData()
+	c.Assert(obtainedDataMap, check.NotNil)
+
+	for _, item := range testColumnsTable {
+		obtainedValue, ok := obtainedDataMap[item.column.Name]
+		c.Assert(ok, check.IsTrue)
+		if !item.column.Flag.IsBinary() {
+			c.Assert(obtainedValue, check.Equals, item.expectedValue)
+			continue
+		}
+
+		if bytes, ok := item.column.Value.([]byte); ok {
+			expectedValue, err := charmap.ISO8859_1.NewDecoder().Bytes(bytes)
+			c.Assert(err, check.IsNil)
+			c.Assert(obtainedValue, check.Equals, string(expectedValue))
+			continue
+		}
+
+		c.Assert(obtainedValue, check.Equals, item.expectedValue)
+	}
+
+	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
+	c.Assert(err, check.IsNil)
+	flatMessage, ok = message.(*canalFlatMessage)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(flatMessage.Data, check.NotNil)
+	c.Assert(flatMessage.Old, check.NotNil)
+	c.Assert(flatMessage.EventType, check.Equals, "UPDATE")
+
+	message, err = encoder.newFlatMessageForDML(testCaseDelete)
+	c.Assert(err, check.IsNil)
+	flatMessage, ok = message.(*canalFlatMessage)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(flatMessage.Data, check.NotNil)
+	c.Assert(flatMessage.Old, check.IsNil)
+	c.Assert(flatMessage.EventType, check.Equals, "DELETE")
 
 	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
 	c.Assert(encoder, check.NotNil)
@@ -101,23 +154,12 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
-	c.Assert(err, check.IsNil)
-	expected := map[string]interface{}{
-		"id":           "1",
-		"name":         "Bob",
-		"tiny":         "255",
-		"comment":      "测试",
-		"blob":         string(encodedBytes),
-		"binaryString": "Chengdu International Airport",
-		"binaryBlob":   "你好，世界",
-	}
-
+	expectedDecodedValues := collectDecodeValueByColumns(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
 		c.Assert(encoder, check.NotNil)
 
-		result, err := encoder.AppendRowChangedEvent(testCaseUpdate)
+		result, err := encoder.AppendRowChangedEvent(testCaseInsert)
 		c.Assert(err, check.IsNil)
 		c.Assert(result, check.Equals, EncoderNoOperation)
 
@@ -142,24 +184,19 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 			consumed, err := decoder.NextRowChangedEvent()
 			c.Assert(err, check.IsNil)
 
-			c.Assert(consumed.Table, check.DeepEquals, testCaseUpdate.Table)
+			c.Assert(consumed.Table, check.DeepEquals, testCaseInsert.Table)
 			if encodeEnable && decodeEnable {
-				c.Assert(consumed.CommitTs, check.Equals, testCaseUpdate.CommitTs)
+				c.Assert(consumed.CommitTs, check.Equals, testCaseInsert.CommitTs)
 			} else {
 				c.Assert(consumed.CommitTs, check.Equals, uint64(0))
 			}
 
 			for _, col := range consumed.Columns {
-				value, ok := expected[col.Name]
+				expected, ok := expectedDecodedValues[col.Name]
 				c.Assert(ok, check.IsTrue)
 
-				if val, ok := col.Value.([]byte); ok {
-					c.Assert(string(val), check.Equals, value)
-				} else {
-					c.Assert(col.Value, check.Equals, value)
-				}
-
-				for _, item := range testCaseUpdate.Columns {
+				c.Assert(col.Value, check.Equals, expected)
+				for _, item := range testCaseInsert.Columns {
 					if item.Name == col.Name {
 						c.Assert(col.Type, check.Equals, item.Type)
 					}
@@ -181,30 +218,30 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)
 
-	message := encoder.newFlatMessageForDDL(testCaseDdl)
+	message := encoder.newFlatMessageForDDL(testCaseDDL)
 	c.Assert(message, check.NotNil)
 
 	msg, ok := message.(*canalFlatMessage)
 	c.Assert(ok, check.IsTrue)
-	c.Assert(msg.tikvTs, check.Equals, testCaseDdl.CommitTs)
-	c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(testCaseDdl.CommitTs))
+	c.Assert(msg.tikvTs, check.Equals, testCaseDDL.CommitTs)
+	c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(testCaseDDL.CommitTs))
 	c.Assert(msg.IsDDL, check.IsTrue)
 	c.Assert(msg.Schema, check.Equals, "cdc")
 	c.Assert(msg.Table, check.Equals, "person")
-	c.Assert(msg.Query, check.Equals, testCaseDdl.Query)
+	c.Assert(msg.Query, check.Equals, testCaseDDL.Query)
 	c.Assert(msg.EventType, check.Equals, "CREATE")
 
 	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
 	c.Assert(encoder, check.NotNil)
 
-	message = encoder.newFlatMessageForDDL(testCaseDdl)
+	message = encoder.newFlatMessageForDDL(testCaseDDL)
 	c.Assert(message, check.NotNil)
 
 	withExtension, ok := message.(*canalFlatMessageWithTiDBExtension)
 	c.Assert(ok, check.IsTrue)
 
 	c.Assert(withExtension.Extensions, check.NotNil)
-	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseDdl.CommitTs)
+	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseDDL.CommitTs)
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C) {
@@ -213,7 +250,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
 		c.Assert(encoder, check.NotNil)
 
-		result, err := encoder.EncodeDDLEvent(testCaseDdl)
+		result, err := encoder.EncodeDDLEvent(testCaseDDL)
 		c.Assert(err, check.IsNil)
 		c.Assert(result, check.NotNil)
 
@@ -232,13 +269,13 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C
 			c.Assert(err, check.IsNil)
 
 			if encodeEnable && decodeEnable {
-				c.Assert(consumed.CommitTs, check.Equals, testCaseDdl.CommitTs)
+				c.Assert(consumed.CommitTs, check.Equals, testCaseDDL.CommitTs)
 			} else {
 				c.Assert(consumed.CommitTs, check.Equals, uint64(0))
 			}
 
-			c.Assert(consumed.TableInfo, check.DeepEquals, testCaseDdl.TableInfo)
-			c.Assert(consumed.Query, check.Equals, testCaseDdl.Query)
+			c.Assert(consumed.TableInfo, check.DeepEquals, testCaseDDL.TableInfo)
+			c.Assert(consumed.Query, check.Equals, testCaseDDL.Query)
 
 			ty, hasNext, err = decoder.HasNext()
 			c.Assert(err, check.IsNil)
@@ -337,37 +374,90 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 	}
 }
 
-var testCaseUpdate = &model.RowChangedEvent{
-	CommitTs: 417318403368288260,
-	Table: &model.TableName{
-		Schema: "cdc",
-		Table:  "person",
-	},
-	Columns: []*model.Column{
-		{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
-		{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
-		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
-		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
-		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
-		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
-		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
-	},
-	PreColumns: []*model.Column{
-		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
-		{Name: "name", Type: mysql.TypeVarchar, Value: "Alice"},
-		{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
-		{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
-		{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
-		{Name: "binaryString", Type: mysql.TypeString, Value: "Chengdu International Airport", Flag: model.BinaryFlag},
-		{Name: "binaryBlob", Type: mysql.TypeVarchar, Value: []byte("你好，世界"), Flag: model.BinaryFlag},
-	},
+func (s *canalFlatSuite) TestCheckpointEventValueMarshal(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	var watermark uint64 = 1024
+	encoder := &CanalFlatEventBatchEncoder{
+		builder:             NewCanalEntryBuilder(),
+		enableTiDBExtension: true,
+	}
+	c.Assert(encoder, check.NotNil)
+	msg, err := encoder.EncodeCheckpointEvent(watermark)
+	c.Assert(err, check.IsNil)
+	c.Assert(msg, check.NotNil)
+
+	// Unmarshal from the data we have encoded.
+	flatMsg := canalFlatMessageWithTiDBExtension{
+		&canalFlatMessage{},
+		&tidbExtension{},
+	}
+	err = json.Unmarshal(msg.Value, &flatMsg)
+	c.Assert(err, check.IsNil)
+	c.Assert(flatMsg.Extensions.WatermarkTs, check.Equals, watermark)
+	// Hack the build time.
+	// Otherwise, the timing will be inconsistent.
+	flatMsg.BuildTime = 1469579899
+	rawBytes, err := json.MarshalIndent(flatMsg, "", "  ")
+	c.Assert(err, check.IsNil)
+
+	// No commit ts will be output.
+	expectedJSON := `{
+  "id": 0,
+  "database": "",
+  "table": "",
+  "pkNames": null,
+  "isDdl": false,
+  "type": "TIDB_WATERMARK",
+  "es": 0,
+  "ts": 1469579899,
+  "sql": "",
+  "sqlType": null,
+  "mysqlType": null,
+  "data": null,
+  "old": null,
+  "_tidb": {
+    "watermarkTs": 1024
+  }
+}`
+	c.Assert(string(rawBytes), check.Equals, expectedJSON)
 }
 
-var testCaseDdl = &model.DDLEvent{
-	CommitTs: 417318403368288260,
-	TableInfo: &model.SimpleTableInfo{
-		Schema: "cdc", Table: "person",
-	},
-	Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
-	Type:  mm.ActionCreateTable,
+func (s *canalFlatSuite) TestDDLEventWithExtensionValueMarshal(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
+	c.Assert(encoder, check.NotNil)
+
+	message := encoder.newFlatMessageForDDL(testCaseDDL)
+	c.Assert(message, check.NotNil)
+
+	msg, ok := message.(*canalFlatMessageWithTiDBExtension)
+	c.Assert(ok, check.IsTrue)
+	// Hack the build time.
+	// Otherwise, the timing will be inconsistent.
+	msg.BuildTime = 1469579899
+	rawBytes, err := json.MarshalIndent(msg, "", "  ")
+	c.Assert(err, check.IsNil)
+
+	// No watermark ts will be output.
+	expectedJSON := `{
+  "id": 0,
+  "database": "cdc",
+  "table": "person",
+  "pkNames": null,
+  "isDdl": true,
+  "type": "CREATE",
+  "es": 1591943372224,
+  "ts": 1469579899,
+  "sql": "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+  "sqlType": null,
+  "mysqlType": null,
+  "data": null,
+  "old": null,
+  "_tidb": {
+    "commitTs": 417318403368288260
+  }
+}`
+	c.Assert(string(rawBytes), check.Equals, expectedJSON)
 }

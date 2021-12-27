@@ -22,12 +22,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/retry"
 	timeta "github.com/pingcap/tidb/meta"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -77,6 +77,9 @@ func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo,
 			return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(job.TableID)
 		}
 		return table, nil
+	case timodel.ActionRenameTables:
+		// DDL on multiple tables, ignore pre table info
+		return nil, nil
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
@@ -348,6 +351,10 @@ func (s *schemaSnapshot) IsIneligibleTableID(id int64) bool {
 
 // FillSchemaName fills the schema name in ddl job
 func (s *schemaSnapshot) FillSchemaName(job *timodel.Job) error {
+	if job.Type == timodel.ActionRenameTables {
+		// DDLs on multiple schema or tables, ignore them.
+		return nil
+	}
 	if job.Type == timodel.ActionCreateSchema ||
 		job.Type == timodel.ActionDropSchema {
 		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
@@ -584,6 +591,8 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+	case timodel.ActionRenameTables:
+		return s.renameTables(job)
 	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
 		err := s.createTable(getWrapTableInfo(job))
 		if err != nil {
@@ -633,6 +642,37 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 	return nil
 }
 
+func (s *schemaSnapshot) renameTables(job *timodel.Job) error {
+	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
+	var newTableNames, oldSchemaNames []*timodel.CIStr
+	err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs, &newTableNames, &oldTableIDs, &oldSchemaNames)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if len(job.BinlogInfo.MultipleTableInfos) < len(newTableNames) {
+		return cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
+	}
+	// NOTE: should handle failures in halfway better.
+	for _, tableID := range oldTableIDs {
+		if err := s.dropTable(tableID); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	for i, tableInfo := range job.BinlogInfo.MultipleTableInfos {
+		newSchema, ok := s.SchemaByID(newSchemaIDs[i])
+		if !ok {
+			return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(newSchemaIDs[i])
+		}
+		newSchemaName := newSchema.Name.L
+		err = s.createTable(model.WrapTableInfo(
+			newSchemaIDs[i], newSchemaName, job.BinlogInfo.FinishedTS, tableInfo))
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 // CloneTables return a clone of the existing tables.
 func (s *schemaSnapshot) CloneTables() map[model.TableID]model.TableName {
 	mp := make(map[model.TableID]model.TableName, len(s.tables))
@@ -652,7 +692,8 @@ func (s *schemaSnapshot) Tables() map[model.TableID]*model.TableInfo {
 
 // SchemaStorage stores the schema information with multi-version
 type SchemaStorage interface {
-	// GetSnapshot returns the snapshot which of ts is specified
+	// GetSnapshot returns the snapshot which of ts is specified.
+	// It may block caller when ts is larger than ResolvedTs.
 	GetSnapshot(ctx context.Context, ts uint64) (*SingleSchemaSnapshot, error)
 	// GetLastSnapshot returns the last snapshot
 	GetLastSnapshot() *schemaSnapshot
@@ -701,10 +742,12 @@ func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, 
 func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 	gcTs := atomic.LoadUint64(&s.gcTs)
 	if ts < gcTs {
+		// Unexpected error, caller should fail immediately.
 		return nil, cerror.ErrSchemaStorageGCed.GenWithStackByArgs(ts, gcTs)
 	}
 	resolvedTs := atomic.LoadUint64(&s.resolvedTs)
 	if ts > resolvedTs {
+		// Caller should retry.
 		return nil, cerror.ErrSchemaStorageUnresolved.GenWithStackByArgs(ts, resolvedTs)
 	}
 	s.snapsMu.RLock()
@@ -713,6 +756,7 @@ func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 		return s.snaps[i].currentTs > ts
 	})
 	if i <= 0 {
+		// Unexpected error, caller should fail immediately.
 		return nil, cerror.ErrSchemaSnapshotNotFound.GenWithStackByArgs(ts)
 	}
 	return s.snaps[i-1], nil

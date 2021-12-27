@@ -18,15 +18,15 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo"
-	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/cdc/sink/common"
-	serverConfig "github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/pipeline"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/common"
+	serverConfig "github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pipeline"
 	"go.uber.org/zap"
 )
 
@@ -164,9 +164,9 @@ func (t *tablePipelineImpl) Wait() {
 // replicating 1024 tables in the worst case.
 const defaultOutputChannelSize = 64
 
-// There are 5 or 6 runners in table pipeline: header, puller, sorter, mounter,
+// There are 4 or 5 runners in table pipeline: header, puller, sorter,
 // sink, cyclic if cyclic replication is enabled
-const defaultRunnersSize = 5
+const defaultRunnersSize = 4
 
 // NewTablePipeline creates a table pipeline
 // TODO(leoppro): implement a mock kvclient to test the table pipeline
@@ -178,12 +178,13 @@ func NewTablePipeline(ctx cdcContext.Context,
 	sink sink.Sink,
 	targetTs model.Ts) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)
+	replConfig := ctx.ChangefeedVars().Info.Config
 	tablePipeline := &tablePipelineImpl{
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,
 		tableName:   tableName,
 		cancel:      cancel,
-		replConfig:  ctx.ChangefeedVars().Info.Config,
+		replConfig:  replConfig,
 	}
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
@@ -201,12 +202,12 @@ func NewTablePipeline(ctx cdcContext.Context,
 	}
 
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
-	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs, flowController, mounter)
-	sinkNode := newSinkNode(sink, replicaInfo.StartTs, targetTs, flowController)
+	sorterNode :=
+		newSorterNode(tableName, tableID, replicaInfo.StartTs, flowController, mounter, replConfig)
+	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
 
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", sorterNode)
-	p.AppendNode(ctx, "mounter", newMounterNode())
 	if cyclicEnabled {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
 	}

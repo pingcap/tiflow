@@ -23,22 +23,25 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo/writer"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
 var updateRtsInterval = time.Second
 
-type consistentLevelType string
+// ConsistentLevelType is the level of redo log consistent level.
+type ConsistentLevelType string
 
 const (
-	consistentLevelNone     consistentLevelType = "none"
-	consistentLevelEventual consistentLevelType = "eventual"
+	// ConsistentLevelNone no consistent guarantee.
+	ConsistentLevelNone ConsistentLevelType = "none"
+	// ConsistentLevelEventual eventual consistent.
+	ConsistentLevelEventual ConsistentLevelType = "eventual"
 )
 
 type consistentStorage string
@@ -61,8 +64,8 @@ const (
 
 // IsValidConsistentLevel checks whether a give consistent level is valid
 func IsValidConsistentLevel(level string) bool {
-	switch consistentLevelType(level) {
-	case consistentLevelNone, consistentLevelEventual:
+	switch ConsistentLevelType(level) {
+	case ConsistentLevelNone, ConsistentLevelEventual:
 		return true
 	default:
 		return false
@@ -82,7 +85,7 @@ func IsValidConsistentStorage(storage string) bool {
 
 // IsConsistentEnabled returns whether the consistent feature is enabled
 func IsConsistentEnabled(level string) bool {
-	return IsValidConsistentLevel(level) && consistentLevelType(level) != consistentLevelNone
+	return IsValidConsistentLevel(level) && ConsistentLevelType(level) != ConsistentLevelNone
 }
 
 // IsS3StorageEnabled returns whether s3 storage is enabled
@@ -132,7 +135,7 @@ type resolvedEvent struct {
 // redo log resolved ts. It implements LogManager interface.
 type ManagerImpl struct {
 	enabled     bool
-	level       consistentLevelType
+	level       ConsistentLevelType
 	storageType consistentStorage
 
 	flushBuffer chan resolvedEvent
@@ -151,7 +154,7 @@ type ManagerImpl struct {
 // NewManager creates a new Manager
 func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *ManagerOptions) (*ManagerImpl, error) {
 	// return a disabled Manager if no consistent config or normal consistent level
-	if cfg == nil || consistentLevelType(cfg.Level) == consistentLevelNone {
+	if cfg == nil || ConsistentLevelType(cfg.Level) == ConsistentLevelNone {
 		return &ManagerImpl{enabled: false}, nil
 	}
 	uri, err := storage.ParseRawURL(cfg.Storage)
@@ -160,7 +163,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 	}
 	m := &ManagerImpl{
 		enabled:     true,
-		level:       consistentLevelType(cfg.Level),
+		level:       ConsistentLevelType(cfg.Level),
 		storageType: consistentStorage(uri.Scheme),
 		rtsMap:      make(map[model.TableID]uint64),
 		logBuffer:   make(chan cacheRows, logBufferChanSize),       /* approximate 0.228MB */

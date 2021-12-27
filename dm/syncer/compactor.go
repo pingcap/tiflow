@@ -14,14 +14,16 @@
 package syncer
 
 import (
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/syncer/metrics"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
 
 // compactor compacts multiple statements into one statement.
@@ -74,8 +76,13 @@ func (c *compactor) run() {
 			}
 			metrics.QueueSizeGauge.WithLabelValues(c.task, "compactor_input", c.source).Set(float64(len(c.inCh)))
 
-			if j.tp == flush {
+			if j.tp == flush || j.tp == asyncFlush {
 				c.flushBuffer()
+				c.outCh <- j
+				continue
+			}
+
+			if j.tp == gc {
 				c.outCh <- j
 				continue
 			}
@@ -165,6 +172,15 @@ func (c *compactor) compactJob(j *job) {
 	}
 
 	key := j.dml.identifyKey()
+
+	failpoint.Inject("DownstreamIdentifyKeyCheckInCompact", func(v failpoint.Value) {
+		value, err := strconv.Atoi(key)
+		upper := v.(int)
+		if err != nil || value > upper {
+			panic(fmt.Sprintf("downstream identifyKey check failed. key value %v should less than %v", value, upper))
+		}
+	})
+
 	prevPos, ok := tableKeyMap[key]
 	// if no such key in the buffer, add it
 	if !ok {
@@ -184,6 +200,8 @@ func (c *compactor) compactJob(j *job) {
 			j.dml.oldValues = nil
 			j.dml.originOldValues = nil
 			j.dml.op = insert
+			// DELETE + INSERT + UPDATE => INSERT with safemode
+			j.dml.safeMode = prevJob.dml.safeMode
 		} else if prevJob.tp == update {
 			// UPDATE + UPDATE => UPDATE
 			j.dml.oldValues = prevJob.dml.oldValues

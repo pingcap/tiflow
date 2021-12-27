@@ -12,8 +12,8 @@ function run() {
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 
 	inject_points=(
-		"github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
-		"github.com/pingcap/ticdc/dm/relay/NewUpstreamServer=return(true)"
+		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/relay/NewUpstreamServer=return(true)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
@@ -36,10 +36,6 @@ function run() {
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
 	# make sure source1 is bound to worker1
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT

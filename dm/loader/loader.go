@@ -28,15 +28,15 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	fr "github.com/pingcap/ticdc/dm/pkg/func-rollback"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -362,7 +362,8 @@ func (w *Worker) dispatchSQL(ctx context.Context, file string, offset int64, tab
 				continue
 			}
 
-			if w.loader.columnMapping != nil {
+			// extend column also need use reassemble to write SQL and the table name has been renamed
+			if w.loader.columnMapping != nil || len(table.extendCol) > 0 {
 				// column mapping and route table
 				query, err = reassemble(data, table, w.loader.columnMapping)
 				if err != nil {
@@ -407,6 +408,8 @@ type tableInfo struct {
 	targetTable    string
 	columnNameList []string
 	insertHeadStmt string
+	extendCol      []string
+	extendVal      []string
 }
 
 // Loader can load your mydumper data into TiDB database.
@@ -1422,7 +1425,7 @@ tblSchemaLoop:
 		for table := range l.db2Tables[db] {
 			schemaFile := l.cfg.Dir + "/" + db + "." + table + "-schema.sql" // cache friendly
 			if _, ok := l.tableInfos[tableName(db, table)]; !ok {
-				l.tableInfos[tableName(db, table)], err = parseTable(tctx, l.tableRouter, db, table, schemaFile, l.cfg.LoaderConfig.SQLMode)
+				l.tableInfos[tableName(db, table)], err = parseTable(tctx, l.tableRouter, db, table, schemaFile, l.cfg.LoaderConfig.SQLMode, l.cfg.SourceID)
 				if err != nil {
 					err = terror.Annotatef(err, "parse table %s/%s", db, table)
 					break tblSchemaLoop

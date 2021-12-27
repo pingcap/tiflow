@@ -15,129 +15,89 @@ package leveldb
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/sorter/leveldb/message"
-	"github.com/pingcap/ticdc/pkg/actor"
-	actormsg "github.com/pingcap/ticdc/pkg/actor/message"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/pkg/actor"
+	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/db"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/syndtr/goleveldb/leveldb"
-	"github.com/syndtr/goleveldb/leveldb/opt"
-	"github.com/syndtr/goleveldb/leveldb/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 )
 
-// OpenDB opens a leveldb.
-func OpenDB(ctx context.Context, id int, cfg *config.SorterConfig) (*leveldb.DB, error) {
-	lcfg := cfg.LevelDB
-	var option opt.Options
-	option.OpenFilesCacheCapacity = lcfg.MaxOpenFiles / lcfg.Count
-	option.BlockCacheCapacity = lcfg.BlockCacheSize / lcfg.Count
-	option.BlockSize = lcfg.BlockSize
-	option.WriteBuffer = lcfg.WriterBufferSize
-	option.Compression = opt.NoCompression
-	if lcfg.Compression == "snappy" {
-		option.Compression = opt.SnappyCompression
-	}
-	option.CompactionTableSize = lcfg.TargetFileSizeBase
-	option.CompactionL0Trigger = lcfg.CompactionL0Trigger
-	option.WriteL0SlowdownTrigger = lcfg.WriteL0SlowdownTrigger
-	option.WriteL0PauseTrigger = lcfg.WriteL0PauseTrigger
-	option.ErrorIfExist = true
-	option.NoSync = true
+// DBActor is a db actor, it reads, writes and deletes key value pair in its db.
+type DBActor struct {
+	id      actor.ID
+	db      db.DB
+	wb      db.Batch
+	wbSize  int
+	wbCap   int
+	snapSem *semaphore.Weighted
 
-	// TODO make sure sorter dir is under data dir.
-	dbDir := filepath.Join(cfg.SortDir, fmt.Sprintf("%04d", id))
-	err := retry.Do(ctx, func() error {
-		err1 := os.RemoveAll(dbDir)
-		if err1 != nil {
-			log.Warn("clean data dir fails",
-				zap.String("dir", dbDir), zap.Error(err1))
-		}
-		return err1
-	},
-		retry.WithBackoffBaseDelay(500), // 0.5s
-		retry.WithMaxTries(4))           // 2s in total.
-	if err != nil {
-		return nil, cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
-	}
-	db, err := leveldb.OpenFile(dbDir, &option)
-	if err != nil {
-		return nil, cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
-	}
-	return db, nil
-}
+	deleteCount int
+	compact     *CompactScheduler
 
-// LevelActor is a leveldb actor, it reads, writes and deletes key value pair
-// in its leveldb.
-type LevelActor struct {
-	id       actor.ID
-	db       *leveldb.DB
-	wb       *leveldb.Batch
-	wbSize   int
-	wbCap    int
-	iterSema *semaphore.Weighted
 	closedWg *sync.WaitGroup
 
 	metricWriteDuration prometheus.Observer
 	metricWriteBytes    prometheus.Observer
 }
 
-var _ actor.Actor = (*LevelActor)(nil)
+var _ actor.Actor = (*DBActor)(nil)
 
-// NewLevelDBActor returns a leveldb actor.
-func NewLevelDBActor(
-	ctx context.Context, id int, db *leveldb.DB, cfg *config.SorterConfig,
+// NewDBActor returns a db actor.
+func NewDBActor(
+	id int, db db.DB, cfg *config.DBConfig, compact *CompactScheduler,
 	wg *sync.WaitGroup, captureAddr string,
-) (*LevelActor, actor.Mailbox, error) {
+) (*DBActor, actor.Mailbox, error) {
 	idTag := strconv.Itoa(id)
 	// Write batch size should be larger than block size to save CPU.
 	const writeBatchSizeFactor = 16
-	wbSize := cfg.LevelDB.BlockSize * writeBatchSizeFactor
+	wbSize := cfg.BlockSize * writeBatchSizeFactor
 	// Double batch capacity to avoid memory reallocation.
 	const writeBatchCapFactor = 2
 	wbCap := wbSize * writeBatchCapFactor
-	wb := leveldb.MakeBatch(wbCap)
-	// IterCount limits the total number of opened iterators to release leveldb
-	// resources (memtables and SST files) in time.
-	iterSema := semaphore.NewWeighted(int64(cfg.LevelDB.Concurrency))
-	mb := actor.NewMailbox(actor.ID(id), cfg.LevelDB.Concurrency)
+	wb := db.Batch(wbCap)
+	// IterCount limits the total number of opened iterators to release db
+	// resources in time.
+	iterSema := semaphore.NewWeighted(int64(cfg.Concurrency))
+	mb := actor.NewMailbox(actor.ID(id), cfg.Concurrency)
 	wg.Add(1)
-	return &LevelActor{
-		id:       actor.ID(id),
-		db:       db,
-		wb:       wb,
-		iterSema: iterSema,
-		wbSize:   wbSize,
-		wbCap:    wbCap,
+
+	dba := &DBActor{
+		id:      actor.ID(id),
+		db:      db,
+		wb:      wb,
+		snapSem: iterSema,
+		wbSize:  wbSize,
+		wbCap:   wbCap,
+		compact: compact,
+
 		closedWg: wg,
 
 		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(captureAddr, idTag),
 		metricWriteBytes:    sorterWriteBytesHistogram.WithLabelValues(captureAddr, idTag),
-	}, mb, nil
+	}
+	return dba, mb, nil
 }
 
-func (ldb *LevelActor) close(err error) {
-	log.Info("leveldb actor quit", zap.Uint64("ID", uint64(ldb.id)), zap.Error(err))
+func (ldb *DBActor) close(err error) {
+	log.Info("db actor quit", zap.Uint64("ID", uint64(ldb.id)), zap.Error(err))
 	ldb.closedWg.Done()
 }
 
-func (ldb *LevelActor) maybeWrite(force bool) error {
-	bytes := len(ldb.wb.Dump())
+func (ldb *DBActor) maybeWrite(force bool) error {
+	bytes := len(ldb.wb.Repr())
 	if bytes >= ldb.wbSize || (force && bytes != 0) {
 		startTime := time.Now()
-		err := ldb.db.Write(ldb.wb, nil)
+		err := ldb.wb.Commit()
 		if err != nil {
 			return cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
 		}
@@ -145,10 +105,16 @@ func (ldb *LevelActor) maybeWrite(force bool) error {
 		ldb.metricWriteBytes.Observe(float64(bytes))
 
 		// Reset write batch or reclaim memory if it grows too large.
-		if cap(ldb.wb.Dump()) <= ldb.wbCap {
+		if cap(ldb.wb.Repr()) <= ldb.wbCap {
 			ldb.wb.Reset()
 		} else {
-			ldb.wb = leveldb.MakeBatch(ldb.wbCap)
+			ldb.wb = ldb.db.Batch(ldb.wbCap)
+		}
+
+		// Schedule a compact task when there are too many deletion.
+		if ldb.compact.maybeCompact(ldb.id, ldb.deleteCount) {
+			// Reset delete key count if schedule compaction successfully.
+			ldb.deleteCount = 0
 		}
 	}
 	return nil
@@ -156,15 +122,14 @@ func (ldb *LevelActor) maybeWrite(force bool) error {
 
 // Poll implements actor.Actor.
 // It handles tasks by writing kv, deleting kv and taking iterators.
-func (ldb *LevelActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
+func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 	select {
 	case <-ctx.Done():
 		ldb.close(ctx.Err())
 		return false
 	default:
 	}
-	iterChs := make([]chan message.LimitedIterator, 0, len(tasks))
-	iterRanges := make([]*util.Range, 0, len(tasks))
+	snapChs := make([]chan message.LimitedSnapshot, 0, len(tasks))
 	for i := range tasks {
 		var task message.Task
 		msg := tasks[i]
@@ -177,7 +142,7 @@ func (ldb *LevelActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 		default:
 			log.Panic("unexpected message", zap.Any("message", msg))
 		}
-		events, needIter, iterCh := task.Events, task.NeedIter, task.IterCh
+		events, needSnap, snapCh := task.Events, task.NeedSnap, task.SnapCh
 
 		for k, v := range events {
 			if len(v) != 0 {
@@ -185,45 +150,49 @@ func (ldb *LevelActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 			} else {
 				// Delete the key if value is empty
 				ldb.wb.Delete([]byte(k))
+				ldb.deleteCount++
 			}
 
 			// Do not force write, batching for efficiency.
 			if err := ldb.maybeWrite(false); err != nil {
-				log.Panic("leveldb error", zap.Error(err))
+				log.Panic("db error", zap.Error(err))
 			}
 		}
-		if needIter {
+		if needSnap {
 			// Append to slice for later batch acquiring iterators.
-			iterChs = append(iterChs, iterCh)
-			iterRanges = append(iterRanges, task.Irange)
+			snapChs = append(snapChs, snapCh)
 		} else {
 			// Or close channel to notify caller that that its task is done.
-			close(iterCh)
+			close(snapCh)
 		}
 	}
 
 	// Force write only if there is a task requires an iterator.
-	forceWrite := len(iterChs) != 0
-	if err := ldb.maybeWrite(forceWrite); err != nil {
-		log.Panic("leveldb error", zap.Error(err))
+	forceWrite := len(snapChs) != 0
+	err := ldb.maybeWrite(forceWrite)
+	if err != nil {
+		log.Panic("db error", zap.Error(err))
 	}
 	// Batch acquire iterators.
-	for i := range iterChs {
-		iterCh := iterChs[i]
-		err := ldb.iterSema.Acquire(ctx, 1)
+	for i := range snapChs {
+		snapCh := snapChs[i]
+		err := ldb.snapSem.Acquire(ctx, 1)
 		if err != nil {
 			if errors.Cause(err) == context.Canceled ||
 				errors.Cause(err) == context.DeadlineExceeded {
 				return false
 			}
-			log.Panic("leveldb unreachable error, acquire iter", zap.Error(err))
+			log.Panic("db unreachable error, acquire iter", zap.Error(err))
 		}
-		iter := ldb.db.NewIterator(iterRanges[i], nil)
-		iterCh <- message.LimitedIterator{
-			Iterator: iter,
-			Sema:     ldb.iterSema,
+		snap, err := ldb.db.Snapshot()
+		if err != nil {
+			log.Panic("db error", zap.Error(err))
 		}
-		close(iterCh)
+		snapCh <- message.LimitedSnapshot{
+			Snapshot: snap,
+			Sema:     ldb.snapSem,
+		}
+		close(snapCh)
 	}
 
 	return true
