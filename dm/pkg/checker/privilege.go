@@ -205,7 +205,7 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 		case ast.GrantLevelTable:
 			for _, privElem := range grantStmt.Privs {
 				switch privElem.Priv {
-				case mysql.SelectPriv, mysql.LockTablesPriv:
+				case mysql.SelectPriv:
 					if _, ok := lackGrants[privElem.Priv]; !ok {
 						continue
 					}
