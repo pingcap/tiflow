@@ -60,8 +60,8 @@ type testMessage struct {
 }
 
 var clientConfigForUnitTesting = &MessageClientConfig{
-	SendChannelSize:         0, // unbuffered channel to make tests more reliable
-	BatchSendInterval:       1 * time.Hour,
+	SendChannelSize:         0,               // unbuffered channel to make tests more reliable
+	BatchSendInterval:       128 * time.Hour, // essentially disables flushing
 	MaxBatchBytes:           math.MaxInt64,
 	MaxBatchCount:           math.MaxInt64,
 	RetryRateLimitPerSecond: 999.0,
