@@ -555,7 +555,7 @@ func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 
 	d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
 	if err != nil {
-		return cerror.ErrKafkaInvalidConfig.Wrap(err)
+		return cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
 	if d.maxMessageBytes <= 0 {
