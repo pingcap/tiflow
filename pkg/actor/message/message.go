@@ -28,6 +28,7 @@ const (
 	TypeStop
 	TypeBarrier
 	TypeSorterTask
+	TypeStopPipeline
 	// Add a new type when adding a new message.
 )
 
@@ -71,5 +72,12 @@ func SorterMessage(task sorter.Task) Message {
 	return Message{
 		Tp:         TypeSorterTask,
 		SorterTask: task,
+	}
+}
+
+// StopPipelineMessage creates the message of Stop
+func StopPipelineMessage() Message {
+	return Message{
+		Tp: TypeStopPipeline,
 	}
 }
