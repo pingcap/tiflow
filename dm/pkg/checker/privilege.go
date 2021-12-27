@@ -75,8 +75,8 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 		dumpPrivileges[mysql.LockTablesPriv] = struct{}{}
 	}
 
-	lackGrants := genDumpGrants(dumpPrivileges, pc.checkTables)
-	err2 := verifyPrivileges(result, grants, lackGrants)
+	lackPriv := genDumpPriv(dumpPrivileges, pc.checkTables)
+	err2 := verifyPrivileges(result, grants, lackPriv)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
 		result.State = StateFailure
@@ -121,8 +121,8 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 		mysql.ReplicationClientPriv: {},
 		mysql.ReplicationSlavePriv:  {},
 	}
-	lackGrants := genReplicationGrants(replicationPrivileges)
-	err2 := verifyPrivileges(result, grants, lackGrants)
+	lackPriv := genReplicPriv(replicationPrivileges)
+	err2 := verifyPrivileges(result, grants, lackPriv)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
 		result.State = StateFailure
@@ -135,14 +135,14 @@ func (pc *SourceReplicatePrivilegeChecker) Name() string {
 	return "source db replication privilege checker"
 }
 
-func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.PrivilegeType]map[string]map[string]struct{}) *Error {
+func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.PrivilegeType]map[string]map[string]struct{}) *Error {
 	if len(grants) == 0 {
 		return NewError("there is no such grant defined for current user on host '%%'")
 	}
 
 	p := parser.New()
 	for i, grant := range grants {
-		if len(lackGrants) == 0 {
+		if len(lackPriv) == 0 {
 			break
 		}
 		node, err := p.ParseOneStmt(grant, "", "")
@@ -175,19 +175,19 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 					// mysql> show master status;
 					// ERROR 1227 (42000): Access denied; you need (at least one of) the SUPER, REPLICATION CLIENT privilege(s) for this operation
 					if privElem.Priv == mysql.SuperPriv {
-						delete(lackGrants, mysql.ReplicationClientPriv)
+						delete(lackPriv, mysql.ReplicationClientPriv)
 					}
-					delete(lackGrants, privElem.Priv)
+					delete(lackPriv, privElem.Priv)
 				}
 			}
 		case ast.GrantLevelDB:
 			for _, privElem := range grantStmt.Privs {
 				switch privElem.Priv {
 				case mysql.SelectPriv, mysql.LockTablesPriv:
-					if _, ok := lackGrants[privElem.Priv]; !ok {
+					if _, ok := lackPriv[privElem.Priv]; !ok {
 						continue
 					}
-					if _, ok := lackGrants[privElem.Priv][dbName]; !ok {
+					if _, ok := lackPriv[privElem.Priv][dbName]; !ok {
 						continue
 					}
 					// currently, only SELECT privilege goes here. we didn't require SELECT to be granted globally,
@@ -196,9 +196,9 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 					if len(privElem.Cols) != 0 {
 						continue
 					}
-					delete(lackGrants[privElem.Priv], dbName)
-					if len(lackGrants[privElem.Priv]) == 0 {
-						delete(lackGrants, privElem.Priv)
+					delete(lackPriv[privElem.Priv], dbName)
+					if len(lackPriv[privElem.Priv]) == 0 {
+						delete(lackPriv, privElem.Priv)
 					}
 				}
 			}
@@ -206,13 +206,13 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 			for _, privElem := range grantStmt.Privs {
 				switch privElem.Priv {
 				case mysql.SelectPriv:
-					if _, ok := lackGrants[privElem.Priv]; !ok {
+					if _, ok := lackPriv[privElem.Priv]; !ok {
 						continue
 					}
-					if _, ok := lackGrants[privElem.Priv][dbName]; !ok {
+					if _, ok := lackPriv[privElem.Priv][dbName]; !ok {
 						continue
 					}
-					if _, ok := lackGrants[privElem.Priv][dbName][tableName]; !ok {
+					if _, ok := lackPriv[privElem.Priv][dbName][tableName]; !ok {
 						continue
 					}
 					// currently, only SELECT privilege goes here. we didn't require SELECT to be granted globally,
@@ -221,31 +221,31 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 					if len(privElem.Cols) != 0 {
 						continue
 					}
-					delete(lackGrants[privElem.Priv][dbName], tableName)
-					if len(lackGrants[privElem.Priv][dbName]) == 0 {
-						delete(lackGrants[privElem.Priv], dbName)
+					delete(lackPriv[privElem.Priv][dbName], tableName)
+					if len(lackPriv[privElem.Priv][dbName]) == 0 {
+						delete(lackPriv[privElem.Priv], dbName)
 					}
-					if len(lackGrants[privElem.Priv]) == 0 {
-						delete(lackGrants, privElem.Priv)
+					if len(lackPriv[privElem.Priv]) == 0 {
+						delete(lackPriv, privElem.Priv)
 					}
 				}
 			}
 		}
 	}
 
-	if len(lackGrants) != 0 {
+	if len(lackPriv) != 0 {
 		var buffer bytes.Buffer
 		// generate error message, for example
 		// lack of privilege1: {tableID1, tableID2, ...};lack of privilege2...
-		for g, tableMap := range lackGrants {
+		for p, tableMap := range lackPriv {
 			buffer.WriteString("lack of ")
-			buffer.WriteString(mysql.Priv2Str[g])
+			buffer.WriteString(mysql.Priv2Str[p])
 			buffer.WriteString(" privilege")
+			if len(tableMap) != 0 {
+				buffer.WriteString(": {")
+			}
 			i := 0
 			for schema, tables := range tableMap {
-				if i == 0 {
-					buffer.WriteString(": {")
-				}
 				j := 0
 				for table := range tables {
 					buffer.WriteString(dbutil.TableName(schema, table))
@@ -254,10 +254,10 @@ func verifyPrivileges(result *Result, grants []string, lackGrants map[mysql.Priv
 					}
 					j++
 				}
-				if i == len(tableMap)-1 {
-					buffer.WriteString("}")
-				}
 				i++
+			}
+			if len(tableMap) != 0 {
+				buffer.WriteString("}")
 			}
 			buffer.WriteString(";")
 		}
