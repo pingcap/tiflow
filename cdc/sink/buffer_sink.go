@@ -195,11 +195,11 @@ func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, tableID model.Ta
 	}:
 		return b.getTableCheckpointTs(tableID), nil
 	default:
+		// since n.checkpoints is refreshed asynchronously in a background goroutine,
+		// we return n.checkpoints every time FlushRowChangedEvents be called
+		// the caller will always check the checkpointTs returned
+		return b.getTableCheckpointTs(tableID), cerrors.ErrFlushTsBlocking.FastGenByArgs()
 	}
-	// since n.checkpoints is refreshed asynchronously in a background goroutine,
-	// we return a n.checkpoints every time FlushRowChangedEvents be called
-	// the caller will always check the returned checkpointTs
-	return b.getTableCheckpointTs(tableID), cerrors.ErrFlushTsBlocking.FastGenByArgs()
 }
 
 type flushMsg struct {

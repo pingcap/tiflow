@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
@@ -148,5 +150,25 @@ func BenchmarkRun(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+func TestFlushRowChangedEvents(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	b := newBufferSink(newBlackHoleSink(ctx, make(map[string]string)), 5, make(chan drawbackMsg))
+	// set flushTsChan to a smaller one to make test easier
+	b.flushTsChan = make(chan flushMsg, 1)
+
+	checkpoint, err := b.FlushRowChangedEvents(ctx, 3, 8)
+	require.Nil(t, err)
+	require.True(t, checkpoint == 5)
+
+	// make suer FlushRowChangedEvents is non-blocking
+	for i := 0; i < 100; i++ {
+		checkpoint, err = b.FlushRowChangedEvents(ctx, model.TableID(i), model.Ts(i))
+		require.True(t, cerrors.ErrFlushTsBlocking.Equal(err))
+		require.True(t, checkpoint == 5)
 	}
 }

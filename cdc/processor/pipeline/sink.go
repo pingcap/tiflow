@@ -31,7 +31,8 @@ import (
 )
 
 const (
-	defaultSyncResolvedBatch = 64
+	defaultSyncResolvedBatch       = 64
+	redoLogBlockingWarnLogDuration = 10 * time.Second
 )
 
 // TableStatus is status of the table pipeline
@@ -154,8 +155,8 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 		return errors.Trace(err)
 	}
 	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, n.tableID, resolvedTs)
-	// we can ignore ErrFlushTsBlocking error because resolvedTs will continue
-	// to come
+	// we can ignore ErrFlushTsBlocking error because flushSink is called
+	// periodically when resolvedTs coming
 	if err != nil && cerror.ErrFlushTsBlocking.NotEqual(err) {
 		return errors.Trace(err)
 	}
@@ -354,7 +355,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 			err := n.emitEvent(ctx, event)
 			cost := time.Since(start)
 			if cost >= 10*time.Second {
-				log.Warn("redo log buffer blocking too long", zap.Float64("blocking time(s)", cost.Seconds()))
+				log.Warn("redo log buffer blocking too long", zap.Duration("blocking time(s)", cost))
 			}
 			return err
 		}, retry.WithBackoffBaseDelay(20),
@@ -396,12 +397,13 @@ func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 func (n *sinkNode) retryFlushSink(ctx context.Context, resolvedTs model.Ts) error {
 	start := time.Now()
 	err := retry.Do(ctx, func() error {
-		// when flushSink return a ErrRedoLogBufferBlocking error
-		// retry until success
+		// We must retry until success when flushSink return a ErrRedoLogBufferBlocking
+		// error to ensure the data is safely store by redo log module
+		// Note: the chance that flushSink return a ErrRedoLogBufferBlocking error is low.
 		err := n.flushSink(ctx, resolvedTs)
 		cost := time.Since(start)
-		if cost >= 10*time.Second {
-			log.Warn("redo log buffer blocking too long", zap.Float64("blocking time(s)", cost.Seconds()))
+		if cost >= redoLogBlockingWarnLogDuration {
+			log.Warn("redo log buffer blocking too long", zap.Duration("blocking time(s)", cost))
 		}
 		return err
 	}, retry.WithBackoffBaseDelay(20),

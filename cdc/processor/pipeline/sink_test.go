@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -554,4 +555,45 @@ func (s *outputSuite) TestSplitUpdateEventWhenDisableOldValue(c *check.C) {
 	insertEventIndex := 1
 	c.Assert(node.eventBuffer[insertEventIndex].Row.Columns, check.HasLen, 2)
 	c.Assert(node.eventBuffer[insertEventIndex].Row.PreColumns, check.HasLen, 0)
+}
+
+type retryFlushSink struct {
+	mockSink
+}
+
+func (s *retryFlushSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {
+	return resolvedTs, cerrors.ErrRedoLogBufferBlocking.FastGenByArgs()
+}
+
+func (s *outputSuite) TestRetryFlushSink(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.EnableOldValue = false
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID: "changefeed-id-test-retryFlushSink",
+		Info: &model.ChangeFeedInfo{
+			StartTs: oracle.GoTimeToTS(time.Now()),
+			Config:  cfg,
+		},
+	})
+
+	sink := &mockSink{}
+	// sNode is a sinkNode
+	sNode := newSinkNode(1, sink, 0, 10, &mockFlowController{})
+	c.Assert(sNode.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
+	sNode.barrierTs = 10
+
+	cctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	// flush successfully
+	err := sNode.retryFlushSink(cctx, 5)
+	c.Assert(err, check.IsNil)
+	c.Assert(sNode.checkpointTs, check.Equals, uint64(5))
+
+	// flush blocking until context deadline exceed
+	sNode.sink = &retryFlushSink{}
+	err = sNode.retryFlushSink(cctx, 6)
+	c.Assert(strings.Contains(err.Error(), "context deadline exceeded"), check.IsTrue)
+	c.Assert(sNode.checkpointTs, check.Equals, uint64(5))
 }
