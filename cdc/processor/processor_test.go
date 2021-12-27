@@ -21,7 +21,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -329,7 +328,7 @@ func TestHandleTableOperation4SingleTable(t *testing.T) {
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
+	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
 		Tables: map[int64]*model.TableReplicaInfo{},
 		Operation: map[int64]*model.TableOperation{
 			66: {Delete: true, BoundaryTs: 121, Status: model.OperFinished},
