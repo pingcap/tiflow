@@ -98,6 +98,10 @@ func (p *levelDB) Batch(cap int) Batch {
 	}
 }
 
+func (p *levelDB) Compact(start, end []byte) error {
+	return p.db.CompactRange(util.Range{Start: start, Limit: end})
+}
+
 func (p *levelDB) Close() error {
 	return p.db.Close()
 }
