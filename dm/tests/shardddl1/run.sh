@@ -134,21 +134,21 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,'lll');"
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test"
+	# first, exec first conflict ddl and skip the second conflict ddl
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-  # first, exec first conflict ddl and skip the second conflict ddl
-  run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-    "query-status test" \
-    "ALTER TABLE \`${shardddl}\`.\`${tb}\` CHANGE COLUMN \`a\` \`c\` INT" 2 \
-    "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
-    "\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
-  # exec first ddl
-  run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-    "shard-ddl-lock unlock test-\`${shardddl}\`.\`${tb}\` -s ${SOURCE_ID1} -d ${shardddl1} -t ${tb1} --action exec" \
-    "\"result\": true" 1
-  # skip second ddl
-  run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-    "shard-ddl-lock unlock test-\`${shardddl}\`.\`${tb}\` -s ${SOURCE_ID2} -d ${shardddl1} -t ${tb1} --action skip" \
-    "\"result\": true" 1
+		"ALTER TABLE \`${shardddl}\`.\`${tb}\` CHANGE COLUMN \`a\` \`c\` INT" 2 \
+		"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
+		"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+	# exec first ddl
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"shard-ddl-lock unlock test-\`${shardddl}\`.\`${tb}\` -s ${SOURCE_ID1} -d ${shardddl1} -t ${tb1} --action exec" \
+		"\"result\": true" 1
+	# skip second ddl
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"shard-ddl-lock unlock test-\`${shardddl}\`.\`${tb}\` -s ${SOURCE_ID2} -d ${shardddl1} -t ${tb1} --action skip" \
+		"\"result\": true" 1
 
 	# second, resume-task. don't check "result: true" here, because worker may run quickly and meet the error from tb2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -303,8 +303,8 @@ function DM_RestartMaster_CASE() {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1 \
-      "\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
-    run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"shard-ddl-lock" \
 			'mysql-replica-01-`shardddl1`.`tb1`' 1 \
 			'mysql-replica-02-`shardddl1`.`tb1`' 2 \
@@ -325,7 +325,7 @@ function DM_RestartMaster_CASE() {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1 \
-      "\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"shard-ddl-lock" \
 			'mysql-replica-01-`shardddl1`.`tb1`' 1 \

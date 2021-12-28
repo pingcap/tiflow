@@ -271,8 +271,8 @@ function DM_107_CASE() {
 	# TODO: check the handle-error message in the future
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-    'ALTER TABLE `shardddl`.`tb` ADD COLUMN `col1` INT NOL NULL' 1 \
-    "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `col1` INT NOL NULL' 1 \
+		"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(3);"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column col1 int not null;"
@@ -307,8 +307,8 @@ function different_field_flag_test() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values (4,${val2});"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-    "ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\` ${type2^^} NOL NULL" 1 \
-    "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
+		"ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\` ${type2^^} NOL NULL" 1 \
+		"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(5);"
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column col1 $type3"
@@ -532,9 +532,9 @@ function DM_117_CASE {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-    'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` INT' 1 \
-    'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` INT' 1 \
-    "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` INT' 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` INT' 1 \
+		"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
 		"add column b that wasn't fully dropped in downstream" 1
 
 	# try to fix data

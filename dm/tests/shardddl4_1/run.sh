@@ -563,9 +563,9 @@ function DM_147_CASE {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"add column c that wasn't fully dropped in downstream" 1 \
-    'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` INT' 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` INT' 1 \
 		'ALTER TABLE `shardddl`.`tb` DROP COLUMN `b`' 1 \
-    "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
+		"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
 		"add column c that wasn't fully dropped in downstream" 1
 
 	# try to fix data

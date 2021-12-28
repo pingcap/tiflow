@@ -114,8 +114,8 @@ function DM_049_CASE() {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			'ALTER TABLE `shardddl`.`tb` CHANGE `a` `c`' 2 \
-      "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
-      "\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -153,8 +153,8 @@ function DM_050_CASE() {
 			"query-status test" \
 			'ALTER TABLE `shardddl`.`tb` CHANGE `a` `c`' 1 \
 			'ALTER TABLE `shardddl`.`tb` CHANGE `a` `d`' 1 \
-      "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
-      "\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -192,8 +192,8 @@ function DM_051_CASE() {
 			"query-status test" \
 			'ALTER TABLE `shardddl`.`tb` CHANGE `a` `c`' 1 \
 			'ALTER TABLE `shardddl`.`tb` CHANGE `b` `c`' 1 \
-      "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
-      "\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -231,8 +231,8 @@ function DM_056_CASE() {
 			"query-status test" \
 			'ALTER TABLE `shardddl`.`tb` CHANGE `a` `c` INT AFTER `b`' 1 \
 			'ALTER TABLE `shardddl`.`tb` CHANGE `a` `c` INT FIRST' 1 \
-      "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
-      "\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -291,7 +291,7 @@ function DM_058_CASE() {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			'ALTER TABLE `shardddl`.`tb` CHANGE `id` `new_col` INT DEFAULT 2' 1 \
-      "\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -494,7 +494,7 @@ function DM_067_CASE() {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			'ALTER TABLE `shardddl`.`tb` MODIFY `id` INT DEFAULT 2' 1 \
-      "\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
