@@ -20,9 +20,8 @@ import (
 	"testing"
 	"time"
 
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-
 	"github.com/pingcap/tiflow/cdc/model"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 

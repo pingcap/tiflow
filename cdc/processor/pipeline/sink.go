@@ -18,6 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -33,6 +35,7 @@ import (
 const (
 	defaultSyncResolvedBatch       = 64
 	redoLogBlockingWarnLogDuration = 10 * time.Second
+	redoLogBlockingWarnLogInterval = 10 * time.Second
 )
 
 // TableStatus is status of the table pipeline
@@ -84,6 +87,8 @@ type sinkNode struct {
 
 	replicaConfig    *config.ReplicaConfig
 	isTableActorMode bool
+
+	logRateLimiter rate.Limiter
 }
 
 func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
@@ -351,14 +356,18 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 			return true, nil
 		}
 		start := time.Now()
+		lastTimeToRetry := start
 		err := retry.Do(ctx, func() error {
 			err := n.emitEvent(ctx, event)
 			cost := time.Since(start)
-			if cost >= 10*time.Second {
+			retryInterval := time.Since(lastTimeToRetry)
+			if cost >= redoLogBlockingWarnLogDuration && retryInterval >= redoLogBlockingWarnLogInterval {
+				lastTimeToRetry = time.Now()
 				log.Warn("redo log buffer blocking too long", zap.Duration("blocking time(s)", cost))
 			}
 			return err
 		}, retry.WithBackoffBaseDelay(20),
+			retry.WithBackoffMaxDelay(500),
 			retry.WithInfiniteTries(),
 			retry.WithIsRetryableErr(isRetryableError))
 		if err != nil {
@@ -396,17 +405,21 @@ func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 
 func (n *sinkNode) retryFlushSink(ctx context.Context, resolvedTs model.Ts) error {
 	start := time.Now()
+	lastTimeToRetry := start
 	err := retry.Do(ctx, func() error {
 		// We must retry until success when flushSink return a ErrRedoLogBufferBlocking
 		// error to ensure the data is safely store by redo log module
 		// Note: the chance that flushSink return a ErrRedoLogBufferBlocking error is low.
 		err := n.flushSink(ctx, resolvedTs)
 		cost := time.Since(start)
-		if cost >= redoLogBlockingWarnLogDuration {
-			log.Warn("redo log buffer blocking too long", zap.Duration("blocking time(s)", cost))
+		retryInterval := time.Since(lastTimeToRetry)
+		if cost >= redoLogBlockingWarnLogDuration && retryInterval >= redoLogBlockingWarnLogInterval {
+			lastTimeToRetry = time.Now()
+			log.Warn("redo log flush buffer blocking too long", zap.Duration("blocking time(s)", cost))
 		}
 		return err
 	}, retry.WithBackoffBaseDelay(20),
+		retry.WithBackoffMaxDelay(500),
 		retry.WithInfiniteTries(),
 		retry.WithIsRetryableErr(isRetryableError))
 	return err

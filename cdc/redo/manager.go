@@ -242,8 +242,8 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 	}:
 		return nil
 	default:
+		return cerror.ErrRedoLogBufferBlocking.FastGenByArgs()
 	}
-	return cerror.ErrRedoLogBufferBlocking.FastGenByArgs()
 }
 
 // FlushLog emits resolved ts of a single table
@@ -267,8 +267,8 @@ func (m *ManagerImpl) FlushLog(
 	}:
 		return nil
 	default:
+		return cerror.ErrFlushTsBlocking.FastGenByArgs()
 	}
-	return cerror.ErrFlushTsBlocking.FastGenByArgs()
 }
 
 // EmitDDLEvent sends DDL event to redo log writer
