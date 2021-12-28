@@ -105,10 +105,78 @@ func (s *kafkaSuite) TestFillBySinkURI(c *check.C) {
 	c.Assert(producerConfig.MaxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 	c.Assert(producerConfig.Compression, check.Equals, defaultCompression)
 	c.Assert(producerConfig.ClientID, check.Equals, "")
-	c.Assert(producerConfig.Credential, check.Equals, &security.Credential{})
-	c.Assert(producerConfig.SaslScram, check.Equals, &security.SaslScram{})
+
+	c.Assert(producerConfig.Credential.CAPath, check.Equals, "")
+	c.Assert(producerConfig.Credential.KeyPath, check.Equals, "")
+	c.Assert(producerConfig.Credential.CertPath, check.Equals, "")
+	c.Assert(len(producerConfig.Credential.CertAllowedCN), check.Equals, 0)
+
+	c.Assert(producerConfig.SaslScram.SaslMechanism, check.Equals, "")
+	c.Assert(producerConfig.SaslScram.SaslUser, check.Equals, "")
+	c.Assert(producerConfig.SaslScram.SaslPassword, check.Equals, "")
+
 	c.Assert(producerConfig.AutoCreate, check.IsTrue)
 
+	uri = "kafka://127.0.0.1:9092/full-params?partition-num=3&replication-factor=3" +
+		"&kafka-version=2.6.0&kafka-client-id=kafka-ut&max-message-bytes=1048576&compression=snappy" +
+		"&ca=123&cert=123&key=123&sasl-user=123&sasl-password=123&sasl-mechanism=123&auto-create-topic=false"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+
+	producerConfig = NewConfig()
+	err = producerConfig.fillBySinkURI(sinkURI)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(len(producerConfig.BrokerEndpoints), check.Equals, 1)
+	c.Assert(producerConfig.BrokerEndpoints[0], check.Equals, "127.0.0.1:9092")
+	c.Assert(producerConfig.PartitionNum, check.Equals, int32(3))
+	c.Assert(producerConfig.ReplicationFactor, check.Equals, int16(3))
+	c.Assert(producerConfig.Version, check.Equals, "2.6.0")
+	c.Assert(producerConfig.ClientID, check.Equals, "kafka-ut")
+	c.Assert(producerConfig.MaxMessageBytes, check.Equals, 1048576)
+	c.Assert(producerConfig.Compression, check.Equals, "snappy")
+	c.Assert(producerConfig.Credential.CAPath, check.Equals, "123")
+	c.Assert(producerConfig.Credential.CertPath, check.Equals, "123")
+	c.Assert(producerConfig.Credential.KeyPath, check.Equals, "123")
+
+	c.Assert(producerConfig.SaslScram.SaslMechanism, check.Equals, "123")
+	c.Assert(producerConfig.SaslScram.SaslUser, check.Equals, "123")
+	c.Assert(producerConfig.SaslScram.SaslPassword, check.Equals, "123")
+
+	c.Assert(producerConfig.AutoCreate, check.IsFalse)
+
+	// Illegal replication-factor.
+	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&replication-factor=a"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	producerConfig = NewConfig()
+	err = producerConfig.fillBySinkURI(sinkURI)
+	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
+
+	// Illegal max-message-bytes.
+	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&max-message-bytes=a"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	producerConfig = NewConfig()
+	err = producerConfig.fillBySinkURI(sinkURI)
+	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
+
+	// Illegal partition-num.
+	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=a"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	producerConfig = NewConfig()
+	err = producerConfig.fillBySinkURI(sinkURI)
+	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
+
+	// Out of range partition-num.
+	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	c.Assert(err, check.IsNil)
+	producerConfig = NewConfig()
+	err = producerConfig.fillBySinkURI(sinkURI)
+	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid partition num.*")
 }
 
 func (s *kafkaSuite) TestInitializeConfigurations(c *check.C) {
@@ -147,7 +215,6 @@ func (s *kafkaSuite) TestInitializeConfigurations(c *check.C) {
 	c.Assert(producerConfig, check.NotNil)
 	c.Assert(saramaConfig, check.NotNil)
 
-	c.Assert(producerConfig.BrokerEndpoints, check.Equals, []string{"127.0.0.1:9092"})
 	c.Assert(producerConfig.PartitionNum, check.Equals, int32(1))
 	c.Assert(producerConfig.ReplicationFactor, check.Equals, int16(3))
 	c.Assert(producerConfig.Version, check.Equals, "2.6.0")
@@ -155,48 +222,6 @@ func (s *kafkaSuite) TestInitializeConfigurations(c *check.C) {
 
 	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(producerConfig.MaxMessageBytes))
 	c.Assert(opts["max-batch-size"], check.Equals, "5")
-
-	// Illegal replication-factor.
-	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&replication-factor=a"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	producerConfig, saramaConfig, err = InitializeConfigurations(context.Background(), topic, sinkURI, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
-
-	// Illegal max-message-bytes.
-	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&max-message-bytes=a"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	producerConfig, saramaConfig, err = InitializeConfigurations(context.Background(), topic, sinkURI, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
-
-	// Illegal enable-tidb-extension.
-	uri = "kafka://127.0.0.1:9092/abc?enable-tidb-extension=a&protocol=canal-json"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	producerConfig, saramaConfig, err = InitializeConfigurations(context.Background(), topic, sinkURI, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
-
-	// Illegal partition-num.
-	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=a"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	producerConfig, saramaConfig, err = InitializeConfigurations(context.Background(), topic, sinkURI, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
-
-	// Out of range partition-num.
-	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	producerConfig, saramaConfig, err = InitializeConfigurations(context.Background(), topic, sinkURI, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid partition num.*")
-
-	// Use enable-tidb-extension on other protocols.
-	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=1&enable-tidb-extension=true"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	producerConfig, saramaConfig, err = InitializeConfigurations(context.Background(), topic, sinkURI, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*enable-tidb-extension only support canal-json protocol.*")
 
 	// Test enable-tidb-extension.
 	uri = "kafka://127.0.0.1:9092/abc?enable-tidb-extension=true&protocol=canal-json"
@@ -207,6 +232,21 @@ func (s *kafkaSuite) TestInitializeConfigurations(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	c.Assert(opts["enable-tidb-extension"], check.Equals, "true")
+
+	// Illegal enable-tidb-extension.
+	uri = "kafka://127.0.0.1:9092/abc?enable-tidb-extension=a&protocol=canal-json"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	producerConfig, saramaConfig, err = InitializeConfigurations(context.Background(), topic, sinkURI, config.GetDefaultReplicaConfig(), opts)
+	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
+
+	// Use enable-tidb-extension on other protocols.
+	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=1&enable-tidb-extension=true"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	producerConfig, saramaConfig, err = InitializeConfigurations(context.Background(), topic, sinkURI, config.GetDefaultReplicaConfig(), opts)
+	c.Assert(errors.Cause(err), check.ErrorMatches, ".*enable-tidb-extension only support canal-json protocol.*")
+
 }
 
 func (s *kafkaSuite) TestSetPartitionNum(c *check.C) {
