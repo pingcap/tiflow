@@ -91,7 +91,7 @@ func NewConfig() *Config {
 }
 
 type ExperimentalFeatures struct {
-	OpenAPI bool `toml:"openapi"` // OpenAPI is available in v5.4 as default.
+	OpenAPI bool `toml:"openapi,omitempty"` // OpenAPI is available in v5.4 as default.
 }
 
 // Config is the configuration for dm-master.

@@ -27,4 +27,3 @@ ssl-cert = ""
 ssl-key = ""
 
 [experimental]
-  openapi = false
