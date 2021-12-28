@@ -143,21 +143,3 @@ func isMySQLError(err error, code uint16) bool {
 	e, ok := err.(*mysql.MySQLError)
 	return ok && e.Number == code
 }
-
-const tablesWithOneThread = 10000 / 32
-
-var concurrencies = []int{4, 8, 12, 16, 20, 24, 28, 32}
-
-func getConcurrency(tableNum int) int {
-	// if tableNum < 100, one thread is enough
-	if tableNum < 100 {
-		return 1
-	}
-	threads := tableNum/tablesWithOneThread + 1
-	for _, num := range concurrencies {
-		if num >= threads {
-			return num
-		}
-	}
-	return concurrencies[len(concurrencies)-1]
-}

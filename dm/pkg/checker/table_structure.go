@@ -26,6 +26,7 @@ import (
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
@@ -40,6 +41,8 @@ const (
 	// AutoIncrementKeyChecking is an identification for auto increment key checking.
 	AutoIncrementKeyChecking = "auto-increment key checking"
 	MaxOptions               = 4
+	tablesForOneThread       = 300
+	maxThreadNum             = 32
 )
 
 // hold information of incompatibility option.
@@ -94,12 +97,11 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 	}
 
 	startTime := time.Now()
-	var (
-		optCh   = make(chan *incompatibilityOption, MaxOptions*len(c.tables))
-		errCh   = make(chan error, 1)
-		checkWg sync.WaitGroup
-	)
-	concurrency := getConcurrency(len(c.tables))
+
+	concurrency := len(c.tables)/tablesForOneThread + 1
+	if concurrency > maxThreadNum {
+		concurrency = maxThreadNum
+	}
 	maxConnections, err := utils.GetMaxConnections(ctx, c.db)
 	if err != nil {
 		return r, err
@@ -107,66 +109,89 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 	if concurrency > maxConnections {
 		concurrency = maxConnections
 	}
-	onethread := len(c.tables) / concurrency
-	defer func() {
-		close(optCh)
-		close(errCh)
-	}()
-	log.L().Logger.Info("start to check tables", zap.Int("concurrency", concurrency), zap.Int("onthread check num", onethread), zap.Int("all table num", len(c.tables)))
-	checkFunc := func(tables []*filter.Table) {
-		defer func() {
-			checkWg.Done()
-		}()
-		for _, table := range tables {
-			statement, err := dbutil.GetCreateTableSQL(ctx, c.db, table.Schema, table.Name)
-			if err != nil {
-				// continue if table was deleted when checking
-				if isMySQLError(err, mysql.ErrNoSuchTable) {
-					continue
-				}
-				if len(errCh) == 0 {
-					errCh <- err
-				}
-				break
-			}
 
-			opts := c.checkCreateSQL(ctx, statement)
-			for _, opt := range opts {
-				opt.tableID = table.String()
-				optCh <- opt
+	var (
+		optCh   = make(chan *incompatibilityOption, MaxOptions*len(c.tables))
+		errCh   = make(chan error, 1)
+		inCh    = make(chan *filter.Table, concurrency)
+		checkWg sync.WaitGroup
+	)
+
+	checkCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		defer close(inCh)
+		for _, table := range c.tables {
+			select {
+			case inCh <- table:
+			case <-checkCtx.Done():
+				return
+			}
+		}
+	}()
+	log.L().Logger.Info("start to check tables", zap.Int("concurrency", concurrency), zap.Int("all table num", len(c.tables)))
+	checkFunc := func() {
+		defer checkWg.Done()
+		for {
+			select {
+			case <-checkCtx.Done():
+				return
+			case table, ok := <-inCh:
+				if !ok {
+					return
+				}
+				statement, err := dbutil.GetCreateTableSQL(ctx, c.db, table.Schema, table.Name)
+				if err != nil {
+					// continue if table was deleted when checking
+					if isMySQLError(err, mysql.ErrNoSuchTable) {
+						continue
+					}
+					if len(errCh) == 0 {
+						errCh <- err
+					}
+					break
+				}
+
+				opts := c.checkCreateSQL(ctx, statement)
+				for _, opt := range opts {
+					opt.tableID = table.String()
+					optCh <- opt
+				}
 			}
 		}
 	}
+
+	go func() {
+		defer cancel()
+		err, ok := <-errCh
+		if ok {
+			markCheckError(r, err)
+			close(errCh)
+		}
+	}()
 
 	for i := 0; i < concurrency; i++ {
-		if onethread == 0 {
-			checkWg.Add(1)
-			go checkFunc(c.tables[0:])
-			break
-		}
-		if onethread*i >= len(c.tables) {
-			break
-		}
-		var checkTables []*filter.Table
-		if i+1 == concurrency || onethread*(i+1) >= len(c.tables) {
-			checkTables = c.tables[onethread*i:]
-		} else {
-			checkTables = c.tables[onethread*i : onethread*(i+1)]
-		}
 		checkWg.Add(1)
-		go checkFunc(checkTables)
+		go checkFunc()
 	}
 
-	checkWg.Wait()
-	log.L().Logger.Info("check table structure over", zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
-	for {
-		if len(optCh) == 0 && len(errCh) == 0 {
-			return r, nil
+	go func() {
+		checkWg.Wait()
+		log.L().Logger.Info("check table structure over", zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
+		close(optCh)
+		if errCh != nil {
+			close(errCh)
 		}
+	}()
+
+	for {
 		select {
-		case err := <-errCh:
-			return r, err
-		case option := <-optCh:
+		case <-checkCtx.Done():
+			return r, nil
+		case option, ok := <-optCh:
+			if !ok {
+				return r, nil
+			}
 			tableMsg := "table " + option.tableID + " "
 			switch option.state {
 			case StateWarning:
@@ -343,13 +368,10 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 		firstTable    string
 		firstInstance string
 		errCh         = make(chan error, 1)
+		inChs         = make(map[string]chan *filter.Table, len(c.tableMap))
 		checkWg       sync.WaitGroup
 	)
-	defer func() {
-		close(errCh)
-	}()
 
-	startTime := time.Now()
 	// get first table
 	for instance, tables := range c.tableMap {
 		db, ok := c.dbs[instance]
@@ -396,84 +418,70 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 		}
 	}
 
-	checkFunc := func(instance string, tables []*filter.Table) {
-		defer func() {
-			checkWg.Done()
-		}()
+	checkCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-		db, ok := c.dbs[instance]
-		if !ok {
-			if len(errCh) == 0 {
-				errCh <- errors.NotFoundf("client for instance %s", instance)
-			}
-			return
-		}
-
-		parser2, err := dbutil.GetParserForDB(ctx, db)
-		if err != nil {
-			r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
-			if len(errCh) == 0 {
-				errCh <- err
-			}
-			return
-		}
-		r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
-		for _, table := range tables {
-			statement, err := dbutil.GetCreateTableSQL(ctx, db, table.Schema, table.Name)
-			if err != nil {
-				// continue if table was deleted when checking
-				if isMySQLError(err, mysql.ErrNoSuchTable) {
-					continue
-				}
-				if len(errCh) == 0 {
-					errCh <- err
-				}
+	checkFunc := func(instance string, db *sql.DB, p *parser.Parser) {
+		defer checkWg.Done()
+		for {
+			select {
+			case <-checkCtx.Done():
 				return
-			}
-
-			info, err := dbutil.GetTableInfoBySQL(statement, parser2)
-			if err != nil {
-				if len(errCh) == 0 {
-					errCh <- err
-				}
-				return
-			}
-			stmt, err := parser2.ParseOneStmt(statement, "", "")
-			if err != nil {
-				if len(errCh) == 0 {
-					errCh <- errors.Annotatef(err, "statement %s", statement)
-				}
-				return
-			}
-
-			ctStmt, ok := stmt.(*ast.CreateTableStmt)
-			if !ok {
-				if len(errCh) == 0 {
-					errCh <- errors.Errorf("Expect CreateTableStmt but got %T", stmt)
-				}
-				return
-			}
-
-			if c.checkAutoIncrementPrimaryKey {
-				passed := c.checkAutoIncrementKey(instance, table.Schema, table.Name, ctStmt, info, r)
-				if !passed {
+			case table, ok := <-inChs[instance]:
+				if !ok {
 					return
 				}
-			}
+				statement, err := dbutil.GetCreateTableSQL(ctx, db, table.Schema, table.Name)
+				if err != nil {
+					// continue if table was deleted when checking
+					if isMySQLError(err, mysql.ErrNoSuchTable) {
+						continue
+					}
+					errCh <- err
+					return
+				}
 
-			checkErr := c.checkConsistency(stmtNode, ctStmt, firstTable, table.String(), firstInstance, instance)
-			if checkErr != nil {
-				r.State = StateFailure
-				r.Errors = append(r.Errors, checkErr)
-				r.Extra = fmt.Sprintf("error on sharding %s", c.targetTableID)
-				r.Instruction = "please set same table structure for sharding tables"
-				return
+				info, err := dbutil.GetTableInfoBySQL(statement, p)
+				if err != nil {
+					errCh <- err
+					return
+				}
+				stmt, err := p.ParseOneStmt(statement, "", "")
+				if err != nil {
+					errCh <- errors.Annotatef(err, "statement %s", statement)
+					return
+				}
+
+				ctStmt, ok := stmt.(*ast.CreateTableStmt)
+				if !ok {
+					errCh <- errors.Errorf("Expect CreateTableStmt but got %T", stmt)
+					return
+				}
+
+				if c.checkAutoIncrementPrimaryKey {
+					passed := c.checkAutoIncrementKey(instance, table.Schema, table.Name, ctStmt, info, r)
+					if !passed {
+						return
+					}
+				}
+
+				checkErr := c.checkConsistency(stmtNode, ctStmt, firstTable, table.String(), firstInstance, instance)
+				if checkErr != nil {
+					r.State = StateFailure
+					r.Errors = append(r.Errors, checkErr)
+					r.Extra = fmt.Sprintf("error on sharding %s", c.targetTableID)
+					r.Instruction = "please set same table structure for sharding tables"
+					return
+				}
 			}
 		}
 	}
 
 	for instance, tables := range c.tableMap {
-		concurrency := getConcurrency(len(tables))
+		concurrency := len(tables)/tablesForOneThread + 1
+		if concurrency > maxThreadNum {
+			concurrency = maxThreadNum
+		}
 		maxConnections, err := utils.GetMaxConnections(ctx, c.dbs[instance])
 		if err != nil {
 			return r, err
@@ -481,37 +489,45 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 		if concurrency > maxConnections {
 			concurrency = maxConnections
 		}
-		onethread := len(tables) / concurrency
-		log.L().Logger.Info("this source have", zap.String("source", instance), zap.Int("concurrency", concurrency), zap.Int("onthread check num", onethread), zap.Int("table num", len(tables)))
+
+		inChs[instance] = make(chan *filter.Table, concurrency)
+		go func(inCh chan *filter.Table, tables []*filter.Table) {
+			for _, table := range tables {
+				inCh <- table
+			}
+			close(inCh)
+		}(inChs[instance], tables)
+
+		log.L().Logger.Info("this source have", zap.String("source", instance), zap.Int("concurrency", concurrency), zap.Int("table num", len(tables)))
+		db, ok := c.dbs[instance]
+		if !ok {
+			return r, errors.NotFoundf("client for instance %s", instance)
+		}
+
+		parser2, err := dbutil.GetParserForDB(ctx, db)
+		if err != nil {
+			r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
+			return r, err
+		}
 		for i := 0; i < concurrency; i++ {
-			if onethread == 0 {
-				checkWg.Add(1)
-				go checkFunc(instance, tables[0:])
-				break
-			}
-			if onethread*i >= len(tables) {
-				break
-			}
-			var checkTables []*filter.Table
-			if i+1 == concurrency || onethread*(i+1) >= len(tables) {
-				checkTables = tables[onethread*i:]
-			} else {
-				checkTables = tables[onethread*i : onethread*(i+1)]
-			}
 			checkWg.Add(1)
-			go checkFunc(instance, checkTables)
+			go checkFunc(instance, db, parser2)
 		}
 	}
 
-	checkWg.Wait()
-	log.L().Logger.Info("check sharding table over", zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
+	go func() {
+		checkWg.Wait()
+		if errCh != nil {
+			close(errCh)
+		}
+	}()
 
-	if len(errCh) != 0 {
-		err := <-errCh
+	select {
+	case <-checkCtx.Done():
+		return r, nil
+	case err := <-errCh:
 		return r, err
 	}
-
-	return r, nil
 }
 
 func (c *ShardingTablesChecker) checkAutoIncrementKey(instance, schema, table string, ctStmt *ast.CreateTableStmt, info *model.TableInfo, r *Result) bool {

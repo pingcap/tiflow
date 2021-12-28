@@ -37,6 +37,9 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 
 	// 1. test a success check
 	mock = initShardingMock(mock)
+	sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "151")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(sqlModeRow)
 	mock = initShardingMock(mock)
 
 	createTableRow2 := sqlmock.NewRows([]string{"Table", "Create Table"}).
@@ -56,13 +59,15 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 		false)
 	result, err := checker.Check(ctx)
 	markCheckError(result, err)
-	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
 	printJSON(result)
 
 	// 2. check different column number
 	mock = initShardingMock(mock)
+	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "151")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(sqlModeRow)
 	mock = initShardingMock(mock)
 	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
@@ -81,6 +86,9 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 
 	// 3. check different column def
 	mock = initShardingMock(mock)
+	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "151")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(sqlModeRow)
 	mock = initShardingMock(mock)
 	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
@@ -108,12 +116,14 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 	}
 
 	// 1. test a success check
-
+	maxConnectionsRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "151")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
 	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
-  "c" int(11) NOT NULL,
-  PRIMARY KEY ("c")
-) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
+		  "c" int(11) NOT NULL,
+		  PRIMARY KEY ("c")
+		) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
 	sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("sql_mode", "ANSI_QUOTES")
@@ -124,13 +134,14 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 		[]*filter.Table{{Schema: "test-db", Name: "test-table-1"}})
 	result, err := checker.Check(ctx)
 	markCheckError(result, err)
-
 	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
 	printJSON(result)
 
 	// 2. check many errors
-
+	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "151")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
 	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
   "c" int(11) NOT NULL,
@@ -143,14 +154,15 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 
 	result, err = checker.Check(ctx)
 	markCheckError(result, err)
-
+	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 2) // no PK/UK + has FK
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJSON(result)
 
 	// 3. unsupported charset
-
+	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "151")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
 	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
   "c" int(11) NOT NULL,
