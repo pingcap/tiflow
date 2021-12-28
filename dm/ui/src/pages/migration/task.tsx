@@ -77,7 +77,6 @@ const TaskList: React.FC = () => {
         icon: <ExclamationCircleOutlined />,
         onOk() {
           message.loading({ content: t('requesting'), key })
-          console.log(selectedSources)
           Promise.all(
             selectedSources.map(name => handler({ taskName: name }).unwrap())
           )

@@ -78,8 +78,6 @@ const CreateTaskConfig: React.FC = () => {
     [taskData]
   )
 
-  console.log('taskData:', taskData)
-
   const getStepComponent = () => {
     const Comp = stepComponents[currentStep]
     return React.cloneElement(<Comp />, {
