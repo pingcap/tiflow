@@ -86,7 +86,6 @@ type Checker struct {
 
 // NewChecker returns a checker.
 func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, errCnt, warnCnt int64) *Checker {
-	logger := log.With(zap.String("unit", "task check"))
 	c := &Checker{
 		instances:     make([]*mysqlInstance, 0, len(cfgs)),
 		checkingItems: checkingItems,
@@ -94,7 +93,6 @@ func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, e
 		errCnt:  errCnt,
 		warnCnt: warnCnt,
 	}
-	c.tctx = tcontext.Background().WithLogger(logger)
 
 	for _, cfg := range cfgs {
 		// we have verify it in SubTaskConfig.Adjust
@@ -118,7 +116,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: c.closeDBs})
 
-	tctx := c.tctx.WithContext(ctx)
+	c.tctx = tcontext.NewContext(ctx, log.With(zap.String("unit", "task check")))
 	// target name => source => schema => [tables]
 	sharding := make(map[string]map[string]map[string][]string)
 	shardingCounter := make(map[string]int)
@@ -139,7 +137,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 
 		if instance.cfg.OnlineDDL && c.onlineDDL == nil {
-			c.onlineDDL, err = onlineddl.NewRealOnlinePlugin(tctx, instance.cfg)
+			c.onlineDDL, err = onlineddl.NewRealOnlinePlugin(c.tctx, instance.cfg)
 			if err != nil {
 				return err
 			}
