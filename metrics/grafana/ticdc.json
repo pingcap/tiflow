@@ -9864,13 +9864,12 @@
       "type": "row"
     },
     {
-      "collapsed": false,
-      "datasource": null,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 7
       },
       "id": 294,
       "panels": [],
@@ -9882,7 +9881,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "${DS_CDC-CLUSTER1}",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -9893,7 +9892,7 @@
         "h": 7,
         "w": 4,
         "x": 0,
-        "y": 22
+        "y": 8
       },
       "hiddenSeries": false,
       "id": 321,
@@ -9977,7 +9976,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "${DS_CDC-CLUSTER1}",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -9988,7 +9987,7 @@
         "h": 7,
         "w": 4,
         "x": 4,
-        "y": 22
+        "y": 8
       },
       "hiddenSeries": false,
       "id": 323,
@@ -10072,7 +10071,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "${DS_CDC-CLUSTER1}",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -10083,7 +10082,7 @@
         "h": 7,
         "w": 4,
         "x": 8,
-        "y": 22
+        "y": 8
       },
       "hiddenSeries": false,
       "id": 352,
@@ -10186,7 +10185,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "${DS_CDC-CLUSTER1}",
       "fieldConfig": {
         "defaults": {
           "unit": "short"
@@ -10197,9 +10196,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
-        "w": 5,
+        "w": 6,
         "x": 12,
-        "y": 22
+        "y": 8
       },
       "hiddenSeries": false,
       "id": 354,
@@ -10299,7 +10298,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "${DS_CDC-CLUSTER1}",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -10308,9 +10307,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
-        "w": 5,
-        "x": 17,
-        "y": 22
+        "w": 6,
+        "x": 18,
+        "y": 8
       },
       "hiddenSeries": false,
       "id": 356,
@@ -10406,7 +10405,8 @@
       }
     },
     {
-      "datasource": "${DS_TEST-CLUSTER}",
+      "columns": [],
+      "datasource": "${DS_CDC-CLUSTER1}",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -10452,18 +10452,48 @@
           }
         ]
       },
+      "fontSize": "100%",
       "gridPos": {
         "h": 8,
-        "w": 19,
+        "w": 20,
         "x": 0,
-        "y": 29
+        "y": 15
       },
       "id": 350,
       "options": {
         "showHeader": true,
         "sortBy": []
       },
+      "pageSize": null,
       "pluginVersion": "7.5.7",
+      "scroll": true,
+      "showHeader": true,
+      "sort": {
+        "col": 0,
+        "desc": true
+      },
+      "styles": [
+        {
+          "alias": "Time",
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "pattern": "Time",
+          "type": "date"
+        },
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "decimals": 2,
+          "pattern": "/.*/",
+          "thresholds": [],
+          "type": "number",
+          "unit": "short"
+        }
+      ],
       "targets": [
         {
           "exemplar": true,
@@ -10477,6 +10507,7 @@
         }
       ],
       "title": "Stream Count Between Nodes",
+      "transform": "timeseries_to_columns",
       "transformations": [
         {
           "id": "labelsToFields",
@@ -10506,7 +10537,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "${DS_CDC-CLUSTER1}",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -10515,9 +10546,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
-        "w": 3,
-        "x": 19,
-        "y": 29
+        "w": 4,
+        "x": 20,
+        "y": 15
       },
       "hiddenSeries": false,
       "id": 358,
