@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	log2 "github.com/pingcap/tidb/br/pkg/lightning/log"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -160,6 +161,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	if err := l.checkPointList.UpdateStatus(ctx, lightningStatusRunning); err != nil {
 		return err
 	}
+	log2.SetAppLogger(l.logger.Logger)
 	err := l.core.RunOnce(taskCtx, cfg, nil)
 	failpoint.Inject("LightningLoadDataSlowDown", nil)
 	failpoint.Inject("LightningLoadDataSlowDownByTask", func(val failpoint.Value) {
@@ -199,6 +201,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		cfg.Checkpoint.DSN = cpPath
 		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 		cfg.TiDB.Vars = make(map[string]string)
+		cfg.Routes = l.cfg.RouteRules
 		if l.cfg.To.Session != nil {
 			for k, v := range l.cfg.To.Session {
 				cfg.TiDB.Vars[k] = v
