@@ -15,8 +15,11 @@ package system
 
 import (
 	"context"
+	"math"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,4 +29,30 @@ func TestStartAndStopSystem(t *testing.T) {
 	s := NewSystem()
 	require.Nil(t, s.Start(context.TODO()))
 	require.Nil(t, s.Stop())
+}
+
+func TestActorID(t *testing.T) {
+	sys := NewSystem()
+	type table struct {
+		changeFeed string
+		tableID    model.TableID
+	}
+	cases := []table{
+		{"abc", 1},
+		{"", -1},
+		{"", 0},
+		{"", math.MaxInt64},
+		{"afddeefessssssss", math.MaxInt64},
+		{"afddeefessssssss", 0},
+		{"afddeefessssssss", 1},
+	}
+	ids := make(map[actor.ID]bool)
+	for _, c := range cases {
+		id1 := sys.ActorID(c.changeFeed, c.tableID)
+		for i := 0; i < 10; i++ {
+			require.Equal(t, id1, sys.ActorID(c.changeFeed, c.tableID))
+		}
+		require.False(t, ids[id1])
+		ids[id1] = true
+	}
 }

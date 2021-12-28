@@ -15,6 +15,7 @@ package entry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"testing"
@@ -374,6 +375,73 @@ func TestHandleDDL(t *testing.T) {
 			require.False(t, ok)
 		}
 	}
+}
+
+func TestHandleRenameTables(t *testing.T) {
+	// Initial schema: db_1.table_1 and db_2.table_2.
+	snap := newEmptySchemaSnapshot(true)
+	var i int64
+	for i = 1; i < 3; i++ {
+		dbInfo := &timodel.DBInfo{
+			ID:    i,
+			Name:  timodel.NewCIStr(fmt.Sprintf("db_%d", i)),
+			State: timodel.StatePublic,
+		}
+		err := snap.createSchema(dbInfo)
+		require.Nil(t, err)
+	}
+	for i = 1; i < 3; i++ {
+		tblInfo := &timodel.TableInfo{
+			ID:    10 + i,
+			Name:  timodel.NewCIStr(fmt.Sprintf("table_%d", i)),
+			State: timodel.StatePublic,
+		}
+		err := snap.createTable(model.WrapTableInfo(i, fmt.Sprintf("db_%d", i), 1, tblInfo))
+		require.Nil(t, err)
+	}
+
+	// rename table db1.table_1 to db2.x, db2.table_2 to db1.y
+	oldSchemaIDs := []int64{1, 2}
+	newSchemaIDs := []int64{2, 1}
+	oldTableIDs := []int64{11, 12}
+	newTableNames := []timodel.CIStr{timodel.NewCIStr("x"), timodel.NewCIStr("y")}
+	oldSchemaNames := []timodel.CIStr{timodel.NewCIStr("db_1"), timodel.NewCIStr("db_2")}
+	args := []interface{}{oldSchemaIDs, newSchemaIDs, newTableNames, oldTableIDs, oldSchemaNames}
+	rawArgs, err := json.Marshal(args)
+	require.Nil(t, err)
+	var job *timodel.Job = &timodel.Job{
+		Type:       timodel.ActionRenameTables,
+		RawArgs:    rawArgs,
+		BinlogInfo: &timodel.HistoryInfo{},
+	}
+	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
+		&timodel.TableInfo{
+			ID:    13,
+			Name:  timodel.NewCIStr("x"),
+			State: timodel.StatePublic,
+		})
+	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
+		&timodel.TableInfo{
+			ID:    14,
+			Name:  timodel.NewCIStr("y"),
+			State: timodel.StatePublic,
+		})
+	testDoDDLAndCheck(t, snap, job, false)
+
+	var ok bool
+	_, ok = snap.TableByID(13)
+	require.True(t, ok)
+	_, ok = snap.TableByID(14)
+	require.True(t, ok)
+	_, ok = snap.TableByID(11)
+	require.False(t, ok)
+	_, ok = snap.TableByID(12)
+	require.False(t, ok)
+
+	t1 := model.TableName{Schema: "db_2", Table: "x"}
+	t2 := model.TableName{Schema: "db_1", Table: "y"}
+	require.Equal(t, snap.tableNameToID[t1], int64(13))
+	require.Equal(t, snap.tableNameToID[t2], int64(14))
 }
 
 func testDoDDLAndCheck(t *testing.T, snap *schemaSnapshot, job *timodel.Job, isErr bool) {

@@ -792,7 +792,7 @@ func TestPoll(t *testing.T) {
 			expectMaxResolvedTs: 2,
 			expectExhaustedRTs:  2,
 		},
-		// exhaustedResolvedTs must advance if all resolved events are outputed.
+		// exhaustedResolvedTs must advance if all resolved events are outputted.
 		// Output: CRTs 2, StartTs 1, keys (0|1|2)
 		{
 			inputEvents: []*model.PolymorphicEvent{

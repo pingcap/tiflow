@@ -151,6 +151,7 @@ var (
 	ErrSnapshotTableNotFound   = errors.Normalize("table %d not found in schema snapshot", errors.RFCCodeText("CDC:ErrSnapshotTableNotFound"))
 	ErrSnapshotSchemaExists    = errors.Normalize("schema %s(%d) already exists", errors.RFCCodeText("CDC:ErrSnapshotSchemaExists"))
 	ErrSnapshotTableExists     = errors.Normalize("table %s.%s already exists", errors.RFCCodeText("CDC:ErrSnapshotTableExists"))
+	ErrInvalidDDLJob           = errors.Normalize("invalid ddl job(%d)", errors.RFCCodeText("CDC:ErrInvalidDDLJob"))
 
 	// puller related errors
 	ErrBufferReachLimit = errors.Normalize("puller mem buffer reach size limit", errors.RFCCodeText("CDC:ErrBufferReachLimit"))
@@ -283,4 +284,9 @@ var (
 	ErrPeerMessageIllegalClientVersion  = errors.Normalize("peer-to-peer message client reported illegal version: %s", errors.RFCCodeText("CDC:ErrPeerMessageIllegalClientVersion"))
 	ErrPeerMessageTopicCongested        = errors.Normalize("peer-to-peer message topic has congested, aborting all connections", errors.RFCCodeText("CDC:ErrPeerMessageTopicCongested"))
 	ErrPeerMessageInjectedServerRestart = errors.Normalize("peer-to-peer message server injected error", errors.RFCCodeText("CDC:ErrPeerMessageInjectedServerRestart"))
+
+	// RESTful client error
+	ErrRewindRequestBodyError = errors.Normalize("failed to seek to the beginning of request body", errors.RFCCodeText("CDC:ErrRewindRequestBodyError"))
+	ErrZeroLengthResponseBody = errors.Normalize("0-length response with status code: %d", errors.RFCCodeText("CDC:ErrZeroLengthResponseBody"))
+	ErrInvalidHost            = errors.Normalize("host must be a URL or a host:port pair: %q", errors.RFCCodeText("CDC:ErrInvalidHost"))
 )

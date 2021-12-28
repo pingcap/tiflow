@@ -346,7 +346,7 @@ func (c *changefeed) redoManagerCleanup(ctx context.Context) {
 			redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
 			redoManager, err := redo.NewManager(ctx, c.state.Info.Config.Consistent, redoManagerOpts)
 			if err != nil {
-				log.Error("create redo manger failed", zap.String("changefeed", c.id), zap.Error(err))
+				log.Error("create redo manager failed", zap.String("changefeed", c.id), zap.Error(err))
 				return
 			}
 			c.redoManager = redoManager
