@@ -19,7 +19,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
@@ -149,13 +148,13 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 	}
 
 	p := parser.New()
-	for i, grant := range grants {
+	for _, grant := range grants {
 		if len(lackPriv) == 0 {
 			break
 		}
 		node, err := p.ParseOneStmt(grant, "", "")
 		if err != nil {
-			return NewError(errors.Annotatef(err, "grant %s, grant after replace %s", grants[i], grant).Error())
+			return NewError(err.Error())
 		}
 		grantStmt, ok := node.(*ast.GrantStmt)
 		if !ok {
@@ -163,12 +162,12 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 			case *ast.GrantProxyStmt, *ast.GrantRoleStmt:
 				continue
 			default:
-				return NewError("%s is not grant statement", grants[i])
+				return NewError("%s is not grant statement", grant)
 			}
 		}
 
 		if len(grantStmt.Users) == 0 {
-			return NewError("grant has no user %s", grantStmt.Text())
+			return NewError("grant has no user %s", grant)
 		}
 
 		dbName := grantStmt.Level.DBName
@@ -176,6 +175,8 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 		switch grantStmt.Level.Level {
 		case ast.GrantLevelGlobal:
 			for _, privElem := range grantStmt.Privs {
+				// all privileges available at a given privilege level (except GRANT OPTION)
+				// from https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_all
 				if privElem.Priv == mysql.AllPriv {
 					if _, ok := lackPriv[mysql.GrantPriv]; ok {
 						lackPriv = make(map[mysql.PrivilegeType]map[string]map[string]struct{})
@@ -203,7 +204,6 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 						if _, ok := lackPriv[priv][dbName]; !ok {
 							continue
 						}
-						fmt.Println(mysql.Priv2Str[priv] + " " + dbName)
 						delete(lackPriv[priv], dbName)
 						if len(lackPriv[priv]) == 0 {
 							delete(lackPriv, priv)
