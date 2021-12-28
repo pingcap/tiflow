@@ -347,7 +347,16 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
-	p.handleWorkload()
+
+	// The workload key does not contain extra information and
+	// will not be used in the new scheduler. If we wrote to the
+	// key while there are many tables (>10000), we would risk burdening Etcd.
+	//
+	// The keys will still exist but will no longer be written to
+	// if we do not call handleWorkload.
+	if !p.newSchedulerEnabled {
+		p.handleWorkload()
+	}
 	p.doGCSchemaStorage(ctx)
 
 	if p.newSchedulerEnabled {
@@ -842,7 +851,7 @@ func (p *processor) pushResolvedTs2Table() {
 	if schemaResolvedTs < resolvedTs {
 		// Do not update barrier ts that is larger than
 		// DDL puller's resolved ts.
-		// When DDL puller stall, resolved events that outputed by sorter
+		// When DDL puller stall, resolved events that outputted by sorter
 		// may pile up in memory, as they have to wait DDL.
 		resolvedTs = schemaResolvedTs
 	}
@@ -919,7 +928,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			}
 			markTableID = tableInfo.ID
 			return nil
-		}, retry.WithBackoffMaxDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
+		}, retry.WithBackoffBaseDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
