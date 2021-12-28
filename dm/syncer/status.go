@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
@@ -76,9 +77,11 @@ func (s *Syncer) Status(sourceStatus *binlog.SourceStatus) interface{} {
 		st.BlockingDDLs = pendingShardInfo.DDLs
 	} else {
 		pendingOptShardInfo := s.optimist.PendingInfo()
-		if pendingOptShardInfo != nil {
+		pendingOptShardOperation := s.optimist.PendingOperation()
+		if pendingOptShardOperation != nil && pendingOptShardOperation.ConflictStage == optimism.ConflictDetected {
 			st.BlockingDDLs = pendingOptShardInfo.DDLs
 			st.BlockDDLOwner = utils.GenDDLLockID(pendingOptShardInfo.Source, pendingOptShardInfo.UpSchema, pendingOptShardInfo.UpTable)
+			st.ConflictMsg = pendingOptShardOperation.ConflictMsg
 		}
 	}
 

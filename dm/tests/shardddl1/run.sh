@@ -135,33 +135,22 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 2
+  # first, exec first conflict ddl and skip the second conflict ddl
+  run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+    "query-status test" \
+    "ALTER TABLE \`${shardddl}\`.\`${tb}\` CHANGE COLUMN \`a\` \`c\` INT" 2 \
+    "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
+    "\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+  # exec first ddl
+  run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+    "shard-ddl-lock unlock test-\`${shardddl}\`.\`${tb}\` -s ${SOURCE_ID1} -d ${shardddl1} -t ${tb1} --action exec" \
+    "\"result\": true" 1
+  # skip second ddl
+  run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+    "shard-ddl-lock unlock test-\`${shardddl}\`.\`${tb}\` -s ${SOURCE_ID2} -d ${shardddl1} -t ${tb1} --action skip" \
+    "\"result\": true" 1
 
-	# first, execute sql in downstream TiDB
-	run_sql_tidb "alter table ${shardddl}.${tb} change a c int;"
-
-	# second, skip the unsupported ddl
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog skip test" \
-		"\"result\": true" 3
-
-	# dmls fail
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"Paused" 2
-	#"Error 1054: Unknown column 'a' in 'field list'" 2 // may more than 2 dml error
-
-	# third, set schema to be same with upstream
-	# TODO: support set schema automatically base on upstream schema
-	echo 'CREATE TABLE `tb1` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema1.sql
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog-schema update -s mysql-replica-01 test ${shardddl1} ${tb1} ${WORK_DIR}/schema1.sql --flush --sync" \
-		"\"result\": true" 2
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog-schema update -s mysql-replica-02 test ${shardddl1} ${tb1} ${WORK_DIR}/schema1.sql --flush --sync" \
-		"\"result\": true" 2
-
-	# fourth, resume-task. don't check "result: true" here, because worker may run quickly and meet the error from tb2
+	# second, resume-task. don't check "result: true" here, because worker may run quickly and meet the error from tb2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test"
 
@@ -313,11 +302,13 @@ function DM_RestartMaster_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'because schema conflict detected' 1
-		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1 \
+      "\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+    run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"shard-ddl-lock" \
 			'mysql-replica-01-`shardddl1`.`tb1`' 1 \
-			'mysql-replica-02-`shardddl1`.`tb1`' 1
+			'mysql-replica-02-`shardddl1`.`tb1`' 2 \
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1
 	fi
 
 	restart_master
@@ -333,11 +324,13 @@ function DM_RestartMaster_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'because schema conflict detected' 1
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1 \
+      "\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"shard-ddl-lock" \
 			'mysql-replica-01-`shardddl1`.`tb1`' 1 \
-			'mysql-replica-02-`shardddl1`.`tb1`' 1
+			'mysql-replica-02-`shardddl1`.`tb1`' 2 \
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1
 	fi
 }
 
@@ -387,7 +380,8 @@ function DM_UpdateBARule_CASE() {
 	run_sql_source2 "alter table ${shardddl2}.${tb1} rename column id to new_id;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 1
+		'mysql-replica-02-`shardddl2`.`tb1`' 1 \
+		'ALTER TABLE `shardddl`.`tb` RENAME COLUMN `id` TO `new_id`' 1
 
 	# user found error and then change block-allow-list, restart task
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

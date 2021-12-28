@@ -271,8 +271,8 @@ function DM_107_CASE() {
 	# TODO: check the handle-error message in the future
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"fail to handle shard ddl \[ALTER TABLE \`shardddl\`.\`tb\` ADD COLUMN \`col1\` INT NOT NULL\]" 1 \
-		"because schema conflict detected" 1
+    'ALTER TABLE `shardddl`.`tb` ADD COLUMN `col1` INT NOL NULL' 1 \
+    "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
 
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(3);"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column col1 int not null;"
@@ -307,7 +307,8 @@ function different_field_flag_test() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values (4,${val2});"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 1
+    "ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\` ${type2^^} NOL NULL" 1 \
+    "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
 
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(5);"
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column col1 $type3"
@@ -531,20 +532,15 @@ function DM_117_CASE {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 1 \
+    'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` INT' 1 \
+    'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` INT' 1 \
+    "\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
 		"add column b that wasn't fully dropped in downstream" 1
 
 	# try to fix data
-	echo 'create table tb1(a int primary key, b int, c int) engine=innodb default charset=latin1 collate=latin1_bin;' >${WORK_DIR}/schema.sql
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog-schema update test ${shardddl1} ${tb1} ${WORK_DIR}/schema.sql -s mysql-replica-01" \
-		"\"result\": true" 2
-
-	# skip this error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog skip test" \
-		"\"result\": true" 2 \
-		"\"source 'mysql-replica-02' has no error\"" 1
+		"shard-ddl-lock unlock test-\`${shardddl}\`.\`${tb}\` -s ${SOURCE_ID1} -d ${shardddl1} -t ${tb1} --action exec" \
+		"\"result\": true" 1
 
 	run_sql_tidb "update ${shardddl}.${tb} set b=null, c=null where a=1;"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
