@@ -24,6 +24,7 @@ v1-sources-path = ""
 ssl-ca = ""
 ssl-cert = ""
 ssl-key = ""
+openapi = false
 
 [experimental]
   openapi = false
