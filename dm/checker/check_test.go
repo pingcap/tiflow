@@ -133,7 +133,7 @@ func (s *testCheckerSuite) TestVersionChecking(c *tc.C) {
 		AddRow("version", "10.1.29-MariaDB"))
 	c.Assert(CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt), tc.IsNil)
 
-	// now can't return warning from checker.
+	// TODO: now can't return warning from checker.
 	// mock = initMockDB(c)
 	// mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 	// 	AddRow("version", "5.5.26-log"))
