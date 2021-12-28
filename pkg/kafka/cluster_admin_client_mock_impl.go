@@ -26,8 +26,13 @@ const (
 	defaultMockControllerID = 1
 )
 
-// defaultMaxMessageBytes specifies the default max message bytes.
-var defaultMaxMessageBytes = "1048576"
+var (
+	// DefaultBrokerMessageMaxBytes specifies the default `message.max.bytes` for the broker.
+	DefaultBrokerMessageMaxBytes = "1048576"
+
+	// DefaultTopicMaxMessageBytes specifies the default `max.message.bytes` for exist topic
+	DefaultTopicMaxMessageBytes = "1048576"
+)
 
 // ClusterAdminClientMockImpl mock implements the admin client interface.
 type ClusterAdminClientMockImpl struct {
@@ -41,7 +46,7 @@ type ClusterAdminClientMockImpl struct {
 func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	topics := make(map[string]sarama.TopicDetail)
 	configEntries := make(map[string]*string)
-	configEntries[TopicMaxMessageBytesConfigName] = &defaultMaxMessageBytes
+	configEntries[TopicMaxMessageBytesConfigName] = &DefaultTopicMaxMessageBytes
 	topics[DefaultMockTopicName] = sarama.TopicDetail{
 		NumPartitions: 3,
 		ConfigEntries: configEntries,
@@ -49,7 +54,7 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 
 	brokerConfigs := []sarama.ConfigEntry{{
 		Name:  BrokerMessageMaxBytesConfigName,
-		Value: defaultMaxMessageBytes,
+		Value: DefaultBrokerMessageMaxBytes,
 	}}
 
 	return &ClusterAdminClientMockImpl{
@@ -90,8 +95,14 @@ func (c *ClusterAdminClientMockImpl) GetDefaultMockTopicName() string {
 	return DefaultMockTopicName
 }
 
-// GetDefaultMaxMessageBytes returns defaultMaxMessageBytes as a number.
-func (c *ClusterAdminClientMockImpl) GetDefaultMaxMessageBytes() int {
-	topicMaxMessage, _ := strconv.Atoi(defaultMaxMessageBytes)
+// GetDefaultTopicMaxMessageBytes returns DefaultMaxMessageBytes as a number.
+func (c *ClusterAdminClientMockImpl) GetDefaultTopicMaxMessageBytes() int {
+	topicMaxMessage, _ := strconv.Atoi(DefaultTopicMaxMessageBytes)
 	return topicMaxMessage
+}
+
+// GetDefaultBrokerMessageMaxBytes returns DefaultBrokerMessageMaxBytes as a number
+func (c *ClusterAdminClientMockImpl) GetDefaultBrokerMessageMaxBytes() int {
+	brokerMessageMaxBytes, _ := strconv.Atoi(DefaultBrokerMessageMaxBytes)
+	return brokerMessageMaxBytes
 }

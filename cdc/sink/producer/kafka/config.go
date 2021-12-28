@@ -244,9 +244,7 @@ func InitializeConfigurations(
 		return nil, nil, errors.Trace(err)
 	}
 
-	if err := adjustSaramaConfig(saramaConfig, producerConfig); err != nil {
-		return nil, nil, errors.Trace(err)
-	}
+	adjustSaramaConfig(saramaConfig, producerConfig)
 
 	if err := replicaConfig.FillBySInkURI(sinkURI); err != nil {
 		return nil, nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
@@ -317,9 +315,8 @@ func adjustConfig(admin kafka.ClusterAdminClient, topic string, config *Config) 
 	return nil
 }
 
-func adjustSaramaConfig(saramaConfig *sarama.Config, producerConfig *Config) error {
+func adjustSaramaConfig(saramaConfig *sarama.Config, producerConfig *Config) {
 	saramaConfig.Producer.MaxMessageBytes = producerConfig.MaxMessageBytes
-	return nil
 }
 
 // newSaramaConfig return the default config and set the according version and metrics

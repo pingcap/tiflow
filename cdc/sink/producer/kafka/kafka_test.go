@@ -190,7 +190,7 @@ func Test(t *testing.T) { check.TestingT(t) }
 //	}()
 //
 //	// When topic exists and max message bytes is set correctly.
-//	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes()
+//	config.MaxMessageBytes = adminClient.GetDefaultTopicMaxMessageBytes()
 //	cfg, err := newSaramaConfigImpl(context.Background(), config)
 //	c.Assert(err, check.IsNil)
 //	err = adjustConfig(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg)
@@ -199,7 +199,7 @@ func Test(t *testing.T) { check.TestingT(t) }
 //
 //	// When topic exists and max message bytes is not set correctly.
 //	// use the smaller one.
-//	defaultMaxMessageBytes := adminClient.GetDefaultMaxMessageBytes()
+//	defaultMaxMessageBytes := adminClient.GetDefaultTopicMaxMessageBytes()
 //	config.MaxMessageBytes = defaultMaxMessageBytes + 1
 //	cfg, err = newSaramaConfigImpl(context.Background(), config)
 //	c.Assert(err, check.IsNil)
