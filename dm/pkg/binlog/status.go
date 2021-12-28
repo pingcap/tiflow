@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
+// BinlogSize
 // in MySQL, we can set `max_binlog_size` to control the max size of a binlog file.
 // but this is not absolute:
 // > A transaction is written in one chunk to the binary log, so it is never split between several binary logs.
@@ -32,13 +33,13 @@ import (
 // but the actual file size still can be larger, and it may exceed the range of an uint32
 // so, if we use go-mysql.Position(with uint32 Pos) to store the binlog size, it may become out of range.
 // ps, use go-mysql.Position to store a position of binlog event (position of the next event) is enough.
-type binlogSize struct {
-	name string
-	size int64
+type BinlogSize struct {
+	Name string
+	Size int64
 }
 
 // FileSizes is a list of binlog filename and size.
-type FileSizes []binlogSize
+type FileSizes []BinlogSize
 
 // GetBinaryLogs returns binlog filename and size of upstream.
 func GetBinaryLogs(ctx context.Context, db *sql.DB) (FileSizes, error) {
@@ -53,7 +54,7 @@ func GetBinaryLogs(ctx context.Context, db *sql.DB) (FileSizes, error) {
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
-	files := make([]binlogSize, 0, 10)
+	files := make([]BinlogSize, 0, 10)
 	for rows.Next() {
 		var file string
 		var pos int64
@@ -66,7 +67,7 @@ func GetBinaryLogs(ctx context.Context, db *sql.DB) (FileSizes, error) {
 		if err != nil {
 			return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 		}
-		files = append(files, binlogSize{name: file, size: pos})
+		files = append(files, BinlogSize{Name: file, Size: pos})
 	}
 	if rows.Err() != nil {
 		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
@@ -78,14 +79,14 @@ func GetBinaryLogs(ctx context.Context, db *sql.DB) (FileSizes, error) {
 func (b FileSizes) After(fromFile gmysql.Position) int64 {
 	var total int64
 	for _, file := range b {
-		switch gmysql.CompareBinlogFileName(file.name, fromFile.Name) {
+		switch gmysql.CompareBinlogFileName(file.Name, fromFile.Name) {
 		case -1:
 			continue
 		case 1:
-			total += file.size
+			total += file.Size
 		case 0:
-			if file.size > int64(fromFile.Pos) {
-				total += file.size - int64(fromFile.Pos)
+			if file.Size > int64(fromFile.Pos) {
+				total += file.Size - int64(fromFile.Pos)
 			}
 		}
 	}
