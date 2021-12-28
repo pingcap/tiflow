@@ -192,15 +192,16 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 
 func (s *kafkaSuite) TestCreateTopics(c *check.C) {
 	defer testleak.AfterTest(c)
-	adminClient := kafka.NewClusterAdminClientMockImpl()
+
+	NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
-		_ = adminClient.Close()
+		NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
 	producerConfig := NewConfig()
-
 	// When topic does not exist and auto-create is not enabled.
 	producerConfig.AutoCreate = false
+
 	saramaConfig, err := newSaramaConfigImpl(context.Background(), producerConfig)
 	c.Assert(err, check.IsNil)
 	err = CreateTopic("non-exist", producerConfig, saramaConfig)
