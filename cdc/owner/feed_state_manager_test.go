@@ -14,36 +14,32 @@
 package owner
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = check.Suite(&feedStateManagerSuite{})
-
-type feedStateManagerSuite struct{}
-
-func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestHandleJob(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := new(feedStateManager)
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
-	tester := orchestrator.NewReactorStateTester(c, state, nil)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		c.Assert(info, check.IsNil)
+		require.Nil(t, info)
 		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		c.Assert(status, check.IsNil)
+		require.Nil(t, status)
 		return &model.ChangeFeedStatus{}, true, nil
 	})
 	tester.MustApplyPatches()
 	manager.Tick(state)
 	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsTrue)
+	require.True(t, manager.ShouldRunning())
 
 	// an admin job which of changefeed is not match
 	manager.PushAdminJob(&model.AdminJob{
@@ -52,7 +48,7 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	})
 	manager.Tick(state)
 	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsTrue)
+	require.True(t, manager.ShouldRunning())
 
 	// a running can not be resume
 	manager.PushAdminJob(&model.AdminJob{
@@ -61,7 +57,7 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	})
 	manager.Tick(state)
 	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsTrue)
+	require.True(t, manager.ShouldRunning())
 
 	// stop a changefeed
 	manager.PushAdminJob(&model.AdminJob{
@@ -70,11 +66,12 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	})
 	manager.Tick(state)
 	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(manager.ShouldRemoved(), check.IsFalse)
-	c.Assert(state.Info.State, check.Equals, model.StateStopped)
-	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminStop)
-	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminStop)
+
+	require.False(t, manager.ShouldRunning())
+	require.False(t, manager.ShouldRemoved())
+	require.Equal(t, state.Info.State, model.StateStopped)
+	require.Equal(t, state.Info.AdminJobType, model.AdminStop)
+	require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 
 	// resume a changefeed
 	manager.PushAdminJob(&model.AdminJob{
@@ -83,11 +80,11 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	})
 	manager.Tick(state)
 	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsTrue)
-	c.Assert(manager.ShouldRemoved(), check.IsFalse)
-	c.Assert(state.Info.State, check.Equals, model.StateNormal)
-	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminNone)
-	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminNone)
+	require.True(t, manager.ShouldRunning())
+	require.False(t, manager.ShouldRemoved())
+	require.Equal(t, state.Info.State, model.StateNormal)
+	require.Equal(t, state.Info.AdminJobType, model.AdminNone)
+	require.Equal(t, state.Status.AdminJobType, model.AdminNone)
 
 	// remove a changefeed
 	manager.PushAdminJob(&model.AdminJob{
@@ -96,51 +93,51 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	})
 	manager.Tick(state)
 	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(manager.ShouldRemoved(), check.IsTrue)
-	c.Assert(state.Exist(), check.IsFalse)
+
+	require.False(t, manager.ShouldRunning())
+	require.True(t, manager.ShouldRemoved())
+	require.False(t, state.Exist())
 }
 
-func (s *feedStateManagerSuite) TestMarkFinished(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMarkFinished(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := new(feedStateManager)
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
-	tester := orchestrator.NewReactorStateTester(c, state, nil)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		c.Assert(info, check.IsNil)
+		require.Nil(t, info)
 		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		c.Assert(status, check.IsNil)
+		require.Nil(t, status)
 		return &model.ChangeFeedStatus{}, true, nil
 	})
 	tester.MustApplyPatches()
 	manager.Tick(state)
 	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsTrue)
+	require.True(t, manager.ShouldRunning())
 
 	manager.MarkFinished()
 	manager.Tick(state)
 	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(state.Info.State, check.Equals, model.StateFinished)
-	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminFinish)
-	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminFinish)
+
+	require.False(t, manager.ShouldRunning())
+	require.Equal(t, state.Info.State, model.StateFinished)
+	require.Equal(t, state.Info.AdminJobType, model.AdminFinish)
+	require.Equal(t, state.Status.AdminJobType, model.AdminFinish)
 }
 
-func (s *feedStateManagerSuite) TestCleanUpInfos(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCleanUpInfos(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := new(feedStateManager)
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
-	tester := orchestrator.NewReactorStateTester(c, state, nil)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		c.Assert(info, check.IsNil)
+		require.Nil(t, info)
 		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		c.Assert(status, check.IsNil)
+		require.Nil(t, status)
 		return &model.ChangeFeedStatus{}, true, nil
 	})
 	state.PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
@@ -153,37 +150,36 @@ func (s *feedStateManagerSuite) TestCleanUpInfos(c *check.C) {
 		return model.TaskWorkload{}, true, nil
 	})
 	tester.MustApplyPatches()
-	c.Assert(state.TaskStatuses, check.HasKey, ctx.GlobalVars().CaptureInfo.ID)
-	c.Assert(state.TaskPositions, check.HasKey, ctx.GlobalVars().CaptureInfo.ID)
-	c.Assert(state.Workloads, check.HasKey, ctx.GlobalVars().CaptureInfo.ID)
+	require.Contains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
+	require.Contains(t, state.TaskPositions, ctx.GlobalVars().CaptureInfo.ID)
+	require.Contains(t, state.Workloads, ctx.GlobalVars().CaptureInfo.ID)
 	manager.Tick(state)
 	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsTrue)
+	require.True(t, manager.ShouldRunning())
 
 	manager.MarkFinished()
 	manager.Tick(state)
 	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(state.Info.State, check.Equals, model.StateFinished)
-	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminFinish)
-	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminFinish)
-	c.Assert(state.TaskStatuses, check.Not(check.HasKey), ctx.GlobalVars().CaptureInfo.ID)
-	c.Assert(state.TaskPositions, check.Not(check.HasKey), ctx.GlobalVars().CaptureInfo.ID)
-	c.Assert(state.Workloads, check.Not(check.HasKey), ctx.GlobalVars().CaptureInfo.ID)
+	require.False(t, manager.ShouldRunning())
+	require.Equal(t, state.Info.State, model.StateFinished)
+	require.Equal(t, state.Info.AdminJobType, model.AdminFinish)
+	require.Equal(t, state.Status.AdminJobType, model.AdminFinish)
+	require.NotContains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
+	require.NotContains(t, state.TaskPositions, ctx.GlobalVars().CaptureInfo.ID)
+	require.NotContains(t, state.Workloads, ctx.GlobalVars().CaptureInfo.ID)
 }
 
-func (s *feedStateManagerSuite) TestHandleError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestHandleError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := new(feedStateManager)
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
-	tester := orchestrator.NewReactorStateTester(c, state, nil)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		c.Assert(info, check.IsNil)
+		require.Nil(t, info)
 		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		c.Assert(status, check.IsNil)
+		require.Nil(t, status)
 		return &model.ChangeFeedStatus{}, true, nil
 	})
 	state.PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
@@ -202,9 +198,9 @@ func (s *feedStateManagerSuite) TestHandleError(c *check.C) {
 	tester.MustApplyPatches()
 	manager.Tick(state)
 	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsTrue)
+	require.True(t, manager.ShouldRunning())
 	// error reported by processor in task position should be cleaned
-	c.Assert(state.TaskPositions[ctx.GlobalVars().CaptureInfo.ID].Error, check.IsNil)
+	require.Nil(t, state.TaskPositions[ctx.GlobalVars().CaptureInfo.ID].Error)
 
 	// throw error more than history threshold to turn feed state into error
 	for i := 0; i < model.ErrorHistoryThreshold; i++ {
@@ -219,26 +215,50 @@ func (s *feedStateManagerSuite) TestHandleError(c *check.C) {
 		manager.Tick(state)
 		tester.MustApplyPatches()
 	}
-	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(manager.ShouldRemoved(), check.IsFalse)
-	c.Assert(state.Info.State, check.Equals, model.StateError)
-	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminStop)
-	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminStop)
+
+	require.False(t, manager.ShouldRunning())
+	require.False(t, manager.ShouldRemoved())
+	require.Equal(t, state.Info.State, model.StateError)
+	require.Equal(t, state.Info.AdminJobType, model.AdminStop)
+	require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 }
 
-func (s *feedStateManagerSuite) TestChangefeedStatusNotExist(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestHandleFastFailError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := new(feedStateManager)
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
-	tester := orchestrator.NewReactorStateTester(c, state, map[string]string{
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		require.Nil(t, info)
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+	})
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+		return &model.TaskPosition{Error: &model.RunningError{
+			Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+			Code:    "CDC:ErrGCTTLExceeded",
+			Message: "fake error for test",
+		}}, true, nil
+	})
+	tester.MustApplyPatches()
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		return nil, true, nil
+	})
+	manager.Tick(state)
+	tester.MustApplyPatches()
+}
+
+func TestChangefeedStatusNotExist(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	manager := new(feedStateManager)
+	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	tester := orchestrator.NewReactorStateTester(t, state, map[string]string{
 		"/tidb/cdc/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5": `{"id":"d563bfc0-f406-4f34-bc7d-6dc2e35a44e5","address":"172.16.6.147:8300","version":"v5.0.0-master-dirty"}`,
 		"/tidb/cdc/changefeed/info/" + ctx.ChangefeedVars().ID:   `{"sink-uri":"blackhole:///","opts":{},"create-time":"2021-06-05T00:44:15.065939487+08:00","start-ts":425381670108266496,"target-ts":0,"admin-job-type":1,"sort-engine":"unified","config":{"case-sensitive":true,"enable-old-value":true,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"open-protocol"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"failed","history":[],"error":{"addr":"172.16.6.147:8300","code":"CDC:ErrSnapshotLostByGC","message":"[CDC:ErrSnapshotLostByGC]fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts 425381670108266496 is earlier than GC safepoint at 0"},"sync-point-enabled":false,"sync-point-interval":600000000000,"creator-version":"v5.0.0-master-dirty"}`,
 		"/tidb/cdc/owner/156579d017f84a68":                       "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
 	})
 	manager.Tick(state)
-	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(manager.ShouldRemoved(), check.IsFalse)
+	require.False(t, manager.ShouldRunning())
+	require.False(t, manager.ShouldRemoved())
 	tester.MustApplyPatches()
 
 	manager.PushAdminJob(&model.AdminJob{
@@ -247,9 +267,9 @@ func (s *feedStateManagerSuite) TestChangefeedStatusNotExist(c *check.C) {
 		Opts: &model.AdminJobOption{ForceRemove: true},
 	})
 	manager.Tick(state)
-	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(manager.ShouldRemoved(), check.IsTrue)
+	require.False(t, manager.ShouldRunning())
+	require.True(t, manager.ShouldRemoved())
 	tester.MustApplyPatches()
-	c.Assert(state.Info, check.IsNil)
-	c.Assert(state.Exist(), check.IsFalse)
+	require.Nil(t, state.Info)
+	require.False(t, state.Exist())
 }

@@ -310,6 +310,9 @@ func (s *oldScheduler) cleanUpFinishedOperations() {
 	for captureID := range s.state.TaskStatuses {
 		s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			changed := false
+			if status == nil {
+				return nil, changed, nil
+			}
 			for tableID, operation := range status.Operation {
 				if operation.Status == model.OperFinished {
 					delete(status.Operation, tableID)
