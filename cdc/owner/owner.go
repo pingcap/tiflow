@@ -287,9 +287,6 @@ func fixChangefeedInfos(state *orchestrator.GlobalReactorState) {
 	for _, changefeedState := range state.Changefeeds {
 		if changefeedState != nil {
 			changefeedState.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-				if info == nil {
-					return nil, false, nil
-				}
 				info.FixIncompatible()
 				return info, true, nil
 			})

@@ -15,33 +15,38 @@ package orchestrator
 
 import (
 	"encoding/json"
-	"fmt"
-	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
-	"github.com/stretchr/testify/require"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
-func TestCheckCaptureAlive(t *testing.T) {
+type stateSuite struct{}
+
+var _ = check.Suite(&stateSuite{})
+
+func (s *stateSuite) TestCheckCaptureAlive(c *check.C) {
+	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test")
-	stateTester := NewReactorStateTester(t, state, nil)
+	stateTester := NewReactorStateTester(c, state, nil)
 	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
-	require.Contains(t, stateTester.ApplyPatches().Error(), "[CDC:ErrLeaseExpired]")
+	c.Assert(stateTester.ApplyPatches(), check.ErrorMatches, ".*[CDC:ErrLeaseExpired].*")
 	err := stateTester.Update("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`))
-	require.Nil(t, err)
+	c.Assert(err, check.IsNil)
 	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
 	stateTester.MustApplyPatches()
 }
 
-func TestChangefeedStateUpdate(t *testing.T) {
+func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
+	defer testleak.AfterTest(c)()
 	createTime, err := time.Parse("2006-01-02", "2020-02-02")
-	require.Nil(t, err)
+	c.Assert(err, check.IsNil)
 	testCases := []struct {
 		changefeedID string
 		updateKey    []string
@@ -315,23 +320,24 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				value = nil
 			}
 			err = state.Update(util.NewEtcdKey(k), value, false)
-			require.Nil(t, err)
+			c.Assert(err, check.IsNil)
 		}
-		require.True(t, cmp.Equal(state, &tc.expected, cmpopts.IgnoreUnexported(ChangefeedReactorState{})),
-			fmt.Sprintf("%d,%s", i, cmp.Diff(state, &tc.expected, cmpopts.IgnoreUnexported(ChangefeedReactorState{}))))
+		c.Assert(cmp.Equal(state, &tc.expected, cmpopts.IgnoreUnexported(ChangefeedReactorState{})), check.IsTrue,
+			check.Commentf("%d,%s", i, cmp.Diff(state, &tc.expected, cmpopts.IgnoreUnexported(ChangefeedReactorState{}))))
 	}
 }
 
-func TestPatchInfo(t *testing.T) {
+func (s *stateSuite) TestPatchInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
-	stateTester := NewReactorStateTester(t, state, nil)
+	stateTester := NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		require.Nil(t, info)
+		c.Assert(info, check.IsNil)
 		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
 	})
 	stateTester.MustApplyPatches()
 	defaultConfig := config.GetDefaultReplicaConfig()
-	require.Equal(t, state.Info, &model.ChangeFeedInfo{
+	c.Assert(state.Info, check.DeepEquals, &model.ChangeFeedInfo{
 		SinkURI: "123",
 		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
@@ -348,7 +354,7 @@ func TestPatchInfo(t *testing.T) {
 		return info, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Info, &model.ChangeFeedInfo{
+	c.Assert(state.Info, check.DeepEquals, &model.ChangeFeedInfo{
 		SinkURI: "123",
 		StartTs: 6,
 		Engine:  model.SortUnified,
@@ -365,50 +371,52 @@ func TestPatchInfo(t *testing.T) {
 		return nil, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Nil(t, state.Info)
+	c.Assert(state.Info, check.IsNil)
 }
 
-func TestPatchStatus(t *testing.T) {
+func (s *stateSuite) TestPatchStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
-	stateTester := NewReactorStateTester(t, state, nil)
+	stateTester := NewReactorStateTester(c, state, nil)
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		require.Nil(t, status)
+		c.Assert(status, check.IsNil)
 		return &model.ChangeFeedStatus{CheckpointTs: 5}, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Status, &model.ChangeFeedStatus{CheckpointTs: 5})
+	c.Assert(state.Status, check.DeepEquals, &model.ChangeFeedStatus{CheckpointTs: 5})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.ResolvedTs = 6
 		return status, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Status, &model.ChangeFeedStatus{CheckpointTs: 5, ResolvedTs: 6})
+	c.Assert(state.Status, check.DeepEquals, &model.ChangeFeedStatus{CheckpointTs: 5, ResolvedTs: 6})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return nil, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Nil(t, state.Status)
+	c.Assert(state.Status, check.IsNil)
 }
 
-func TestPatchTaskPosition(t *testing.T) {
+func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
+	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
-	stateTester := NewReactorStateTester(t, state, nil)
+	stateTester := NewReactorStateTester(c, state, nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
 	state.PatchTaskPosition(captureID1, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		require.Nil(t, position)
+		c.Assert(position, check.IsNil)
 		return &model.TaskPosition{
 			CheckPointTs: 1,
 		}, true, nil
 	})
 	state.PatchTaskPosition(captureID2, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		require.Nil(t, position)
+		c.Assert(position, check.IsNil)
 		return &model.TaskPosition{
 			CheckPointTs: 2,
 		}, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.TaskPositions, map[string]*model.TaskPosition{
+	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*model.TaskPosition{
 		captureID1: {
 			CheckPointTs: 1,
 		},
@@ -425,7 +433,7 @@ func TestPatchTaskPosition(t *testing.T) {
 		return position, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.TaskPositions, map[string]*model.TaskPosition{
+	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*model.TaskPosition{
 		captureID1: {
 			CheckPointTs: 3,
 		},
@@ -445,7 +453,7 @@ func TestPatchTaskPosition(t *testing.T) {
 		return position, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.TaskPositions, map[string]*model.TaskPosition{
+	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*model.TaskPosition{
 		captureID1: {
 			CheckPointTs: 3,
 			Count:        6,
@@ -453,25 +461,26 @@ func TestPatchTaskPosition(t *testing.T) {
 	})
 }
 
-func TestPatchTaskStatus(t *testing.T) {
+func (s *stateSuite) TestPatchTaskStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
-	stateTester := NewReactorStateTester(t, state, nil)
+	stateTester := NewReactorStateTester(c, state, nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
 	state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		require.Nil(t, status)
+		c.Assert(status, check.IsNil)
 		return &model.TaskStatus{
 			Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}},
 		}, true, nil
 	})
 	state.PatchTaskStatus(captureID2, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		require.Nil(t, status)
+		c.Assert(status, check.IsNil)
 		return &model.TaskStatus{
 			Tables: map[model.TableID]*model.TableReplicaInfo{46: {StartTs: 1}},
 		}, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.TaskStatuses, map[model.CaptureID]*model.TaskStatus{
+	c.Assert(state.TaskStatuses, check.DeepEquals, map[model.CaptureID]*model.TaskStatus{
 		captureID1: {Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}}},
 		captureID2: {Tables: map[model.TableID]*model.TableReplicaInfo{46: {StartTs: 1}}},
 	})
@@ -484,7 +493,7 @@ func TestPatchTaskStatus(t *testing.T) {
 		return status, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.TaskStatuses, map[model.CaptureID]*model.TaskStatus{
+	c.Assert(state.TaskStatuses, check.DeepEquals, map[model.CaptureID]*model.TaskStatus{
 		captureID1: {Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
 		captureID2: {Tables: map[model.TableID]*model.TableReplicaInfo{46: {StartTs: 2}}},
 	})
@@ -492,26 +501,27 @@ func TestPatchTaskStatus(t *testing.T) {
 		return nil, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.TaskStatuses, map[model.CaptureID]*model.TaskStatus{
+	c.Assert(state.TaskStatuses, check.DeepEquals, map[model.CaptureID]*model.TaskStatus{
 		captureID1: {Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
 	})
 }
 
-func TestPatchTaskWorkload(t *testing.T) {
+func (s *stateSuite) TestPatchTaskWorkload(c *check.C) {
+	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
-	stateTester := NewReactorStateTester(t, state, nil)
+	stateTester := NewReactorStateTester(c, state, nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
 	state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		require.Nil(t, workload)
+		c.Assert(workload, check.IsNil)
 		return model.TaskWorkload{45: {Workload: 1}}, true, nil
 	})
 	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		require.Nil(t, workload)
+		c.Assert(workload, check.IsNil)
 		return model.TaskWorkload{46: {Workload: 1}}, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Workloads, map[model.CaptureID]model.TaskWorkload{
+	c.Assert(state.Workloads, check.DeepEquals, map[model.CaptureID]model.TaskWorkload{
 		captureID1: {45: {Workload: 1}},
 		captureID2: {46: {Workload: 1}},
 	})
@@ -524,7 +534,7 @@ func TestPatchTaskWorkload(t *testing.T) {
 		return workload, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Workloads, map[model.CaptureID]model.TaskWorkload{
+	c.Assert(state.Workloads, check.DeepEquals, map[model.CaptureID]model.TaskWorkload{
 		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
 		captureID2: {45: {Workload: 3}, 46: {Workload: 1}},
 	})
@@ -532,12 +542,13 @@ func TestPatchTaskWorkload(t *testing.T) {
 		return nil, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Workloads, map[model.CaptureID]model.TaskWorkload{
+	c.Assert(state.Workloads, check.DeepEquals, map[model.CaptureID]model.TaskWorkload{
 		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
 	})
 }
 
-func TestGlobalStateUpdate(t *testing.T) {
+func (s *stateSuite) TestGlobalStateUpdate(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		updateKey   []string
 		updateValue []string
@@ -636,25 +647,26 @@ func TestGlobalStateUpdate(t *testing.T) {
 				value = nil
 			}
 			err := state.Update(util.NewEtcdKey(k), value, false)
-			require.Nil(t, err)
+			c.Assert(err, check.IsNil)
 		}
-		require.True(t, cmp.Equal(state, &tc.expected, cmpopts.IgnoreUnexported(GlobalReactorState{}, ChangefeedReactorState{})),
-			cmp.Diff(state, &tc.expected, cmpopts.IgnoreUnexported(GlobalReactorState{}, ChangefeedReactorState{})))
+		c.Assert(cmp.Equal(state, &tc.expected, cmpopts.IgnoreUnexported(GlobalReactorState{}, ChangefeedReactorState{})), check.IsTrue,
+			check.Commentf("%s", cmp.Diff(state, &tc.expected, cmpopts.IgnoreUnexported(GlobalReactorState{}, ChangefeedReactorState{}))))
 	}
 }
 
-func TestCaptureChangeHooks(t *testing.T) {
+func (s *stateSuite) TestCaptureChangeHooks(c *check.C) {
+	defer testleak.AfterTest(c)()
 	state := NewGlobalState()
 
 	var callCount int
 	state.onCaptureAdded = func(captureID model.CaptureID, addr string) {
 		callCount++
-		require.Equal(t, captureID, "capture-1")
-		require.Equal(t, addr, "ip-1:8300")
+		c.Check(captureID, check.Equals, "capture-1")
+		c.Check(addr, check.Equals, "ip-1:8300")
 	}
 	state.onCaptureRemoved = func(captureID model.CaptureID) {
 		callCount++
-		require.Equal(t, captureID, "capture-1")
+		c.Check(captureID, check.Equals, "capture-1")
 	}
 
 	captureInfo := &model.CaptureInfo{
@@ -662,20 +674,21 @@ func TestCaptureChangeHooks(t *testing.T) {
 		AdvertiseAddr: "ip-1:8300",
 	}
 	captureInfoBytes, err := json.Marshal(captureInfo)
-	require.Nil(t, err)
+	c.Check(err, check.IsNil)
 
 	err = state.Update(util.NewEtcdKey(etcd.CaptureInfoKeyPrefix+"/capture-1"), captureInfoBytes, false)
-	require.Nil(t, err)
-	require.Equal(t, callCount, 1)
+	c.Check(err, check.IsNil)
+	c.Check(callCount, check.Equals, 1)
 
 	err = state.Update(util.NewEtcdKey(etcd.CaptureInfoKeyPrefix+"/capture-1"), nil /* delete */, false)
-	require.Nil(t, err)
-	require.Equal(t, callCount, 2)
+	c.Check(err, check.IsNil)
+	c.Check(callCount, check.Equals, 2)
 }
 
-func TestCheckChangefeedNormal(t *testing.T) {
+func (s *stateSuite) TestCheckChangefeedNormal(c *check.C) {
+	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
-	stateTester := NewReactorStateTester(t, state, nil)
+	stateTester := NewReactorStateTester(c, state, nil)
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -686,7 +699,7 @@ func TestCheckChangefeedNormal(t *testing.T) {
 	})
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Status.ResolvedTs, uint64(1))
+	c.Assert(state.Status.ResolvedTs, check.Equals, uint64(1))
 
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		info.AdminJobType = model.AdminStop
@@ -698,7 +711,7 @@ func TestCheckChangefeedNormal(t *testing.T) {
 	})
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Status.ResolvedTs, uint64(1))
+	c.Assert(state.Status.ResolvedTs, check.Equals, uint64(1))
 
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.ResolvedTs = 2
@@ -706,5 +719,5 @@ func TestCheckChangefeedNormal(t *testing.T) {
 	})
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Status.ResolvedTs, uint64(2))
+	c.Assert(state.Status.ResolvedTs, check.Equals, uint64(2))
 }

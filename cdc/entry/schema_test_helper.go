@@ -14,8 +14,7 @@
 package entry
 
 import (
-	"testing"
-
+	"github.com/pingcap/check"
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
@@ -23,34 +22,33 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/testkit"
-	"github.com/stretchr/testify/require"
+	"github.com/pingcap/tidb/util/testkit"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
 // SchemaTestHelper is a test helper for schema which creates an internal tidb instance to generate DDL jobs with meta information
 type SchemaTestHelper struct {
-	t       *testing.T
+	c       *check.C
 	tk      *testkit.TestKit
 	storage kv.Storage
 	domain  *domain.Domain
 }
 
 // NewSchemaTestHelper creates a SchemaTestHelper
-func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
+func NewSchemaTestHelper(c *check.C) *SchemaTestHelper {
 	store, err := mockstore.NewMockStore()
-	require.Nil(t, err)
+	c.Assert(err, check.IsNil)
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		conf.AlterPrimaryKey = true
 	})
 	session.SetSchemaLease(0)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
-	require.Nil(t, err)
+	c.Assert(err, check.IsNil)
 	domain.SetStatsUpdating(true)
-	tk := testkit.NewTestKit(t, store)
+	tk := testkit.NewTestKit(c, store)
 	return &SchemaTestHelper{
-		t:       t,
+		c:       c,
 		tk:      tk,
 		storage: store,
 		domain:  domain,
@@ -61,8 +59,8 @@ func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
 func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	s.tk.MustExec(ddl)
 	jobs, err := s.GetCurrentMeta().GetLastNHistoryDDLJobs(1)
-	require.Nil(s.t, err)
-	require.Len(s.t, jobs, 1)
+	s.c.Assert(err, check.IsNil)
+	s.c.Assert(jobs, check.HasLen, 1)
 	return jobs[0]
 }
 
@@ -74,7 +72,7 @@ func (s *SchemaTestHelper) Storage() kv.Storage {
 // GetCurrentMeta return the current meta snapshot
 func (s *SchemaTestHelper) GetCurrentMeta() *timeta.Meta {
 	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(s.t, err)
+	s.c.Assert(err, check.IsNil)
 	return timeta.NewSnapshotMeta(s.storage.GetSnapshot(ver))
 }
 

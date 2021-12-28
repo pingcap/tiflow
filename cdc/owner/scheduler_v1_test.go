@@ -16,14 +16,16 @@ package owner
 import (
 	"fmt"
 	"math/rand"
-	"testing"
 
+	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
-	"github.com/stretchr/testify/require"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
-type schedulerTester struct {
+var _ = check.Suite(&schedulerSuite{})
+
+type schedulerSuite struct {
 	changefeedID model.ChangeFeedID
 	state        *orchestrator.ChangefeedReactorState
 	tester       *orchestrator.ReactorStateTester
@@ -31,10 +33,10 @@ type schedulerTester struct {
 	scheduler    *oldScheduler
 }
 
-func (s *schedulerTester) reset(t *testing.T) {
+func (s *schedulerSuite) reset(c *check.C) {
 	s.changefeedID = fmt.Sprintf("test-changefeed-%x", rand.Uint32())
 	s.state = orchestrator.NewChangefeedReactorState("test-changefeed")
-	s.tester = orchestrator.NewReactorStateTester(t, s.state, nil)
+	s.tester = orchestrator.NewReactorStateTester(c, s.state, nil)
 	s.scheduler = newSchedulerV1().(*schedulerV1CompatWrapper).inner
 	s.captures = make(map[model.CaptureID]*model.CaptureInfo)
 	s.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -43,7 +45,7 @@ func (s *schedulerTester) reset(t *testing.T) {
 	s.tester.MustApplyPatches()
 }
 
-func (s *schedulerTester) addCapture(captureID model.CaptureID) {
+func (s *schedulerSuite) addCapture(captureID model.CaptureID) {
 	captureInfo := &model.CaptureInfo{
 		ID: captureID,
 	}
@@ -54,7 +56,7 @@ func (s *schedulerTester) addCapture(captureID model.CaptureID) {
 	s.tester.MustApplyPatches()
 }
 
-func (s *schedulerTester) finishTableOperation(captureID model.CaptureID, tableIDs ...model.TableID) {
+func (s *schedulerSuite) finishTableOperation(captureID model.CaptureID, tableIDs ...model.TableID) {
 	s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		for _, tableID := range tableIDs {
 			status.Operation[tableID].Status = model.OperFinished
@@ -79,29 +81,29 @@ func (s *schedulerTester) finishTableOperation(captureID model.CaptureID, tableI
 	s.tester.MustApplyPatches()
 }
 
-func TestScheduleOneCapture(t *testing.T) {
-	s := &schedulerTester{}
-	s.reset(t)
+func (s *schedulerSuite) TestScheduleOneCapture(c *check.C) {
+	defer testleak.AfterTest(c)()
+	s.reset(c)
 	captureID := "test-capture-1"
 	s.addCapture(captureID)
 
 	// add three tables
 	shouldUpdateState, err := s.scheduler.Tick(s.state, []model.TableID{1, 2, 3, 4}, s.captures)
-	require.Nil(t, err)
-	require.False(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsFalse)
 	s.tester.MustApplyPatches()
-	require.Equal(t, s.state.TaskStatuses[captureID].Tables, map[model.TableID]*model.TableReplicaInfo{
+	c.Assert(s.state.TaskStatuses[captureID].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		1: {StartTs: 0}, 2: {StartTs: 0}, 3: {StartTs: 0}, 4: {StartTs: 0},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID].Operation, map[model.TableID]*model.TableOperation{
+	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
 		1: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 		2: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 		3: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 		4: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{1, 2, 3, 4}, s.captures)
-	require.Nil(t, err)
-	require.True(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsTrue)
 	s.tester.MustApplyPatches()
 
 	// two tables finish adding operation
@@ -109,13 +111,13 @@ func TestScheduleOneCapture(t *testing.T) {
 
 	// remove table 1,2 and add table 4,5
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{3, 4, 5}, s.captures)
-	require.Nil(t, err)
-	require.False(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsFalse)
 	s.tester.MustApplyPatches()
-	require.Equal(t, s.state.TaskStatuses[captureID].Tables, map[model.TableID]*model.TableReplicaInfo{
+	c.Assert(s.state.TaskStatuses[captureID].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		3: {StartTs: 0}, 4: {StartTs: 0}, 5: {StartTs: 0},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID].Operation, map[model.TableID]*model.TableOperation{
+	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
 		1: {Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
 		2: {Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
 		4: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
@@ -128,13 +130,13 @@ func TestScheduleOneCapture(t *testing.T) {
 	s.scheduler.MoveTable(3, "fake-capture")
 	s.scheduler.MoveTable(4, "fake-capture")
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{3, 4, 5}, s.captures)
-	require.Nil(t, err)
-	require.False(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsFalse)
 	s.tester.MustApplyPatches()
-	require.Equal(t, s.state.TaskStatuses[captureID].Tables, map[model.TableID]*model.TableReplicaInfo{
+	c.Assert(s.state.TaskStatuses[captureID].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		4: {StartTs: 0}, 5: {StartTs: 0},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID].Operation, map[model.TableID]*model.TableOperation{
+	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
 		1: {Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
 		2: {Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
 		3: {Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
@@ -146,77 +148,77 @@ func TestScheduleOneCapture(t *testing.T) {
 	s.finishTableOperation(captureID, 1, 2, 3, 4, 5)
 
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{3, 4, 5}, s.captures)
-	require.Nil(t, err)
-	require.True(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsTrue)
 	s.tester.MustApplyPatches()
-	require.Equal(t, s.state.TaskStatuses[captureID].Tables, map[model.TableID]*model.TableReplicaInfo{
+	c.Assert(s.state.TaskStatuses[captureID].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		4: {StartTs: 0}, 5: {StartTs: 0},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID].Operation, map[model.TableID]*model.TableOperation{})
+	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
 
 	// table 3 is missing by expected, because the table was trying to move to a invalid capture
 	// and the move will failed, the table 3 will be add in next tick
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{3, 4, 5}, s.captures)
-	require.Nil(t, err)
-	require.False(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsFalse)
 	s.tester.MustApplyPatches()
-	require.Equal(t, s.state.TaskStatuses[captureID].Tables, map[model.TableID]*model.TableReplicaInfo{
+	c.Assert(s.state.TaskStatuses[captureID].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		4: {StartTs: 0}, 5: {StartTs: 0},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID].Operation, map[model.TableID]*model.TableOperation{})
+	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
 
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{3, 4, 5}, s.captures)
-	require.Nil(t, err)
-	require.False(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsFalse)
 	s.tester.MustApplyPatches()
-	require.Equal(t, s.state.TaskStatuses[captureID].Tables, map[model.TableID]*model.TableReplicaInfo{
+	c.Assert(s.state.TaskStatuses[captureID].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		3: {StartTs: 0}, 4: {StartTs: 0}, 5: {StartTs: 0},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID].Operation, map[model.TableID]*model.TableOperation{
+	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
 		3: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 }
 
-func TestScheduleMoveTable(t *testing.T) {
-	s := &schedulerTester{}
-	s.reset(t)
+func (s *schedulerSuite) TestScheduleMoveTable(c *check.C) {
+	defer testleak.AfterTest(c)()
+	s.reset(c)
 	captureID1 := "test-capture-1"
 	captureID2 := "test-capture-2"
 	s.addCapture(captureID1)
 
 	// add a table
 	shouldUpdateState, err := s.scheduler.Tick(s.state, []model.TableID{1}, s.captures)
-	require.Nil(t, err)
-	require.False(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsFalse)
 	s.tester.MustApplyPatches()
-	require.Equal(t, s.state.TaskStatuses[captureID1].Tables, map[model.TableID]*model.TableReplicaInfo{
+	c.Assert(s.state.TaskStatuses[captureID1].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		1: {StartTs: 0},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID1].Operation, map[model.TableID]*model.TableOperation{
+	c.Assert(s.state.TaskStatuses[captureID1].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
 		1: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 
 	s.finishTableOperation(captureID1, 1)
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{1}, s.captures)
-	require.Nil(t, err)
-	require.True(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsTrue)
 	s.tester.MustApplyPatches()
 
 	s.addCapture(captureID2)
 
 	// add a table
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{1, 2}, s.captures)
-	require.Nil(t, err)
-	require.False(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsFalse)
 	s.tester.MustApplyPatches()
-	require.Equal(t, s.state.TaskStatuses[captureID1].Tables, map[model.TableID]*model.TableReplicaInfo{
+	c.Assert(s.state.TaskStatuses[captureID1].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		1: {StartTs: 0},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID1].Operation, map[model.TableID]*model.TableOperation{})
-	require.Equal(t, s.state.TaskStatuses[captureID2].Tables, map[model.TableID]*model.TableReplicaInfo{
+	c.Assert(s.state.TaskStatuses[captureID1].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
+	c.Assert(s.state.TaskStatuses[captureID2].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		2: {StartTs: 0},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID2].Operation, map[model.TableID]*model.TableOperation{
+	c.Assert(s.state.TaskStatuses[captureID2].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
 		2: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 
@@ -224,48 +226,48 @@ func TestScheduleMoveTable(t *testing.T) {
 
 	s.scheduler.MoveTable(2, captureID1)
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{1, 2}, s.captures)
-	require.Nil(t, err)
-	require.False(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsFalse)
 	s.tester.MustApplyPatches()
-	require.Equal(t, s.state.TaskStatuses[captureID1].Tables, map[model.TableID]*model.TableReplicaInfo{
+	c.Assert(s.state.TaskStatuses[captureID1].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		1: {StartTs: 0},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID1].Operation, map[model.TableID]*model.TableOperation{})
-	require.Equal(t, s.state.TaskStatuses[captureID2].Tables, map[model.TableID]*model.TableReplicaInfo{})
-	require.Equal(t, s.state.TaskStatuses[captureID2].Operation, map[model.TableID]*model.TableOperation{
+	c.Assert(s.state.TaskStatuses[captureID1].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
+	c.Assert(s.state.TaskStatuses[captureID2].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{})
+	c.Assert(s.state.TaskStatuses[captureID2].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
 		2: {Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 
 	s.finishTableOperation(captureID2, 2)
 
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{1, 2}, s.captures)
-	require.Nil(t, err)
-	require.True(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsTrue)
 	s.tester.MustApplyPatches()
-	require.Equal(t, s.state.TaskStatuses[captureID1].Tables, map[model.TableID]*model.TableReplicaInfo{
+	c.Assert(s.state.TaskStatuses[captureID1].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		1: {StartTs: 0},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID1].Operation, map[model.TableID]*model.TableOperation{})
-	require.Equal(t, s.state.TaskStatuses[captureID2].Tables, map[model.TableID]*model.TableReplicaInfo{})
-	require.Equal(t, s.state.TaskStatuses[captureID2].Operation, map[model.TableID]*model.TableOperation{})
+	c.Assert(s.state.TaskStatuses[captureID1].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
+	c.Assert(s.state.TaskStatuses[captureID2].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{})
+	c.Assert(s.state.TaskStatuses[captureID2].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
 
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{1, 2}, s.captures)
-	require.Nil(t, err)
-	require.False(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsFalse)
 	s.tester.MustApplyPatches()
-	require.Equal(t, s.state.TaskStatuses[captureID1].Tables, map[model.TableID]*model.TableReplicaInfo{
+	c.Assert(s.state.TaskStatuses[captureID1].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		1: {StartTs: 0}, 2: {StartTs: 0},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID1].Operation, map[model.TableID]*model.TableOperation{
+	c.Assert(s.state.TaskStatuses[captureID1].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
 		2: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 	})
-	require.Equal(t, s.state.TaskStatuses[captureID2].Tables, map[model.TableID]*model.TableReplicaInfo{})
-	require.Equal(t, s.state.TaskStatuses[captureID2].Operation, map[model.TableID]*model.TableOperation{})
+	c.Assert(s.state.TaskStatuses[captureID2].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{})
+	c.Assert(s.state.TaskStatuses[captureID2].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
 }
 
-func TestScheduleRebalance(t *testing.T) {
-	s := &schedulerTester{}
-	s.reset(t)
+func (s *schedulerSuite) TestScheduleRebalance(c *check.C) {
+	defer testleak.AfterTest(c)()
+	s.reset(c)
 	captureID1 := "test-capture-1"
 	captureID2 := "test-capture-2"
 	captureID3 := "test-capture-3"
@@ -287,13 +289,13 @@ func TestScheduleRebalance(t *testing.T) {
 
 	// rebalance table
 	shouldUpdateState, err := s.scheduler.Tick(s.state, []model.TableID{1, 2, 3, 4, 5, 6}, s.captures)
-	require.Nil(t, err)
-	require.False(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsFalse)
 	s.tester.MustApplyPatches()
 	// 4 tables remove in capture 1, this 4 tables will be added to another capture in next tick
-	require.Len(t, s.state.TaskStatuses[captureID1].Tables, 2)
-	require.Len(t, s.state.TaskStatuses[captureID2].Tables, 0)
-	require.Len(t, s.state.TaskStatuses[captureID3].Tables, 0)
+	c.Assert(s.state.TaskStatuses[captureID1].Tables, check.HasLen, 2)
+	c.Assert(s.state.TaskStatuses[captureID2].Tables, check.HasLen, 0)
+	c.Assert(s.state.TaskStatuses[captureID3].Tables, check.HasLen, 0)
 
 	s.state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		for _, opt := range status.Operation {
@@ -302,7 +304,7 @@ func TestScheduleRebalance(t *testing.T) {
 		return status, true, nil
 	})
 	s.state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		require.Nil(t, workload)
+		c.Assert(workload, check.IsNil)
 		workload = make(model.TaskWorkload)
 		for tableID := range s.state.TaskStatuses[captureID1].Tables {
 			workload[tableID] = model.WorkloadInfo{Workload: 1}
@@ -313,26 +315,26 @@ func TestScheduleRebalance(t *testing.T) {
 
 	// clean finished operation
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{1, 2, 3, 4, 5, 6}, s.captures)
-	require.Nil(t, err)
-	require.True(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsTrue)
 	s.tester.MustApplyPatches()
 	// 4 tables add to another capture in this tick
-	require.Len(t, s.state.TaskStatuses[captureID1].Operation, 0)
+	c.Assert(s.state.TaskStatuses[captureID1].Operation, check.HasLen, 0)
 
 	// rebalance table
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{1, 2, 3, 4, 5, 6}, s.captures)
-	require.Nil(t, err)
-	require.False(t, shouldUpdateState)
+	c.Assert(err, check.IsNil)
+	c.Assert(shouldUpdateState, check.IsFalse)
 	s.tester.MustApplyPatches()
 	// 4 tables add to another capture in this tick
-	require.Len(t, s.state.TaskStatuses[captureID1].Tables, 2)
-	require.Len(t, s.state.TaskStatuses[captureID2].Tables, 2)
-	require.Len(t, s.state.TaskStatuses[captureID3].Tables, 2)
+	c.Assert(s.state.TaskStatuses[captureID1].Tables, check.HasLen, 2)
+	c.Assert(s.state.TaskStatuses[captureID2].Tables, check.HasLen, 2)
+	c.Assert(s.state.TaskStatuses[captureID3].Tables, check.HasLen, 2)
 	tableIDs := make(map[model.TableID]struct{})
 	for _, status := range s.state.TaskStatuses {
 		for tableID := range status.Tables {
 			tableIDs[tableID] = struct{}{}
 		}
 	}
-	require.Equal(t, tableIDs, map[model.TableID]struct{}{1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}})
+	c.Assert(tableIDs, check.DeepEquals, map[model.TableID]struct{}{1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}})
 }

@@ -149,9 +149,6 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.patchState(model.StateNormal)
 		// remove error history to make sure the changefeed can running in next tick
 		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-			if info == nil {
-				return nil, false, nil
-			}
 			if info.Error != nil || len(info.ErrorHis) != 0 {
 				info.Error = nil
 				info.ErrorHis = nil
@@ -215,9 +212,6 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 	})
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		changed := false
-		if info == nil {
-			return nil, changed, nil
-		}
 		if info.State != feedState {
 			info.State = feedState
 			changed = true
@@ -282,9 +276,6 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	for _, err := range errs {
 		if cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code)) {
 			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-				if info == nil {
-					return nil, false, nil
-				}
 				info.Error = err
 				info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 				info.CleanUpOutdatedErrorHistory()
@@ -297,9 +288,6 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	}
 
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		if info == nil {
-			return nil, false, nil
-		}
 		for _, err := range errs {
 			info.Error = err
 			info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)

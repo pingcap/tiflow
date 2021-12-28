@@ -14,57 +14,55 @@
 package orchestrator
 
 import (
-	"testing"
-
+	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
-	"github.com/stretchr/testify/require"
 )
 
 // ReactorStateTester is a helper struct for unit-testing an implementer of ReactorState
 type ReactorStateTester struct {
-	t         *testing.T
+	c         *check.C
 	state     ReactorState
 	kvEntries map[string]string
 }
 
 // NewReactorStateTester creates a new ReactorStateTester
-func NewReactorStateTester(t *testing.T, state ReactorState, initKVEntries map[string]string) *ReactorStateTester {
+func NewReactorStateTester(c *check.C, state ReactorState, initKVEntries map[string]string) *ReactorStateTester {
 	if initKVEntries == nil {
 		initKVEntries = make(map[string]string)
 	}
 	for k, v := range initKVEntries {
 		err := state.Update(util.NewEtcdKey(k), []byte(v), true)
-		require.NoError(t, err)
+		c.Assert(err, check.IsNil)
 	}
 	return &ReactorStateTester{
-		t:         t,
+		c:         c,
 		state:     state,
 		kvEntries: initKVEntries,
 	}
 }
 
 // Update is used to update keys in the mocked kv-store.
-func (r *ReactorStateTester) Update(key string, value []byte) error {
+func (t *ReactorStateTester) Update(key string, value []byte) error {
 	k := util.NewEtcdKey(key)
-	err := r.state.Update(k, value, false)
+	err := t.state.Update(k, value, false)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	if value != nil {
-		r.kvEntries[key] = string(value)
+		t.kvEntries[key] = string(value)
 	} else {
-		delete(r.kvEntries, key)
+		delete(t.kvEntries, key)
 	}
 	return nil
 }
 
 // ApplyPatches calls the GetPatches method on the ReactorState and apply the changes to the mocked kv-store.
-func (r *ReactorStateTester) ApplyPatches() error {
-	patchGroups := r.state.GetPatches()
+func (t *ReactorStateTester) ApplyPatches() error {
+	patchGroups := t.state.GetPatches()
 	for _, patches := range patchGroups {
-		err := r.applyPatches(patches)
+		err := t.applyPatches(patches)
 		if err != nil {
 			return err
 		}
@@ -72,11 +70,11 @@ func (r *ReactorStateTester) ApplyPatches() error {
 	return nil
 }
 
-func (r *ReactorStateTester) applyPatches(patches []DataPatch) error {
+func (t *ReactorStateTester) applyPatches(patches []DataPatch) error {
 RetryLoop:
 	for {
 		tmpKVEntries := make(map[util.EtcdKey][]byte)
-		for k, v := range r.kvEntries {
+		for k, v := range t.kvEntries {
 			tmpKVEntries[util.NewEtcdKey(k)] = []byte(v)
 		}
 		changedSet := make(map[util.EtcdKey]struct{})
@@ -91,14 +89,14 @@ RetryLoop:
 			}
 		}
 		for k := range changedSet {
-			err := r.state.Update(k, tmpKVEntries[k], false)
+			err := t.state.Update(k, tmpKVEntries[k], false)
 			if err != nil {
 				return err
 			}
 			if value := tmpKVEntries[k]; value != nil {
-				r.kvEntries[k.String()] = string(value)
+				t.kvEntries[k.String()] = string(value)
 			} else {
-				delete(r.kvEntries, k.String())
+				delete(t.kvEntries, k.String())
 			}
 		}
 		return nil
@@ -106,16 +104,16 @@ RetryLoop:
 }
 
 // MustApplyPatches calls ApplyPatches and must successfully
-func (r *ReactorStateTester) MustApplyPatches() {
-	require.Nil(r.t, r.ApplyPatches())
+func (t *ReactorStateTester) MustApplyPatches() {
+	t.c.Assert(t.ApplyPatches(), check.IsNil)
 }
 
 // MustUpdate calls Update and must successfully
-func (r *ReactorStateTester) MustUpdate(key string, value []byte) {
-	require.Nil(r.t, r.Update(key, value))
+func (t *ReactorStateTester) MustUpdate(key string, value []byte) {
+	t.c.Assert(t.Update(key, value), check.IsNil)
 }
 
 // KVEntries returns the contents of the mocked KV store.
-func (r *ReactorStateTester) KVEntries() map[string]string {
-	return r.kvEntries
+func (t *ReactorStateTester) KVEntries() map[string]string {
+	return t.kvEntries
 }
