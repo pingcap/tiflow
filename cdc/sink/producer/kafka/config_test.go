@@ -169,6 +169,14 @@ func (s *kafkaSuite) TestFillBySinkURI(c *check.C) {
 	err = producerConfig.fillBySinkURI(sinkURI)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
+	// Illegal auto-create-topic
+	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&auto-create-topic=123"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	producerConfig = NewConfig()
+	err = producerConfig.fillBySinkURI(sinkURI)
+	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
+
 	// Out of range partition-num.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0"
 	sinkURI, err = url.Parse(uri)

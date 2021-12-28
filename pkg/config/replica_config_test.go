@@ -16,6 +16,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -94,4 +95,17 @@ func TestReplicaConfigValidate(t *testing.T) {
 	conf.Sink.Protocol = "canal"
 	conf.EnableOldValue = false
 	require.Regexp(t, ".*canal protocol requires old value to be enabled.*", conf.Validate())
+}
+
+func TestReplicaConfigFillBySinkURI(t *testing.T) {
+	t.Parallel()
+	conf := GetDefaultReplicaConfig()
+
+	uri := "kafka://127.0.0.1/topic-name?protocol=canal-json"
+	sinkURI, err := url.Parse(uri)
+	require.Nil(t, err)
+
+	err = conf.FillBySInkURI(sinkURI)
+	require.Nil(t, err)
+	require.Equal(t, conf.Sink.Protocol, "canal-json")
 }
