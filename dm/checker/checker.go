@@ -37,7 +37,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
-	plog "github.com/pingcap/log"
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -236,7 +235,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.checkList = append(c.checkList, checker.NewShardingTablesChecker(name, dbs, shardingSet, columnMapping, checkingShardID))
 		}
 	}
-	plog.Info(c.displayCheckingItems())
 	c.logger.Info(c.displayCheckingItems())
 	return nil
 }
