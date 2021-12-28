@@ -28,7 +28,21 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "owner",
 			Name:      "checkpoint_ts_lag",
-			Help:      "checkpoint ts lag of changefeeds",
+			Help:      "checkpoint ts lag of changefeeds in seconds",
+		}, []string{"changefeed"})
+	changefeedResolvedTsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "owner",
+			Name:      "resolved_ts",
+			Help:      "resolved ts of changefeeds",
+		}, []string{"changefeed"})
+	changefeedResolvedTsLagGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "owner",
+			Name:      "resolved_ts_lag",
+			Help:      "resolved ts lag of changefeeds in seconds",
 		}, []string{"changefeed"})
 	ownershipCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
@@ -63,7 +77,9 @@ const (
 // InitMetrics registers all metrics used in owner
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(changefeedCheckpointTsGauge)
+	registry.MustRegister(changefeedResolvedTsGauge)
 	registry.MustRegister(changefeedCheckpointTsLagGauge)
+	registry.MustRegister(changefeedResolvedTsLagGauge)
 	registry.MustRegister(ownershipCounter)
 	registry.MustRegister(ownerMaintainTableNumGauge)
 	registry.MustRegister(changefeedStatusGauge)

@@ -78,7 +78,8 @@ const (
       "max-size": 300,
       "max-days": 0,
       "max-backups": 0
-    }
+    },
+    "error-output": "stderr"
   },
   "data-dir": "",
   "gc-ttl": 86400,
@@ -107,7 +108,7 @@ const (
     "region-scan-limit": 40
   },
   "debug": {
-    "enable-table-actor": true,
+    "enable-table-actor": false,
     "enable-db-sorter": false,
     "db": {
       "count": 16,
