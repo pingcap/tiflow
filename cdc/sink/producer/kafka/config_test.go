@@ -190,23 +190,33 @@ func (s *kafkaSuite) TestFillBySinkURI(c *check.C) {
 func (s *kafkaSuite) TestCompleteOpts(c *check.C) {
 	defer testleak.AfterTest(c)
 
-	uri := "kafka://127.0.0.1:9092/abc?enable-tidb-extension=true&protocol=canal-json"
+	uri := "kafka://127.0.0.1:9092/abc?enable-tidb-extension=true&protocol=canal-json&max-batch-size=1"
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
 
 	producerConfig := NewConfig()
 	saramaConfig, err := newSaramaConfigImpl(context.Background(), producerConfig)
 	c.Assert(err, check.IsNil)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	err = replicaConfig.FillBySInkURI(sinkURI)
+	c.Assert(err, check.IsNil)
+	c.Assert(replicaConfig.Sink.Protocol, check.Equals, "canal-json")
 
 	opts := make(map[string]string)
-	err = completeOpts(sinkURI, opts, saramaConfig, config.GetDefaultReplicaConfig())
+	err = completeOpts(sinkURI, opts, saramaConfig, replicaConfig)
 	c.Assert(err, check.IsNil)
 	c.Assert(opts["enable-tidb-extension"], check.Equals, "true")
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(saramaConfig.Producer.MaxMessageBytes))
+	c.Assert(opts["max-batch-size"], check.Equals, "1")
 
 	// Illegal enable-tidb-extension.
 	uri = "kafka://127.0.0.1:9092/abc?enable-tidb-extension=a&protocol=canal-json"
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
+	replicaConfig = config.GetDefaultReplicaConfig()
+	err = replicaConfig.FillBySInkURI(sinkURI)
+	c.Assert(err, check.IsNil)
+	c.Assert(replicaConfig.Sink.Protocol, check.Equals, "canal-json")
 	opts = make(map[string]string)
 	err = completeOpts(sinkURI, opts, saramaConfig, config.GetDefaultReplicaConfig())
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
@@ -215,6 +225,11 @@ func (s *kafkaSuite) TestCompleteOpts(c *check.C) {
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=1&enable-tidb-extension=true"
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
+	replicaConfig = config.GetDefaultReplicaConfig()
+	err = replicaConfig.FillBySInkURI(sinkURI)
+	c.Assert(err, check.IsNil)
+	c.Assert(replicaConfig.Sink.Protocol, check.Not(check.Equals), "canal-json")
+
 	opts = make(map[string]string)
 	err = completeOpts(sinkURI, opts, saramaConfig, config.GetDefaultReplicaConfig())
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*enable-tidb-extension only support canal-json protocol.*")
