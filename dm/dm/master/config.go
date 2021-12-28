@@ -315,7 +315,7 @@ func (c *Config) adjust() error {
 	}
 
 	if c.ExperimentalFeatures.OpenAPI {
-		log.L().Warn("openapi is a GA feature and removed from experimental features, so this configuration will have no affect, please set openapi=true in dm-master config file")
+		log.L().Warn("openapi is a GA feature and removed from experimental features, so this configuration may have no affect in feature release, please set openapi=true in dm-master config file")
 	}
 
 	return err

@@ -191,7 +191,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		"/status": getStatusHandle(),
 		"/debug/": getDebugHandler(),
 	}
-	if s.cfg.OpenAPI {
+	if s.cfg.OpenAPI || s.cfg.ExperimentalFeatures.OpenAPI {
 		if initOpenAPIErr := s.InitOpenAPIHandles(); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
