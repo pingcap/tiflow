@@ -245,10 +245,7 @@ func InitializeConfigurations(
 	}
 
 	adjustSaramaConfig(saramaConfig, producerConfig)
-
-	if err := replicaConfig.FillBySInkURI(sinkURI); err != nil {
-		return nil, nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
+	replicaConfig.FillBySInkURI(sinkURI)
 
 	if err := completeOpts(sinkURI, opts, saramaConfig, replicaConfig); err != nil {
 		return nil, nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)

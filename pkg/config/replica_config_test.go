@@ -105,7 +105,6 @@ func TestReplicaConfigFillBySinkURI(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 
-	err = conf.FillBySInkURI(sinkURI)
-	require.Nil(t, err)
+	conf.FillBySInkURI(sinkURI)
 	require.Equal(t, conf.Sink.Protocol, "canal-json")
 }
