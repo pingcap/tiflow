@@ -205,7 +205,8 @@ func completeOpts(sinkURI *url.URL, opts map[string]string, saramaConfig *sarama
 	return nil
 }
 
-// InitializeConfigurations the kafka producer configuration, replication configuration and opts.
+// InitializeConfigurations build the kafka configuration, sarama configuration,
+// also fill replication configuration and opts.
 func InitializeConfigurations(
 	ctx context.Context,
 	topic string,
@@ -241,7 +242,7 @@ func InitializeConfigurations(
 		return nil, nil, errors.Trace(err)
 	}
 
-	if err := replicaConfig.FillProtocol(sinkURI); err != nil {
+	if err := replicaConfig.FillBySInkURI(sinkURI); err != nil {
 		return nil, nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 

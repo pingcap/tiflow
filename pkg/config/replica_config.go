@@ -144,8 +144,10 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 	return defaultReplicaConfig.Clone()
 }
 
-func (c *ReplicaConfig) FillProtocol(url *url.URL) error {
-	s := url.Query().Get(ProtocolKey)
+// FillBySInkURI update ReplicaConfig, return error if necessary.
+// at the moment, only `protocol` need to be updated.
+func (c *ReplicaConfig) FillBySInkURI(sinkURI *url.URL) error {
+	s := sinkURI.Query().Get(ProtocolKey)
 	if s != "" {
 		c.Sink.Protocol = s
 	}
