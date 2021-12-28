@@ -91,7 +91,7 @@ func NewConfig() *Config {
 }
 
 type ExperimentalFeatures struct {
-	OpenAPI bool `toml:"openapi"`
+	OpenAPI bool `toml:"openapi"` // OpenAPI is available in v5.4 as default.
 }
 
 // Config is the configuration for dm-master.
@@ -128,6 +128,7 @@ type Config struct {
 	AutoCompactionMode      string `toml:"auto-compaction-mode" json:"auto-compaction-mode"`
 	AutoCompactionRetention string `toml:"auto-compaction-retention" json:"auto-compaction-retention"`
 	QuotaBackendBytes       int64  `toml:"quota-backend-bytes" json:"quota-backend-bytes"`
+	OpenAPI                 bool   `toml:"openapi"` // OpenAPI is available in v5.4 as default.
 
 	// directory path used to store source config files when upgrading from v1.0.x.
 	// if this path set, DM-master leader will try to upgrade from v1.0.x to the current version.
@@ -311,6 +312,10 @@ func (c *Config) adjust() error {
 			zap.Int64("from", c.QuotaBackendBytes),
 			zap.Int64("to", quotaBackendBytesLowerBound))
 		c.QuotaBackendBytes = quotaBackendBytesLowerBound
+	}
+
+	if c.ExperimentalFeatures.OpenAPI {
+		log.L().Warn("openapi is a GA feature and removed from experimental features, so this configuration will have no affect, please set openapi=true in dm-master config file")
 	}
 
 	return err
