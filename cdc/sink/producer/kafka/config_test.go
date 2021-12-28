@@ -235,6 +235,54 @@ func (s *kafkaSuite) TestCompleteOpts(c *check.C) {
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*enable-tidb-extension only support canal-json protocol.*")
 }
 
+func (s *kafkaSuite) TestAdjustConfig(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	NewAdminClientImpl = kafka.NewMockAdminClient
+	defer func() {
+		NewAdminClientImpl = kafka.NewSaramaAdminClient
+	}()
+
+	producerConfig := NewConfig()
+	saramaConfig, err := newSaramaConfigImpl(context.Background(), producerConfig)
+	c.Assert(err, check.IsNil)
+
+	adminClient, err := NewAdminClientImpl(producerConfig.BrokerEndpoints, saramaConfig)
+	c.Assert(err, check.IsNil)
+
+	// When the topic exists, but the topic does not store max message bytes info,
+	// the check of parameter succeeds.
+	detail := &sarama.TopicDetail{
+		NumPartitions: 3,
+		// Does not contain max message bytes information.
+		ConfigEntries: make(map[string]*string),
+	}
+	err = adminClient.CreateTopic("test-topic", detail, false)
+	c.Assert(err, check.IsNil)
+
+	// It is less than the value of broker.
+	producerConfig.MaxMessageBytes = config.DefaultMaxMessageBytes - 1
+	saramaConfig, err = newSaramaConfigImpl(context.Background(), producerConfig)
+	c.Assert(err, check.IsNil)
+
+	err = adjustConfig(adminClient, "test-topic", producerConfig)
+	c.Assert(err, check.IsNil)
+	adjustSaramaConfig(saramaConfig, producerConfig)
+	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, producerConfig.MaxMessageBytes)
+
+	// When the topic exists, but the topic does not store max message bytes info,
+	// the check of parameter fails.
+	// It is larger than the value of broker.
+	producerConfig.MaxMessageBytes = config.DefaultMaxMessageBytes + 1
+	saramaConfig, err = newSaramaConfigImpl(context.Background(), producerConfig)
+	c.Assert(err, check.IsNil)
+	err = adjustConfig(adminClient, "test-topic", producerConfig)
+	c.Assert(err, check.IsNil)
+	adjustSaramaConfig(saramaConfig, producerConfig)
+	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, producerConfig.MaxMessageBytes)
+
+}
+
 func (s *kafkaSuite) TestInitializeConfigurations(c *check.C) {
 	defer testleak.AfterTest(c)()
 
