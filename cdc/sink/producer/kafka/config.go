@@ -53,14 +53,20 @@ type Config struct {
 	AutoCreate bool
 }
 
+const (
+	defaultVersion           = "2.4.0"
+	defaultReplicationFactor = 1
+	defaultCompression       = "none"
+)
+
 // NewConfig returns a default Kafka configuration
 func NewConfig() *Config {
 	return &Config{
-		Version: "2.4.0",
+		Version: defaultVersion,
 		// MaxMessageBytes will be used to initialize producer
 		MaxMessageBytes:   config.DefaultMaxMessageBytes,
-		ReplicationFactor: 1,
-		Compression:       "none",
+		ReplicationFactor: defaultReplicationFactor,
+		Compression:       defaultCompression,
 		Credential:        &security.Credential{},
 		SaslScram:         &security.SaslScram{},
 		AutoCreate:        true,
