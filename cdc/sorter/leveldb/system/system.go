@@ -107,6 +107,11 @@ func (s *System) CleanerRouter() *actor.Router {
 	return s.cleanRouter
 }
 
+// CompactScheduler returns compaction scheduler.
+func (s *System) CompactScheduler() *lsorter.CompactScheduler {
+	return s.compactSched
+}
+
 // broadcase messages to actors in the router.
 // Caveats it may lose messages quietly.
 func (s *System) broadcast(ctx context.Context, router *actor.Router, msg message.Message) {
@@ -139,7 +144,7 @@ func (s *System) Start(ctx context.Context) error {
 	dbCount := s.cfg.Count
 	for id := 0; id < dbCount; id++ {
 		// Open db.
-		db, err := db.OpenLevelDB(ctx, id, s.dir, s.cfg)
+		db, err := db.OpenPebble(ctx, id, s.dir, s.cfg)
 		if err != nil {
 			return errors.Trace(err)
 		}

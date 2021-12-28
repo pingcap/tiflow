@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
 )
@@ -34,10 +35,12 @@ func newTestSorter(
 	ctx context.Context, capacity int,
 ) (*Sorter, actor.Mailbox) {
 	id := actor.ID(1)
-	router := actor.NewRouter("teet")
+	router := actor.NewRouter("test")
 	mb := actor.NewMailbox(1, capacity)
 	router.InsertMailbox4Test(id, mb)
-	ls := NewSorter(ctx, 1, 1, router, id)
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	compact := NewCompactScheduler(nil, cfg)
+	ls := NewSorter(ctx, 1, 1, router, id, compact, cfg)
 	return ls, mb
 }
 
@@ -244,19 +247,10 @@ func TestBuildTask(t *testing.T) {
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 2}))),
 			},
 		},
-		// Write one event and a resolved ts event.
-		{
-			events: []*model.PolymorphicEvent{
-				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}),
-				model.NewResolvedPolymorphicEvent(0, 3),
-			},
-			deleteKeys: []message.Key{},
-		},
-		// Write two events and a resolved ts event, delete one key.
+		// Write two events and delete one key.
 		{
 			events: []*model.PolymorphicEvent{
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
-				model.NewResolvedPolymorphicEvent(0, 5),
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 6}),
 			},
 			deleteKeys: []message.Key{
@@ -272,10 +266,6 @@ func TestBuildTask(t *testing.T) {
 
 		expectedEvents := make(map[message.Key][]uint8)
 		for _, ev := range events {
-			if ev.RawKV.OpType == model.OpTypeResolved {
-				// Leveldb sorter does not write resolved ts events.
-				continue
-			}
 			value, err := ls.serde.Marshal(ev, []byte{})
 			require.Nil(t, err, "case #%d, %v", i, cs)
 			key := message.Key(encoding.EncodeKey(ls.uid, ls.tableID, ev))
@@ -545,16 +535,17 @@ func TestOutputIterEvents(t *testing.T) {
 	// CRTs 5, StartTs 4, keys (0|1|2)
 	// CRTs 6, StartTs 4, keys (0|1|2)
 	db := prepareTxnData(t, ls, 5, 3)
-	_ = db
 
 	cases := []struct {
 		outputChCap   int
 		maxResolvedTs uint64
+		hasReadNext   bool
 
 		expectEvents       []*model.PolymorphicEvent
 		expectDeleteKeys   []message.Key
 		expectOutputs      []*model.PolymorphicEvent
 		expectExhaustedRTs uint64
+		expectHasReadNext  bool
 	}{
 		// Empty resolved event.
 		{
@@ -565,6 +556,7 @@ func TestOutputIterEvents(t *testing.T) {
 			expectDeleteKeys:   []message.Key{},
 			expectOutputs:      []*model.PolymorphicEvent{},
 			expectExhaustedRTs: 0,
+			expectHasReadNext:  true,
 		},
 		// Nonblocking output three events and one resolved ts.
 		{
@@ -585,6 +577,7 @@ func TestOutputIterEvents(t *testing.T) {
 				model.NewResolvedPolymorphicEvent(0, 2),
 			},
 			expectExhaustedRTs: 2, // Iter is exhausted and no buffered resolved events.
+			expectHasReadNext:  true,
 		},
 		// Blocking output two events of CRTs 3.
 		{
@@ -600,7 +593,9 @@ func TestOutputIterEvents(t *testing.T) {
 				newTestEvent(3, 2, 0),
 				newTestEvent(3, 2, 1),
 			},
-			expectExhaustedRTs: 0, // There are buffered resolved events.
+			// Events of CRTs 3 have been read and buffered.
+			expectExhaustedRTs: 0,
+			expectHasReadNext:  true,
 		},
 		// Output remaining event of CRTs 3.
 		{
@@ -616,6 +611,7 @@ func TestOutputIterEvents(t *testing.T) {
 				model.NewResolvedPolymorphicEvent(0, 3),
 			},
 			expectExhaustedRTs: 3, // Iter is exhausted and no buffered resolved events.
+			expectHasReadNext:  true,
 		},
 		// Resolved ts covers all resolved events,
 		// blocking output events of CRTs 4 (3 events) and 5 (1 event).
@@ -640,11 +636,10 @@ func TestOutputIterEvents(t *testing.T) {
 				model.NewResolvedPolymorphicEvent(0, 4),
 				newTestEvent(5, 4, 0),
 			},
-			expectExhaustedRTs: 0, // Iter is not exhausted.
+			expectExhaustedRTs: 0,     // Iter is not exhausted.
+			expectHasReadNext:  false, // (5, 4, 1) is neither output nor buffered.
 		},
-
-		// Resolved ts covers all resolved events,
-		// nonblocking output all events.
+		// Resolved ts covers all resolved events, nonblocking output all events.
 		{
 			outputChCap:   7,
 			maxResolvedTs: 7,
@@ -667,6 +662,7 @@ func TestOutputIterEvents(t *testing.T) {
 				model.NewResolvedPolymorphicEvent(0, 7),
 			},
 			expectExhaustedRTs: 7, // Iter is exhausted and no buffered resolved events.
+			expectHasReadNext:  true,
 		},
 	}
 
@@ -677,12 +673,15 @@ func TestOutputIterEvents(t *testing.T) {
 		iter := db.Iterator(
 			encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
 			encoding.EncodeTsKey(ls.uid, ls.tableID, cs.maxResolvedTs+1))
+		iter.First()
 		require.Nil(t, iter.Error(), "case #%d, %v", i, cs)
-		exhaustedRTs, err := ls.outputIterEvents(iter, buf, cs.maxResolvedTs)
+		hasReadLastNext, exhaustedRTs, err :=
+			ls.outputIterEvents(iter, cs.hasReadNext, buf, cs.maxResolvedTs)
 		require.Nil(t, err, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectExhaustedRTs, exhaustedRTs, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectDeleteKeys, buf.deleteKeys, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectEvents, buf.resolvedEvents, "case #%d, %v", i, cs)
+		require.EqualValues(t, cs.expectHasReadNext, hasReadLastNext, "case #%d, %v", i, cs)
 		outputEvents := receiveOutputEvents(ls.outputCh)
 		require.EqualValues(t, cs.expectOutputs, outputEvents, "case #%d, %v", i, cs)
 
@@ -692,6 +691,103 @@ func TestOutputIterEvents(t *testing.T) {
 		}
 		require.Nil(t, wb.Commit())
 	}
+
+	require.Nil(t, db.Close())
+}
+
+func TestStateIterator(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ls, _ := newTestSorter(ctx, 1)
+	// Prepare data, 1 txn.
+	db := prepareTxnData(t, ls, 1, 1)
+	sema := semaphore.NewWeighted(1)
+	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
+		prometheus.Labels{"capture": t.Name(), "id": t.Name()})
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	mb := actor.NewMailbox(1, 1)
+	router := actor.NewRouter(t.Name())
+	router.InsertMailbox4Test(mb.ID(), mb)
+	state := pollState{
+		actorID:               mb.ID(),
+		iterFirstSlowDuration: 100 * time.Second,
+		compact:               NewCompactScheduler(router, cfg),
+		iterMaxAliveDuration:  100 * time.Millisecond,
+		metricIterFirst:       metricIterDuration.WithLabelValues("first"),
+		metricIterRelease:     metricIterDuration.WithLabelValues("release"),
+	}
+
+	// First get returns a request.
+	req, ok := state.tryGetIterator(1, 1)
+	require.False(t, ok)
+	require.NotNil(t, req)
+
+	// Still wait for iterator response.
+	req1, ok := state.tryGetIterator(1, 1)
+	require.False(t, ok)
+	require.Nil(t, req1)
+
+	// Send iterator.
+	require.Nil(t, sema.Acquire(ctx, 1))
+	req.IterCh <- &message.LimitedIterator{
+		Iterator: db.Iterator([]byte{}, []byte{}),
+		Sema:     sema,
+	}
+	// Get iterator successfully.
+	req2, ok := state.tryGetIterator(1, 1)
+	require.True(t, ok)
+	require.Nil(t, req2)
+	// Get iterator successfully again.
+	req2, ok = state.tryGetIterator(1, 1)
+	require.True(t, ok)
+	require.Nil(t, req2)
+
+	// Release an invalid iterator.
+	require.False(t, state.iter.Valid())
+	require.Nil(t, state.tryReleaseIterator())
+	require.Nil(t, state.iter)
+
+	// Release an outdated iterator.
+	require.Nil(t, sema.Acquire(ctx, 1))
+	state.iter = &message.LimitedIterator{
+		Iterator: db.Iterator([]byte{}, []byte{0xff}),
+		Sema:     sema,
+	}
+	require.True(t, state.iter.First())
+	state.iterAliveTime = time.Now()
+	time.Sleep(2 * state.iterMaxAliveDuration)
+	require.Nil(t, state.tryReleaseIterator())
+	require.Nil(t, state.iter)
+
+	// Release empty iterator.
+	require.Nil(t, state.tryReleaseIterator())
+
+	// Slow first must send a compaction task.
+	req3, ok := state.tryGetIterator(1, 1)
+	require.False(t, ok)
+	require.NotNil(t, req3)
+	require.Nil(t, sema.Acquire(ctx, 1))
+	req3.IterCh <- &message.LimitedIterator{
+		Iterator: db.Iterator([]byte{}, []byte{}),
+		Sema:     sema,
+	}
+	// No compaction task yet.
+	_, ok = mb.Receive()
+	require.False(t, ok)
+	// Always slow.
+	state.iterFirstSlowDuration = time.Duration(0)
+	_, ok = state.tryGetIterator(1, 1)
+	require.True(t, ok)
+	require.NotNil(t, state.iter)
+	// Must recv a compaction task.
+	_, ok = mb.Receive()
+	require.True(t, ok)
+	// Release iterator.
+	time.Sleep(2 * state.iterMaxAliveDuration)
+	require.Nil(t, state.tryReleaseIterator())
+	require.Nil(t, state.iter)
 
 	require.Nil(t, db.Close())
 }
