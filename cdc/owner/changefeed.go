@@ -70,6 +70,8 @@ type changefeed struct {
 
 	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
+	metricsChangefeedResolvedTsGauge      prometheus.Gauge
+	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
@@ -292,6 +294,8 @@ LOOP:
 	// init metrics
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
+	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.WithLabelValues(c.id)
+	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.WithLabelValues(c.id)
 
 	// create scheduler
 	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
@@ -323,10 +327,17 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	}
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
+
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsGauge = nil
 	c.metricsChangefeedCheckpointTsLagGauge = nil
+
+	changefeedResolvedTsGauge.DeleteLabelValues(c.id)
+	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id)
+	c.metricsChangefeedResolvedTsGauge = nil
+	c.metricsChangefeedResolvedTsLagGauge = nil
+
 	c.initialized = false
 }
 
@@ -346,7 +357,7 @@ func (c *changefeed) redoManagerCleanup(ctx context.Context) {
 			redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
 			redoManager, err := redo.NewManager(ctx, c.state.Info.Config.Consistent, redoManagerOpts)
 			if err != nil {
-				log.Error("create redo manger failed", zap.String("changefeed", c.id), zap.Error(err))
+				log.Error("create redo manager failed", zap.String("changefeed", c.id), zap.Error(err))
 				return
 			}
 			c.redoManager = redoManager
@@ -524,10 +535,13 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 		}
 		return status, changed, nil
 	})
-	phyTs := oracle.ExtractPhysical(checkpointTs)
+	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
+	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
+	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyCkpTs) / 1e3)
 
-	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
-	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyTs) / 1e3)
+	phyRTs := oracle.ExtractPhysical(resolvedTs)
+	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
+	c.metricsChangefeedResolvedTsLagGauge.Set(float64(currentTs-phyRTs) / 1e3)
 }
 
 func (c *changefeed) Close(ctx cdcContext.Context) {

@@ -16,116 +16,104 @@ package server
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
 )
 
-func TestSuite(t *testing.T) { check.TestingT(t) }
-
-type serverSuite struct{}
-
-var _ = check.Suite(&serverSuite{})
-
-func (s *serverSuite) TestPatchTiDBConf(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestPatchTiDBConf(t *testing.T) {
+	t.TempDir()
 	patchTiDBConf()
 	cfg := ticonfig.GetGlobalConfig()
-	c.Assert(cfg.TiKVClient.MaxBatchSize, check.Equals, uint(0))
+	require.Equal(t, uint(0), cfg.TiKVClient.MaxBatchSize)
 }
 
-func (s *serverSuite) TestValidateWithEmptyPdAddress(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestValidateWithEmptyPdAddress(t *testing.T) {
 	cmd := new(cobra.Command)
 	o := newOptions()
 	o.addFlags(cmd)
 
-	c.Assert(cmd.ParseFlags([]string{"--pd="}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{"--pd="}))
 	err := o.complete(cmd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = o.validate()
-	c.Assert(err, check.ErrorMatches, ".*empty PD address.*")
+	require.Regexp(t, ".*empty PD address.*", err.Error())
 }
 
-func (s *serverSuite) TestValidateWithInvalidPdAddress(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestValidateWithInvalidPdAddress(t *testing.T) {
 	cmd := new(cobra.Command)
 	o := newOptions()
 	o.addFlags(cmd)
 
-	c.Assert(cmd.ParseFlags([]string{"--pd=aa"}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{"--pd=aa"}))
 	err := o.complete(cmd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = o.validate()
-	c.Assert(err, check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
+	require.Regexp(t, ".*PD endpoint should be a valid http or https URL.*", err.Error())
 }
 
-func (s *serverSuite) TestValidateWithInvalidPdAddressWithoutHost(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestValidateWithInvalidPdAddressWithoutHost(t *testing.T) {
 	cmd := new(cobra.Command)
 	o := newOptions()
 	o.addFlags(cmd)
 
-	c.Assert(cmd.ParseFlags([]string{"--pd=http://"}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{"--pd=http://"}))
 	err := o.complete(cmd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = o.validate()
-	c.Assert(err, check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
+	require.Regexp(t, ".*PD endpoint should be a valid http or https URL.*", err.Error())
 }
 
-func (s *serverSuite) TestValidateWithHttpsPdAddressWithoutCertificate(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestValidateWithHttpsPdAddressWithoutCertificate(t *testing.T) {
 	cmd := new(cobra.Command)
 	o := newOptions()
 	o.addFlags(cmd)
 
-	c.Assert(cmd.ParseFlags([]string{"--pd=https://aa"}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{"--pd=https://aa"}))
 	err := o.complete(cmd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = o.validate()
-	c.Assert(err, check.ErrorMatches, ".*PD endpoint scheme is https, please provide certificate.*")
+	require.Regexp(t, ".*PD endpoint scheme is https, please provide certificate.*", err.Error())
 }
 
-func (s *serverSuite) TestAddUnknownFlag(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestAddUnknownFlag(t *testing.T) {
 	cmd := new(cobra.Command)
 	o := newOptions()
 	o.addFlags(cmd)
 
-	c.Assert(cmd.ParseFlags([]string{"--PD="}), check.ErrorMatches, ".*unknown flag: --PD.*")
+	require.Regexp(t, ".*unknown flag: --PD.*", cmd.ParseFlags([]string{"--PD="}).Error())
 }
 
-func (s *serverSuite) TestDefaultCfg(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestDefaultCfg(t *testing.T) {
 	cmd := new(cobra.Command)
 	o := newOptions()
 	o.addFlags(cmd)
 
-	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{}))
 	err := o.complete(cmd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	defaultCfg := config.GetDefaultServerConfig()
-	c.Assert(defaultCfg.ValidateAndAdjust(), check.IsNil)
-	c.Assert(o.serverConfig, check.DeepEquals, defaultCfg)
-	c.Assert(o.serverPdAddr, check.Equals, "http://127.0.0.1:2379")
+	require.Nil(t, defaultCfg.ValidateAndAdjust())
+	require.Equal(t, defaultCfg, o.serverConfig)
+	require.Equal(t, "http://127.0.0.1:2379", o.serverPdAddr)
 }
 
-func (s *serverSuite) TestParseCfg(c *check.C) {
-	defer testleak.AfterTest(c)()
-	dataDir := c.MkDir()
+func TestParseCfg(t *testing.T) {
+	dataDir := newTempDir()
 	cmd := new(cobra.Command)
 	o := newOptions()
 	o.addFlags(cmd)
 
-	c.Assert(cmd.ParseFlags([]string{
+	require.Nil(t, cmd.ParseFlags([]string{
 		"--addr", "127.5.5.1:8833",
 		"--advertise-addr", "127.5.5.1:7777",
 		"--log-file", "/root/cdc.log",
@@ -144,13 +132,13 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 		"--sorter-num-concurrent-worker", "80",
 		"--sorter-num-workerpool-goroutine", "90",
 		"--sort-dir", "/tmp/just_a_test",
-	}), check.IsNil)
+	}))
 
 	err := o.complete(cmd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = o.validate()
-	c.Assert(err, check.IsNil)
-	c.Assert(o.serverConfig, check.DeepEquals, &config.ServerConfig{
+	require.Nil(t, err)
+	require.Equal(t, &config.ServerConfig{
 		Addr:          "127.5.5.1:8833",
 		AdvertiseAddr: "127.5.5.1:7777",
 		LogFile:       "/root/cdc.log",
@@ -161,6 +149,7 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 				MaxDays:    0,
 				MaxBackups: 0,
 			},
+			InternalErrOutput: "stderr",
 		},
 		DataDir:                dataDir,
 		GcTTL:                  10,
@@ -188,7 +177,7 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 			RegionScanLimit:  40,
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: true,
+			EnableTableActor: false,
 			EnableDBSorter:   false,
 			DB: &config.DBConfig{
 				Count:                       16,
@@ -218,13 +207,12 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 				ServerWorkerPoolSize:         4,
 			},
 		},
-	})
+	}, o.serverConfig)
 }
 
-func (s *serverSuite) TestDecodeCfg(c *check.C) {
-	defer testleak.AfterTest(c)()
-	dataDir := c.MkDir()
-	tmpDir := c.MkDir()
+func TestDecodeCfg(t *testing.T) {
+	dataDir := newTempDir()
+	tmpDir := newTempDir()
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
 addr = "128.0.0.1:1234"
@@ -281,19 +269,19 @@ server-ack-interval = "1s"
 server-worker-pool-size = 16
 `, dataDir)
 	err := os.WriteFile(configPath, []byte(configContent), 0o644)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	cmd := new(cobra.Command)
 	o := newOptions()
 	o.addFlags(cmd)
 
-	c.Assert(cmd.ParseFlags([]string{"--config", configPath}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{"--config", configPath}))
 
 	err = o.complete(cmd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = o.validate()
-	c.Assert(err, check.IsNil)
-	c.Assert(o.serverConfig, check.DeepEquals, &config.ServerConfig{
+	require.Nil(t, err)
+	require.Equal(t, &config.ServerConfig{
 		Addr:          "128.0.0.1:1234",
 		AdvertiseAddr: "127.0.0.1:1111",
 		LogFile:       "/root/cdc1.log",
@@ -304,6 +292,7 @@ server-worker-pool-size = 16
 				MaxDays:    1,
 				MaxBackups: 1,
 			},
+			InternalErrOutput: "stderr",
 		},
 		DataDir:                dataDir,
 		GcTTL:                  500,
@@ -327,7 +316,7 @@ server-worker-pool-size = 16
 			RegionScanLimit:  40,
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: true,
+			EnableTableActor: false,
 			EnableDBSorter:   false,
 			DB: &config.DBConfig{
 				Count:                       5,
@@ -356,13 +345,12 @@ server-worker-pool-size = 16
 				ServerWorkerPoolSize:         16,
 			},
 		},
-	})
+	}, o.serverConfig)
 }
 
-func (s *serverSuite) TestDecodeCfgWithFlags(c *check.C) {
-	defer testleak.AfterTest(c)()
-	dataDir := c.MkDir()
-	tmpDir := c.MkDir()
+func TestDecodeCfgWithFlags(t *testing.T) {
+	dataDir := newTempDir()
+	tmpDir := newTempDir()
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
 addr = "128.0.0.1:1234"
@@ -399,13 +387,13 @@ key-path = "cc"
 cert-allowed-cn = ["dd","ee"]
 `, dataDir)
 	err := os.WriteFile(configPath, []byte(configContent), 0o644)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	cmd := new(cobra.Command)
 	o := newOptions()
 	o.addFlags(cmd)
 
-	c.Assert(cmd.ParseFlags([]string{
+	require.Nil(t, cmd.ParseFlags([]string{
 		"--addr", "127.5.5.1:8833",
 		"--log-file", "/root/cdc.log",
 		"--log-level", "debug",
@@ -420,13 +408,13 @@ cert-allowed-cn = ["dd","ee"]
 		"--sorter-max-memory-percentage", "70",
 		"--sorter-num-concurrent-worker", "3",
 		"--config", configPath,
-	}), check.IsNil)
+	}))
 
 	err = o.complete(cmd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = o.validate()
-	c.Assert(err, check.IsNil)
-	c.Assert(o.serverConfig, check.DeepEquals, &config.ServerConfig{
+	require.Nil(t, err)
+	require.Equal(t, &config.ServerConfig{
 		Addr:          "127.5.5.1:8833",
 		AdvertiseAddr: "127.0.0.1:1111",
 		LogFile:       "/root/cdc.log",
@@ -437,6 +425,7 @@ cert-allowed-cn = ["dd","ee"]
 				MaxDays:    1,
 				MaxBackups: 1,
 			},
+			InternalErrOutput: "stderr",
 		},
 		DataDir:                dataDir,
 		GcTTL:                  10,
@@ -464,7 +453,7 @@ cert-allowed-cn = ["dd","ee"]
 			RegionScanLimit:  40,
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: true,
+			EnableTableActor: false,
 			EnableDBSorter:   false,
 			DB: &config.DBConfig{
 				Count:                       16,
@@ -494,5 +483,17 @@ cert-allowed-cn = ["dd","ee"]
 				ServerWorkerPoolSize:         4,
 			},
 		},
-	})
+	}, o.serverConfig)
+}
+
+var lck sync.Mutex
+
+func newTempDir() string {
+	lck.Lock()
+	defer lck.Unlock()
+	path := fmt.Sprintf("%s%ccheck-%d-%d", os.TempDir(), os.PathSeparator, time.Now().Unix(), rand.Uint64())
+	if err := os.Mkdir(path, 0o700); err != nil {
+		panic("Couldn't create temporary directory: " + err.Error())
+	}
+	return path
 }
