@@ -327,7 +327,16 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-func CreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config) error {
+func CreateTopic(topic string, config *Config, saramaConfig *sarama.Config) error {
+	admin, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		if err := admin.Close(); err != nil {
+			log.Warn("close kafka cluster admin failed", zap.Error(err))
+		}
+	}()
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)

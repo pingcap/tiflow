@@ -385,24 +385,18 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	producerConfig, saramaConfig, err := kafka.InitializeConfigurations(ctx, sinkURI, replicaConfig, opts)
+	producerConfig, saramaConfig, err := kafka.InitializeConfigurations(ctx, topic, sinkURI, replicaConfig, opts)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
+	// NOTICE: Please check after the completion, as we may get the configuration from the sinkURI.
+	if err := replicaConfig.Validate(); err != nil {
+		return nil, err
+	}
 
-	//
-	//saramaConfig, err := kafka.CompleteConfigsAndOpts(ctx, topic, sinkURI, producerConfig, replicaConfig, opts)
-	//if err != nil {
-	//	return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	//}
-	//// NOTICE: Please check after the completion, as we may get the configuration from the sinkURI.
-	//if err := replicaConfig.Validate(); err != nil {
-	//	return nil, err
-	//}
-	//
-	//if err := kafka.CreateTopic(admin, topic, producerConfig); err != nil {
-	//	return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
-	//}
+	if err := kafka.CreateTopic(topic, producerConfig, saramaConfig); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
+	}
 
 	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, saramaConfig, errCh)
 	if err != nil {
