@@ -199,7 +199,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 
-		if !checkSchema {
+		if !checkingShard && !checkSchema {
 			continue
 		}
 
@@ -409,10 +409,10 @@ func (c *Checker) closeDBs() {
 	}
 }
 
-func (s *Checker) closeOnlineDDL() {
-	if s.onlineDDL != nil {
-		s.onlineDDL.Close()
-		s.onlineDDL = nil
+func (c *Checker) closeOnlineDDL() {
+	if c.onlineDDL != nil {
+		c.onlineDDL.Close()
+		c.onlineDDL = nil
 	}
 }
 
