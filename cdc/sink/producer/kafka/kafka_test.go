@@ -196,18 +196,19 @@ func (s *kafkaSuite) TestCreateTopics(c *check.C) {
 	defer func() {
 		_ = adminClient.Close()
 	}()
-	panic("not implemented")
+
+	producerConfig := NewConfig()
 
 	// When topic does not exist and auto-create is not enabled.
-	//config.AutoCreate = false
-	//cfg, err = newSaramaConfigImpl(context.Background(), config)
-	//c.Assert(err, check.IsNil)
-	//err = adjustConfig(adminClient, "non-exist", config, cfg)
-	//c.Assert(
-	//	errors.Cause(err),
-	//	check.ErrorMatches,
-	//	".*auto-create-topic` is false, and topic not found.*",
-	//)
+	producerConfig.AutoCreate = false
+	saramaConfig, err := newSaramaConfigImpl(context.Background(), producerConfig)
+	c.Assert(err, check.IsNil)
+	err = CreateTopic("non-exist", producerConfig, saramaConfig)
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*auto-create-topic` is false, and topic not found.*",
+	)
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
