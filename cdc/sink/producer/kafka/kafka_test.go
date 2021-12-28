@@ -212,24 +212,6 @@ func (s *kafkaSuite) TestCreateTopics(c *check.C) {
 	)
 }
 
-func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
-	defer testleak.AfterTest(c)()
-	ctx := context.Background()
-	errCh := make(chan error, 1)
-	config := NewConfig()
-	config.Version = "invalid"
-	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
-	topic := "topic"
-	NewAdminClientImpl = kafka.NewMockAdminClient
-	defer func() {
-		NewAdminClientImpl = kafka.NewSaramaAdminClient
-	}()
-	cfg, err := newSaramaConfigImpl(context.Background(), config)
-	c.Assert(err, check.IsNil)
-	_, err = NewKafkaSaramaProducer(ctx, topic, config, cfg, errCh)
-	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
-}
-
 func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	topic := kafka.DefaultMockTopicName
