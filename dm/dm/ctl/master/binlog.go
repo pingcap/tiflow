@@ -23,8 +23,9 @@ import (
 // NewBinlogCmd creates a binlog command.
 func NewBinlogCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "binlog <command>",
-		Short: "manage upstream binlog operations",
+		Use:   "binlog <task-name>",
+		Short: "manage or show upstream binlog operations",
+		RunE:  binlogCommandList,
 	}
 	cmd.PersistentFlags().StringP("binlog-pos", "b", "", "position used to match binlog event if matched the binlog operation will be applied. The format like \"mysql-bin|000001.000003:3270\"")
 	cmd.AddCommand(
@@ -104,4 +105,12 @@ func newBinlogInjectCmd() *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+func binlogCommandList(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return cmd.Help()
+	}
+	taskName := common.GetTaskNameFromArgOrFile(cmd.Flags().Arg(0))
+	return sendHandleErrorRequest(cmd, pb.ErrorOp_List, taskName, nil)
 }

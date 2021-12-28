@@ -16,9 +16,11 @@ package operator
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -36,14 +38,16 @@ type Operator struct {
 	op            pb.ErrorOp
 	isAllInjected bool                       // is all injected, used by inject
 	events        []*replication.BinlogEvent // startLocation -> events
+	originReq     pb.HandleWorkerErrorRequest
 }
 
 // newOperator creates a new operator with a random UUID.
-func newOperator(op pb.ErrorOp, events []*replication.BinlogEvent) *Operator {
+func newOperator(op pb.ErrorOp, events []*replication.BinlogEvent, originReq pb.HandleWorkerErrorRequest) *Operator {
 	return &Operator{
-		uuid:   uuid.New().String(),
-		op:     op,
-		events: events,
+		uuid:      uuid.New().String(),
+		op:        op,
+		events:    events,
+		originReq: originReq,
 	}
 }
 
@@ -54,14 +58,15 @@ func (o *Operator) String() string {
 		e.Dump(buf)
 		events = append(events, buf.String())
 	}
-	return fmt.Sprintf("uuid: %s, op: %s, events: %s", o.uuid, o.op, strings.Join(events, "\n"))
+	return fmt.Sprintf("uuid: %s, op: %s, events: %s, originReq: %v", o.uuid, o.op, strings.Join(events, "\n"), o.originReq)
 }
 
 // Holder holds error operator.
 type Holder struct {
 	mu        sync.Mutex
 	operators map[string]*Operator
-	logger    log.Logger
+
+	logger log.Logger
 }
 
 // NewHolder creates a new Holder.
@@ -73,9 +78,12 @@ func NewHolder(pLogger *log.Logger) *Holder {
 }
 
 // Set sets an Operator.
-func (h *Holder) Set(pos string, op pb.ErrorOp, events []*replication.BinlogEvent) error {
+func (h *Holder) Set(req *pb.HandleWorkerErrorRequest, events []*replication.BinlogEvent) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	op := req.Op
+	pos := req.BinlogPos
 
 	if op == pb.ErrorOp_Revert {
 		if _, ok := h.operators[pos]; !ok {
@@ -85,7 +93,7 @@ func (h *Holder) Set(pos string, op pb.ErrorOp, events []*replication.BinlogEven
 		return nil
 	}
 
-	oper := newOperator(op, events)
+	oper := newOperator(op, events, *req)
 	pre, ok := h.operators[pos]
 	if ok {
 		h.logger.Warn("overwrite operator", zap.String("position", pos), zap.Stringer("old operator", pre))
@@ -93,6 +101,35 @@ func (h *Holder) Set(pos string, op pb.ErrorOp, events []*replication.BinlogEven
 	h.operators[pos] = oper
 	h.logger.Info("set a new operator", zap.String("position", pos), zap.Stringer("new operator", oper))
 	return nil
+}
+
+// GetBehindCommands gets behind commands.
+func (h *Holder) GetBehindCommands(pos string) []pb.HandleWorkerErrorRequest {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	current := mysql.Position{}
+	fmt.Sscanf(strings.ReplaceAll(pos[1:len(pos)-1], ",", ""), "%s %d", &current.Name, &current.Pos)
+
+	// find behind position
+	var behindPositions []mysql.Position
+	for key := range h.operators {
+		p := mysql.Position{}
+		fmt.Sscanf(strings.ReplaceAll(key[1:len(key)-1], ",", ""), "%s %d", &p.Name, &p.Pos)
+		if current.Compare(p) <= 0 {
+			behindPositions = append(behindPositions, p)
+		}
+	}
+	sort.Slice(behindPositions, func(i, j int) bool {
+		return behindPositions[i].Compare(behindPositions[j]) < 0
+	})
+
+	res := make([]pb.HandleWorkerErrorRequest, 0, len(behindPositions))
+	for _, behindPosition := range behindPositions {
+		res = append(res, h.operators[behindPosition.String()].originReq)
+	}
+
+	return res
 }
 
 func (h *Holder) SetHasAllInjected(startLocation binlog.Location) {

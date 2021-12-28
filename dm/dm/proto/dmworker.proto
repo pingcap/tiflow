@@ -368,6 +368,7 @@ enum ErrorOp {
     Replace = 2; // replace the error event with a specified SQL
     Revert = 3; // remove the error operator
     Inject = 4; // inject a specified SQL
+    List = 5; // show handle error commands
 }
 
 message HandleWorkerErrorRequest {

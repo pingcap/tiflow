@@ -77,6 +77,10 @@ func (s *testSyncerSuite) TestHandleError(c *C) {
 				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Skip, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{}},
 				errMsg: "",
 			},
+			{
+				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_List, Task: task, BinlogPos: "mysql-bin.000001:2344", Sqls: []string{}},
+				errMsg: "",
+			},
 		}
 	)
 	mockDB := conn.InitMockDB(c)
@@ -85,7 +89,10 @@ func (s *testSyncerSuite) TestHandleError(c *C) {
 	c.Assert(err, IsNil)
 
 	for _, cs := range cases {
-		err := syncer.HandleError(ctx, &cs.req)
+		commandsJSON, err := syncer.HandleError(ctx, &cs.req)
+		if cs.req.Op == pb.ErrorOp_List {
+			c.Assert(commandsJSON, Equals, "[{\"op\":1,\"task\":\"test\",\"binlogPos\":\"(mysql-bin.000001, 2345)\"}]")
+		}
 		if len(cs.errMsg) == 0 {
 			c.Assert(err, IsNil)
 		} else {
