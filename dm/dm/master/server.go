@@ -427,12 +427,17 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	}
 
 	resp := &pb.StartTaskResponse{}
-	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
 		return resp, nil
 	}
+	msg, err = checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	if err != nil {
+		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
+	}
+
 	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.JSON()), zap.String("request", "StartTask"))
 
 	sourceRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs))
@@ -1434,7 +1439,7 @@ func (s *Server) OperateLeader(ctx context.Context, req *pb.OperateLeaderRequest
 	}, nil
 }
 
-func (s *Server) generateSubTask(ctx context.Context, task string, errCnt, warnCnt int64) (*config.TaskConfig, []*config.SubTaskConfig, error) {
+func (s *Server) generateSubTask(ctx context.Context, task string) (*config.TaskConfig, []*config.SubTaskConfig, error) {
 	cfg := config.NewTaskConfig()
 	err := cfg.Decode(task)
 	if err != nil {
@@ -1449,11 +1454,6 @@ func (s *Server) generateSubTask(ctx context.Context, task string, errCnt, warnC
 	sourceCfgs := s.getSourceConfigs(cfg.MySQLInstances)
 
 	stCfgs, err := config.TaskConfigToSubTaskConfigs(cfg, sourceCfgs)
-	if err != nil {
-		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
-	}
-
-	err = checker.CheckSyncConfigFunc(ctx, stCfgs, errCnt, warnCnt)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}

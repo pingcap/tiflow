@@ -26,7 +26,7 @@ var (
 	ErrorMsgHeader = "fail to check synchronization configuration with type"
 
 	// CheckSyncConfigFunc holds the CheckSyncConfig function.
-	CheckSyncConfigFunc func(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) error
+	CheckSyncConfigFunc func(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error)
 )
 
 func init() {
@@ -34,9 +34,9 @@ func init() {
 }
 
 // CheckSyncConfig checks synchronization configuration.
-func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) error {
+func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error) {
 	if len(cfgs) == 0 {
-		return nil
+		return "", nil
 	}
 
 	// all `IgnoreCheckingItems` and `Mode` of sub-task are same, so we take first one
@@ -53,13 +53,13 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 	}
 	checkingItems := config.FilterCheckingItems(ignoreCheckingItems)
 	if len(checkingItems) == 0 {
-		return nil
+		return "", nil
 	}
 
 	c := NewChecker(cfgs, checkingItems, errCnt, warnCnt)
 
 	if err := c.Init(ctx); err != nil {
-		return terror.Annotate(err, "fail to initial checker")
+		return "", terror.Annotate(err, "fail to initial checker")
 	}
 	defer c.Close()
 
@@ -69,9 +69,9 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 		r := <-pr
 		// we only want first error
 		if len(r.Errors) > 0 {
-			return terror.ErrTaskCheckSyncConfigError.Generate(ErrorMsgHeader, r.Errors[0].Message, string(r.Detail))
+			return "", terror.ErrTaskCheckSyncConfigError.Generate(ErrorMsgHeader, r.Errors[0].Message, string(r.Detail))
 		}
 	}
 
-	return nil
+	return "", nil
 }
