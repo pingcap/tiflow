@@ -61,7 +61,7 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check dump privileges of source DB",
-		State: StateSuccess,
+		State: StateFailure,
 		Extra: fmt.Sprintf("address of db instance - %s:%d", pc.dbinfo.Host, pc.dbinfo.Port),
 	}
 
@@ -86,7 +86,8 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 	err2 := verifyPrivileges(result, grants, lackPriv)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
-		result.State = StateFailure
+	} else {
+		result.State = StateSuccess
 	}
 	return result
 }
@@ -306,7 +307,7 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 			if len(tableMap) != 0 {
 				buffer.WriteString("}")
 			}
-			buffer.WriteString(";")
+			buffer.WriteString("; ")
 		}
 		privileges := buffer.String()
 		result.Instruction = "You need grant related privileges."

@@ -48,14 +48,13 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 			dumpState: StateFailure,
 		},
 		{
-			grants:    []string{"GRANT REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'user'@'%'"}, // lack SELECT privilege
+			grants:    []string{"GRANT RELOAD ON *.* TO 'user'@'%'"}, // lack SELECT privilege
 			dumpState: StateFailure,
-			errMatch:  "lack of Select privilege: {`INFORMATION_SCHEMA`};",
+			errMatch:  "lack of Select privilege: {`INFORMATION_SCHEMA`}; ",
 		},
 		{
 			grants: []string{ // lack optional privilege
-				"GRANT REPLICATION SLAVE ON *.* TO 'user'@'%'",
-				"GRANT REPLICATION CLIENT ON *.* TO 'user'@'%'",
+				"GRANT RELOAD ON *.* TO 'user'@'%'",
 				"GRANT EXECUTE ON FUNCTION db1.anomaly_score TO 'user1'@'domain-or-ip-address1'",
 			},
 			dumpState: StateFailure,
@@ -64,11 +63,11 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 			},
 			// `db1`.`anomaly_score`; `INFORMATION_SCHEMA`
 			// can't guarantee the order
-			errMatch: "lack of Select privilege: {.*; .*};",
+			errMatch: "lack of Select privilege: {.*; .*}; ",
 		},
 		{
 			grants: []string{ // have privileges
-				"GRANT SELECT ON *.* TO 'user'@'%'",
+				"GRANT RELOAD, SELECT ON *.* TO 'user'@'%'",
 			},
 			dumpState: StateSuccess,
 		},
@@ -107,7 +106,7 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA, INVOKE SAGEMAKER, INVOKE COMPREHEND ON *.* TO 'root'@'%' WITH GRANT OPTION",
 			},
 			dumpState: StateFailure,
-			errMatch:  "lack of Select privilege: {`INFORMATION_SCHEMA`};",
+			errMatch:  "lack of .* privilege.*; lack of .* privilege.*; ",
 		},
 		{
 			grants: []string{ // test `LOAD FROM S3, SELECT INTO S3` not at end
@@ -123,27 +122,29 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 		},
 		{
 			grants: []string{ // lack db/table level privilege
+				"GRANT ALL PRIVILEGES ON `INFORMATION_SCHEMA`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 				"GRANT ALL PRIVILEGES ON `medz`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 			},
 			dumpState: StateFailure,
 			checkTables: map[string][]string{
 				"medz": {"medz"},
 			},
-			errMatch: "lack of Select privilege: {`INFORMATION_SCHEMA`};",
+			errMatch: "lack of RELOAD privilege; ",
 		},
 		{
 			grants: []string{ // privilege on db/table level is not enough to execute SHOW MASTER STATUS
 				"GRANT ALL PRIVILEGES ON `medz`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 				"GRANT ALL PRIVILEGES ON `INFORMATION_SCHEMA`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 			},
-			dumpState: StateSuccess,
+			dumpState: StateFailure,
 			checkTables: map[string][]string{
 				"medz": {"medz"},
 			},
+			errMatch: "lack of RELOAD privilege; ",
 		},
 		{
 			grants: []string{ // privilege on column level is not enough to execute SHOW CREATE TABLE
-				"GRANT REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'user'@'%'",
+				"GRANT RELOAD ON *.* TO 'user'@'%'",
 				"GRANT SELECT (c) ON `lance`.`t` TO 'user'@'%'",
 				"GRANT SELECT ON `INFORMATION_SCHEMA`.* TO 'user'@'%'",
 			},
@@ -151,12 +152,12 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 			checkTables: map[string][]string{
 				"lance": {"t"},
 			},
-			errMatch: "lack of Select privilege: {`lance`.`t`};",
+			errMatch: "lack of Select privilege: {`lance`.`t`}; ",
 		},
 		{
 			grants: []string{
-				"GRANT RELOAD, REPLICATION CLIENT, REPLICATION SLAVE, PROCESS ON *.* TO `u1`@`localhost`",
-				"GRANT SELECT, INSERT, UPDATE, DELETE, LOCK TABLES ON `db1`.* TO `u1`@`localhost`",
+				"GRANT RELOAD ON *.* TO `u1`@`localhost`",
+				"GRANT SELECT ON `db1`.* TO `u1`@`localhost`",
 				"GRANT SELECT ON `INFORMATION_SCHEMA`.* TO `u1`@`localhost`",
 				"GRANT `r1`@`%`,`r2`@`%` TO `u1`@`localhost`",
 			},
@@ -176,6 +177,7 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 	}
 	dumpPrivileges := map[mysql.PrivilegeType]struct{}{
 		mysql.SelectPriv: {},
+		mysql.ReloadPriv: {},
 	}
 	for _, cs := range cases {
 		result := &Result{
@@ -212,17 +214,17 @@ func (t *testCheckSuite) TestVerifyReplicationPrivileges(c *tc.C) {
 		{
 			grants:           []string{"GRANT SELECT ON *.* TO 'user'@'%'"}, // lack necessary privilege
 			replicationState: StateFailure,
-			errMatch:         "lack of .* privilege;lack of .* privilege;",
+			errMatch:         "lack of .* privilege; lack of .* privilege; ",
 		},
 		{
 			grants:           []string{"GRANT REPLICATION SLAVE ON *.* TO 'user'@'%'"}, // lack REPLICATION CLIENT privilege
 			replicationState: StateFailure,
-			errMatch:         "lack of REPLICATION CLIENT privilege;",
+			errMatch:         "lack of REPLICATION CLIENT privilege; ",
 		},
 		{
 			grants:           []string{"GRANT REPLICATION CLIENT ON *.* TO 'user'@'%'"}, // lack REPLICATION SLAVE privilege
 			replicationState: StateFailure,
-			errMatch:         "lack of REPLICATION SLAVE privilege;",
+			errMatch:         "lack of REPLICATION SLAVE privilege; ",
 		},
 		{
 			grants: []string{ // have privileges
@@ -265,7 +267,7 @@ func (t *testCheckSuite) TestVerifyReplicationPrivileges(c *tc.C) {
 				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA, INVOKE SAGEMAKER, INVOKE COMPREHEND ON *.* TO 'root'@'%' WITH GRANT OPTION",
 			},
 			replicationState: StateFailure,
-			errMatch:         "lack of .* privilege;lack of .* privilege;",
+			errMatch:         "lack of .* privilege; lack of .* privilege; ",
 		},
 		{
 			grants: []string{ // test `LOAD FROM S3, SELECT INTO S3` not at end
