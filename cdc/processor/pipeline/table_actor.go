@@ -141,20 +141,16 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 
 		switch msgs[i].Tp {
 		case message.TypeBarrier:
-			if _, err := t.sortNode.TryHandleDataMessage(ctx, pipeline.BarrierMessage(msgs[i].BarrierTs)); err != nil {
-				t.stop(err)
-			}
-			err := t.actorMessageHandler.HandleActorMessage(ctx, msgs[i])
-			if err != nil {
+			if err := t.pullerNode.Receive(ctx, pipeline.BarrierMessage(msgs[i].BarrierTs)); err != nil {
 				t.stop(err)
 			}
 		case message.TypeTick:
-			_, err := t.sinkNode.HandleMessage(ctx, *msgs[i])
+			_, err := t.sinkNode.HandleMessage(ctx, pipeline.TickMessage())
 			if err != nil {
 				t.stop(err)
 			}
 		case message.TypeStop:
-			go t.actorMessageHandler.HandleActorMessage(ctx, msgs[i])
+			go t.sinkNode.HandleMessage(ctx, pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}))
 		case message.TypeStopPipeline:
 			t.stop(nil)
 			return false
