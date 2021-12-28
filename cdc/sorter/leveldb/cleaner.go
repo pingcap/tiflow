@@ -103,13 +103,7 @@ TASKS:
 
 		start := encoding.EncodeTsKey(task.UID, task.TableID, 0)
 		limit := encoding.EncodeTsKey(task.UID, task.TableID+1, 0)
-		snap, err := clean.db.Snapshot()
-		if err != nil {
-			log.Panic("get snapshot failed",
-				zap.Error(err), zap.Uint64("id", uint64(clean.id)))
-			return false
-		}
-		iter := snap.Iterator(start, limit)
+		iter := clean.db.Iterator(start, limit)
 
 		// Force writes the first batch if the task is rescheduled (rate limited).
 		force := task.CleanupRatelimited
@@ -135,23 +129,13 @@ TASKS:
 						log.Panic("db error",
 							zap.Error(err), zap.Uint64("id", uint64(clean.id)))
 					}
-					err = snap.Release()
-					if err != nil {
-						log.Panic("db error",
-							zap.Error(err), zap.Uint64("id", uint64(clean.id)))
-					}
 					break TASKS
 				}
 				force = false
 			}
 		}
 		// Release iterator and snapshot in time.
-		err = iter.Release()
-		if err != nil {
-			log.Panic("db error",
-				zap.Error(err), zap.Uint64("id", uint64(clean.id)))
-		}
-		err = snap.Release()
+		err := iter.Release()
 		if err != nil {
 			log.Panic("db error",
 				zap.Error(err), zap.Uint64("id", uint64(clean.id)))
