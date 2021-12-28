@@ -275,46 +275,46 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 		}
 	}
 
-	if len(lackPriv) != 0 {
-		var buffer bytes.Buffer
-		// generate error message, for example
-		// lack of privilege1: {tableID1, tableID2, ...};lack of privilege2...
-		for p, tableMap := range lackPriv {
-			buffer.WriteString("lack of ")
-			buffer.WriteString(mysql.Priv2Str[p])
-			buffer.WriteString(" privilege")
-			if len(tableMap) != 0 {
-				buffer.WriteString(": {")
-			}
-			i := 0
-			for schema, tables := range tableMap {
-				if len(tables) == 0 {
-					buffer.WriteString(dbutil.ColumnName(schema))
-				}
-				j := 0
-				for table := range tables {
-					buffer.WriteString(dbutil.TableName(schema, table))
-					j++
-					if j != len(tables) {
-						buffer.WriteString(", ")
-					}
-				}
-				i++
-				if i != len(tableMap) {
-					buffer.WriteString("; ")
-				}
-			}
-			if len(tableMap) != 0 {
-				buffer.WriteString("}")
-			}
-			buffer.WriteString("; ")
-		}
-		privileges := buffer.String()
-		result.Instruction = "You need grant related privileges."
-		log.L().Info("lack privilege", zap.String("err msg", privileges))
-		return NewError(privileges)
+	if len(lackPriv) == 0 {
+		return nil
 	}
-	return nil
+	var buffer bytes.Buffer
+	// generate error message, for example
+	// lack of privilege1: {tableID1, tableID2, ...};lack of privilege2...
+	for p, tableMap := range lackPriv {
+		buffer.WriteString("lack of ")
+		buffer.WriteString(mysql.Priv2Str[p])
+		buffer.WriteString(" privilege")
+		if len(tableMap) != 0 {
+			buffer.WriteString(": {")
+		}
+		i := 0
+		for schema, tables := range tableMap {
+			if len(tables) == 0 {
+				buffer.WriteString(dbutil.ColumnName(schema))
+			}
+			j := 0
+			for table := range tables {
+				buffer.WriteString(dbutil.TableName(schema, table))
+				j++
+				if j != len(tables) {
+					buffer.WriteString(", ")
+				}
+			}
+			i++
+			if i != len(tableMap) {
+				buffer.WriteString("; ")
+			}
+		}
+		if len(tableMap) != 0 {
+			buffer.WriteString("}")
+		}
+		buffer.WriteString("; ")
+	}
+	privileges := buffer.String()
+	result.Instruction = "You need grant related privileges."
+	log.L().Info("lack privilege", zap.String("err msg", privileges))
+	return NewError(privileges)
 }
 
 // checkTables map schema => {table1, table2, ...}.
