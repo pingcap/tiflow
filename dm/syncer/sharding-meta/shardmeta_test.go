@@ -20,7 +20,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 )
 
 var _ = check.Suite(&testShardMetaSuite{})
