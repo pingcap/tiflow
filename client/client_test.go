@@ -58,7 +58,7 @@ func TestClientManager(t *testing.T) {
 	execServer := executor.NewServer(executorCfg, test.NewContext())
 	execCtx, execCancel := context.WithCancel(ctx)
 	defer execCancel()
-	err = execServer.Start(execCtx)
+	err = execServer.Run(execCtx)
 	require.Nil(t, err)
 
 	err = manager.AddExecutor("executor", "127.0.0.1:1993")

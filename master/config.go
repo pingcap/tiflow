@@ -207,6 +207,18 @@ func (c *Config) configFromFile(path string) error {
 	if err != nil {
 		return errors.Wrap(errors.ErrMasterDecodeConfigFile, err)
 	}
+	return checkUndecodedItems(metaData)
+}
+
+func (c *Config) configFromString(data string) error {
+	metaData, err := toml.Decode(data, c)
+	if err != nil {
+		return errors.Wrap(errors.ErrMasterDecodeConfigFile, err)
+	}
+	return checkUndecodedItems(metaData)
+}
+
+func checkUndecodedItems(metaData toml.MetaData) error {
 	undecoded := metaData.Undecoded()
 	if len(undecoded) > 0 {
 		var undecodedItems []string

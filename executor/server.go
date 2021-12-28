@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"net"
 	"strings"
 	"time"
 
@@ -15,11 +14,14 @@ import (
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/tcpserver"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -28,17 +30,15 @@ type Server struct {
 	cfg     *Config
 	testCtx *test.Context
 
-	srv  *grpc.Server
-	cli  *client.MasterClient
-	sch  *runtime.Runtime
-	info *model.ExecutorInfo
+	tcpServer tcpserver.TCPServer
+	grpcSrv   *grpc.Server
+	cli       *client.MasterClient
+	sch       *runtime.Runtime
+	info      *model.ExecutorInfo
 
 	lastHearbeatTime time.Time
 
 	mockSrv mock.GrpcServer
-
-	cancel  func()
-	closeCh chan bool
 
 	metastore metadata.MetaKV
 }
@@ -47,7 +47,6 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 	s := Server{
 		cfg:     cfg,
 		testCtx: ctx,
-		closeCh: make(chan bool, 1),
 	}
 	return &s
 }
@@ -94,8 +93,15 @@ func (s *Server) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksR
 }
 
 func (s *Server) Stop() {
-	if s.srv != nil {
-		s.srv.Stop()
+	if s.grpcSrv != nil {
+		s.grpcSrv.Stop()
+	}
+
+	if s.tcpServer != nil {
+		err := s.tcpServer.Close()
+		if err != nil {
+			log.L().Error("close tcp server", zap.Error(err))
+		}
 	}
 
 	if s.mockSrv != nil {
@@ -110,7 +116,6 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 	s.sch = runtime.NewRuntime(s.testCtx)
 	go func() {
-		defer s.cancel()
 		s.sch.Run(ctx, 10)
 	}()
 
@@ -119,82 +124,71 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 		return err
 	}
 	go func() {
-		defer s.cancel()
 		err := s.keepHeartbeat(ctx)
 		log.L().Info("heartbeat quits", zap.Error(err))
 	}()
 	return nil
 }
 
-func (s *Server) Start(ctx context.Context) error {
-	ctx1, cancel := context.WithCancel(ctx)
-	s.cancel = cancel
+func (s *Server) Run(ctx context.Context) error {
 	if test.GlobalTestFlag {
-		return s.startForTest(ctx1)
+		return s.startForTest(ctx)
 	}
-	// Start grpc server
-	rootLis, err := net.Listen("tcp", s.cfg.WorkerAddr)
+
+	wg, ctx := errgroup.WithContext(ctx)
+
+	err := s.startTCPService(ctx, wg)
 	if err != nil {
 		return err
 	}
 
-	log.L().Logger.Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
-
-	s.srv = grpc.NewServer()
-	pb.RegisterExecutorServer(s.srv, s)
-
-	exitCh := make(chan struct{}, 1)
-
-	go func() {
-		defer s.close()
-		err1 := s.srv.Serve(rootLis)
-		if err1 != nil {
-			log.L().Logger.Error("start grpc server failed", zap.Error(err))
-		}
-		exitCh <- struct{}{}
-	}()
-
 	s.sch = runtime.NewRuntime(nil)
-	go func() {
-		defer s.close()
-		s.sch.Run(ctx1, 10)
-	}()
+	wg.Go(func() error {
+		s.sch.Run(ctx, 10)
+		return nil
+	})
 
-	err = s.selfRegister(ctx1)
+	err = s.selfRegister(ctx)
 	if err != nil {
 		return err
 	}
 
 	// connects to metastore and maintains a etcd session
-	go func() {
-		err := s.keepalive(ctx)
-		if err != nil {
-			log.L().Error("master keepalive failed", zap.Error(err))
-			s.close()
-		}
-	}()
+	wg.Go(func() error {
+		return s.keepalive(ctx)
+	})
 
-	// Start Heartbeat
-	go func() {
-		defer s.close()
-		err := s.keepHeartbeat(ctx1)
-		log.L().Info("heartbeat quits", zap.Error(err))
-	}()
-	return nil
+	wg.Go(func() error {
+		return s.keepHeartbeat(ctx)
+	})
+
+	return wg.Wait()
 }
 
-// close the executor server, this function can be executed reentrantly
-func (s *Server) close() {
-	s.cancel()
-	select {
-	case s.closeCh <- true:
-	default:
+// startTCPService starts grpc server and http server
+func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error {
+	tcpServer, err := tcpserver.NewTCPServer(s.cfg.WorkerAddr, &security.Credential{})
+	if err != nil {
+		return err
 	}
-}
+	s.tcpServer = tcpServer
+	s.grpcSrv = grpc.NewServer()
+	pb.RegisterExecutorServer(s.grpcSrv, s)
+	log.L().Logger.Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
 
-// CloseCh returns a bool chan to notify server closed event
-func (s *Server) CloseCh() chan bool {
-	return s.closeCh
+	wg.Go(func() error {
+		return s.tcpServer.Run(ctx)
+	})
+
+	wg.Go(func() error {
+		return s.grpcSrv.Serve(s.tcpServer.GrpcListener())
+	})
+
+	wg.Go(func() error {
+		return debugHandler(s.tcpServer.HTTP1Listener())
+	})
+
+	return nil
 }
 
 func (s *Server) keepalive(ctx context.Context) error {

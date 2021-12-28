@@ -53,7 +53,7 @@ func (c *MiniCluster) CreateExecutor(cfg *executor.Config) *test.Context {
 func (c *MiniCluster) AsyncStartExector() error {
 	ctx := context.Background()
 	execCtx, execCancel := context.WithCancel(ctx)
-	err := c.exec.Start(execCtx)
+	err := c.exec.Run(execCtx)
 	c.execCancel = execCancel
 	return err
 }

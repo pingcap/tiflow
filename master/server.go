@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"reflect"
 	"runtime"
 	"strings"
@@ -238,6 +239,15 @@ func (s *Server) Stop() {
 	if s.mockGrpcServer != nil {
 		s.mockGrpcServer.Stop()
 	}
+	if s.etcdClient != nil {
+		s.etcdClient.Close()
+	}
+	if s.leaderClient != nil {
+		s.leaderClient.Close()
+	}
+	if s.etcd != nil {
+		s.etcd.Close()
+	}
 }
 
 // Run the master-server.
@@ -291,14 +301,12 @@ func (s *Server) startGrpcSrv() (err error) {
 		// TODO: register msg server
 	}
 
-	// TODO: implement http api/
-	//apiHandler, err := getHTTPAPIHandler(ctx, s.cfg.AdvertiseAddr, tls2.ToGRPCDialOption())
-	//if err != nil {
-	//	return
-	//}
+	httpHandlers := map[string]http.Handler{
+		"/debug/": getDebugHandler(),
+	}
 
 	// generate grpcServer
-	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, nil, etcdStartTimeout)
+	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, httpHandlers, etcdStartTimeout)
 	if err != nil {
 		return
 	}
