@@ -36,6 +36,10 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
+const (
+	maxQueryWorkerRetryNum = 10
+)
+
 // Scheduler schedules tasks for DM-worker instances, including:
 // - register/unregister DM-worker instances.
 // - observe the online/offline status of DM-worker instances.
@@ -742,29 +746,29 @@ func (s *Scheduler) batchOperateTaskOnWorker(
 	}
 	// wait all tasks are in expected stage before actually starting scheduling
 WaitLoop:
-	for maxRetryNum := 10; maxRetryNum > 0; maxRetryNum-- {
+	for retry := 0; retry < maxQueryWorkerRetryNum; retry++ {
 		resp, err := worker.queryStatus(ctx)
 		if err != nil {
 			return terror.Annotatef(err, "failed to query worker: %s status", worker.baseInfo.Name)
 		}
 
 		failpoint.Inject("batchOperateTaskOnWorkerMustRetry", func(v failpoint.Value) {
-			if maxRetryNum != v.(int) {
+			if retry < v.(int) {
 				resp.QueryStatus.SubTaskStatus[0].Stage = pb.Stage_InvalidStage
-				log.L().Info("batchOperateTaskOnWorkerMustRetry failpoint triggered", zap.Int("maxRetryNum", maxRetryNum))
+				log.L().Info("batchOperateTaskOnWorkerMustRetry failpoint triggered", zap.Int("retry", retry))
 			} else {
-				log.L().Info("batchOperateTaskOnWorkerMustRetry passed", zap.Int("maxRetryNum", maxRetryNum))
+				log.L().Info("batchOperateTaskOnWorkerMustRetry passed", zap.Int("retry", retry))
 			}
 		})
 
 		for _, status := range resp.QueryStatus.GetSubTaskStatus() {
 			if status.Stage != stage {
 				// NOTE: the defaultRPCTimeout is 10m, use 1s * retry times to increase the waiting time
-				sleepTime := time.Second * time.Duration(10-maxRetryNum)
+				sleepTime := time.Second * time.Duration(maxQueryWorkerRetryNum-retry)
 				s.logger.Info(
 					"waiting task",
 					zap.String("task", status.Name),
-					zap.Int("retry times", 10-maxRetryNum),
+					zap.Int("retry times", retry),
 					zap.Duration("sleep time", sleepTime),
 					zap.String("want stage", stage.String()),
 					zap.String("current stage", status.Stage.String()),

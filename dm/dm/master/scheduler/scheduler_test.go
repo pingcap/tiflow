@@ -1242,7 +1242,7 @@ func (t *testScheduler) TestTransferSource(c *C) {
 
 	// now we can transfer successfully after 2 times retry
 	s.expectSubTaskStages.Store("test", map[string]ha.Stage{sourceID1: {Expect: pb.Stage_Running}})
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/batchOperateTaskOnWorkerMustRetry", `return(8)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/batchOperateTaskOnWorkerMustRetry", `return(2)`), IsNil)
 	c.Assert(s.TransferSource(ctx, sourceID1, workerName1), IsNil)
 	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/batchOperateTaskOnWorkerMustRetry"), IsNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker1)
