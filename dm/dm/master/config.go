@@ -128,7 +128,7 @@ type Config struct {
 	AutoCompactionMode      string `toml:"auto-compaction-mode" json:"auto-compaction-mode"`
 	AutoCompactionRetention string `toml:"auto-compaction-retention" json:"auto-compaction-retention"`
 	QuotaBackendBytes       int64  `toml:"quota-backend-bytes" json:"quota-backend-bytes"`
-	OpenAPI                 bool   `toml:"openapi"`
+	OpenAPI                 bool   `toml:"openapi" json:"openapi"`
 
 	// directory path used to store source config files when upgrading from v1.0.x.
 	// if this path set, DM-master leader will try to upgrade from v1.0.x to the current version.
@@ -315,9 +315,10 @@ func (c *Config) adjust() error {
 	}
 
 	if c.ExperimentalFeatures.OpenAPI {
+		c.OpenAPI = true
+		c.ExperimentalFeatures.OpenAPI = false
 		log.L().Warn("openapi is a GA feature and removed from experimental features, so this configuration may have no affect in feature release, please set openapi=true in dm-master config file")
 	}
-
 	return err
 }
 

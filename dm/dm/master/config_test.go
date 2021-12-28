@@ -300,3 +300,19 @@ func (t *testConfigSuite) TestAdjustAddr(c *check.C) {
 	c.Assert(cfg.adjust(), check.IsNil)
 	c.Assert(cfg.AdvertiseAddr, check.Equals, cfg.MasterAddr)
 }
+
+func (t *testConfigSuite) TestAdjustOpenAPI(c *check.C) {
+	cfg := NewConfig()
+	c.Assert(cfg.configFromFile(defaultConfigFile), check.IsNil)
+	c.Assert(cfg.adjust(), check.IsNil)
+
+	// test default value
+	c.Assert(cfg.OpenAPI, check.Equals, false)
+	c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
+
+	//  adjust openapi from experimental-features
+	cfg.ExperimentalFeatures.OpenAPI = true
+	c.Assert(cfg.adjust(), check.IsNil)
+	c.Assert(cfg.OpenAPI, check.Equals, true)
+	c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
+}
