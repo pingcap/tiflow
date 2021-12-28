@@ -187,6 +187,39 @@ func (s *kafkaSuite) TestFillBySinkURI(c *check.C) {
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid partition num.*")
 }
 
+func (s *kafkaSuite) TestCompleteOpts(c *check.C) {
+	defer testleak.AfterTest(c)
+
+	uri := "kafka://127.0.0.1:9092/abc?enable-tidb-extension=true&protocol=canal-json"
+	sinkURI, err := url.Parse(uri)
+	c.Assert(err, check.IsNil)
+
+	producerConfig := NewConfig()
+	saramaConfig, err := newSaramaConfigImpl(context.Background(), producerConfig)
+	c.Assert(err, check.IsNil)
+
+	opts := make(map[string]string)
+	err = completeOpts(sinkURI, opts, saramaConfig, config.GetDefaultReplicaConfig())
+	c.Assert(err, check.IsNil)
+	c.Assert(opts["enable-tidb-extension"], check.Equals, "true")
+
+	// Illegal enable-tidb-extension.
+	uri = "kafka://127.0.0.1:9092/abc?enable-tidb-extension=a&protocol=canal-json"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = completeOpts(sinkURI, opts, saramaConfig, config.GetDefaultReplicaConfig())
+	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
+
+	// Use enable-tidb-extension on other protocols.
+	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=1&enable-tidb-extension=true"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = completeOpts(sinkURI, opts, saramaConfig, config.GetDefaultReplicaConfig())
+	c.Assert(errors.Cause(err), check.ErrorMatches, ".*enable-tidb-extension only support canal-json protocol.*")
+}
+
 func (s *kafkaSuite) TestInitializeConfigurations(c *check.C) {
 	defer testleak.AfterTest(c)
 
@@ -202,6 +235,7 @@ func (s *kafkaSuite) TestInitializeConfigurations(c *check.C) {
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
 
+	// topic not found
 	opts := make(map[string]string)
 	producerConfig, saramaConfig, err := InitializeConfigurations(context.Background(), topic, sinkURI, config.GetDefaultReplicaConfig(), opts)
 	c.Assert(err, check.IsNil)
@@ -230,30 +264,6 @@ func (s *kafkaSuite) TestInitializeConfigurations(c *check.C) {
 
 	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(producerConfig.MaxMessageBytes))
 	c.Assert(opts["max-batch-size"], check.Equals, "5")
-
-	// Test enable-tidb-extension.
-	uri = "kafka://127.0.0.1:9092/abc?enable-tidb-extension=true&protocol=canal-json"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	opts = make(map[string]string)
-	producerConfig, saramaConfig, err = InitializeConfigurations(context.Background(), topic, sinkURI, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(err, check.IsNil)
-
-	c.Assert(opts["enable-tidb-extension"], check.Equals, "true")
-
-	// Illegal enable-tidb-extension.
-	uri = "kafka://127.0.0.1:9092/abc?enable-tidb-extension=a&protocol=canal-json"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	producerConfig, saramaConfig, err = InitializeConfigurations(context.Background(), topic, sinkURI, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
-
-	// Use enable-tidb-extension on other protocols.
-	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=1&enable-tidb-extension=true"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	producerConfig, saramaConfig, err = InitializeConfigurations(context.Background(), topic, sinkURI, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*enable-tidb-extension only support canal-json protocol.*")
 
 }
 
