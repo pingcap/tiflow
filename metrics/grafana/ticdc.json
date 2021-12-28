@@ -1392,30 +1392,19 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "exemplar": true,
-              "expr": "sum(rate(ticdc_etcd_worker_etcd_txn_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le)",
-              "format": "heatmap",
-              "instant": false,
-=======
               "expr": "sum(rate(ticdc_etcd_request_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (capture, type)",
               "format": "time_series",
->>>>>>> 20e3f139f (metrics(ticdc): add resolved ts and add changefeed to dataflow (#4038))
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-{{type}}",
               "refId": "A"
             }
           ],
-<<<<<<< HEAD
-          "title": "EtcdWorker txn size",
-=======
           "thresholds": [],
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
           "title": "PD etcd requests/s",
->>>>>>> 20e3f139f (metrics(ticdc): add resolved ts and add changefeed to dataflow (#4038))
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -2188,11 +2177,7 @@
               "refId": "A"
             },
             {
-<<<<<<< HEAD
-              "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"}) * 1000",
-=======
               "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (changefeed)",
->>>>>>> 20e3f139f (metrics(ticdc): add resolved ts and add changefeed to dataflow (#4038))
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -4271,30 +4256,6 @@
           "options": {
             "dataLinks": []
           },
-<<<<<<< HEAD
-          "styles": [
-            {
-              "alias": "Time",
-              "dateFormat": "YYYY-MM-DD HH:mm:ss",
-              "pattern": "Value",
-              "type": "date"
-            },
-            {
-              "alias": "",
-              "colorMode": null,
-              "colors": [
-                "rgba(245, 54, 54, 0.9)",
-                "rgba(237, 129, 40, 0.89)",
-                "rgba(50, 172, 45, 0.97)"
-              ],
-              "decimals": 2,
-              "pattern": "/.*/",
-              "thresholds": [],
-              "type": "number",
-              "unit": "short"
-            }
-          ],
-=======
           "paceLength": 10,
           "percentage": false,
           "pointradius": 2,
@@ -4304,7 +4265,6 @@
           "spaceLength": 10,
           "stack": false,
           "steppedLine": false,
->>>>>>> 20e3f139f (metrics(ticdc): add resolved ts and add changefeed to dataflow (#4038))
           "targets": [
             {
               "expr": "sum(ticdc_sink_buffer_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture)",
