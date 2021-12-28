@@ -267,18 +267,9 @@ LOOP:
 	// init metrics
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
-<<<<<<< HEAD
-=======
 	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.WithLabelValues(c.id)
 
-	// create scheduler
-	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
->>>>>>> 20e3f139f (metrics(ticdc): add resolved ts and add changefeed to dataflow (#4038))
 	c.initialized = true
 	return nil
 }
@@ -300,11 +291,7 @@ func (c *changefeed) releaseResources() {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
-<<<<<<< HEAD
-=======
-	c.scheduler.Close(ctx)
 
->>>>>>> 20e3f139f (metrics(ticdc): add resolved ts and add changefeed to dataflow (#4038))
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsGauge = nil
