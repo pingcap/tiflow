@@ -81,7 +81,7 @@ function run() {
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1 -w $WORKER1_NAME
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	# check wrong do-tables

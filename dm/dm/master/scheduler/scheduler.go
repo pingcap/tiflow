@@ -317,7 +317,7 @@ func (s *Scheduler) CloseAllWorkers() {
 	}
 }
 
-// AddSourceCfg adds the upstream source config to the cluster.
+// AddSourceCfg adds the upstream source config to the cluster, and try to bound source to worker
 // NOTE: please verify the config before call this.
 func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 	s.mu.Lock()
@@ -327,11 +327,54 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
+	err := s.startSource(cfg)
+	if err != nil {
+		return err
+	}
+
+	// try to bound it to a Free worker.
+	_, err = s.tryBoundForSource(cfg.SourceID)
+	return err
+}
+
+// AddSourceCfgWithWorker adds the upstream source config to the cluster, and try to bound source to specify worker
+// NOTE: please verify the config before call this.
+func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.started {
+		return terror.ErrSchedulerNotStarted.Generate()
+	}
+
+	// 1. check whether worker exists.
+	w, ok := s.workers[workerName]
+	if !ok {
+		return terror.ErrSchedulerWorkerNotExist.Generate(workerName)
+	}
+
+	err := s.startSource(cfg)
+	if err != nil {
+		return err
+	}
+
+	bounded, err := s.tryBoundForSourceWorker(cfg.SourceID, w)
+	if err != nil {
+		return err
+	} else if !bounded {
+		// 5. record the source as unbounded.
+		s.unbounds[cfg.SourceID] = struct{}{}
+	}
+
+	return nil
+}
+
+// startSource add the upstream source config to the cluster.
+func (s *Scheduler) startSource(cfg *config.SourceConfig) error {
 	// 1. check whether exists.
 	if _, ok := s.sourceCfgs[cfg.SourceID]; ok {
 		return terror.ErrSchedulerSourceCfgExist.Generate(cfg.SourceID)
 	}
-
 	// 2. put the config into etcd.
 	_, err := ha.PutSourceCfg(s.etcdCli, cfg)
 	if err != nil {
@@ -340,11 +383,7 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 
 	// 3. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg
-	s.unbounds[cfg.SourceID] = struct{}{}
-
-	// 4. try to bound it to a Free worker.
-	_, err = s.tryBoundForSource(cfg.SourceID)
-	return err
+	return nil
 }
 
 // UpdateSourceCfg update the upstream source config to the cluster.
@@ -2191,6 +2230,25 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// tryBoundForSourceWorker tries to bound a source to the specified worker.
+// returns (true, nil) after bounded.
+func (s *Scheduler) tryBoundForSourceWorker(source string, w *Worker) (bool, error) {
+	boundedSource := ""
+	for s, worker := range s.bounds {
+		if worker.baseInfo.Name == w.baseInfo.Name {
+			boundedSource = s
+			break
+		}
+	}
+
+	if boundedSource != "" {
+		return false, nil
+	}
+
+	err := s.boundSourceToWorker(source, w)
+	return err == nil, err
 }
 
 // boundSourceToWorker bounds the source and worker together.
