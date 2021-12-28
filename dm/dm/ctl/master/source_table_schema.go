@@ -46,7 +46,7 @@ func sourceTableSchemaList(cmd *cobra.Command, args []string) error {
 	}
 	database := args[1]
 	table := args[2]
-	return sendOperateSchemaRequest(pb.SchemaOp_GetSchema, taskName, sources, database, table, "", false, false)
+	return sendOperateSchemaRequest(pb.SchemaOp_GetSchema, taskName, sources, database, table, "", false, false, false, false)
 }
 
 func newSourceTableSchemaUpdateCmd() *cobra.Command {
@@ -77,7 +77,15 @@ func newSourceTableSchemaUpdateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return sendOperateSchemaRequest(pb.SchemaOp_SetSchema, taskName, sources, database, table, string(schemaContent), flush, sync)
+			fromSource, err := cmd.Flags().GetBool("from-source")
+			if err != nil {
+				return err
+			}
+			fromTarget, err := cmd.Flags().GetBool("from-target")
+			if err != nil {
+				return err
+			}
+			return sendOperateSchemaRequest(pb.SchemaOp_SetSchema, taskName, sources, database, table, string(schemaContent), flush, sync, fromSource, fromTarget)
 		},
 	}
 	cmd.Flags().Bool("flush", true, "flush the table info and checkpoint immediately")
@@ -102,7 +110,7 @@ func newSourceTableSchemaDeleteCmd() *cobra.Command {
 			}
 			database := args[1]
 			table := args[2]
-			return sendOperateSchemaRequest(pb.SchemaOp_RemoveSchema, taskName, sources, database, table, "", false, false)
+			return sendOperateSchemaRequest(pb.SchemaOp_RemoveSchema, taskName, sources, database, table, "", false, false, false, false)
 		},
 	}
 	return cmd
