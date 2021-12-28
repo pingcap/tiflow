@@ -26,10 +26,10 @@ type OnlineDDLChecker struct {
 	db           *sql.DB
 	onlineDDL    onlineddl.OnlinePlugin
 	bwlist       *filter.Filter
-	checkSchemas []string
+	checkSchemas map[string]struct{}
 }
 
-func NewOnlineDDLChecker(db *sql.DB, checkSchemas []string, onlineDDL onlineddl.OnlinePlugin, bwlist *filter.Filter) RealChecker {
+func NewOnlineDDLChecker(db *sql.DB, checkSchemas map[string]struct{}, onlineDDL onlineddl.OnlinePlugin, bwlist *filter.Filter) RealChecker {
 	return &OnlineDDLChecker{
 		db:           db,
 		checkSchemas: checkSchemas,
@@ -46,7 +46,7 @@ func (c *OnlineDDLChecker) Check(ctx context.Context) *Result {
 		Extra: "online ddl",
 	}
 
-	for _, schema := range c.checkSchemas {
+	for schema := range c.checkSchemas {
 		tableList, err := utils.GetTableList(ctx, c.db, schema)
 		if err != nil {
 			markCheckError(r, err)
@@ -75,5 +75,5 @@ func (c *OnlineDDLChecker) Check(ctx context.Context) *Result {
 }
 
 func (c *OnlineDDLChecker) Name() string {
-	return ""
+	return "online ddl checker"
 }

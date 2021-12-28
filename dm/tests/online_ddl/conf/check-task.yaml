@@ -24,7 +24,7 @@ block-allow-list:
     do-dbs: ["online_ddl"]
     do-tables:
     -  db-name: "online_ddl"
-       tbl-name: "~^_?check_((pt)|(gho))_t.*$"
+       tbl-name: "~^check_((pt)|(gho))_t.*$"
 
 mydumpers:
   global:

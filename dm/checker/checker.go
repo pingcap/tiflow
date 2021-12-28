@@ -214,11 +214,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 
 		checkTables := make(map[string][]string)
-		checkSchemas := make([]string, len(mapping))
+		checkSchemas := make(map[string]struct{}, len(mapping))
 		for name, tables := range mapping {
-			checkSchemas = append(checkSchemas, name)
 			for _, table := range tables {
 				checkTables[table.Schema] = append(checkTables[table.Schema], table.Name)
+				if _, ok := checkSchemas[table.Schema]; !ok {
+					checkSchemas[table.Schema] = struct{}{}
+				}
 				if _, ok := sharding[name]; !ok {
 					sharding[name] = make(map[string]map[string][]string)
 				}

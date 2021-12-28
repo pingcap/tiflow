@@ -20,17 +20,17 @@ function run() {
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
-	run_sql_file $cur/data/check.db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-
 	cp $cur/conf/check-task.yaml $WORK_DIR/check-task.yaml
+	# prevent start task in process of online-ddl
+	run_sql_file $cur/data/check.gho.db1.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $WORK_DIR/check-task.yaml" \
+		"your ddl is in pt\/ghost online-ddl" 1
 
+	run_sql_file $cur/data/check.pt.db1.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $WORK_DIR/check-task.yaml" \
-		"\"result\": true" 1
-	run_sql_file_online_ddl $cur/data/check.gho.db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 online_ddl gho-ost
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"check-task $WORK_DIR/check-task.yaml" \
-		"\"result\": true" 3
+		"your ddl is in pt\/ghost online-ddl" 1
 
 	run_sql_file $cur/data/gho.db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
