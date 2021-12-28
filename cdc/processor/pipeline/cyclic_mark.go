@@ -183,7 +183,7 @@ func extractReplicaID(markRow *model.RowChangedEvent) uint64 {
 }
 
 // cyclicNodeContext implements the NodeContext, cyclicMarkNode can be reused in table actor
-// buffer all messages with a queue, it will not block the actor system
+// to buffer all messages with a queue, it will not block the actor system
 type cyclicNodeContext struct {
 	*actorNodeContext
 	queue list.List
@@ -195,12 +195,12 @@ func NewCyclicNodeContext(ctx *actorNodeContext) *cyclicNodeContext {
 	}
 }
 
-// SendToNextNode implement the interface function, push the message to queue
+// SendToNextNode implement the NodeContext interface, push the message to a queue
 func (c *cyclicNodeContext) SendToNextNode(msg pipeline.Message) {
 	c.queue.PushBack(msg)
 }
 
-// Message implements the interface function, not used
+// Message implements the NodeContext
 func (c *cyclicNodeContext) Message() pipeline.Message {
 	msg := c.tryGetProcessedMessage()
 	if msg != nil {
