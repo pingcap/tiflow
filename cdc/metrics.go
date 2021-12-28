@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor"
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/puller"
+	redowriter "github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
