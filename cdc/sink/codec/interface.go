@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -174,6 +174,26 @@ func (p *Protocol) FromString(protocol string) {
 	default:
 		*p = ProtocolDefault
 		log.Warn("can't support codec protocol, using default protocol", zap.String("protocol", protocol))
+	}
+}
+
+// String converts the Protocol enum type string to string.
+func (p Protocol) String() string {
+	switch p {
+	case ProtocolDefault:
+		return "default"
+	case ProtocolCanal:
+		return "canal"
+	case ProtocolAvro:
+		return "avro"
+	case ProtocolMaxwell:
+		return "maxwell"
+	case ProtocolCanalJSON:
+		return "canal-json"
+	case ProtocolCraft:
+		return "craft"
+	default:
+		panic("unreachable")
 	}
 }
 
