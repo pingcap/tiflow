@@ -277,7 +277,6 @@ func (s *kafkaSuite) TestAdjustConfig(c *check.C) {
 	c.Assert(err, check.IsNil)
 	adjustSaramaConfig(saramaConfig, producerConfig)
 	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, producerConfig.MaxMessageBytes)
-
 }
 
 func (s *kafkaSuite) TestInitializeConfigurations(c *check.C) {
@@ -296,7 +295,8 @@ func (s *kafkaSuite) TestInitializeConfigurations(c *check.C) {
 		expectedMaxMessageBytes string
 	}{
 		//`max-message-bytes` not set, topic not created, broker `message.max.bytes` is the default.
-		{"kafka://127.0.0.1:9092/%s",
+		{
+			"kafka://127.0.0.1:9092/%s",
 			[]interface{}{"no-params"},
 			kafka.DefaultBrokerMessageMaxBytes,
 			kafka.DefaultTopicMaxMessageBytes,
