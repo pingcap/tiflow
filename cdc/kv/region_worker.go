@@ -271,13 +271,8 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 	revokeToken := !state.initialized
 	// since the context used in region worker will be cancelled after region
 	// worker exits, we must use the parent context to prevent regionErrorInfo loss.
-	err2 := w.session.onRegionFail(w.parentCtx, regionErrorInfo{
-		singleRegionInfo: state.sri,
-		err:              err,
-	}, revokeToken)
-	if err2 != nil {
-		return err2
-	}
+	errInfo := newRegionErrorInfo(state.sri, err)
+	w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
 
 	return retErr
 }
@@ -767,8 +762,7 @@ func (w *regionWorker) handleResolvedTs(
 
 // evictAllRegions is used when gRPC stream meets error and re-establish, notify
 // all existing regions to re-establish
-func (w *regionWorker) evictAllRegions() error {
-	var err error
+func (w *regionWorker) evictAllRegions() {
 	for _, states := range w.statesManager.states {
 		states.Range(func(_, value interface{}) bool {
 			state := value.(*regionFeedState)
@@ -789,14 +783,11 @@ func (w *regionWorker) evictAllRegions() error {
 			// since the context used in region worker will be cancelled after
 			// region worker exits, we must use the parent context to prevent
 			// regionErrorInfo loss.
-			err = w.session.onRegionFail(w.parentCtx, regionErrorInfo{
-				singleRegionInfo: singleRegionInfo,
-				err:              cerror.ErrEventFeedAborted.FastGenByArgs(),
-			}, revokeToken)
-			return err == nil
+			errInfo := newRegionErrorInfo(singleRegionInfo, cerror.ErrEventFeedAborted.FastGenByArgs())
+			w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
+			return true
 		})
 	}
-	return err
 }
 
 func getWorkerPoolSize() (size int) {
