@@ -4,7 +4,7 @@
   "scripts": {
     "start": "vite",
     "build": "vite build",
-    "type-check": "tsc --noEmit",
+    "type-check": "vite optimize --force && tsc --noEmit",
     "serve": "vite preview",
     "fmt": "prettier src --write",
     "lint": "eslint --ext .tsx,.ts src/",
