@@ -126,8 +126,8 @@ const (
       "cleanup-speed-limit": 10000
     },
     "messages": {
-      "client-max-batch-interval": 100000000,
-      "client-max-batch-size": 8192,
+      "client-max-batch-interval": 200000000,
+      "client-max-batch-size": 8388608,
       "client-max-batch-count": 128,
       "client-retry-rate-limit": 1,
       "server-max-pending-message-count": 102400,
