@@ -136,7 +136,6 @@ func (r *sizedRegionRouter) Release(id string) {
 
 func (r *sizedRegionRouter) Run(ctx context.Context) error {
 	ticker := time.NewTicker(sizedRegionCheckInterval)
-	defer ticker.Stop()
 	defer func() {
 		ticker.Stop()
 		r.lock.Lock()
