@@ -3616,7 +3616,7 @@ func TestRegionErrorInfoLogRateLimitedHint(t *testing.T) {
 	t.Parallel()
 
 	errInfo := newRegionErrorInfo(singleRegionInfo{}, nil)
-	errInfo.logRateLimitDuration = 200 * time.Millisecond
+	errInfo.logRateLimitDuration = time.Second
 
 	// True on the first rate limited.
 	require.True(t, errInfo.logRateLimitedHint())
