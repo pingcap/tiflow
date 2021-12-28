@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"sync"
@@ -86,6 +87,127 @@ func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (reader.
 	adjustedPos := binlog.AdjustPosition(location.Position)
 	streamer, err := r.reader.StartSync(adjustedPos)
 	return streamer, terror.ErrSyncerUnitRemoteSteamerStartSync.Delegate(err)
+}
+
+type binlogPosFinder interface {
+	findByTs(ts int64) (*binlog.Location, error)
+}
+
+type remoteBinlogPosFinder struct {
+	tctx    *tcontext.Context
+	db      *sql.DB
+	syncCfg replication.BinlogSyncerConfig
+
+	targetBinlog        binlog.BinlogSize // target binlog file the timestamp may reside
+	tsBeforeFirstBinlog bool              // whether the timestamp is before the first binlog
+	lastBinlogFile      bool              // whether targetBinlog is the last binlog file
+}
+
+func (r *remoteBinlogPosFinder) initTargetBinlogFile(ts int64) error {
+	targetTs := uint32(ts)
+	var prevBinlog, currBinlog binlog.BinlogSize
+	var prevTs, currTs uint32
+	binaryLogs, err := binlog.GetBinaryLogs(r.tctx.Ctx, r.db)
+	if err != nil {
+		return err
+	}
+	if len(binaryLogs) <= 0 {
+		// should not happen on a master with binlog enabled
+		return errors.New("cannot find binlog on master")
+	}
+	// how many binlog files on normal production env?
+	// TODO change to binary search
+	for _, binlogFile := range binaryLogs {
+		// master switched may complicate the situation, suppose we are trying to sync mysql-bin.000003, both master
+		// contains it, but they have different timestamp, we may get the wrong location.
+		prevTs, currTs = currTs, 0
+		prevBinlog, currBinlog = currBinlog, binlogFile
+		syncer := replication.NewBinlogSyncer(r.syncCfg)
+		streamer, err := syncer.StartSync(mysql.Position{Name: currBinlog.Name, Pos: binlog.FileHeaderLen})
+		if err != nil {
+			return err
+		}
+		for {
+			ev, err := streamer.GetEvent(r.tctx.Ctx)
+			if err != nil {
+				return err
+			}
+			// break on first non-fake event(must be a format description event)
+			if !utils.IsFakeRotateEvent(ev.Header) {
+				currTs = ev.Header.Timestamp
+				break
+			}
+		}
+		syncer.Close()
+
+		r.tctx.L().Info("min timestamp of binlog", zap.Reflect("file", binlogFile), zap.Uint32("ts", currTs))
+
+		if currTs >= targetTs {
+			break
+		}
+	}
+	if currTs >= targetTs {
+		if prevTs == 0 {
+			// ts of first binlog event in first binlog file >= targetTs
+			r.targetBinlog = currBinlog
+			r.tsBeforeFirstBinlog = true
+		} else {
+			// ts of first event in currBinlog >= targetTs, need to search from prevBinlog
+			r.targetBinlog = prevBinlog
+		}
+	} else {
+		// find from the last binlog file, i.e. currBinlog
+		r.targetBinlog = currBinlog
+	}
+	r.lastBinlogFile = r.targetBinlog.Name == binaryLogs[len(binaryLogs)-1].Name
+	return nil
+}
+
+// get binlog location of first event or transaction with timestamp >= ts
+func (r *remoteBinlogPosFinder) findByTs(ts int64) (*binlog.Location, error) {
+	// TODO check server uuid
+	if err := r.initTargetBinlogFile(ts); err != nil {
+		return nil, err
+	}
+
+	if r.tsBeforeFirstBinlog {
+		return &binlog.Location{Position: mysql.Position{Name: r.targetBinlog.Name, Pos:  binlog.FileHeaderLen,},}, nil
+	}
+
+	targetTs := uint32(ts)
+	position := mysql.Position{Name: r.targetBinlog.Name, Pos: binlog.FileHeaderLen}
+	syncer := replication.NewBinlogSyncer(r.syncCfg)
+	streamer, err := syncer.StartSync(position)
+	if err != nil {
+		return nil, err
+	}
+	defer syncer.Close()
+	for {
+		ev, err := streamer.GetEvent(r.tctx.Ctx)
+		// TODO retryable error
+		if err != nil {
+			return nil, err
+		}
+		if utils.IsFakeRotateEvent(ev.Header) {
+			continue
+		}
+
+		position.Pos = ev.Header.LogPos
+		if ev.Header.Timestamp >= targetTs {
+			break
+		}
+
+		// we have reached the end of this binlog file
+		if int64(position.Pos) >= r.targetBinlog.Size {
+			// if it's not the last binlog file, then this ts is out of range,
+			// else the end of this binlog file is the position we want
+			if r.lastBinlogFile {
+				return nil, errors.New("not found")
+			}
+			break
+		}
+	}
+	return &binlog.Location{Position: position}, nil
 }
 
 // StreamerController controls the streamer for read binlog, include:
