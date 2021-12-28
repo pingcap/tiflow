@@ -94,13 +94,19 @@ var (
 	// user should use ha.PutOpenAPITaskConfig(key, openapi.Task,overwrite) to force update the content in etcd.
 	// k/v: Encode(task-name) -> openapi.Task.
 	OpenAPITaskConfigKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/openapi-task-config/")
+
+	// TaskConfigKeyAdapter is used to store the command line arguments of task. They are different from the task config
+	// because the command line arguments may expected to take effect only once when failover.
+	// kv: Encode(task-name) -> TaskCliArgs.
+	TaskCliArgsKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/task-cli-args/")
 )
 
 func keyAdapterKeysLen(s KeyAdapter) int {
 	switch s {
 	case WorkerRegisterKeyAdapter, UpstreamConfigKeyAdapter, UpstreamBoundWorkerKeyAdapter,
 		WorkerKeepAliveKeyAdapter, StageRelayKeyAdapter,
-		UpstreamLastBoundWorkerKeyAdapter, UpstreamRelayWorkerKeyAdapter, OpenAPITaskConfigKeyAdapter:
+		UpstreamLastBoundWorkerKeyAdapter, UpstreamRelayWorkerKeyAdapter, OpenAPITaskConfigKeyAdapter,
+		TaskCliArgsKeyAdapter:
 		return 1
 	case UpstreamSubTaskKeyAdapter, StageSubTaskKeyAdapter,
 		ShardDDLPessimismInfoKeyAdapter, ShardDDLPessimismOperationKeyAdapter,
