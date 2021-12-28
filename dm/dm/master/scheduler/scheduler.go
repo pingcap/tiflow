@@ -772,8 +772,12 @@ WaitLoop:
 				failpoint.Inject("skipBatchOperateTaskOnWorkerSleep", func(_ failpoint.Value) {
 					failpoint.Continue("WaitLoop")
 				})
-				time.Sleep(sleepTime)
-				continue WaitLoop
+				select {
+				case <-ctx.Done():
+					return terror.Annotatef(err, "failed to wait task on worker: %s because context is canceled", worker.baseInfo.Name)
+				case <-time.After(sleepTime):
+					continue WaitLoop
+				}
 			}
 		}
 		return nil // all task are in expected stage
