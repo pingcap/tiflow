@@ -27,10 +27,6 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"go.uber.org/zap"
-
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 )
 
 // AutoIncrementKeyChecking is an identification for auto increment key checking.
@@ -66,16 +62,14 @@ type TablesChecker struct {
 	dbinfo *dbutil.DBConfig
 	tables map[string][]string // schema => []table; if []table is empty, query tables from db
 
-	onlineDDL onlineddl.OnlinePlugin
 }
 
 // NewTablesChecker returns a RealChecker.
-func NewTablesChecker(db *sql.DB, dbinfo *dbutil.DBConfig, tables map[string][]string, onlineDDL onlineddl.OnlinePlugin) RealChecker {
+func NewTablesChecker(db *sql.DB, dbinfo *dbutil.DBConfig, tables map[string][]string) RealChecker {
 	return &TablesChecker{
-		db:        db,
-		dbinfo:    dbinfo,
-		tables:    tables,
-		onlineDDL: onlineDDL,
+		db:     db,
+		dbinfo: dbinfo,
+		tables: tables,
 	}
 }
 
@@ -191,17 +185,6 @@ func (c *TablesChecker) checkAST(stmt ast.StmtNode) []*incompatibilityOption {
 	}
 
 	var options []*incompatibilityOption
-	// check table name
-	if c.onlineDDL != nil {
-		log.L().Info("", zap.String("table name", st.Table.Name.O))
-		if c.onlineDDL.TableType(st.Table.Name.O) != onlineddl.RealTable {
-			options = append(options, &incompatibilityOption{
-				state:       StateFailure,
-				instruction: "please wait the online-ddl over",
-				errMessage:  "your ddl is in pt/ghost online-ddl",
-			})
-		}
-	}
 
 	// check columns
 	for _, def := range st.Cols {
