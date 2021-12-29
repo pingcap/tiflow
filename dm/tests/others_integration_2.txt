@@ -10,3 +10,4 @@ openapi
 duplicate_event
 tracker_ignored_ddl
 extend_column
+gbk
