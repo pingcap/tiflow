@@ -561,8 +561,7 @@ func (s *flushSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, 
 // TestFlushSinkReleaseFlowController tests sinkNode.flushSink method will always
 // call flowController.Release to release the memory quota of the table to avoid
 // deadlock if there is no error occur
-func (s *outputSuite) TestFlushSinkReleaseFlowController(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestFlushSinkReleaseFlowController(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.EnableOldValue = false
@@ -577,16 +576,16 @@ func (s *outputSuite) TestFlushSinkReleaseFlowController(c *check.C) {
 	sink := &flushSink{}
 	// sNode is a sinkNode
 	sNode := newSinkNode(1, sink, 0, 10, flowController)
-	c.Assert(sNode.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
+	require.Nil(t, sNode.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
 	sNode.barrierTs = 10
 
 	err := sNode.flushSink(context.Background(), uint64(8))
-	c.Assert(err, check.IsNil)
-	c.Assert(sNode.checkpointTs, check.Equals, uint64(8))
-	c.Assert(flowController.releaseCounter, check.Equals, 1)
+	require.Nil(t, err)
+	require.Equal(t, uint64(8), sNode.checkpointTs)
+	require.Equal(t, 1, flowController.releaseCounter)
 	// resolvedTs will fall back in this call
 	err = sNode.flushSink(context.Background(), uint64(10))
-	c.Assert(err, check.IsNil)
-	c.Assert(sNode.checkpointTs, check.Equals, uint64(8))
-	c.Assert(flowController.releaseCounter, check.Equals, 2)
+	require.Nil(t, err)
+	require.Equal(t, uint64(8), sNode.checkpointTs)
+	require.Equal(t, 2, flowController.releaseCounter)
 }
