@@ -561,18 +561,21 @@ func (c *Consumer) Run(ctx context.Context) error {
 		if todoDDL != nil && todoDDL.CommitTs < globalResolvedTs {
 			globalResolvedTs = todoDDL.CommitTs
 		}
-		if lastGlobalResolvedTs == globalResolvedTs {
-			continue
+		if lastGlobalResolvedTs > globalResolvedTs {
+			log.Panic("global ResolvedTs fallback")
 		}
-		lastGlobalResolvedTs = globalResolvedTs
-		atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
-		log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
 
-		err = c.forEachSink(func(sink *partitionSink) error {
-			return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
-		})
-		if err != nil {
-			return errors.Trace(err)
+		if lastGlobalResolvedTs < globalResolvedTs {
+			lastGlobalResolvedTs = globalResolvedTs
+			atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
+			log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
+
+			err = c.forEachSink(func(sink *partitionSink) error {
+				return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
+			})
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 }
