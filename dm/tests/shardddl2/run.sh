@@ -279,7 +279,7 @@ function DM_DROP_COLUMN_EXEC_ERROR_CASE() {
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column b varchar(10);"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` VARCHAR(10)' 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` VARCHAR(10)' 2 \
 		"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
 		"add column b that wasn't fully dropped in downstream" 1
 
@@ -341,7 +341,7 @@ function DM_DROP_COLUMN_ALL_DONE_CASE() {
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column b varchar(10);"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` VARCHAR(10)' 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` VARCHAR(10)' 2 \
 		"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
 		"add column b that wasn't fully dropped in downstream" 1
 
