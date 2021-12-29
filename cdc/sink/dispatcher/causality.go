@@ -28,19 +28,19 @@ import (
 // if some conflicts exist in more than one groups, then syncer waits all SQLs that are grouped be executed and reset causalityDispatcher.
 // this mechanism meets quiescent consistency to ensure correctness.
 type causalityDispatcher struct {
-	relations    map[string]int
-	workerNum    int
-	curWorkerIdx int
+	relations    map[string]int32
+	workerNum    int32
+	curWorkerIdx int32
 }
 
-func newCausalityDispatcher(workerNum int) *causalityDispatcher {
+func newCausalityDispatcher(workerNum int32) *causalityDispatcher {
 	if workerNum < 0 {
 		log.Error("unexpected workerNum for dispatcher, set to 1 forcely", zap.Int32("workerNum", workerNum))
 		workerNum = 1
 	}
 
 	return &causalityDispatcher{
-		relations:    make(map[string]int),
+		relations:    make(map[string]int32),
 		workerNum:    workerNum,
 		curWorkerIdx: 0,
 	}
@@ -51,22 +51,22 @@ func newCausalityDispatcher(workerNum int) *causalityDispatcher {
 // if return value > 0, it means normal worker index
 func (c *causalityDispatcher) Dispatch(tbTxn *model.RawTableTxn) int32 {
 	keys := genTxnKeys(tbTxn)
-	if conflict, idx := causality.detectConflict(keys); conflict {
+	if conflict, idx := c.detectConflict(keys); conflict {
 		if idx >= 0 {
-			add(keys, idx)
+			c.add(keys, idx)
 			return idx
 		}
-		reset()
+		c.reset()
 		return -1
 	}
-	add(keys, curWorkerIdx)
-	workerIdx := curWorkerIdx
-	curWorkerIdx++
-	curWorkerIdx = curWorkerIdx % workerNum
+	c.add(keys, c.curWorkerIdx)
+	workerIdx := c.curWorkerIdx
+	c.curWorkerIdx++
+	c.curWorkerIdx = c.curWorkerIdx % c.workerNum
 	return workerIdx
 }
 
-func (c *causalityDispatcher) add(keys [][]byte, idx int) {
+func (c *causalityDispatcher) add(keys [][]byte, idx int32) {
 	if len(keys) == 0 {
 		return
 	}
@@ -76,17 +76,17 @@ func (c *causalityDispatcher) add(keys [][]byte, idx int) {
 }
 
 func (c *causalityDispatcher) reset() {
-	c.relations = make(map[string]int)
+	c.relations = make(map[string]int32)
 	// don't need to reset curWorkerIdx
 }
 
 // detectConflict detects whether there is a conflict
-func (c *causalityDispatcher) detectConflict(keys [][]byte) (bool, int) {
+func (c *causalityDispatcher) detectConflict(keys [][]byte) (bool, int32) {
 	if len(keys) == 0 {
 		return false, 0
 	}
 
-	firstIdx := -1
+	firstIdx := int32(-1)
 	for _, key := range keys {
 		if idx, ok := c.relations[string(key)]; ok {
 			if firstIdx == -1 {

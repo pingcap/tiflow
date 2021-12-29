@@ -37,7 +37,7 @@ func (d *defaultDispatcher) Dispatch(tbTxn *model.RawTableTxn) int32 {
 	if d.enableOldValue {
 		return d.tbd.Dispatch(tbTxn)
 	}
-	if len(row.IndexColumns) != 1 {
+	if len(tbTxn.Rows) > 0 && len(tbTxn.Rows[0].IndexColumns) != 1 {
 		return d.tbd.Dispatch(tbTxn)
 	}
 	return d.ivd.Dispatch(tbTxn)
