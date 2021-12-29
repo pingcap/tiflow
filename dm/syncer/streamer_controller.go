@@ -28,8 +28,10 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -90,17 +92,25 @@ func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (reader.
 }
 
 type binlogPosFinder interface {
-	findByTs(ts int64) (*binlog.Location, error)
+	// FindByTs get binlog location of first event or transaction with timestamp >= ts
+	FindByTs(ts int64) (*binlog.Location, BinlogPosType, error)
 }
 
 type remoteBinlogPosFinder struct {
-	tctx    *tcontext.Context
-	db      *sql.DB
-	syncCfg replication.BinlogSyncerConfig
+	tctx       *tcontext.Context
+	db         *sql.DB
+	syncCfg    replication.BinlogSyncerConfig
+	EnableGTID bool
 
 	targetBinlog        binlog.BinlogSize // target binlog file the timestamp may reside
 	tsBeforeFirstBinlog bool              // whether the timestamp is before the first binlog
 	lastBinlogFile      bool              // whether targetBinlog is the last binlog file
+}
+
+func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *sql.DB, syncCfg replication.BinlogSyncerConfig, enableGTID bool) *remoteBinlogPosFinder {
+	// make sure it's raw mode
+	syncCfg.RawModeEnabled = true
+	return &remoteBinlogPosFinder{tctx: tctx, db: db, syncCfg: syncCfg, EnableGTID: enableGTID}
 }
 
 func (r *remoteBinlogPosFinder) initTargetBinlogFile(ts int64) error {
@@ -116,7 +126,7 @@ func (r *remoteBinlogPosFinder) initTargetBinlogFile(ts int64) error {
 		return errors.New("cannot find binlog on master")
 	}
 	// how many binlog files on normal production env?
-	// TODO change to binary search
+	// TODO change to binary search when len(binaryLogs) is large and r.EnableGTID = false
 	for _, binlogFile := range binaryLogs {
 		// master switched may complicate the situation, suppose we are trying to sync mysql-bin.000003, both master
 		// contains it, but they have different timestamp, we may get the wrong location.
@@ -163,51 +173,141 @@ func (r *remoteBinlogPosFinder) initTargetBinlogFile(ts int64) error {
 	return nil
 }
 
-// get binlog location of first event or transaction with timestamp >= ts
-func (r *remoteBinlogPosFinder) findByTs(ts int64) (*binlog.Location, error) {
+type BinlogPosType int
+
+const (
+	InvalidBinlogPos BinlogPosType = iota
+	BelowLowerBoundBinlogPos
+	InRangeBinlogPos
+	AboveUpperBoundBinlogPos
+)
+
+func (r *remoteBinlogPosFinder) newParser() *replication.BinlogParser {
+	parser := replication.NewBinlogParser()
+	parser.SetFlavor(r.syncCfg.Flavor)
+	parser.SetRawMode(r.syncCfg.RawModeEnabled)
+	parser.SetParseTime(r.syncCfg.ParseTime)
+	parser.SetTimestampStringLocation(r.syncCfg.TimestampStringLocation)
+	parser.SetUseDecimal(r.syncCfg.UseDecimal)
+	parser.SetVerifyChecksum(r.syncCfg.VerifyChecksum)
+	return parser
+}
+
+func (r *remoteBinlogPosFinder) processGTIDRelatedEvent(parser *replication.BinlogParser, ev *replication.BinlogEvent, prevSet gtid.Set) (gtid.Set, error) {
+	ev, err := parser.Parse(ev.RawData)
+	if err != nil {
+		return nil, err
+	}
+	switch ev.Header.EventType {
+	case replication.PREVIOUS_GTIDS_EVENT:
+		newSet, err := event.GTIDsFromPreviousGTIDsEvent(ev)
+		if err != nil {
+			return nil, err
+		}
+		return newSet, nil
+	case replication.MARIADB_GTID_EVENT:
+	case replication.GTID_EVENT:
+		gtidStr, _ := event.GetGTIDStr(ev)
+		if err := prevSet.Update(gtidStr); err != nil {
+			return nil, err
+		}
+	case replication.MARIADB_GTID_LIST_EVENT:
+		newSet, err := event.GTIDsFromMariaDBGTIDListEvent(ev)
+		if err != nil {
+			return nil, err
+		}
+		return newSet, nil
+	}
+	return prevSet, nil
+}
+
+func (r *remoteBinlogPosFinder) FindByTs(ts int64) (*binlog.Location, BinlogPosType, error) {
 	// TODO check server uuid
 	if err := r.initTargetBinlogFile(ts); err != nil {
-		return nil, err
+		return nil, InvalidBinlogPos, err
 	}
 
 	if r.tsBeforeFirstBinlog {
-		return &binlog.Location{Position: mysql.Position{Name: r.targetBinlog.Name, Pos:  binlog.FileHeaderLen,},}, nil
+		loc := binlog.NewLocation(r.syncCfg.Flavor)
+		loc.Position = mysql.Position{Name: r.targetBinlog.Name, Pos: binlog.FileHeaderLen}
+		return &loc, BelowLowerBoundBinlogPos, nil
 	}
 
 	targetTs := uint32(ts)
 	position := mysql.Position{Name: r.targetBinlog.Name, Pos: binlog.FileHeaderLen}
+	gtidSet := gtid.MinGTIDSet(r.syncCfg.Flavor)
 	syncer := replication.NewBinlogSyncer(r.syncCfg)
+
 	streamer, err := syncer.StartSync(position)
 	if err != nil {
-		return nil, err
+		return nil, InvalidBinlogPos, err
 	}
 	defer syncer.Close()
+	parser := r.newParser()
 	for {
 		ev, err := streamer.GetEvent(r.tctx.Ctx)
-		// TODO retryable error
+		// TODO retryable error, let outer layer retry?
 		if err != nil {
-			return nil, err
+			return nil, InvalidBinlogPos, err
 		}
 		if utils.IsFakeRotateEvent(ev.Header) {
 			continue
 		}
 
-		position.Pos = ev.Header.LogPos
-		if ev.Header.Timestamp >= targetTs {
-			break
+		// we find the timestamp at transaction boundary, so we need to parse event to get the first event of transaction
+		var transactionBeginEvent bool
+		switch ev.Header.EventType {
+		case replication.FORMAT_DESCRIPTION_EVENT:
+			ev, err = parser.Parse(ev.RawData)
+			if err != nil {
+				return nil, InvalidBinlogPos, err
+			}
+		case replication.GTID_EVENT:
+		case replication.ANONYMOUS_GTID_EVENT: // since 5.7, when GTID not enabled. we use this to avoid parsing query event
+		case replication.MARIADB_GTID_EVENT:
+			transactionBeginEvent = true
+		case replication.QUERY_EVENT:
+			// so non-BEGIN, non-DCL query event is rare, we parse it every time
+			// user may change session level binlog-format=statement, but it's an unusual operation
+			ev, err = parser.Parse(ev.RawData)
+			if err != nil {
+				return nil, InvalidBinlogPos, err
+			}
+			e := ev.Event.(*replication.QueryEvent)
+			transactionBeginEvent = string(e.Query) == "BEGIN"
 		}
 
-		// we have reached the end of this binlog file
+		if transactionBeginEvent && ev.Header.Timestamp >= targetTs {
+			break
+		}
+		position.Pos = ev.Header.LogPos
+
+		if r.EnableGTID {
+			eventType := ev.Header.EventType
+			if eventType == replication.PREVIOUS_GTIDS_EVENT ||
+				eventType == replication.MARIADB_GTID_LIST_EVENT ||
+				eventType == replication.GTID_EVENT ||
+				eventType == replication.MARIADB_GTID_EVENT {
+				gtidSet, err = r.processGTIDRelatedEvent(parser, ev, gtidSet)
+				if err != nil {
+					return nil, InvalidBinlogPos, err
+				}
+			}
+		}
+
+		// still not found the timestamp after reached the end of this binlog file
 		if int64(position.Pos) >= r.targetBinlog.Size {
-			// if it's not the last binlog file, then this ts is out of range,
-			// else the end of this binlog file is the position we want
+			// if it's the last binlog file, then this timestamp is out of range,
+			// else the end of this binlog file is the position we want,
+			// since the timestamp of the first event in next binlog >= target timestamp
 			if r.lastBinlogFile {
-				return nil, errors.New("not found")
+				return nil, AboveUpperBoundBinlogPos, nil
 			}
 			break
 		}
 	}
-	return &binlog.Location{Position: position}, nil
+	loc := binlog.InitLocation(position, gtidSet)
+	return &loc, InRangeBinlogPos, nil
 }
 
 // StreamerController controls the streamer for read binlog, include:
