@@ -383,7 +383,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	if sink == nil {
 		panic("sink should initialized")
 	}
-ClaimMessages:
+
 	for message := range claim.Messages() {
 		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 		batchDecoder, err := codec.NewJSONEventBatchDecoder(message.Key, message.Value)
