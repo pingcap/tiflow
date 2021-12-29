@@ -52,6 +52,7 @@ type System struct {
 	cleanRouter   *actor.Router
 	compactSystem *actor.System
 	compactRouter *actor.Router
+	compactSched  *lsorter.CompactScheduler
 	dir           string
 	cfg           *config.DBConfig
 	closedCh      chan struct{}
@@ -69,6 +70,7 @@ func NewSystem(dir string, cfg *config.DBConfig) *System {
 		WorkerNumber(cfg.Count).Build()
 	compactSystem, compactRouter := actor.NewSystemBuilder("compactor").
 		WorkerNumber(cfg.Count).Build()
+	compactSched := lsorter.NewCompactScheduler(compactRouter, cfg)
 	return &System{
 		dbSystem:      dbSystem,
 		dbRouter:      dbRouter,
@@ -76,6 +78,7 @@ func NewSystem(dir string, cfg *config.DBConfig) *System {
 		cleanRouter:   cleanRouter,
 		compactSystem: compactSystem,
 		compactRouter: compactRouter,
+		compactSched:  compactSched,
 		dir:           dir,
 		cfg:           cfg,
 		closedCh:      make(chan struct{}),
@@ -151,10 +154,9 @@ func (s *System) Start(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		compact := lsorter.NewCompactScheduler(s.compactRouter, s.cfg)
 		// Create and spawn db actor.
 		dbac, dbmb, err :=
-			lsorter.NewDBActor(id, db, s.cfg, compact, s.closedWg, captureAddr)
+			lsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg, captureAddr)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -164,7 +166,7 @@ func (s *System) Start(ctx context.Context) error {
 		}
 		// Create and spawn cleaner actor.
 		clac, clmb, err := lsorter.NewCleanerActor(
-			id, db, s.cleanRouter, compact, s.cfg, s.closedWg)
+			id, db, s.cleanRouter, s.compactSched, s.cfg, s.closedWg)
 		if err != nil {
 			return errors.Trace(err)
 		}
