@@ -138,8 +138,11 @@ type pebbleDB struct {
 
 var _ DB = (*pebbleDB)(nil)
 
-func (p *pebbleDB) Snapshot() (Snapshot, error) {
-	return pebbleSnapshot{Snapshot: p.db.NewSnapshot()}, nil
+func (p *pebbleDB) Iterator(lowerBound, upperBound []byte) Iterator {
+	return pebbleIter{Iterator: p.db.NewIter(&pebble.IterOptions{
+		LowerBound: lowerBound,
+		UpperBound: upperBound,
+	})}
 }
 
 func (p *pebbleDB) Batch(cap int) Batch {
@@ -217,23 +220,6 @@ func (b pebbleBatch) Repr() []byte {
 
 func (b pebbleBatch) Reset() {
 	b.Batch.Reset()
-}
-
-type pebbleSnapshot struct {
-	*pebble.Snapshot
-}
-
-var _ Snapshot = (*pebbleSnapshot)(nil)
-
-func (s pebbleSnapshot) Iterator(lowerBound, upperBound []byte) Iterator {
-	return pebbleIter{Iterator: s.NewIter(&pebble.IterOptions{
-		LowerBound: lowerBound,
-		UpperBound: upperBound,
-	})}
-}
-
-func (s pebbleSnapshot) Release() error {
-	return s.Close()
 }
 
 type pebbleIter struct {
