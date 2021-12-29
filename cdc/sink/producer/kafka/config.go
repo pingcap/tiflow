@@ -100,7 +100,8 @@ func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	return nil
 }
 
-func (c *Config) fillBySinkURI(sinkURI *url.URL) error {
+// complete the `Config` from `sink-uri`
+func (c *Config) complete(sinkURI *url.URL) error {
 	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
@@ -196,7 +197,7 @@ func completeOpts(sinkURI *url.URL, opts map[string]string, saramaConfig *sarama
 			return err
 		}
 		if replicaConfig.Sink.Protocol != "canal-json" {
-			return cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("enable-tidb-extension only support canal-json protocol"))
+			return errors.New("enable-tidb-extension only support canal-json protocol")
 		}
 		opts["enable-tidb-extension"] = s
 	}
@@ -221,7 +222,7 @@ func InitializeConfigurations(
 	opts map[string]string,
 ) (producerConfig *Config, saramaConfig *sarama.Config, err error) {
 	producerConfig = NewConfig()
-	if err := producerConfig.fillBySinkURI(sinkURI); err != nil {
+	if err := producerConfig.complete(sinkURI); err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
@@ -248,7 +249,7 @@ func InitializeConfigurations(
 	replicaConfig.FillBySInkURI(sinkURI)
 
 	if err := completeOpts(sinkURI, opts, saramaConfig, replicaConfig); err != nil {
-		return nil, nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	return producerConfig, saramaConfig, nil

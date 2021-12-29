@@ -94,7 +94,7 @@ func (s *kafkaSuite) TestFillBySinkURI(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	producerConfig := NewConfig()
-	err = producerConfig.fillBySinkURI(sinkURI)
+	err = producerConfig.complete(sinkURI)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(len(producerConfig.BrokerEndpoints), check.Equals, 1)
@@ -124,7 +124,7 @@ func (s *kafkaSuite) TestFillBySinkURI(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	producerConfig = NewConfig()
-	err = producerConfig.fillBySinkURI(sinkURI)
+	err = producerConfig.complete(sinkURI)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(len(producerConfig.BrokerEndpoints), check.Equals, 1)
@@ -150,7 +150,7 @@ func (s *kafkaSuite) TestFillBySinkURI(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	producerConfig = NewConfig()
-	err = producerConfig.fillBySinkURI(sinkURI)
+	err = producerConfig.complete(sinkURI)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
 	// Illegal max-message-bytes.
@@ -158,7 +158,7 @@ func (s *kafkaSuite) TestFillBySinkURI(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	producerConfig = NewConfig()
-	err = producerConfig.fillBySinkURI(sinkURI)
+	err = producerConfig.complete(sinkURI)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
 	// Illegal partition-num.
@@ -166,7 +166,7 @@ func (s *kafkaSuite) TestFillBySinkURI(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	producerConfig = NewConfig()
-	err = producerConfig.fillBySinkURI(sinkURI)
+	err = producerConfig.complete(sinkURI)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
 	// Illegal auto-create-topic
@@ -174,7 +174,7 @@ func (s *kafkaSuite) TestFillBySinkURI(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	producerConfig = NewConfig()
-	err = producerConfig.fillBySinkURI(sinkURI)
+	err = producerConfig.complete(sinkURI)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
 	// Out of range partition-num.
@@ -183,7 +183,7 @@ func (s *kafkaSuite) TestFillBySinkURI(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(err, check.IsNil)
 	producerConfig = NewConfig()
-	err = producerConfig.fillBySinkURI(sinkURI)
+	err = producerConfig.complete(sinkURI)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid partition num.*")
 }
 
