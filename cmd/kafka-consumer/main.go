@@ -426,6 +426,7 @@ ClaimMessages:
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
 						zap.Int32("partition", partition))
+					// stop consume messages, this should make consistency check failed.
 					break ClaimMessages
 				}
 				// FIXME: hack to set start-ts in row changed event, as start-ts
@@ -483,8 +484,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	}
 	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 	if ddl.CommitTs <= globalResolvedTs {
-		log.Error("unexpected ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
-		return
+		log.Fatal("unexpected ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
 	}
 	c.ddlList = append(c.ddlList, ddl)
 	c.maxDDLReceivedTs = ddl.CommitTs
