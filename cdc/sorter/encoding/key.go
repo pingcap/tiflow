@@ -53,7 +53,7 @@ func EncodeTsKey(uniqueID uint32, tableID uint64, ts uint64) []byte {
 	return append(buf, uint64Buf[:]...)
 }
 
-// EncodeKey encodes a key accroding to event.
+// EncodeKey encodes a key according to event.
 // Format: uniqueID, tableID, CRTs, startTs, Put/Delete, Key.
 func EncodeKey(uniqueID uint32, tableID uint64, event *model.PolymorphicEvent) []byte {
 	if event.RawKV == nil {

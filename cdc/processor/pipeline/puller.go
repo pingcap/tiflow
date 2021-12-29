@@ -33,7 +33,7 @@ type pullerNode struct {
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo
 	cancel      context.CancelFunc
-	wg          errgroup.Group
+	wg          *errgroup.Group
 }
 
 func newPullerNode(
@@ -58,6 +58,11 @@ func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 }
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
+	return n.InitWithWaitGroup(ctx, new(errgroup.Group))
+}
+
+func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Group) error {
+	n.wg = wg
 	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
