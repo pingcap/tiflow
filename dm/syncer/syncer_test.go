@@ -55,8 +55,9 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tiflow/pkg/errorutil"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
 var _ = Suite(&testSyncerSuite{})
@@ -993,11 +994,11 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		{
 			insert,
 			[]string{"INSERT INTO `test_1`.`t_2` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int32(3), "c"}},
+			[][]interface{}{{int64(3), "c"}},
 		}, {
 			del,
 			[]string{"DELETE FROM `test_1`.`t_2` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int32(3)}},
+			[][]interface{}{{int64(3)}},
 		}, {
 			flush,
 			nil,
@@ -1152,28 +1153,28 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		}, {
 			insert,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int32(1), "a"}},
+			[][]interface{}{{int64(1), "a"}},
 		}, {
 			del,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int32(1)}},
+			[][]interface{}{{int64(1)}},
 		}, {
 			update,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int32(2)}, {int32(1), "b"}},
+			[][]interface{}{{int64(2)}, {int64(1), "b"}},
 		}, {
 			// start from this event, location passes safeModeExitLocation and safe mode should exit
 			insert,
 			[]string{"INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int32(1), "a"}},
+			[][]interface{}{{int64(1), "a"}},
 		}, {
 			del,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int32(1)}},
+			[][]interface{}{{int64(1)}},
 		}, {
 			update,
 			[]string{"UPDATE `test_1`.`t_1` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int32(1), "b", int32(2)}},
+			[][]interface{}{{int64(1), "b", int64(2)}},
 		}, {
 			flush,
 			nil,
