@@ -128,8 +128,8 @@ func (s *Syncer) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, error
 		targetTables: targetTables,
 	}
 
-	// "strick" will adjust collation
-	if s.cfg.CollationCompatible == config.StrickCollationCompatible {
+	// "strict" will adjust collation
+	if s.cfg.CollationCompatible == config.StrictCollationCompatible {
 		adjustCollation(s.tctx, ddlInfo, qec.eventStatusVars, s.charsetAndDefaultCollation, s.idAndCollationMap)
 	}
 

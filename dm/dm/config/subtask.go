@@ -230,7 +230,7 @@ type SubTaskConfig struct {
 	CaseSensitive bool `toml:"case-sensitive" json:"case-sensitive"`
 
 	// default "loose" handle create sql by original sql, will not add default collation as upstream
-	// "strick" will add default collation as upstream, and downstream will occur error when downstream don't support
+	// "strict" will add default collation as upstream, and downstream will occur error when downstream don't support
 	CollationCompatible string `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
 
 	Name string `toml:"name" json:"name"`
