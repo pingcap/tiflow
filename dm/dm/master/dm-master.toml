@@ -44,7 +44,3 @@ rpc-rate-limit = 10.0
 
 # openapi feature
 openapi = false
-
-# some experimental features
-[experimental]
-openapi = false
