@@ -64,3 +64,9 @@ function check_task_error_count() {
 		"\"failed\": 2" 1 \
 		"\"state\": \"fail\"" 0
 }
+
+function check_task_only_warning() {
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $cur/conf/only-warning.yaml" \
+		"\"state\": \"warn\"" 1
+}

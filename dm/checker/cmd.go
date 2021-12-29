@@ -15,13 +15,10 @@ package checker
 
 import (
 	"context"
-	"strings"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"go.uber.org/zap"
 )
 
 var (
@@ -74,10 +71,10 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 		if len(r.Errors) > 0 {
 			return "", terror.ErrTaskCheckSyncConfigError.Generate(ErrorMsgHeader, r.Errors[0].Message, string(r.Detail))
 		}
-
-		log.L().Info("debug check detail", zap.String("detail", string(r.Detail)))
-		log.L().Info("debug check detail", zap.String("detail", strings.ReplaceAll(string(r.Detail), "\\\\", "\\")))
-		return strings.ReplaceAll(string(r.Detail), "\\\\", "\\"), nil
+		if len(r.Detail) == 0 {
+			return "check pass!!!", nil
+		}
+		return terror.ErrTaskCheckSyncConfigWarn.Generate(ErrorMsgHeader, string(r.Detail)).Error(), nil
 	}
 
 	return "", nil

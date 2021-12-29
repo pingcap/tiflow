@@ -274,6 +274,7 @@ const (
 	codeTaskCheckSyncConfigError
 	codeTaskCheckGenBAList
 	codeSourceCheckGTID
+	codeTaskCheckSyncConfigWarn
 )
 
 // Relay log utils error code.
@@ -923,6 +924,7 @@ var (
 	ErrTaskCheckSyncConfigError  = New(codeTaskCheckSyncConfigError, ClassTaskCheck, ScopeInternal, LevelMedium, "%s: %v\n detail: %v", "")
 	ErrTaskCheckGenBAList        = New(codeTaskCheckGenBAList, ClassTaskCheck, ScopeInternal, LevelMedium, "generate block allow list error", "Please check the `block-allow-list` config in task configuration file.")
 	ErrSourceCheckGTID           = New(codeSourceCheckGTID, ClassTaskCheck, ScopeInternal, LevelMedium, "%s has GTID_MODE = %s instead of ON", "Please check the `enable-gtid` config in source configuration file.")
+	ErrTaskCheckSyncConfigWarn   = New(codeTaskCheckSyncConfigWarn, ClassTaskCheck, ScopeInternal, LevelLow, "%s: no errors but some warnings\n detail: %v", "")
 
 	// Relay log basic API error.
 	ErrRelayParseUUIDIndex         = New(codeRelayParseUUIDIndex, ClassRelayEventLib, ScopeInternal, LevelHigh, "parse server-uuid.index", "")

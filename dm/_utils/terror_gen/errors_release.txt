@@ -197,6 +197,7 @@ ErrTaskCheckGenColumnMapping,[code=26004:class=task-check:scope=internal:level=m
 ErrTaskCheckSyncConfigError,[code=26005:class=task-check:scope=internal:level=medium], "Message: %s: %v\n detail: %v"
 ErrTaskCheckGenBAList,[code=26006:class=task-check:scope=internal:level=medium], "Message: generate block allow list error, Workaround: Please check the `block-allow-list` config in task configuration file."
 ErrSourceCheckGTID,[code=26007:class=task-check:scope=internal:level=medium], "Message: %s has GTID_MODE = %s instead of ON, Workaround: Please check the `enable-gtid` config in source configuration file."
+ErrTaskCheckSyncConfigWarn,[code=26008:class=task-check:scope=internal:level=low], "Message: %s: no errors but some warnings\n detail: %v"
 ErrRelayParseUUIDIndex,[code=28001:class=relay-event-lib:scope=internal:level=high], "Message: parse server-uuid.index"
 ErrRelayParseUUIDSuffix,[code=28002:class=relay-event-lib:scope=internal:level=high], "Message: UUID (with suffix) %s not valid"
 ErrRelayUUIDWithSuffixNotFound,[code=28003:class=relay-event-lib:scope=internal:level=high], "Message: no UUID (with suffix) matched %s found in %s, all UUIDs are %v"

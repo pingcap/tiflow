@@ -325,9 +325,12 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	default:
 	}
 
-	rawResult, err := json.MarshalIndent(result, "\t", "\t")
-	if err != nil {
-		rawResult = []byte(fmt.Sprintf("marshal error %v", err))
+	var rawResult []byte
+	if result.Summary.Successful != result.Summary.Total {
+		rawResult, err = json.MarshalIndent(result, "\t", "\t")
+		if err != nil {
+			rawResult = []byte(fmt.Sprintf("marshal error %v", err))
+		}
 	}
 
 	c.result.Lock()
