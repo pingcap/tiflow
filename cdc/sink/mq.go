@@ -84,7 +84,7 @@ func newMqSink(
 	}
 
 	partitionNum := mqProducer.GetPartitionNum()
-	d, err := dispatcher.NewDispatcher(replicaConfig, partitionNum)
+	d, err := dispatcher.NewDispatcher(replicaConfig, partitionNum, model.SinkTypeMQ)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -149,7 +149,15 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
-		partition := k.dispatcher.Dispatch(row)
+		// Make single row txn
+		txn := &RawTableTxn{
+			Table:     row.Table,
+			StartTs:   row.StartTs,
+			CommitTs:  row.CommitTs,
+			Rows:      make([]*RowChangedEvent{row}, 1),
+			ReplicaID: row.ReplicaID,
+		}
+		partition := k.dispatcher.Dispatch(txn)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sink
+package dispatcher
 
 import (
 	"encoding/binary"
@@ -22,36 +22,66 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
-// causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.
-// causality groups sqls that maybe contain causal relationships, and syncer executes them linearly.
-// if some conflicts exist in more than one groups, then syncer waits all SQLs that are grouped be executed and reset causality.
+// causalityDispatcher provides a simple mechanism to improve the concurrency of SQLs execution
+// under the premise of ensuring correctness. It use all uks to detect row data conflict.
+// causalityDispatcher groups sqls that maybe contain causal relationships, and syncer executes them linearly.
+// if some conflicts exist in more than one groups, then syncer waits all SQLs that are grouped be executed and reset causalityDispatcher.
 // this mechanism meets quiescent consistency to ensure correctness.
 type causalityDispatcher struct {
-	relations map[string]int
+	relations    map[string]int
+	workerNum    int
+	curWorkerIdx int
 }
 
-func newCausalityDispatcher() *causalityDispatcher {
+func newCausalityDispatcher(workerNum int) *causalityDispatcher {
+	if workerNum < 0 {
+		log.Error("unexpected workerNum for dispatcher, set to 1 forcely", zap.Int32("workerNum", workerNum))
+		workerNum = 1
+	}
+
 	return &causalityDispatcher{
-		relations: make(map[string]int),
+		relations:    make(map[string]int),
+		workerNum:    workerNum,
+		curWorkerIdx: 0,
 	}
 }
 
-func (c *causality) add(keys [][]byte, idx int) {
+// Dispatch return the oriented worker index
+// if return value = -1, it means current txn conflicts with multi-workers and will clear causality cache inner
+// if return value > 0, it means normal worker index
+func (c *causalityDispatcher) Dispatch(tbTxn *model.RawTableTxn) int32 {
+	keys := genTxnKeys(tbTxn)
+	if conflict, idx := causality.detectConflict(keys); conflict {
+		if idx >= 0 {
+			add(keys, idx)
+			return idx
+		}
+		reset()
+		return -1
+	}
+	add(keys, curWorkerIdx)
+	workerIdx := curWorkerIdx
+	curWorkerIdx++
+	curWorkerIdx = curWorkerIdx % workerNum
+	return workerIdx
+}
+
+func (c *causalityDispatcher) add(keys [][]byte, idx int) {
 	if len(keys) == 0 {
 		return
 	}
-
 	for _, key := range keys {
 		c.relations[string(key)] = idx
 	}
 }
 
-func (c *causality) reset() {
+func (c *causalityDispatcher) reset() {
 	c.relations = make(map[string]int)
+	// don't need to reset curWorkerIdx
 }
 
 // detectConflict detects whether there is a conflict
-func (c *causality) detectConflict(keys [][]byte) (bool, int) {
+func (c *causalityDispatcher) detectConflict(keys [][]byte) (bool, int) {
 	if len(keys) == 0 {
 		return false, 0
 	}
@@ -70,12 +100,12 @@ func (c *causality) detectConflict(keys [][]byte) (bool, int) {
 	return firstIdx != -1, firstIdx
 }
 
-func genTxnKeys(txn *model.SingleTableTxn) [][]byte {
-	if len(txn.Rows) == 0 {
+func genTxnKeys(tbTxn *model.RawTableTxn) [][]byte {
+	if len(tbTxn.Rows) == 0 {
 		return nil
 	}
-	keysSet := make(map[string]struct{}, len(txn.Rows))
-	for _, row := range txn.Rows {
+	keysSet := make(map[string]struct{}, len(tbTxn.Rows))
+	for _, row := range tbTxn.Rows {
 		rowKeys := genRowKeys(row)
 		for _, key := range rowKeys {
 			keysSet[string(key)] = struct{}{}

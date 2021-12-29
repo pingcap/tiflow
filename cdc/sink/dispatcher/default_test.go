@@ -14,17 +14,16 @@
 package dispatcher
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type DefaultDispatcherSuite struct{}
+// [TODO] add multi-rows test
+func TestDefaultDispatcher(t *testing.T) {
+	t.Parellel()
 
-var _ = check.Suite(&DefaultDispatcherSuite{})
-
-func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
-	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		row             *model.RowChangedEvent
 		exceptPartition int32
@@ -197,6 +196,70 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 	}
 	p := newDefaultDispatcher(16, false)
 	for _, tc := range testCases {
-		c.Assert(p.Dispatch(tc.row), check.Equals, tc.exceptPartition)
+		rowTxn := &model.RawTableTxn{
+			Table:     tc.row.Table,
+			StartTs:   tc.row.StartTs,
+			CommitTs:  tc.row.CommitTs,
+			Rows:      make([]*RowChangedEvent{tc.row}, 1),
+			ReplicaID: tc.row.ReplicaID,
+		}
+		require.Equals(t, p.Dispatch(rowTxn), tc.exceptPartition)
+	}
+}
+
+// Always use table dispatcher when enable old value
+func TestDefaultDispatcherWithOldValue(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		row             *model.RowChangedEvent
+		exceptPartition int32
+	}{
+		{row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t3",
+			},
+			Columns: []*model.Column{
+				{
+					Name:  "id",
+					Value: 3,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+				}, {
+					Name:  "a",
+					Value: 4,
+				},
+			},
+			IndexColumns: [][]int{{0}},
+		}, exceptPartition: 3},
+		{row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t3",
+			},
+			Columns: []*model.Column{
+				{
+					Name:  "id",
+					Value: 3,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+				}, {
+					Name:  "a",
+					Value: 4,
+					Flag:  model.UniqueKeyFlag,
+				},
+			},
+			IndexColumns: [][]int{{0}, {1}},
+		}, exceptPartition: 3},
+	}
+	p := newDefaultDispatcher(16, true)
+	for _, tc := range testCases {
+		rowTxn := &model.RawTableTxn{
+			Table:     tc.row.Table,
+			StartTs:   tc.row.StartTs,
+			CommitTs:  tc.row.CommitTs,
+			Rows:      make([]*RowChangedEvent{tc.row}, 1),
+			ReplicaID: tc.row.ReplicaID,
+		}
+		require.Equals(t, tc.exceptPartition, p.Dispatch(rowTxn))
 	}
 }

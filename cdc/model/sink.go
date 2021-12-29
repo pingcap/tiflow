@@ -28,6 +28,30 @@ import (
 
 //go:generate msgp
 
+type SinkType int
+
+const (
+	// SinkTypeUnknown is unknown sink type
+	SinkTypeUnknown SinkType = iota
+	// SinkTypeMySQL is MySQL sink
+	SinkTypeMySQL
+	// SinkTypeMQ is MQ sink
+	SinkTypeMQ
+)
+
+func (s *SinkType) String() string {
+	switch *s {
+	case SinkTypeUnknown:
+		return "unknown sink"
+	case SinkTypeMySQL:
+		return "MySQL sink"
+	case SinkTypeMQ:
+		return "MQ sink"
+	}
+
+	return "unknown sink"
+}
+
 // MqMessageType is the type of message
 type MqMessageType int
 
@@ -507,16 +531,19 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 	}
 }
 
-// SingleTableTxn represents a transaction which includes many row events in a single table
-//msgp:ignore SingleTableTxn
-type SingleTableTxn struct {
+type RawTableTxn struct {
 	// data fields of SingleTableTxn
 	Table     *TableName
 	StartTs   uint64
 	CommitTs  uint64
 	Rows      []*RowChangedEvent
 	ReplicaID uint64
+}
 
+// SingleTableTxn represents a transaction which includes many row events in a single table
+//msgp:ignore SingleTableTxn
+type SingleTableTxn struct {
+	RawTableTxn
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must
 	// flush cached txns and call FinishWg.Done() to mark txns have been flushed.
