@@ -25,6 +25,6 @@ func newTsDispatcher(partitionNum int32) *tsDispatcher {
 	}
 }
 
-func (t *tsDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
-	return int32(row.CommitTs % uint64(t.partitionNum))
+func (t *tsDispatcher) Dispatch(rowTxn *model.RawTableTxn) int32 {
+	return int32(rowTxn.CommitTs % uint64(t.partitionNum))
 }
