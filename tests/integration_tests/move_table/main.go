@@ -23,6 +23,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -45,6 +46,10 @@ import (
 var (
 	pd       = flag.String("pd", "http://127.0.0.1:2379", "PD address and port")
 	logLevel = flag.String("log-level", "debug", "Set log level of the logger")
+)
+
+const (
+	maxCheckSourceEmptyRetries = 30
 )
 
 // This program moves all tables replicated by a certain capture to other captures,
@@ -116,7 +121,7 @@ func main() {
 
 	log.Info("all tables are moved", zap.String("sourceCapture", sourceCapture), zap.String("targetCapture", targetCapture))
 
-	for counter := 0; counter < 30; counter++ {
+	for counter := 0; counter < maxCheckSourceEmptyRetries; counter++ {
 		err := retry.Do(ctx, func() error {
 			return cluster.refreshInfo(ctx)
 		}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(5+1), retry.WithIsRetryableErr(cerrors.IsRetryableError))
@@ -135,9 +140,12 @@ func main() {
 			break
 		}
 
-		if counter != 30 {
+		if counter != maxCheckSourceEmptyRetries {
 			log.Debug("source capture is not empty, will try again", zap.String("sourceCapture", sourceCapture))
 			time.Sleep(time.Second * 10)
+		} else {
+			// non-zero error code indicates failed test.
+			os.Exit(1)
 		}
 	}
 }
