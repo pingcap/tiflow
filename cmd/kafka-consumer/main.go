@@ -385,7 +385,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	}
 ClaimMessages:
 	for message := range claim.Messages() {
-		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
+		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 		batchDecoder, err := codec.NewJSONEventBatchDecoder(message.Key, message.Value)
 		if err != nil {
 			return errors.Trace(err)
