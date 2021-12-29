@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/test"
@@ -72,7 +73,9 @@ func (s *Runtime) runImpl(ctx context.Context) {
 		}
 		t := s.q.pop()
 		if t == nil {
-			// idle
+			// idle, sleep for sometime to avoid busy loop
+			// TODO: find better wake up mechanism way if needed
+			time.Sleep(time.Millisecond * 50)
 			continue
 		}
 		status := t.Poll()
