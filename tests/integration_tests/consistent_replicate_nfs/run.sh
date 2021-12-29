@@ -39,12 +39,12 @@ function run() {
 
 	TOPIC_NAME="ticdc-sink-retry-test-$RANDOM"
 	case $SINK_TYPE in
-	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&max-message-bytes=102400&kafka-version=${KAFKA_VERSION}" ;;
+	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=3&max-message-bytes=102400&kafka-version=${KAFKA_VERSION}&protocol=canal-json&enable-tidb-extension=true" ;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
 	changefeed_id=$(cdc cli changefeed create --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
 	if [ "$SINK_TYPE" == "kafka" ]; then
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}"
+		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=3&version=${KAFKA_VERSION}&protocol=canal-json&enable-tidb-extension=true"
 	fi
 
 	run_sql "CREATE DATABASE consistent_replicate_nfs;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}

@@ -25,12 +25,20 @@ function prepare() {
 
 	TOPIC_NAME="ticdc-processor-panic-test-$RANDOM"
 	case $SINK_TYPE in
+<<<<<<< HEAD:tests/integration_tests/processor_panic/run.sh
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-client-id=cdc_test_processor_panic&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+=======
+	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=3&kafka-client-id=cdc_test_processor_panic&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760&protocol=canal-json&enable-tidb-extension=true" ;;
+>>>>>>> 0418c69c8 (use canal-json with tidb extension for all kafka integration test.):tests/processor_panic/run.sh
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
 	if [ "$SINK_TYPE" == "kafka" ]; then
+<<<<<<< HEAD:tests/integration_tests/processor_panic/run.sh
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
+=======
+		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=3&version=${KAFKA_VERSION}&max-message-bytes=10485760&protocol=canal-json&enable-tidb-extension=true"
+>>>>>>> 0418c69c8 (use canal-json with tidb extension for all kafka integration test.):tests/processor_panic/run.sh
 	fi
 }
 

@@ -26,12 +26,12 @@ function run() {
 
 	TOPIC_NAME="ticdc-sink-retry-test-$RANDOM"
 	case $SINK_TYPE in
-	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=3&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760&protocol=canal-json&enable-tidb-extension=true" ;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1" ;;
 	esac
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
 	if [ "$SINK_TYPE" == "kafka" ]; then
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
+		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=3&version=${KAFKA_VERSION}&max-message-bytes=10485760&protocol=canal-json&enable-tidb-extension=true"
 	fi
 
 	check_table_exists "sink_retry.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}

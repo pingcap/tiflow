@@ -76,8 +76,6 @@ func init() {
 	flag.StringVar(&ca, "ca", "", "CA certificate path for Kafka SSL connection")
 	flag.StringVar(&cert, "cert", "", "Certificate path for Kafka SSL connection")
 	flag.StringVar(&key, "key", "", "Private key path for Kafka SSL connection")
-	flag.StringVar(&protocol, "protocol", "canal-json", "message encoding protocol")
-	flag.BoolVar(&enableTiDBExtension, "enable-tidb-extension", false, "canal-json with tidb extension")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
@@ -147,6 +145,24 @@ func init() {
 		}
 		log.Info("Setting max-batch-size", zap.Int("max-batch-size", c))
 		kafkaMaxBatchSize = c
+	}
+
+	s = upstreamURI.Query().Get("protocol")
+	if s != "" {
+		protocol = s
+	}
+
+	s = upstreamURI.Query().Get("enable-tidb-extension")
+	if s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			log.Fatal("invalid enable-tidb-extension of upstream-uri")
+		}
+		if strings.ToLower(protocol) != "canal-json" && b {
+			log.Fatal("enable-tidb-extension only work with canal-json")
+		}
+
+		enableTiDBExtension = b
 	}
 }
 

@@ -27,13 +27,21 @@ function run() {
 
 	TOPIC_NAME="ticdc-move-table-test-$RANDOM"
 	case $SINK_TYPE in
+<<<<<<< HEAD:tests/integration_tests/move_table/run.sh
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+=======
+	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=3&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760&protocol=canal-json&enable-tidb-extension=true" ;;
+>>>>>>> 0418c69c8 (use canal-json with tidb extension for all kafka integration test.):tests/move_table/run.sh
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1" ;;
 	esac
 
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
 	if [ "$SINK_TYPE" == "kafka" ]; then
+<<<<<<< HEAD:tests/integration_tests/move_table/run.sh
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
+=======
+		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=3&version=${KAFKA_VERSION}&max-message-bytes=10485760&protocol=canal-json&enable-tidb-extension=true"
+>>>>>>> 0418c69c8 (use canal-json with tidb extension for all kafka integration test.):tests/move_table/run.sh
 	fi
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "2" --addr 127.0.0.1:8301
