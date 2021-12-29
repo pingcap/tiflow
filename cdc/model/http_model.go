@@ -25,10 +25,21 @@ import (
 // JSONTime used to wrap time into json format
 type JSONTime time.Time
 
-// MarshalJSON use to specify the time format
+// MarshalJSON used to specify the time format
 func (t JSONTime) MarshalJSON() ([]byte, error) {
-	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006-01-02 15:04:05.000"))
+	stamp := fmt.Sprintf(`"%s"`, time.Time(t).Format("2006-01-02 15:04:05.000"))
 	return []byte(stamp), nil
+}
+
+// UnmarshalJSON used to parse time.Time from bytes
+func (t *JSONTime) UnmarshalJSON(data []byte) error {
+	tm, err := time.Parse(`"2006-01-02 15:04:05.000"`, string(data))
+	if err != nil {
+		return err
+	}
+
+	*t = JSONTime(tm)
+	return nil
 }
 
 // HTTPError of cdc http api
@@ -84,6 +95,7 @@ type ChangefeedDetail struct {
 	SinkURI        string              `json:"sink_uri"`
 	CreateTime     JSONTime            `json:"create_time"`
 	StartTs        uint64              `json:"start_ts"`
+	ResolvedTs     uint64              `json:"resolved_ts"`
 	TargetTs       uint64              `json:"target_ts"`
 	CheckpointTSO  uint64              `json:"checkpoint_tso"`
 	CheckpointTime JSONTime            `json:"checkpoint_time"`
@@ -140,6 +152,8 @@ type ProcessorDetail struct {
 	ResolvedTs uint64 `json:"resolved_ts"`
 	// all table ids that this processor are replicating
 	Tables []int64 `json:"table_ids"`
+	// The count of events were synchronized.
+	Count uint64 `json:"count"`
 	// Error code when error happens
 	Error *RunningError `json:"error"`
 }
@@ -148,8 +162,8 @@ type ProcessorDetail struct {
 type CaptureTaskStatus struct {
 	CaptureID string `json:"capture_id"`
 	// Table list, containing tables that processor should process
-	Tables    []int64                     `json:"table_ids"`
-	Operation map[TableID]*TableOperation `json:"table_operations"`
+	Tables    map[TableID]*TableReplicaInfo `json:"tables"`
+	Operation map[TableID]*TableOperation   `json:"operations"`
 }
 
 // Capture holds common information of a capture in cdc

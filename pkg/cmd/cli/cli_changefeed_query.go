@@ -14,40 +14,42 @@
 package cli
 
 import (
+	"context"
+	"time"
+
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/cmd/context"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
 
-// captureTaskStatus holds capture task status.
-type captureTaskStatus struct {
-	CaptureID  string            `json:"capture-id"`
-	TaskStatus *model.TaskStatus `json:"status"`
-}
-
-// cfMeta holds changefeed info and changefeed status.
-type cfMeta struct {
-	Info       *model.ChangeFeedInfo   `json:"info"`
-	Status     *model.ChangeFeedStatus `json:"status"`
-	Count      uint64                  `json:"count"`
-	TaskStatus []captureTaskStatus     `json:"task-status"`
+// changeFeedMeta holds changefeed info and changefeed status.
+type changeFeedMeta struct {
+	Info       *model.ChangeFeedInfo     `json:"info"`
+	Status     *model.ChangeFeedStatus   `json:"status"`
+	Count      uint64                    `json:"count"`
+	TaskStatus []model.CaptureTaskStatus `json:"task-status"`
 }
 
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.
 type queryChangefeedOptions struct {
 	etcdClient *etcd.CDCEtcdClient
+	apiClient  apiv1client.ApiV1Interface
 
 	credential *security.Credential
 
-	changefeedID string
-	simplified   bool
+	changefeedID     string
+	simplified       bool
+	runWithApiClient bool
 }
 
 // newQueryChangefeedOptions creates new options for the `cli changefeed query` command.
@@ -71,27 +73,39 @@ func (o *queryChangefeedOptions) complete(f factory.Factory) error {
 	}
 
 	o.etcdClient = etcdClient
+	ctx := cmdcontext.GetDefaultContext()
 
+	owner, err := getOwnerCapture(ctx, o.etcdClient)
+	if err != nil {
+		return err
+	}
+
+	o.apiClient, err = apiv1client.NewApiClient(owner.AdvertiseAddr, o.credential)
+	if err != nil {
+		return err
+	}
 	o.credential = f.GetCredential()
+
+	_, captureInfos, err := o.etcdClient.GetCaptures(ctx)
+	if err != nil {
+		return err
+	}
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	
+	if !cdcClusterVer.ShouldRunCliWithApiClientByDefault() {
+		o.runWithApiClient = false
+		log.Warn("The TiCDC cluster is built from an older version, run cli with etcd client by default.",
+			zap.String("version", cdcClusterVer.String()))
+	}
 
 	return nil
 }
 
-// run the `cli changefeed query` command.
-func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
-	ctx := context.GetDefaultContext()
-
-	if o.simplified {
-		resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
-		if err != nil {
-			return err
-		}
-
-		cmd.Println(resp)
-
-		return nil
-	}
-
+// run cli command with etcd client
+func (o *queryChangefeedOptions) runCliWithEtcdClient(ctx context.Context, cmd *cobra.Command) error {
 	info, err := o.etcdClient.GetChangeFeedInfo(ctx, o.changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
@@ -125,14 +139,90 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		return err
 	}
 
-	taskStatus := make([]captureTaskStatus, 0, len(processorInfos))
+	taskStatus := make([]model.CaptureTaskStatus, 0, len(processorInfos))
 	for captureID, status := range processorInfos {
-		taskStatus = append(taskStatus, captureTaskStatus{CaptureID: captureID, TaskStatus: status})
+		taskStatus = append(taskStatus, model.CaptureTaskStatus{
+			CaptureID: captureID,
+			Tables:    status.Tables,
+			Operation: status.Operation,
+		})
 	}
 
-	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
+	meta := &changeFeedMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
+	return util.JSONPrint(cmd, meta)
+}
+
+// run cli command with the encapsulated api client
+func (o *queryChangefeedOptions) runCliWithApiClient(ctx context.Context, cmd *cobra.Command) error {
+	var count uint64
+	// count cannot be properly calculated until https://github.com/pingcap/tiflow/pull/4052 is merged
+
+	// captures, err := o.apiClient.Captures().List(ctx)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// for _, capture := range *captures {
+	// 	processor, err := o.apiClient.Processors().Get(ctx, o.changefeedID, capture.ID)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	count += processor.Count
+	// }
+
+	changefeed, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
+	if err != nil {
+		return err
+	}
+
+	meta := &changeFeedMeta{
+		Info: &model.ChangeFeedInfo{
+			SinkURI: changefeed.SinkURI,
+			// Opts is vacant
+			CreateTime: time.Time(changefeed.CreateTime),
+			StartTs:    changefeed.StartTs,
+			TargetTs:   changefeed.TargetTs,
+			// AdminJobType is vacant
+			Engine: changefeed.Engine,
+			// SortDir is vacant
+			// Config is vacant
+			State:    changefeed.FeedState,
+			ErrorHis: changefeed.ErrorHis,
+			Error:    changefeed.RunningError,
+			// SyncPointEnabled is vacant
+			// SyncPointInterval is vacant
+			// CreatorVersion is vacant
+		},
+		Status: &model.ChangeFeedStatus{
+			ResolvedTs:   changefeed.ResolvedTs,
+			CheckpointTs: changefeed.CheckpointTSO,
+		},
+		Count:      count,
+		TaskStatus: changefeed.TaskStatus}
 
 	return util.JSONPrint(cmd, meta)
+}
+
+// run the `cli changefeed query` command.
+func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
+	ctx := cmdcontext.GetDefaultContext()
+
+	if o.simplified {
+		resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
+		if err != nil {
+			return err
+		}
+
+		cmd.Println(resp)
+
+		return nil
+	}
+
+	if o.runWithApiClient {
+		return o.runCliWithApiClient(ctx, cmd)
+	} else {
+		return o.runCliWithEtcdClient(ctx, cmd)
+	}
 }
 
 // newCmdQueryChangefeed creates the `cli changefeed query` command.

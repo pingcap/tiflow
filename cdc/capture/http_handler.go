@@ -166,11 +166,11 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 
 	taskStatus := make([]model.CaptureTaskStatus, 0, len(processorInfos))
 	for captureID, status := range processorInfos {
-		tables := make([]int64, 0)
-		for tableID := range status.Tables {
-			tables = append(tables, tableID)
-		}
-		taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
+		taskStatus = append(taskStatus, model.CaptureTaskStatus{
+			CaptureID: captureID,
+			Tables:    status.Tables,
+			Operation: status.Operation},
+		)
 	}
 
 	changefeedDetail := &model.ChangefeedDetail{
@@ -181,6 +181,7 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 		TargetTs:       info.TargetTs,
 		CheckpointTSO:  status.CheckpointTs,
 		CheckpointTime: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
+		ResolvedTs:     status.ResolvedTs,
 		Engine:         info.Engine,
 		FeedState:      info.State,
 		TaskStatus:     taskStatus,
@@ -576,7 +577,6 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 	status, exist := statuses[captureID]
 	if !exist {
 		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
-		return
 	}
 
 	positions, err := statusProvider.GetTaskPositions(ctx, changefeedID)
@@ -587,7 +587,6 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 	position, exist := positions[captureID]
 	if !exist {
 		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
-		return
 	}
 
 	processorDetail := &model.ProcessorDetail{CheckPointTs: position.CheckPointTs, ResolvedTs: position.ResolvedTs, Error: position.Error}

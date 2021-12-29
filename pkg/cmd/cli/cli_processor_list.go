@@ -14,16 +14,24 @@
 package cli
 
 import (
-	"github.com/pingcap/tiflow/pkg/cmd/context"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 // listProcessorOptions defines flags for the `cli processor list` command.
 type listProcessorOptions struct {
-	etcdClient *etcd.CDCEtcdClient
+	etcdClient       *etcd.CDCEtcdClient
+	apiClient        apiv1client.ApiV1Interface
+	runWithApiClient bool
 }
 
 // newListProcessorOptions creates new listProcessorOptions for the `cli processor list` command.
@@ -39,19 +47,51 @@ func (o *listProcessorOptions) complete(f factory.Factory) error {
 	}
 
 	o.etcdClient = etcdClient
+	ctx := cmdcontext.GetDefaultContext()
+	owner, err := getOwnerCapture(ctx, o.etcdClient)
+	if err != nil {
+		return err
+	}
+
+	o.apiClient, err = apiv1client.NewApiClient(owner.AdvertiseAddr, nil)
+	if err != nil {
+		return err
+	}
+
+	_, captureInfos, err := o.etcdClient.GetCaptures(ctx)
+	if err != nil {
+		return err
+	}
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if !cdcClusterVer.ShouldRunCliWithApiClientByDefault() {
+		o.runWithApiClient = false
+		log.Warn("The TiCDC cluster is built from an older version, run cli with etcd client by default.",
+			zap.String("version", cdcClusterVer.String()))
+	}
 
 	return nil
 }
 
 // run runs the `cli processor list` command.
 func (o *listProcessorOptions) run(cmd *cobra.Command) error {
-	ctx := context.GetDefaultContext()
-	info, err := o.etcdClient.GetProcessors(ctx)
-	if err != nil {
-		return err
+	ctx := cmdcontext.GetDefaultContext()
+	if o.runWithApiClient {
+		processors, err := o.apiClient.Processors().List(ctx)
+		if err != nil {
+			return err
+		}
+		return util.JSONPrint(cmd, processors)
+	} else {
+		info, err := o.etcdClient.GetProcessors(ctx)
+		if err != nil {
+			return err
+		}
+		return util.JSONPrint(cmd, info)
 	}
-
-	return util.JSONPrint(cmd, info)
 }
 
 // newCmdListProcessor creates the `cli processor list` command.

@@ -14,13 +14,20 @@
 package cli
 
 import (
+	"context"
+
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/cmd/context"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 type processorMeta struct {
@@ -31,9 +38,11 @@ type processorMeta struct {
 // queryProcessorOptions defines flags for the `cli processor query` command.
 type queryProcessorOptions struct {
 	etcdClient *etcd.CDCEtcdClient
+	apiClient  apiv1client.ApiV1Interface
 
-	changefeedID string
-	captureID    string
+	changefeedID     string
+	captureID        string
+	runWithApiClient bool
 }
 
 // newQueryProcessorOptions creates new options for the `cli changefeed query` command.
@@ -49,6 +58,31 @@ func (o *queryProcessorOptions) complete(f factory.Factory) error {
 	}
 
 	o.etcdClient = etcdClient
+	ctx := cmdcontext.GetDefaultContext()
+	owner, err := getOwnerCapture(ctx, o.etcdClient)
+	if err != nil {
+		return err
+	}
+
+	o.apiClient, err = apiv1client.NewApiClient(owner.AdvertiseAddr, nil)
+	if err != nil {
+		return err
+	}
+
+	_, captureInfos, err := o.etcdClient.GetCaptures(ctx)
+	if err != nil {
+		return err
+	}
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if !cdcClusterVer.ShouldRunCliWithApiClientByDefault() {
+		o.runWithApiClient = false
+		log.Warn("The TiCDC cluster is built from an older version, run cli with etcd client by default.",
+			zap.String("version", cdcClusterVer.String()))
+	}
 
 	return nil
 }
@@ -62,10 +96,8 @@ func (o *queryProcessorOptions) addFlags(cmd *cobra.Command) {
 	_ = cmd.MarkPersistentFlagRequired("capture-id")
 }
 
-// run runs the `cli processor query` command.
-func (o *queryProcessorOptions) run(cmd *cobra.Command) error {
-	ctx := context.GetDefaultContext()
-
+// run cli cmd with etcd client
+func (o *queryProcessorOptions) runCliWithEtcdClient(ctx context.Context, cmd *cobra.Command) error {
 	_, status, err := o.etcdClient.GetTaskStatus(ctx, o.changefeedID, o.captureID)
 	if err != nil && cerror.ErrTaskStatusNotExists.Equal(err) {
 		return err
@@ -79,6 +111,53 @@ func (o *queryProcessorOptions) run(cmd *cobra.Command) error {
 	meta := &processorMeta{Status: status, Position: position}
 
 	return util.JSONPrint(cmd, meta)
+}
+
+// run cli cmd with apio client
+func (o *queryProcessorOptions) runCliWithApiClient(ctx context.Context, cmd *cobra.Command) error {
+	changfeed, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
+	if err != nil {
+		return err
+	}
+
+	processor, err := o.apiClient.Processors().Get(ctx, o.changefeedID, o.captureID)
+	if err != nil {
+		return err
+	}
+
+	var status model.CaptureTaskStatus
+	for _, captureStatus := range changfeed.TaskStatus {
+		if captureStatus.CaptureID == o.captureID {
+			status = captureStatus
+			break
+		}
+	}
+
+	meta := &processorMeta{
+		Status: &model.TaskStatus{
+			Tables:    status.Tables,
+			Operation: status.Operation,
+			// AdminJobType and ModRevision are vacant
+		},
+		Position: &model.TaskPosition{
+			CheckPointTs: processor.CheckPointTs,
+			ResolvedTs:   processor.ResolvedTs,
+			Count:        processor.Count,
+			Error:        processor.Error,
+		},
+	}
+
+	return util.JSONPrint(cmd, meta)
+}
+
+// run runs the `cli processor query` command.
+func (o *queryProcessorOptions) run(cmd *cobra.Command) error {
+	ctx := cmdcontext.GetDefaultContext()
+	if o.runWithApiClient {
+		return o.runCliWithApiClient(ctx, cmd)
+	} else {
+		return o.runCliWithEtcdClient(ctx, cmd)
+	}
 }
 
 // newCmdQueryProcessor creates the `cli processor query` command.
