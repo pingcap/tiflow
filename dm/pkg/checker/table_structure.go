@@ -146,8 +146,9 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 					if isMySQLError(err, mysql.ErrNoSuchTable) {
 						continue
 					}
-					if len(errCh) == 0 {
+					if errCh != nil {
 						errCh <- err
+						close(errCh)
 					}
 					break
 				}
@@ -166,7 +167,6 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 		err, ok := <-errCh
 		if ok {
 			markCheckError(r, err)
-			close(errCh)
 		}
 	}()
 
