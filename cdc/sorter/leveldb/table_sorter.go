@@ -341,9 +341,10 @@ func (ls *Sorter) outputIterEvents(
 	start := time.Now()
 	lastNext := start
 	if hasReadLastNext {
+		// We have read the last key/value, move the next.
 		iter.Next()
 		ls.metricIterNextDuration.Observe(time.Since(start).Seconds())
-	}
+	} // else the last is not read, we need to skip calling next and read again.
 	hasReadNext := true
 	hasNext := iter.Valid()
 	for ; hasNext; hasNext = iter.Next() {
@@ -576,8 +577,9 @@ func (state *pollState) tryReleaseIterator() error {
 func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	// Wait input or output becomes available.
 	waitOutput := state.hasResolvedEvents()
-	maxCommitTs, maxResolvedTs, n, err :=
-		ls.wait(ctx, waitOutput, state.eventsBuf)
+	// TODO: we should also wait state.iterCh, so that we can read and output
+	//       resolved events ASAP.
+	maxCommitTs, maxResolvedTs, n, err := ls.wait(ctx, waitOutput, state.eventsBuf)
 	if err != nil {
 		return errors.Trace(err)
 	}

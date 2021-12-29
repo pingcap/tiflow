@@ -16,7 +16,6 @@ package leveldb
 import (
 	"context"
 	"encoding/hex"
-	"sync"
 	"testing"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
+	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
@@ -810,7 +810,9 @@ func TestPoll(t *testing.T) {
 	db := prepareTxnData(t, ls, 5, 3)
 	sema := semaphore.NewWeighted(1)
 
-	cases := []struct {
+	// We need to poll twice to read resolved events, so we need a slice of
+	// two cases.
+	cases := [][2]struct {
 		inputEvents []*model.PolymorphicEvent
 		inputIter   func([2][]byte) *message.LimitedIterator
 		state       *pollState
@@ -822,7 +824,7 @@ func TestPoll(t *testing.T) {
 		expectMaxResolvedTs uint64
 		expectExhaustedRTs  uint64
 	}{
-		{
+		{{ // The first poll
 			inputEvents: []*model.PolymorphicEvent{
 				model.NewResolvedPolymorphicEvent(0, 1),
 			},
@@ -839,10 +841,24 @@ func TestPoll(t *testing.T) {
 			expectMaxCommitTs:   0,
 			expectMaxResolvedTs: 1,
 			expectExhaustedRTs:  0,
-		},
+		}, { // The second poll
+			inputEvents: []*model.PolymorphicEvent{
+				model.NewResolvedPolymorphicEvent(0, 1),
+			},
+			state:     nil, // state is inherited from the first poll.
+			inputIter: nil, // no need to make an iterator.
+
+			expectEvents:     []*model.PolymorphicEvent{},
+			expectDeleteKeys: []message.Key{},
+			// It is initialized to 1 in the test.
+			expectOutputs:       []*model.PolymorphicEvent{model.NewResolvedPolymorphicEvent(0, 1)},
+			expectMaxCommitTs:   0,
+			expectMaxResolvedTs: 1,
+			expectExhaustedRTs:  0,
+		}},
 		// maxCommitTs and maxResolvedTs must advance according to inputs.
 		// And exhaustedResolvedTs must advance if there is no resolved event.
-		{
+		{{ // The first poll
 			inputEvents: []*model.PolymorphicEvent{
 				newTestEvent(3, 2, 1), // crts 3, startts 2
 				model.NewResolvedPolymorphicEvent(0, 2),
@@ -854,6 +870,19 @@ func TestPoll(t *testing.T) {
 			// An empty iterator.
 			inputIter: newEmptyIterator(ctx, t, db, sema),
 
+			expectEvents:        []*model.PolymorphicEvent{},
+			expectDeleteKeys:    []message.Key{},
+			expectOutputs:       []*model.PolymorphicEvent{},
+			expectMaxCommitTs:   3,
+			expectMaxResolvedTs: 2,
+			expectExhaustedRTs:  0,
+		}, { // The second poll
+			inputEvents: []*model.PolymorphicEvent{
+				model.NewResolvedPolymorphicEvent(0, 2),
+			},
+			state:     nil, // state is inherited from the first poll.
+			inputIter: nil, // no need to make an iterator.
+
 			expectEvents:     []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{},
 			expectOutputs: []*model.PolymorphicEvent{
@@ -861,11 +890,12 @@ func TestPoll(t *testing.T) {
 			},
 			expectMaxCommitTs:   3,
 			expectMaxResolvedTs: 2,
-			expectExhaustedRTs:  2,
-		},
+			//exhaustedResolvedTs must advance if there is no resolved event.
+			expectExhaustedRTs: 2,
+		}},
 		// exhaustedResolvedTs must advance if all resolved events are outputted.
 		// Output: CRTs 2, StartTs 1, keys (0|1|2)
-		{
+		{{ // The first poll
 			inputEvents: []*model.PolymorphicEvent{
 				newTestEvent(3, 2, 1), // crts 3, startts 2
 				model.NewResolvedPolymorphicEvent(0, 2),
@@ -875,6 +905,19 @@ func TestPoll(t *testing.T) {
 				outputBuf: newOutputBuffer(1),
 			},
 			inputIter: newSnapshot(ctx, t, db, sema),
+
+			expectEvents:        []*model.PolymorphicEvent{},
+			expectDeleteKeys:    []message.Key{},
+			expectOutputs:       []*model.PolymorphicEvent{},
+			expectMaxCommitTs:   3,
+			expectMaxResolvedTs: 2,
+			expectExhaustedRTs:  0,
+		}, { // The second poll
+			inputEvents: []*model.PolymorphicEvent{
+				model.NewResolvedPolymorphicEvent(0, 2),
+			},
+			state:     nil, // state is inherited from the first poll.
+			inputIter: nil, // no need to make an iterator.
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
@@ -890,10 +933,11 @@ func TestPoll(t *testing.T) {
 			},
 			expectMaxCommitTs:   3,
 			expectMaxResolvedTs: 2,
-			expectExhaustedRTs:  2,
-		},
+			//exhaustedResolvedTs must advance if there is no resolved event.
+			expectExhaustedRTs: 2,
+		}},
 		// maxResolvedTs must advance even if there is only resolved ts event.
-		{
+		{{ // The first poll
 			inputEvents: []*model.PolymorphicEvent{
 				model.NewResolvedPolymorphicEvent(0, 3),
 			},
@@ -913,9 +957,24 @@ func TestPoll(t *testing.T) {
 			expectMaxCommitTs:   2,
 			expectMaxResolvedTs: 3,
 			expectExhaustedRTs:  2,
-		},
+		}, { // The second poll
+			inputEvents: []*model.PolymorphicEvent{
+				model.NewResolvedPolymorphicEvent(0, 3),
+			},
+			state:     nil, // state is inherited from the first poll.
+			inputIter: nil, // no need to make an iterator.
+
+			expectEvents:     []*model.PolymorphicEvent{},
+			expectDeleteKeys: []message.Key{},
+			expectOutputs: []*model.PolymorphicEvent{
+				model.NewResolvedPolymorphicEvent(0, 3),
+			},
+			expectMaxCommitTs:   2,
+			expectMaxResolvedTs: 3,
+			expectExhaustedRTs:  2,
+		}},
 		// Batch output buffered resolved events
-		{
+		{{ // The first poll
 			inputEvents: []*model.PolymorphicEvent{},
 			state: &pollState{
 				eventsBuf: make([]*model.PolymorphicEvent, 2),
@@ -943,54 +1002,75 @@ func TestPoll(t *testing.T) {
 			expectMaxCommitTs:   0,
 			expectMaxResolvedTs: 0,
 			expectExhaustedRTs:  0,
-		},
+		}, { // The second poll
+			inputEvents: []*model.PolymorphicEvent{
+				model.NewResolvedPolymorphicEvent(0, 4),
+			},
+			state:     nil, // state is inherited from the first poll.
+			inputIter: nil, // no need to make an iterator.
+
+			expectEvents:     []*model.PolymorphicEvent{},
+			expectDeleteKeys: []message.Key{},
+			expectOutputs: []*model.PolymorphicEvent{
+				model.NewResolvedPolymorphicEvent(0, 4),
+			},
+			expectMaxCommitTs:   0,
+			expectMaxResolvedTs: 4,
+			expectExhaustedRTs:  0,
+		}},
 	}
 
-	for i, cs := range cases {
-		_, state := i, cs.state
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() { handleTask(mb, &wg, cs.inputIter) }()
-		for i := range cs.inputEvents {
-			ls.AddEntry(ctx, cs.inputEvents[i])
+	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
+		prometheus.Labels{"capture": t.Name(), "id": t.Name()})
+	for i, css := range cases {
+		state := css[0].state
+		state.iterFirstSlowDuration = 100 * time.Second
+		state.iterMaxAliveDuration = 100 * time.Second
+		state.metricIterFirst = metricIterDuration.WithLabelValues("first")
+		state.metricIterRelease = metricIterDuration.WithLabelValues("release")
+		for j, cs := range css {
+			for i := range cs.inputEvents {
+				ls.AddEntry(ctx, cs.inputEvents[i])
+			}
+			t.Logf("test case #%d[%d], %v", i, j, cs)
+			require.Nil(t, ls.poll(ctx, state))
+			require.EqualValues(t, cs.expectEvents, state.outputBuf.resolvedEvents, "case #%d[%d], %v", i, j, cs)
+			require.EqualValues(t, cs.expectDeleteKeys, state.outputBuf.deleteKeys, "case #%d[%d], %v", i, j, cs)
+			require.EqualValues(t, cs.expectMaxCommitTs, state.maxCommitTs, "case #%d[%d], %v", i, j, cs)
+			require.EqualValues(t, cs.expectMaxResolvedTs, state.maxResolvedTs, "case #%d[%d], %v", i, j, cs)
+			require.EqualValues(t, cs.expectExhaustedRTs, state.exhaustedResolvedTs, "case #%d[%d], %v", i, j, cs)
+			outputEvents := receiveOutputEvents(ls.outputCh)
+			require.EqualValues(t, cs.expectOutputs, outputEvents, "case #%d[%d], %v", i, j, cs)
+
+			task, ok := mb.Receive()
+			if !ok {
+				// No task, so there must be nil inputIter.
+				require.Nil(t, cs.inputIter, "case #%d[%d], %v", i, j, cs)
+				continue
+			}
+			handleTask(task, cs.inputIter)
 		}
-		t.Logf("test case #%d, %v", i, cs)
-		err := ls.poll(ctx, state)
-		require.Nil(t, err)
-		require.EqualValues(t, cs.expectEvents, state.outputBuf.resolvedEvents, "case #%d, %v", i, cs)
-		require.EqualValues(t, cs.expectDeleteKeys, state.outputBuf.deleteKeys, "case #%d, %v", i, cs)
-		require.EqualValues(t, cs.expectMaxCommitTs, state.maxCommitTs, "case #%d, %v", i, cs)
-		require.EqualValues(t, cs.expectMaxResolvedTs, state.maxResolvedTs, "case #%d, %v", i, cs)
-		require.EqualValues(t, cs.expectExhaustedRTs, state.exhaustedResolvedTs, "case #%d, %v", i, cs)
-		outputEvents := receiveOutputEvents(ls.outputCh)
-		require.EqualValues(t, cs.expectOutputs, outputEvents, "case #%d, %v", i, cs)
-		wg.Wait()
+		if state.iter != nil {
+			require.Nil(t, state.iter.Release())
+		}
 	}
 
 	require.Nil(t, db.Close())
 }
 
 func handleTask(
-	mb actor.Mailbox, wg *sync.WaitGroup,
-	iterFn func(rg [2][]byte) *message.LimitedIterator,
+	task actormsg.Message, iterFn func(rg [2][]byte) *message.LimitedIterator,
 ) {
-	defer wg.Done()
-	for {
-		time.Sleep(20 * time.Millisecond)
-		task, ok := mb.Receive()
-		if !ok {
-			continue
-		}
-		if task.SorterTask.IterReq == nil {
-			return
-		}
-		iter := iterFn(task.SorterTask.IterReq.Range)
-		if iter != nil {
-			task.SorterTask.IterReq.IterCh <- iter
-		}
-		close(task.SorterTask.IterReq.IterCh)
+	if task.SorterTask.IterReq == nil || iterFn == nil {
 		return
 	}
+	iter := iterFn(task.SorterTask.IterReq.Range)
+	iter.ResolvedTs = task.SorterTask.IterReq.ResolvedTs
+	if iter != nil {
+		task.SorterTask.IterReq.IterCh <- iter
+	}
+	close(task.SorterTask.IterReq.IterCh)
+	return
 }
 
 func newSnapshot(
