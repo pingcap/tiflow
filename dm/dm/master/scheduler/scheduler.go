@@ -15,11 +15,11 @@ package scheduler
 
 import (
 	"context"
-	"errors"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/atomic"
@@ -762,6 +762,10 @@ WaitLoop:
 		})
 
 		for _, status := range resp.QueryStatus.GetSubTaskStatus() {
+			if status == nil {
+				// this should not happen when rpc logic in server side not changed
+				return errors.Errorf("expect a query-status with subtask status but got a nil, resp %v", resp)
+			}
 			if status.Stage != stage {
 				// NOTE: the defaultRPCTimeout is 10m, use 1s * retry times to increase the waiting time
 				sleepTime := time.Second * time.Duration(maxQueryWorkerRetryNum-retry)

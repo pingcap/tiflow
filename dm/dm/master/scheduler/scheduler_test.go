@@ -1223,6 +1223,7 @@ func (t *testScheduler) TestTransferSource(c *C) {
 
 	// test can't transfer when running tasks not in sync unit
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus", `return("notInSyncUnit")`), IsNil)
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus") //nolint:errcheck
 	c.Assert(terror.ErrSchedulerRequireRunningTaskInSyncUnit.Equal(s.TransferSource(ctx, sourceID1, workerName1)), IsTrue)
 	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus"), IsNil)
 
@@ -1233,6 +1234,7 @@ func (t *testScheduler) TestTransferSource(c *C) {
 
 	// test can transfer when all running task is in sync unit
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/skipBatchOperateTaskOnWorkerSleep", `return()`), IsNil)
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/skipBatchOperateTaskOnWorkerSleep") //nolint:errcheck
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus", `return("allTaskIsPaused")`), IsNil)
 
 	// we only retry 10 times, open a failpoint to make need retry more than 10 times, so this transfer will fail
