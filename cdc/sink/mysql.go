@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/common"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/cyclic"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
@@ -60,6 +61,7 @@ type mysqlSink struct {
 
 	txnCache           *common.UnresolvedTxnCache
 	workers            []*mysqlSinkWorker
+	txnDispatcher	dispatcher.Dispatcher
 	tableCheckpointTs  sync.Map
 	tableMaxResolvedTs sync.Map
 
@@ -198,6 +200,11 @@ func newMySQLSink(
 	err = sink.createSinkWorkers(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	sink.txnDispatcher, err := dispatcher.NewDispatcher(replicaConfig, params.workerCount, model.SinkTypeMySQL)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	receiver, err := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
@@ -422,26 +429,16 @@ func (s *mysqlSink) broadcastFinishTxn() {
 
 func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model.TableID][]*model.SingleTableTxn) {
 	nWorkers := s.params.workerCount
-	causality := newCausality()
-	rowsChIdx := 0
-
-	sendFn := func(txn *model.SingleTableTxn, keys [][]byte, idx int) {
-		causality.add(keys, idx)
-		s.workers[idx].appendTxn(ctx, txn)
-	}
 	dispatchTableTxn := func(txn *model.SingleTableTxn) {
-		keys := genTxnKeys(txn)
-		if conflict, idx := causality.detectConflict(keys); conflict {
-			if idx >= 0 {
-				sendFn(txn, keys, idx)
-				return
-			}
-			s.notifyAndWaitExec(ctx)
-			causality.reset()
+		// NOTICE: To some extend, causality dispatcher may affect other dispatcher due to the waitExec
+		workerIdx := txnDispatcher.Dispatch(txn)
+		if workerIdx > 0 {
+			workers[workerIdx].appendTxn(ctx, txn)
+			return
 		}
-		sendFn(txn, keys, rowsChIdx)
-		rowsChIdx++
-		rowsChIdx = rowsChIdx % nWorkers
+		// need wait all txn finish here and redo the dispatch
+		s.notifyAndWaitExec(ctx)
+		dispatchTableTxn(txn)
 	}
 	h := newTxnsHeap(txnsGroup)
 	h.iter(func(txn *model.SingleTableTxn) {

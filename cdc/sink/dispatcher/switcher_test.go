@@ -14,25 +14,117 @@
 package dispatcher
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type SwitcherSuite struct{}
+func (s SwitcherSuite) TestDefaultSwitcher(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&SwitcherSuite{})
+	d, err := NewDispatcher(config.GetDefaultReplicaConfig(), 4, model.SinkTypeUnknown)
+	require.Nil(t, d)
+	require.Error(t, err)
 
-func (s SwitcherSuite) TestSwitcher(c *check.C) {
-	defer testleak.AfterTest(c)()
-	d, err := NewDispatcher(config.GetDefaultReplicaConfig(), 4)
-	c.Assert(err, check.IsNil)
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	d, err = NewDispatcher(config.GetDefaultReplicaConfig(), 4, SinkTypeMQ)
+	require.Nil(t, err)
+	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test", Table: "test",
 		},
-	}), check.FitsTypeOf, &defaultDispatcher{})
+	}))
+
+	d, err = NewDispatcher(config.GetDefaultReplicaConfig(), 4, SinkTypeMySQL)
+	require.Nil(t, err)
+	require.IsType(t, &causalityDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema: "test", Table: "test",
+		},
+	}))
+}
+
+func TestSupportedSwitcher(t *testing.T) {
+	t.Parallel()
+
+	d, err := NewDispatcher(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{Matcher: []string{"test_default.*"}, Dispatcher: "default"},
+				{Matcher: []string{"test_table.*"}, Dispatcher: "table"},
+				{Matcher: []string{"test_index_value.*"}, Dispatcher: "index-value"},
+				{Matcher: []string{"test.*"}, Dispatcher: "rowid"},
+				{Matcher: []string{"*.*", "!*.test"}, Dispatcher: "ts"},
+			},
+		},
+	}, 4, SinkTypeMQ)
+	require.Nil(t, err)
+
+	d, err = NewDispatcher(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{Matcher: []string{"test.*"}, Dispatcher: "causality"},
+			},
+		},
+	}, 4, SinkTypeMQ)
+	require.Error(err)
+
+	d, err = NewDispatcher(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{Matcher: []string{"test_default.*"}, Dispatcher: "table"},
+				{Matcher: []string{"test.*"}, Dispatcher: "causality"},
+			},
+		},
+	}, 4, SinkTypeMySQL)
+	require.Nil(err)
+
+	d, err = NewDispatcher(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{Matcher: []string{"test_default.*"}, Dispatcher: "default"},
+			},
+		},
+	}, 4, SinkTypeMySQL)
+	require.Error(err)
+
+	d, err = NewDispatcher(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{Matcher: []string{"test_default.*"}, Dispatcher: "index-value"},
+			},
+		},
+	}, 4, SinkTypeMySQL)
+	require.Error(err)
+
+	d, err = NewDispatcher(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{Matcher: []string{"test_default.*"}, Dispatcher: "ts"},
+			},
+		},
+	}, 4, SinkTypeMySQL)
+	require.Error(err)
+
+	d, err = NewDispatcher(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{Matcher: []string{"test_default.*"}, Dispatcher: "rowid"},
+			},
+		},
+	}, 4, SinkTypeMySQL)
+	require.Error(err)
+}
+
+func (s SwitcherSuite) TestMQSwitcher(t *testing.T) {
+	d, err := NewDispatcher(config.GetDefaultReplicaConfig(), 4, SinkTypeMQ)
+	require.Nil(t, err)
+	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema: "test", Table: "test",
+		},
+	}))
 
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
@@ -45,35 +137,35 @@ func (s SwitcherSuite) TestSwitcher(c *check.C) {
 			},
 		},
 	}, 4)
-	c.Assert(err, check.IsNil)
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	require.Nil(t, err)
+	require.IsType(t, &indexValueDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test", Table: "table1",
 		},
-	}), check.FitsTypeOf, &indexValueDispatcher{})
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	}))
+	require.IsType(t, &tsDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "sbs", Table: "table2",
 		},
-	}), check.FitsTypeOf, &tsDispatcher{})
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	}))
+	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "sbs", Table: "test",
 		},
-	}), check.FitsTypeOf, &defaultDispatcher{})
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	}))
+	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test_default", Table: "test",
 		},
-	}), check.FitsTypeOf, &defaultDispatcher{})
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	}))
+	require.IsType(t, &tableDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test_table", Table: "test",
 		},
-	}), check.FitsTypeOf, &tableDispatcher{})
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	}))
+	require.IsType(t, &indexValueDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test_index_value", Table: "test",
 		},
-	}), check.FitsTypeOf, &indexValueDispatcher{})
+	}))
 }

@@ -14,6 +14,7 @@
 package dispatcher
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/pingcap/log"
@@ -24,10 +25,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// Dispatcher is an abstraction for dispatching rows into different partitions
+// For reuse the dispatcher in both mysql sink and mq sink, we abstract the single unit as txn
+// As for MySQL sink, it can be txn with multi-rows
+// As for MQ sink, it can be txn with single-row
+// Dispatcher is an abstraction for dispatching txn into different partitions
 type Dispatcher interface {
 	// Dispatch returns an index of partitions according to RowChangedEvent
-	Dispatch(row *model.RowChangedEvent) int32
+	Dispatch(tbTxn *model.RawTableTxn) int32
 }
 
 type dispatchRule int
@@ -38,8 +42,10 @@ const (
 	dispatchRuleTS
 	dispatchRuleTable
 	dispatchRuleIndexValue
+	dispatchRuleCausality
 )
 
+// To keep dispatcher rule unchanged for MQ sink, MySQL sink need use different default tag `causality`
 func (r *dispatchRule) fromString(rule string) {
 	switch strings.ToLower(rule) {
 	case "default":
@@ -52,7 +58,9 @@ func (r *dispatchRule) fromString(rule string) {
 		*r = dispatchRuleTable
 	case "index-value":
 		*r = dispatchRuleIndexValue
-	default:
+	case "causality":
+		*r = dispatchRuleCausality
+	default: // [TODO] check
 		*r = dispatchRuleDefault
 		log.Warn("can't support dispatch rule, using default rule", zap.String("rule", rule))
 	}
@@ -65,13 +73,13 @@ type dispatcherSwitcher struct {
 	}
 }
 
-func (s *dispatcherSwitcher) Dispatch(row *model.RowChangedEvent) int32 {
-	return s.matchDispatcher(row).Dispatch(row)
+func (s *dispatcherSwitcher) Dispatch(tbTxn *model.RawTableTxn) int32 {
+	return s.matchDispatcher(tbTxn).Dispatch(tbTxn)
 }
 
-func (s *dispatcherSwitcher) matchDispatcher(row *model.RowChangedEvent) Dispatcher {
+func (s *dispatcherSwitcher) matchDispatcher(tbTxn *model.RawTableTxn) Dispatcher {
 	for _, rule := range s.rules {
-		if !rule.MatchTable(row.Table.Schema, row.Table.Table) {
+		if !rule.MatchTable(tbTxn.Table.Schema, tbTxn.Table.Table) {
 			continue
 		}
 		return rule.Dispatcher
@@ -81,11 +89,25 @@ func (s *dispatcherSwitcher) matchDispatcher(row *model.RowChangedEvent) Dispatc
 }
 
 // NewDispatcher creates a new dispatcher
-func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, error) {
-	ruleConfigs := append(cfg.Sink.DispatchRules, &config.DispatchRule{
-		Matcher:    []string{"*.*"},
-		Dispatcher: "default",
-	})
+func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32, sinkTp model.sinkType) (Dispatcher, error) {
+	if sinkTp != model.SinkTypeMQ || sinkTp != model.SinkTypeMQ {
+		return nil, cerror.WrapError(cerror.ErrSinkTypeForDispatcher, sinkTp)
+	}
+
+	var ruleConfigs []*DispatchRule
+	// NOTICE: New sink need to add default dispatcher here
+	if model.SinkTypeMySQL == sinkTp {
+		ruleConfigs = append(cfg.Sink.DispatchRules, &config.DispatchRule{
+			Matcher:    []string{"*.*"},
+			Dispatcher: "causality",
+		})
+	} else if model.SinkTypeMQ == sinkTp {
+		ruleConfigs = append(cfg.Sink.DispatchRules, &config.DispatchRule{
+			Matcher:    []string{"*.*"},
+			Dispatcher: "default",
+		})
+	}
+
 	rules := make([]struct {
 		Dispatcher
 		filter.Filter
@@ -102,6 +124,15 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		var d Dispatcher
 		var rule dispatchRule
 		rule.fromString(ruleConfig.Dispatcher)
+		if sinkTp == SinkTypeMySQL && rule != dispatcherRuleTable && rule != dispatchRuleCausality {
+			log.Error("MySQL sink only support `causality` and `table` dispatch rule.", zap.String("user dispatch rule", ruleConfig.Dispatcher))
+			return nil, cerror.WrapError(cerror.ErrFilterRuleUnsupported, fmt.Sprintf("%s for MySQL sink", ruleConfig.Dispatcher))
+		}
+		if sinkTp == SinkTypeMQ && rule == dispatcherRuleCausality {
+			log.Error("MQ sink can't support `causality` dispatch rule.", zap.String("user dispatch rule", ruleConfig.Dispatcher))
+			return nil, cerror.WrapError(cerror.ErrFilterRuleUnsupported, fmt.Sprintf("%s for MQ sink", ruleConfig.Dispatcher))
+		}
+
 		switch rule {
 		case dispatchRuleRowID, dispatchRuleIndexValue:
 			if cfg.EnableOldValue {
@@ -116,6 +147,8 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 			d = newTableDispatcher(partitionNum)
 		case dispatchRuleDefault:
 			d = newDefaultDispatcher(partitionNum, cfg.EnableOldValue)
+		case dispatchRuleCausality:
+			d = newCausalityDispatcher(partitionNum)
 		}
 		rules = append(rules, struct {
 			Dispatcher

@@ -30,23 +30,26 @@ func newIndexValueDispatcher(partitionNum int32) *indexValueDispatcher {
 	}
 }
 
-func (r *indexValueDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
+func (r *indexValueDispatcher) Dispatch(tbTxn *model.RawTableTxn) int32 {
 	r.hasher.Reset()
-	r.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
+	r.hasher.Write([]byte(tbTxn.Table.Schema), []byte(tbTxn.Table.Table))
 	// FIXME(leoppro): if the row events includes both pre-cols and cols
 	// the dispatch logic here is wrong
 
-	// distribute partition by rowid or unique column value
-	dispatchCols := row.Columns
-	if len(row.Columns) == 0 {
-		dispatchCols = row.PreColumns
-	}
-	for _, col := range dispatchCols {
-		if col == nil {
-			continue
+	for _, row := range tbTxn.Rows {
+		// distribute partition by rowid or unique column value
+		dispatchCols := row.Columns
+		if len(row.Columns) == 0 {
+			dispatchCols = row.PreColumns
 		}
-		if col.Flag.IsHandleKey() {
-			r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value)))
+		for _, col := range dispatchCols {
+			if col == nil {
+				continue
+			}
+			// Handle key can be pk or uk(if no pk)
+			if col.Flag.IsHandleKey() {
+				r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value)))
+			}
 		}
 	}
 	return int32(r.hasher.Sum32() % uint32(r.partitionNum))

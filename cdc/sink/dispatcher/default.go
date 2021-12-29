@@ -33,12 +33,12 @@ func newDefaultDispatcher(partitionNum int32, enableOldValue bool) *defaultDispa
 	}
 }
 
-func (d *defaultDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
+func (d *defaultDispatcher) Dispatch(tbTxn *model.RawTableTxn) int32 {
 	if d.enableOldValue {
-		return d.tbd.Dispatch(row)
+		return d.tbd.Dispatch(tbTxn)
 	}
 	if len(row.IndexColumns) != 1 {
-		return d.tbd.Dispatch(row)
+		return d.tbd.Dispatch(tbTxn)
 	}
-	return d.ivd.Dispatch(row)
+	return d.ivd.Dispatch(tbTxn)
 }

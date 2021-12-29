@@ -14,17 +14,16 @@
 package dispatcher
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type IndexValueDispatcherSuite struct{}
+// [TODO] add multi-rows test
+func TestIndexValueDispatcher(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&IndexValueDispatcherSuite{})
-
-func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
-	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		row             *model.RowChangedEvent
 		exceptPartition int32
@@ -51,7 +50,41 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t1",
 			},
+			PreColumns: []*model.Column{
+				{
+					Name:  "a",
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				}, {
+					Name:  "b",
+					Value: 22,
+					Flag:  0,
+				},
+			},
+		}, exceptPartition: 2},
+		{row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t1",
+			},
 			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Value: 22,
+					Flag:  model.HandleKeyFlag,
+				}, {
+					Name:  "b",
+					Value: 22,
+					Flag:  0,
+				},
+			},
+		}, exceptPartition: 11},
+		{row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t1",
+			},
+			PreColumns: []*model.Column{
 				{
 					Name:  "a",
 					Value: 22,
@@ -86,6 +119,23 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 				Table:  "t2",
 			},
 			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				}, {
+					Name:  "b",
+					Value: 22,
+					Flag:  model.HandleKeyFlag,
+				},
+			},
+		}, exceptPartition: 5},
+		{row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t2",
+			},
+			PreColumns: []*model.Column{
 				{
 					Name:  "a",
 					Value: 11,
@@ -151,6 +201,13 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 	}
 	p := newIndexValueDispatcher(16)
 	for _, tc := range testCases {
-		c.Assert(p.Dispatch(tc.row), check.Equals, tc.exceptPartition)
+		rowTxn := &model.RawTableTxn{
+			Table:     tc.row.Table,
+			StartTs:   tc.row.StartTs,
+			CommitTs:  tc.row.CommitTs,
+			Rows:      make([]*RowChangedEvent{tc.row}, 1),
+			ReplicaID: tc.row.ReplicaID,
+		}
+		require.Equals(t, tc.exceptPartition, p.Dispatch(tc.row))
 	}
 }
