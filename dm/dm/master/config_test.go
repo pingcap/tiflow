@@ -315,4 +315,12 @@ func (t *testConfigSuite) TestAdjustOpenAPI(c *check.C) {
 	c.Assert(cfg.adjust(), check.IsNil)
 	c.Assert(cfg.OpenAPI, check.Equals, true)
 	c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
+
+	// test from flags
+	c.Assert(cfg.Parse([]string{"--openapi=false", "--master-addr=127.0.0.1:8261"}), check.IsNil)
+	c.Assert(cfg.adjust(), check.IsNil)
+	c.Assert(cfg.OpenAPI, check.Equals, false)
+	c.Assert(cfg.Parse([]string{"--openapi=true", "--master-addr=127.0.0.1:8261"}), check.IsNil)
+	c.Assert(cfg.adjust(), check.IsNil)
+	c.Assert(cfg.OpenAPI, check.Equals, true)
 }
