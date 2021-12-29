@@ -454,16 +454,18 @@ ClaimMessages:
 					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if ts <= resolvedTs {
+				if ts < resolvedTs {
 					log.Fatal("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Int32("partition", partition))
 				}
-				log.Debug("update sink resolved ts",
-					zap.Uint64("ts", ts),
-					zap.Int32("partition", partition))
-				atomic.StoreUint64(&sink.resolvedTs, ts)
+				if ts > resolvedTs {
+					log.Debug("update sink resolved ts",
+						zap.Uint64("ts", ts),
+						zap.Int32("partition", partition))
+					atomic.StoreUint64(&sink.resolvedTs, ts)
+				}
 			}
 			session.MarkMessage(message, "")
 		}
