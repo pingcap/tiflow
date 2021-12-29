@@ -26,16 +26,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/httputil"
-	"github.com/pingcap/tiflow/pkg/security"
-
-	"github.com/pingcap/tiflow/pkg/etcd"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
@@ -49,6 +47,8 @@ var (
 	logLevel = flag.String("log-level", "debug", "Set log level of the logger")
 )
 
+// This program moves all tables replicated by a certain capture to other captures,
+// and makes sure that the original capture becomes empty.
 func main() {
 	flag.Parse()
 	if strings.ToLower(*logLevel) == "debug" {
@@ -217,7 +217,6 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 	}
 
 	log.Debug("retrieved changefeeds", zap.Reflect("changefeeds", changefeeds))
-
 	var changefeed string
 	for k := range changefeeds {
 		changefeed = k
@@ -250,6 +249,9 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 	return nil
 }
 
+// queryProcessor invokes the following API to get the mapping from
+// captureIDs to tableIDs:
+//     GET /api/v1/processors/{changefeed_id}/{capture_id}
 func queryProcessor(
 	apiEndpoint string,
 	changefeed string,
@@ -270,7 +272,8 @@ func queryProcessor(
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, errors.Trace(errors.Errorf("HTTP API returned error status: %d, url: %s", resp.StatusCode, requestURL))
+		return nil, errors.Trace(
+			errors.Errorf("HTTP API returned error status: %d, url: %s", resp.StatusCode, requestURL))
 	}
 
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
