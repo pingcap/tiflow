@@ -40,6 +40,7 @@ func (t *statusSuite) TestStatusRace(c *C) {
 	s.cfg = &config.SubTaskConfig{}
 	s.checkpoint = &mockCheckpoint{}
 	s.pessimist = shardddl.NewPessimist(&l, nil, "", "")
+	s.optimist = shardddl.NewOptimist(&l, nil, "", "")
 
 	sourceStatus := &binlog.SourceStatus{
 		Location: binlog.Location{
