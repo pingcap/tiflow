@@ -57,34 +57,53 @@ func newSourceTableSchemaUpdateCmd() *cobra.Command {
 			if len(args) < 3 {
 				return cmd.Help()
 			}
-			taskName := common.GetTaskNameFromArgOrFile(args[0])
-			sources, err := common.GetSourceArgs(cmd)
+
+			var (
+				taskName, database, table           string
+				sources                             []string
+				schemaContent                       []byte
+				flush, sync, fromSource, fromTarget bool
+				err                                 error
+			)
+
+			fromSource, err = cmd.Flags().GetBool("from-source")
 			if err != nil {
 				return err
 			}
-			database := args[1]
-			table := args[2]
-			schemaFile := args[3]
-			schemaContent, err := common.GetFileContent(schemaFile)
+			fromTarget, err = cmd.Flags().GetBool("from-target")
 			if err != nil {
 				return err
 			}
-			flush, err := cmd.Flags().GetBool("flush")
+
+			if !fromSource && !fromTarget && len(args) < 4 {
+				return cmd.Help()
+			}
+
+			taskName = common.GetTaskNameFromArgOrFile(args[0])
+			sources, err = common.GetSourceArgs(cmd)
 			if err != nil {
 				return err
 			}
-			sync, err := cmd.Flags().GetBool("sync")
+			database = args[1]
+			table = args[2]
+
+			if !fromSource && !fromTarget {
+				schemaFile := args[3]
+				schemaContent, err = common.GetFileContent(schemaFile)
+				if err != nil {
+					return err
+				}
+			}
+
+			flush, err = cmd.Flags().GetBool("flush")
 			if err != nil {
 				return err
 			}
-			fromSource, err := cmd.Flags().GetBool("from-source")
+			sync, err = cmd.Flags().GetBool("sync")
 			if err != nil {
 				return err
 			}
-			fromTarget, err := cmd.Flags().GetBool("from-target")
-			if err != nil {
-				return err
-			}
+
 			return sendOperateSchemaRequest(pb.SchemaOp_SetSchema, taskName, sources, database, table, string(schemaContent), flush, sync, fromSource, fromTarget)
 		},
 	}

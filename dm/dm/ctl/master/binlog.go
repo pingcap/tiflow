@@ -108,7 +108,7 @@ func newBinlogInjectCmd() *cobra.Command {
 }
 
 func binlogCommandList(cmd *cobra.Command, args []string) error {
-	if len(args) == 0 {
+	if len(args) != 1 {
 		return cmd.Help()
 	}
 	taskName := common.GetTaskNameFromArgOrFile(cmd.Flags().Arg(0))
