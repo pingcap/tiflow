@@ -219,6 +219,8 @@ function run_sql_tidb() {
 function run_sql_tidb_with_retry() {
     rc=0
     for ((k=1; k<11; k++)); do
+        # in retry scenario sometimes run_sql_tidb will fail because "table not exist", we should keep retrying so turn
+        # off the error option temporarily.
         set +e
         run_sql_tidb "$1"
         set -e
