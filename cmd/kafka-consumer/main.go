@@ -453,7 +453,7 @@ ClaimMessages:
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if ts <= resolvedTs {
-					log.Panic("partition resolved ts fallback",
+					log.Fatal("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Int32("partition", partition))
@@ -566,7 +566,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			globalResolvedTs = todoDDL.CommitTs
 		}
 		if lastGlobalResolvedTs > globalResolvedTs {
-			log.Panic("global ResolvedTs fallback")
+			log.Fatal("global ResolvedTs fallback")
 		}
 
 		if lastGlobalResolvedTs < globalResolvedTs {
