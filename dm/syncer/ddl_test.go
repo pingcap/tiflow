@@ -672,7 +672,7 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
-	syncer := NewSyncer(&config.SubTaskConfig{CollationCompatible: config.StrickCollationCompatible}, nil, nil)
+	syncer := NewSyncer(&config.SubTaskConfig{CollationCompatible: config.StrictCollationCompatible}, nil, nil)
 	syncer.tctx = tctx
 	p := parser.New()
 	tab := &filter.Table{
@@ -746,7 +746,7 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
-	syncer := NewSyncer(&config.SubTaskConfig{CollationCompatible: config.StrickCollationCompatible}, nil, nil)
+	syncer := NewSyncer(&config.SubTaskConfig{CollationCompatible: config.StrictCollationCompatible}, nil, nil)
 	syncer.tctx = tctx
 	p := parser.New()
 	tab := &filter.Table{
