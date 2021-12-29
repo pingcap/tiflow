@@ -445,7 +445,7 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 	for i := range subTaskConfigList {
 		subTaskConfigPList[i] = &subTaskConfigList[i]
 	}
-	if err = checker.CheckSyncConfigFunc(newCtx, subTaskConfigPList,
+	if _, err = checker.CheckSyncConfigFunc(newCtx, subTaskConfigPList,
 		common.DefaultErrorCnt, common.DefaultWarnCnt); err != nil {
 		_ = c.Error(terror.WithClass(err, terror.ClassDMMaster))
 		return

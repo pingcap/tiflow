@@ -15,10 +15,13 @@ package checker
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/zap"
 )
 
 var (
@@ -65,12 +68,16 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 
 	pr := make(chan pb.ProcessResult, 1)
 	c.Process(ctx, pr)
-	for len(pr) > 0 {
+	if len(pr) > 0 {
 		r := <-pr
 		// we only want first error
 		if len(r.Errors) > 0 {
 			return "", terror.ErrTaskCheckSyncConfigError.Generate(ErrorMsgHeader, r.Errors[0].Message, string(r.Detail))
 		}
+
+		log.L().Info("debug check detail", zap.String("detail", string(r.Detail)))
+		log.L().Info("debug check detail", zap.String("detail", strings.ReplaceAll(string(r.Detail), "\\\\", "\\")))
+		return strings.ReplaceAll(string(r.Detail), "\\\\", "\\"), nil
 	}
 
 	return "", nil
