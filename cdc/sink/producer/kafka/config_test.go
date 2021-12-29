@@ -86,7 +86,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	c.Assert(cfg.Net.SASL.Mechanism, check.Equals, sarama.SASLMechanism("SCRAM-SHA-256"))
 }
 
-func (s *kafkaSuite) TestFillBySinkURI(c *check.C) {
+func (s *kafkaSuite) TestCompleteConfig(c *check.C) {
 	defer testleak.AfterTest(c)()
 
 	uri := "kafka://127.0.0.1:9092/no-params"
@@ -235,16 +235,11 @@ func (s *kafkaSuite) TestCompleteOpts(c *check.C) {
 func (s *kafkaSuite) TestAdjustConfig(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	NewAdminClientImpl = kafka.NewMockAdminClient
-	defer func() {
-		NewAdminClientImpl = kafka.NewSaramaAdminClient
-	}()
-
 	producerConfig := NewConfig()
 	saramaConfig, err := newSaramaConfigImpl(context.Background(), producerConfig)
 	c.Assert(err, check.IsNil)
 
-	adminClient, err := NewAdminClientImpl(producerConfig.BrokerEndpoints, saramaConfig)
+	adminClient, err := kafka.NewMockAdminClient(producerConfig.BrokerEndpoints, saramaConfig)
 	c.Assert(err, check.IsNil)
 
 	// When the topic exists, but the topic does not store max message bytes info,
