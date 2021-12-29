@@ -132,7 +132,7 @@ func newMySQLSink(
 	defer testDB.Close()
 
 	// Adjust sql_mode for compatibility.
-	dsn.Params["sql_mode"], err = querySQLMode(testDB, ctx)
+	dsn.Params["sql_mode"], err = querySQLMode(ctx, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -357,7 +357,7 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
-func querySQLMode(db *sql.DB, ctx context.Context) (sqlMode string, err error) {
+func querySQLMode(ctx context.Context, db *sql.DB) (sqlMode string, err error) {
 	row := db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
 	err = row.Scan(&sqlMode)
 	if err != nil {
