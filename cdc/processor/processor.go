@@ -943,15 +943,31 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 	}
 
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs, p.redoManager)
-	table := tablepipeline.NewTablePipeline(
-		ctx,
-		p.mounter,
-		tableID,
-		tableNameStr,
-		replicaInfo,
-		sink,
-		p.changefeed.Info.GetTargetTs(),
-	)
+	var table tablepipeline.TablePipeline
+	if config.GetGlobalServerConfig().Debug.EnableTableActor {
+		var err error
+		table, err = tablepipeline.NewTableActor(
+			ctx,
+			p.mounter,
+			tableID,
+			tableNameStr,
+			replicaInfo,
+			sink,
+			p.changefeed.Info.GetTargetTs())
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	} else {
+		table = tablepipeline.NewTablePipeline(
+			ctx,
+			p.mounter,
+			tableID,
+			tableNameStr,
+			replicaInfo,
+			sink,
+			p.changefeed.Info.GetTargetTs(),
+		)
+	}
 	p.wg.Add(1)
 	p.metricSyncTableNumGauge.Inc()
 	go func() {

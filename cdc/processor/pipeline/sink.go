@@ -352,12 +352,19 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 			}
 		}
 	case pipeline.MessageTypeBarrier:
-		n.barrierTs = msg.BarrierTs
-		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+		if err := n.UpdateBarrierTs(ctx, n.resolvedTs); err != nil {
 			return false, errors.Trace(err)
 		}
 	}
 	return true, nil
+}
+
+func (n *sinkNode) UpdateBarrierTs(ctx context.Context, ts model.Ts) error {
+	atomic.StoreUint64(&n.barrierTs, ts)
+	if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {

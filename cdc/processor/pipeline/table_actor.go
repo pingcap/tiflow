@@ -141,7 +141,8 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 
 		switch msgs[i].Tp {
 		case message.TypeBarrier:
-			if err := t.pullerNode.Receive(ctx, pipeline.BarrierMessage(msgs[i].BarrierTs)); err != nil {
+			t.sortNode.UpdateBarrierTs(msgs[i].BarrierTs)
+			if err := t.sinkNode.UpdateBarrierTs(ctx, msgs[i].BarrierTs); err != nil {
 				t.stop(err)
 			}
 		case message.TypeTick:
@@ -198,14 +199,30 @@ func (t *tableActor) start(ctx context.Context) error {
 		return err
 	}
 	t.sortNode = sorterNode
+	var c AsyncDataHolderFunc = func() *pipeline.Message { return pCtx.tryGetProcessedMessage() }
+	var d AsyncDataProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+		return sorterNode.TryHandleDataMessage(sCtx, msg)
+	}
+	t.nodes = append(t.nodes, &Node{
+		parentNode:    c,
+		dataProcessor: d,
+	})
 
+	var cCtx *cyclicNodeContext
 	if t.cyclicEnabled {
 		cyclicNode := newCyclicMarkNode(t.markTableID)
-		cCtx := NewCyclicNodeContext(NewContext(ctx, t.vars.TableActorSystem.Router(), t.actorID, t.info, t.vars))
+		cCtx = NewCyclicNodeContext(NewContext(ctx, t.vars.TableActorSystem.Router(), t.actorID, t.info, t.vars))
 		if err := cyclicNode.Init(cCtx); err != nil {
 			log.Error("sink fails to start", zap.Error(err))
 			return err
 		}
+		c = func() *pipeline.Message {
+			return sCtx.tryGetProcessedMessage()
+		}
+		d = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+			return cyclicNode.TryHandleDataMessage(cCtx, msg)
+		}
+		t.nodes = append(t.nodes, &Node{parentNode: c, dataProcessor: d})
 	}
 
 	actorSinkNode := newSinkNode(t.tableID, t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
@@ -214,6 +231,20 @@ func (t *tableActor) start(ctx context.Context) error {
 		return err
 	}
 	t.sinkNode = actorSinkNode
+	if t.cyclicEnabled {
+		c = func() *pipeline.Message {
+			return cCtx.tryGetProcessedMessage()
+		}
+	} else {
+		c = func() *pipeline.Message {
+			return sCtx.tryGetProcessedMessage()
+		}
+	}
+	d = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+		return actorSinkNode.HandleMessage(sCtx, msg)
+	}
+	t.nodes = append(t.nodes, &Node{parentNode: c, dataProcessor: d})
+
 	t.started = true
 	log.Info("table actor is started", zap.Int64("tableID", t.tableID))
 	return nil

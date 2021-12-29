@@ -288,9 +288,7 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
 		return true, nil
 	case pipeline.MessageTypeBarrier:
-		if msg.BarrierTs > n.barrierTs {
-			n.barrierTs = msg.BarrierTs
-		}
+		n.UpdateBarrierTs(msg.BarrierTs)
 		fallthrough
 	default:
 		// todo: remove feature switcher after GA
@@ -299,6 +297,12 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 		}
 		ctx.(pipeline.NodeContext).SendToNextNode(msg)
 		return true, nil
+	}
+}
+
+func (n *sorterNode) UpdateBarrierTs(barrierTs model.Ts) {
+	if barrierTs > atomic.LoadUint64(&n.barrierTs) {
+		atomic.StoreUint64(&n.barrierTs, barrierTs)
 	}
 }
 
