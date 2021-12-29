@@ -31,9 +31,16 @@ function run() {
 	# See: https://github.com/PingCAP-QE/ci/blob/ddde195ebf4364a0028d53405d1194aa37a4d853/jenkins/pipelines/ci/ticdc/cdc_ghpr_kafka_integration_test.groovy#L180
 	SINK_URI="kafka://127.0.0.1:9092/big-message-test?protocol=open-protocol&partition-num=1&kafka-version=${KAFKA_VERSION}&max-message-bytes=12582912"
 	cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
-	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/big-message-test?protocol=open-protocol&partition-num=1&version=${KAFKA_VERSION}&max-message-bytes=10485760"
+	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/big-message-test?protocol=open-protocol&partition-num=1&version=${KAFKA_VERSION}"
 
-	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	echo "Starting generate kafka big messages..."
+	cd $CUR/../../utils/gen_kafka_big_messages
+	if [ ! -f ./gen_kafka_big_messages ]; then
+		GO111MODULE=on go build
+	fi
+	./gen_kafka_big_messages --row-count=15 --sql-file-path=$CUR/test.sql
+
+	run_sql_file $CUR/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	table="kafka_big_messages.test"
 	check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
