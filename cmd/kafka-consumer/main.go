@@ -453,6 +453,9 @@ ClaimMessages:
 				if err != nil {
 					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
 				}
+				// TiCDC owner when sending `checkpointTs` to downstream sink,
+				// it tries to make the `checkpointTs` monotonically increase.
+				// But there always have some scenario the consumer receive redundant `checkpointTs`.
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if ts < resolvedTs {
 					log.Fatal("partition resolved ts fallback",
