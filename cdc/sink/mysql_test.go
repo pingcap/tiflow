@@ -594,7 +594,7 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 			uri = nil
 		}
 		_, err = parseSinkURI(ctx, uri, opts)
-		require.Nil(t, err)
+		require.NotNil(t, err)
 	}
 }
 
