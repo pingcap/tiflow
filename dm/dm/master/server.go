@@ -502,6 +502,8 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			release()
 		}
 
+		go s.scheduler.TryResolveLoadTask(sources)
+
 		resp.Result = true
 		if cfg.RemoveMeta {
 			resp.Msg = "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
@@ -1534,6 +1536,8 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	// clear loader and syncer checkpoints
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
 		dbutil.TableName(metaSchema, cputil.LoaderCheckpoint(taskName))))
+	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
+		dbutil.TableName(metaSchema, cputil.LightningCheckpoint(taskName))))
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
 		dbutil.TableName(metaSchema, cputil.SyncerCheckpoint(taskName))))
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",

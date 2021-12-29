@@ -39,8 +39,26 @@ var (
 		Namespace: "ticdc",
 		Subsystem: "message_server",
 		Name:      "message_batch_size",
-		Help:      "size of message batches received",
-		Buckets:   prometheus.LinearBuckets(0, 5, 16),
+		Help:      "size in number of messages of message batches received",
+		Buckets:   prometheus.ExponentialBuckets(1, 2, 10),
+	}, []string{"from"})
+
+	// serverMessageBatchBytesHistogram records the wire sizes as reported by protobuf.
+	serverMessageBatchBytesHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "ticdc",
+		Subsystem: "message_server",
+		Name:      "message_batch_bytes",
+		Help:      "size in bytes of message batches received",
+		Buckets:   prometheus.ExponentialBuckets(8.0, 2, 16),
+	}, []string{"from"})
+
+	// serverMessageBytesHistogram records the wire sizes as reported by protobuf.
+	serverMessageBytesHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "ticdc",
+		Subsystem: "message_server",
+		Name:      "message_bytes",
+		Help:      "size in bytes of messages received",
+		Buckets:   prometheus.ExponentialBuckets(8.0, 2, 16),
 	}, []string{"from"})
 
 	serverAckCount = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -89,6 +107,8 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(serverStreamCount)
 	registry.MustRegister(serverMessageCount)
 	registry.MustRegister(serverMessageBatchHistogram)
+	registry.MustRegister(serverMessageBytesHistogram)
+	registry.MustRegister(serverMessageBatchBytesHistogram)
 	registry.MustRegister(serverAckCount)
 	registry.MustRegister(serverRepeatedMessageCount)
 	registry.MustRegister(grpcClientMetrics)
