@@ -252,9 +252,14 @@ function test_noshard_task() {
 	# start no shard task success
 	openapi_task_check "start_noshard_task_success"
 
+	# to avoid task is not started
+    sleep 1
+    # check noshard task dump status success
+    openapi_task_check "check_noshard_task_dump_status_success" "$task_name" 0
+
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
-		"\"stage\": \"Running\"" 2
+		"\"unit\": \"Sync\"" 2
 
 	init_noshard_data
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
@@ -332,7 +337,20 @@ function run() {
 	test_relay
 
 	test_shard_task
-	test_noshard_task
+	
+    export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dumpling/dumpSleepStage=return()"
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+    
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	
+    test_noshard_task
 	test_cluster
 }
 

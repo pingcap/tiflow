@@ -125,6 +125,11 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		m.mu.Lock()
 		m.core = dumpling
 		m.mu.Unlock()
+
+		failpoint.Inject("dumpSleepStage", func() {
+			time.Sleep(2 * time.Second)
+		})
+
 		err = dumpling.Dump()
 		dumpling.Close()
 	}
