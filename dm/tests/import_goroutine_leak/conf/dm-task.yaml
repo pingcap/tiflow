@@ -34,6 +34,7 @@ loaders:
   global:
     pool-size: 16
     dir: "./dumped_data"
+    import-mode: "loader"
 
 syncers:
   global:

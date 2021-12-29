@@ -204,9 +204,9 @@ func (m *MydumperConfig) UnmarshalYAML(unmarshal func(interface{}) error) error 
 type LoadMode string
 
 const (
-	// write data by sql statements, uses tidb-lightning tidb backend to load data
+	// LoadModeSQL means write data by sql statements, uses tidb-lightning tidb backend to load data
 	LoadModeSQL LoadMode = "sql"
-	// the legacy sql mode, use loader to load data. this should be replaced by sql mode in new version.
+	// LoadModeLoader is the legacy sql mode, use loader to load data. this should be replaced by sql mode in new version.
 	LoadModeLoader = "loader"
 )
 
