@@ -50,14 +50,21 @@ const (
 	tidbTxnOptimistic = "optimistic"
 )
 
+// collation_compatible.
+const (
+	LooseCollationCompatible  = "loose"
+	StrickCollationCompatible = "strick"
+)
+
 // default config item values.
 var (
 	// TaskConfig.
-	defaultMetaSchema      = "dm_meta"
-	defaultEnableHeartbeat = false
-	defaultIsSharding      = false
-	defaultUpdateInterval  = 1
-	defaultReportInterval  = 10
+	defaultMetaSchema          = "dm_meta"
+	defaultEnableHeartbeat     = false
+	defaultIsSharding          = false
+	defaultUpdateInterval      = 1
+	defaultReportInterval      = 10
+	defaultCollationCompatible = "loose"
 	// MydumperConfig.
 	defaultMydumperPath  = "./bin/mydumper"
 	defaultThreads       = 4
@@ -301,6 +308,10 @@ type TaskConfig struct {
 	// if case insensitive, we would convert schema/table name to lower case
 	CaseSensitive bool `yaml:"case-sensitive" toml:"case-sensitive" json:"case-sensitive"`
 
+	// default "loose" handle create sql by original sql, will not add default collation as upstream
+	// "strick" will add default collation as upstream, and downstream will occur error when downstream don't support
+	CollationCompatible string `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
+
 	TargetDB *DBConfig `yaml:"target-database" toml:"target-database" json:"target-database"`
 
 	MySQLInstances []*MySQLInstance `yaml:"mysql-instances" toml:"mysql-instances" json:"mysql-instances"`
@@ -357,6 +368,7 @@ func NewTaskConfig() *TaskConfig {
 		Loaders:                 make(map[string]*LoaderConfig),
 		Syncers:                 make(map[string]*SyncerConfig),
 		CleanDumpFile:           true,
+		CollationCompatible:     defaultCollationCompatible,
 	}
 	cfg.FlagSet = flag.NewFlagSet("task", flag.ContinueOnError)
 	return cfg
