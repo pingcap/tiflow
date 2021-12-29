@@ -125,7 +125,7 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 // CdcHealthCheck check cdc cluster health.
 func CdcHealthCheck(cdcContainer, pdEndpoint string) error {
 	_, err := execInController(cdcContainer,
-		fmt.Sprintf("/cdc cli --pd=\"%s\" changefeed list", pdEndpoint))
+		fmt.Sprintf("/cdc cli --pd=%s changefeed list", pdEndpoint))
 	return err
 }
 
