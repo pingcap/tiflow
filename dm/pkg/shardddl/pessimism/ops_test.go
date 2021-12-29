@@ -40,7 +40,7 @@ func (t *testForEtcd) TestPutOperationDeleteInfo(c *C) {
 	c.Assert(ifm[task][source], DeepEquals, info)
 
 	// verify no operations exist.
-	opm, _, err := GetAllOperations(etcdTestCli, "")
+	opm, _, err := GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 0)
 
@@ -55,7 +55,7 @@ func (t *testForEtcd) TestPutOperationDeleteInfo(c *C) {
 	c.Assert(ifm, HasLen, 0)
 
 	// verify the operation exists.
-	opm, _, err = GetAllOperations(etcdTestCli, "")
+	opm, _, err = GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 1)
 	c.Assert(opm, HasKey, task)
@@ -80,7 +80,7 @@ func (t *testForEtcd) TestPutOperationDeleteInfo(c *C) {
 	c.Assert(ifm[task][source], DeepEquals, info)
 
 	// verify the operation exists.
-	opm, _, err = GetAllOperations(etcdTestCli, "")
+	opm, _, err = GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 1)
 	c.Assert(opm, HasKey, task)
@@ -96,7 +96,7 @@ func (t *testForEtcd) TestPutOperationDeleteInfo(c *C) {
 	c.Assert(ifm, HasLen, 0)
 
 	// verify no operations exist.
-	opm, _, err = GetAllOperations(etcdTestCli, "")
+	opm, _, err = GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 0)
 }

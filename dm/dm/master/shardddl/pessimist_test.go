@@ -1039,7 +1039,7 @@ func (t *testPessimist) noLockExist(c *C, p *Pessimist) {
 	ifm, _, err := pessimism.GetAllInfo(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(ifm, HasLen, 0)
-	opm, _, err := pessimism.GetAllOperations(etcdTestCli, "")
+	opm, _, err := pessimism.GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 0)
 }

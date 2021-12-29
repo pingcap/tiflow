@@ -173,10 +173,9 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 			s.tctx.L().Info("got a shard DDL lock operation", zap.Stringer("operation", op))
 			if op.ConflictStage != optimism.ConflictDetected {
 				break
-			} else {
-				rev = op.Revision
-				s.tctx.L().Info("operation conflict detected, waiting for resolve", zap.Stringer("info", info))
 			}
+			rev = op.Revision
+			s.tctx.L().Info("operation conflict detected, waiting for resolve", zap.Stringer("info", info))
 		}
 	}
 

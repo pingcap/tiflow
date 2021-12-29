@@ -121,7 +121,7 @@ func (t *testForEtcd) TestOperationEtcd(c *C) {
 	c.Assert(ops[2], DeepEquals, op21)
 
 	// get all operations.
-	opm, rev4, err := GetAllOperations(etcdTestCli, "")
+	opm, rev4, err := GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(rev4, Equals, rev3)
 	c.Assert(opm, HasLen, 2)
@@ -155,7 +155,7 @@ func (t *testForEtcd) TestOperationEtcd(c *C) {
 	c.Assert(op11d, DeepEquals, op11)
 
 	// get again, op11 should be deleted.
-	opm, _, err = GetAllOperations(etcdTestCli, "")
+	opm, _, err = GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm[task1], HasLen, 1)
 	c.Assert(opm[task1][source2], DeepEquals, op12)
@@ -168,7 +168,7 @@ func (t *testForEtcd) TestOperationEtcd(c *C) {
 	c.Assert(rev7, Greater, rev6)
 
 	// get again, op11 and op13 should be putted.
-	opm, _, err = GetAllOperations(etcdTestCli, "")
+	opm, _, err = GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm[task1], HasLen, 3)
 	c.Assert(opm[task1][source1], DeepEquals, op11)
@@ -196,7 +196,7 @@ func (t *testForEtcd) TestOperationEtcd(c *C) {
 	c.Assert(rev9, Equals, rev8)
 
 	// get again, op13 not putted.
-	opm, _, err = GetAllOperations(etcdTestCli, "")
+	opm, _, err = GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm[task1], HasLen, 2)
 	c.Assert(opm[task1][source1], DeepEquals, op11)

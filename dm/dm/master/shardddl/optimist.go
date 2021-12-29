@@ -207,7 +207,6 @@ func (o *Optimist) ShowLocks(task string, sources []string) ([]*pb.DDLLock, erro
 				Unsynced: lockUnsynced,
 			})
 		}
-
 	}
 	return ret, err
 }

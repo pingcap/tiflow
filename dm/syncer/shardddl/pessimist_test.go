@@ -112,7 +112,7 @@ func (t *testPessimist) TestPessimist(c *C) {
 	// verify the operation and info.
 	opc := op2
 	opc.Done = true
-	opm, _, err := pessimism.GetAllOperations(etcdTestCli, "")
+	opm, _, err := pessimism.GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 1)
 	c.Assert(opm[task], HasLen, 1)
