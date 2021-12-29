@@ -40,7 +40,6 @@ import (
 )
 
 type mqSink struct {
-<<<<<<< HEAD
 	mqProducer producer.Producer
 	dispatcher dispatcher.Dispatcher
 	newEncoder func() codec.EventBatchEncoder
@@ -53,19 +52,7 @@ type mqSink struct {
 		resolvedTs uint64
 	}
 	partitionResolvedTs []uint64
-	checkpointTs        uint64
-=======
-	mqProducer     producer.Producer
-	dispatcher     dispatcher.Dispatcher
-	encoderBuilder codec.EncoderBuilder
-	filter         *filter.Filter
-	protocol       codec.Protocol
-
-	partitionNum        int32
-	partitionInput      []chan mqEvent
-	partitionResolvedTs []uint64
 	tableCheckpointTs   map[model.TableID]uint64
->>>>>>> b3940442f (sink(ticdc): cherry pick sink bug fix to release 5.3 (#4083))
 	resolvedNotifier    *notify.Notifier
 	resolvedReceiver    *notify.Receiver
 

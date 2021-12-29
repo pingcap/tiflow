@@ -188,19 +188,13 @@ func NewTablePipeline(ctx cdcContext.Context,
 		runnerSize++
 	}
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
-<<<<<<< HEAD
-=======
-	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs, flowController, mounter)
-	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
-
->>>>>>> b3940442f (sink(ticdc): cherry pick sink bug fix to release 5.3 (#4083))
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
 	p.AppendNode(ctx, "mounter", newMounterNode())
 	if cyclicEnabled {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
 	}
-	tablePipeline.sinkNode = newSinkNode(sink, replicaInfo.StartTs, targetTs, flowController)
+	tablePipeline.sinkNode = newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
 	p.AppendNode(ctx, "sink", tablePipeline.sinkNode)
 	tablePipeline.p = p
 	return tablePipeline

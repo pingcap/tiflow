@@ -27,11 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
-<<<<<<< HEAD
-=======
-	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
->>>>>>> b3940442f (sink(ticdc): cherry pick sink bug fix to release 5.3 (#4083))
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -52,11 +48,7 @@ func newProcessor4Test(
 ) *processor {
 	p := newProcessor(ctx)
 	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
-<<<<<<< HEAD
-=======
 	p.sinkManager = &sink.Manager{}
-	p.redoManager = redo.NewDisabledManager()
->>>>>>> b3940442f (sink(ticdc): cherry pick sink bug fix to release 5.3 (#4083))
 	p.createTablePipeline = createTablePipeline
 	p.schemaStorage = &mockSchemaStorage{c: c}
 	return p

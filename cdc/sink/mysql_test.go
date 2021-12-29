@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/url"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -422,20 +423,18 @@ func TestReduceReplace(t *testing.T) {
 			sort.Strings(sqls)
 			sort.Sort(sqlArgs(args))
 		}
-<<<<<<< HEAD
-		c.Assert(sqls, check.DeepEquals, tc.expectSQLs)
-		c.Assert(args, check.DeepEquals, tc.expectArgs)
+		require.Equal(t, tc.expectSQLs, sqls)
+		require.Equal(t, tc.expectArgs, args)
 	}
 }
 
-func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestSinkParamsClone(t *testing.T) {
 	param1 := defaultParams.Clone()
 	param2 := param1.Clone()
 	param2.changefeedID = "123"
 	param2.batchReplaceEnabled = false
 	param2.maxTxnRow = 1
-	c.Assert(param1, check.DeepEquals, &sinkParams{
+	require.Equal(t, &sinkParams{
 		workerCount:         defaultWorkerCount,
 		maxTxnRow:           defaultMaxTxnRow,
 		tidbTxnMode:         defaultTiDBTxnMode,
@@ -445,8 +444,8 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		writeTimeout:        defaultWriteTimeout,
 		dialTimeout:         defaultDialTimeout,
 		safeMode:            defaultSafeMode,
-	})
-	c.Assert(param2, check.DeepEquals, &sinkParams{
+	}, param1)
+	require.Equal(t, &sinkParams{
 		changefeedID:        "123",
 		workerCount:         defaultWorkerCount,
 		maxTxnRow:           1,
@@ -457,22 +456,20 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		writeTimeout:        defaultWriteTimeout,
 		dialTimeout:         defaultDialTimeout,
 		safeMode:            defaultSafeMode,
-	})
+	}, param2)
 }
 
-func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestConfigureSinkURI(t *testing.T) {
 	testDefaultParams := func() {
 		db, err := mockTestDB()
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		defer db.Close()
 
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		params := defaultParams.Clone()
 		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		expectedParams := []string{
 			"tidb_txn_mode=optimistic",
 			"readTimeout=2m",
@@ -480,45 +477,45 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 			"allow_auto_random_explicit_insert=1",
 		}
 		for _, param := range expectedParams {
-			c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
+			require.True(t, strings.Contains(dsnStr, param))
 		}
-		c.Assert(strings.Contains(dsnStr, "time_zone"), check.IsFalse)
+		require.False(t, strings.Contains(dsnStr, "time_zone"))
 	}
 
 	testTimezoneParam := func() {
 		db, err := mockTestDB()
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		defer db.Close()
 
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		params := defaultParams.Clone()
 		params.timezone = `"UTC"`
 		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
-		c.Assert(err, check.IsNil)
-		c.Assert(strings.Contains(dsnStr, "time_zone=%22UTC%22"), check.IsTrue)
+		require.Nil(t, err)
+		require.True(t, strings.Contains(dsnStr, "time_zone=%22UTC%22"))
 	}
 
 	testTimeoutParams := func() {
 		db, err := mockTestDB()
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		defer db.Close()
 
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		uri, err := url.Parse("mysql://127.0.0.1:3306/?read-timeout=4m&write-timeout=5m&timeout=3m")
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		params, err := parseSinkURI(context.TODO(), uri, map[string]string{})
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		expectedParams := []string{
 			"readTimeout=4m",
 			"writeTimeout=5m",
 			"timeout=3m",
 		}
 		for _, param := range expectedParams {
-			c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
+			require.True(t, strings.Contains(dsnStr, param))
 		}
 	}
 
@@ -527,8 +524,7 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 	testTimeoutParams()
 }
 
-func (s MySQLSinkSuite) TestParseSinkURI(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestParseSinkURI(t *testing.T) {
 	expected := defaultParams.Clone()
 	expected.workerCount = 64
 	expected.maxTxnRow = 20
@@ -547,14 +543,13 @@ func (s MySQLSinkSuite) TestParseSinkURI(c *check.C) {
 		OptCaptureAddr:  expected.captureAddr,
 	}
 	uri, err := url.Parse(uriStr)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	params, err := parseSinkURI(context.TODO(), uri, opts)
-	c.Assert(err, check.IsNil)
-	c.Assert(params, check.DeepEquals, expected)
+	require.Nil(t, err)
+	require.Equal(t, expected, params)
 }
 
-func (s MySQLSinkSuite) TestParseSinkURITimezone(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestParseSinkURITimezone(t *testing.T) {
 	uris := []string{
 		"mysql://127.0.0.1:3306/?time-zone=Asia/Shanghai&worker-count=32",
 		"mysql://127.0.0.1:3306/?time-zone=&worker-count=32",
@@ -569,15 +564,14 @@ func (s MySQLSinkSuite) TestParseSinkURITimezone(c *check.C) {
 	opts := map[string]string{}
 	for i, uriStr := range uris {
 		uri, err := url.Parse(uriStr)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		params, err := parseSinkURI(ctx, uri, opts)
-		c.Assert(err, check.IsNil)
-		c.Assert(params.timezone, check.Equals, expected[i])
+		require.Nil(t, err)
+		require.Equal(t, expected[i], params.timezone)
 	}
 }
 
-func (s MySQLSinkSuite) TestParseSinkURIBadQueryString(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestParseSinkURIBadQueryString(t *testing.T) {
 	uris := []string{
 		"",
 		"postgre://127.0.0.1:3306",
@@ -595,16 +589,12 @@ func (s MySQLSinkSuite) TestParseSinkURIBadQueryString(c *check.C) {
 	for _, uriStr := range uris {
 		if uriStr != "" {
 			uri, err = url.Parse(uriStr)
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 		} else {
 			uri = nil
 		}
 		_, err = parseSinkURI(ctx, uri, opts)
-		c.Assert(err, check.NotNil)
-=======
-		require.Equal(t, tc.expectSQLs, sqls)
-		require.Equal(t, tc.expectArgs, args)
->>>>>>> b3940442f (sink(ticdc): cherry pick sink bug fix to release 5.3 (#4083))
+		require.Nil(t, err)
 	}
 }
 
@@ -1152,54 +1142,6 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 	require.Nil(t, err)
 }
 
-func TestNeedSwitchDB(t *testing.T) {
-	testCases := []struct {
-		ddl        *model.DDLEvent
-		needSwitch bool
-	}{
-		{
-			&model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "",
-				},
-				Type: timodel.ActionCreateTable,
-			},
-			false,
-		},
-		{
-			&model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "golang",
-				},
-				Type: timodel.ActionCreateSchema,
-			},
-			false,
-		},
-		{
-			&model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "golang",
-				},
-				Type: timodel.ActionDropSchema,
-			},
-			false,
-		},
-		{
-			&model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "golang",
-				},
-				Type: timodel.ActionCreateTable,
-			},
-			true,
-		},
-	}
-
-	for _, tc := range testCases {
-		require.Equal(t, tc.needSwitch, needSwitchDB(tc.ddl))
-	}
-}
-
 func TestNewMySQLSink(t *testing.T) {
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
@@ -1307,10 +1249,10 @@ func TestMySQLSinkFlushResovledTs(t *testing.T) {
 		require.Nil(t, err)
 		return db, nil
 	}
-	backupGetDBConn := GetDBConnImpl
-	GetDBConnImpl = mockGetDBConn
+	backupGetDBConn := getDBConnImpl
+	getDBConnImpl = mockGetDBConn
 	defer func() {
-		GetDBConnImpl = backupGetDBConn
+		getDBConnImpl = backupGetDBConn
 	}()
 
 	ctx := context.Background()
