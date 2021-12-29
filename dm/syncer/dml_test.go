@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	. "github.com/pingcap/check"
+
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 
@@ -630,4 +631,19 @@ func (s *testSyncerSuite) TestTruncateIndexValues(c *C) {
 		realPreValue := truncateIndexValues(sessCtx, ti, dti.AvailableUKIndexList[0], cols, values)
 		assert(realPreValue, DeepEquals, tc.preValues)
 	}
+}
+
+func (s *testSyncerSuite) TestGBKExtractValueFromData(c *C) {
+	table := `CREATE TABLE t (c INT PRIMARY KEY, d VARCHAR(20) CHARSET GBK);`
+	se := mock.NewContext()
+	p := parser.New()
+	stmt, _, err := p.Parse(table, "", "")
+	c.Assert(err, IsNil)
+	ti, err := tiddl.MockTableInfo(se, stmt[0].(*ast.CreateTableStmt), 6716)
+	c.Assert(err, IsNil)
+
+	row := []interface{}{1, "\xc4\xe3\xba\xc3"}
+	expect := []interface{}{1, []byte("\xc4\xe3\xba\xc3")}
+	got := extractValueFromData(row, ti.Columns, ti)
+	c.Assert(got, DeepEquals, expect)
 }
