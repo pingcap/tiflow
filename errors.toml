@@ -421,6 +421,11 @@ error = '''
 kafka async send message failed
 '''
 
+["CDC:ErrKafkaCreateTopic"]
+error = '''
+kafka create topic failed
+'''
+
 ["CDC:ErrKafkaFlushUnfinished"]
 error = '''
 flush not finished before producer close
