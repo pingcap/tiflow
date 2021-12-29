@@ -1662,32 +1662,34 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 
 	maybeSkipNRowsEvent := func(n int) error {
-		if s.cfg.EnableGTID && n > 0 {
-			for i := 0; i < n; {
-				e, err1 := s.getEvent(tctx, currentLocation)
-				if err1 != nil {
-					return err
-				}
-				switch e.Event.(type) {
-				case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
-					gtidStr, err2 := event.GetGTIDStr(e)
-					if err2 != nil {
-						return err2
-					}
-					if currentGTID != gtidStr {
-						s.tctx.L().Error("after recover GTID-based replication, the first GTID is not same as broken one. May meet duplicate entry or corrupt data if table has no PK/UK.",
-							zap.String("last GTID", currentGTID),
-							zap.String("GTID after reset", gtidStr),
-						)
-						return nil
-					}
-				case *replication.RowsEvent:
-					i++
-				}
-			}
-			log.L().Info("discard event already consumed", zap.Int("count", n),
-				zap.Any("cur_loc", currentLocation))
+		if n == 0 {
+			return nil
 		}
+
+		for i := 0; i < n; {
+			e, err1 := s.getEvent(tctx, currentLocation)
+			if err1 != nil {
+				return err
+			}
+			switch e.Event.(type) {
+			case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+				gtidStr, err2 := event.GetGTIDStr(e)
+				if err2 != nil {
+					return err2
+				}
+				if currentGTID != gtidStr {
+					s.tctx.L().Error("after recover GTID-based replication, the first GTID is not same as broken one. May meet duplicate entry or corrupt data if table has no PK/UK.",
+						zap.String("last GTID", currentGTID),
+						zap.String("GTID after reset", gtidStr),
+					)
+					return nil
+				}
+			case *replication.RowsEvent:
+				i++
+			}
+		}
+		log.L().Info("discard event already consumed", zap.Int("count", n),
+			zap.Any("cur_loc", currentLocation))
 		return nil
 	}
 
@@ -1738,7 +1740,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		})
 		failpoint.Inject("GetEventErrorInTxn", func(val failpoint.Value) {
-			if intVal, ok := val.(int); ok && intVal == eventIndex {
+			if intVal, ok := val.(int); ok && intVal == eventIndex && failOnce.CAS(false, true) {
 				err = errors.New("failpoint triggered")
 				s.tctx.L().Warn("failed to get event", zap.Int("event_index", eventIndex),
 					zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
@@ -1761,7 +1763,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 			continue
 		case err == relay.ErrorMaybeDuplicateEvent:
-			tctx.L().Warn("read binlog met a truncated file, need to open safe-mode until the next transaction")
+			tctx.L().Warn("read binlog met a truncated file, will skip events that has been consumed")
 			err = maybeSkipNRowsEvent(eventIndex)
 			if err == nil {
 				continue
@@ -1777,7 +1779,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			if s.streamerController.CanRetry(err) {
-				// GlobalPoint is the last finished GTID
+				// GlobalPoint is the last finished transaction location
 				err = s.streamerController.ResetReplicationSyncer(tctx, s.checkpoint.GlobalPoint())
 				if err != nil {
 					return err
