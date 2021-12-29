@@ -57,10 +57,11 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 	}
 
 	c := NewChecker(cfgs, checkingItems, errCnt, warnCnt)
-	defer c.Close()
+
 	if err := c.Init(ctx); err != nil {
 		return terror.Annotate(err, "fail to initial checker")
 	}
+	defer c.Close()
 
 	pr := make(chan pb.ProcessResult, 1)
 	c.Process(ctx, pr)
