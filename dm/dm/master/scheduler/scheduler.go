@@ -786,7 +786,7 @@ WaitLoop:
 		}
 		return nil // all task are in expected stage
 	}
-	return terror.ErrSchedulerPauseTaskForTransferSource // failed to pause tasks, need user to handle it manually
+	return terror.ErrSchedulerPauseTaskForTransferSource.Generate(tasks) // failed to pause tasks, need user to handle it manually
 }
 
 // AcquireSubtaskLatch tries acquiring a latch for subtask name.

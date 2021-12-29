@@ -1298,7 +1298,7 @@ var (
 	ErrSchedulerStopRelayOnSpecified         = New(codeSchedulerStopRelayOnSpecified, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` with worker name for workers %v, so it can't `stop-relay` without worker name now", "Please specify worker names for `stop-relay`.")
 	ErrSchedulerStartRelayOnBound            = New(codeSchedulerStartRelayOnBound, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` automatically for bound worker, so it can't `start-relay` with worker name now", "Please stop relay by `stop-relay` without worker name first.")
 	ErrSchedulerStopRelayOnBound             = New(codeSchedulerStopRelayOnBound, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now", "Please use `stop-relay` without worker name.")
-	ErrSchedulerPauseTaskForTransferSource   = New(codeSchedulerPauseTaskForTransferSource, ClassScheduler, ScopeInternal, LevelLow, "failed to auto pause task when transfer-source", "Please pause task by `dmctl pause-task`.")
+	ErrSchedulerPauseTaskForTransferSource   = New(codeSchedulerPauseTaskForTransferSource, ClassScheduler, ScopeInternal, LevelLow, "failed to auto pause tasks %s when transfer-source", "Please pause task by `dmctl pause-task`.")
 
 	// dmctl.
 	ErrCtlGRPCCreateConn = New(codeCtlGRPCCreateConn, ClassDMCtl, ScopeInternal, LevelHigh, "can not create grpc connection", "Please check your network connection.")

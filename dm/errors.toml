@@ -3203,7 +3203,7 @@ workaround = "Please use `stop-relay` without worker name."
 tags = ["internal", "low"]
 
 [error.DM-scheduler-46032]
-message = "failed to auto pause task when transfer-source"
+message = "failed to auto pause tasks %s when transfer-source"
 description = ""
 workaround = "Please pause task by `dmctl pause-task`."
 tags = ["internal", "low"]
