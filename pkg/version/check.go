@@ -218,8 +218,8 @@ func (v *TiCDCClusterVersion) ShouldEnableUnifiedSorterByDefault() bool {
 	return !v.LessThan(*semver.New("4.0.13")) || (v.Major == 4 && v.Minor == 0 && v.Patch == 13)
 }
 
-// ShouldRunCliWithApiClientByDefault returns whether to run cmd cli with api client by default
-func (v *TiCDCClusterVersion) ShouldRunCliWithApiClientByDefault() bool {
+// ShouldRunCliWithAPIClientByDefault returns whether to run cmd cli with api client by default
+func (v *TiCDCClusterVersion) ShouldRunCliWithAPIClientByDefault() bool {
 	// we assume the unknown version to be the latest version
 	if v.Version == nil {
 		return true

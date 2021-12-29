@@ -38,11 +38,11 @@ type processorMeta struct {
 // queryProcessorOptions defines flags for the `cli processor query` command.
 type queryProcessorOptions struct {
 	etcdClient *etcd.CDCEtcdClient
-	apiClient  apiv1client.ApiV1Interface
+	apiClient  apiv1client.APIV1Interface
 
 	changefeedID     string
 	captureID        string
-	runWithApiClient bool
+	runWithAPIClient bool
 }
 
 // newQueryProcessorOptions creates new options for the `cli changefeed query` command.
@@ -64,7 +64,7 @@ func (o *queryProcessorOptions) complete(f factory.Factory) error {
 		return err
 	}
 
-	o.apiClient, err = apiv1client.NewApiClient(owner.AdvertiseAddr, nil)
+	o.apiClient, err = apiv1client.NewAPIClient(owner.AdvertiseAddr, nil)
 	if err != nil {
 		return err
 	}
@@ -78,8 +78,9 @@ func (o *queryProcessorOptions) complete(f factory.Factory) error {
 		return errors.Trace(err)
 	}
 
-	if !cdcClusterVer.ShouldRunCliWithApiClientByDefault() {
-		o.runWithApiClient = false
+	o.runWithAPIClient = true
+	if !cdcClusterVer.ShouldRunCliWithAPIClientByDefault() {
+		o.runWithAPIClient = false
 		log.Warn("The TiCDC cluster is built from an older version, run cli with etcd client by default.",
 			zap.String("version", cdcClusterVer.String()))
 	}
@@ -113,8 +114,8 @@ func (o *queryProcessorOptions) runCliWithEtcdClient(ctx context.Context, cmd *c
 	return util.JSONPrint(cmd, meta)
 }
 
-// run cli cmd with apio client
-func (o *queryProcessorOptions) runCliWithApiClient(ctx context.Context, cmd *cobra.Command) error {
+// run cli cmd with api client
+func (o *queryProcessorOptions) runCliWithAPIClient(ctx context.Context, cmd *cobra.Command) error {
 	changfeed, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
 	if err != nil {
 		return err
@@ -153,11 +154,11 @@ func (o *queryProcessorOptions) runCliWithApiClient(ctx context.Context, cmd *co
 // run runs the `cli processor query` command.
 func (o *queryProcessorOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
-	if o.runWithApiClient {
-		return o.runCliWithApiClient(ctx, cmd)
-	} else {
-		return o.runCliWithEtcdClient(ctx, cmd)
+	if o.runWithAPIClient {
+		return o.runCliWithAPIClient(ctx, cmd)
 	}
+
+	return o.runCliWithEtcdClient(ctx, cmd)
 }
 
 // newCmdQueryProcessor creates the `cli processor query` command.

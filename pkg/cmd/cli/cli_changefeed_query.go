@@ -43,13 +43,13 @@ type changeFeedMeta struct {
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.
 type queryChangefeedOptions struct {
 	etcdClient *etcd.CDCEtcdClient
-	apiClient  apiv1client.ApiV1Interface
+	apiClient  apiv1client.APIV1Interface
 
 	credential *security.Credential
 
 	changefeedID     string
 	simplified       bool
-	runWithApiClient bool
+	runWithAPIClient bool
 }
 
 // newQueryChangefeedOptions creates new options for the `cli changefeed query` command.
@@ -80,7 +80,7 @@ func (o *queryChangefeedOptions) complete(f factory.Factory) error {
 		return err
 	}
 
-	o.apiClient, err = apiv1client.NewApiClient(owner.AdvertiseAddr, o.credential)
+	o.apiClient, err = apiv1client.NewAPIClient(owner.AdvertiseAddr, o.credential)
 	if err != nil {
 		return err
 	}
@@ -94,9 +94,10 @@ func (o *queryChangefeedOptions) complete(f factory.Factory) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	
-	if !cdcClusterVer.ShouldRunCliWithApiClientByDefault() {
-		o.runWithApiClient = false
+
+	o.runWithAPIClient = true
+	if !cdcClusterVer.ShouldRunCliWithAPIClientByDefault() {
+		o.runWithAPIClient = false
 		log.Warn("The TiCDC cluster is built from an older version, run cli with etcd client by default.",
 			zap.String("version", cdcClusterVer.String()))
 	}
@@ -153,7 +154,7 @@ func (o *queryChangefeedOptions) runCliWithEtcdClient(ctx context.Context, cmd *
 }
 
 // run cli command with the encapsulated api client
-func (o *queryChangefeedOptions) runCliWithApiClient(ctx context.Context, cmd *cobra.Command) error {
+func (o *queryChangefeedOptions) runCliWithAPIClient(ctx context.Context, cmd *cobra.Command) error {
 	var count uint64
 	// count cannot be properly calculated until https://github.com/pingcap/tiflow/pull/4052 is merged
 
@@ -198,7 +199,8 @@ func (o *queryChangefeedOptions) runCliWithApiClient(ctx context.Context, cmd *c
 			CheckpointTs: changefeed.CheckpointTSO,
 		},
 		Count:      count,
-		TaskStatus: changefeed.TaskStatus}
+		TaskStatus: changefeed.TaskStatus,
+	}
 
 	return util.JSONPrint(cmd, meta)
 }
@@ -218,11 +220,11 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		return nil
 	}
 
-	if o.runWithApiClient {
-		return o.runCliWithApiClient(ctx, cmd)
-	} else {
-		return o.runCliWithEtcdClient(ctx, cmd)
+	if o.runWithAPIClient {
+		return o.runCliWithAPIClient(ctx, cmd)
 	}
+
+	return o.runCliWithEtcdClient(ctx, cmd)
 }
 
 // newCmdQueryChangefeed creates the `cli changefeed query` command.

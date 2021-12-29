@@ -45,11 +45,11 @@ type status struct {
 type statisticsChangefeedOptions struct {
 	etcdClient *etcd.CDCEtcdClient
 	pdClient   pd.Client
-	apiClient  apiv1client.ApiV1Interface
+	apiClient  apiv1client.APIV1Interface
 
 	changefeedID     string
 	interval         uint
-	runWithApiClient bool
+	runWithAPIClient bool
 }
 
 // newStatisticsChangefeedOptions creates new options for the `cli changefeed statistics` command.
@@ -80,7 +80,7 @@ func (o *statisticsChangefeedOptions) complete(f factory.Factory) error {
 		return err
 	}
 
-	o.apiClient, err = apiv1client.NewApiClient(owner.AdvertiseAddr, nil)
+	o.apiClient, err = apiv1client.NewAPIClient(owner.AdvertiseAddr, nil)
 	if err != nil {
 		return err
 	}
@@ -100,8 +100,9 @@ func (o *statisticsChangefeedOptions) complete(f factory.Factory) error {
 		return errors.Trace(err)
 	}
 
-	if !cdcClusterVer.ShouldRunCliWithApiClientByDefault() {
-		o.runWithApiClient = false
+	o.runWithAPIClient = true
+	if !cdcClusterVer.ShouldRunCliWithAPIClientByDefault() {
+		o.runWithAPIClient = false
 		log.Warn("The TiCDC cluster is built from an older version, run cli with etcd client by default.",
 			zap.String("version", cdcClusterVer.String()))
 	}
@@ -149,7 +150,7 @@ func (o *statisticsChangefeedOptions) runCliWithEtcdClient(ctx context.Context, 
 }
 
 // run cli command with api client
-func (o *statisticsChangefeedOptions) runCliWithApiClient(ctx context.Context, cmd *cobra.Command, lastCount *uint64, lastTime *time.Time) error {
+func (o *statisticsChangefeedOptions) runCliWithAPIClient(ctx context.Context, cmd *cobra.Command, lastCount *uint64, lastTime *time.Time) error {
 	now := time.Now()
 	var count uint64
 	captures, err := o.apiClient.Captures().List(ctx)
@@ -203,8 +204,8 @@ func (o *statisticsChangefeedOptions) run(cmd *cobra.Command) error {
 				return err
 			}
 		case <-tick.C:
-			if o.runWithApiClient {
-				_ = o.runCliWithApiClient(ctx, cmd, &lastCount, &lastTime)
+			if o.runWithAPIClient {
+				_ = o.runCliWithAPIClient(ctx, cmd, &lastCount, &lastTime)
 			} else {
 				_ = o.runCliWithEtcdClient(ctx, cmd, &lastCount, &lastTime)
 			}

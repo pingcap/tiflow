@@ -30,8 +30,8 @@ import (
 // listProcessorOptions defines flags for the `cli processor list` command.
 type listProcessorOptions struct {
 	etcdClient       *etcd.CDCEtcdClient
-	apiClient        apiv1client.ApiV1Interface
-	runWithApiClient bool
+	apiClient        apiv1client.APIV1Interface
+	runWithAPIClient bool
 }
 
 // newListProcessorOptions creates new listProcessorOptions for the `cli processor list` command.
@@ -53,7 +53,7 @@ func (o *listProcessorOptions) complete(f factory.Factory) error {
 		return err
 	}
 
-	o.apiClient, err = apiv1client.NewApiClient(owner.AdvertiseAddr, nil)
+	o.apiClient, err = apiv1client.NewAPIClient(owner.AdvertiseAddr, nil)
 	if err != nil {
 		return err
 	}
@@ -67,8 +67,9 @@ func (o *listProcessorOptions) complete(f factory.Factory) error {
 		return errors.Trace(err)
 	}
 
-	if !cdcClusterVer.ShouldRunCliWithApiClientByDefault() {
-		o.runWithApiClient = false
+	o.runWithAPIClient = true
+	if !cdcClusterVer.ShouldRunCliWithAPIClientByDefault() {
+		o.runWithAPIClient = false
 		log.Warn("The TiCDC cluster is built from an older version, run cli with etcd client by default.",
 			zap.String("version", cdcClusterVer.String()))
 	}
@@ -79,19 +80,19 @@ func (o *listProcessorOptions) complete(f factory.Factory) error {
 // run runs the `cli processor list` command.
 func (o *listProcessorOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
-	if o.runWithApiClient {
+	if o.runWithAPIClient {
 		processors, err := o.apiClient.Processors().List(ctx)
 		if err != nil {
 			return err
 		}
 		return util.JSONPrint(cmd, processors)
-	} else {
-		info, err := o.etcdClient.GetProcessors(ctx)
-		if err != nil {
-			return err
-		}
-		return util.JSONPrint(cmd, info)
 	}
+
+	info, err := o.etcdClient.GetProcessors(ctx)
+	if err != nil {
+		return err
+	}
+	return util.JSONPrint(cmd, info)
 }
 
 // newCmdListProcessor creates the `cli processor list` command.

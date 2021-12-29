@@ -169,7 +169,8 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 		taskStatus = append(taskStatus, model.CaptureTaskStatus{
 			CaptureID: captureID,
 			Tables:    status.Tables,
-			Operation: status.Operation},
+			Operation: status.Operation,
+		},
 		)
 	}
 

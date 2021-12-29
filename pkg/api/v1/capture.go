@@ -1,3 +1,16 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package v1
 
 import (
@@ -24,18 +37,18 @@ type captures struct {
 }
 
 // newCaptures returns captures
-func newCaptures(c *ApiV1Client) *captures {
+func newCaptures(c *APIV1Client) *captures {
 	return &captures{
 		client: c.RESTClient(),
 	}
 }
 
 // List returns the list of captures
-func (c *captures) List(ctx context.Context) (result *[]model.Capture, err error) {
-	result = &[]model.Capture{}
-	err = c.client.Get().
+func (c *captures) List(ctx context.Context) (*[]model.Capture, error) {
+	result := new([]model.Capture)
+	err := c.client.Get().
 		WithURI("captures").
 		Do(ctx).
 		Into(result)
-	return
+	return result, err
 }
