@@ -364,11 +364,6 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 	if len(c.resolvedBuf) == 0 {
 		return nil
 	}
-	key, err := json.Marshal(model.MqMessageTypeRow)
-	if err != nil {
-		log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
-		return nil
-	}
 	ret := make([]*MQMessage, len(c.resolvedBuf))
 	for i, msg := range c.resolvedBuf {
 		value, err := json.Marshal(msg)
@@ -511,7 +506,6 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 		Table:  *flatMessage.getTable(),
 	}
 
-	// update event was split into a `delete` and `insert` event
 	var err error
 	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(), flatMessage.getMySQLType(), flatMessage.getJavaSQLType())
 	if err != nil {
@@ -522,7 +516,7 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 		return nil, err
 	}
 
-	return result, err
+	return result, nil
 }
 
 func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType map[string]string, javaSQLType map[string]int32) ([]*model.Column, error) {

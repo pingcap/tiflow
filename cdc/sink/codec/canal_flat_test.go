@@ -155,69 +155,6 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 	c.Assert(message, check.NotNil)
 }
 
-//func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
-//	defer testleak.AfterTest(c)()
-//	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
-//	c.Assert(encoder, check.NotNil)
-//	message, err := encoder.newFlatMessageForDML(testCaseUpdate)
-//	c.Assert(err, check.IsNil)
-//
-//	msg, ok := message.(*canalFlatMessage)
-//	c.Assert(ok, check.IsTrue)
-//	c.Assert(msg.EventType, check.Equals, "UPDATE")
-//	c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(testCaseUpdate.CommitTs))
-//	c.Assert(msg.tikvTs, check.Equals, testCaseUpdate.CommitTs)
-//	c.Assert(msg.Schema, check.Equals, "cdc")
-//	c.Assert(msg.Table, check.Equals, "person")
-//	c.Assert(msg.IsDDL, check.IsFalse)
-//	c.Assert(msg.SQLType, check.DeepEquals, map[string]int32{
-//		"id":           int32(JavaSQLTypeINTEGER),
-//		"name":         int32(JavaSQLTypeVARCHAR),
-//		"tiny":         int32(JavaSQLTypeTINYINT),
-//		"comment":      int32(JavaSQLTypeCLOB),
-//		"blob":         int32(JavaSQLTypeBLOB),
-//		"binaryString": int32(JavaSQLTypeBLOB),
-//		"binaryBlob":   int32(JavaSQLTypeBLOB),
-//	})
-//	c.Assert(msg.MySQLType, check.DeepEquals, map[string]string{
-//		"id":           "int",
-//		"name":         "varchar",
-//		"tiny":         "tinyint",
-//		"comment":      "text",
-//		"blob":         "blob",
-//		"binaryString": "binary",
-//		"binaryBlob":   "varbinary",
-//	})
-//	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
-//	c.Assert(err, check.IsNil)
-//
-//	encodedBinaryBlob, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("你好，世界"))
-//	c.Assert(err, check.IsNil)
-//
-//	c.Assert(msg.Data, check.DeepEquals, []map[string]interface{}{
-//		{
-//			"id":           "1",
-//			"name":         "Bob",
-//			"tiny":         "255",
-//			"comment":      "测试",
-//			"blob":         string(encodedBytes),
-//			"binaryString": "Chengdu International Airport",
-//			"binaryBlob":   string(encodedBinaryBlob),
-//		},
-//	})
-//	c.Assert(msg.Old, check.DeepEquals, []map[string]interface{}{
-//		{
-//			"id":           "1",
-//			"name":         "Alice",
-//			"tiny":         "255",
-//			"comment":      "测试",
-//			"blob":         string(encodedBytes),
-//			"binaryString": "Chengdu International Airport",
-//			"binaryBlob":   string(encodedBinaryBlob),
-//		},
-//	})
-//}
-
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C) {
 	defer testleak.AfterTest(c)()
 
