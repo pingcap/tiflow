@@ -32,6 +32,8 @@ var colValue = strings.Repeat("a", varcharColumnMaxLen)
 type options struct {
 	// The size of each row.
 	// The default is 1MiB.
+	// FIXME: Currently it does not have precise control over the size of each row.
+	// The overhead needs to be calculated and processed accurately.
 	rowBytes int
 	// Total number of rows.
 	// The default is 1 line.

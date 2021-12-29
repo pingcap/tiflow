@@ -38,6 +38,7 @@ function run() {
 	if [ ! -f ./gen_kafka_big_messages ]; then
 		GO111MODULE=on go build
 	fi
+	# Generate data larger than kafka broker max.message.bytes. We can send this data correctly.
 	./gen_kafka_big_messages --row-count=15 --sql-file-path=$CUR/test.sql
 
 	run_sql_file $CUR/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
