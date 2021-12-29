@@ -423,12 +423,10 @@ ClaimMessages:
 				}
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
-					log.Debug("filter fallback row", zap.ByteString("row", message.Key),
+					log.Fatal("RowChangedEvent fallback row", zap.ByteString("row", message.Key),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
 						zap.Int32("partition", partition))
-					// stop consume messages, this should make consistency check failed.
-					break ClaimMessages
 				}
 				// FIXME: hack to set start-ts in row changed event, as start-ts
 				// is not contained in TiCDC open protocol
@@ -455,7 +453,7 @@ ClaimMessages:
 				}
 				// TiCDC owner when sending `checkpointTs` to downstream sink,
 				// it tries to make the `checkpointTs` monotonically increase.
-				// But there always have some scenario the consumer receive redundant `checkpointTs`.
+				// But there is some scenario that the consumer would receive redundant `checkpointTs`.
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if ts < resolvedTs {
 					log.Fatal("partition resolved ts fallback",
