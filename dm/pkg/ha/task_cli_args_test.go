@@ -23,26 +23,56 @@ func (t *testForEtcd) TestTaskCliArgs(c *C) {
 	defer clearTestInfoOperation(c)
 
 	task := "test-task-cli-args"
+	source1 := "source1"
+	source2 := "source2"
 
-	ret, err := GetTaskCliArgs(etcdTestCli, task)
-	c.Assert(err, IsNil)
-	c.Assert(ret, IsNil)
+	checkNotExist := func(source string) {
+		ret, err := GetTaskCliArgs(etcdTestCli, task, source)
+		c.Assert(err, IsNil)
+		c.Assert(ret, IsNil)
+	}
+
+	checkNotExist(source1)
+	checkNotExist(source2)
 
 	args := config.TaskCliArgs{
 		StartTime: "123",
 	}
-	err = PutTaskCliArgs(etcdTestCli, task, args)
+	err := PutTaskCliArgs(etcdTestCli, task, []string{source1}, args)
 	c.Assert(err, IsNil)
 
-	ret, err = GetTaskCliArgs(etcdTestCli, task)
+	ret, err := GetTaskCliArgs(etcdTestCli, task, source1)
+	c.Assert(err, IsNil)
+	c.Assert(ret, NotNil)
+	c.Assert(*ret, Equals, args)
+	checkNotExist(source2)
+
+	// put will overwrite
+	args.StartTime = "456"
+	err = PutTaskCliArgs(etcdTestCli, task, []string{source1, source2}, args)
+	c.Assert(err, IsNil)
+
+	ret, err = GetTaskCliArgs(etcdTestCli, task, source1)
+	c.Assert(err, IsNil)
+	c.Assert(ret, NotNil)
+	c.Assert(*ret, Equals, args)
+	ret, err = GetTaskCliArgs(etcdTestCli, task, source2)
 	c.Assert(err, IsNil)
 	c.Assert(ret, NotNil)
 	c.Assert(*ret, Equals, args)
 
-	err = DeleteTaskCliArgs(etcdTestCli, task)
+	// test delete one source
+	err = DeleteTaskCliArgs(etcdTestCli, task, source1)
 	c.Assert(err, IsNil)
 
-	ret, err = GetTaskCliArgs(etcdTestCli, task)
+	checkNotExist(source1)
+	ret, err = GetTaskCliArgs(etcdTestCli, task, source2)
 	c.Assert(err, IsNil)
-	c.Assert(ret, IsNil)
+	c.Assert(ret, NotNil)
+	c.Assert(*ret, Equals, args)
+
+	// test delete all source
+	err = DeleteAllTaskCliArgs(etcdTestCli, task)
+	c.Assert(err, IsNil)
+	checkNotExist(source2)
 }

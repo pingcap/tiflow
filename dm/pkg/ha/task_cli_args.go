@@ -24,24 +24,36 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-// PutTaskCliArgs puts TaskCliArgs into etcd.
-func PutTaskCliArgs(cli *clientv3.Client, taskName string, args config.TaskCliArgs) error {
+func putTaskCliArgsOp(taskname string, sources []string, args config.TaskCliArgs) ([]clientv3.Op, error) {
 	data, err := args.ToJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	var ops []clientv3.Op
+	for _, source := range sources {
+		key := common.TaskCliArgsKeyAdapter.Encode(taskname, source)
+		ops = append(ops, clientv3.OpPut(key, data))
+	}
+	return ops, nil
+}
+
+// PutTaskCliArgs puts TaskCliArgs into etcd.
+func PutTaskCliArgs(cli *clientv3.Client, taskName string, sources []string, args config.TaskCliArgs) error {
+	ops, err := putTaskCliArgsOp(taskName, sources, args)
 	if err != nil {
 		return err
 	}
-	key := common.TaskCliArgsKeyAdapter.Encode(taskName)
-	op := clientv3.OpPut(key, data)
-	_, _, err = etcdutil.DoOpsInOneTxnWithRetry(cli, op)
+	_, _, err = etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
 	return err
 }
 
 // GetTaskCliArgs gets the command line arguments for the specified task.
-func GetTaskCliArgs(cli *clientv3.Client, taskName string) (*config.TaskCliArgs, error) {
+func GetTaskCliArgs(cli *clientv3.Client, taskName, source string) (*config.TaskCliArgs, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	resp, err := cli.Get(ctx, common.TaskCliArgsKeyAdapter.Encode(taskName))
+	resp, err := cli.Get(ctx, common.TaskCliArgsKeyAdapter.Encode(taskName, source))
 	if err != nil {
 		return nil, err
 	}
@@ -62,9 +74,17 @@ func GetTaskCliArgs(cli *clientv3.Client, taskName string) (*config.TaskCliArgs,
 	return args, nil
 }
 
-// DeleteTaskCliArgs deleted the command line arguments of this task.
-func DeleteTaskCliArgs(cli *clientv3.Client, taskName string) error {
+// DeleteAllTaskCliArgs deleted the command line arguments of this task.
+func DeleteAllTaskCliArgs(cli *clientv3.Client, taskName string) error {
 	key := common.TaskCliArgsKeyAdapter.Encode(taskName)
+	op := clientv3.OpDelete(key, clientv3.WithPrefix())
+	_, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, op)
+	return err
+}
+
+// DeleteTaskCliArgs deleted the command line arguments of this task.
+func DeleteTaskCliArgs(cli *clientv3.Client, taskName, source string) error {
+	key := common.TaskCliArgsKeyAdapter.Encode(taskName, source)
 	op := clientv3.OpDelete(key)
 	_, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, op)
 	return err
