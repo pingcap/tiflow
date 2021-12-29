@@ -6,6 +6,35 @@ cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
+function check_worker_ungraceful_stop_with_retry() {
+	all_matched=false
+
+	for ((k = 0; k < 10; k++)); do
+		sleep 1
+		echo "start check_worker_ungraceful_stop_with_retry times: $k"
+		num=$(grep "closing syncer without graceful" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+		if [ $num -lt 1 ]; then
+			continue
+		fi
+		num=$(grep "syncer is closing" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+		if [ $num -lt 1 ]; then
+			continue
+		fi
+		num=$(grep "received ungraceful exit ctx, exit now" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+		if [ $num -lt 1 ]; then
+			continue
+		fi
+		echo "check_worker_ungraceful_stop_with_retry after retry: $k"
+		all_matched=true
+		if $all_matched; then
+			break
+		fi
+	done
+	if ! $all_matched; then
+		exit 1
+	fi
+}
+
 function run() {
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/checkCheckpointInMiddleOfTransaction=return"
 
@@ -26,6 +55,29 @@ function run() {
 	dmctl_start_task_standalone $cur/conf/dm-task.yaml
 
 	# check diff
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	# test ungraceful stop, worker will not wait transaction finish
+	run_sql_file $cur/data/db1.increment1.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	sleep 2
+	# kill dm-master 1 to make worker lost keepalive while a transaction is not finished
+	echo "kill dm-master1"
+	kill_dm_master
+	check_master_port_offline 1
+	sleep 1 # wiat woker lost ha keepalive-ttl is 1 second
+
+	# check dm-worker2 will exit quickly without waiting for the transaction to finish
+	check_worker_ungraceful_stop_with_retry
+
+	# test data in tidb less than source
+	dataCountSource=$(mysql -uroot -h$MYSQL_HOST1 -P$MYSQL_PORT1 -p$MYSQL_PASSWORD1 -se "select count(1) from checkpoint_transaction.t1")
+	dataCountIntidb=$(mysql -uroot -h127.0.0.1 -P4000 -se "select count(1) from checkpoint_transaction.t1")
+	echo "afetr ungraceful exit data in source count: $dataCountSource data in tidb count: $dataCountIntidb"
+	[[ $dataCountIntidb -lt $dataCountSource ]]
+
+	# start dm-master again task will be resume, and data will be synced
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	run_sql_file $cur/data/db1.increment1.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1

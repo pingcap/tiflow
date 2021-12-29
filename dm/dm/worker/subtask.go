@@ -359,6 +359,12 @@ func (st *SubTask) PrevUnit() unit.Unit {
 
 // closeUnits closes all un-closed units (current unit and all the subsequent units).
 func (st *SubTask) closeUnits(graceful bool) {
+	// when not graceful, we want to syncer to exit immediately, so we call u.Close(false) before call cancel
+	// Note that we only implement un graceful close for sync unit
+	if !graceful && st.CurrUnit().Type() == pb.UnitType_Sync {
+		st.l.Info("closing syncer without graceful", zap.String("task", st.cfg.Name))
+		st.CurrUnit().Close(false)
+	}
 	st.cancel()
 	st.resultWg.Wait()
 

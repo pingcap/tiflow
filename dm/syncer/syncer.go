@@ -157,8 +157,8 @@ type Syncer struct {
 	waitXIDJob          atomic.Int64
 	isTransactionEnd    bool
 	waitTransactionLock sync.Mutex
-	noWaitCtx           context.Context // when this cancel, syncer will exit quickly no need to wait transaction end
-	noWaitCancel        context.CancelFunc
+	runCtx              context.Context // this ctx is injected in `s.Run` and when this ctx cancelled, syncer will exit quickly and not wait transaction end
+	runCancel           context.CancelFunc
 
 	tableRouter     *router.Table
 	binlogFilter    *bf.BinlogEvent
@@ -275,10 +275,6 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	}
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
-
-	noWaitCtx, noWaitCancel := context.WithCancel(context.Background())
-	syncer.noWaitCtx = noWaitCtx
-	syncer.noWaitCancel = noWaitCancel
 	return syncer
 }
 
@@ -570,9 +566,6 @@ func (s *Syncer) reset() {
 	s.waitXIDJob.Store(int64(noWait))
 	s.isTransactionEnd = true
 	s.flushSeq = 0
-	noWaitCtx, noWaitCancel := context.WithCancel(context.Background())
-	s.noWaitCtx = noWaitCtx
-	s.noWaitCancel = noWaitCancel
 	switch s.cfg.ShardMode {
 	case config.ShardPessimistic:
 		// every time start to re-sync from resume, we reset status to make it like a fresh syncing
@@ -980,7 +973,7 @@ func (s *Syncer) addJob(job *job) error {
 		s.isTransactionEnd = false
 		failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
 			s.tctx.L().Info("receive dml job", zap.Any("dml job", job))
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 		})
 	}
 
@@ -1393,34 +1386,28 @@ func (s *Syncer) syncDML() {
 	}
 }
 
-func (s *Syncer) waitTransactionEndBeforeExit(ctx, runCtx context.Context, cancel context.CancelFunc) {
-	<-ctx.Done()
+func (s *Syncer) waitTransactionEndBeforeExit(ctx context.Context) {
 	select {
-	case <-runCtx.Done():
-	default:
-		log.L().Info("received subtask's done")
-
+	case <-ctx.Done(): // hijack the context to wait for the transaction to end.
+		log.L().Info("received subtask's done, try graceful stop")
 		s.waitTransactionLock.Lock()
 		if s.isTransactionEnd {
 			s.waitXIDJob.Store(int64(waitComplete))
 			log.L().Info("the last job is transaction end, done directly")
-			cancel()
+			s.runCancel()
 			s.waitTransactionLock.Unlock()
 			return
 		}
 		s.waitXIDJob.Store(int64(waiting))
 		s.waitTransactionLock.Unlock()
-
 		select {
-		case <-runCtx.Done():
-			log.L().Info("received syncer's done")
-		case <-s.noWaitCtx.Done():
-			log.L().Info("received no wait ctx done")
-			cancel()
+		case <-s.runCtx.Done():
+			log.L().Info("received run ctx done, exit now")
 		case <-time.After(maxPauseOrStopWaitTime):
-			log.L().Info("wait transaction end timeout")
-			cancel()
+			log.L().Info("wait transaction end timeout, exit now")
 		}
+	case <-s.runCtx.Done(): // when no graceful stop, run ctx will canceled first.
+		log.L().Info("received ungraceful exit ctx, exit now")
 	}
 }
 
@@ -1428,6 +1415,10 @@ func (s *Syncer) waitTransactionEndBeforeExit(ctx, runCtx context.Context, cance
 func (s *Syncer) Run(ctx context.Context) (err error) {
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
+	s.Lock()
+	s.runCtx = runCtx
+	s.runCancel = runCancel
+	s.Unlock()
 	tctx := s.tctx.WithContext(runCtx)
 
 	defer func() {
@@ -1436,8 +1427,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 	}()
 
-	// start another goroutine to wait until transaction end.
-	go s.waitTransactionEndBeforeExit(ctx, runCtx, runCancel)
+	go s.waitTransactionEndBeforeExit(ctx)
 
 	// some initialization that can't be put in Syncer.Init
 	fresh, err := s.IsFreshTask(runCtx)
@@ -3183,15 +3173,20 @@ func (s *Syncer) Close(graceful bool) {
 	}
 
 	if !graceful {
-		s.noWaitCancel()
+		s.runCancel()
+		s.tctx.L().Warn("syncer is closing without graceful")
 	}
 	s.stopSync()
 	s.closeDBs()
 
 	s.checkpoint.Close()
 
-	if err := s.schemaTracker.Close(); err != nil {
-		s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
+	if graceful {
+		// when close sycner without graceful, Close will be called before s.Process exit.
+		// if we close schematracker here worker will pending on `s.checkpoint.Rollback(s.schemaTracker)` forever
+		if err := s.schemaTracker.Close(); err != nil {
+			s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
+		}
 	}
 
 	if s.sgk != nil {
