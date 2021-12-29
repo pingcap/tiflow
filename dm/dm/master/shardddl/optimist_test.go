@@ -113,8 +113,14 @@ func checkLocksByMap(c *C, o *Optimist, expectedLocks map[string]*pb.DDLLock, so
 	lock, err := o.ShowLocks("", sources)
 	c.Assert(err, IsNil)
 	c.Assert(lock, HasLen, len(lockIDs))
-	for i, lockID := range lockIDs {
-		c.Assert(lock[i].ID, Equals, lockID)
+	lockIDMap := make(map[string]struct{})
+	for _, lockID := range lockIDs {
+		lockIDMap[lockID] = struct{}{}
+	}
+	for i := range lockIDs {
+		_, ok := lockIDMap[lock[i].ID]
+		c.Assert(ok, IsTrue)
+		delete(lockIDMap, lock[i].ID)
 		c.Assert(lock[i], DeepEquals, expectedLocks[lock[i].ID])
 	}
 }
