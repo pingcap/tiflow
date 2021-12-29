@@ -78,7 +78,8 @@ const (
       "max-size": 300,
       "max-days": 0,
       "max-backups": 0
-    }
+    },
+    "error-output": "stderr"
   },
   "data-dir": "",
   "gc-ttl": 86400,
@@ -107,7 +108,7 @@ const (
     "region-scan-limit": 40
   },
   "debug": {
-    "enable-table-actor": true,
+    "enable-table-actor": false,
     "enable-db-sorter": false,
     "db": {
       "count": 16,
@@ -122,6 +123,8 @@ const (
       "write-l0-pause-trigger": 2147483647,
       "compaction-l0-trigger": 160,
       "compaction-deletion-threshold": 160000,
+      "iterator-max-alive-duration": 10000,
+      "iterator-slow-read-duration": 256,
       "cleanup-speed-limit": 10000
     },
     "messages": {

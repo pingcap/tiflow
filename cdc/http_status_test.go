@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pingcap/check"
@@ -70,7 +71,19 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	config.StoreGlobalServerConfig(conf)
 	server, err := NewServer([]string{"http://127.0.0.1:2379"})
 	c.Assert(err, check.IsNil)
-	err = server.startStatusHTTP()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.tcpServer.Run(ctx)
+		c.Check(err, check.ErrorMatches, ".*ErrTCPServerClosed.*")
+	}()
+
+	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
 	c.Assert(err, check.IsNil)
 	defer func() {
 		c.Assert(server.statusServer.Close(), check.IsNil)
@@ -85,6 +98,9 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	testHandleMoveTable(c)
 	testHandleChangefeedQuery(c)
 	testHandleFailpoint(c)
+
+	cancel()
+	wg.Wait()
 }
 
 func testPprof(c *check.C) {
@@ -186,7 +202,7 @@ func (s *httpStatusSuite) TestServerTLSWithoutCommonName(c *check.C) {
 	server, err := NewServer([]string{"https://127.0.0.1:2379"})
 	server.capture = capture.NewCapture4Test()
 	c.Assert(err, check.IsNil)
-	err = server.startStatusHTTP()
+	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
 	c.Assert(err, check.IsNil)
 	defer func() {
 		c.Assert(server.statusServer.Close(), check.IsNil)
@@ -195,6 +211,14 @@ func (s *httpStatusSuite) TestServerTLSWithoutCommonName(c *check.C) {
 	statusURL := fmt.Sprintf("https://%s/api/v1/status", addr)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.tcpServer.Run(ctx)
+		c.Check(err, check.ErrorMatches, ".*ErrTCPServerClosed.*")
+	}()
 
 	// test cli sends request without a cert will success
 	err = retry.Do(ctx, func() error {
@@ -236,6 +260,9 @@ func (s *httpStatusSuite) TestServerTLSWithoutCommonName(c *check.C) {
 		return nil
 	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 	c.Assert(err, check.IsNil)
+
+	cancel()
+	wg.Wait()
 }
 
 //
@@ -254,7 +281,7 @@ func (s *httpStatusSuite) TestServerTLSWithCommonName(c *check.C) {
 	server, err := NewServer([]string{"https://127.0.0.1:2379"})
 	server.capture = capture.NewCapture4Test()
 	c.Assert(err, check.IsNil)
-	err = server.startStatusHTTP()
+	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
 	c.Assert(err, check.IsNil)
 	defer func() {
 		c.Assert(server.statusServer.Close(), check.IsNil)
@@ -263,6 +290,14 @@ func (s *httpStatusSuite) TestServerTLSWithCommonName(c *check.C) {
 	statusURL := fmt.Sprintf("https://%s/api/v1/status", addr)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.tcpServer.Run(ctx)
+		c.Check(err, check.ErrorMatches, ".*ErrTCPServerClosed.*")
+	}()
 
 	// test cli sends request without a cert will fail
 	err = retry.Do(ctx, func() error {
