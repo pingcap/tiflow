@@ -576,6 +576,7 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 	status, exist := statuses[captureID]
 	if !exist {
 		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
+		return
 	}
 
 	positions, err := statusProvider.GetTaskPositions(ctx, changefeedID)
@@ -586,6 +587,7 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 	position, exist := positions[captureID]
 	if !exist {
 		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
+		return
 	}
 
 	processorDetail := &model.ProcessorDetail{CheckPointTs: position.CheckPointTs, ResolvedTs: position.ResolvedTs, Error: position.Error}
