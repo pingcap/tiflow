@@ -82,22 +82,22 @@ function run_with_prepared_source_config() {
 }
 
 function run() {
-  # test source enable gtid
+	# test source enable gtid
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 
 	run_with_prepared_source_config
 
 	cleanup_process $*
-  cleanup_data dup_event1 dup_event_relay
+	cleanup_data dup_event1 dup_event_relay
 
-  # test source disable gtid
-  cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-  cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
+	# test source disable gtid
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	sed -i "s/enable-gtid: true/enable-gtid: false/g" $WORK_DIR/source1.yaml
-  sed -i "s/enable-gtid: true/enable-gtid: false/g" $WORK_DIR/source2.yaml
+	sed -i "s/enable-gtid: true/enable-gtid: false/g" $WORK_DIR/source2.yaml
 
-  run_with_prepared_source_config
+	run_with_prepared_source_config
 }
 
 # also cleanup dm processes in case of last run failed
