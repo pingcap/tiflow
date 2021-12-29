@@ -198,6 +198,13 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.grpcService.Reset(c.MessageServer)
 
 		messageClientConfig := conf.Debug.Messages.ToMessageClientConfig()
+
+		// Puts the advertise-addr of the local node to the client config.
+		// This is for metrics purpose only, so that the receiver knows which
+		// node the connections are from.
+		advertiseAddr := conf.AdvertiseAddr
+		messageClientConfig.AdvertisedAddr = advertiseAddr
+
 		c.MessageRouter = p2p.NewMessageRouter(c.info.ID, conf.Security, messageClientConfig)
 	}
 
