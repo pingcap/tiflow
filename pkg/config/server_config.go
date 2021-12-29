@@ -59,7 +59,8 @@ type LogFileConfig struct {
 
 // LogConfig represents log config for server
 type LogConfig struct {
-	File *LogFileConfig `toml:"file" json:"file"`
+	File              *LogFileConfig `toml:"file" json:"file"`
+	InternalErrOutput string         `toml:"error-output" json:"error-output"`
 }
 
 var defaultServerConfig = &ServerConfig{
@@ -73,6 +74,7 @@ var defaultServerConfig = &ServerConfig{
 			MaxDays:    0,
 			MaxBackups: 0,
 		},
+		InternalErrOutput: "stderr",
 	},
 	DataDir: "",
 	GcTTL:   24 * 60 * 60, // 24H
@@ -100,7 +102,7 @@ var defaultServerConfig = &ServerConfig{
 		RegionScanLimit:  40,
 	},
 	Debug: &DebugConfig{
-		EnableTableActor: true,
+		EnableTableActor: false,
 		// Default leveldb sorter config
 		EnableDBSorter: false,
 		DB: &DBConfig{
@@ -118,6 +120,8 @@ var defaultServerConfig = &ServerConfig{
 			WriteL0PauseTrigger:         math.MaxInt32,
 			CompactionL0Trigger:         160,
 			CompactionDeletionThreshold: 160000,
+			IteratorMaxAliveDuration:    10000,
+			IteratorSlowReadDuration:    256,
 			CleanupSpeedLimit:           10000,
 		},
 		Messages: defaultMessageConfig.Clone(),
