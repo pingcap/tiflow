@@ -66,8 +66,8 @@ function run() {
 	# wait for changefeed created
 	sleep 2
 
-  # test processor query with no attached tables
-  python $CUR/util/test_case.py get_processor $TLS_DIR
+	# test processor query with no attached tables
+	python $CUR/util/test_case.py get_processor $TLS_DIR
 
 	run_sql "CREATE table test.simple0(id int primary key, val int);"
 	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
