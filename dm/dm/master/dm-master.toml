@@ -42,6 +42,5 @@ rpc-timeout = "30s"
 rpc-rate-burst = 40
 rpc-rate-limit = 10.0
 
-# some experimental features
-[experimental]
+# openapi feature
 openapi = false
