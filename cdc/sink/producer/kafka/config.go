@@ -120,7 +120,7 @@ func (c *Config) complete(sinkURI *url.URL) error {
 	if s != "" {
 		a, err := strconv.ParseInt(s, 10, 16)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 		c.ReplicationFactor = int16(a)
 	}
@@ -134,7 +134,7 @@ func (c *Config) complete(sinkURI *url.URL) error {
 	if s != "" {
 		a, err := strconv.Atoi(s)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 		c.MaxMessageBytes = a
 	}
@@ -180,7 +180,7 @@ func (c *Config) complete(sinkURI *url.URL) error {
 	if s != "" {
 		autoCreate, err := strconv.ParseBool(s)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 		c.AutoCreate = autoCreate
 	}
@@ -259,7 +259,7 @@ func InitializeConfigurations(
 func adjustConfig(admin kafka.ClusterAdminClient, topic string, config *Config) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
-		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return errors.Trace(err)
 	}
 
 	info, exists := topics[topic]
@@ -268,7 +268,7 @@ func adjustConfig(admin kafka.ClusterAdminClient, topic string, config *Config) 
 		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
 		topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
 		if err != nil {
-			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+			return errors.Trace(err)
 		}
 
 		if topicMaxMessageBytes < config.MaxMessageBytes {

@@ -374,7 +374,7 @@ func CreateTopic(topic string, config *Config, saramaConfig *sarama.Config) erro
 func getBrokerMessageMaxBytes(admin kafka.ClusterAdminClient) (int, error) {
 	_, controllerID, err := admin.DescribeCluster()
 	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return 0, errors.Trace(err)
 	}
 
 	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
@@ -383,7 +383,7 @@ func getBrokerMessageMaxBytes(admin kafka.ClusterAdminClient) (int, error) {
 		ConfigNames: []string{kafka.BrokerMessageMaxBytesConfigName},
 	})
 	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return 0, errors.Trace(err)
 	}
 
 	if len(configEntries) == 0 || configEntries[0].Name != kafka.BrokerMessageMaxBytesConfigName {
@@ -394,7 +394,7 @@ func getBrokerMessageMaxBytes(admin kafka.ClusterAdminClient) (int, error) {
 
 	result, err := strconv.Atoi(configEntries[0].Value)
 	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return 0, errors.Trace(err)
 	}
 
 	return result, nil
@@ -404,7 +404,7 @@ func getTopicMaxMessageBytes(admin kafka.ClusterAdminClient, info sarama.TopicDe
 	if a, ok := info.ConfigEntries[kafka.TopicMaxMessageBytesConfigName]; ok {
 		result, err := strconv.Atoi(*a)
 		if err != nil {
-			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+			return 0, errors.Trace(err)
 		}
 		return result, nil
 	}
