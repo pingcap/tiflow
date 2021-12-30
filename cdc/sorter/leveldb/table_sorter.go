@@ -341,10 +341,10 @@ func (ls *Sorter) outputIterEvents(
 	start := time.Now()
 	lastNext := start
 	if hasReadLastNext {
-		// We have read the last key/value, move the next.
+		// We have read the last key/value, move the Next.
 		iter.Next()
 		ls.metricIterNextDuration.Observe(time.Since(start).Seconds())
-	} // else the last is not read, we need to skip calling next and read again.
+	} // else the last is not read, we need to skip calling Next and read again.
 	hasReadNext := true
 	hasNext := iter.Valid()
 	for ; hasNext; hasNext = iter.Next() {
@@ -374,13 +374,13 @@ func (ls *Sorter) outputIterEvents(
 			buffer.appendResolvedEvent(event)
 			continue
 		}
-		// As new event belongs to a new txn group, we need to output
-		// all buffered events before append the event.
+		// As a new event belongs to a new txn group, we need to output all
+		// buffered events before append the event.
 		ls.outputBufferedResolvedEvents(buffer, true)
 		lenResolvedEvents, _ = buffer.len()
 		if lenResolvedEvents > 0 {
 			// Output blocked, skip append new event.
-			// This means we has not read next.
+			// This means we has not read Next.
 			hasReadNext = false
 			break
 		}
