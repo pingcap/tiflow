@@ -108,6 +108,7 @@ func newProcessor4Test(ctx cdcContext.Context,
 	p := newProcessor(ctx)
 	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
 	p.createTablePipeline = createTablePipeline
+	p.sinkManager = &sink.Manager{}
 	return p
 }
 
