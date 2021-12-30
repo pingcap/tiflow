@@ -16,11 +16,13 @@ package binlog
 import (
 	"context"
 	"database/sql"
+	"path"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // BinlogSize
@@ -92,6 +94,22 @@ func (b FileSizes) After(fromFile gmysql.Position) int64 {
 	}
 
 	return total
+}
+
+func GetLocalBinaryLogs(dir string) (FileSizes, error) {
+	fileNames, err := ReadSortedBinlogFromDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]BinlogSize, 0, len(fileNames))
+	for _, fileName := range fileNames {
+        size, err := utils.GetFileSize(path.Join(dir, fileName))
+        if err != nil {
+            return nil, err
+        }
+        files = append(files, BinlogSize{Name: fileName, Size: size})
+    }
+	return files, nil
 }
 
 // SourceStatus collects all information of upstream.
