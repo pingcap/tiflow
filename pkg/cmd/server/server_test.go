@@ -510,8 +510,8 @@ unknown3 = 3
 		EnableTableActor: false,
 		EnableDBSorter:   false,
 		DB: &config.DBConfig{
-			Count:                       8,
-			Concurrency:                 128,
+			Count:                       16,
+			Concurrency:                 256,
 			MaxOpenFiles:                10000,
 			BlockSize:                   65536,
 			BlockCacheSize:              4294967296,
@@ -528,8 +528,8 @@ unknown3 = 3
 		},
 		// We expect the default configuration here.
 		Messages: &config.MessagesConfig{
-			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 100),
-			ClientMaxBatchSize:           8 * 1024,
+			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 200),
+			ClientMaxBatchSize:           8 * 1024 * 1024,
 			ClientMaxBatchCount:          128,
 			ClientRetryRateLimit:         1.0,
 			ServerMaxPendingMessageCount: 102400,
