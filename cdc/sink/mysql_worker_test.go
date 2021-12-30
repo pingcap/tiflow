@@ -30,7 +30,6 @@ import (
 )
 
 func TestMysqlSinkWorker(t *testing.T) {
-	defer testleak.AfterTestT(t)()
 	tbl := &model.TableName{
 		Schema:      "test",
 		Table:       "user",
@@ -203,7 +202,6 @@ func TestMysqlSinkWorker(t *testing.T) {
 }
 
 func TestMySQLSinkWorkerExitWithError(t *testing.T) {
-	defer testleak.AfterTestT(t)()
 	tbl := &model.TableName{
 		Schema:      "test",
 		Table:       "user",
@@ -289,7 +287,6 @@ func TestMySQLSinkWorkerExitWithError(t *testing.T) {
 }
 
 func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
-	defer testleak.AfterTestT(t)()
 	tbl := &model.TableName{
 		Schema:      "test",
 		Table:       "user",
