@@ -334,10 +334,13 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
-	s.charsetAndDefaultCollation, s.idAndCollationMap, err = dbconn.GetCharsetAndCollationInfo(tctx, s.fromConn)
-	if err != nil {
-		return err
+	if s.cfg.CollationCompatible == config.StrictCollationCompatible {
+		s.charsetAndDefaultCollation, s.idAndCollationMap, err = dbconn.GetCharsetAndCollationInfo(tctx, s.fromConn)
+		if err != nil {
+			return err
+		}
 	}
+
 	s.streamerController = NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
 
 	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
@@ -2331,6 +2334,18 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		// Xid event: GTID set = xxx:1-11  this event is related to global checkpoint
 		*ec.lastLocation = *ec.currentLocation
 		return nil
+	}
+
+	codec, err := event.GetCharsetCodecByStatusVars(ev.StatusVars)
+	if err != nil {
+		s.tctx.L().Error("get charset codec failed, will treat query as utf8", zap.Error(err))
+	} else if codec != nil {
+		converted, err2 := codec.NewDecoder().String(originSQL)
+		if err2 != nil {
+			s.tctx.L().Error("convert query string failed, will treat query as utf8", zap.Error(err2))
+		} else {
+			originSQL = converted
+		}
 	}
 
 	qec := &queryEventContext{
