@@ -19,11 +19,12 @@ import (
 	"io"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/config"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -51,14 +52,18 @@ type Manager struct {
 	commandQueue chan *command
 
 	newProcessor func(cdcContext.Context) *processor
+
+	enableNewScheduler bool
 }
 
 // NewManager creates a new processor manager
 func NewManager() *Manager {
+	conf := config.GetGlobalServerConfig()
 	return &Manager{
-		processors:   make(map[model.ChangeFeedID]*processor),
-		commandQueue: make(chan *command, 4),
-		newProcessor: newProcessor,
+		processors:         make(map[model.ChangeFeedID]*processor),
+		commandQueue:       make(chan *command, 4),
+		newProcessor:       newProcessor,
+		enableNewScheduler: conf.Debug.EnableNewScheduler,
 	}
 }
 
@@ -86,7 +91,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		})
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			if config.SchedulerV2Enabled {
+			if m.enableNewScheduler {
 				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
 				processor = m.newProcessor(ctx)
 				m.processors[changefeedID] = processor
