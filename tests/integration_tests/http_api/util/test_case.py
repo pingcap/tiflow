@@ -241,7 +241,6 @@ def list_processor():
     print("pass test: list processors")
 
 
-# must at least one table is sync will the test success
 def get_processor():
     base_url = BASE_URL0 + "/processors"
     resp = rq.get(base_url, cert=CERT, verify=VERIFY)
