@@ -193,9 +193,6 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	return nil
 }
 
-<<<<<<< HEAD
-func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
-=======
 // FlushRowChangedEvents flushes sorted rows to sink manager, note the resolvedTs
 // is required to be no more than global resolvedTs, table barrierTs and table
 // redo log watermarkTs.
@@ -210,22 +207,17 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 					zap.Uint64("checkpointTs", ckpt))
 		}
 	}
->>>>>>> 0f6997376 (sink(ticdc): cherry pick sink bug fix to release 5.1  (#4119) (#4150))
 	i := sort.Search(len(t.buffer), func(i int) bool {
 		return t.buffer[i].CommitTs > resolvedTs
 	})
 	if i == 0 {
 		atomic.StoreUint64(&t.emittedTs, resolvedTs)
-<<<<<<< HEAD
-		return t.manager.flushBackendSink(ctx)
-=======
 		ckpt, err := t.manager.flushBackendSink(ctx, tableID)
 		if err != nil {
 			return ckpt, err
 		}
 		logAbnormalCheckpoint(ckpt)
 		return ckpt, err
->>>>>>> 0f6997376 (sink(ticdc): cherry pick sink bug fix to release 5.1  (#4119) (#4150))
 	}
 	resolvedRows := t.buffer[:i]
 	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
@@ -235,16 +227,12 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 		return t.manager.getCheckpointTs(tableID), errors.Trace(err)
 	}
 	atomic.StoreUint64(&t.emittedTs, resolvedTs)
-<<<<<<< HEAD
-	return t.manager.flushBackendSink(ctx)
-=======
 	ckpt, err := t.manager.flushBackendSink(ctx, tableID)
 	if err != nil {
 		return ckpt, err
 	}
 	logAbnormalCheckpoint(ckpt)
 	return ckpt, err
->>>>>>> 0f6997376 (sink(ticdc): cherry pick sink bug fix to release 5.1  (#4119) (#4150))
 }
 
 func (t *tableSink) getEmittedTs() uint64 {
