@@ -486,8 +486,12 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 		return
 	}
 	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-	if ddl.CommitTs <= globalResolvedTs {
+	if ddl.CommitTs < globalResolvedTs {
 		log.Fatal("unexpected ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
+	}
+	if ddl.CommitTs == globalResolvedTs {
+		log.Warn("receive redundant ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
+		return
 	}
 	c.ddlList = append(c.ddlList, ddl)
 	c.maxDDLReceivedTs = ddl.CommitTs
@@ -534,7 +538,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		default:
 		}
 		time.Sleep(100 * time.Millisecond)
-		// handle ddl
+		// initialize the `globalResolvedTs` as min of all partition's `ResolvedTs`
 		globalResolvedTs := uint64(math.MaxUint64)
 		err := c.forEachSink(func(sink *partitionSink) error {
 			resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
@@ -546,6 +550,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		// handle ddl
 		todoDDL := c.getFrontDDL()
 		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
 			// flush DMLs
