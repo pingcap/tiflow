@@ -72,6 +72,7 @@ type Server struct {
 // NewServer creates a Server instance.
 func NewServer(pdEndpoints []string) (*Server, error) {
 	conf := config.GetGlobalServerConfig()
+	conf.Debug.EnableNewScheduler = true
 	log.Info("creating CDC server",
 		zap.Strings("pd-addrs", pdEndpoints),
 		zap.Stringer("config", conf),
