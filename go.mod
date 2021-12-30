@@ -56,9 +56,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
 	github.com/pingcap/kvproto v0.0.0-20211202065422-a412f7a319c3
 	github.com/pingcap/log v0.0.0-20211207084639-71a2e5860834
-	github.com/pingcap/tidb v1.1.0-beta.0.20211224045547-6e6db1fd356e
+	github.com/pingcap/tidb v1.1.0-beta.0.20211230101750-a06e9f2980d5
 	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20211224045547-6e6db1fd356e
+	github.com/pingcap/tidb/parser v0.0.0-20211230101750-a06e9f2980d5
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -74,7 +74,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tidwall/gjson v1.9.1
 	github.com/tidwall/sjson v1.2.2
-	github.com/tikv/client-go/v2 v2.0.0-rc.0.20211223062159-300275dee63e
+	github.com/tikv/client-go/v2 v2.0.0-rc.0.20211229051614-62d6b4a2e8f7
 	github.com/tikv/pd v1.1.0-beta.0.20211118054146-02848d2660ee
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
@@ -88,7 +88,7 @@ require (
 	go.uber.org/zap v1.19.1
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20211031064116-611d5d643895
+	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/genproto v0.0.0-20210825212027-de86158e7fda
