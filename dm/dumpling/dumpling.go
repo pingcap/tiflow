@@ -244,6 +244,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	dumpConfig.User = db.User
 	dumpConfig.Password = db.Password
 	dumpConfig.OutputDirPath = cfg.Dir // use LoaderConfig.Dir as output dir
+	dumpConfig.CollationCompatible = cfg.CollationCompatible
 	tableFilter, err := filter.ParseMySQLReplicationRules(cfg.BAList)
 	if err != nil {
 		return nil, err
