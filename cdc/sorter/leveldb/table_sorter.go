@@ -206,19 +206,15 @@ BATCH:
 	return maxCommitTs, maxResolvedTs, inputCount, nil
 }
 
-// asyncWrite writes events and delete keys asynchronously.
-// It returns a channel to notify caller when write is done,
-// if needSnap is true, caller receives a snapshot and reads all resolved
-// events, up to the maxResolvedTs.
-func (ls *Sorter) asyncWrite(
-	ctx context.Context, events []*model.PolymorphicEvent, deleteKeys []message.Key, needSnap bool,
-) (chan message.LimitedSnapshot, error) {
+// buildTask build a task for writing new events and delete outputted events.
+func (ls *Sorter) buildTask(
+	events []*model.PolymorphicEvent, deleteKeys []message.Key,
+) (message.Task, error) {
 	// Write and sort events.
 	tk := message.Task{
 		UID:     ls.uid,
 		TableID: ls.tableID,
 		Events:  make(map[message.Key][]byte),
-		SnapCh:  make(chan message.LimitedSnapshot, 1),
 	}
 	for i := range events {
 		event := events[i]
@@ -231,7 +227,7 @@ func (ls *Sorter) asyncWrite(
 		var err error
 		value, err = ls.serde.Marshal(event, value)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return message.Task{}, errors.Trace(err)
 		}
 		tk.Events[message.Key(key)] = value
 	}
@@ -241,11 +237,7 @@ func (ls *Sorter) asyncWrite(
 		tk.Events[deleteKeys[i]] = []byte{}
 	}
 
-	tk.NeedSnap = needSnap
-
-	// Send write task to leveldb.
-	err := ls.router.SendB(ctx, ls.actorID, actormsg.SorterMessage(tk))
-	return tk.SnapCh, errors.Trace(err)
+	return tk, nil
 }
 
 // output nonblocking outputs an event. Caller should retry when it returns false.
@@ -468,13 +460,12 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	// It can only acquire a snapshot when
 	// 1. No buffered resolved events, they must be sent before
 	//    sending further resolved events from snapshot.
-	needSnap := lenResolvedEvents == 0
+	needIter := lenResolvedEvents == 0
 	// 2. There are some events that can be resolved.
-	needSnap = needSnap && state.hasResolvedEvents()
+	needIter = needIter && state.hasResolvedEvents()
 
 	// Write new events and delete sent keys.
-	snapCh, err :=
-		ls.asyncWrite(ctx, newEvents, state.outputBuf.deleteKeys, needSnap)
+	task, err := ls.buildTask(newEvents, state.outputBuf.deleteKeys)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -483,38 +474,47 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	// Try shrink buffer to release memory.
 	state.outputBuf.maybeShrink()
 
-	if !needSnap {
+	if !needIter {
 		// No new events and no resolved events.
 		if !state.hasResolvedEvents() && state.maxResolvedTs != 0 {
 			ls.outputResolvedTs(state.maxResolvedTs)
 		}
-		return nil
+		// Send write task to leveldb.
+		return ls.router.SendB(ctx, ls.actorID, actormsg.SorterMessage(task))
+	}
+
+	iterCh := make(chan *message.LimitedIterator, 1)
+	task.IterReq = &message.IterRequest{
+		UID:        ls.uid,
+		ResolvedTs: state.maxResolvedTs,
+		Range: [2][]byte{
+			encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
+			encoding.EncodeTsKey(ls.uid, ls.tableID, state.maxResolvedTs+1),
+		},
+		IterCh: iterCh,
+	}
+	// Send write task to leveldb.
+	err = ls.router.SendB(ctx, ls.actorID, actormsg.SorterMessage(task))
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	// Wait for writing and deleting.
-	var snap message.LimitedSnapshot
+	var iter *message.LimitedIterator
 	var ok bool
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case snap, ok = <-snapCh:
+	case iter, ok = <-iterCh:
 	}
-	if !ok && needSnap {
+	if !ok && needIter {
 		return cerrors.ErrUnexpectedSnapshot.GenWithStackByArgs(ls.tableID)
 	}
-	iter := snap.Iterator(
-		encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
-		encoding.EncodeTsKey(ls.uid, ls.tableID, state.maxResolvedTs+1),
-	)
 	defer func() {
-		// Release iter and snap should be fast, otherwise it may block
+		// Release iter should be fast, otherwise it may block
 		// the funcation.
 		if err := iter.Release(); err != nil {
 			log.Error("iterator release error",
-				zap.Error(err), zap.Uint64("tableID", ls.tableID))
-		}
-		if err := snap.Release(); err != nil {
-			log.Error("snapshot release error",
 				zap.Error(err), zap.Uint64("tableID", ls.tableID))
 		}
 	}()

@@ -585,7 +585,6 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 		return
 	}
 	position, exist := positions[captureID]
-
 	// Note: for the case that no tables are attached to a newly created changefeed,
 	//       we just do not report an error.
 	var processorDetail model.ProcessorDetail

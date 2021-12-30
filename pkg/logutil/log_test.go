@@ -15,54 +15,49 @@ package logutil
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-func TestSuite(t *testing.T) {
-	check.TestingT(t)
-}
+func TestInitLoggerAndSetLogLevel(t *testing.T) {
+	f, err := ioutil.TempFile("", "init-logger-test")
+	require.Nil(t, err)
+	defer os.Remove(f.Name())
 
-type logSuite struct{}
-
-var _ = check.Suite(&logSuite{})
-
-func (s *logSuite) TestInitLoggerAndSetLogLevel(c *check.C) {
-	defer testleak.AfterTest(c)()
-	f := filepath.Join(c.MkDir(), "test")
 	cfg := &Config{
 		Level: "warning",
-		File:  f,
+		File:  f.Name(),
 	}
 	cfg.Adjust()
-	err := InitLogger(cfg)
-	c.Assert(err, check.IsNil)
-	c.Assert(log.GetLevel(), check.Equals, zapcore.WarnLevel)
+	err = InitLogger(cfg)
+	require.NoError(t, err)
+	require.Equal(t, log.GetLevel(), zapcore.WarnLevel)
 
 	// Set a different level.
 	err = SetLogLevel("info")
-	c.Assert(err, check.IsNil)
-	c.Assert(log.GetLevel(), check.Equals, zapcore.InfoLevel)
+	require.NoError(t, err)
+	require.Equal(t, log.GetLevel(), zapcore.InfoLevel)
 
 	// Set the same level.
 	err = SetLogLevel("info")
-	c.Assert(err, check.IsNil)
-	c.Assert(log.GetLevel(), check.Equals, zapcore.InfoLevel)
+	require.NoError(t, err)
+	require.Equal(t, log.GetLevel(), zapcore.InfoLevel)
 
 	// Set an invalid level.
 	err = SetLogLevel("badlevel")
-	c.Assert(err, check.NotNil)
+	require.Error(t, err)
 }
 
-func (s *logSuite) TestZapErrorFilter(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestZapErrorFilter(t *testing.T) {
 	var (
 		err       = errors.New("test error")
 		testCases = []struct {
@@ -79,6 +74,35 @@ func (s *logSuite) TestZapErrorFilter(c *check.C) {
 		}
 	)
 	for _, tc := range testCases {
-		c.Assert(ZapErrorFilter(tc.err, tc.filters...), check.DeepEquals, tc.expected)
+		require.Equal(t, ZapErrorFilter(tc.err, tc.filters...), tc.expected)
+	}
+}
+
+func TestZapInternalErrorOutput(t *testing.T) {
+	testCases := []struct {
+		desc      string
+		errOutput string
+		error     bool
+	}{
+		{"test valid error output path", "stderr", false},
+		{"test invalid error output path", filepath.Join(t.TempDir(), "/not-there/foo.log"), true},
+	}
+
+	dir, err := ioutil.TempDir("", "zap-error-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+	for idx, tc := range testCases {
+		f := filepath.Join(dir, fmt.Sprintf("test-file%d", idx))
+		cfg := &Config{
+			Level:                "info",
+			File:                 f,
+			ZapInternalErrOutput: tc.errOutput,
+		}
+		err = InitLogger(cfg)
+		if tc.error {
+			require.NotNil(t, err)
+		} else {
+			require.Nil(t, err)
+		}
 	}
 }

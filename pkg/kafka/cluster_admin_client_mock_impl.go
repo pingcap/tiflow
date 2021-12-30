@@ -27,7 +27,7 @@ const (
 )
 
 // defaultMaxMessageBytes specifies the default max message bytes.
-var defaultMaxMessageBytes = "1048576"
+var defaultMaxMessageBytes = "10485760"
 
 // ClusterAdminClientMockImpl mock implements the admin client interface.
 type ClusterAdminClientMockImpl struct {
