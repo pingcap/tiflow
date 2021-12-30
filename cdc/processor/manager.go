@@ -51,14 +51,18 @@ type Manager struct {
 	commandQueue chan *command
 
 	newProcessor func(cdcContext.Context) *processor
+
+	enableNewScheduler bool
 }
 
 // NewManager creates a new processor manager
 func NewManager() *Manager {
+	conf := config.GetGlobalServerConfig()
 	return &Manager{
-		processors:   make(map[model.ChangeFeedID]*processor),
-		commandQueue: make(chan *command, 4),
-		newProcessor: newProcessor,
+		processors:         make(map[model.ChangeFeedID]*processor),
+		commandQueue:       make(chan *command, 4),
+		newProcessor:       newProcessor,
+		enableNewScheduler: conf.Debug.EnableNewScheduler,
 	}
 }
 
@@ -86,7 +90,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		})
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			if config.SchedulerV2Enabled {
+			if m.enableNewScheduler {
 				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
 				processor = m.newProcessor(ctx)
 				m.processors[changefeedID] = processor
