@@ -321,7 +321,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		var warn string
 		var size int
 		if exist {
-			colValue, size, warn, err = formatColVal(colDatums)
+			colValue, size, warn, err = formatColVal(colDatums, colInfo.Tp)
 		} else if fillWithDefaultValue {
 			colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
@@ -438,22 +438,23 @@ func sizeOfBytes(b []byte) int {
 }
 
 // formatColVal return interface{} need to meet the same requirement as getDefaultOrZeroValue
-func formatColVal(datum types.Datum) (
+func formatColVal(datum types.Datum, tp byte) (
 	value interface{}, size int, warn string, err error,
 ) {
-	switch datum.Kind() {
-	case types.KindNull:
+	if datum.IsNull() {
 		return nil, 0, "", nil
-	case types.KindMysqlTime:
+	}
+	switch tp {
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		v := datum.GetMysqlTime().String()
 		return v, sizeOfString(v), "", nil
-	case types.KindMysqlDuration:
+	case mysql.TypeDuration:
 		v := datum.GetMysqlDuration().String()
 		return v, sizeOfString(v), "", nil
-	case types.KindMysqlJSON:
+	case mysql.TypeJSON:
 		v := datum.GetMysqlJSON().String()
 		return v, sizeOfString(v), "", nil
-	case types.KindMysqlDecimal:
+	case mysql.TypeNewDecimal:
 		d := datum.GetMysqlDecimal()
 		if d == nil {
 			// nil takes 0 byte.
@@ -461,26 +462,27 @@ func formatColVal(datum types.Datum) (
 		}
 		v := d.String()
 		return v, sizeOfString(v), "", nil
-	case types.KindMysqlEnum:
+	case mysql.TypeEnum:
 		v := datum.GetMysqlEnum().Value
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", nil
-	case types.KindMysqlSet:
+	case mysql.TypeSet:
 		v := datum.GetMysqlSet().Value
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", nil
-	case types.KindMysqlBit:
+	case mysql.TypeBit:
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
 		v, err := datum.GetBinaryLiteral().ToInt(nil)
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", err
-	case types.KindString:
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
+		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		b := datum.GetBytes()
 		if b == nil {
 			b = emptyBytes
 		}
 		return b, sizeOfBytes(b), "", nil
-	case types.KindFloat32, types.KindFloat64:
+	case mysql.TypeFloat, mysql.TypeDouble:
 		v := datum.GetFloat64()
 		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
 			warn = fmt.Sprintf("the value is invalid in column: %f", v)
@@ -497,7 +499,7 @@ func formatColVal(datum types.Datum) (
 }
 
 // Scenarios when call this function:
-// (1) column define default null at creating+ insert without explicit column
+// (1) column define default null at creating + insert without explicit column
 // (2) alter table add column default xxx + old existing data
 // (3) amend + insert without explicit column + alter table add column default xxx
 // (4) online DDL drop column + data insert at state delete-only
@@ -505,20 +507,22 @@ func formatColVal(datum types.Datum) (
 // getDefaultOrZeroValue return interface{} need to meet to require type in
 // https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
 // Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
-// FIXME: Dynamic Timestamp will cause data inconsistency here
 // TODO: Check default expr support
 func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, error) {
 	var d types.Datum
-	// NOTICE: In TiDB, default value type may not consistent with the column type
-	// Almost all types default value is plain type: string or int
-	// ref: https://github.com/pingcap/tidb/blob/66d767374d/ddl/ddl_api.go#L849
 	// NOTICE: SHOULD use OriginDefaultValue here, more info pls ref to
 	// https://github.com/pingcap/tiflow/issues/4048
+	// FIXME: Too many corner cases may hit here, like type truncate, timezone
+	// (1) If this column is uk(no pk), will cause data inconsistency in Scenarios(2)
+	// (2) If not fix here, will cause data inconsistency in Scenarios(3) directly
+	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 	if col.GetOriginDefaultValue() != nil {
-		// TODO: add timezone support for default time like type
 		d = types.NewDatum(col.GetOriginDefaultValue())
 		log.Debug("default column type", zap.String("detail", d.String()))
-	} else if !mysql.HasNotNullFlag(col.Flag) {
+		return d.GetValue(), sizeOfDatum(d), "", nil
+	}
+
+	if !mysql.HasNotNullFlag(col.Flag) {
 		// NOTICE: NotNullCheck need do after OriginDefaultValue check, as when TiDB meet "amend + add column default xxx",
 		// ref: https://github.com/pingcap/ticdc/issues/3929
 		// must use null if TiDB not write the column value when default value is null
@@ -540,7 +544,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 		}
 	}
 
-	return formatColVal(d)
+	return formatColVal(d, col.Tp)
 }
 
 // DecodeTableID decodes the raw key to a table ID
