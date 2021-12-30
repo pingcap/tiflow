@@ -529,16 +529,13 @@ func (s *Server) DMAPIGetTaskList(c *gin.Context, params openapi.DMAPIGetTaskLis
 	// fill status
 	if params.WithStatus != nil && *params.WithStatus {
 		// get source list for all task
-		var sourceList []string
 		sourceNameM := make(map[string]struct{}) // use map to avoid duplicate source name
 		for _, task := range taskList {
 			for _, sourceConf := range task.SourceConfig.SourceConf {
 				sourceNameM[sourceConf.SourceName] = struct{}{}
 			}
 		}
-		for sourceName := range sourceNameM {
-			sourceList = append(sourceList, sourceName)
-		}
+		sourceList := utils.SetToSlice(sourceNameM)
 		// get status from workers
 		workerStatusList := s.getStatusFromWorkers(c.Request.Context(), sourceList, "", false)
 		// fill status for every task
