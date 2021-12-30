@@ -1179,8 +1179,6 @@ func TestNewMySQLSink(t *testing.T) {
 	err = sink.Close(ctx)
 	require.Nil(t, err)
 }
-<<<<<<< HEAD
-=======
 
 func TestMySQLSinkClose(t *testing.T) {
 	dbIndex := 0
@@ -1307,4 +1305,3 @@ func TestMySQLSinkFlushResovledTs(t *testing.T) {
 	err = sink.Close(ctx)
 	require.Nil(t, err)
 }
->>>>>>> 2ed77d8bc (sink(ticdc): cherry pick sink bug fix to release 5.2 (#4083) (#4119))

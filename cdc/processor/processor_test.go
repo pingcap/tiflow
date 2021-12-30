@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
-	"github.com/pingcap/tiflow/cdc/sink"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -36,22 +35,6 @@ type processorSuite struct{}
 
 var _ = check.Suite(&processorSuite{})
 
-<<<<<<< HEAD
-=======
-func newProcessor4Test(
-	ctx cdcContext.Context,
-	c *check.C,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
-) *processor {
-	p := newProcessor(ctx)
-	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
-	p.sinkManager = &sink.Manager{}
-	p.createTablePipeline = createTablePipeline
-	p.schemaStorage = &mockSchemaStorage{c: c}
-	return p
-}
-
->>>>>>> 2ed77d8bc (sink(ticdc): cherry pick sink bug fix to release 5.2 (#4083) (#4119))
 func initProcessor4Test(ctx cdcContext.Context, c *check.C) (*processor, *orchestrator.ReactorStateTester) {
 	p := newProcessor4Test(ctx, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 		return &mockTablePipeline{
