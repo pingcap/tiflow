@@ -27,7 +27,7 @@ type APIV1Interface interface {
 	ProcessorsGetter
 }
 
-// APIV1Client implements ApiV1Interface and it is used to interact with cdc owner http api.
+// APIV1Client implements APIV1Interface and it is used to interact with cdc owner http api.
 type APIV1Client struct {
 	restClient rest.CDCRESTInterface
 }
@@ -56,7 +56,7 @@ func (c *APIV1Client) RESTClient() rest.CDCRESTInterface {
 	return c.restClient
 }
 
-// NewAPIClient creates a new ApiV1Client.
+// NewAPIClient creates a new APIV1Client.
 func NewAPIClient(ownerAddr string, credential *security.Credential) (*APIV1Client, error) {
 	c := &rest.Config{}
 	c.APIPath = "/api"
