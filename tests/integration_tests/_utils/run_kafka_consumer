@@ -4,7 +4,7 @@
 # parameter 2: sink-uri
 # parameter 3: log suffix
 
-set -eu
+set -e
 
 workdir=$1
 sink_uri=$2

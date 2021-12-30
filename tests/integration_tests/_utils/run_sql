@@ -4,7 +4,7 @@
 # parameter 3: database port
 # parameter 4: other mysql client settings
 
-set -eu
+set -e
 
 sql=${1}
 
