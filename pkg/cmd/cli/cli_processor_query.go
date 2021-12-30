@@ -116,29 +116,24 @@ func (o *queryProcessorOptions) runCliWithEtcdClient(ctx context.Context, cmd *c
 
 // run cli cmd with api client
 func (o *queryProcessorOptions) runCliWithAPIClient(ctx context.Context, cmd *cobra.Command) error {
-	changfeed, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
-	if err != nil {
-		return err
-	}
-
 	processor, err := o.apiClient.Processors().Get(ctx, o.changefeedID, o.captureID)
 	if err != nil {
 		return err
 	}
 
-	var status model.CaptureTaskStatus
-	for _, captureStatus := range changfeed.TaskStatus {
-		if captureStatus.CaptureID == o.captureID {
-			status = captureStatus
-			break
+	tables := make(map[int64]*model.TableReplicaInfo)
+	for _, tableID := range processor.Tables {
+		tables[tableID] = &model.TableReplicaInfo{
+			// to be compatible with old version `cli processor query`,
+			// set this field to 0
+			StartTs: 0,
 		}
 	}
 
 	meta := &processorMeta{
 		Status: &model.TaskStatus{
-			Tables:    status.Tables,
-			Operation: status.Operation,
-			// AdminJobType and ModRevision are vacant
+			Tables: tables,
+			// Operations, AdminJobType and ModRevision are vacant
 		},
 		Position: &model.TaskPosition{
 			CheckPointTs: processor.CheckPointTs,
