@@ -4,7 +4,7 @@
 # --tlsdir: certificates directory
 # --retry: retry times
 
-set -eu
+set -e
 
 OUT_DIR=
 TLS_DIR=

@@ -8,7 +8,7 @@
 # --addr: address
 # --pd: pd address
 
-set -eu
+set -e
 
 workdir=
 tls=

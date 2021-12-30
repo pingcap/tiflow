@@ -4,7 +4,7 @@
 # --tidb-config: path to tidb config file
 # --retry: retry times
 
-set -eu
+set -e
 
 OUT_DIR=
 tidb_config=
