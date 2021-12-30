@@ -423,10 +423,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
-					log.Fatal("RowChangedEvent fallback row", zap.ByteString("row", message.Key),
+					log.Fatal("RowChangedEvent fallback row",
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
-						zap.Int32("partition", partition))
+						zap.Int32("partition", partition),
+						zap.ByteString("row", message.Key))
 				}
 				// FIXME: hack to set start-ts in row changed event, as start-ts
 				// is not contained in TiCDC open protocol
