@@ -3,7 +3,7 @@
 # --workdir: work directory
 # --tlsdir: certificates directory
 
-set -e
+set -eu
 
 OUT_DIR=
 TLS_DIR=
