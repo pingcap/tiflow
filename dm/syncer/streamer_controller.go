@@ -117,7 +117,6 @@ func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *sql.DB, syncCfg replic
 
 	parser := replication.NewBinlogParser()
 	parser.SetFlavor(syncCfg.Flavor)
-	parser.SetRawMode(syncCfg.RawModeEnabled)
 	parser.SetParseTime(syncCfg.ParseTime)
 	parser.SetTimestampStringLocation(syncCfg.TimestampStringLocation)
 	parser.SetUseDecimal(syncCfg.UseDecimal)
@@ -138,8 +137,9 @@ func (r *remoteBinlogPosFinder) initTargetBinlogFile(ts int64) error {
 		// should not happen on a master with binlog enabled
 		return errors.New("cannot find binlog on master")
 	}
-	// how many binlog files on normal production env?
-	// TODO change to binary search when len(binaryLogs) is large and r.enableGTID = false
+	// large proportion of the time will be spent at finding inside the target binlog file
+	// find the target binlog file is relatively fast
+	// TODO maybe change to binary search later when len(binaryLogs) is large
 	for _, binlogFile := range binaryLogs {
 		// master switched may complicate the situation, suppose we are trying to sync mysql-bin.000003, both master
 		// contains it, but they have different timestamp, we may get the wrong location.
@@ -163,7 +163,7 @@ func (r *remoteBinlogPosFinder) initTargetBinlogFile(ts int64) error {
 		}
 		syncer.Close()
 
-		r.tctx.L().Info("min timestamp of binlog", zap.Reflect("file", binlogFile), zap.Uint32("ts", currTs))
+		r.tctx.L().Info("min timestamp in binlog file", zap.Reflect("file", binlogFile), zap.Uint32("ts", currTs))
 
 		if currTs >= targetTs {
 			break
@@ -188,6 +188,18 @@ func (r *remoteBinlogPosFinder) initTargetBinlogFile(ts int64) error {
 
 type BinlogPosType int
 
+func (b BinlogPosType) String() string {
+	switch b {
+	case BelowLowerBoundBinlogPos:
+		return "BelowLowerBound"
+	case InRangeBinlogPos:
+		return "InRange"
+	case AboveUpperBoundBinlogPos:
+		return "AboveUpperBound"
+	}
+	return "Invalid"
+}
+
 const (
 	InvalidBinlogPos BinlogPosType = iota
 	BelowLowerBoundBinlogPos
@@ -208,6 +220,7 @@ func (r *remoteBinlogPosFinder) processGTIDRelatedEvent(ev *replication.BinlogEv
 		}
 		return newSet, nil
 	case replication.MARIADB_GTID_EVENT:
+		fallthrough
 	case replication.GTID_EVENT:
 		gtidStr, _ := event.GetGTIDStr(ev)
 		if err := prevSet.Update(gtidStr); err != nil {
@@ -239,7 +252,9 @@ func (r *remoteBinlogPosFinder) checkTransactionBoundaryEvent(ev *replication.Bi
 			return false, err
 		}
 	case replication.GTID_EVENT:
+		fallthrough
 	case replication.ANONYMOUS_GTID_EVENT: // since 5.7, when GTID not enabled. we use this to avoid parsing query event
+		fallthrough
 	case replication.MARIADB_GTID_EVENT:
 		r.everMetGTIDEvent = true
 		transactionBeginEvent = true
@@ -272,6 +287,7 @@ func (r *remoteBinlogPosFinder) checkTransactionBoundaryEvent(ev *replication.Bi
 }
 
 func (r *remoteBinlogPosFinder) FindByTs(ts int64) (*binlog.Location, BinlogPosType, error) {
+	r.tctx.L().Info("target timestamp", zap.Int64("ts", ts))
 	// TODO check server uuid
 	if err := r.initTargetBinlogFile(ts); err != nil {
 		return nil, InvalidBinlogPos, err
