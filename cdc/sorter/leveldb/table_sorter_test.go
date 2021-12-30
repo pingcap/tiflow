@@ -1065,12 +1065,11 @@ func handleTask(
 		return
 	}
 	iter := iterFn(task.SorterTask.IterReq.Range)
-	iter.ResolvedTs = task.SorterTask.IterReq.ResolvedTs
 	if iter != nil {
+		iter.ResolvedTs = task.SorterTask.IterReq.ResolvedTs
 		task.SorterTask.IterReq.IterCh <- iter
 	}
 	close(task.SorterTask.IterReq.IterCh)
-	return
 }
 
 func newSnapshot(
