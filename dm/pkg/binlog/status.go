@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
-// BinlogSize
 // in MySQL, we can set `max_binlog_size` to control the max size of a binlog file.
 // but this is not absolute:
 // > A transaction is written in one chunk to the binary log, so it is never split between several binary logs.
@@ -35,13 +34,13 @@ import (
 // but the actual file size still can be larger, and it may exceed the range of an uint32
 // so, if we use go-mysql.Position(with uint32 Pos) to store the binlog size, it may become out of range.
 // ps, use go-mysql.Position to store a position of binlog event (position of the next event) is enough.
-type BinlogSize struct {
-	Name string
-	Size int64
+type binlogSize struct {
+	name string
+	size int64
 }
 
 // FileSizes is a list of binlog filename and size.
-type FileSizes []BinlogSize
+type FileSizes []binlogSize
 
 // GetBinaryLogs returns binlog filename and size of upstream.
 func GetBinaryLogs(ctx context.Context, db *sql.DB) (FileSizes, error) {
@@ -56,7 +55,7 @@ func GetBinaryLogs(ctx context.Context, db *sql.DB) (FileSizes, error) {
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
-	files := make([]BinlogSize, 0, 10)
+	files := make([]binlogSize, 0, 10)
 	for rows.Next() {
 		var file string
 		var pos int64
@@ -69,7 +68,7 @@ func GetBinaryLogs(ctx context.Context, db *sql.DB) (FileSizes, error) {
 		if err != nil {
 			return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 		}
-		files = append(files, BinlogSize{Name: file, Size: pos})
+		files = append(files, binlogSize{name: file, size: pos})
 	}
 	if rows.Err() != nil {
 		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
@@ -81,14 +80,14 @@ func GetBinaryLogs(ctx context.Context, db *sql.DB) (FileSizes, error) {
 func (b FileSizes) After(fromFile gmysql.Position) int64 {
 	var total int64
 	for _, file := range b {
-		switch gmysql.CompareBinlogFileName(file.Name, fromFile.Name) {
+		switch gmysql.CompareBinlogFileName(file.name, fromFile.Name) {
 		case -1:
 			continue
 		case 1:
-			total += file.Size
+			total += file.size
 		case 0:
-			if file.Size > int64(fromFile.Pos) {
-				total += file.Size - int64(fromFile.Pos)
+			if file.size > int64(fromFile.Pos) {
+				total += file.size - int64(fromFile.Pos)
 			}
 		}
 	}
@@ -101,13 +100,13 @@ func GetLocalBinaryLogs(dir string) (FileSizes, error) {
 	if err != nil {
 		return nil, err
 	}
-	files := make([]BinlogSize, 0, len(fileNames))
+	files := make([]binlogSize, 0, len(fileNames))
 	for _, fileName := range fileNames {
         size, err := utils.GetFileSize(path.Join(dir, fileName))
         if err != nil {
             return nil, err
         }
-        files = append(files, BinlogSize{Name: fileName, Size: size})
+        files = append(files, binlogSize{name: fileName, size: size})
     }
 	return files, nil
 }

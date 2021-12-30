@@ -39,7 +39,7 @@ func (t *testStatusSuite) TestGetBinaryLogs(c *C) {
 			sqlmock.NewRows([]string{"Log_name", "File_size"}).
 				AddRow("mysql-bin.000001", 52119).
 				AddRow("mysql-bin.000002", 114),
-			[]BinlogSize{
+			[]binlogSize{
 				{
 					"mysql-bin.000001", 52119,
 				},
@@ -52,7 +52,7 @@ func (t *testStatusSuite) TestGetBinaryLogs(c *C) {
 			sqlmock.NewRows([]string{"Log_name", "File_size", "Encrypted"}).
 				AddRow("mysql-bin.000001", 52119, "No").
 				AddRow("mysql-bin.000002", 114, "No"),
-			[]BinlogSize{
+			[]binlogSize{
 				{
 					"mysql-bin.000001", 52119,
 				},
@@ -82,9 +82,9 @@ func (t *testStatusSuite) TestGetBinaryLogs(c *C) {
 
 func (t *testStatusSuite) TestBinlogSizesAfter(c *C) {
 	sizes := FileSizes{
-		{Name: "mysql-bin.999999", Size: 1},
-		{Name: "mysql-bin.1000000", Size: 2},
-		{Name: "mysql-bin.1000001", Size: 4},
+		{name: "mysql-bin.999999", size: 1},
+		{name: "mysql-bin.1000000", size: 2},
+		{name: "mysql-bin.1000001", size: 4},
 	}
 
 	cases := []struct {

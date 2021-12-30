@@ -44,7 +44,7 @@ type binlogPosFinder struct {
 	relayDir string // should be a directory with current UUID
 
 	// fields used inside FindByTs
-	targetBinlog        BinlogSize // target binlog file the timestamp may reside
+	targetBinlog        binlogSize // target binlog file the timestamp may reside
 	tsBeforeFirstBinlog bool       // whether the timestamp is before the first binlog
 	lastBinlogFile      bool       // whether targetBinlog is the last binlog file
 
@@ -132,7 +132,7 @@ func (r *binlogPosFinder) startSync(position mysql.Position) (reader.Reader, err
 
 func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 	targetTs := uint32(ts)
-	var prevBinlog, currBinlog BinlogSize
+	var prevBinlog, currBinlog binlogSize
 	var prevTs, currTs uint32
 	binaryLogs, err := r.getBinlogFiles()
 	if err != nil {
@@ -150,7 +150,7 @@ func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 		// contains it, but they have different timestamp, we may get the wrong location.
 		prevTs, currTs = currTs, 0
 		prevBinlog, currBinlog = currBinlog, binlogFile
-		binlogReader, err := r.startSync(mysql.Position{Name: currBinlog.Name, Pos: FileHeaderLen})
+		binlogReader, err := r.startSync(mysql.Position{Name: currBinlog.name, Pos: FileHeaderLen})
 		if err != nil {
 			return err
 		}
@@ -187,7 +187,7 @@ func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 		// find from the last binlog file, i.e. currBinlog
 		r.targetBinlog = currBinlog
 	}
-	r.lastBinlogFile = r.targetBinlog.Name == binaryLogs[len(binaryLogs)-1].Name
+	r.lastBinlogFile = r.targetBinlog.name == binaryLogs[len(binaryLogs)-1].name
 	return nil
 }
 
@@ -281,12 +281,12 @@ func (r *binlogPosFinder) FindByTs(ts int64) (*Location, PosType, error) {
 
 	if r.tsBeforeFirstBinlog {
 		loc := NewLocation(r.flavor)
-		loc.Position = mysql.Position{Name: r.targetBinlog.Name, Pos: FileHeaderLen}
+		loc.Position = mysql.Position{Name: r.targetBinlog.name, Pos: FileHeaderLen}
 		return &loc, BelowLowerBoundBinlogPos, nil
 	}
 
 	targetTs := uint32(ts)
-	position := mysql.Position{Name: r.targetBinlog.Name, Pos: FileHeaderLen}
+	position := mysql.Position{Name: r.targetBinlog.name, Pos: FileHeaderLen}
 	gtidSet := gtid.MinGTIDSet(r.flavor)
 
 	binlogReader, err := r.startSync(position)
@@ -328,7 +328,7 @@ func (r *binlogPosFinder) FindByTs(ts int64) (*Location, PosType, error) {
 		}
 
 		// still not found the timestamp after reached the end of this binlog file
-		if int64(position.Pos) >= r.targetBinlog.Size {
+		if int64(position.Pos) >= r.targetBinlog.size {
 			// if it's the last binlog file, then this timestamp is out of range,
 			// else the end of this binlog file is the position we want,
 			// since the timestamp of the first event in next binlog >= target timestamp
