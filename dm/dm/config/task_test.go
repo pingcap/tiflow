@@ -659,6 +659,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 			HeartbeatUpdateInterval: heartbeatUI,
 			HeartbeatReportInterval: heartbeatRI,
 			EnableHeartbeat:         true,
+			CollationCompatible:     LooseCollationCompatible,
 			Meta: &Meta{
 				BinLogName: "mysql-bin.000123",
 				BinLogPos:  456,
@@ -734,6 +735,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 		HeartbeatReportInterval: heartbeatRI,
 		CaseSensitive:           stCfg1.CaseSensitive,
 		TargetDB:                &stCfg1.To,
+		CollationCompatible:     LooseCollationCompatible,
 		MySQLInstances: []*MySQLInstance{
 			{
 				SourceID:           source1,
