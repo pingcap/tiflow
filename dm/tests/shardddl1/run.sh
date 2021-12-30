@@ -13,7 +13,10 @@ function DM_001_CASE() {
 	# schema tracker could track per table without error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Duplicate column name 'new_col1'" 1
+		"\"result\": true" 2 \
+		"\"synced\": true" 1
+	# only downstream sees a duplicate error, but currently ignored by DM
+	check_log_contain_with_retry "Duplicate column name 'new_col1'" $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
 }
 
 function DM_001() {
