@@ -451,6 +451,12 @@ func (c *TaskConfig) adjust() error {
 		c.ShardMode = ShardPessimistic // use the pessimistic mode as default for back compatible.
 	}
 
+	if c.CollationCompatible != "" && c.CollationCompatible != LooseCollationCompatible && c.CollationCompatible != StrictCollationCompatible {
+		return terror.ErrConfigCollationCompatibleNotSupport.Generate(c.ShardMode)
+	} else if c.CollationCompatible == "" {
+		c.CollationCompatible = LooseCollationCompatible
+	}
+
 	for _, item := range c.IgnoreCheckingItems {
 		if err := ValidateCheckingItem(item); err != nil {
 			return err
