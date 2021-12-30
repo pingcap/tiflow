@@ -347,7 +347,7 @@ func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName 
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
-	// 1. check whether worker exists.
+	// check whether worker exists.
 	w, ok := s.workers[workerName]
 	if !ok {
 		return terror.ErrSchedulerWorkerNotExist.Generate(workerName)
@@ -358,15 +358,8 @@ func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName 
 		return err
 	}
 
-	bounded, err := s.tryBoundForSourceWorker(cfg.SourceID, w)
-	if err != nil {
-		return err
-	} else if !bounded {
-		// 5. record the source as unbounded.
-		s.unbounds[cfg.SourceID] = struct{}{}
-	}
-
-	return nil
+	_, err = s.tryBoundForSourceWorker(cfg.SourceID, w)
+	return err
 }
 
 // startSource add the upstream source config to the cluster.
