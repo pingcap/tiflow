@@ -9,6 +9,7 @@ heartbeat-update-interval: 1
 heartbeat-report-interval: 10
 timezone: ""
 case-sensitive: false
+collation_compatible: loose
 target-database:
   host: 127.0.0.1
   port: 4000

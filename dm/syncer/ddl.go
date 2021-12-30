@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
@@ -127,7 +128,11 @@ func (s *Syncer) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, error
 		targetTables: targetTables,
 	}
 
-	adjustCollation(s.tctx, ddlInfo, qec.eventStatusVars, s.charsetAndDefaultCollation, s.idAndCollationMap)
+	// "strict" will adjust collation
+	if s.cfg.CollationCompatible == config.StrictCollationCompatible {
+		adjustCollation(s.tctx, ddlInfo, qec.eventStatusVars, s.charsetAndDefaultCollation, s.idAndCollationMap)
+	}
+
 	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
 	ddlInfo.routedDDL = routedDDL
 	return ddlInfo, err
