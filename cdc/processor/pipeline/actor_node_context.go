@@ -88,6 +88,19 @@ func (c *actorNodeContext) SendToNextNode(msg pipeline.Message) {
 	c.trySendTickMessage()
 }
 
+func (c *actorNodeContext) TrySendToNextNode(msg pipeline.Message) bool {
+	added := false
+	select {
+	case c.outputCh <- msg:
+		added = true
+	default:
+	}
+	if added {
+		c.trySendTickMessage()
+	}
+	return added
+}
+
 func (c *actorNodeContext) Message() pipeline.Message {
 	return <-c.outputCh
 }

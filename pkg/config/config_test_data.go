@@ -123,11 +123,13 @@ const (
       "write-l0-pause-trigger": 2147483647,
       "compaction-l0-trigger": 160,
       "compaction-deletion-threshold": 160000,
+      "iterator-max-alive-duration": 10000,
+      "iterator-slow-read-duration": 256,
       "cleanup-speed-limit": 10000
     },
     "messages": {
-      "client-max-batch-interval": 100000000,
-      "client-max-batch-size": 8192,
+      "client-max-batch-interval": 200000000,
+      "client-max-batch-size": 8388608,
       "client-max-batch-count": 128,
       "client-retry-rate-limit": 1,
       "server-max-pending-message-count": 102400,
