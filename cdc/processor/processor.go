@@ -224,6 +224,7 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 func newProcessor(ctx cdcContext.Context) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	advertiseAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	conf := config.GetGlobalServerConfig()
 	p := &processor{
 		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:         make(chan error, 1),
@@ -232,7 +233,7 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
 
-		newSchedulerEnabled: config.SchedulerV2Enabled,
+		newSchedulerEnabled: conf.Debug.EnableNewScheduler,
 
 		metricResolvedTsGauge:        resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricResolvedTsLagGauge:     resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
