@@ -375,6 +375,9 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 			ExpressionFilters:  exprFilterNames,
 		})
 	}
+	if c.CollationCompatible == "" {
+		c.CollationCompatible = LooseCollationCompatible
+	}
 	return c
 }
 
