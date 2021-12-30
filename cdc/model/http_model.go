@@ -162,8 +162,8 @@ type ProcessorDetail struct {
 type CaptureTaskStatus struct {
 	CaptureID string `json:"capture_id"`
 	// Table list, containing tables that processor should process
-	Tables    map[TableID]*TableReplicaInfo `json:"tables"`
-	Operation map[TableID]*TableOperation   `json:"operations"`
+	Tables    []int64                     `json:"table_ids"`
+	Operation map[TableID]*TableOperation `json:"table_operations"`
 }
 
 // Capture holds common information of a capture in cdc
