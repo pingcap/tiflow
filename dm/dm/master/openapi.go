@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -399,7 +400,7 @@ func (s *Server) DMAPITransferSource(c *gin.Context, sourceName string) {
 		_ = c.Error(err)
 		return
 	}
-	if err := s.scheduler.TransferSource(sourceName, req.WorkerName); err != nil {
+	if err := s.scheduler.TransferSource(c.Request.Context(), sourceName, req.WorkerName); err != nil {
 		_ = c.Error(err)
 	}
 }
@@ -820,6 +821,123 @@ func (s *Server) DMAPIOperateTableStructure(c *gin.Context, taskName string, sou
 		_ = c.Error(terror.ErrOpenAPICommonError.New(resp.OperateSchema.Msg))
 		return
 	}
+}
+
+// DMAPIImportTaskConfig create task_config_template url is: (POST /api/v1/task/configs/import).
+func (s *Server) DMAPIImportTaskConfig(c *gin.Context) {
+	var req openapi.TaskConfigRequest
+	if err := c.Bind(&req); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	resp := openapi.TaskConfigResponse{
+		FailedTaskList: []struct {
+			ErrorMsg string `json:"error_msg"`
+			TaskName string `json:"task_name"`
+		}{},
+		SuccessTaskList: []string{},
+	}
+	for _, task := range config.SubTaskConfigsToOpenAPITask(s.scheduler.GetSubTaskCfgs()) {
+		if err := ha.PutOpenAPITaskConfig(s.etcdClient, task, req.Overwrite); err != nil {
+			resp.FailedTaskList = append(resp.FailedTaskList, struct {
+				ErrorMsg string `json:"error_msg"`
+				TaskName string `json:"task_name"`
+			}{
+				ErrorMsg: err.Error(),
+				TaskName: task.Name,
+			})
+		} else {
+			resp.SuccessTaskList = append(resp.SuccessTaskList, task.Name)
+		}
+	}
+	c.IndentedJSON(http.StatusAccepted, resp)
+}
+
+// DMAPICreateTaskConfig create task_config_template url is: (POST /api/task/configs).
+func (s *Server) DMAPICreateTaskConfig(c *gin.Context) {
+	task := &openapi.Task{}
+	if err := c.Bind(task); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if err := task.Adjust(); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	// prepare target db config
+	newCtx := c.Request.Context()
+	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
+	if adjustDBErr := adjustTargetDB(newCtx, toDBCfg); adjustDBErr != nil {
+		_ = c.Error(terror.WithClass(adjustDBErr, terror.ClassDMMaster))
+		return
+	}
+	if err := ha.PutOpenAPITaskConfig(s.etcdClient, *task, false); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.IndentedJSON(http.StatusCreated, task)
+}
+
+// DMAPIGetTaskConfigList get task_config_template list url is: (GET /api/v1/task/configs).
+func (s *Server) DMAPIGetTaskConfigList(c *gin.Context) {
+	TaskConfigList, err := ha.GetAllOpenAPITaskConfig(s.etcdClient)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	taskList := make([]openapi.Task, len(TaskConfigList))
+	for i, TaskConfig := range TaskConfigList {
+		taskList[i] = *TaskConfig
+	}
+	resp := openapi.GetTaskListResponse{Total: len(TaskConfigList), Data: taskList}
+	c.IndentedJSON(http.StatusOK, resp)
+}
+
+// DMAPIDeleteTaskConfig delete task_config_template url is: (DELETE /api/v1/task/configs/{task-name}).
+func (s *Server) DMAPIDeleteTaskConfig(c *gin.Context, taskName string) {
+	if err := ha.DeleteOpenAPITaskConfig(s.etcdClient, taskName); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// DMAPIGetTaskConfig get task_config_template url is: (GET /api/v1/task/configs/{task-name}).
+func (s *Server) DMAPIGetTaskConfig(c *gin.Context, taskName string) {
+	task, err := ha.GetOpenAPITaskConfig(s.etcdClient, taskName)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if task == nil {
+		_ = c.Error(terror.ErrOpenAPITaskConfigNotExist.Generate(taskName))
+		return
+	}
+	c.IndentedJSON(http.StatusOK, task)
+}
+
+// DMAPUpdateTaskConfig update task_config_template url is: (PUT /api/v1/task/configs/{task-name}).
+func (s *Server) DMAPUpdateTaskConfig(c *gin.Context, taskName string) {
+	task := &openapi.Task{}
+	if err := c.Bind(task); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if err := task.Adjust(); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	newCtx := c.Request.Context()
+	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
+	if adjustDBErr := adjustTargetDB(newCtx, toDBCfg); adjustDBErr != nil {
+		_ = c.Error(terror.WithClass(adjustDBErr, terror.ClassDMMaster))
+		return
+	}
+	if err := ha.UpdateOpenAPITaskConfig(s.etcdClient, *task); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, task)
 }
 
 func terrorHTTPErrorHandler() gin.HandlerFunc {

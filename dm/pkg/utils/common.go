@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
-	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -343,29 +342,8 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 
 // AdjustBinaryProtocolForDatum converts the data in binlog to TiDB datum.
 func AdjustBinaryProtocolForDatum(ctx sessionctx.Context, data []interface{}, cols []*model.ColumnInfo) ([]types.Datum, error) {
-	log.L().Debug("AdjustBinaryProtocolForChunk",
-		zap.Any("data", data),
-		zap.Any("columns", cols))
 	ret := make([]types.Datum, 0, len(data))
 	for i, d := range data {
-		switch v := d.(type) {
-		case int8:
-			d = int64(v)
-		case int16:
-			d = int64(v)
-		case int32:
-			d = int64(v)
-		case uint8:
-			d = uint64(v)
-		case uint16:
-			d = uint64(v)
-		case uint32:
-			d = uint64(v)
-		case uint:
-			d = uint64(v)
-		case decimal.Decimal:
-			d = v.String()
-		}
 		datum := types.NewDatum(d)
 		castDatum, err := table.CastValue(ctx, datum, cols[i], false, false)
 		if err != nil {
