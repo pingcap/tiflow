@@ -103,8 +103,6 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	return p
 }
 
-<<<<<<< HEAD
-=======
 func newProcessor4Test(ctx cdcContext.Context,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *processor {
@@ -115,7 +113,6 @@ func newProcessor4Test(ctx cdcContext.Context,
 	return p
 }
 
->>>>>>> 0f6997376 (sink(ticdc): cherry pick sink bug fix to release 5.1  (#4119) (#4150))
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
