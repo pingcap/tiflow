@@ -437,6 +437,8 @@ type columnInfoAndResult struct {
 
 // We use OriginDefaultValue instead of DefaultValue in the ut, pls ref to
 // https://github.com/pingcap/tiflow/issues/4048
+// FIXME: OriginDefaultValue seems always to be string, and test more corner case
+// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 func TestGetDefaultZeroValue(t *testing.T) {
 	colAndRess := []columnInfoAndResult{
 		// mysql flag null
@@ -659,8 +661,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Decimal: 2,
 				},
 			},
-			// NewDecimal default value will be a string and then translate to []byte
-			Res: []byte("-3.14"),
+			Res: "-3.14",
 		},
 		// mysql.TypeNull
 		{
@@ -690,8 +691,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			// TypeTimestamp default value will be a string and then translate to []byte
-			Res: []byte("2020-11-19 12:12:12"),
+			Res: "2020-11-19 12:12:12",
 		},
 		// mysql.TypeTimestamp + null + default
 		{
@@ -702,8 +702,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			// TypeTimestamp default value will be a string and then translate to []byte
-			Res: []byte("2020-11-19 12:12:12"),
+			Res: "2020-11-19 12:12:12",
 		},
 		// mysql.TypeDate, other testCases same as TypeTimestamp
 		{
@@ -755,7 +754,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				},
 			},
 			// TypeYear default value will be a string and then translate to []byte
-			Res: []byte("2021"),
+			Res: "2021",
 		},
 		// mysql.TypeNewDate
 		{
@@ -787,7 +786,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				},
 			},
 			// TypeVarchar default value will be a string and then translate to []byte
-			Res: []byte("e0"),
+			Res: "e0",
 		},
 		// mysql.TypeTinyBlob
 		{
@@ -881,7 +880,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			// TypeEnum value will be a string and then translate to []byte
 			// NotNull && no default will choose first element
-			Res: []byte("e0"),
+			Res: uint64(0),
 		},
 		// mysql.TypeEnum + notnull + default
 		{
@@ -894,7 +893,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				},
 			},
 			// TypeEnum default value will be a string and then translate to []byte
-			Res: []byte("e1"),
+			Res: "e1",
 		},
 		// mysql.TypeSet + notnull
 		{
@@ -916,7 +915,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				},
 			},
 			// TypeSet default value will be a string and then translate to []byte
-			Res: []byte("1,e"),
+			Res: "1,e",
 		},
 		// mysql.TypeGeometry
 		{
