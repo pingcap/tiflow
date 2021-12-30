@@ -452,7 +452,7 @@ func (c *TaskConfig) adjust() error {
 	}
 
 	if c.CollationCompatible != "" && c.CollationCompatible != LooseCollationCompatible && c.CollationCompatible != StrictCollationCompatible {
-		return terror.ErrConfigCollationCompatibleNotSupport.Generate(c.ShardMode)
+		return terror.ErrConfigCollationCompatibleNotSupport.Generate(c.CollationCompatible)
 	} else if c.CollationCompatible == "" {
 		c.CollationCompatible = LooseCollationCompatible
 	}
