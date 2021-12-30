@@ -38,6 +38,9 @@ type cyclicMarkNode struct {
 	// startTs -> replicaID
 	currentReplicaIDs map[model.Ts]uint64
 	currentCommitTs   uint64
+
+	// todo : remove this flag after table actor is GA
+	isTableActorMode bool
 }
 
 func newCyclicMarkNode(markTableID model.TableID) pipeline.Node {
@@ -49,12 +52,16 @@ func newCyclicMarkNode(markTableID model.TableID) pipeline.Node {
 }
 
 func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
-	n.localReplicaID = ctx.ChangefeedVars().Info.Config.Cyclic.ReplicaID
-	filterReplicaID := ctx.ChangefeedVars().Info.Config.Cyclic.FilterReplicaID
+	return n.InitTableActor(ctx.ChangefeedVars().Info.Config.Cyclic.ReplicaID, ctx.ChangefeedVars().Info.Config.Cyclic.FilterReplicaID, false)
+}
+
+func (n *cyclicMarkNode) InitTableActor(localReplicaID uint64, filterReplicaID []uint64, isTableActorMode bool) error {
+	n.localReplicaID = localReplicaID
 	n.filterReplicaID = make(map[uint64]struct{})
 	for _, rID := range filterReplicaID {
 		n.filterReplicaID[rID] = struct{}{}
 	}
+	n.isTableActorMode = isTableActorMode
 	// do nothing
 	return nil
 }
@@ -77,6 +84,10 @@ func (n *cyclicMarkNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *cyclicMarkNode) TryHandleDataMessage(ctx pipeline.NodeContext, msg pipeline.Message) (bool, error) {
+	// limit the queue size when the table actor mode is enabled
+	if n.isTableActorMode && ctx.(*cyclicNodeContext).queue.Len() >= defaultSyncResolvedBatch {
+		return false, nil
+	}
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
@@ -196,6 +207,7 @@ func NewCyclicNodeContext(ctx *actorNodeContext) *cyclicNodeContext {
 }
 
 // SendToNextNode implement the NodeContext interface, push the message to a queue
+// the queue size is limited by TryHandleDataMessage，size is defaultSyncResolvedBatch
 func (c *cyclicNodeContext) SendToNextNode(msg pipeline.Message) {
 	c.queue.PushBack(msg)
 }
