@@ -170,8 +170,7 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 			CaptureID: captureID,
 			Tables:    status.Tables,
 			Operation: status.Operation,
-		},
-		)
+		})
 	}
 
 	changefeedDetail := &model.ChangefeedDetail{
