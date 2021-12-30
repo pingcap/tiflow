@@ -158,7 +158,6 @@ func cleanDumpFiles(cfg *config.SubTaskConfig) {
 		var lastErr error
 		for f := range files {
 			if strings.HasSuffix(f, ".sql") {
-				// TODO: table structure files are not used now, but we plan to used them in future so not delete them
 				if strings.HasSuffix(f, "-schema-create.sql") || strings.HasSuffix(f, "-schema.sql") {
 					continue
 				}
