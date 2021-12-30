@@ -502,6 +502,8 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			release()
 		}
 
+		go s.scheduler.TryResolveLoadTask(sources)
+
 		resp.Result = true
 		if cfg.RemoveMeta {
 			resp.Msg = "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
@@ -2321,7 +2323,7 @@ func (s *Server) TransferSource(ctx context.Context, req *pb.TransferSourceReque
 		return resp2, err2
 	}
 
-	err := s.scheduler.TransferSource(req.Source, req.Worker)
+	err := s.scheduler.TransferSource(ctx, req.Source, req.Worker)
 	if err != nil {
 		resp2.Msg = err.Error()
 		// nolint:nilerr
