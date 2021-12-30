@@ -103,6 +103,19 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	return p
 }
 
+<<<<<<< HEAD
+=======
+func newProcessor4Test(ctx cdcContext.Context,
+	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
+) *processor {
+	p := newProcessor(ctx)
+	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
+	p.createTablePipeline = createTablePipeline
+	p.sinkManager = &sink.Manager{}
+	return p
+}
+
+>>>>>>> 0f6997376 (sink(ticdc): cherry pick sink bug fix to release 5.1  (#4119) (#4150))
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
@@ -163,6 +176,8 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	if err := p.lazyInit(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
+	// sink manager will return this checkpointTs to sink node if sink node resolvedTs flush failed
+	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Info.GetCheckpointTs(state.Status))
 	if err := p.handleTableOperation(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
