@@ -890,7 +890,7 @@ func TestPoll(t *testing.T) {
 			},
 			expectMaxCommitTs:   3,
 			expectMaxResolvedTs: 2,
-			//exhaustedResolvedTs must advance if there is no resolved event.
+			// exhaustedResolvedTs must advance if there is no resolved event.
 			expectExhaustedRTs: 2,
 		}},
 		// exhaustedResolvedTs must advance if all resolved events are outputted.
@@ -933,7 +933,7 @@ func TestPoll(t *testing.T) {
 			},
 			expectMaxCommitTs:   3,
 			expectMaxResolvedTs: 2,
-			//exhaustedResolvedTs must advance if there is no resolved event.
+			// exhaustedResolvedTs must advance if there is no resolved event.
 			expectExhaustedRTs: 2,
 		}},
 		// maxResolvedTs must advance even if there is only resolved ts event.
