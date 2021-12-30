@@ -1084,6 +1084,27 @@ description = ""
 workaround = "Please update your `shadow-table-rules` or `trash-table-rules` in the configuration file."
 tags = ["internal", "high"]
 
+<<<<<<< HEAD
+=======
+[error.DM-config-20050]
+message = "the openapi task config for '%s' already exist"
+description = ""
+workaround = "If you want to override it, please use the overwrite flag."
+tags = ["internal", "low"]
+
+[error.DM-config-20051]
+message = "the openapi task config for '%s' does not exist"
+description = ""
+workaround = ""
+tags = ["internal", "low"]
+
+[error.DM-config-20052]
+message = "collation compatible %s not supported"
+description = ""
+workaround = "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
+tags = ["internal", "medium"]
+
+>>>>>>> 7d9dd2f1d ( syncer(dm): add collation config "collation_compatible" (#4121))
 [error.DM-binlog-op-22001]
 message = ""
 description = ""

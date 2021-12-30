@@ -637,6 +637,144 @@ func (s *testDDLSuite) TestClearOnlineDDL(c *C) {
 	c.Assert(mock.toFinish, HasLen, 0)
 }
 
+<<<<<<< HEAD
+=======
+func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
+	statusVarsArray := [][]byte{
+		{
+			4, 0, 0, 0, 0, 46, 0,
+		},
+		{
+			4, 0, 0, 0, 0, 21, 1,
+		},
+	}
+
+	sqls := []string{
+		"create database if not exists `test`",
+		"create database `test` CHARACTER SET=utf8mb4 COLLATE=utf8mb4_general_ci",
+		"create database `test` CHARACTER SET=utf8mb4",
+		"create database `test` COLLATE=utf8mb4_general_ci",
+	}
+
+	expectedSQLs := [][]string{
+		{
+			"CREATE DATABASE IF NOT EXISTS `test` COLLATE = utf8mb4_bin",
+			"CREATE DATABASE `test` CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci",
+			"CREATE DATABASE `test` CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci",
+			"CREATE DATABASE `test` COLLATE = utf8mb4_general_ci",
+		},
+		{
+			"CREATE DATABASE IF NOT EXISTS `test` COLLATE = utf8mb4_vi_0900_ai_ci",
+			"CREATE DATABASE `test` CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci",
+			"CREATE DATABASE `test` CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci",
+			"CREATE DATABASE `test` COLLATE = utf8mb4_general_ci",
+		},
+	}
+
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
+	syncer := NewSyncer(&config.SubTaskConfig{CollationCompatible: config.StrictCollationCompatible}, nil, nil)
+	syncer.tctx = tctx
+	p := parser.New()
+	tab := &filter.Table{
+		Schema: "test",
+		Name:   "t",
+	}
+
+	charsetAndDefaultCollationMap := map[string]string{"utf8mb4": "utf8mb4_general_ci"}
+	idAndCollationMap := map[int]string{46: "utf8mb4_bin", 277: "utf8mb4_vi_0900_ai_ci"}
+	for i, statusVars := range statusVarsArray {
+		for j, sql := range sqls {
+			ddlInfo := &ddlInfo{
+				originDDL:    sql,
+				routedDDL:    sql,
+				sourceTables: []*filter.Table{tab},
+				targetTables: []*filter.Table{tab},
+			}
+			stmt, err := p.ParseOneStmt(sql, "", "")
+			c.Assert(err, IsNil)
+			c.Assert(stmt, NotNil)
+			ddlInfo.originStmt = stmt
+			adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
+			routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+			c.Assert(err, IsNil)
+			c.Assert(routedDDL, Equals, expectedSQLs[i][j])
+		}
+	}
+}
+
+func (s *testDDLSuite) TestAdjustCollation(c *C) {
+	sqls := []string{
+		"create table `test`.`t1` (id int) CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+		"create table `test`.`t1` (id int) CHARSET=utf8mb4",
+		"create table `test`.`t1` (id int) COLLATE=utf8mb4_general_ci",
+		"create table `test`.`t1` (id int)",
+		"create table `test`.`t1` (id int, name varchar(20) CHARACTER SET utf8mb4, work varchar(20))",
+		"create table `test`.`t1` (id int, name varchar(20), work varchar(20))",
+		"create table `test`.`t1` (id int, name varchar(20) COLLATE utf8mb4_general_ci, work varchar(20))",
+		"create table `test`.`t1` (id int, name varchar(20) COLLATE utf8mb4_general_ci, work varchar(20) CHARACTER SET utf8mb4)",
+		"create table `test`.`t1` (id int, name varchar(20) CHARACTER SET utf8mb4, work varchar(20)) COLLATE=utf8mb4_general_ci",
+		"create table `test`.`t1` (id int, name varchar(20) CHARACTER SET utf8mb4, work varchar(20)) COLLATE=latin1_swedish_ci",
+		"create table `test`.`t1` (id int, name varchar(20), work varchar(20)) COLLATE=utf8mb4_general_ci",
+		"create table `test`.`t1` (id int, name varchar(20) COLLATE utf8mb4_general_ci, work varchar(20)) COLLATE=utf8mb4_general_ci",
+		"create table `test`.`t1` (id int, name varchar(20) COLLATE utf8mb4_general_ci, work varchar(20) CHARACTER SET utf8mb4) COLLATE=utf8mb4_general_ci",
+		"create table `test`.`t1` (id int, name varchar(20) CHARACTER SET utf8mb4, work varchar(20)) CHARSET=utf8mb4 ",
+		"create table `test`.`t1` (id int, name varchar(20) CHARACTER SET latin1, work varchar(20)) CHARSET=utf8mb4 ",
+		"create table `test`.`t1` (id int, name varchar(20), work varchar(20)) CHARSET=utf8mb4",
+		"create table `test`.`t1` (id int, name varchar(20) COLLATE utf8mb4_general_ci, work varchar(20)) CHARSET=utf8mb4",
+		"create table `test`.`t1` (id int, name varchar(20) COLLATE utf8mb4_general_ci, work varchar(20) CHARACTER SET utf8mb4) CHARSET=utf8mb4",
+	}
+
+	expectedSQLs := []string{
+		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT)",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) CHARACTER SET UTF8MB4 COLLATE utf8mb4_general_ci,`work` VARCHAR(20))",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20),`work` VARCHAR(20))",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) COLLATE utf8mb4_general_ci,`work` VARCHAR(20))",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) COLLATE utf8mb4_general_ci,`work` VARCHAR(20) CHARACTER SET UTF8MB4 COLLATE utf8mb4_general_ci)",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) CHARACTER SET UTF8MB4 COLLATE utf8mb4_general_ci,`work` VARCHAR(20)) DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) CHARACTER SET UTF8MB4 COLLATE utf8mb4_general_ci,`work` VARCHAR(20)) DEFAULT COLLATE = LATIN1_SWEDISH_CI",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20),`work` VARCHAR(20)) DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) COLLATE utf8mb4_general_ci,`work` VARCHAR(20)) DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) COLLATE utf8mb4_general_ci,`work` VARCHAR(20) CHARACTER SET UTF8MB4 COLLATE utf8mb4_general_ci) DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) CHARACTER SET UTF8MB4 COLLATE utf8mb4_general_ci,`work` VARCHAR(20)) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) CHARACTER SET LATIN1 COLLATE latin1_swedish_ci,`work` VARCHAR(20)) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20),`work` VARCHAR(20)) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) COLLATE utf8mb4_general_ci,`work` VARCHAR(20)) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) COLLATE utf8mb4_general_ci,`work` VARCHAR(20) CHARACTER SET UTF8MB4 COLLATE utf8mb4_general_ci) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
+	}
+
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
+	syncer := NewSyncer(&config.SubTaskConfig{CollationCompatible: config.StrictCollationCompatible}, nil, nil)
+	syncer.tctx = tctx
+	p := parser.New()
+	tab := &filter.Table{
+		Schema: "test",
+		Name:   "t",
+	}
+	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
+	charsetAndDefaultCollationMap := map[string]string{"utf8mb4": "utf8mb4_general_ci", "latin1": "latin1_swedish_ci"}
+	idAndCollationMap := map[int]string{46: "utf8mb4_bin"}
+	for i, sql := range sqls {
+		ddlInfo := &ddlInfo{
+			originDDL:    sql,
+			routedDDL:    sql,
+			sourceTables: []*filter.Table{tab},
+			targetTables: []*filter.Table{tab},
+		}
+		stmt, err := p.ParseOneStmt(sql, "", "")
+		c.Assert(err, IsNil)
+		c.Assert(stmt, NotNil)
+		ddlInfo.originStmt = stmt
+		adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
+		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+		c.Assert(err, IsNil)
+		c.Assert(routedDDL, Equals, expectedSQLs[i])
+	}
+}
+
+>>>>>>> 7d9dd2f1d ( syncer(dm): add collation config "collation_compatible" (#4121))
 type mockOnlinePlugin struct {
 	toFinish map[string]struct{}
 }

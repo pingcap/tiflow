@@ -52,12 +52,20 @@ require (
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20210513014640-40f9a1999b3b
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
+<<<<<<< HEAD
 	github.com/pingcap/kvproto v0.0.0-20211011060348-d957056f1551
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
 	github.com/pingcap/tidb v1.1.0-beta.0.20211111080905-76b00f3ec11e
 	github.com/pingcap/tidb-tools v5.2.2-0.20211019062242-37a8bef2fa17+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20211111080905-76b00f3ec11e
 	github.com/pkg/errors v0.9.1
+=======
+	github.com/pingcap/kvproto v0.0.0-20211202065422-a412f7a319c3
+	github.com/pingcap/log v0.0.0-20211207084639-71a2e5860834
+	github.com/pingcap/tidb v1.1.0-beta.0.20211229105350-1e7f0dcc63b9
+	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
+	github.com/pingcap/tidb/parser v0.0.0-20211229105350-1e7f0dcc63b9
+>>>>>>> 7d9dd2f1d ( syncer(dm): add collation config "collation_compatible" (#4121))
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -87,7 +95,11 @@ require (
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+<<<<<<< HEAD
 	golang.org/x/sys v0.0.0-20211025201205-69cdffdb9359
+=======
+	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e
+>>>>>>> 7d9dd2f1d ( syncer(dm): add collation config "collation_compatible" (#4121))
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/genproto v0.0.0-20210825212027-de86158e7fda

@@ -23,6 +23,11 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"go.uber.org/zap"
 
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
+>>>>>>> 7d9dd2f1d ( syncer(dm): add collation config "collation_compatible" (#4121))
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -127,7 +132,20 @@ func (s *Syncer) genDDLInfo(p *parser.Parser, schema, sql string) (*ddlInfo, err
 		originStmt:   stmt,
 		sourceTables: sourceTables,
 		targetTables: targetTables,
+<<<<<<< HEAD
 	}, err
+=======
+	}
+
+	// "strict" will adjust collation
+	if s.cfg.CollationCompatible == config.StrictCollationCompatible {
+		adjustCollation(s.tctx, ddlInfo, qec.eventStatusVars, s.charsetAndDefaultCollation, s.idAndCollationMap)
+	}
+
+	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+	ddlInfo.routedDDL = routedDDL
+	return ddlInfo, err
+>>>>>>> 7d9dd2f1d ( syncer(dm): add collation config "collation_compatible" (#4121))
 }
 
 func (s *Syncer) dropSchemaInSharding(tctx *tcontext.Context, sourceSchema string) error {
