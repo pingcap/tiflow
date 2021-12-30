@@ -68,7 +68,6 @@ type tableActor struct {
 
 	pullerNode *pullerNode
 	sortNode   *sorterNode
-	cyclicNode *cyclicMarkNode
 	sinkNode   *sinkNode
 
 	nodes   []*Node
