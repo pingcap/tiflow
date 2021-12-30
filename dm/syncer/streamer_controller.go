@@ -93,22 +93,31 @@ func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (reader.
 
 type binlogPosFinder interface {
 	// FindByTs get binlog location of first event or transaction with timestamp >= ts
+	// go-mysql has BinlogStreamer.GetEventWithStartTime, but it doesn't fit our need. Also we need to support relay log.
 	FindByTs(ts int64) (*binlog.Location, BinlogPosType, error)
 }
 
 type remoteBinlogPosFinder struct {
+	remote     bool
 	tctx       *tcontext.Context
-	db         *sql.DB
-	syncCfg    replication.BinlogSyncerConfig
 	enableGTID bool
 	parser     *replication.BinlogParser
+	flavor     string
 
+	// fields used for remote mode
+	db      *sql.DB
+	syncCfg replication.BinlogSyncerConfig
+
+	// fields used for local relay
+	relayDir string // should be a directory with current UUID
+
+	// fields used inside FindByTs
 	targetBinlog        binlog.BinlogSize // target binlog file the timestamp may reside
 	tsBeforeFirstBinlog bool              // whether the timestamp is before the first binlog
 	lastBinlogFile      bool              // whether targetBinlog is the last binlog file
 
-	everMetGTIDEvent bool
-	inTransaction    bool
+	everMetGTIDEvent bool // whether ever met a GTID event
+	inTransaction    bool // whether in transaction
 }
 
 func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *sql.DB, syncCfg replication.BinlogSyncerConfig, enableGTID bool) *remoteBinlogPosFinder {
@@ -122,14 +131,39 @@ func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *sql.DB, syncCfg replic
 	parser.SetUseDecimal(syncCfg.UseDecimal)
 	parser.SetVerifyChecksum(syncCfg.VerifyChecksum)
 
-	return &remoteBinlogPosFinder{tctx: tctx, db: db, syncCfg: syncCfg, enableGTID: enableGTID, parser: parser}
+	return &remoteBinlogPosFinder{
+		remote:     true,
+		tctx:       tctx,
+		enableGTID: enableGTID,
+		parser:     parser,
+		flavor:     syncCfg.Flavor,
+
+		db:      db,
+		syncCfg: syncCfg,
+	}
+}
+
+func (r *remoteBinlogPosFinder) getBinlogFiles() (binlog.FileSizes, error) {
+	if r.remote {
+		return binlog.GetBinaryLogs(r.tctx.Ctx, r.db)
+	} else {
+		return binlog.GetLocalBinaryLogs(r.relayDir)
+	}
+}
+
+func (r *remoteBinlogPosFinder) createReader() reader.Reader {
+	if r.remote {
+		return reader.NewTCPReader(r.syncCfg)
+	} else {
+		return reader.NewFileReader(&reader.FileReaderConfig{EnableRawMode: true})
+	}
 }
 
 func (r *remoteBinlogPosFinder) initTargetBinlogFile(ts int64) error {
 	targetTs := uint32(ts)
 	var prevBinlog, currBinlog binlog.BinlogSize
 	var prevTs, currTs uint32
-	binaryLogs, err := binlog.GetBinaryLogs(r.tctx.Ctx, r.db)
+	binaryLogs, err := r.getBinlogFiles()
 	if err != nil {
 		return err
 	}
@@ -145,14 +179,15 @@ func (r *remoteBinlogPosFinder) initTargetBinlogFile(ts int64) error {
 		// contains it, but they have different timestamp, we may get the wrong location.
 		prevTs, currTs = currTs, 0
 		prevBinlog, currBinlog = currBinlog, binlogFile
-		syncer := replication.NewBinlogSyncer(r.syncCfg)
-		streamer, err := syncer.StartSync(mysql.Position{Name: currBinlog.Name, Pos: binlog.FileHeaderLen})
+		binlogReader := r.createReader()
+		err := binlogReader.StartSyncByPos(mysql.Position{Name: currBinlog.Name, Pos: binlog.FileHeaderLen})
 		if err != nil {
 			return err
 		}
 		for {
-			ev, err := streamer.GetEvent(r.tctx.Ctx)
+			ev, err := binlogReader.GetEvent(r.tctx.Ctx)
 			if err != nil {
+				binlogReader.Close()
 				return err
 			}
 			// break on first non-fake event(must be a format description event)
@@ -161,7 +196,7 @@ func (r *remoteBinlogPosFinder) initTargetBinlogFile(ts int64) error {
 				break
 			}
 		}
-		syncer.Close()
+		binlogReader.Close()
 
 		r.tctx.L().Info("min timestamp in binlog file", zap.Reflect("file", binlogFile), zap.Uint32("ts", currTs))
 
@@ -294,23 +329,23 @@ func (r *remoteBinlogPosFinder) FindByTs(ts int64) (*binlog.Location, BinlogPosT
 	}
 
 	if r.tsBeforeFirstBinlog {
-		loc := binlog.NewLocation(r.syncCfg.Flavor)
+		loc := binlog.NewLocation(r.flavor)
 		loc.Position = mysql.Position{Name: r.targetBinlog.Name, Pos: binlog.FileHeaderLen}
 		return &loc, BelowLowerBoundBinlogPos, nil
 	}
 
 	targetTs := uint32(ts)
 	position := mysql.Position{Name: r.targetBinlog.Name, Pos: binlog.FileHeaderLen}
-	gtidSet := gtid.MinGTIDSet(r.syncCfg.Flavor)
-	syncer := replication.NewBinlogSyncer(r.syncCfg)
+	gtidSet := gtid.MinGTIDSet(r.flavor)
 
-	streamer, err := syncer.StartSync(position)
+	binlogReader := r.createReader()
+	err := binlogReader.StartSyncByPos(position)
 	if err != nil {
 		return nil, InvalidBinlogPos, err
 	}
-	defer syncer.Close()
+	defer binlogReader.Close()
 	for {
-		ev, err := streamer.GetEvent(r.tctx.Ctx)
+		ev, err := binlogReader.GetEvent(r.tctx.Ctx)
 		// TODO retryable error, let outer layer retry?
 		if err != nil {
 			return nil, InvalidBinlogPos, err
