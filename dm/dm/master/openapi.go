@@ -400,7 +400,7 @@ func (s *Server) DMAPITransferSource(c *gin.Context, sourceName string) {
 		_ = c.Error(err)
 		return
 	}
-	if err := s.scheduler.TransferSource(sourceName, req.WorkerName); err != nil {
+	if err := s.scheduler.TransferSource(c.Request.Context(), sourceName, req.WorkerName); err != nil {
 		_ = c.Error(err)
 	}
 }

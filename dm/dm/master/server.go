@@ -2323,7 +2323,7 @@ func (s *Server) TransferSource(ctx context.Context, req *pb.TransferSourceReque
 		return resp2, err2
 	}
 
-	err := s.scheduler.TransferSource(req.Source, req.Worker)
+	err := s.scheduler.TransferSource(ctx, req.Source, req.Worker)
 	if err != nil {
 		resp2.Msg = err.Error()
 		// nolint:nilerr
