@@ -339,7 +339,7 @@ func CreateTopic(topic string, config *Config, saramaConfig *sarama.Config) erro
 	}()
 	topics, err := admin.ListTopics()
 	if err != nil {
-		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return errors.Trace(err)
 	}
 
 	_, exists := topics[topic]
@@ -361,7 +361,7 @@ func CreateTopic(topic string, config *Config, saramaConfig *sarama.Config) erro
 	}, false)
 	// TODO identify the cause of "Topic with this name already exists"
 	if err != nil && !strings.Contains(err.Error(), "already exists") {
-		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return errors.Trace(err)
 	}
 
 	log.Info("TiCDC create the topic",
