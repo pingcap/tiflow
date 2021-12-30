@@ -80,11 +80,11 @@ func (o *queryChangefeedOptions) complete(f factory.Factory) error {
 		return err
 	}
 
+	o.credential = f.GetCredential()
 	o.apiClient, err = apiv1client.NewAPIClient(owner.AdvertiseAddr, o.credential)
 	if err != nil {
 		return err
 	}
-	o.credential = f.GetCredential()
 
 	_, captureInfos, err := o.etcdClient.GetCaptures(ctx)
 	if err != nil {
