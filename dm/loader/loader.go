@@ -222,7 +222,7 @@ func (w *Worker) run(ctx context.Context, fileJobQueue chan *fileJob, runFatalCh
 				continue
 			}
 			// update finished offset after checkpoint updated
-			w.loader.finishedDataSize.Store(job.offset)
+			w.loader.finishedDataSize.Add(job.offset - job.lastOffset)
 			if _, ok := w.loader.dbTableDataFinishedSize[job.sourceSchema]; ok {
 				if _, ok := w.loader.dbTableDataFinishedSize[job.sourceSchema][job.sourceTable]; ok {
 					w.loader.dbTableDataFinishedSize[job.sourceSchema][job.sourceTable].Store(job.offset)
