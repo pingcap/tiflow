@@ -100,17 +100,30 @@ type remoteBinlogPosFinder struct {
 	tctx       *tcontext.Context
 	db         *sql.DB
 	syncCfg    replication.BinlogSyncerConfig
-	EnableGTID bool
+	enableGTID bool
+	parser     *replication.BinlogParser
 
 	targetBinlog        binlog.BinlogSize // target binlog file the timestamp may reside
 	tsBeforeFirstBinlog bool              // whether the timestamp is before the first binlog
 	lastBinlogFile      bool              // whether targetBinlog is the last binlog file
+
+	everMetGTIDEvent bool
+	inTransaction    bool
 }
 
 func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *sql.DB, syncCfg replication.BinlogSyncerConfig, enableGTID bool) *remoteBinlogPosFinder {
 	// make sure it's raw mode
 	syncCfg.RawModeEnabled = true
-	return &remoteBinlogPosFinder{tctx: tctx, db: db, syncCfg: syncCfg, EnableGTID: enableGTID}
+
+	parser := replication.NewBinlogParser()
+	parser.SetFlavor(syncCfg.Flavor)
+	parser.SetRawMode(syncCfg.RawModeEnabled)
+	parser.SetParseTime(syncCfg.ParseTime)
+	parser.SetTimestampStringLocation(syncCfg.TimestampStringLocation)
+	parser.SetUseDecimal(syncCfg.UseDecimal)
+	parser.SetVerifyChecksum(syncCfg.VerifyChecksum)
+
+	return &remoteBinlogPosFinder{tctx: tctx, db: db, syncCfg: syncCfg, enableGTID: enableGTID, parser: parser}
 }
 
 func (r *remoteBinlogPosFinder) initTargetBinlogFile(ts int64) error {
@@ -126,7 +139,7 @@ func (r *remoteBinlogPosFinder) initTargetBinlogFile(ts int64) error {
 		return errors.New("cannot find binlog on master")
 	}
 	// how many binlog files on normal production env?
-	// TODO change to binary search when len(binaryLogs) is large and r.EnableGTID = false
+	// TODO change to binary search when len(binaryLogs) is large and r.enableGTID = false
 	for _, binlogFile := range binaryLogs {
 		// master switched may complicate the situation, suppose we are trying to sync mysql-bin.000003, both master
 		// contains it, but they have different timestamp, we may get the wrong location.
@@ -182,19 +195,8 @@ const (
 	AboveUpperBoundBinlogPos
 )
 
-func (r *remoteBinlogPosFinder) newParser() *replication.BinlogParser {
-	parser := replication.NewBinlogParser()
-	parser.SetFlavor(r.syncCfg.Flavor)
-	parser.SetRawMode(r.syncCfg.RawModeEnabled)
-	parser.SetParseTime(r.syncCfg.ParseTime)
-	parser.SetTimestampStringLocation(r.syncCfg.TimestampStringLocation)
-	parser.SetUseDecimal(r.syncCfg.UseDecimal)
-	parser.SetVerifyChecksum(r.syncCfg.VerifyChecksum)
-	return parser
-}
-
-func (r *remoteBinlogPosFinder) processGTIDRelatedEvent(parser *replication.BinlogParser, ev *replication.BinlogEvent, prevSet gtid.Set) (gtid.Set, error) {
-	ev, err := parser.Parse(ev.RawData)
+func (r *remoteBinlogPosFinder) processGTIDRelatedEvent(ev *replication.BinlogEvent, prevSet gtid.Set) (gtid.Set, error) {
+	ev, err := r.parser.Parse(ev.RawData)
 	if err != nil {
 		return nil, err
 	}
@@ -221,6 +223,54 @@ func (r *remoteBinlogPosFinder) processGTIDRelatedEvent(parser *replication.Binl
 	return prevSet, nil
 }
 
+func (r *remoteBinlogPosFinder) checkTransactionBoundaryEvent(ev *replication.BinlogEvent) (bool, error) {
+	// we find the timestamp at transaction boundary
+	// When there are GTID events in this binlog file, we use GTID event as the start event, else:
+	// for DML
+	// 		take a 'BEGIN' query event as the start event
+	//		XID event or a 'COMMIT' query event as the end event
+	// for DDL
+	// 		one single query event acts as both the start and end event
+	var transactionBeginEvent bool
+	switch ev.Header.EventType {
+	case replication.FORMAT_DESCRIPTION_EVENT:
+		_, err := r.parser.Parse(ev.RawData)
+		if err != nil {
+			return false, err
+		}
+	case replication.GTID_EVENT:
+	case replication.ANONYMOUS_GTID_EVENT: // since 5.7, when GTID not enabled. we use this to avoid parsing query event
+	case replication.MARIADB_GTID_EVENT:
+		r.everMetGTIDEvent = true
+		transactionBeginEvent = true
+	case replication.QUERY_EVENT:
+		if !r.everMetGTIDEvent {
+			// so non-BEGIN, non-DCL query event is rare, we parse it every time
+			// user may change session level binlog-format=statement, but it's an unusual operation
+			ev2, err := r.parser.Parse(ev.RawData)
+			if err != nil {
+				return false, err
+			}
+			e := ev2.Event.(*replication.QueryEvent)
+			switch string(e.Query) {
+			case "BEGIN":
+				transactionBeginEvent = true
+				r.inTransaction = true
+			case "COMMIT": // MyISAM use COMMIT to end transaction
+				r.inTransaction = false
+			default:
+				if !r.inTransaction {
+					// DDL
+					transactionBeginEvent = true
+				}
+			}
+		}
+	case replication.XID_EVENT:
+		r.inTransaction = false
+	}
+	return transactionBeginEvent, nil
+}
+
 func (r *remoteBinlogPosFinder) FindByTs(ts int64) (*binlog.Location, BinlogPosType, error) {
 	// TODO check server uuid
 	if err := r.initTargetBinlogFile(ts); err != nil {
@@ -243,7 +293,6 @@ func (r *remoteBinlogPosFinder) FindByTs(ts int64) (*binlog.Location, BinlogPosT
 		return nil, InvalidBinlogPos, err
 	}
 	defer syncer.Close()
-	parser := r.newParser()
 	for {
 		ev, err := streamer.GetEvent(r.tctx.Ctx)
 		// TODO retryable error, let outer layer retry?
@@ -254,27 +303,9 @@ func (r *remoteBinlogPosFinder) FindByTs(ts int64) (*binlog.Location, BinlogPosT
 			continue
 		}
 
-		// we find the timestamp at transaction boundary, so we need to parse event to get the first event of transaction
-		var transactionBeginEvent bool
-		switch ev.Header.EventType {
-		case replication.FORMAT_DESCRIPTION_EVENT:
-			ev, err = parser.Parse(ev.RawData)
-			if err != nil {
-				return nil, InvalidBinlogPos, err
-			}
-		case replication.GTID_EVENT:
-		case replication.ANONYMOUS_GTID_EVENT: // since 5.7, when GTID not enabled. we use this to avoid parsing query event
-		case replication.MARIADB_GTID_EVENT:
-			transactionBeginEvent = true
-		case replication.QUERY_EVENT:
-			// so non-BEGIN, non-DCL query event is rare, we parse it every time
-			// user may change session level binlog-format=statement, but it's an unusual operation
-			ev, err = parser.Parse(ev.RawData)
-			if err != nil {
-				return nil, InvalidBinlogPos, err
-			}
-			e := ev.Event.(*replication.QueryEvent)
-			transactionBeginEvent = string(e.Query) == "BEGIN"
+		transactionBeginEvent, err := r.checkTransactionBoundaryEvent(ev)
+		if err != nil {
+			return nil, InvalidBinlogPos, err
 		}
 
 		if transactionBeginEvent && ev.Header.Timestamp >= targetTs {
@@ -282,13 +313,13 @@ func (r *remoteBinlogPosFinder) FindByTs(ts int64) (*binlog.Location, BinlogPosT
 		}
 		position.Pos = ev.Header.LogPos
 
-		if r.EnableGTID {
+		if r.enableGTID {
 			eventType := ev.Header.EventType
 			if eventType == replication.PREVIOUS_GTIDS_EVENT ||
 				eventType == replication.MARIADB_GTID_LIST_EVENT ||
 				eventType == replication.GTID_EVENT ||
 				eventType == replication.MARIADB_GTID_EVENT {
-				gtidSet, err = r.processGTIDRelatedEvent(parser, ev, gtidSet)
+				gtidSet, err = r.processGTIDRelatedEvent(ev, gtidSet)
 				if err != nil {
 					return nil, InvalidBinlogPos, err
 				}
