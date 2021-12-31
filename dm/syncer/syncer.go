@@ -2359,6 +2359,27 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		sourceTbls:      make(map[string]map[string]struct{}),
 		eventStatusVars: ev.StatusVars,
 	}
+
+	defer func() {
+		if err == nil {
+			return
+		}
+		// return error if parse fail and filter fail
+		needSkip, err2 := s.skipSQLByPattern(qec.originSQL)
+		if err2 != nil {
+			err = err2
+			return
+		}
+		if !needSkip {
+			return
+		}
+		// don't return error if parse fail and filter success
+		metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
+		ec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
+		*ec.lastLocation = *ec.currentLocation // before record skip location, update lastLocation
+		err = s.recordSkipSQLsLocation(&ec)
+	}()
+
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
 	if err != nil {
 		log.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
@@ -2366,19 +2387,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 
 	stmt, err := parseOneStmt(qec)
 	if err != nil {
-		// return error if parse fail and filter fail
-		needSkip, err2 := s.skipSQLByPattern(qec.originSQL)
-		if err2 != nil {
-			return err2
-		}
-		if !needSkip {
-			return err
-		}
-		// don't return error if parse fail and filter success
-		metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
-		ec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
-		*ec.lastLocation = *ec.currentLocation // before record skip location, update lastLocation
-		return s.recordSkipSQLsLocation(&ec)
+		return err
 	}
 
 	if node, ok := stmt.(ast.DMLNode); ok {
