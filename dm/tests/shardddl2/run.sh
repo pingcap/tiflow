@@ -485,18 +485,14 @@ function DM_DropAddColumn_CASE() {
 		"\"source 'mysql-replica-02' has no error\"" 1
 
 	# after we skip ADD COLUMN, we should fix the table structure
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"pause-task test" \
-		"\"result\": true" 3
-
-	echo 'CREATE TABLE `tb1` ( `a` int(11) NOT NULL, `b` int(11) DEFAULT NULL, `c` int(11) DEFAULT NULL, PRIMARY KEY (`a`) /*T![clustered_index] NONCLUSTERED */) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema.sql
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog-schema update test ${shardddl1} ${tb1} ${WORK_DIR}/schema.sql -s mysql-replica-01" \
-		"\"result\": true" 2
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task test" \
-		"\"result\": true" 3
+	# TODO: support flush checkpoint when ddl is skipped
+  #	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+  #		"pause-task test" \
+  #		"\"result\": true" 3
+  #
+  #	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+  #		"resume-task test" \
+  #		"\"result\": true" 3
 
 	run_sql_source1 "update ${shardddl1}.${tb1} set b=1 where a=1;"
 	run_sql_source1 "update ${shardddl1}.${tb1} set b=3 where a=3;"
