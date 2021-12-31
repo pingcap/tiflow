@@ -265,7 +265,7 @@ function test_noshard_task() {
 	# get task status success
 	openapi_task_check "get_task_status_success" "$task_name" 2
 
-	# delte source with force
+	# delete source with force
 	openapi_source_check "delete_source_with_force_success" "mysql-01"
 
 	# after delete source-1, there is only one subtask status

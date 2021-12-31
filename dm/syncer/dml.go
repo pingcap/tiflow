@@ -23,11 +23,13 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/expression"
+	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/tablecodec"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -76,10 +78,41 @@ type genDMLParam struct {
 	extendData      [][]interface{}     // all data include extend data
 }
 
-func extractValueFromData(data []interface{}, columns []*model.ColumnInfo) []interface{} {
+// extractValueFromData adjust the values obtained from go-mysql so that
+// - the values can be correctly converted to TiDB datum
+// - the values are in the correct type that go-sql-driver/mysql uses.
+func extractValueFromData(data []interface{}, columns []*model.ColumnInfo, sourceTI *model.TableInfo) []interface{} {
 	value := make([]interface{}, 0, len(data))
-	for i := range data {
-		value = append(value, castUnsigned(data[i], &columns[i].FieldType))
+
+	for i, d := range data {
+		d = castUnsigned(d, &columns[i].FieldType)
+
+		switch v := d.(type) {
+		case int8:
+			d = int64(v)
+		case int16:
+			d = int64(v)
+		case int32:
+			d = int64(v)
+		case uint8:
+			d = uint64(v)
+		case uint16:
+			d = uint64(v)
+		case uint32:
+			d = uint64(v)
+		case uint:
+			d = uint64(v)
+		case decimal.Decimal:
+			d = v.String()
+		case string:
+			// convert string to []byte so that go-sql-driver/mysql can use _binary'value' for DML
+			if columns[i].Charset == charset.CharsetGBK {
+				d = []byte(v)
+			} else if columns[i].Charset == "" && sourceTI.Charset == charset.CharsetGBK {
+				d = []byte(v)
+			}
+		}
+		value = append(value, d)
 	}
 	return value
 }
@@ -112,10 +145,10 @@ RowLoop:
 			return nil, terror.ErrSyncerUnitDMLColumnNotMatch.Generate(len(columns), len(data))
 		}
 
-		value := extractValueFromData(data, columns)
+		value := extractValueFromData(data, columns, ti)
 		originalValue := value
 		if len(columns) != len(ti.Columns) {
-			originalValue = extractValueFromData(originalDataSeq[dataIdx], ti.Columns)
+			originalValue = extractValueFromData(originalDataSeq[dataIdx], ti.Columns, ti)
 		}
 
 		for _, expr := range filterExprs {
@@ -181,16 +214,16 @@ RowLoop:
 			return nil, terror.ErrSyncerUnitDMLColumnNotMatch.Generate(len(columns), len(oldData))
 		}
 
-		oldValues := extractValueFromData(oldData, columns)
-		changedValues := extractValueFromData(changedData, columns)
+		oldValues := extractValueFromData(oldData, columns, ti)
+		changedValues := extractValueFromData(changedData, columns, ti)
 
 		var oriOldValues, oriChangedValues []interface{}
 		if len(columns) == len(ti.Columns) {
 			oriOldValues = oldValues
 			oriChangedValues = changedValues
 		} else {
-			oriOldValues = extractValueFromData(oriOldData, ti.Columns)
-			oriChangedValues = extractValueFromData(oriChangedData, ti.Columns)
+			oriOldValues = extractValueFromData(oriOldData, ti.Columns, ti)
+			oriChangedValues = extractValueFromData(oriChangedData, ti.Columns, ti)
 		}
 
 		for j := range oldValueFilters {
@@ -247,7 +280,7 @@ RowLoop:
 			return nil, terror.ErrSyncerUnitDMLColumnNotMatch.Generate(len(ti.Columns), len(data))
 		}
 
-		value := extractValueFromData(data, ti.Columns)
+		value := extractValueFromData(data, ti.Columns, ti)
 
 		for _, expr := range filterExprs {
 			skip, err := SkipDMLByExpression(s.sessCtx, value, expr, ti.Columns)

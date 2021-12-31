@@ -659,6 +659,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 			HeartbeatUpdateInterval: heartbeatUI,
 			HeartbeatReportInterval: heartbeatRI,
 			EnableHeartbeat:         true,
+			CollationCompatible:     LooseCollationCompatible,
 			Meta: &Meta{
 				BinLogName: "mysql-bin.000123",
 				BinLogPos:  456,
@@ -734,6 +735,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 		HeartbeatReportInterval: heartbeatRI,
 		CaseSensitive:           stCfg1.CaseSensitive,
 		TargetDB:                &stCfg1.To,
+		CollationCompatible:     LooseCollationCompatible,
 		MySQLInstances: []*MySQLInstance{
 			{
 				SourceID:           source1,
@@ -1025,7 +1027,7 @@ func (t *testConfig) TestTaskConfigForDowngrade(c *C) {
 	// make sure all new field were added
 	cfgReflect := reflect.Indirect(reflect.ValueOf(cfg))
 	cfgForDowngradeReflect := reflect.Indirect(reflect.ValueOf(cfgForDowngrade))
-	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+2) // without flag and tidb
+	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+3) // without flag and tidb and collation_compatible
 
 	// make sure all field were copied
 	cfgForClone := &TaskConfigForDowngrade{}

@@ -274,7 +274,8 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return s.tcpServer.Run(cctx)
 	})
 
-	if config.SchedulerV2Enabled {
+	conf := config.GetGlobalServerConfig()
+	if conf.Debug.EnableNewScheduler {
 		grpcServer := grpc.NewServer()
 		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 
