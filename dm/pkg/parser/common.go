@@ -337,6 +337,7 @@ func SplitDDL(stmt ast.StmtNode, schema string) (sqls []string, err error) {
 		v.Table = table
 
 		return sqls, nil
+	case *ast.CreateViewStmt:
 	default:
 		return nil, terror.ErrUnknownTypeDDL.Generate(stmt)
 	}
