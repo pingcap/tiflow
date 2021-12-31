@@ -68,7 +68,8 @@ type Capture struct {
 	TimeAcquirer pdtime.TimeAcquirer
 	sorterSystem *ssystem.System
 
-	tableActorSystem *system.System
+	enableNewScheduler bool
+	tableActorSystem   *system.System
 
 	// MessageServer is the receiver of the messages from the other nodes.
 	// It should be recreated each time the capture is restarted.
@@ -92,6 +93,7 @@ type Capture struct {
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
+	conf := config.GetGlobalServerConfig()
 	return &Capture{
 		pdClient:    pdClient,
 		kvStorage:   kvStorage,
@@ -99,6 +101,7 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.C
 		grpcService: grpcService,
 		cancel:      func() {},
 
+		enableNewScheduler:  conf.Debug.EnableNewScheduler,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 	}
@@ -176,7 +179,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.grpcPool.Close()
 	}
 
-	if config.SchedulerV2Enabled {
+	if c.enableNewScheduler {
 		c.grpcService.Reset(nil)
 
 		if c.MessageRouter != nil {
@@ -192,12 +195,19 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 	c.regionCache = tikv.NewRegionCache(c.pdClient)
 
-	if config.SchedulerV2Enabled {
+	if c.enableNewScheduler {
 		messageServerConfig := conf.Debug.Messages.ToMessageServerConfig()
 		c.MessageServer = p2p.NewMessageServer(c.info.ID, messageServerConfig)
 		c.grpcService.Reset(c.MessageServer)
 
 		messageClientConfig := conf.Debug.Messages.ToMessageClientConfig()
+
+		// Puts the advertise-addr of the local node to the client config.
+		// This is for metrics purpose only, so that the receiver knows which
+		// node the connections are from.
+		advertiseAddr := conf.AdvertiseAddr
+		messageClientConfig.AdvertisedAddr = advertiseAddr
+
 		c.MessageRouter = p2p.NewMessageRouter(c.info.ID, conf.Security, messageClientConfig)
 	}
 
@@ -291,7 +301,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 
 		globalState := orchestrator.NewGlobalState()
 
-		if config.SchedulerV2Enabled {
+		if c.enableNewScheduler {
 			globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 				c.MessageRouter.AddPeer(captureID, addr)
 			})
@@ -316,7 +326,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		defer wg.Done()
 		c.grpcPool.RecycleConn(ctx)
 	}()
-	if config.SchedulerV2Enabled {
+	if c.enableNewScheduler {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -406,7 +416,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 
 		globalState := orchestrator.NewGlobalState()
 
-		if config.SchedulerV2Enabled {
+		if c.enableNewScheduler {
 			globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 				c.MessageRouter.AddPeer(captureID, addr)
 			})
@@ -539,7 +549,7 @@ func (c *Capture) AsyncClose() {
 		}
 		c.sorterSystem = nil
 	}
-	if config.SchedulerV2Enabled {
+	if c.enableNewScheduler {
 		c.grpcService.Reset(nil)
 
 		if c.MessageRouter != nil {
