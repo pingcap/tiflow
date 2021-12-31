@@ -2364,7 +2364,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		if err == nil {
 			return
 		}
-		// return error if parse fail and filter fail
+		// return error if filter fail
 		needSkip, err2 := s.skipSQLByPattern(qec.originSQL)
 		if err2 != nil {
 			err = err2
@@ -2373,7 +2373,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		if !needSkip {
 			return
 		}
-		// don't return error if parse fail and filter success
+		// don't return error if filter success
 		metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
 		ec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
 		*ec.lastLocation = *ec.currentLocation // before record skip location, update lastLocation
