@@ -68,6 +68,7 @@ type kafkaSaramaProducer struct {
 	closeCh chan struct{}
 	// atomic flag indicating whether the producer is closing
 	closing kafkaProducerClosingFlag
+	admin kafka.ClusterAdminClient
 }
 
 type kafkaProducerClosingFlag = int32
@@ -82,8 +83,25 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 		return nil
 	}
 
+	topic := fmt.Sprintf("%s_%s_%s", k.topic, *message.Schema, *message.Table)
+
+	topics, err := k.admin.ListTopics()
+	if err != nil {
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	if _, exists := topics[topic]; !exists {
+		err = k.admin.CreateTopic(topic, &sarama.TopicDetail{
+			NumPartitions:     3,
+			ReplicationFactor: 1,
+		}, false)
+		if err != nil {
+			log.Error("Failed to create topic", zap.Error(err), zap.String("topic", topic))
+		}
+	}
+
 	msg := &sarama.ProducerMessage{
-		Topic:     k.topic,
+		Topic:     topic,
 		Key:       sarama.ByteEncoder(message.Key),
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partition,
@@ -204,6 +222,11 @@ func (k *kafkaSaramaProducer) Close() error {
 	k.clientLock.Lock()
 	defer k.clientLock.Unlock()
 
+
+	if err := k.admin.Close(); err != nil {
+		log.Warn("close kafka cluster admin failed", zap.Error(err))
+	}
+
 	if k.producersReleased {
 		// We need to guard against double closing the clients,
 		// which could lead to panic.
@@ -274,11 +297,6 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-	defer func() {
-		if err := admin.Close(); err != nil {
-			log.Warn("close kafka cluster admin failed", zap.Error(err))
-		}
-	}()
 
 	if err := validateMaxMessageBytesAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -312,6 +330,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		closeCh:         make(chan struct{}),
 		failpointCh:     make(chan error, 1),
 		closing:         kafkaProducerRunning,
+		admin:           admin,
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
