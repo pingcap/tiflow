@@ -1889,6 +1889,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				s.isReplacingOrInjectingErr = false
 				if s.errOperatorHolder.IsInject(startLocation) {
 					s.errOperatorHolder.SetHasAllInjected(startLocation)
+					// reset event as startLocation, avoid to be marked in checkpoint
+					currentLocation.Position.Pos = startLocation.Position.Pos
 					err = s.streamerController.RedirectStreamer(tctx, startLocation)
 				} else {
 					err = s.streamerController.RedirectStreamer(tctx, currentLocation)
@@ -3479,7 +3481,6 @@ func (s *Syncer) handleEventError(err error, startLocation, endLocation binlog.L
 	if err == nil {
 		return nil
 	}
-
 	s.setErrLocation(&startLocation, &endLocation, isQueryEvent)
 	if len(originSQL) > 0 {
 		return terror.Annotatef(err, "startLocation: [%s], endLocation: [%s], origin SQL: [%s]", startLocation, endLocation, originSQL)
