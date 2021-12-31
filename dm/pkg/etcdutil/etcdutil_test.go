@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/phayes/freeport"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"go.etcd.io/etcd/clientv3"
@@ -33,11 +34,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-var _ = Suite(&testEtcdUtilSuite{})
+var etcdTestSuite = Suite(&testEtcdUtilSuite{})
 
-var tt *testing.T
-
-type testEtcdUtilSuite struct{}
+type testEtcdUtilSuite struct {
+	testT *testing.T
+}
 
 func (t *testEtcdUtilSuite) SetUpSuite(c *C) {
 	// initialized the logger to make genEmbedEtcdConfig working.
@@ -45,11 +46,15 @@ func (t *testEtcdUtilSuite) SetUpSuite(c *C) {
 }
 
 func TestSuite(t *testing.T) {
-	tt = t // record in t
+	// inject *testing.T to sui
+	s := etcdTestSuite.(*testEtcdUtilSuite)
+	s.testT = t
 	TestingT(t)
 }
 
-func (t *testEtcdUtilSuite) newConfig(c *C, name string, basePort uint16, portCount int) (*embed.Config, uint16) {
+func (t *testEtcdUtilSuite) newConfig(c *C, name string, portCount int) *embed.Config {
+	basePort := freeport.GetPort()
+
 	cfg := embed.NewConfig()
 	cfg.Name = name
 	cfg.Dir = c.MkDir()
@@ -80,7 +85,8 @@ func (t *testEtcdUtilSuite) newConfig(c *C, name string, basePort uint16, portCo
 
 	cfg.InitialCluster = strings.Join(ic, ",")
 	cfg.ClusterState = embed.ClusterStateFlagNew
-	return cfg, basePort
+	c.Assert(cfg.Validate(), IsNil)
+	return cfg
 }
 
 func (t *testEtcdUtilSuite) urlsToStrings(urls []url.URL) []string {
@@ -95,13 +101,12 @@ func (t *testEtcdUtilSuite) startEtcd(c *C, cfg *embed.Config) *embed.Etcd {
 	e, err := embed.StartEtcd(cfg)
 	c.Assert(err, IsNil)
 
-	timeout := 3 * time.Second
+	timeout := 10 * time.Second
 	select {
 	case <-e.Server.ReadyNotify():
 	case <-time.After(timeout):
 		c.Fatalf("start embed etcd timeout %v", timeout)
 	}
-
 	return e
 }
 
@@ -124,16 +129,11 @@ func (t *testEtcdUtilSuite) TestEtcdUtil(c *C) {
 	for i := 1; i <= 3; i++ {
 		t.testMemberUtilInternal(c, i)
 	}
-
-	t.testRemoveMember(c)
-	t.testDoOpsInOneTxnWithRetry(c)
 }
 
 func (t *testEtcdUtilSuite) testMemberUtilInternal(c *C, portCount int) {
-	var basePort uint16 = 8361
-
 	// start a etcd
-	cfg1, basePort := t.newConfig(c, "etcd1", basePort, portCount)
+	cfg1 := t.newConfig(c, "etcd1", portCount)
 	etcd1 := t.startEtcd(c, cfg1)
 	defer etcd1.Close()
 
@@ -145,7 +145,7 @@ func (t *testEtcdUtilSuite) testMemberUtilInternal(c *C, portCount int) {
 	t.checkMember(c, uint64(etcd1.Server.ID()), listResp1.Members[0], cfg1)
 
 	// add member
-	cfg2, _ := t.newConfig(c, "etcd2", basePort, portCount)
+	cfg2 := t.newConfig(c, "etcd2", portCount)
 	cfg2.InitialCluster = cfg1.InitialCluster + "," + cfg2.InitialCluster
 	cfg2.ClusterState = embed.ClusterStateFlagExisting
 	addResp, err := AddMember(cli, t.urlsToStrings(cfg2.APUrls))
@@ -173,11 +173,11 @@ func (t *testEtcdUtilSuite) testMemberUtilInternal(c *C, portCount int) {
 	}
 }
 
-func (t *testEtcdUtilSuite) testRemoveMember(c *C) {
-	cluster := integration.NewClusterV3(tt, &integration.ClusterConfig{Size: 3})
-	defer cluster.Terminate(tt)
+func (t *testEtcdUtilSuite) TestRemoveMember(c *C) {
+	cluster := integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 3})
+	defer cluster.Terminate(t.testT)
 
-	i := cluster.WaitLeader(tt)
+	i := cluster.WaitLeader(t.testT)
 	c.Assert(i, Not(Equals), -1)
 
 	cli := cluster.Client(i) // client to the leader.
@@ -200,7 +200,7 @@ func (t *testEtcdUtilSuite) testRemoveMember(c *C) {
 	c.Assert(respList.Members, HasLen, 2)
 }
 
-func (t *testEtcdUtilSuite) testDoOpsInOneTxnWithRetry(c *C) {
+func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *C) {
 	var (
 		key1 = "/test/etcdutil/do-ops-in-one-txn-with-retry-1"
 		key2 = "/test/etcdutil/do-ops-in-one-txn-with-retry-2"
@@ -208,8 +208,8 @@ func (t *testEtcdUtilSuite) testDoOpsInOneTxnWithRetry(c *C) {
 		val2 = "bar"
 		val  = "foo-bar"
 	)
-	cluster := integration.NewClusterV3(tt, &integration.ClusterConfig{Size: 1})
-	defer cluster.Terminate(tt)
+	cluster := integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1})
+	defer cluster.Terminate(t.testT)
 
 	cli := cluster.RandClient()
 
