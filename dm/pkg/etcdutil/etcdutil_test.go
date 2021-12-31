@@ -42,7 +42,7 @@ type testEtcdUtilSuite struct {
 
 func (t *testEtcdUtilSuite) SetUpSuite(c *C) {
 	// initialized the logger to make genEmbedEtcdConfig working.
-	c.Assert(log.InitLogger(&log.Config{}), IsNil)
+	c.Assert(log.InitLogger(&log.Config{Level: "debug"}), IsNil)
 }
 
 func TestSuite(t *testing.T) {
@@ -53,7 +53,7 @@ func TestSuite(t *testing.T) {
 }
 
 func (t *testEtcdUtilSuite) newConfig(c *C, name string, portCount int) *embed.Config {
-	basePort := freeport.GetPort()
+	freePort := freeport.GetPort()
 
 	cfg := embed.NewConfig()
 	cfg.Name = name
@@ -65,27 +65,25 @@ func (t *testEtcdUtilSuite) newConfig(c *C, name string, portCount int) *embed.C
 
 	cfg.LCUrls = []url.URL{}
 	for i := 0; i < portCount; i++ {
-		cu, err2 := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", basePort))
+		cu, err2 := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", freePort))
 		c.Assert(err2, IsNil)
 		cfg.LCUrls = append(cfg.LCUrls, *cu)
-		basePort++
+		freePort = freeport.GetPort()
 	}
-	cfg.ACUrls = cfg.LCUrls
 
+	cfg.ACUrls = cfg.LCUrls
 	cfg.LPUrls = []url.URL{}
 	ic := make([]string, 0, portCount)
 	for i := 0; i < portCount; i++ {
-		pu, err2 := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", basePort))
+		pu, err2 := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", freePort))
 		c.Assert(err2, IsNil)
 		cfg.LPUrls = append(cfg.LPUrls, *pu)
 		ic = append(ic, fmt.Sprintf("%s=%s", cfg.Name, pu))
-		basePort++
+		freePort = freeport.GetPort()
 	}
 	cfg.APUrls = cfg.LPUrls
-
 	cfg.InitialCluster = strings.Join(ic, ",")
 	cfg.ClusterState = embed.ClusterStateFlagNew
-	c.Assert(cfg.Validate(), IsNil)
 	return cfg
 }
 
@@ -105,6 +103,7 @@ func (t *testEtcdUtilSuite) startEtcd(c *C, cfg *embed.Config) *embed.Etcd {
 	select {
 	case <-e.Server.ReadyNotify():
 	case <-time.After(timeout):
+		e.Server.Stop()
 		c.Fatalf("start embed etcd timeout %v", timeout)
 	}
 	return e
@@ -177,10 +176,9 @@ func (t *testEtcdUtilSuite) TestRemoveMember(c *C) {
 	cluster := integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 3})
 	defer cluster.Terminate(t.testT)
 
-	i := cluster.WaitLeader(t.testT)
-	c.Assert(i, Not(Equals), -1)
-
-	cli := cluster.Client(i) // client to the leader.
+	leaderIdx := cluster.WaitLeader(t.testT)
+	c.Assert(leaderIdx, Not(Equals), -1)
+	cli := cluster.Client(leaderIdx) // client to the leader.
 
 	respList, err := ListMembers(cli)
 	c.Assert(err, IsNil)
@@ -188,12 +186,16 @@ func (t *testEtcdUtilSuite) TestRemoveMember(c *C) {
 
 	// always try to remove the first member, may or may not the leader
 	respRemove, err := RemoveMember(cli, respList.Members[0].ID)
-	c.Assert(err, IsNil)
-	c.Assert(respRemove.Members, HasLen, 2)
+	if err != nil {
+		// remove the leader will meet this error
+		c.Assert(err, ErrorMatches, ".*etcdserver: server stopped")
+	} else {
+		c.Assert(err, IsNil)
+		c.Assert(respRemove.Members, HasLen, 2)
+	}
 
-	// get another client
-	cli = cluster.RandClient()
-
+	// update client to leader
+	cli = cluster.Client(cluster.WaitLeader(t.testT))
 	// only 2 members exist now
 	respList, err = ListMembers(cli)
 	c.Assert(err, IsNil)
