@@ -16,10 +16,8 @@ package server
 import (
 	"fmt"
 	"math"
-	"math/rand"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -108,7 +106,7 @@ func TestDefaultCfg(t *testing.T) {
 }
 
 func TestParseCfg(t *testing.T) {
-	dataDir := newTempDir()
+	dataDir := t.TempDir()
 	cmd := new(cobra.Command)
 	o := newOptions()
 	o.addFlags(cmd)
@@ -180,8 +178,8 @@ func TestParseCfg(t *testing.T) {
 			EnableTableActor: false,
 			EnableDBSorter:   false,
 			DB: &config.DBConfig{
-				Count:                       16,
-				Concurrency:                 256,
+				Count:                       8,
+				Concurrency:                 128,
 				MaxOpenFiles:                10000,
 				BlockSize:                   65536,
 				BlockCacheSize:              4294967296,
@@ -211,8 +209,8 @@ func TestParseCfg(t *testing.T) {
 }
 
 func TestDecodeCfg(t *testing.T) {
-	dataDir := newTempDir()
-	tmpDir := newTempDir()
+	dataDir := t.TempDir()
+	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
 addr = "128.0.0.1:1234"
@@ -349,8 +347,8 @@ server-worker-pool-size = 16
 }
 
 func TestDecodeCfgWithFlags(t *testing.T) {
-	dataDir := newTempDir()
-	tmpDir := newTempDir()
+	dataDir := t.TempDir()
+	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
 addr = "128.0.0.1:1234"
@@ -456,8 +454,8 @@ cert-allowed-cn = ["dd","ee"]
 			EnableTableActor: false,
 			EnableDBSorter:   false,
 			DB: &config.DBConfig{
-				Count:                       16,
-				Concurrency:                 256,
+				Count:                       8,
+				Concurrency:                 128,
 				MaxOpenFiles:                10000,
 				BlockSize:                   65536,
 				BlockCacheSize:              4294967296,
@@ -486,14 +484,57 @@ cert-allowed-cn = ["dd","ee"]
 	}, o.serverConfig)
 }
 
-var lck sync.Mutex
+func TestDecodeUnkownDebugCfg(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ticdc.toml")
+	configContent := `
+[debug]
+unknown1 = 1
+[debug.unknown2]
+unknown3 = 3
+`
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
+	require.Nil(t, err)
 
-func newTempDir() string {
-	lck.Lock()
-	defer lck.Unlock()
-	path := fmt.Sprintf("%s%ccheck-%d-%d", os.TempDir(), os.PathSeparator, time.Now().Unix(), rand.Uint64())
-	if err := os.Mkdir(path, 0o700); err != nil {
-		panic("Couldn't create temporary directory: " + err.Error())
-	}
-	return path
+	cmd := new(cobra.Command)
+	o := newOptions()
+	o.addFlags(cmd)
+
+	require.Nil(t, cmd.ParseFlags([]string{"--config", configPath}))
+
+	err = o.complete(cmd)
+	require.Nil(t, err)
+	err = o.validate()
+	require.Nil(t, err)
+	require.Equal(t, &config.DebugConfig{
+		EnableTableActor: false,
+		EnableDBSorter:   false,
+		DB: &config.DBConfig{
+			Count:                       8,
+			Concurrency:                 128,
+			MaxOpenFiles:                10000,
+			BlockSize:                   65536,
+			BlockCacheSize:              4294967296,
+			WriterBufferSize:            8388608,
+			Compression:                 "snappy",
+			TargetFileSizeBase:          8388608,
+			WriteL0SlowdownTrigger:      math.MaxInt32,
+			WriteL0PauseTrigger:         math.MaxInt32,
+			CompactionL0Trigger:         160,
+			CompactionDeletionThreshold: 160000,
+			IteratorMaxAliveDuration:    10000,
+			IteratorSlowReadDuration:    256,
+			CleanupSpeedLimit:           10000,
+		},
+		// We expect the default configuration here.
+		Messages: &config.MessagesConfig{
+			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 200),
+			ClientMaxBatchSize:           8 * 1024 * 1024,
+			ClientMaxBatchCount:          128,
+			ClientRetryRateLimit:         1.0,
+			ServerMaxPendingMessageCount: 102400,
+			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
+			ServerWorkerPoolSize:         4,
+		},
+	}, o.serverConfig.Debug)
 }
