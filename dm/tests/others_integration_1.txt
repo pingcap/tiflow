@@ -1,5 +1,4 @@
 full_mode
-dm_syncer
 sequence_sharding_optimistic
 sequence_sharding_removemeta
 gtid
