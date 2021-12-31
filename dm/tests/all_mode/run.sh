@@ -380,7 +380,7 @@ function run() {
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	# check create view success, then skip it
+	# check create view(should be skipped) success, then skip it
 	run_sql_source1 "create view all_mode.t1_v as select * from all_mode.t1 where id=0;"
 
 	run_sql_source1 "SHOW SLAVE HOSTS;"
