@@ -153,7 +153,7 @@ type ProcessorDetail struct {
 	ResolvedTs uint64 `json:"resolved_ts"`
 	// all table ids that this processor are replicating
 	Tables []int64 `json:"table_ids"`
-	// The count of events were synchronized.
+	// The count of events that have been replicated.
 	Count uint64 `json:"count"`
 	// Error code when error happens
 	Error *RunningError `json:"error"`
