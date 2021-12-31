@@ -8,10 +8,14 @@ import {
   Card,
   Table,
   Badge,
-  Popconfirm,
   message,
+  Modal,
 } from '~/uikit'
-import { RedoOutlined, CheckCircleOutlined } from '~/uikit/icons'
+import {
+  RedoOutlined,
+  CheckCircleOutlined,
+  ExclamationCircleOutlined,
+} from '~/uikit/icons'
 import i18n from '~/i18n'
 import {
   useDmapiGetClusterMasterListQuery,
@@ -26,14 +30,20 @@ const MasterTable: React.FC = () => {
   const [t] = useTranslation()
   const { data, isFetching, refetch } = useDmapiGetClusterMasterListQuery()
   const [offlineMasterNode] = useDmapiOfflineMasterNodeMutation()
-  const handleConfirmOffline = useCallback((name: string) => {
-    const key = 'offlineMasterNode-' + Date.now()
-    message.loading({ content: t('requesting'), key })
-    offlineMasterNode(name)
-      .unwrap()
-      .then(() => message.success({ content: t('request success') }))
-      .catch(() => message.destroy(key))
-  }, [])
+  const handleConfirmOffline = (name: string) => {
+    Modal.confirm({
+      title: t('are you sure to offline this master'),
+      icon: <ExclamationCircleOutlined />,
+      onOk() {
+        const key = 'offlineMasterNode-' + Date.now()
+        message.loading({ content: t('requesting'), key })
+        offlineMasterNode(name)
+          .unwrap()
+          .then(() => message.success({ content: t('request success') }))
+          .catch(() => message.destroy(key))
+      },
+    })
+  }
   const dataSource = data?.data
   const columns = [
     {
@@ -66,16 +76,13 @@ const MasterTable: React.FC = () => {
       render(name: string) {
         return (
           <Space>
-            <Popconfirm
-              title={t('are you sure to offline this master')}
-              onConfirm={() => handleConfirmOffline(name)}
-              okText={t('confirm')}
-              cancelText={t('cancel')}
+            <Button
+              type="link"
+              danger
+              onClick={() => handleConfirmOffline(name)}
             >
-              <Button type="link" danger>
-                {t('offline')}
-              </Button>
-            </Popconfirm>
+              {t('offline')}
+            </Button>
           </Space>
         )
       },
@@ -110,14 +117,20 @@ const WorkerTable: React.FC = () => {
   const [t] = useTranslation()
   const { data, isFetching, refetch } = useDmapiGetClusterWorkerListQuery()
   const [offlineWorkerNode] = useDmapiOfflineWorkerNodeMutation()
-  const handleConfirmOffline = useCallback((name: string) => {
-    const key = 'offlineWorkerNode-' + Date.now()
-    message.loading({ content: t('requesting'), key })
-    offlineWorkerNode(name)
-      .unwrap()
-      .then(() => message.success({ content: t('request success') }))
-      .catch(() => message.destroy(key))
-  }, [])
+  const handleConfirmOffline = (name: string) => {
+    Modal.confirm({
+      title: t('are you sure to offline this worker'),
+      icon: <ExclamationCircleOutlined />,
+      onOk() {
+        const key = 'offlineWorkerNode-' + Date.now()
+        message.loading({ content: t('requesting'), key })
+        offlineWorkerNode(name)
+          .unwrap()
+          .then(() => message.success({ content: t('request success') }))
+          .catch(() => message.destroy(key))
+      },
+    })
+  }
   const dataSource = data?.data
   const columns = [
     {
@@ -152,16 +165,13 @@ const WorkerTable: React.FC = () => {
           <Space>
             <Button type="link">{t('edit')}</Button>
 
-            <Popconfirm
-              title={t('are you sure to offline this worker')}
-              onConfirm={() => handleConfirmOffline(name)}
-              okText={t('confirm')}
-              cancelText={t('cancel')}
+            <Button
+              type="link"
+              danger
+              onClick={() => handleConfirmOffline(name)}
             >
-              <Button type="link" danger>
-                {t('offline')}
-              </Button>
-            </Popconfirm>
+              {t('offline')}
+            </Button>
           </Space>
         )
       },
