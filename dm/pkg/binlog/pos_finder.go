@@ -134,10 +134,33 @@ func (r *binlogPosFinder) startSync(position mysql.Position) (reader.Reader, err
 	}
 }
 
+func (r *binlogPosFinder) findMinTimestampOfBinlog(currBinlog binlogSize) (uint32, error) {
+	var minTs uint32
+	binlogReader, err := r.startSync(mysql.Position{Name: currBinlog.name, Pos: FileHeaderLen})
+	if err != nil {
+		return 0, err
+	}
+	for {
+		ev, err := binlogReader.GetEvent(r.tctx.Ctx)
+		if err != nil {
+			binlogReader.Close()
+			return 0, err
+		}
+		// break on first non-fake event(must be a format description event)
+		if !utils.IsFakeRotateEvent(ev.Header) {
+			minTs = ev.Header.Timestamp
+			break
+		}
+	}
+	binlogReader.Close()
+
+	return minTs, nil
+}
+
 func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 	targetTs := uint32(ts)
-	var prevBinlog, currBinlog binlogSize
-	var prevTs, currTs uint32
+	var lastTs, minTs uint32
+	var lastMid int
 	binaryLogs, err := r.getBinlogFiles()
 	if err != nil {
 		return err
@@ -146,50 +169,39 @@ func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 		// should not happen on a master with binlog enabled
 		return errors.New("cannot find binlog on master")
 	}
-	// large proportion of the time will be spent at finding inside the target binlog file
-	// find the target binlog file is relatively fast
-	// TODO maybe change to binary search later when len(binaryLogs) is large
-	for _, binlogFile := range binaryLogs {
-		// master switched may complicate the situation, suppose we are trying to sync mysql-bin.000003, both master
-		// contains it, but they have different timestamp, we may get the wrong location.
-		prevTs, currTs = currTs, 0
-		prevBinlog, currBinlog = currBinlog, binlogFile
-		binlogReader, err := r.startSync(mysql.Position{Name: currBinlog.name, Pos: FileHeaderLen})
+
+	begin, end := 0, len(binaryLogs)-1
+	for begin <= end {
+		mid := (begin + end) / 2
+		currBinlog := binaryLogs[mid]
+
+		minTs, err = r.findMinTimestampOfBinlog(currBinlog)
 		if err != nil {
 			return err
 		}
-		for {
-			ev, err := binlogReader.GetEvent(r.tctx.Ctx)
-			if err != nil {
-				binlogReader.Close()
-				return err
-			}
-			// break on first non-fake event(must be a format description event)
-			if !utils.IsFakeRotateEvent(ev.Header) {
-				currTs = ev.Header.Timestamp
-				break
-			}
-		}
-		binlogReader.Close()
 
-		r.tctx.L().Info("min timestamp in binlog file", zap.Reflect("file", binlogFile), zap.Uint32("ts", currTs))
+		r.tctx.L().Info("min timestamp in binlog file", zap.Reflect("file", currBinlog), zap.Uint32("ts", minTs))
 
-		if currTs >= targetTs {
-			break
+		lastTs = minTs
+		lastMid = mid
+
+		if minTs >= targetTs {
+			end = mid - 1
+		} else {
+			begin = mid + 1
 		}
 	}
-	if currTs >= targetTs {
-		if prevTs == 0 {
-			// ts of first binlog event in first binlog file >= targetTs
-			r.targetBinlog = currBinlog
+	if lastTs >= targetTs {
+		if lastMid == 0 {
+			// timestamp of first binlog event in first binlog file >= targetTs
+			r.targetBinlog = binaryLogs[lastMid]
 			r.tsBeforeFirstBinlog = true
 		} else {
-			// ts of first event in currBinlog >= targetTs, need to search from prevBinlog
-			r.targetBinlog = prevBinlog
+			// timestamp of first event in lastMid >= targetTs, need to search from previous binlog file
+			r.targetBinlog = binaryLogs[lastMid-1]
 		}
 	} else {
-		// find from the last binlog file, i.e. currBinlog
-		r.targetBinlog = currBinlog
+		r.targetBinlog = binaryLogs[lastMid]
 	}
 	r.lastBinlogFile = r.targetBinlog.name == binaryLogs[len(binaryLogs)-1].name
 	return nil
