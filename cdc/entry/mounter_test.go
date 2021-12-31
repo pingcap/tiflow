@@ -400,8 +400,10 @@ type columnInfoAndResult struct {
 	Res     interface{}
 }
 
-func TestFormatColVal(t *testing.T) {}
-
+// We use OriginDefaultValue instead of DefaultValue in the ut, pls ref to
+// https://github.com/pingcap/tiflow/issues/4048
+// FIXME: OriginDefaultValue seems always to be string, and test more corner case
+// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 func TestGetDefaultZeroValue(t *testing.T) {
 	colAndRess := []columnInfoAndResult{
 		// mysql flag null
@@ -413,7 +415,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: nil,
 		},
-		// mysql.TypeTiny
+		// mysql.TypeTiny + notnull + nodefault
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -423,7 +425,60 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: int64(0),
 		},
-		// mysql.TypeShort
+		// mysql.TypeTiny + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: -1314,
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTiny,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(-1314),
+		},
+		// mysql.TypeTiny + notnull + default + unsigned
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTiny,
+					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
+				},
+			},
+			Res: uint64(0),
+		},
+		// mysql.TypeTiny + notnull + unsigned
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: uint64(1314),
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTiny,
+					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
+				},
+			},
+			Res: uint64(1314),
+		},
+		// mysql.TypeTiny + null + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: -1314,
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTiny,
+					Flag: uint(0),
+				},
+			},
+			Res: int64(-1314),
+		},
+		// mysql.TypeTiny + null + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTiny,
+					Flag: uint(0),
+				},
+			},
+			Res: nil,
+		},
+		// mysql.TypeShort, others testCases same as tiny
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -433,7 +488,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: int64(0),
 		},
-		// mysql.TypeLong
+		// mysql.TypeLong, others testCases same as tiny
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -443,7 +498,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: int64(0),
 		},
-		// mysql.TypeLonglong
+		// mysql.TypeLonglong, others testCases same as tiny
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -453,7 +508,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: int64(0),
 		},
-		// mysql.TypeInt24
+		// mysql.TypeInt24, others testCases same as tiny
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -463,7 +518,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: int64(0),
 		},
-		// mysql.TypeFloat
+		// mysql.TypeFloat + notnull + nodefault
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -473,7 +528,60 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: float64(0),
 		},
-		// mysql.TypeDouble
+		// mysql.TypeFloat + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: -3.1415,
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeFloat,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: float64(-3.1415),
+		},
+		// mysql.TypeFloat + notnull + default + unsigned
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: 3.1415,
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeFloat,
+					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
+				},
+			},
+			Res: float64(3.1415),
+		},
+		// mysql.TypeFloat + notnull + unsigned
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeFloat,
+					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
+				},
+			},
+			Res: float64(0),
+		},
+		// mysql.TypeFloat + null + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: -3.1415,
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeFloat,
+					Flag: uint(0),
+				},
+			},
+			Res: float64(-3.1415),
+		},
+		// mysql.TypeFloat + null + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeFloat,
+					Flag: uint(0),
+				},
+			},
+			Res: nil,
+		},
+		// mysql.TypeDouble, other testCases same as float
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -483,7 +591,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: float64(0),
 		},
-		// mysql.TypeNewDecimal
+		// mysql.TypeNewDecimal + notnull + nodefault
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -493,19 +601,43 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Decimal: 2,
 				},
 			},
-			Res: "0", // related with Flen and Decimal, [TODO] need check default
+			Res: "0", // related with Flen and Decimal
+		},
+		// mysql.TypeNewDecimal + null + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:      mysql.TypeNewDecimal,
+					Flag:    uint(0),
+					Flen:    5,
+					Decimal: 2,
+				},
+			},
+			Res: nil,
+		},
+		// mysql.TypeNewDecimal + null + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "-3.14", // no float
+				FieldType: types.FieldType{
+					Tp:      mysql.TypeNewDecimal,
+					Flag:    uint(0),
+					Flen:    5,
+					Decimal: 2,
+				},
+			},
+			Res: "-3.14",
 		},
 		// mysql.TypeNull
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
-					Tp:   mysql.TypeNull,
-					Flag: mysql.NotNullFlag,
+					Tp: mysql.TypeNull,
 				},
 			},
 			Res: nil,
 		},
-		// mysql.TypeTimestamp
+		// mysql.TypeTimestamp + notnull + nodefault
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -515,7 +647,29 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: "0000-00-00 00:00:00",
 		},
-		// mysql.TypeDate
+		// mysql.TypeTimestamp + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "2020-11-19 12:12:12",
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTimestamp,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "2020-11-19 12:12:12",
+		},
+		// mysql.TypeTimestamp + null + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "2020-11-19 12:12:12",
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTimestamp,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "2020-11-19 12:12:12",
+		},
+		// mysql.TypeDate, other testCases same as TypeTimestamp
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -525,7 +679,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: "0000-00-00",
 		},
-		// mysql.TypeDuration
+		// mysql.TypeDuration, other testCases same as TypeTimestamp
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -535,7 +689,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: "00:00:00",
 		},
-		// mysql.TypeDatetime
+		// mysql.TypeDatetime, other testCases same as TypeTimestamp
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -545,7 +699,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: "0000-00-00 00:00:00",
 		},
-		// mysql.TypeYear
+		// mysql.TypeYear + notnull + nodefault
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -554,6 +708,18 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				},
 			},
 			Res: int64(0),
+		},
+		// mysql.TypeYear + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "2021",
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeYear,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			// TypeYear default value will be a string and then translate to []byte
+			Res: "2021",
 		},
 		// mysql.TypeNewDate
 		{
@@ -565,7 +731,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: nil, // [TODO] seems not support by TiDB, need check
 		},
-		// mysql.TypeVarchar
+		// mysql.TypeVarchar + notnull + nodefault
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -574,6 +740,18 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				},
 			},
 			Res: []byte{},
+		},
+		// mysql.TypeVarchar + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "e0",
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeVarchar,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			// TypeVarchar default value will be a string and then translate to []byte
+			Res: "e0",
 		},
 		// mysql.TypeTinyBlob
 		{
@@ -645,6 +823,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: uint64(0),
 		},
+		// BLOB, TEXT, GEOMETRY or JSON column can't have a default value
 		// mysql.TypeJSON
 		{
 			ColInfo: timodel.ColumnInfo{
@@ -655,7 +834,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: "null",
 		},
-		// mysql.TypeEnum
+		// mysql.TypeEnum + notnull + nodefault
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -664,9 +843,24 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Elems: []string{"e0", "e1"},
 				},
 			},
+			// TypeEnum value will be a string and then translate to []byte
+			// NotNull && no default will choose first element
 			Res: uint64(0),
 		},
-		// mysql.TypeSet
+		// mysql.TypeEnum + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "e1",
+				FieldType: types.FieldType{
+					Tp:    mysql.TypeEnum,
+					Flag:  mysql.NotNullFlag,
+					Elems: []string{"e0", "e1"},
+				},
+			},
+			// TypeEnum default value will be a string and then translate to []byte
+			Res: "e1",
+		},
+		// mysql.TypeSet + notnull
 		{
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
@@ -676,6 +870,18 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			Res: uint64(0),
 		},
+		// mysql.TypeSet + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "1,e",
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeSet,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			// TypeSet default value will be a string and then translate to []byte
+			Res: "1,e",
+		},
 		// mysql.TypeGeometry
 		{
 			ColInfo: timodel.ColumnInfo{
@@ -684,7 +890,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: nil,
+			Res: nil, // not support yet
 		},
 	}
 	testGetDefaultZeroValue(t, colAndRess)
