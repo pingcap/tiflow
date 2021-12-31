@@ -324,7 +324,14 @@ func (ls *Sorter) outputBufferedResolvedEvents(
 // It appends outputted events's key to outputBuffer deleteKeys to delete them
 // later, and appends resolved events to outputBuffer resolvedEvents to send
 // them later.
-// outputBuffer must be empty.
+//
+// It returns:
+//   * a bool to indicate whether it has read the last Next or not.
+//   * a uint64, if it is not 0, it means all resolved events before the ts
+//     are outputted.
+//   * an error if it occurs.
+//
+// Note: outputBuffer must be empty.
 func (ls *Sorter) outputIterEvents(
 	iter db.Iterator, hasReadLastNext bool, buffer *outputBuffer,
 	resolvedTs uint64,
@@ -629,9 +636,13 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 	task.IterReq, hasIter = state.tryGetIterator(ls.uid, ls.tableID)
 	// Send write/read task to leveldb.
 	err = ls.router.SendB(ctx, ls.actorID, actormsg.SorterMessage(task))
-	if err != nil || !hasIter {
-		// Skip read iterator if send fails or there is no iterator.
+	if err != nil {
+		// Skip read iterator if send fails.
 		return errors.Trace(err)
+	}
+	if !hasIter {
+		// Skip read iterator if there is no iterator
+		return nil
 	}
 
 	// Read and send resolved events from iterator.
