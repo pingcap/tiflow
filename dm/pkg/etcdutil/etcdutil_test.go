@@ -23,6 +23,7 @@ import (
 	"github.com/phayes/freeport"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/clientv3util"
 	"go.etcd.io/etcd/embed"
@@ -120,11 +121,11 @@ func (t *testEtcdUtilSuite) checkMember(c *C, mid uint64, m *etcdserverpb.Member
 		c.Assert(m.Name, Equals, cfg.Name)
 	}
 	c.Assert(m.ID, Equals, mid)
-	c.Assert(m.ClientURLs, DeepEquals, t.urlsToStrings(cfg.ACUrls))
-	c.Assert(m.PeerURLs, DeepEquals, t.urlsToStrings(cfg.APUrls))
+	require.ElementsMatch(t.testT, m.ClientURLs, t.urlsToStrings(cfg.ACUrls))
+	require.ElementsMatch(t.testT, m.PeerURLs, t.urlsToStrings(cfg.APUrls))
 }
 
-func (t *testEtcdUtilSuite) TestEtcdUtil(c *C) {
+func (t *testEtcdUtilSuite) TestMemberUtilInternal(c *C) {
 	for i := 1; i <= 3; i++ {
 		t.testMemberUtilInternal(c, i)
 	}
