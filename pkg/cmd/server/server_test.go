@@ -510,8 +510,8 @@ unknown3 = 3
 		EnableTableActor: false,
 		EnableDBSorter:   false,
 		DB: &config.DBConfig{
-			Count:                       16,
-			Concurrency:                 256,
+			Count:                       8,
+			Concurrency:                 128,
 			MaxOpenFiles:                10000,
 			BlockSize:                   65536,
 			BlockCacheSize:              4294967296,
