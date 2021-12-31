@@ -8,7 +8,7 @@ const injectedRtkApi = api.injectEndpoints({
       { overwrite: boolean }
     >({
       query: queryArg => ({
-        url: `/api/v1/task_configs/batch_import`,
+        url: `/task/configs/import`,
         method: 'POST',
         body: queryArg,
       }),
@@ -16,31 +16,31 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     dmapiCreateTaskConfig: build.mutation<Task, Task>({
       query: queryArg => ({
-        url: `/api/v1/task_configs`,
+        url: `/task/configs`,
         method: 'POST',
         body: queryArg,
       }),
       invalidatesTags: ['TaskConfig'],
     }),
     dmapiGetTaskConfigList: build.query<ListResponse<Task>, void>({
-      query: () => ({ url: `/api/v1/task_configs` }),
+      query: () => ({ url: `/task/configs` }),
       providesTags: ['TaskConfig'],
     }),
     dmapiGetTaskConfig: build.query<Task, { taskName: string }>({
       query: queryArg => ({
-        url: `/api/v1/task_configs/${queryArg.taskName}`,
+        url: `/task/configs/${queryArg.taskName}`,
       }),
     }),
     dmapUpdateTaskConfig: build.mutation<Task, { taskName: string }>({
       query: queryArg => ({
-        url: `/api/v1/task_configs/${queryArg.taskName}`,
+        url: `/task/configs/${queryArg.taskName}`,
         method: 'PUT',
       }),
       invalidatesTags: ['TaskConfig'],
     }),
     dmapiDeleteTaskConfig: build.mutation<void, { taskName: string }>({
       query: queryArg => ({
-        url: `/api/v1/task_configs/${queryArg.taskName}`,
+        url: `/task/configs/${queryArg.taskName}`,
         method: 'DELETE',
       }),
       invalidatesTags: ['TaskConfig'],

@@ -3,23 +3,23 @@ import { api, ListResponse } from './api'
 const injectedRtkApi = api.injectEndpoints({
   endpoints: build => ({
     dmapiGetClusterMasterList: build.query<ListResponse<ClusterMaster>, void>({
-      query: () => ({ url: `/api/v1/cluster/masters` }),
+      query: () => ({ url: `/cluster/masters` }),
       providesTags: ['ClusterMaster'],
     }),
     dmapiOfflineMasterNode: build.mutation<void, string>({
       query: masterName => ({
-        url: `/api/v1/cluster/masters/${masterName}`,
+        url: `/cluster/masters/${masterName}`,
         method: 'DELETE',
       }),
       invalidatesTags: ['ClusterMaster'],
     }),
     dmapiGetClusterWorkerList: build.query<ListResponse<ClusterWorker>, void>({
-      query: () => ({ url: `/api/v1/cluster/workers` }),
+      query: () => ({ url: `/cluster/workers` }),
       providesTags: ['ClusterWorker'],
     }),
     dmapiOfflineWorkerNode: build.mutation<void, string>({
       query: workerName => ({
-        url: `/api/v1/cluster/workers/${workerName}`,
+        url: `/cluster/workers/${workerName}`,
         method: 'DELETE',
       }),
       invalidatesTags: ['ClusterWorker'],
