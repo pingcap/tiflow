@@ -152,6 +152,8 @@ func newMySQLSink(
 		sinkCyclic = cyclic.NewCyclic(cfg)
 		dsn.Params["sql_mode"] = cyclic.RelaxSQLMode(dsn.Params["sql_mode"])
 	}
+	// NOTE: quote the string is necessary to avoid ambiguities.
+	dsn.Params["sql_mode"] = strconv.Quote(dsn.Params["sql_mode"])
 
 	dsnStr, err = generateDSNByParams(ctx, dsn, params, testDB)
 	if err != nil {
