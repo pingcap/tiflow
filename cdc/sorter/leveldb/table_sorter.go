@@ -380,7 +380,7 @@ func (ls *Sorter) outputIterEvents(
 		lenResolvedEvents, _ = buffer.len()
 		if lenResolvedEvents > 0 {
 			// Output blocked, skip append new event.
-			// This means we has not read Next.
+			// This means we have not read Next.
 			hasReadNext = false
 			break
 		}
