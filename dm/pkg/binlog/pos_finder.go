@@ -49,7 +49,9 @@ type binlogPosFinder struct {
 	tsBeforeFirstBinlog bool       // whether the timestamp is before the first binlog
 	lastBinlogFile      bool       // whether targetBinlog is the last binlog file
 
-	everMetGTIDEvent bool // whether ever met a GTID event
+	// one binlog file can either be GTID enabled or not, cannot be mixed up
+	// we mark it useing this field to avoid parsing events.
+	everMetGTIDEvent bool
 	inTransaction    bool // whether in transaction
 }
 
