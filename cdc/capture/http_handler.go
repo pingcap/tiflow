@@ -591,11 +591,11 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 	var processorDetail model.ProcessorDetail
 	if exist {
 		processorDetail = model.ProcessorDetail{
-      CheckPointTs: position.CheckPointTs, 
-      ResolvedTs: position.ResolvedTs, 
-      Count: count,
-      Error: position.Error,
-    }
+			CheckPointTs: position.CheckPointTs,
+			ResolvedTs:   position.ResolvedTs,
+			Count:        position.Count,
+			Error:        position.Error,
+		}
 		tables := make([]int64, 0)
 		for tableID := range status.Tables {
 			tables = append(tables, tableID)
