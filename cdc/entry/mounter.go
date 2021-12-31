@@ -292,6 +292,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Debug("get new DDL job", zap.String("detail", job.String()))
 	if !job.IsDone() && !job.IsSynced() {
 		return nil, nil
 	}
@@ -448,6 +449,7 @@ func formatColVal(datum types.Datum, tp byte) (value interface{}, warn string, e
 		}
 		return v, warn, nil
 	default:
+<<<<<<< HEAD
 		return datum.GetValue(), "", nil
 	}
 }
@@ -473,6 +475,58 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 		return d.GetValue()
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 		return emptyBytes
+=======
+		// NOTICE: GetValue() may return some types that go sql not support, which will cause sink DML fail
+		// Make specified convert upper if you need
+		// Go sql support type ref to: https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
+		return datum.GetValue(), sizeOfDatum(datum), "", nil
+	}
+}
+
+// Scenarios when call this function:
+// (1) column define default null at creating + insert without explicit column
+// (2) alter table add column default xxx + old existing data
+// (3) amend + insert without explicit column + alter table add column default xxx
+// (4) online DDL drop column + data insert at state delete-only
+//
+// getDefaultOrZeroValue return interface{} need to meet to require type in
+// https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
+// Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
+// TODO: Check default expr support
+func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, error) {
+	var d types.Datum
+	// NOTICE: SHOULD use OriginDefaultValue here, more info pls ref to
+	// https://github.com/pingcap/tiflow/issues/4048
+	// FIXME: Too many corner cases may hit here, like type truncate, timezone
+	// (1) If this column is uk(no pk), will cause data inconsistency in Scenarios(2)
+	// (2) If not fix here, will cause data inconsistency in Scenarios(3) directly
+	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
+	if col.GetOriginDefaultValue() != nil {
+		d = types.NewDatum(col.GetOriginDefaultValue())
+		return d.GetValue(), sizeOfDatum(d), "", nil
+	}
+
+	if !mysql.HasNotNullFlag(col.Flag) {
+		// NOTICE: NotNullCheck need do after OriginDefaultValue check, as when TiDB meet "amend + add column default xxx",
+		// ref: https://github.com/pingcap/ticdc/issues/3929
+		// must use null if TiDB not write the column value when default value is null
+		// and the value is null, see https://github.com/pingcap/tidb/issues/9304
+		d = types.NewDatum(nil)
+	} else {
+		switch col.Tp {
+		case mysql.TypeEnum:
+			// For enum type, if no default value and not null is set,
+			// the default value is the first element of the enum list
+			d = types.NewDatum(col.FieldType.Elems[0])
+		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+			return emptyBytes, sizeOfEmptyBytes, "", nil
+		default:
+			d = table.GetZeroValue(col)
+			if d.IsNull() {
+				log.Error("meet unsupported column type", zap.String("column info", col.String()))
+			}
+		}
+>>>>>>> cdb4f64d5 (mounter(ticdc): fix mounter default value panic and data inconsistency (#3930))
 	}
 
 	d := table.GetZeroValue(col)
