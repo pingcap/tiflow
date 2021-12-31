@@ -8,13 +8,17 @@ import { render } from 'react-dom'
 
 import App from './App'
 
-if (process.env.NODE_ENV === 'development') {
-  import('./mock')
+function mountApp() {
+  render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+    document.getElementById('root')
+  )
 }
 
-render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-  document.getElementById('root')
-)
+if (process.env.NODE_ENV === 'development') {
+  import('./mock').then(mountApp)
+} else {
+  mountApp()
+}
