@@ -1875,6 +1875,26 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 						// revert currentLocation to startLocation
 						currentLocation = startLocation
 					} else if op == pb.ErrorOp_Skip {
+						ec := eventContext{
+							tctx:                tctx,
+							header:              e.Header,
+							startLocation:       &startLocation,
+							currentLocation:     &currentLocation,
+							lastLocation:        &lastLocation,
+							shardingReSync:      shardingReSync,
+							closeShardingResync: closeShardingResync,
+							traceSource:         traceSource,
+							safeMode:            s.safeMode.Enable(),
+							tryReSync:           tryReSync,
+							startTime:           startTime,
+							shardingReSyncCh:    &shardingReSyncCh,
+						}
+						originSQL := strings.TrimSpace(string(ev.Query))
+						err = s.trackOriginDDL(ev, ec, originSQL)
+						if err != nil {
+							tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), zap.String("sql", originSQL))
+						}
+
 						s.saveGlobalPoint(currentLocation)
 						err = s.flushJobs()
 						if err != nil {
@@ -2962,6 +2982,55 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 			return terror.ErrSchemaTrackerCannotExecDDL.Delegate(err, trackInfo.originDDL)
 		}
 		s.exprFilterGroup.ResetExprs(srcTable)
+	}
+
+	return nil
+}
+
+func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext, originSQL string) error {
+	if originSQL == "BEGIN" || originSQL == "" || utils.IsBuildInSkipDDL(originSQL) {
+		return nil
+	}
+	var err error
+	qec := &queryEventContext{
+		eventContext:    &ec,
+		ddlSchema:       string(ev.Schema),
+		originSQL:       utils.TrimCtrlChars(originSQL),
+		splitDDLs:       make([]string, 0),
+		appliedDDLs:     make([]string, 0),
+		sourceTbls:      make(map[string]map[string]struct{}),
+		eventStatusVars: ev.StatusVars,
+	}
+	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
+	if err != nil {
+		log.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
+	}
+	stmt, err := parseOneStmt(qec)
+	if err != nil {
+		// originSQL can't be parsed => can't be tracked by schema tracker
+		// we can use operate-schema to set a compatiable schema after this
+		return err
+	}
+
+	if _, ok := stmt.(ast.DDLNode); !ok {
+		return nil
+	}
+
+	// TiDB can't handle multi schema change DDL, so we split it here.
+	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
+	if err != nil {
+		return err
+	}
+
+	for _, sql := range qec.splitDDLs {
+		ddlInfo, err := s.genDDLInfo(qec, sql)
+		if err != nil {
+			return err
+		}
+		err = s.trackDDL(qec.ddlSchema, ddlInfo, qec.eventContext)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
