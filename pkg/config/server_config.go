@@ -103,10 +103,10 @@ var defaultServerConfig = &ServerConfig{
 		// Default leveldb sorter config
 		EnableDBSorter: false,
 		DB: &DBConfig{
-			Count: 16,
-			// Following configs are optimized for write throughput.
+			Count: 8,
+			// Following configs are optimized for write/read throughput.
 			// Users should not change them.
-			Concurrency:                 256,
+			Concurrency:                 128,
 			MaxOpenFiles:                10000,
 			BlockSize:                   65536,
 			BlockCacheSize:              4294967296,
