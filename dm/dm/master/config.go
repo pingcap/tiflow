@@ -60,6 +60,7 @@ func NewConfig() *Config {
 
 	fs.BoolVar(&cfg.printVersion, "V", false, "prints version and exit")
 	fs.BoolVar(&cfg.printSampleConfig, "print-sample-config", false, "print sample config file of dm-worker")
+	fs.BoolVar(&cfg.OpenAPI, "openapi", false, "enable openapi")
 	fs.StringVar(&cfg.ConfigFile, "config", "", "path to config file")
 	fs.StringVar(&cfg.MasterAddr, "master-addr", "", "master API server and status addr")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", `advertise address for client traffic (default "${master-addr}")`)
@@ -91,7 +92,7 @@ func NewConfig() *Config {
 }
 
 type ExperimentalFeatures struct {
-	OpenAPI bool `toml:"openapi"`
+	OpenAPI bool `toml:"openapi,omitempty"` // OpenAPI is available in v5.4 as default.
 }
 
 // Config is the configuration for dm-master.
@@ -128,6 +129,7 @@ type Config struct {
 	AutoCompactionMode      string `toml:"auto-compaction-mode" json:"auto-compaction-mode"`
 	AutoCompactionRetention string `toml:"auto-compaction-retention" json:"auto-compaction-retention"`
 	QuotaBackendBytes       int64  `toml:"quota-backend-bytes" json:"quota-backend-bytes"`
+	OpenAPI                 bool   `toml:"openapi" json:"openapi"`
 
 	// directory path used to store source config files when upgrading from v1.0.x.
 	// if this path set, DM-master leader will try to upgrade from v1.0.x to the current version.
@@ -313,6 +315,11 @@ func (c *Config) adjust() error {
 		c.QuotaBackendBytes = quotaBackendBytesLowerBound
 	}
 
+	if c.ExperimentalFeatures.OpenAPI {
+		c.OpenAPI = true
+		c.ExperimentalFeatures.OpenAPI = false
+		log.L().Warn("openapi is a GA feature and removed from experimental features, so this configuration may have no affect in feature release, please set openapi=true in dm-master config file")
+	}
 	return err
 }
 

@@ -43,10 +43,6 @@ func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
 }
 
-// SchedulerV2Enabled determines wether to used the peer-message based scheduler.
-// TODO set this to true
-const SchedulerV2Enabled = false
-
 // SecurityConfig represents security config for server
 type SecurityConfig = security.Credential
 
@@ -102,7 +98,8 @@ var defaultServerConfig = &ServerConfig{
 		RegionScanLimit:  40,
 	},
 	Debug: &DebugConfig{
-		EnableTableActor: false,
+		EnableTableActor:   false,
+		EnableNewScheduler: false,
 		// Default leveldb sorter config
 		EnableDBSorter: false,
 		DB: &DBConfig{
