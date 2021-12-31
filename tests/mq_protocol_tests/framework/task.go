@@ -88,7 +88,7 @@ func (p *CDCProfile) String() string {
 	if p.PDUri == "" {
 		p.PDUri = "http://127.0.0.1:2379"
 	}
-	builder.WriteString(fmt.Sprint("--pd=%s ", strconv.Quote(p.PDUri)))
+	builder.WriteString(fmt.Sprintf("--pd=%s ", strconv.Quote(p.PDUri)))
 
 	if p.SinkURI == "" {
 		log.Fatal("SinkURI cannot be empty!")
