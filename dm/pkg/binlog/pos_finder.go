@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -91,8 +92,11 @@ func NewLocalBinlogPosFinder(tctx *tcontext.Context, enableGTID bool, flavor str
 }
 
 func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *sql.DB, syncCfg replication.BinlogSyncerConfig, enableGTID bool) *binlogPosFinder {
-	// make sure it's raw mode
+	// make sure raw mode enabled, and MaxReconnectAttempts set
 	syncCfg.RawModeEnabled = true
+	if syncCfg.MaxReconnectAttempts == 0 {
+		syncCfg.MaxReconnectAttempts = common.MaxBinlogSyncerReconnect
+	}
 
 	parser := replication.NewBinlogParser()
 	parser.SetFlavor(syncCfg.Flavor)
@@ -244,8 +248,11 @@ func (r *binlogPosFinder) checkTransactionBoundaryEvent(ev *replication.BinlogEv
 		transactionBeginEvent = true
 	case replication.QUERY_EVENT:
 		if !r.everMetGTIDEvent {
-			// so non-BEGIN, non-DCL query event is rare, we parse it every time
-			// user may change session level binlog-format=statement, but it's an unusual operation
+			// user may change session level binlog-format=statement, but it's an unusual operation, so we parse it every time
+			// In MySQL 5.6.x without GTID, the timestamp of BEGIN is not the timestamp of the transaction,
+			// To simplify implementation, we use timestamp of BEGIN as the transaction timestamp,
+			// but this may cause some transaction with timestamp >= target timestamp be skipped.
+			// TODO maybe add backtrace to support this case later
 			ev2, err := r.parser.Parse(ev.RawData)
 			if err != nil {
 				return false, err
@@ -274,7 +281,7 @@ func (r *binlogPosFinder) checkTransactionBoundaryEvent(ev *replication.BinlogEv
 // go-mysql has BinlogStreamer.GetEventWithStartTime, but it doesn't fit our need. Also we need to support relay log.
 func (r *binlogPosFinder) FindByTs(ts int64) (*Location, PosType, error) {
 	r.tctx.L().Info("target timestamp", zap.Int64("ts", ts))
-	// TODO check server uuid
+
 	if err := r.initTargetBinlogFile(ts); err != nil {
 		return nil, InvalidBinlogPos, err
 	}
@@ -296,7 +303,7 @@ func (r *binlogPosFinder) FindByTs(ts int64) (*Location, PosType, error) {
 	defer binlogReader.Close()
 	for {
 		ev, err := binlogReader.GetEvent(r.tctx.Ctx)
-		// TODO retryable error, let outer layer retry?
+		// let outer layer retry
 		if err != nil {
 			return nil, InvalidBinlogPos, err
 		}
