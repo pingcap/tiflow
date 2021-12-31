@@ -13,7 +13,9 @@
 
 package config
 
-import cerror "github.com/pingcap/tiflow/pkg/errors"
+import (
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+)
 
 // DBConfig represents leveldb sorter config.
 type DBConfig struct {
@@ -50,11 +52,6 @@ type DBConfig struct {
 	//
 	// The default value is 8388608, 8MB.
 	TargetFileSizeBase int `toml:"target-file-size-base" json:"target-file-size-base"`
-	// CompactionL0Trigger defines number of leveldb sst file at level-0 that will
-	// trigger compaction.
-	//
-	// The default value is 160.
-	CompactionL0Trigger int `toml:"compaction-l0-trigger" json:"compaction-l0-trigger"`
 	// WriteL0SlowdownTrigger defines number of leveldb sst file at level-0 that
 	// will trigger write slowdown.
 	//
@@ -65,6 +62,31 @@ type DBConfig struct {
 	//
 	// The default value is 1<<31 - 1.
 	WriteL0PauseTrigger int `toml:"write-l0-pause-trigger" json:"write-l0-pause-trigger"`
+
+	// CompactionL0Trigger defines number of leveldb sst file at level-0 that will
+	// trigger compaction.
+	//
+	// The default value is 160.
+	CompactionL0Trigger int `toml:"compaction-l0-trigger" json:"compaction-l0-trigger"`
+	// CompactionDeletionThreshold defines the threshold of the number of deletion that
+	// trigger compaction.
+	//
+	// The default value is 160000.
+	// Iterator.First() takes about 27ms to 149ms in this case,
+	// see pkg/db.BenchmarkNext.
+	CompactionDeletionThreshold int `toml:"compaction-deletion-threshold" json:"compaction-deletion-threshold"`
+
+	// IteratorMaxAliveDuration the maximum iterator alive duration in ms.
+	//
+	// The default value is 10000, 10s
+	IteratorMaxAliveDuration int `toml:"iterator-max-alive-duration" json:"iterator-max-alive-duration"`
+
+	// IteratorSlowReadDuration is the iterator slow read threshold.
+	// A reading that exceeds the duration triggers a db compaction.
+	//
+	// The default value is 256, 256ms.
+	IteratorSlowReadDuration int `toml:"iterator-slow-read-duration" json:"iterator-slow-read-duration"`
+
 	// CleanupSpeedLimit limits clean up speed, based on key value entry count.
 	//
 	// The default value is 10000.

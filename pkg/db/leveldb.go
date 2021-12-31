@@ -86,9 +86,11 @@ type levelDB struct {
 
 var _ DB = (*levelDB)(nil)
 
-func (p *levelDB) Snapshot() (Snapshot, error) {
-	snap, err := p.db.GetSnapshot()
-	return leveldbSnapshot{Snapshot: snap}, err
+func (p *levelDB) Iterator(lowerBound, upperBound []byte) Iterator {
+	return leveldbIter{Iterator: p.db.NewIterator(&util.Range{
+		Start: lowerBound,
+		Limit: upperBound,
+	}, nil)}
 }
 
 func (p *levelDB) Batch(cap int) Batch {
@@ -96,6 +98,10 @@ func (p *levelDB) Batch(cap int) Batch {
 		db:    p.db,
 		Batch: leveldb.MakeBatch(cap),
 	}
+}
+
+func (p *levelDB) Compact(start, end []byte) error {
+	return p.db.CompactRange(util.Range{Start: start, Limit: end})
 }
 
 func (p *levelDB) Close() error {
@@ -164,24 +170,6 @@ func (b leveldbBatch) Repr() []byte {
 
 func (b leveldbBatch) Reset() {
 	b.Batch.Reset()
-}
-
-type leveldbSnapshot struct {
-	*leveldb.Snapshot
-}
-
-var _ Snapshot = (*leveldbSnapshot)(nil)
-
-func (s leveldbSnapshot) Iterator(lowerBound, upperBound []byte) Iterator {
-	return leveldbIter{Iterator: s.NewIterator(&util.Range{
-		Start: lowerBound,
-		Limit: upperBound,
-	}, nil)}
-}
-
-func (s leveldbSnapshot) Release() error {
-	s.Snapshot.Release()
-	return nil
 }
 
 type leveldbIter struct {
