@@ -1,5 +1,4 @@
-USE
-`test`;
+USE `test`;
 
 CREATE TABLE multi_data_type
 (
