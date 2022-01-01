@@ -21,7 +21,7 @@ i=0
 while ! mysql -uroot -h${DOWNSTREAM_DB_HOST} -P${DOWNSTREAM_DB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
 	i=$((i + 1))
 	if [ "$i" -gt 200 ]; then
-		echo 'Failed to start downstream TiDB'
+		echo 'Connection to downstream TiDB failed'
 		exit 2
 	fi
 	sleep 5

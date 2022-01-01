@@ -30,10 +30,13 @@ services:
       - "zookeeper"
 
   canal-adapter:
-    image: rustinliu/ticdc-canal-json-adapter
+    # Build from https://github.com/pingcap/tiflow/tree/master/scripts/canal/docker.
+    image: rustinliu/ticdc-canal-json-adapter:latest
     environment:
+      # Since we are all under the kafka service's network, we use 127.0.0.1 directly.
       KAFKA_SERVER: 127.0.0.1:9092
       ZOOKEEPER_SERVER: zookeeper:2181
+      # This is actually the name of the topic.
       DB_NAME: test
       DOWNSTREAM_DB_HOST: 127.0.0.1
       DOWNSTREAM_DB_PORT: 3306
