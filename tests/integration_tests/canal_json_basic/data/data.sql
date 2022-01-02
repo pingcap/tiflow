@@ -15,31 +15,31 @@ CREATE TABLE multi_data_type
     t_bigint_unsigned    BIGINT UNSIGNED,
     t_boolean            BOOLEAN,
     t_float              FLOAT(6, 2),
-    t_double    DOUBLE(6, 2),
-    t_decimal   DECIMAL(38, 19),
-    t_char      CHAR,
-    t_varchar   VARCHAR(10),
-    c_binary     binary(16),
-    c_varbinary  varbinary(16),
-    t_tinytext  TINYTEXT,
-    t_text      TEXT,
-    t_mediumtext MEDIUMTEXT,
-    t_longtext LONGTEXT,
-    t_tinyblob TINYBLOB,
-    t_blob      BLOB,
-    t_mediumblob MEDIUMBLOB,
-    t_longblob LONGBLOB,
-    t_date      DATE,
-    t_datetime  DATETIME,
-    t_timestamp TIMESTAMP NULL,
-    t_time      TIME,
+    t_double             DOUBLE(6, 2),
+    t_decimal            DECIMAL(38, 19),
+    t_char               CHAR,
+    t_varchar            VARCHAR(10),
+    c_binary             binary(16),
+    c_varbinary          varbinary(16),
+    t_tinytext           TINYTEXT,
+    t_text               TEXT,
+    t_mediumtext         MEDIUMTEXT,
+    t_longtext           LONGTEXT,
+    t_tinyblob           TINYBLOB,
+    t_blob               BLOB,
+    t_mediumblob         MEDIUMBLOB,
+    t_longblob           LONGBLOB,
+    t_date               DATE,
+    t_datetime           DATETIME,
+    t_timestamp          TIMESTAMP NULL,
+    t_time               TIME,
 --  FIXME: Currently canal-adapter does not handle year types correctly.
---  t_year      YEAR,
-    t_enum      ENUM ('enum1', 'enum2', 'enum3'),
-    t_set SET ('a', 'b', 'c'),
+--  t_year               YEAR,
+    t_enum               ENUM ('enum1', 'enum2', 'enum3'),
+    t_set                SET ('a', 'b', 'c'),
 --  FIXME: Currently there will be data inconsistencies.
---  t_bit       BIT(64),
-    t_json      JSON,
+--  t_bit                BIT(64),
+    t_json               JSON,
     PRIMARY KEY (id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8
@@ -77,11 +77,13 @@ CREATE TABLE test_ddl2
 
 RENAME TABLE test_ddl1 TO test_ddl;
 
-ALTER TABLE test_ddl ADD INDEX test_add_index(c1);
+ALTER TABLE test_ddl
+    ADD INDEX test_add_index (c1);
 
 DROP INDEX test_add_index ON test_ddl;
 
-ALTER TABLE test_ddl ADD COLUMN c2 INT NOT NULL;
+ALTER TABLE test_ddl
+    ADD COLUMN c2 INT NOT NULL;
 
 TRUNCATE TABLE test_ddl;
 
