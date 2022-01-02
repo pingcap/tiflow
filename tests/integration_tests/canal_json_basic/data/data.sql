@@ -60,3 +60,36 @@ VALUES ( -1, 1, -129, 129, -65536, 65536, -16777216, 16777216, -2147483649, 2147
        , '1977-01-01', '9999-12-31 23:59:59', '19731230153000', '23:59:59'
        , 'enum2'
        , 'a,b', b'1000001', NULL);
+
+CREATE TABLE test_ddl1
+(
+    id INT AUTO_INCREMENT,
+    c1 INT,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE test_ddl2
+(
+    id INT AUTO_INCREMENT,
+    c1 INT,
+    PRIMARY KEY (id)
+);
+
+RENAME TABLE test_ddl1 TO test_ddl;
+
+ALTER TABLE test_ddl ADD INDEX test_add_index(c1);
+
+DROP INDEX test_add_index ON test_ddl;
+
+ALTER TABLE test_ddl ADD COLUMN c2 INT NOT NULL;
+
+TRUNCATE TABLE test_ddl;
+
+DROP TABLE test_ddl2;
+
+CREATE TABLE test_ddl2
+(
+    id INT AUTO_INCREMENT,
+    c1 INT,
+    PRIMARY KEY (id)
+);
