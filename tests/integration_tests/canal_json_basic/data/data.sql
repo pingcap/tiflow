@@ -45,7 +45,7 @@ CREATE TABLE multi_data_type
   DEFAULT CHARSET = utf8
   COLLATE = utf8_bin;
 
-INSERT INTO multi_data_type( t_tinyint, t_tinyint_unsigned, t_smallint, t_smallint_unsigned, t_mediumint,
+INSERT INTO multi_data_type( t_tinyint, t_tinyint_unsigned, t_smallint, t_smallint_unsigned, t_mediumint
                            , t_mediumint_unsigned, t_int, t_int_unsigned, t_bigint, t_bigint_unsigned
                            , t_boolean, t_float, t_double, t_decimal
                            , t_char, t_varchar, c_binary, c_varbinary, t_tinytext, t_text, t_mediumtext, t_longtext
