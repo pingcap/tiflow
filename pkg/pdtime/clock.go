@@ -28,33 +28,34 @@ import (
 
 const pdTimeUpdateInterval = 200 * time.Millisecond
 
-type TimeAcquirer interface {
-	// Run run the TimeAcquirer
-	Run(ctx context.Context)
-	// CurrentTimeFromCached returns current time from cache
-	CurrentTimeFromCached() (time.Time, error)
-	// Stop stops the TimeAcquirer
-	Stop()
+// Clock is a time source of PD cluster.
+type Clock interface {
+	// CurrentTime returns current time from PD.
+	CurrentTime() (time.Time, error)
 }
 
-// TimeAcquirerImpl cache time get from PD periodically and cache it
-type TimeAcquirerImpl struct {
-	pdClient  pd.Client
-	timeCache time.Time
-	mu        sync.RWMutex
-	cancel    context.CancelFunc
-	err       error
+// PDClock cache time get from PD periodically and cache it
+type PDClock struct {
+	pdClient pd.Client
+	mu       struct {
+		sync.RWMutex
+		timeCache time.Time
+		err       error
+	}
+	cancel context.CancelFunc
+	stopCh chan struct{}
 }
 
-// NewTimeAcquirer return a new TimeAcquirer
-func NewTimeAcquirer(pdClient pd.Client) TimeAcquirer {
-	return &TimeAcquirerImpl{
+// NewClock return a new TimeAcquirer
+func NewClock(pdClient pd.Client) *PDClock {
+	return &PDClock{
 		pdClient: pdClient,
+		stopCh:   make(chan struct{}, 1),
 	}
 }
 
 // Run will get time from pd periodically to cache in pdPhysicalTimeCache
-func (c *TimeAcquirerImpl) Run(ctx context.Context) {
+func (c *PDClock) Run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 	ticker := time.NewTicker(pdTimeUpdateInterval)
@@ -62,7 +63,7 @@ func (c *TimeAcquirerImpl) Run(ctx context.Context) {
 		select {
 		// c.Stop() was called or parent ctx was canceled
 		case <-ctx.Done():
-			log.Info("TimeAcquirer exit")
+			c.stopCh <- struct{}{}
 			return
 		case <-ticker.C:
 			err := retry.Do(ctx, func() error {
@@ -72,47 +73,48 @@ func (c *TimeAcquirerImpl) Run(ctx context.Context) {
 					return err
 				}
 				c.mu.Lock()
-				c.timeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
-				c.err = nil
+				c.mu.timeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
+				c.mu.err = nil
 				c.mu.Unlock()
 				return nil
 			}, retry.WithBackoffBaseDelay(200), retry.WithMaxTries(10))
 			if err != nil {
 				log.Warn("get time from pd failed, will use local time as pd time")
 				c.mu.Lock()
-				c.timeCache = time.Now()
-				c.err = err
+				c.mu.timeCache = time.Now()
+				c.mu.err = err
 				c.mu.Unlock()
 			}
 		}
 	}
 }
 
-// CurrentTimeFromCached return current time from pd cache
-func (c *TimeAcquirerImpl) CurrentTimeFromCached() (time.Time, error) {
+// CurrentTime return current time from pd cache
+func (c *PDClock) CurrentTime() (time.Time, error) {
 	c.mu.RLock()
-	err := c.err
-	cacheTime := c.timeCache
+	err := c.mu.err
+	cacheTime := c.mu.timeCache
 	c.mu.RUnlock()
 	return cacheTime, errors.Trace(err)
 }
 
-func (c *TimeAcquirerImpl) Stop() {
+// Stop PDClock.
+func (c *PDClock) Stop() {
 	c.cancel()
 }
 
-type TimeAcquirer4Test struct{}
+type clock4Test struct{}
 
-func NewTimeAcquirer4Test() TimeAcquirer {
-	return &TimeAcquirer4Test{}
+func NewClock4Test() Clock {
+	return &clock4Test{}
 }
 
-func (c *TimeAcquirer4Test) CurrentTimeFromCached() (time.Time, error) {
+func (c *clock4Test) CurrentTime() (time.Time, error) {
 	return time.Now(), nil
 }
 
-func (c *TimeAcquirer4Test) Run(ctx context.Context) {
+func (c *clock4Test) Run(ctx context.Context) {
 }
 
-func (c *TimeAcquirer4Test) Stop() {
+func (c *clock4Test) Stop() {
 }

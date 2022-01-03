@@ -96,13 +96,13 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 
-	TimeAcquirer := pdtime.NewTimeAcquirer(mockPDClient)
+	TimeAcquirer := pdtime.NewClock(mockPDClient)
 	go TimeAcquirer.Run(ctx)
 	time.Sleep(1 * time.Second)
 	defer TimeAcquirer.Stop()
 
 	cCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
-		TimeAcquirer: TimeAcquirer,
+		PDClock: TimeAcquirer,
 	})
 
 	err := gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)
