@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/common"
+	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/cyclic"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
@@ -130,6 +131,30 @@ func newMySQLSink(
 	}
 	defer testDB.Close()
 
+	// Adjust sql_mode for compatibility.
+	dsn.Params["sql_mode"], err = querySQLMode(ctx, testDB)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	dsn.Params["sql_mode"], err = dmutils.AdjustSQLModeCompatible(dsn.Params["sql_mode"])
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// Adjust sql_mode for cyclic replication.
+	var sinkCyclic *cyclic.Cyclic = nil
+	if val, ok := opts[mark.OptCyclicConfig]; ok {
+		cfg := new(config.CyclicConfig)
+		err := cfg.Unmarshal([]byte(val))
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		sinkCyclic = cyclic.NewCyclic(cfg)
+		dsn.Params["sql_mode"] = cyclic.RelaxSQLMode(dsn.Params["sql_mode"])
+	}
+	// NOTE: quote the string is necessary to avoid ambiguities.
+	dsn.Params["sql_mode"] = strconv.Quote(dsn.Params["sql_mode"])
+
 	dsnStr, err = generateDSNByParams(ctx, dsn, params, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -157,6 +182,7 @@ func newMySQLSink(
 		db:                              db,
 		params:                          params,
 		filter:                          filter,
+		cyclic:                          sinkCyclic,
 		txnCache:                        common.NewUnresolvedTxnCache(),
 		statistics:                      NewStatistics(ctx, "mysql", opts),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
@@ -164,20 +190,6 @@ func newMySQLSink(
 		errCh:                           make(chan error, 1),
 		forceReplicate:                  replicaConfig.ForceReplicate,
 		cancel:                          cancel,
-	}
-
-	if val, ok := opts[mark.OptCyclicConfig]; ok {
-		cfg := new(config.CyclicConfig)
-		err := cfg.Unmarshal([]byte(val))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		sink.cyclic = cyclic.NewCyclic(cfg)
-
-		err = sink.adjustSQLMode(ctx)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
 	}
 
 	sink.execWaitNotifier = new(notify.Notifier)
@@ -347,26 +359,13 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
-// adjustSQLMode adjust sql mode according to sink config.
-func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
-	// Must relax sql mode to support cyclic replication, as downstream may have
-	// extra columns (not null and no default value).
-	if s.cyclic == nil || !s.cyclic.Enabled() {
-		return nil
-	}
-	var oldMode, newMode string
-	row := s.db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
-	err := row.Scan(&oldMode)
+func querySQLMode(ctx context.Context, db *sql.DB) (sqlMode string, err error) {
+	row := db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
+	err = row.Scan(&sqlMode)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
+		err = cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
-
-	newMode = cyclic.RelaxSQLMode(oldMode)
-	_, err = s.db.ExecContext(ctx, fmt.Sprintf("SET sql_mode = '%s';", newMode))
-	if err != nil {
-		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
-	}
-	return nil
+	return
 }
 
 func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
