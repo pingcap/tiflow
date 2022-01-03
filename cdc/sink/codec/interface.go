@@ -57,14 +57,15 @@ type EventBatchEncoder interface {
 
 // MQMessage represents an MQ message to the mqSink
 type MQMessage struct {
-	Key       []byte
-	Value     []byte
-	Ts        uint64              // reserved for possible output sorting
-	Schema    *string             // schema
-	Table     *string             // table
-	Type      model.MqMessageType // type
-	Protocol  config.Protocol     // protocol
-	rowsCount int                 // rows in one MQ Message
+	Key      []byte
+	Value    []byte
+	Ts       uint64              // reserved for possible output sorting
+	Schema   *string             // schema
+	Table    *string             // table
+	Type     model.MqMessageType // type
+	Protocol config.Protocol     // protocol
+	// rows in one MQ Message, once a `Row Changed Event` message attached into the `Value`, this value should be incremented.
+	rowsCount int
 }
 
 // maximumRecordOverhead is used to calculate ProducerMessage's byteSize by sarama kafka client.
