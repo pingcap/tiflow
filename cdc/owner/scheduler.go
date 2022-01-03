@@ -102,7 +102,8 @@ func newSchedulerV2FromCtx(ctx context.Context, startTs uint64) (scheduler, erro
 }
 
 func newScheduler(ctx context.Context, startTs uint64) (scheduler, error) {
-	if config.SchedulerV2Enabled {
+	conf := config.GetGlobalServerConfig()
+	if conf.Debug.EnableNewScheduler {
 		return newSchedulerV2FromCtx(ctx, startTs)
 	}
 	return newSchedulerV1(), nil
