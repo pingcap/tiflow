@@ -428,6 +428,7 @@ func TestReduceReplace(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestSinkParamsClone(t *testing.T) {
 	param1 := defaultParams.Clone()
 	param2 := param1.Clone()
@@ -599,10 +600,18 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 }
 
 func mockTestDB() (*sql.DB, error) {
+=======
+func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
+>>>>>>> 1df27c666 (sink(ticdc): adjust sql mode compatibility for mysql sink (#3938))
 	// mock for test db, which is used querying TiDB session variable
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		return nil, err
+	}
+	if adjustSQLMode {
+		mock.ExpectQuery("SELECT @@SESSION.sql_mode;").
+			WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
+				AddRow("ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
 	}
 	columns := []string{"Variable_name", "Value"}
 	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
@@ -626,18 +635,13 @@ func TestAdjustSQLMode(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
-		mock.ExpectQuery("SELECT @@SESSION.sql_mode;").
-			WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
-				AddRow("ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
-		mock.ExpectExec("SET sql_mode = 'ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE';").
-			WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectClose()
 		return db, nil
 	}
@@ -743,7 +747,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -887,7 +891,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -953,7 +957,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -1019,7 +1023,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -1068,7 +1072,7 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -1150,7 +1154,7 @@ func TestNewMySQLSink(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -1189,7 +1193,7 @@ func TestMySQLSinkClose(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -1229,7 +1233,7 @@ func TestMySQLSinkFlushResovledTs(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB()
+			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
