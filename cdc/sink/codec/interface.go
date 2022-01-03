@@ -101,11 +101,13 @@ func (m *MQMessage) IncRowsCount() {
 }
 
 func newDDLMQMessage(proto config.Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
-	return NewMQMessage(proto, key, value, event.CommitTs, model.MqMessageTypeDDL, &event.TableInfo.Schema, &event.TableInfo.Table)
+	result := NewMQMessage(proto, key, value, event.CommitTs, model.MqMessageTypeDDL, &event.TableInfo.Schema, &event.TableInfo.Table)
+	return result
 }
 
 func newResolvedMQMessage(proto config.Protocol, key, value []byte, ts uint64) *MQMessage {
-	return NewMQMessage(proto, key, value, ts, model.MqMessageTypeResolved, nil, nil)
+	result := NewMQMessage(proto, key, value, ts, model.MqMessageTypeResolved, nil, nil)
+	return result
 }
 
 // NewMQMessage should be used when creating a MQMessage struct.
