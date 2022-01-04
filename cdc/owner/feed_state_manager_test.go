@@ -240,10 +240,17 @@ func TestHandleFastFailError(t *testing.T) {
 		}}, true, nil
 	})
 	tester.MustApplyPatches()
+	manager.Tick(state)
+	// test handling fast failed error with non-nil ChangeFeedInfo
+	tester.MustApplyPatches()
+	// test handling fast failed error with nil ChangeFeedInfo
+	// set info to nil when this patch is applied
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return nil, true, nil
 	})
 	manager.Tick(state)
+	// When the patches are applied, the callback function of PatchInfo in feedStateManager.HandleError will be called.
+	// At that time, the nil pointer will be checked instead of throwing a panic. See issue #3128 for more detail.
 	tester.MustApplyPatches()
 }
 

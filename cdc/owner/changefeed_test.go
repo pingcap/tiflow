@@ -251,7 +251,7 @@ func TestExecDDL(t *testing.T) {
 	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, 0)
 
 	job = helper.DDL2Job("drop table test0.table0")
-	// ddl puller resolved ts grow uo
+	// ddl puller resolved ts grow up
 	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs = startTs
 	mockDDLSink := cf.sink.(*mockDDLSink)
