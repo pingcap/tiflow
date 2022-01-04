@@ -224,6 +224,7 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 func newProcessor(ctx cdcContext.Context) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	advertiseAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	conf := config.GetGlobalServerConfig()
 	p := &processor{
 		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:         make(chan error, 1),
@@ -232,7 +233,7 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
 
-		newSchedulerEnabled: config.SchedulerV2Enabled,
+		newSchedulerEnabled: conf.Debug.EnableNewScheduler,
 
 		metricResolvedTsGauge:        resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricResolvedTsLagGauge:     resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
@@ -347,7 +348,16 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
-	p.handleWorkload()
+
+	// The workload key does not contain extra information and
+	// will not be used in the new scheduler. If we wrote to the
+	// key while there are many tables (>10000), we would risk burdening Etcd.
+	//
+	// The keys will still exist but will no longer be written to
+	// if we do not call handleWorkload.
+	if !p.newSchedulerEnabled {
+		p.handleWorkload()
+	}
 	p.doGCSchemaStorage(ctx)
 
 	if p.newSchedulerEnabled {

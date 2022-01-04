@@ -172,7 +172,7 @@ type ClientInterface interface {
 	DMAPUpdateTaskTemplate(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DMAPIGetTaskList request
-	DMAPIGetTaskList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DMAPIGetTaskList(ctx context.Context, params *DMAPIGetTaskListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DMAPIStartTask request with any body
 	DMAPIStartTaskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -561,8 +561,8 @@ func (c *Client) DMAPUpdateTaskTemplate(ctx context.Context, taskName string, re
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIGetTaskList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIGetTaskListRequest(c.Server)
+func (c *Client) DMAPIGetTaskList(ctx context.Context, params *DMAPIGetTaskListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIGetTaskListRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1582,7 +1582,7 @@ func NewDMAPUpdateTaskTemplateRequest(server string, taskName string) (*http.Req
 }
 
 // NewDMAPIGetTaskListRequest generates requests for DMAPIGetTaskList
-func NewDMAPIGetTaskListRequest(server string) (*http.Request, error) {
+func NewDMAPIGetTaskListRequest(server string, params *DMAPIGetTaskListParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -1599,6 +1599,24 @@ func NewDMAPIGetTaskListRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	queryValues := queryURL.Query()
+
+	if params.WithStatus != nil {
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "with_status", runtime.ParamLocationQuery, *params.WithStatus); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+	}
+
+	queryURL.RawQuery = queryValues.Encode()
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
@@ -2238,7 +2256,7 @@ type ClientWithResponsesInterface interface {
 	DMAPUpdateTaskTemplateWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPUpdateTaskTemplateResponse, error)
 
 	// DMAPIGetTaskList request
-	DMAPIGetTaskListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetTaskListResponse, error)
+	DMAPIGetTaskListWithResponse(ctx context.Context, params *DMAPIGetTaskListParams, reqEditors ...RequestEditorFn) (*DMAPIGetTaskListResponse, error)
 
 	// DMAPIStartTask request with any body
 	DMAPIStartTaskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIStartTaskResponse, error)
@@ -3299,8 +3317,8 @@ func (c *ClientWithResponses) DMAPUpdateTaskTemplateWithResponse(ctx context.Con
 }
 
 // DMAPIGetTaskListWithResponse request returning *DMAPIGetTaskListResponse
-func (c *ClientWithResponses) DMAPIGetTaskListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetTaskListResponse, error) {
-	rsp, err := c.DMAPIGetTaskList(ctx, reqEditors...)
+func (c *ClientWithResponses) DMAPIGetTaskListWithResponse(ctx context.Context, params *DMAPIGetTaskListParams, reqEditors ...RequestEditorFn) (*DMAPIGetTaskListResponse, error) {
+	rsp, err := c.DMAPIGetTaskList(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

@@ -361,6 +361,7 @@ type Task struct {
 
 	// source-related configuration
 	SourceConfig TaskSourceConfig `json:"source_config"`
+	StatusList   *[]SubTaskStatus `json:"status_list,omitempty"`
 
 	// table migrate rule
 	TableMigrateRule []TaskTableMigrateRule `json:"table_migrate_rule"`
@@ -542,6 +543,12 @@ type DMAPICreateTaskTemplateJSONBody Task
 
 // DMAPIImportTaskTemplateJSONBody defines parameters for DMAPIImportTaskTemplate.
 type DMAPIImportTaskTemplateJSONBody TaskTemplateRequest
+
+// DMAPIGetTaskListParams defines parameters for DMAPIGetTaskList.
+type DMAPIGetTaskListParams struct {
+	// get task with status
+	WithStatus *bool `json:"with_status,omitempty"`
+}
 
 // DMAPIStartTaskJSONBody defines parameters for DMAPIStartTask.
 type DMAPIStartTaskJSONBody CreateTaskRequest
