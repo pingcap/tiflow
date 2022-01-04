@@ -42,6 +42,13 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
 	dmctl_start_task_standalone
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"totalTables\": \"500\"" 1 \
+		"\"completedTables\"" 1 \
+		"\"finishedBytes\"" 1 \
+		"\"finishedRows\"" 1 \
+		"\"estimateTotalRows\"" 1
 	wait_until_sync $WORK_DIR "127.0.0.1:$MASTER_PORT"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 

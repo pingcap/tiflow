@@ -78,7 +78,8 @@ const (
       "max-size": 300,
       "max-days": 0,
       "max-backups": 0
-    }
+    },
+    "error-output": "stderr"
   },
   "data-dir": "",
   "gc-ttl": 86400,
@@ -107,25 +108,29 @@ const (
     "region-scan-limit": 40
   },
   "debug": {
-    "enable-table-actor": true,
+    "enable-table-actor": false,
     "enable-db-sorter": false,
     "db": {
-      "count": 16,
-      "concurrency": 256,
+      "count": 8,
+      "concurrency": 128,
       "max-open-files": 10000,
       "block-size": 65536,
       "block-cache-size": 4294967296,
       "writer-buffer-size": 8388608,
       "compression": "snappy",
       "target-file-size-base": 8388608,
-      "compaction-l0-trigger": 160,
       "write-l0-slowdown-trigger": 2147483647,
       "write-l0-pause-trigger": 2147483647,
+      "compaction-l0-trigger": 160,
+      "compaction-deletion-threshold": 160000,
+      "iterator-max-alive-duration": 10000,
+      "iterator-slow-read-duration": 256,
       "cleanup-speed-limit": 10000
     },
+    "enable-new-scheduler": false,
     "messages": {
-      "client-max-batch-interval": 100000000,
-      "client-max-batch-size": 8192,
+      "client-max-batch-interval": 200000000,
+      "client-max-batch-size": 8388608,
       "client-max-batch-count": 128,
       "client-retry-rate-limit": 1,
       "server-max-pending-message-count": 102400,

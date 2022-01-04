@@ -88,7 +88,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
-	cfg1.ExperimentalFeatures.OpenAPI = true
+	cfg1.OpenAPI = true
 
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
@@ -108,7 +108,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg2.PeerUrls = tempurl.Alloc()
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
-	cfg2.ExperimentalFeatures.OpenAPI = true
+	cfg2.OpenAPI = true
 
 	s2 := NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
@@ -794,7 +794,7 @@ func setupServer(ctx context.Context, c *check.C) *Server {
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
-	cfg1.ExperimentalFeatures.OpenAPI = true
+	cfg1.OpenAPI = true
 
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
