@@ -82,7 +82,7 @@ func (s *schedulerTester) finishTableOperation(captureID model.CaptureID, tableI
 
 func TestScheduleOneCapture(t *testing.T) {
 	s := &schedulerTester{}
-	s.reset(c)
+	s.reset(t)
 	captureID := "test-capture-0"
 	s.addCapture(captureID)
 
@@ -97,7 +97,7 @@ func TestScheduleOneCapture(t *testing.T) {
 	s.tester.MustUpdate(key.String(), nil)
 	s.tester.MustApplyPatches()
 
-	s.reset(c)
+	s.reset(t)
 	captureID = "test-capture-1"
 	s.addCapture(captureID)
 
