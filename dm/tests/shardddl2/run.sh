@@ -485,14 +485,13 @@ function DM_DropAddColumn_CASE() {
 		"\"source 'mysql-replica-02' has no error\"" 1
 
 	# after we skip ADD COLUMN, we should fix the table structure
-	# TODO: support flush checkpoint when ddl is skipped
-	#	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-	#		"pause-task test" \
-	#		"\"result\": true" 3
-	#
-	#	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-	#		"resume-task test" \
-	#		"\"result\": true" 3
+  run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+    "pause-task test" \
+    "\"result\": true" 3
+
+  run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+    "resume-task test" \
+    "\"result\": true" 3
 
 	run_sql_source1 "update ${shardddl1}.${tb1} set b=1 where a=1;"
 	run_sql_source1 "update ${shardddl1}.${tb1} set b=3 where a=3;"
