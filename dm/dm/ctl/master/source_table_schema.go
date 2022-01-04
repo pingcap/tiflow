@@ -98,7 +98,7 @@ func newSourceTableSchemaUpdateCmd() *cobra.Command {
 				return cmd.Help()
 			}
 
-			if len(args) == 4 && fromSource || fromTarget {
+			if len(args) == 4 && (fromSource || fromTarget) {
 				common.PrintLinesf("can not set schema-file when use from-source or from-target")
 				return errors.New("please check output to see error")
 			}
