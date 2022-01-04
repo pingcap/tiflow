@@ -1876,18 +1876,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 						currentLocation = startLocation
 					} else if op == pb.ErrorOp_Skip {
 						ec := eventContext{
-							tctx:                tctx,
-							header:              e.Header,
-							startLocation:       &startLocation,
-							currentLocation:     &currentLocation,
-							lastLocation:        &lastLocation,
-							shardingReSync:      shardingReSync,
-							closeShardingResync: closeShardingResync,
-							traceSource:         traceSource,
-							safeMode:            s.safeMode.Enable(),
-							tryReSync:           tryReSync,
-							startTime:           startTime,
-							shardingReSyncCh:    &shardingReSyncCh,
+							tctx:            tctx,
+							header:          e.Header,
+							startLocation:   &startLocation,
+							currentLocation: &currentLocation,
+							lastLocation:    &lastLocation,
 						}
 						originSQL := strings.TrimSpace(string(ev.Query))
 						sourceTbls, err := s.trackOriginDDL(ev, ec, originSQL)

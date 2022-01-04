@@ -484,7 +484,6 @@ function DM_DropAddColumn_CASE() {
 		"\"result\": true" 2 \
 		"\"source 'mysql-replica-02' has no error\"" 1
 
-	# after we skip ADD COLUMN, we should fix the table structure
   run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
     "pause-task test" \
     "\"result\": true" 3
