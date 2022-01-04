@@ -12,11 +12,12 @@ function check_worker_ungraceful_stop_with_retry() {
 	for ((k = 0; k < 10; k++)); do
 		sleep 1
 		echo "start check_worker_ungraceful_stop_with_retry times: $k"
-		num=$(grep "closing syncer without graceful" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+
+		num=$(grep "kill syncer unit" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 		if [ $num -lt 1 ]; then
 			continue
 		fi
-		num=$(grep "syncer is closing" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+		num=$(grep "kill syncer without graceful" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 		if [ $num -lt 1 ]; then
 			continue
 		fi
@@ -24,9 +25,9 @@ function check_worker_ungraceful_stop_with_retry() {
 		if [ $num -lt 1 ]; then
 			continue
 		fi
-		echo "check_worker_ungraceful_stop_with_retry after retry: $k"
 		all_matched=true
 		if $all_matched; then
+			echo "check_worker_ungraceful_stop_with_retry after retry: $k"
 			break
 		fi
 	done

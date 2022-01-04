@@ -157,7 +157,7 @@ func (st *SubTask) initUnits(relay relay.Process) error {
 	var needCloseUnits []unit.Unit
 	defer func() {
 		for _, u := range needCloseUnits {
-			u.Close(true)
+			u.Close()
 		}
 
 		st.initialized.Store(initializeUnitSuccess)
@@ -311,7 +311,7 @@ func (st *SubTask) fetchResultAndUpdateStage(pr chan pb.ProcessResult) {
 
 	switch stage {
 	case pb.Stage_Finished:
-		cu.Close(true)
+		cu.Close()
 		nu := st.getNextUnit()
 		if nu == nil {
 			// Now, when finished, it only stops the process
@@ -358,13 +358,7 @@ func (st *SubTask) PrevUnit() unit.Unit {
 }
 
 // closeUnits closes all un-closed units (current unit and all the subsequent units).
-func (st *SubTask) closeUnits(graceful bool) {
-	// when not graceful, we want to syncer to exit immediately, so we call u.Close(false) before call cancel
-	// note that we only implement ungraceful close for sync unit
-	if !graceful && st.CurrUnit().Type() == pb.UnitType_Sync {
-		st.l.Info("closing syncer without graceful", zap.String("task", st.cfg.Name))
-		st.CurrUnit().Close(false)
-	}
+func (st *SubTask) closeUnits() {
 	st.cancel()
 	st.resultWg.Wait()
 
@@ -385,8 +379,16 @@ func (st *SubTask) closeUnits(graceful bool) {
 
 	for i := cui; i < len(st.units); i++ {
 		u := st.units[i]
-		st.l.Info("closing unit process", zap.Stringer("unit", cu.Type()), zap.Bool("graceful", graceful))
-		u.Close(graceful)
+		st.l.Info("closing unit process", zap.Stringer("unit", cu.Type()))
+		u.Close()
+	}
+}
+
+func (st *SubTask) killCurrentUnit() {
+	// note that we only implement ungraceful stop for sync unit
+	if st.CurrUnit().Type() == pb.UnitType_Sync {
+		st.l.Info("kill syncer unit", zap.String("task", st.cfg.Name))
+		st.CurrUnit().Kill()
 	}
 }
 
@@ -483,14 +485,25 @@ func (st *SubTask) Result() *pb.ProcessResult {
 }
 
 // Close stops the sub task.
-func (st *SubTask) Close(graceful bool) {
+func (st *SubTask) Close() {
 	st.l.Info("closing")
 	if !st.setStageIfNotIn([]pb.Stage{pb.Stage_Stopped, pb.Stage_Stopping, pb.Stage_Finished}, pb.Stage_Stopping) {
 		st.l.Info("subTask is already closed, no need to close")
 		return
 	}
+	st.closeUnits() // close all un-closed units
+	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, pb.Stage_Stopped, st.workerName)
+}
 
-	st.closeUnits(graceful) // close all un-closed units
+// kill kill running unit and stop the sub task.
+func (st *SubTask) Kill() {
+	st.l.Info("killing")
+	if !st.setStageIfNotIn([]pb.Stage{pb.Stage_Stopped, pb.Stage_Stopping, pb.Stage_Finished}, pb.Stage_Stopping) {
+		st.l.Info("subTask is already closed, no need to close")
+		return
+	}
+	st.killCurrentUnit()
+	st.closeUnits() // close all un-closed units
 	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, pb.Stage_Stopped, st.workerName)
 }
 

@@ -147,7 +147,7 @@ func (t *testDumplingSuite) TestCallStatus(c *C) {
 	dumpling, _ := export.NewDumper(ctx, dumpConf)
 	m.core = dumpling
 
-	m.Close(true)
+	m.Close()
 	s = m.Status(nil).(*pb.DumpStatus)
 	c.Assert(s.CompletedTables, Equals, float64(0))
 	c.Assert(s.FinishedBytes, Equals, float64(0))

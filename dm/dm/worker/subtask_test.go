@@ -116,7 +116,9 @@ func (m *MockUnit) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	}
 }
 
-func (m *MockUnit) Close(graceful bool) {}
+func (m *MockUnit) Close() {}
+
+func (m *MockUnit) Kill() {}
 
 func (m MockUnit) Pause() {}
 
@@ -512,7 +514,7 @@ func (t *testSubTask) TestSubtaskFastQuit(c *C) {
 		return st.Stage() == pb.Stage_Running
 	}), IsTrue)
 	// test Close
-	st.Close(true)
+	st.Close()
 	select {
 	case <-time.After(500 * time.Millisecond):
 		c.Fatal("fail to stop subtask in 0.5s when stuck into unitTransWaitCondition")

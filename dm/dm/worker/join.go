@@ -108,7 +108,7 @@ func (s *Server) KeepAlive() {
 		failpoint.Label("bypass")
 
 		// TODO: report the error.
-		// when lost keepalive, stop the worker with not graceful. this is to fix https://github.com/pingcap/tiflow/issues/3737
+		// when lost keepalive, stop the worker without graceful. this is to fix https://github.com/pingcap/tiflow/issues/3737
 		err := s.stopWorker("", true, false)
 		if err != nil {
 			log.L().Error("fail to stop worker", zap.Error(err))

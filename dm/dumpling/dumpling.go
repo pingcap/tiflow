@@ -165,7 +165,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 }
 
 // Close implements Unit.Close.
-func (m *Dumpling) Close(graceful bool) {
+func (m *Dumpling) Close() {
 	if m.closed.Load() {
 		return
 	}
@@ -173,6 +173,12 @@ func (m *Dumpling) Close(graceful bool) {
 	m.removeLabelValuesWithTaskInMetrics(m.cfg.Name, m.cfg.SourceID)
 	// do nothing, external will cancel the command (if running)
 	m.closed.Store(true)
+}
+
+// Kill implements Unit.Kill.
+func (m *Dumpling) Kill() {
+	// TODO: implement kill
+	m.Close()
 }
 
 // Pause implements Unit.Pause.

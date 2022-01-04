@@ -787,7 +787,7 @@ func (l *Loader) loadFinishedSize() {
 }
 
 // Close does graceful shutdown.
-func (l *Loader) Close(graceful bool) {
+func (l *Loader) Close() {
 	l.Lock()
 	defer l.Unlock()
 	if l.isClosed() {
@@ -802,6 +802,12 @@ func (l *Loader) Close(graceful bool) {
 	l.checkPoint.Close()
 	l.removeLabelValuesWithTaskInMetrics(l.cfg.Name)
 	l.closed.Store(true)
+}
+
+// Kill kill the loader without graceful.
+func (l *Loader) Kill() {
+	// TODO: implement kill
+	l.Close()
 }
 
 // stopLoad stops loading, now it used by Close and Pause

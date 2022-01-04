@@ -1015,7 +1015,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	testJobs.RUnlock()
 
 	cancel()
-	syncer.Close(true)
+	syncer.Close()
 	c.Assert(syncer.isClosed(), IsTrue)
 
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -1191,7 +1191,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	testJobs.Unlock()
 
 	cancel()
-	syncer.Close(true)
+	syncer.Close()
 	c.Assert(syncer.isClosed(), IsTrue)
 
 	if err := mock.ExpectationsWereMet(); err != nil {

@@ -3163,8 +3163,7 @@ func (s *Syncer) isClosed() bool {
 	return s.closed.Load()
 }
 
-// Close closes syncer.
-func (s *Syncer) Close(graceful bool) {
+func (s *Syncer) close(closeTracker bool) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -3172,18 +3171,14 @@ func (s *Syncer) Close(graceful bool) {
 		return
 	}
 
-	if !graceful {
-		s.runCancel()
-		s.tctx.L().Warn("syncer is closing without graceful")
-	}
 	s.stopSync()
 	s.closeDBs()
 
 	s.checkpoint.Close()
 
-	if graceful {
-		// when close sycner without graceful, Close will be called before s.Process exit.
-		// if we close schematracker here worker will pending on `s.checkpoint.Rollback(s.schemaTracker)` forever
+	// when close sycner without graceful, Close will be called before s.Process exit.
+	// if we close schematracker worker will pending on `s.checkpoint.Rollback(s.schemaTracker)` forever
+	if closeTracker {
 		if err := s.schemaTracker.Close(); err != nil {
 			s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
 		}
@@ -3201,6 +3196,18 @@ func (s *Syncer) Close(graceful bool) {
 	metrics.RemoveLabelValuesWithTaskInMetrics(s.cfg.Name)
 
 	s.closed.Store(true)
+}
+
+// Close closes syncer.
+func (s *Syncer) Close() {
+	s.close(true)
+}
+
+// Kill kill syncer without graceful.
+func (s *Syncer) Kill() {
+	s.tctx.L().Warn("kill syncer without graceful")
+	s.runCancel()
+	s.close(false)
 }
 
 // stopSync stops syncing, now it used by Close and Pause

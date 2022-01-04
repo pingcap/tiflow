@@ -115,7 +115,7 @@ func NewSourceWorker(
 		if err != nil { // when err != nil, `w` will become nil in this func, so we pass `w` in defer.
 			// release resources, NOTE: we need to refactor New/Init/Start/Close for components later.
 			w2.cancel()
-			w2.subTaskHolder.closeAllSubTasks(true)
+			w2.subTaskHolder.closeAllSubTasks()
 		}
 	}(w)
 
@@ -196,7 +196,7 @@ func (w *SourceWorker) Start() {
 }
 
 // Close stops working and releases resources.
-func (w *SourceWorker) Close(graceful bool) {
+func (w *SourceWorker) Stop(graceful bool) {
 	if w.closed.Load() {
 		w.l.Warn("already closed")
 		return
@@ -211,8 +211,12 @@ func (w *SourceWorker) Close(graceful bool) {
 	w.Lock()
 	defer w.Unlock()
 
-	// close all sub tasks
-	w.subTaskHolder.closeAllSubTasks(graceful)
+	// close or kill all subtasks
+	if graceful {
+		w.subTaskHolder.closeAllSubTasks()
+	} else {
+		w.subTaskHolder.killAllSubTasks()
+	}
 
 	if w.relayHolder != nil {
 		w.relayHolder.Close()
@@ -464,7 +468,7 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 		// "for range" of a map will use same value address, so we'd better not pass value address to other function
 		clone := subTaskCfg
 		if err2 := w.StartSubTask(&clone, expectStage.Expect, false); err2 != nil {
-			w.subTaskHolder.closeAllSubTasks(true)
+			w.subTaskHolder.closeAllSubTasks()
 			return err2
 		}
 	}
@@ -497,7 +501,7 @@ func (w *SourceWorker) DisableHandleSubtasks() {
 	defer w.Unlock()
 
 	// close all sub tasks
-	w.subTaskHolder.closeAllSubTasks(true)
+	w.subTaskHolder.closeAllSubTasks()
 	w.l.Info("handling subtask enabled")
 }
 
@@ -604,7 +608,7 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 	switch op {
 	case pb.TaskOp_Stop:
 		w.l.Info("stop sub task", zap.String("task", name))
-		st.Close(true)
+		st.Close()
 		w.subTaskHolder.removeSubTask(name)
 	case pb.TaskOp_Pause:
 		w.l.Info("pause sub task", zap.String("task", name))
