@@ -59,11 +59,11 @@ func (c *PDClock) Run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 	ticker := time.NewTicker(pdTimeUpdateInterval)
+	defer func() { c.stopCh <- struct{}{} }()
 	for {
 		select {
 		// c.Stop() was called or parent ctx was canceled
 		case <-ctx.Done():
-			c.stopCh <- struct{}{}
 			return
 		case <-ticker.C:
 			err := retry.Do(ctx, func() error {
@@ -101,6 +101,7 @@ func (c *PDClock) CurrentTime() (time.Time, error) {
 // Stop PDClock.
 func (c *PDClock) Stop() {
 	c.cancel()
+	<-c.stopCh
 }
 
 type clock4Test struct{}
