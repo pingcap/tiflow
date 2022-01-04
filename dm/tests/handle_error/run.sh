@@ -372,7 +372,7 @@ function DM_INJECT_ERROR() {
 	run_case INJECT_DDL_ERROR "single-source-no-sharding" \
 		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"" \
 		"clean_table" ""
-	# # inject dml can not run, because get position is invalid.
+	# TODO inject dml, because get dml error position is not supported.
 	# run_case INJECT_DML_ERROR "single-source-no-sharding" \
 	# 	"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b varchar(10));\"" \
 	# 	"clean_table" ""
