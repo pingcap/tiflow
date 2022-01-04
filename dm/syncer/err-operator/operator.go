@@ -63,7 +63,7 @@ func (o *Operator) String() string {
 
 // Holder holds error operator.
 type Holder struct {
-	mu        sync.Mutex
+	mu        sync.RWMutex
 	operators map[string]*Operator
 
 	logger log.Logger
@@ -105,8 +105,8 @@ func (h *Holder) Set(req *pb.HandleWorkerErrorRequest, events []*replication.Bin
 
 // GetBehindCommands gets behind commands.
 func (h *Holder) GetBehindCommands(pos string) []pb.HandleWorkerErrorRequest {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
 	current := mysql.Position{}
 	fmt.Sscanf(strings.ReplaceAll(pos[1:len(pos)-1], ",", ""), "%s %d", &current.Name, &current.Pos)
