@@ -1100,12 +1100,18 @@ tags = ["internal", "low"]
 message = "invalid load mode '%s'"
 description = ""
 workaround = "Please choose a valid value in ['sql', 'loader']"
-tags = ["internal", "high"]
+tags = ["internal", "medium"]
 
 [error.DM-config-20053]
 message = "collation compatible %s not supported"
 description = ""
 workaround = "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
+tags = ["internal", "medium"]
+
+[error.DM-config-20054]
+message = "invalid load on-duplicate '%s'"
+description = ""
+workaround = "Please choose a valid value in ['replace', 'error', 'ignore']"
 tags = ["internal", "medium"]
 
 [error.DM-binlog-op-22001]

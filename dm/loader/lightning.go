@@ -163,13 +163,13 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	}
 	log2.SetAppLogger(l.logger.Logger)
 	err := l.core.RunOnce(taskCtx, cfg, nil)
-	failpoint.Inject("LightningLoadDataSlowDown", nil)
-	failpoint.Inject("LightningLoadDataSlowDownByTask", func(val failpoint.Value) {
+	failpoint.Inject("LoadDataSlowDown", nil)
+	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
 		tasks := val.(string)
 		taskNames := strings.Split(tasks, ",")
 		for _, taskName := range taskNames {
 			if l.cfg.Name == taskName {
-				l.logger.Info("inject failpoint LightningLoadDataSlowDownByTask", zap.String("task", taskName))
+				l.logger.Info("inject fail-point LoadDataSlowDownByTask in lightning loader", zap.String("task", taskName))
 				<-taskCtx.Done()
 			}
 		}
@@ -200,6 +200,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		cpPath := filepath.Join(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName)
 		cfg.Checkpoint.DSN = cpPath
 		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+		cfg.TikvImporter.OnDuplicate = string(l.cfg.OnDuplicate)
 		cfg.TiDB.Vars = make(map[string]string)
 		cfg.Routes = l.cfg.RouteRules
 		if l.cfg.To.Session != nil {

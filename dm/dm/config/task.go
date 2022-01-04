@@ -207,22 +207,35 @@ func (m *MydumperConfig) UnmarshalYAML(unmarshal func(interface{}) error) error 
 	return nil
 }
 
-// LoadMode defines different mode used in load phase
+// LoadMode defines different mode used in load phase.
 type LoadMode string
 
 const (
-	// LoadModeSQL means write data by sql statements, uses tidb-lightning tidb backend to load data
+	// LoadModeSQL means write data by sql statements, uses tidb-lightning tidb backend to load data.
 	LoadModeSQL LoadMode = "sql"
 	// LoadModeLoader is the legacy sql mode, use loader to load data. this should be replaced by sql mode in new version.
 	LoadModeLoader = "loader"
 )
 
+// DuplicateResolveType defines the duplication resolution when meet duplicate rows
+type DuplicateResolveType string
+
+const (
+	// OnDuplicateReplace represents replace the old row with new data.
+	OnDuplicateReplace DuplicateResolveType = "replace"
+	// OnDuplicateError represents return an error when meet duplicate row.
+	OnDuplicateError = "error"
+	// OnDuplicateIgnore represents ignore the new data when meet duplicate row.
+	OnDuplicateIgnore = "ignore"
+)
+
 // LoaderConfig represents loader process unit's specific config.
 type LoaderConfig struct {
-	PoolSize   int      `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
-	Dir        string   `yaml:"dir" toml:"dir" json:"dir"`
-	SQLMode    string   `yaml:"-" toml:"-" json:"-"` // wrote by dump unit
-	ImportMode LoadMode `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
+	PoolSize    int                  `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
+	Dir         string               `yaml:"dir" toml:"dir" json:"dir"`
+	SQLMode     string               `yaml:"-" toml:"-" json:"-"` // wrote by dump unit
+	ImportMode  LoadMode             `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
+	OnDuplicate DuplicateResolveType `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
@@ -250,9 +263,19 @@ func (m *LoaderConfig) adjust() error {
 	if m.ImportMode == "" {
 		m.ImportMode = LoadModeSQL
 	}
+	m.ImportMode = LoadMode(strings.ToLower(string(m.ImportMode)))
 	if m.ImportMode != LoadModeSQL && m.ImportMode != LoadModeLoader {
 		return terror.ErrConfigInvalidLoadMode.Generate(m.ImportMode)
 	}
+
+	if m.OnDuplicate == "" {
+		m.OnDuplicate = OnDuplicateReplace
+	}
+	m.OnDuplicate = DuplicateResolveType(strings.ToLower(string(m.OnDuplicate)))
+	if m.OnDuplicate != OnDuplicateReplace && m.OnDuplicate != OnDuplicateError && m.OnDuplicate != OnDuplicateIgnore {
+		return terror.ErrConfigInvalidDuplicateResolution.Generate(m.OnDuplicate)
+	}
+
 	return nil
 }
 
