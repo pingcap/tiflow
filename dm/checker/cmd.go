@@ -15,6 +15,7 @@ package checker
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -22,8 +23,8 @@ import (
 )
 
 var (
-	// ErrorMsgHeader used as the header of the error message when checking config failed.
-	ErrorMsgHeader = "fail to check synchronization configuration with type"
+	// CheckTaskMsgHeader used as the header of the error/warning message when checking config failed.
+	CheckTaskMsgHeader = "fail to check synchronization configuration with type"
 
 	// CheckSyncConfigFunc holds the CheckSyncConfig function.
 	CheckSyncConfigFunc func(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error)
@@ -69,12 +70,12 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 		r := <-pr
 		// we only want first error
 		if len(r.Errors) > 0 {
-			return "", terror.ErrTaskCheckSyncConfigError.Generate(ErrorMsgHeader, r.Errors[0].Message, string(r.Detail))
+			return "", terror.ErrTaskCheckSyncConfigError.Generate(CheckTaskMsgHeader, r.Errors[0].Message, string(r.Detail))
 		}
 		if len(r.Detail) == 0 {
 			return "check pass!!!", nil
 		}
-		return terror.ErrTaskCheckSyncConfigWarn.Generate(ErrorMsgHeader, string(r.Detail)).Error(), nil
+		return fmt.Sprintf("%s: no errors but some warnings\n detail: %v", CheckTaskMsgHeader, string(r.Detail)), nil
 	}
 
 	return "", nil
