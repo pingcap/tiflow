@@ -117,7 +117,7 @@ func (r *Request) WithURI(uri string) *Request {
 		r.err = err
 		return r
 	}
-	r.pathPrefix = u.Path
+	r.pathPrefix = path.Join(r.pathPrefix, u.Path)
 	vals := u.Query()
 	if len(vals) > 0 {
 		if r.params == nil {
