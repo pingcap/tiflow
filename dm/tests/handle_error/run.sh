@@ -358,11 +358,11 @@ function DM_INJECT_DML_ERROR_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Column count doesn't match value" 1 \
+		"Duplicate entry '2' for key 'b'" 1 \
 
 	# inject sql but length is 10
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog inject test alter table ${db}.${tb1} add column d int;" \
+		"binlog inject test alter table ${db}.${tb1} drop index b;alter table ${db}.${tb1} add unique(c);" \
 		"\"result\": true" 2
 
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where d = 2;" "count(1): 1"
@@ -372,7 +372,7 @@ function DM_INJECT_ERROR() {
 	run_case INJECT_DDL_ERROR "single-source-no-sharding" \
 		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"" \
 		"clean_table" ""
-	# inject dml can not run, because get position is invalid.
+	# # inject dml can not run, because get position is invalid.
 	# run_case INJECT_DML_ERROR "single-source-no-sharding" \
 	# 	"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b varchar(10));\"" \
 	# 	"clean_table" ""
