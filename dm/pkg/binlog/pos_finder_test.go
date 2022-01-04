@@ -227,7 +227,7 @@ func (t *testPosFinderSuite) TestMySQL57GTID(c *C) {
 		location, posType, err := finder.FindByTs(beforeTime.Add(-time.Minute).Unix())
 		c.Assert(err, IsNil)
 		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000001", 4})
-		c.Assert(location.GTIDSetStr(), Equals, "")
+		c.Assert(location.GTIDSetStr(), Equals, "ffffffff-ffff-ffff-ffff-ffffffffffff:1")
 		c.Assert(posType, Equals, BelowLowerBoundBinlogPos)
 	}
 	{
@@ -317,7 +317,7 @@ func (t *testPosFinderSuite) TestMariadbGTID(c *C) {
 		location, posType, err := finder.FindByTs(beforeTime.Add(-time.Minute).Unix())
 		c.Assert(err, IsNil)
 		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000001", 4})
-		c.Assert(location.GTIDSetStr(), Equals, "")
+		c.Assert(location.GTIDSetStr(), Equals, "1-1-1")
 		c.Assert(posType, Equals, BelowLowerBoundBinlogPos)
 	}
 	{

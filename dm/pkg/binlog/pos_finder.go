@@ -292,18 +292,14 @@ func (r *binlogPosFinder) checkTransactionBoundaryEvent(ev *replication.BinlogEv
 }
 
 // FindByTs get binlog location of first event or transaction with timestamp >= ts
-// go-mysql has BinlogStreamer.GetEventWithStartTime, but it doesn't fit our need. Also we need to support relay log.
+// go-mysql has BinlogStreamer.GetEventWithStartTime, but it doesn't fit our need. And we need to support relay log.
+// if posType != AboveUpperBoundBinlogPos, then location is the target location we want.
+// if posType == BelowLowerBoundBinlogPos, master binlog may have purged.
 func (r *binlogPosFinder) FindByTs(ts int64) (*Location, PosType, error) {
 	r.tctx.L().Info("target timestamp", zap.Int64("ts", ts))
 
 	if err := r.initTargetBinlogFile(ts); err != nil {
 		return nil, InvalidBinlogPos, err
-	}
-
-	if r.tsBeforeFirstBinlog {
-		loc := NewLocation(r.flavor)
-		loc.Position = mysql.Position{Name: r.targetBinlog.name, Pos: FileHeaderLen}
-		return &loc, BelowLowerBoundBinlogPos, nil
 	}
 
 	targetTs := uint32(ts)
@@ -345,6 +341,10 @@ func (r *binlogPosFinder) FindByTs(ts int64) (*Location, PosType, error) {
 				if err != nil {
 					return nil, InvalidBinlogPos, err
 				}
+				// we meet PREVIOUS_GTIDS_EVENT or MARIADB_GTID_LIST_EVENT first, so break after get previous GTIDs
+				if r.tsBeforeFirstBinlog {
+					break
+				}
 			}
 		}
 
@@ -358,6 +358,11 @@ func (r *binlogPosFinder) FindByTs(ts int64) (*Location, PosType, error) {
 			}
 			break
 		}
+	}
+	if r.tsBeforeFirstBinlog {
+		// always return the position of the first event in target binlog
+		loc := InitLocation(mysql.Position{Name: r.targetBinlog.name, Pos: FileHeaderLen}, gtidSet)
+		return &loc, BelowLowerBoundBinlogPos, nil
 	}
 	loc := InitLocation(position, gtidSet)
 	return &loc, InRangeBinlogPos, nil
