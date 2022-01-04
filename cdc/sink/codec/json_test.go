@@ -158,6 +158,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		if len(cs) > 0 {
 			res := encoder.Build()
 			c.Assert(res, check.HasLen, 1)
+			c.Assert(res[0].GetRowsCount(), check.Equals, len(cs))
 			decoder, err := newDecoder(res[0].Key, res[0].Value)
 			c.Assert(err, check.IsNil)
 			checkRowDecoder(decoder, cs)
