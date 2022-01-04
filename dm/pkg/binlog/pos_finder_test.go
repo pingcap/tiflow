@@ -70,6 +70,67 @@ func genBinlogFile(generator *event.Generator, start time.Time, nextFile string)
 	return allEvents, buf.Bytes()
 }
 
+func (t *testPosFinderSuite) TestTransBoundary(c *C) {
+	flavor := "mysql"
+	relayDir := c.MkDir()
+	beforeTime := time.Now()
+	latestGTIDStr := "ffffffff-ffff-ffff-ffff-ffffffffffff:1"
+	generator, _ := event.NewGeneratorV2(flavor, "5.6.0", latestGTIDStr, false)
+	insertDMLData := []*event.DMLData{
+		{
+			TableID:    uint64(1),
+			Schema:     fmt.Sprintf("db_%d", 1),
+			Table:      strconv.Itoa(1),
+			ColumnType: []byte{mysql.MYSQL_TYPE_INT24},
+			Rows:       [][]interface{}{{int32(1)}, {int32(2)}},
+		},
+	}
+	allEvents := make([]*replication.BinlogEvent, 0)
+	var buf bytes.Buffer
+	events, data, _ := generator.GenFileHeader(beforeTime.Add(1 * time.Second).Unix())
+	allEvents = append(allEvents, events...)
+	buf.Write(data)
+
+	// first transaction, timestamp of BEGIN = beforeTime.Add(2*time.Second)
+	// timestamp of other events inside this transaction = beforeTime.Add(3 * time.Second)
+	ts := beforeTime.Add(2 * time.Second).Unix()
+	header := &replication.EventHeader{
+		Timestamp: uint32(ts),
+		ServerID:  11,
+		Flags:     0x01,
+	}
+	beginEvent, _ := event.GenQueryEvent(header, generator.LatestPos, 1, 1, 0, []byte("0"), []byte("test"), []byte("BEGIN"))
+	buf.Write(beginEvent.RawData)
+
+	ts = beforeTime.Add(3 * time.Second).Unix()
+	header.Timestamp = uint32(ts)
+	mapEvent, _ := event.GenTableMapEvent(header, beginEvent.Header.LogPos, 1, []byte("test"), []byte("t"), []byte{mysql.MYSQL_TYPE_INT24})
+	buf.Write(mapEvent.RawData)
+	rowsEvent, _ := event.GenRowsEvent(header, mapEvent.Header.LogPos, replication.WRITE_ROWS_EVENTv2, 1, 1, [][]interface{}{{int32(1)}, {int32(2)}}, []byte{mysql.MYSQL_TYPE_INT24}, mapEvent)
+	buf.Write(rowsEvent.RawData)
+	xidEvent, _ := event.GenXIDEvent(header, rowsEvent.Header.LogPos, 1)
+	buf.Write(xidEvent.RawData)
+
+	// second transaction, timestamp of all events = beforeTime.Add(3 * time.Second)
+	generator.LatestPos = xidEvent.Header.LogPos
+	dmlEvents, data, _ := generator.GenDMLEvents(replication.WRITE_ROWS_EVENTv2, insertDMLData, ts)
+	buf.Write(data)
+
+	c.Assert(dmlEvents[len(dmlEvents)-1].Header.LogPos, Equals, uint32(buf.Len()))
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000001"), buf.Bytes(), 0644)
+
+	{
+		tcctx := tcontext.NewContext(context.Background(), log.L())
+		finder := NewLocalBinlogPosFinder(tcctx, false, flavor, relayDir)
+		location, posType, err := finder.FindByTs(ts)
+		c.Assert(err, IsNil)
+		// start of second transaction
+		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000001", xidEvent.Header.LogPos})
+		c.Assert(location.GTIDSetStr(), Equals, "")
+		c.Assert(posType, Equals, InRangeBinlogPos)
+	}
+}
+
 func (t *testPosFinderSuite) TestMySQL56NoGTID(c *C) {
 	flavor := "mysql"
 	relayDir := c.MkDir()
