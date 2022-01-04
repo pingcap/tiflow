@@ -3006,7 +3006,7 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext, ori
 	stmt, err := parseOneStmt(qec)
 	if err != nil {
 		// originSQL can't be parsed => can't be tracked by schema tracker
-		// we can use operate-schema to set a compatiable schema after this
+		// we can use operate-schema to set a compatible schema after this
 		return err
 	}
 
