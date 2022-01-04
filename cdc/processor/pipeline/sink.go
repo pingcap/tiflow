@@ -361,7 +361,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 			}
 		}
 	case pipeline.MessageTypeBarrier:
-		if err := n.UpdateBarrierTs(ctx, n.resolvedTs); err != nil {
+		if err := n.UpdateBarrierTs(ctx, msg.BarrierTs); err != nil {
 			return false, errors.Trace(err)
 		}
 	}
