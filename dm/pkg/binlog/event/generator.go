@@ -40,16 +40,16 @@ type Generator struct {
 
 // NewGenerator creates a new instance of Generator.
 func NewGenerator(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, previousGTIDs gtid.Set, latestXID uint64) (*Generator, error) {
-	return NewGeneratorV2(flavor, "5.7", serverID, latestPos, latestGTID, previousGTIDs, latestXID, true)
+	return newGenerator(flavor, "5.7.0", serverID, latestPos, latestGTID, previousGTIDs, latestXID, true)
 }
 
-func NewUpstream(flavor, version string, enableGTID bool) (*Generator, error) {
+func NewGeneratorV2(flavor, version string, enableGTID bool) (*Generator, error) {
 	latestGTID, _ := gtid.ParserGTID(flavor, "")
 	previousGTIDSet, _ := gtid.ParserGTID(flavor, "")
-	return NewGeneratorV2(flavor, version, 1, 0, latestGTID, previousGTIDSet, 0, enableGTID)
+	return newGenerator(flavor, version, 1, 0, latestGTID, previousGTIDSet, 0, enableGTID)
 }
 
-func NewGeneratorV2(flavor, version string, serverID uint32, latestPos uint32, latestGTID gtid.Set, previousGTIDs gtid.Set, latestXID uint64, genGTID bool) (*Generator, error) {
+func newGenerator(flavor, version string, serverID uint32, latestPos uint32, latestGTID gtid.Set, previousGTIDs gtid.Set, latestXID uint64, genGTID bool) (*Generator, error) {
 	prevOrigin := previousGTIDs.Origin()
 	if prevOrigin == nil {
 		return nil, terror.ErrPreviousGTIDsNotValid.Generate(previousGTIDs)
@@ -77,7 +77,7 @@ func NewGeneratorV2(flavor, version string, serverID uint32, latestPos uint32, l
 		if err != nil {
 			return nil, err
 		}
-		if ver.Compare(*semver.New("5.7")) >= 0 && !genGTID {
+		if ver.Compare(*semver.New("5.7.0")) >= 0 && !genGTID {
 			// 5.7+ add anonymous GTID when GTID is disabled
 			genGTID = true
 			anonymousGTID = true
@@ -203,7 +203,7 @@ func (g *Generator) GenDMLEvents(eventType replication.EventType, dmlData []*DML
 	return result.Events, result.Data, nil
 }
 
-func (g *Generator) Rotate(nextName string) ([]*replication.BinlogEvent, []byte, error) {
+func (g *Generator) Rotate(nextName string) (*replication.BinlogEvent, []byte, error) {
 	header := &replication.EventHeader{
 		Timestamp: uint32(time.Now().Unix()),
 		ServerID:  11,
@@ -214,7 +214,7 @@ func (g *Generator) Rotate(nextName string) ([]*replication.BinlogEvent, []byte,
 		return nil, nil, err
 	}
 	g.updateLatestPosGTID(4, g.LatestGTID)
-	return []*replication.BinlogEvent{ev}, ev.RawData, nil
+	return ev, ev.RawData, nil
 }
 
 func (g *Generator) updateLatestPosGTID(latestPos uint32, latestGTID gtid.Set) {

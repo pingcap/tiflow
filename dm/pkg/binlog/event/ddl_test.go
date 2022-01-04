@@ -57,5 +57,5 @@ func (t *testDDLSuite) TestGenDDLEvent(c *C) {
 	c.Assert(bytes.Contains(result.Data, []byte("ALTER TABLE")), IsTrue)
 	c.Assert(bytes.Contains(result.Data, []byte(table)), IsTrue)
 	c.Assert(result.LatestPos, Equals, latestPos+uint32(len(result.Data)))
-	c.Assert(result.LatestGTID.String(), Equals, fmt.Sprintf("1-%d-6", serverID))
+	c.Assert(result.LatestGTID.String(), Equals, fmt.Sprintf("1-%d-4", serverID))
 }
