@@ -407,7 +407,7 @@ function DM_LIST_ERROR_CASE() {
 		"Unsupported modify column: this column has primary key flag" 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog test" \
+		"binlog list test" \
 		'\"msg\": \"\[{\\\"op\\\":1,\\\"task\\\":\\\"test\\\",\\\"binlogPos\\\":\\\"('${first_name1}', '${second_pos1}')\\\"}\]\"' 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -419,7 +419,7 @@ function DM_LIST_ERROR_CASE() {
 		"Unsupported modify column: this column has primary key flag" 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog test" \
+		"binlog list test" \
 		'\"msg\": \"\[{\\\"op\\\":1,\\\"task\\\":\\\"test\\\",\\\"binlogPos\\\":\\\"('${first_name1}', '${second_pos1}')\\\"},{\\\"op\\\":4,\\\"task\\\":\\\"test\\\",\\\"binlogPos\\\":\\\"('${first_name1}', '${third_pos1}')\\\",\\\"sqls\\\":\[\\\"alter table handle_error.tb1 drop primary key;\\\",\\\" alter table handle_error.tb1 add unique (c);\\\"\]}\]\"' 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

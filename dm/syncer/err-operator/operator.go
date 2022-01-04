@@ -176,13 +176,13 @@ func (h *Holder) GetEvent(startLocation binlog.Location) (*replication.BinlogEve
 	}
 
 	if len(operator.events) <= startLocation.Suffix {
-		return nil, terror.ErrSyncerEvent.Generatef("replace or inject events out of range, index: %d, total: %d", startLocation.Suffix, len(operator.events))
+		return nil, terror.ErrSyncerEvent.Generatef("%s events out of range, index: %d, total: %d", pb.ErrorOp_name[int32(operator.op)], startLocation.Suffix, len(operator.events))
 	}
 
 	e := operator.events[startLocation.Suffix]
 	buf := new(bytes.Buffer)
 	e.Dump(buf)
-	h.logger.Info("get replace or inject event", zap.Stringer("event", buf))
+	h.logger.Info("get event", zap.String("operatorType", pb.ErrorOp_name[int32(operator.op)]), zap.Stringer("event", buf))
 
 	return e, nil
 }

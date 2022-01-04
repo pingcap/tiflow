@@ -27,8 +27,16 @@ function binlog_invalid_sqls_by_inject() {
 		"invalid sql" 1
 }
 
+function binlog_invalid_list_op() {
+	binlog_pos="mysql-bin:should-be-digital"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog list test-task --binlog-pos $binlog_pos" \
+		"\[.*\], Message: invalid --binlog-pos $binlog_pos in handle-error operation: the pos should be digital" 1
+}
+
 function binlog_invalid_op() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog wrong_operation test-task" \
 		"Available Commands" 1
 }
+

@@ -720,7 +720,7 @@ func (st *SubTask) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReq
 		return "", err
 	}
 
-	if st.Stage() == pb.Stage_Paused {
+	if st.Stage() == pb.Stage_Paused && req.Op != pb.ErrorOp_List {
 		err = st.Resume(relay)
 	}
 	return msg, err
