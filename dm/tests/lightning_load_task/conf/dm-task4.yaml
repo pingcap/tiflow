@@ -30,9 +30,6 @@ mydumpers:
     skip-tz-utc: true
     extra-args: ""
 
-tidb:
-  backend: "tidb"
-
 loaders:
   global:
     pool-size: 16

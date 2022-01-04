@@ -7,7 +7,6 @@ meta-schema: "dm_meta"
 heartbeat-update-interval: 1
 heartbeat-report-interval: 1
 remove-meta: true
-tidb: null
 
 target-database:
   host: "127.0.0.1"

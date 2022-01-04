@@ -217,7 +217,7 @@ const (
 	LoadModeLoader = "loader"
 )
 
-// DuplicateResolveType defines the duplication resolution when meet duplicate rows
+// DuplicateResolveType defines the duplication resolution when meet duplicate rows.
 type DuplicateResolveType string
 
 const (

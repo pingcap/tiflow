@@ -55,7 +55,7 @@ func (t *testSubTask) TestCreateUnits(c *C) {
 	c.Assert(unitsFull, HasLen, 2)
 	_, ok := unitsFull[0].(*dumpling.Dumpling)
 	c.Assert(ok, IsTrue)
-	_, ok = unitsFull[1].(*loader.Loader)
+	_, ok = unitsFull[1].(*loader.LightningLoader)
 	c.Assert(ok, IsTrue)
 
 	cfg.Mode = config.ModeIncrement
@@ -69,7 +69,7 @@ func (t *testSubTask) TestCreateUnits(c *C) {
 	c.Assert(unitsAll, HasLen, 3)
 	_, ok = unitsAll[0].(*dumpling.Dumpling)
 	c.Assert(ok, IsTrue)
-	_, ok = unitsAll[1].(*loader.Loader)
+	_, ok = unitsAll[1].(*loader.LightningLoader)
 	c.Assert(ok, IsTrue)
 	_, ok = unitsAll[2].(*syncer.Syncer)
 	c.Assert(ok, IsTrue)
