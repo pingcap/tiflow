@@ -46,7 +46,7 @@ type PDClock struct {
 	stopCh chan struct{}
 }
 
-// NewClock return a new TimeAcquirer
+// NewClock return a new PDClock
 func NewClock(pdClient pd.Client) *PDClock {
 	return &PDClock{
 		pdClient: pdClient,
