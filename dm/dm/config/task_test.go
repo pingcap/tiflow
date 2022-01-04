@@ -690,9 +690,9 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 				ExtraArgs:     "--escape-backslash",
 			},
 			LoaderConfig: LoaderConfig{
-				PoolSize: 32,
-				Dir:      "./dumpped_data",
-				ImportMode: LoadModeSQL,
+				PoolSize:    32,
+				Dir:         "./dumpped_data",
+				ImportMode:  LoadModeSQL,
 				OnDuplicate: OnDuplicateReplace,
 			},
 			SyncerConfig: SyncerConfig{
