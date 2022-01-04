@@ -1192,12 +1192,6 @@ description = ""
 workaround = "Please check the `enable-gtid` config in source configuration file."
 tags = ["internal", "medium"]
 
-[error.DM-task-check-26008]
-message = "%s: no errors but some warnings\n detail: %v"
-description = ""
-workaround = ""
-tags = ["internal", "low"]
-
 [error.DM-relay-event-lib-28001]
 message = "parse server-uuid.index"
 description = ""
