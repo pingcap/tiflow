@@ -175,19 +175,12 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 		go checkFunc()
 	}
 
-	defer func() {
-		checkWg.Wait()
-		log.L().Logger.Info("check table structure over", zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
-	}()
-
 	for _, table := range c.tables {
-		select {
-		case inCh <- table:
-		case <-checkCtx.Done():
-			return r, nil
-		}
+		inCh <- table
 	}
 
+	checkWg.Wait()
+	log.L().Logger.Info("check table structure over", zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
 	return r, nil
 }
 
