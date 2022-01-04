@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/context"
@@ -85,7 +86,7 @@ func (c *actorNodeContext) Throw(err error) {
 // to reduce the  actor message, only send tick message per threshold
 func (c *actorNodeContext) SendToNextNode(msg pipeline.Message) {
 	c.outputCh <- msg
-	c.trySendTickMessage()
+	c.trySendTickMessage(msg)
 }
 
 func (c *actorNodeContext) TrySendToNextNode(msg pipeline.Message) bool {
@@ -96,7 +97,7 @@ func (c *actorNodeContext) TrySendToNextNode(msg pipeline.Message) bool {
 	default:
 	}
 	if added {
-		c.trySendTickMessage()
+		c.trySendTickMessage(msg)
 	}
 	return added
 }
@@ -117,12 +118,13 @@ func (c *actorNodeContext) tryGetProcessedMessage() *pipeline.Message {
 	}
 }
 
-func (c *actorNodeContext) trySendTickMessage() {
+func (c *actorNodeContext) trySendTickMessage(msg pipeline.Message) {
 	threshold := atomic.LoadInt32(&c.tickMessageThreshold)
 	atomic.AddInt32(&c.noTickMessageCount, 1)
 	count := atomic.LoadInt32(&c.noTickMessageCount)
 	// resolvedTs message will be sent by puller periodically
-	if count >= threshold {
+	if count >= threshold || (msg.Tp == pipeline.MessageTypePolymorphicEvent &&
+		msg.PolymorphicEvent.RawKV.OpType == model.OpTypeResolved) {
 		_ = c.tableActorRouter.Send(c.tableActorID, message.TickMessage())
 		atomic.StoreInt32(&c.noTickMessageCount, 0)
 	}
