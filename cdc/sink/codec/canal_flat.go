@@ -237,7 +237,13 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 			log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
 			return nil
 		}
+<<<<<<< HEAD
 		ret[i] = NewMQMessage(ProtocolCanalJSON, nil, value, msg.tikvTs, model.MqMessageTypeRow, &msg.Schema, &msg.Table)
+=======
+		m := NewMQMessage(config.ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MqMessageTypeRow, msg.getSchema(), msg.getTable())
+		m.IncRowsCount()
+		ret[i] = m
+>>>>>>> fc70dbde8 (metrics(cdc): fix mq sink write row count metrics. (#4192))
 	}
 	c.resolvedBuf = c.resolvedBuf[0:0]
 	return ret
