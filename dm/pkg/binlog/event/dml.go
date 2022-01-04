@@ -35,11 +35,7 @@ type DMLData struct {
 // GenDMLEvents generates binlog events for `INSERT`/`UPDATE`/`DELETE`.
 // events: [GTIDEvent, QueryEvent, TableMapEvent, RowsEvent, ..., XIDEvent]
 // NOTE: multi <TableMapEvent, RowsEvent> pairs can be in events.
-func GenDMLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, eventType replication.EventType, xid uint64, dmlData []*DMLData) (*DDLDMLResult, error) {
-	return GenDMLEventsV2(flavor, serverID, latestPos, latestGTID, eventType, xid, dmlData, true, false)
-}
-
-func GenDMLEventsV2(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, eventType replication.EventType, xid uint64, dmlData []*DMLData, genGTID, anonymousGTID bool) (*DDLDMLResult, error) {
+func GenDMLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, eventType replication.EventType, xid uint64, dmlData []*DMLData, genGTID, anonymousGTID bool) (*DDLDMLResult, error) {
 	if len(dmlData) == 0 {
 		return nil, terror.ErrBinlogDMLEmptyData.Generate()
 	}
@@ -51,7 +47,7 @@ func GenDMLEventsV2(flavor string, serverID uint32, latestPos uint32, latestGTID
 	}
 	var gtidEv *replication.BinlogEvent
 	if genGTID {
-		gtidEv, err = GenCommonGTIDEventV2(flavor, serverID, latestPos, latestGTID, anonymousGTID)
+		gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, latestGTID, anonymousGTID)
 		if err != nil {
 			return nil, terror.Annotate(err, "generate GTIDEvent")
 		}

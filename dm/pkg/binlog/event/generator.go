@@ -78,6 +78,7 @@ func NewGeneratorV2(flavor, version string, serverID uint32, latestPos uint32, l
 			return nil, err
 		}
 		if ver.Compare(*semver.New("5.7")) >= 0 && !genGTID {
+			// 5.7+ add anonymous GTID when GTID is disabled
 			genGTID = true
 			anonymousGTID = true
 		}
@@ -95,6 +96,7 @@ func NewGeneratorV2(flavor, version string, serverID uint32, latestPos uint32, l
 		if !ok || prevGTID.ServerID != mariaGTID.ServerID || prevGTID.SequenceNumber != mariaGTID.SequenceNumber {
 			return nil, terror.ErrBinlogLatestGTIDNotInPrev.Generate(latestGTID, previousGTIDs)
 		}
+		// MariaDB 10.0.2+ always contains GTID
 		genGTID = true
 	default:
 		return nil, terror.ErrBinlogFlavorNotSupport.Generate(flavor)
@@ -122,7 +124,7 @@ func NewGeneratorV2(flavor, version string, serverID uint32, latestPos uint32, l
 //   2. FormatDescriptionEvent
 //   3. MariadbGTIDListEvent
 func (g *Generator) GenFileHeader() ([]*replication.BinlogEvent, []byte, error) {
-	events, data, err := GenCommonFileHeaderV2(g.Flavor, g.ServerID, g.PreviousGTIDs, g.GenGTID)
+	events, data, err := GenCommonFileHeader(g.Flavor, g.ServerID, g.PreviousGTIDs, g.GenGTID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -134,7 +136,7 @@ func (g *Generator) GenFileHeader() ([]*replication.BinlogEvent, []byte, error) 
 // events: [GTIDEvent, QueryEvent]
 func (g *Generator) GenCreateDatabaseEvents(schema string) ([]*replication.BinlogEvent, []byte, error) {
 	query := fmt.Sprintf("CREATE DATABASE `%s`", schema)
-	result, err := GenDDLEventsV2(g.Flavor, g.ServerID, g.LatestPos, g.LatestGTID, schema, query, g.GenGTID, g.AnonymousGTID)
+	result, err := GenDDLEvents(g.Flavor, g.ServerID, g.LatestPos, g.LatestGTID, schema, query, g.GenGTID, g.AnonymousGTID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -146,7 +148,7 @@ func (g *Generator) GenCreateDatabaseEvents(schema string) ([]*replication.Binlo
 // events: [GTIDEvent, QueryEvent]
 func (g *Generator) GenDropDatabaseEvents(schema string) ([]*replication.BinlogEvent, []byte, error) {
 	query := fmt.Sprintf("DROP DATABASE `%s`", schema)
-	result, err := GenDDLEventsV2(g.Flavor, g.ServerID, g.LatestPos, g.LatestGTID, schema, query, g.GenGTID, g.AnonymousGTID)
+	result, err := GenDDLEvents(g.Flavor, g.ServerID, g.LatestPos, g.LatestGTID, schema, query, g.GenGTID, g.AnonymousGTID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -157,7 +159,7 @@ func (g *Generator) GenDropDatabaseEvents(schema string) ([]*replication.BinlogE
 // GenCreateTableEvents generates binlog events for `CREATE TABLE`.
 // events: [GTIDEvent, QueryEvent]
 func (g *Generator) GenCreateTableEvents(schema string, query string) ([]*replication.BinlogEvent, []byte, error) {
-	result, err := GenDDLEventsV2(g.Flavor, g.ServerID, g.LatestPos, g.LatestGTID, schema, query, g.GenGTID, g.AnonymousGTID)
+	result, err := GenDDLEvents(g.Flavor, g.ServerID, g.LatestPos, g.LatestGTID, schema, query, g.GenGTID, g.AnonymousGTID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -169,7 +171,7 @@ func (g *Generator) GenCreateTableEvents(schema string, query string) ([]*replic
 // events: [GTIDEvent, QueryEvent]
 func (g *Generator) GenDropTableEvents(schema string, table string) ([]*replication.BinlogEvent, []byte, error) {
 	query := fmt.Sprintf("DROP TABLE `%s`.`%s`", schema, table)
-	result, err := GenDDLEventsV2(g.Flavor, g.ServerID, g.LatestPos, g.LatestGTID, schema, query, g.GenGTID, g.AnonymousGTID)
+	result, err := GenDDLEvents(g.Flavor, g.ServerID, g.LatestPos, g.LatestGTID, schema, query, g.GenGTID, g.AnonymousGTID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -180,7 +182,7 @@ func (g *Generator) GenDropTableEvents(schema string, table string) ([]*replicat
 // GenDDLEvents generates binlog events for DDL statements.
 // events: [GTIDEvent, QueryEvent]
 func (g *Generator) GenDDLEvents(schema string, query string) ([]*replication.BinlogEvent, []byte, error) {
-	result, err := GenDDLEventsV2(g.Flavor, g.ServerID, g.LatestPos, g.LatestGTID, schema, query, g.GenGTID, g.AnonymousGTID)
+	result, err := GenDDLEvents(g.Flavor, g.ServerID, g.LatestPos, g.LatestGTID, schema, query, g.GenGTID, g.AnonymousGTID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -192,7 +194,7 @@ func (g *Generator) GenDDLEvents(schema string, query string) ([]*replication.Bi
 // events: [GTIDEvent, QueryEvent, TableMapEvent, RowsEvent, ..., XIDEvent]
 // NOTE: multi <TableMapEvent, RowsEvent> pairs can be in events.
 func (g *Generator) GenDMLEvents(eventType replication.EventType, dmlData []*DMLData) ([]*replication.BinlogEvent, []byte, error) {
-	result, err := GenDMLEventsV2(g.Flavor, g.ServerID, g.LatestPos, g.LatestGTID, eventType, g.LatestXID+1, dmlData, g.GenGTID, g.AnonymousGTID)
+	result, err := GenDMLEvents(g.Flavor, g.ServerID, g.LatestPos, g.LatestGTID, eventType, g.LatestXID+1, dmlData, g.GenGTID, g.AnonymousGTID)
 	if err != nil {
 		return nil, nil, err
 	}

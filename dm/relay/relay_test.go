@@ -759,7 +759,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *C) {
 	})
 
 	// other event type without LOG_EVENT_ARTIFICIAL_F
-	ev, err = event.GenCommonGTIDEvent(gmysql.MySQLFlavor, header.ServerID, latestPos, gtidSet)
+	ev, err = event.GenCommonGTIDEvent(gmysql.MySQLFlavor, header.ServerID, latestPos, gtidSet, false)
 	c.Assert(err, IsNil)
 	cases = append(cases, Case{
 		event: ev,

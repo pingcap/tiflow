@@ -25,11 +25,7 @@ import (
 
 // GenDDLEvents generates binlog events for DDL statements.
 // events: [GTIDEvent, QueryEvent]
-func GenDDLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, schema string, query string) (*DDLDMLResult, error) {
-	return GenDDLEventsV2(flavor, serverID, latestPos, latestGTID, schema, query, true, false)
-}
-
-func GenDDLEventsV2(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, schema string, query string, genGTID, anonymousGTID bool) (*DDLDMLResult, error) {
+func GenDDLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, schema string, query string, genGTID, anonymousGTID bool) (*DDLDMLResult, error) {
 	// GTIDEvent, increase GTID first
 	latestGTID, err := GTIDIncrease(flavor, latestGTID)
 	if err != nil {
@@ -37,7 +33,7 @@ func GenDDLEventsV2(flavor string, serverID uint32, latestPos uint32, latestGTID
 	}
 	var gtidEv *replication.BinlogEvent
 	if genGTID {
-		gtidEv, err = GenCommonGTIDEventV2(flavor, serverID, latestPos, latestGTID, anonymousGTID)
+		gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, latestGTID, anonymousGTID)
 		if err != nil {
 			return nil, terror.Annotate(err, "generate GTIDEvent")
 		}

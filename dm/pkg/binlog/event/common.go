@@ -35,18 +35,14 @@ type DDLDMLResult struct {
 // GenCommonFileHeader generates a common binlog file header.
 // for MySQL:
 //   1. BinLogFileHeader, [ fe `bin` ]
-//   2. FormatDescriptionEvent
-//   3. PreviousGTIDsEvent
+//   2. FormatDescriptionEvent, depends on genGTID
+//   3. PreviousGTIDsEvent, depends on genGTID
 // for MariaDB:
 //   1. BinLogFileHeader, [ fe `bin` ]
-//   2. FormatDescriptionEvent
-//   3. MariadbGTIDListEvent
+//   2. FormatDescriptionEvent, depends on genGTID
+//   3. MariadbGTIDListEvent, depends on genGTID
 //   -. MariadbBinlogCheckPointEvent, not added yet
-func GenCommonFileHeader(flavor string, serverID uint32, gSet gtid.Set) ([]*replication.BinlogEvent, []byte, error) {
-	return GenCommonFileHeaderV2(flavor, serverID, gSet, true)
-}
-
-func GenCommonFileHeaderV2(flavor string, serverID uint32, gSet gtid.Set, genGTID bool) ([]*replication.BinlogEvent, []byte, error) {
+func GenCommonFileHeader(flavor string, serverID uint32, gSet gtid.Set, genGTID bool) ([]*replication.BinlogEvent, []byte, error) {
 	var (
 		header = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
@@ -102,11 +98,7 @@ func GenCommonFileHeaderV2(flavor string, serverID uint32, gSet gtid.Set, genGTI
 }
 
 // GenCommonGTIDEvent generates a common GTID event.
-func GenCommonGTIDEvent(flavor string, serverID uint32, latestPos uint32, gSet gtid.Set) (*replication.BinlogEvent, error) {
-	return GenCommonGTIDEventV2(flavor, serverID, latestPos, gSet, false)
-}
-
-func GenCommonGTIDEventV2(flavor string, serverID uint32, latestPos uint32, gSet gtid.Set, anonymous bool) (*replication.BinlogEvent, error) {
+func GenCommonGTIDEvent(flavor string, serverID uint32, latestPos uint32, gSet gtid.Set, anonymous bool) (*replication.BinlogEvent, error) {
 	singleGTID, err := verifySingleGTID(flavor, gSet)
 	if err != nil {
 		return nil, terror.Annotate(err, "verify single GTID in set")
