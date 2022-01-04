@@ -348,7 +348,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	}
 	// it is no need to check the err here, because we will use
 	// local time when an error return, which is acceptable
-	pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+	pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
 
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
@@ -662,6 +662,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().RegionCache,
 		ctx.GlobalVars().KVStorage,
+		ctx.GlobalVars().PDClock,
 		checkpointTs, ddlspans, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
