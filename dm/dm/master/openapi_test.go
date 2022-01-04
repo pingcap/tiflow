@@ -558,6 +558,22 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(resultTaskStatusWithStatus, check.DeepEquals, resultTaskStatus)
 
+	// list task with status
+	result = testutil.NewRequest().Get(taskURL+"?with_status=true").GoWithHTTPHandler(t.testT, s.openapiHandles)
+	// check http status code
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	var resultListTask openapi.GetTaskListResponse
+	err = result.UnmarshalBodyToObject(&resultListTask)
+	c.Assert(err, check.IsNil)
+	c.Assert(resultListTask.Data, check.HasLen, 1)
+	c.Assert(resultListTask.Total, check.Equals, 1)
+	c.Assert(resultListTask.Data[0].StatusList, check.NotNil)
+	statusList := *resultListTask.Data[0].StatusList
+	c.Assert(statusList, check.HasLen, 1)
+	status := statusList[0]
+	c.Assert(status.WorkerName, check.Equals, workerName1)
+	c.Assert(status.Name, check.Equals, task.Name)
+
 	// stop task
 	result = testutil.NewRequest().Delete(fmt.Sprintf("%s/%s", taskURL, task.Name)).GoWithHTTPHandler(t.testT, s.openapiHandles)
 	c.Assert(result.Code(), check.Equals, http.StatusNoContent)
@@ -845,7 +861,7 @@ func mockTaskQueryStatus(
 	}
 	mockWorkerClient.EXPECT().QueryStatus(
 		gomock.Any(),
-		&pb.QueryStatusRequest{Name: taskName},
+		gomock.Any(),
 	).Return(queryResp, nil).MaxTimes(maxRetryNum)
 }
 
