@@ -75,7 +75,7 @@ func SorterMessage(task sorter.Task) Message {
 	}
 }
 
-// StopPipelineMessage creates the message of Stop
+// StopPipelineMessage creates the message of Stop the table actor
 func StopPipelineMessage() Message {
 	return Message{
 		Tp: TypeStopPipeline,
