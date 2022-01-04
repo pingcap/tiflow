@@ -14,7 +14,11 @@
 package db
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"math"
+	"math/rand"
 	"path/filepath"
 	"testing"
 	"time"
@@ -71,18 +75,12 @@ func testDB(t *testing.T, db DB) {
 	batch.Reset()
 	require.EqualValues(t, lbatch.Len(), batch.Count())
 
-	// Snapshot
-	lsnap, err := ldb.GetSnapshot()
-	require.Nil(t, err)
-	snap, err := db.Snapshot()
-	require.Nil(t, err)
-
 	// Iterator
-	liter := lsnap.NewIterator(&util.Range{
+	liter := ldb.NewIterator(&util.Range{
 		Start: []byte(""),
 		Limit: []byte("k4"),
 	}, nil)
-	iter := snap.Iterator([]byte(""), []byte("k4"))
+	iter := db.Iterator([]byte(""), []byte("k4"))
 	// First
 	require.True(t, liter.First())
 	require.True(t, iter.First())
@@ -111,8 +109,9 @@ func testDB(t *testing.T, db DB) {
 	// Release
 	liter.Release()
 	require.Nil(t, iter.Release())
-	lsnap.Release()
-	require.Nil(t, snap.Release())
+
+	// Compact
+	require.Nil(t, db.Compact([]byte{0x00}, []byte{0xff}))
 
 	// Close
 	require.Nil(t, db.Close())
@@ -161,4 +160,94 @@ func TestPebbleMetrics(t *testing.T) {
 	require.Less(t, time.Duration(0), ws.duration.Load().(time.Duration))
 
 	require.Nil(t, pdb.Close())
+}
+
+// goos: linux
+// goarch: amd64
+// pkg: github.com/pingcap/tiflow/pkg/db
+// cpu: Intel(R) Xeon(R) CPU E5-2630 v4 @ 2.20GHz
+// BenchmarkNext/leveldb/next_1_event(s)-40                 4492518               272.8 ns/op             0 B/op          0 allocs/op
+// BenchmarkNext/leveldb/next_4_event(s)-40                 1218038              1023 ns/op               0 B/op           0 allocs/op
+// BenchmarkNext/leveldb/next_16_event(s)-40                 269282              4062 ns/op               0 B/op           0 allocs/op
+// BenchmarkNext/leveldb/next_64_event(s)-40                  72012             16933 ns/op               0 B/op          0 allocs/op
+// BenchmarkNext/leveldb/next_256_event(s)-40                 19056             65554 ns/op               0 B/op          0 allocs/op
+// BenchmarkNext/leveldb/next_1024_event(s)-40                 4311            303426 ns/op               0 B/op          0 allocs/op
+// BenchmarkNext/leveldb/next_4096_event(s)-40                  853           1248045 ns/op               1 B/op          0 allocs/op
+// BenchmarkNext/leveldb/next_16384_event(s)-40                 230           4902989 ns/op           43826 B/op        389 allocs/op
+// BenchmarkNext/leveldb/next_65536_event(s)-40                  25         240067525 ns/op         1687187 B/op       1708 allocs/op
+// BenchmarkNext/leveldb/next_262144_event(s)-40                  4         285807572 ns/op          840336 B/op       6532 allocs/op
+// BenchmarkNext/pebble/next_1_event(s)-40                  4241365               284.0 ns/op             0 B/op          0 allocs/op
+// BenchmarkNext/pebble/next_4_event(s)-40                  1844215               683.1 ns/op             0 B/op          0 allocs/op
+// BenchmarkNext/pebble/next_16_event(s)-40                  533388              2438 ns/op               0 B/op          0 allocs/op
+// BenchmarkNext/pebble/next_64_event(s)-40                  118070              8653 ns/op               0 B/op          0 allocs/op
+// BenchmarkNext/pebble/next_256_event(s)-40                  34298             37768 ns/op               0 B/op          0 allocs/op
+// BenchmarkNext/pebble/next_1024_event(s)-40                  3860            259939 ns/op               5 B/op          0 allocs/op
+// BenchmarkNext/pebble/next_4096_event(s)-40                   946           1194918 ns/op              20 B/op          0 allocs/op
+// BenchmarkNext/pebble/next_16384_event(s)-40                  331           3577048 ns/op              77 B/op          0 allocs/op
+// BenchmarkNext/pebble/next_65536_event(s)-40                   40          27640122 ns/op             651 B/op          0 allocs/op
+// BenchmarkNext/pebble/next_262144_event(s)-40                   7         149654135 ns/op            5512 B/op          3 allocs/op
+func BenchmarkNext(b *testing.B) {
+	ctx := context.Background()
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 1
+
+	cases := []struct {
+		name string
+		dbfn func(name string) DB
+	}{{
+		name: "leveldb",
+		dbfn: func(name string) DB {
+			db, err := OpenLevelDB(ctx, 1, filepath.Join(b.TempDir(), name), cfg)
+			require.Nil(b, err)
+			return db
+		},
+	}, {
+		name: "pebble",
+		dbfn: func(name string) DB {
+			db, err := OpenPebble(ctx, 1, filepath.Join(b.TempDir(), name), cfg)
+			require.Nil(b, err)
+			return db
+		},
+	}}
+
+	rd := rand.New(rand.NewSource(0))
+	for _, cs := range cases {
+		b.Run(cs.name, func(b *testing.B) {
+			for exp := 0; exp < 10; exp++ {
+				count := int(math.Pow(4, float64(exp)))
+				db := cs.dbfn(fmt.Sprintf("%s-%d", cs.name, count))
+				batch := db.Batch(256)
+				// Key length for typical workload, see sorter/encoding/key.go
+				// 4 + 8 + 8 + 8 + 2 + 44 (key length, obtain by sst_dump a tikv sst file)
+				key := [74]byte{}
+				// Value length for typical workload, see sorter/encoding/value.go
+				// 128 + 314 (key length, obtain by sst_dump a tikv sst file)
+				value := [442]byte{}
+				for i := 0; i < count; i++ {
+					n, err := rd.Read(key[:])
+					require.EqualValues(b, len(key), n)
+					require.Nil(b, err)
+					n, err = rd.Read(value[:])
+					require.EqualValues(b, len(value), n)
+					require.Nil(b, err)
+					batch.Put(key[:], value[:])
+					if batch.Count() == 256 {
+						require.Nil(b, batch.Commit())
+						batch.Reset()
+					}
+				}
+				require.Nil(b, batch.Commit())
+				b.ResetTimer()
+
+				b.Run(fmt.Sprintf("next %d event(s)", count), func(b *testing.B) {
+					iter := db.Iterator([]byte{}, bytes.Repeat([]byte{0xff}, len(key)))
+					require.Nil(b, iter.Error())
+					for i := 0; i < b.N; i++ {
+						for ok := iter.First(); ok; ok = iter.Next() {
+						}
+					}
+				})
+			}
+		})
+	}
 }

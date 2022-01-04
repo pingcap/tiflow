@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/stretchr/testify/require"
 )
@@ -81,8 +82,23 @@ func (s *schedulerTester) finishTableOperation(captureID model.CaptureID, tableI
 
 func TestScheduleOneCapture(t *testing.T) {
 	s := &schedulerTester{}
-	s.reset(t)
-	captureID := "test-capture-1"
+	s.reset(c)
+	captureID := "test-capture-0"
+	s.addCapture(captureID)
+
+	_, _ = s.scheduler.Tick(s.state, []model.TableID{}, s.captures)
+
+	// Manually simulate the scenario where the corresponding key was deleted in the etcd
+	key := &etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeTaskStatus,
+		CaptureID:    captureID,
+		ChangefeedID: s.state.ID,
+	}
+	s.tester.MustUpdate(key.String(), nil)
+	s.tester.MustApplyPatches()
+
+	s.reset(c)
+	captureID = "test-capture-1"
 	s.addCapture(captureID)
 
 	// add three tables

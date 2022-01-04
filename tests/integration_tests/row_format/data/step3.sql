@@ -191,13 +191,13 @@ insert into tp_real(c_float, c_double, c_decimal, c_decimal_2)
 values (-2.7182818284, -3.1415926, -8000, -179394.233);
 
 create table tp_unsigned_real (
-      id                   int auto_increment,
-      c_unsigned_float     float unsigned   null,
-      c_unsigned_double    double unsigned  null,
-      c_unsigned_decimal   decimal unsigned null,
-      c_unsigned_decimal_2 decimal(10, 4) unsigned null,
-      constraint pk
-          primary key (id)
+    id                   int auto_increment,
+    c_unsigned_float     float unsigned   null,
+    c_unsigned_double    double unsigned  null,
+    c_unsigned_decimal   decimal unsigned null,
+    c_unsigned_decimal_2 decimal(10, 4) unsigned null,
+    constraint pk
+        primary key (id)
 );
 
 insert into tp_unsigned_real()

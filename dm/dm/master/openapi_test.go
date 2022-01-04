@@ -88,7 +88,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
-	cfg1.ExperimentalFeatures.OpenAPI = true
+	cfg1.OpenAPI = true
 
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
@@ -108,7 +108,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg2.PeerUrls = tempurl.Alloc()
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
-	cfg2.ExperimentalFeatures.OpenAPI = true
+	cfg2.OpenAPI = true
 
 	s2 := NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
@@ -558,6 +558,22 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(resultTaskStatusWithStatus, check.DeepEquals, resultTaskStatus)
 
+	// list task with status
+	result = testutil.NewRequest().Get(taskURL+"?with_status=true").GoWithHTTPHandler(t.testT, s.openapiHandles)
+	// check http status code
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	var resultListTask openapi.GetTaskListResponse
+	err = result.UnmarshalBodyToObject(&resultListTask)
+	c.Assert(err, check.IsNil)
+	c.Assert(resultListTask.Data, check.HasLen, 1)
+	c.Assert(resultListTask.Total, check.Equals, 1)
+	c.Assert(resultListTask.Data[0].StatusList, check.NotNil)
+	statusList := *resultListTask.Data[0].StatusList
+	c.Assert(statusList, check.HasLen, 1)
+	status := statusList[0]
+	c.Assert(status.WorkerName, check.Equals, workerName1)
+	c.Assert(status.Name, check.Equals, task.Name)
+
 	// stop task
 	result = testutil.NewRequest().Delete(fmt.Sprintf("%s/%s", taskURL, task.Name)).GoWithHTTPHandler(t.testT, s.openapiHandles)
 	c.Assert(result.Code(), check.Equals, http.StatusNoContent)
@@ -778,7 +794,7 @@ func setupServer(ctx context.Context, c *check.C) *Server {
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
-	cfg1.ExperimentalFeatures.OpenAPI = true
+	cfg1.OpenAPI = true
 
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
@@ -845,7 +861,7 @@ func mockTaskQueryStatus(
 	}
 	mockWorkerClient.EXPECT().QueryStatus(
 		gomock.Any(),
-		&pb.QueryStatusRequest{Name: taskName},
+		gomock.Any(),
 	).Return(queryResp, nil).MaxTimes(maxRetryNum)
 }
 
