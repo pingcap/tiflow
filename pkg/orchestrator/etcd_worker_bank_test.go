@@ -121,7 +121,6 @@ func (b *bankReactor) Tick(ctx context.Context, state ReactorState) (nextState R
 }
 
 func TestEtcdBank(t *testing.T) {
-
 	_ = failpoint.Enable("github.com/pingcap/tiflow/pkg/orchestrator/InjectProgressRequestAfterCommit", "10%return(true)")
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/orchestrator/InjectProgressRequestAfterCommit")
