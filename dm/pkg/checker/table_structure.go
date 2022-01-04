@@ -115,7 +115,6 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 		checkWg sync.WaitGroup
 		reMu    sync.Mutex
 	)
-	defer close(inCh)
 
 	checkCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -178,6 +177,7 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 	for _, table := range c.tables {
 		inCh <- table
 	}
+	close(inCh)
 
 	checkWg.Wait()
 	log.L().Logger.Info("check table structure over", zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
@@ -339,9 +339,9 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 		stmtNode      *ast.CreateTableStmt
 		firstTable    string
 		firstInstance string
-		errCh         = make(chan error, 1)
 		inChs         = make(map[string]chan *filter.Table, len(c.tableMap))
 		checkWg       sync.WaitGroup
+		reMu          sync.Mutex
 	)
 
 	// get first table
@@ -367,9 +367,6 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 				return r, err
 			}
 
-			if err != nil {
-				return r, err
-			}
 			stmt, err := parser2.ParseOneStmt(statement, "", "")
 			if err != nil {
 				return r, errors.Annotatef(err, "statement %s", statement)
@@ -394,7 +391,16 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 	defer cancel()
 
 	checkFunc := func(instance string, db *sql.DB, p *parser.Parser) {
-		defer checkWg.Done()
+		var err error
+		defer func() {
+			checkWg.Done()
+			if err != nil {
+				cancel()
+				reMu.Lock()
+				markCheckError(r, err)
+				reMu.Unlock()
+			}
+		}()
 		for {
 			select {
 			case <-checkCtx.Done():
@@ -403,30 +409,30 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 				if !ok {
 					return
 				}
-				statement, err := dbutil.GetCreateTableSQL(ctx, db, table.Schema, table.Name)
-				if err != nil {
+				statement, err2 := dbutil.GetCreateTableSQL(ctx, db, table.Schema, table.Name)
+				if err2 != nil {
 					// continue if table was deleted when checking
-					if isMySQLError(err, mysql.ErrNoSuchTable) {
+					if isMySQLError(err2, mysql.ErrNoSuchTable) {
 						continue
 					}
-					errCh <- err
+					err = err2
 					return
 				}
 
-				info, err := dbutil.GetTableInfoBySQL(statement, p)
-				if err != nil {
-					errCh <- err
+				info, err2 := dbutil.GetTableInfoBySQL(statement, p)
+				if err2 != nil {
+					err = err2
 					return
 				}
-				stmt, err := p.ParseOneStmt(statement, "", "")
-				if err != nil {
-					errCh <- errors.Annotatef(err, "statement %s", statement)
+				stmt, err2 := p.ParseOneStmt(statement, "", "")
+				if err2 != nil {
+					err = errors.Annotatef(err2, "statement %s", statement)
 					return
 				}
 
 				ctStmt, ok := stmt.(*ast.CreateTableStmt)
 				if !ok {
-					errCh <- errors.Errorf("Expect CreateTableStmt but got %T", stmt)
+					err = errors.Errorf("Expect CreateTableStmt but got %T", stmt)
 					return
 				}
 
@@ -464,11 +470,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 
 		inChs[instance] = make(chan *filter.Table, len(tables))
 		for _, table := range tables {
-			select {
-			case inChs[instance] <- table:
-			case <-checkCtx.Done():
-				return r, nil
-			}
+			inChs[instance] <- table
 		}
 		close(inChs[instance])
 
@@ -489,19 +491,8 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 		}
 	}
 
-	go func() {
-		checkWg.Wait()
-		if errCh != nil {
-			close(errCh)
-		}
-	}()
-
-	select {
-	case <-checkCtx.Done():
-		return r, nil
-	case err := <-errCh:
-		return r, err
-	}
+	checkWg.Wait()
+	return r, nil
 }
 
 func (c *ShardingTablesChecker) checkAutoIncrementKey(instance, schema, table string, ctStmt *ast.CreateTableStmt, info *model.TableInfo, r *Result) bool {
