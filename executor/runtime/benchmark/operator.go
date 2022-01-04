@@ -95,11 +95,15 @@ type opReceive struct {
 
 	running      bool
 	binlogClient pb.TestService_FeedBinlogClient
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func (o *opReceive) NextWantedInputIdx() int { return runtime.DontNeedData }
 
 func (o *opReceive) Close() error {
+	o.cancel()
 	return o.conn.Close()
 }
 
@@ -125,6 +129,7 @@ func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 }
 
 func (o *opReceive) Prepare(_ *runtime.TaskContext) error {
+	o.ctx, o.cancel = context.WithCancel(context.Background())
 	return nil
 }
 
@@ -135,7 +140,7 @@ func (o *opReceive) connect() error {
 	}
 	// start receiving data
 	// TODO: implement recover from a gtid point during failover.
-	o.binlogClient, err = client.FeedBinlog(context.Background(), &pb.TestBinlogRequest{Gtid: 0})
+	o.binlogClient, err = client.FeedBinlog(o.ctx, &pb.TestBinlogRequest{Gtid: 0})
 	if err != nil {
 		return errors.New("conn failed")
 	}
@@ -339,6 +344,7 @@ type opBinlog struct {
 
 func (o *opBinlog) Close() error {
 	o.server.Stop()
+	close(o.binlogChan)
 	return nil
 }
 
