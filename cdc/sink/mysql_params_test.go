@@ -62,7 +62,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 	defer testleak.AfterTestT(t)()
 
 	testDefaultParams := func() {
-		db, err := mockTestDB()
+		db, err := mockTestDB(false)
 		require.Nil(t, err)
 		defer db.Close()
 
@@ -84,7 +84,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 	}
 
 	testTimezoneParam := func() {
-		db, err := mockTestDB()
+		db, err := mockTestDB(false)
 		require.Nil(t, err)
 		defer db.Close()
 
@@ -98,7 +98,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 	}
 
 	testTimeoutParams := func() {
-		db, err := mockTestDB()
+		db, err := mockTestDB(false)
 		require.Nil(t, err)
 		defer db.Close()
 
