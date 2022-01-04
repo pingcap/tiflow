@@ -42,10 +42,13 @@ type DDLDMLResult struct {
 //   2. FormatDescriptionEvent, depends on genGTID
 //   3. MariadbGTIDListEvent, depends on genGTID
 //   -. MariadbBinlogCheckPointEvent, not added yet
-func GenCommonFileHeader(flavor string, serverID uint32, gSet gtid.Set, genGTID bool) ([]*replication.BinlogEvent, []byte, error) {
+func GenCommonFileHeader(flavor string, serverID uint32, gSet gtid.Set, genGTID bool, ts int64) ([]*replication.BinlogEvent, []byte, error) {
+	if ts == 0 {
+		ts = time.Now().Unix()
+	}
 	var (
 		header = &replication.EventHeader{
-			Timestamp: uint32(time.Now().Unix()),
+			Timestamp: uint32(ts),
 			ServerID:  serverID,
 			Flags:     defaultHeaderFlags,
 		}
@@ -98,15 +101,18 @@ func GenCommonFileHeader(flavor string, serverID uint32, gSet gtid.Set, genGTID 
 }
 
 // GenCommonGTIDEvent generates a common GTID event.
-func GenCommonGTIDEvent(flavor string, serverID uint32, latestPos uint32, gSet gtid.Set, anonymous bool) (*replication.BinlogEvent, error) {
+func GenCommonGTIDEvent(flavor string, serverID uint32, latestPos uint32, gSet gtid.Set, anonymous bool, ts int64) (*replication.BinlogEvent, error) {
 	singleGTID, err := verifySingleGTID(flavor, gSet)
 	if err != nil {
 		return nil, terror.Annotate(err, "verify single GTID in set")
 	}
 
+	if ts == 0 {
+		ts = time.Now().Unix()
+	}
 	var (
 		header = &replication.EventHeader{
-			Timestamp: uint32(time.Now().Unix()),
+			Timestamp: uint32(ts),
 			ServerID:  serverID,
 			Flags:     defaultHeaderFlags,
 		}

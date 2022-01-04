@@ -35,9 +35,13 @@ type DMLData struct {
 // GenDMLEvents generates binlog events for `INSERT`/`UPDATE`/`DELETE`.
 // events: [GTIDEvent, QueryEvent, TableMapEvent, RowsEvent, ..., XIDEvent]
 // NOTE: multi <TableMapEvent, RowsEvent> pairs can be in events.
-func GenDMLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, eventType replication.EventType, xid uint64, dmlData []*DMLData, genGTID, anonymousGTID bool) (*DDLDMLResult, error) {
+func GenDMLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, eventType replication.EventType, xid uint64, dmlData []*DMLData, genGTID, anonymousGTID bool, ts int64) (*DDLDMLResult, error) {
 	if len(dmlData) == 0 {
 		return nil, terror.ErrBinlogDMLEmptyData.Generate()
+	}
+
+	if ts == 0 {
+		ts = time.Now().Unix()
 	}
 
 	// GTIDEvent, increase GTID first.
@@ -47,7 +51,7 @@ func GenDMLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID g
 	}
 	var gtidEv *replication.BinlogEvent
 	if genGTID {
-		gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, latestGTID, anonymousGTID)
+		gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, latestGTID, anonymousGTID, ts)
 		if err != nil {
 			return nil, terror.Annotate(err, "generate GTIDEvent")
 		}
@@ -56,7 +60,7 @@ func GenDMLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID g
 
 	// QueryEvent, `BEGIN`
 	header := &replication.EventHeader{
-		Timestamp: uint32(time.Now().Unix()),
+		Timestamp: uint32(ts),
 		ServerID:  serverID,
 		Flags:     defaultHeaderFlags,
 	}
