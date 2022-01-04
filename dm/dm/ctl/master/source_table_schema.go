@@ -25,7 +25,7 @@ import (
 // NewSourceTableSchemaCmd creates a SourceTableSchema command.
 func NewSourceTableSchemaCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "binlog-schema <task-name> <table-filter1> <table-filter2> ...",
+		Use:   "binlog-schema <task-name> <database> <table>",
 		Short: "manage or show source-table schema schemas",
 		RunE:  sourceTableSchemaList,
 	}
@@ -151,7 +151,7 @@ func newSourceTableSchemaUpdateCmd() *cobra.Command {
 
 func newSourceTableSchemaDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "delete <task-name> <table-filter1> <table-filter2> ...",
+		Use:   "delete <task-name> <database> <table>",
 		Short: "delete tables schema structures",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 3 {
