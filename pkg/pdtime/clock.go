@@ -54,7 +54,7 @@ func NewClock(pdClient pd.Client) *PDClock {
 	}
 }
 
-// Run will get time from pd periodically to cache in pdPhysicalTimeCache
+// Run will get time from pd periodically to cache in timeCache
 func (c *PDClock) Run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
@@ -89,7 +89,7 @@ func (c *PDClock) Run(ctx context.Context) {
 	}
 }
 
-// CurrentTime return current time from pd cache
+// CurrentTime returns current time from timeCache
 func (c *PDClock) CurrentTime() (time.Time, error) {
 	c.mu.RLock()
 	err := c.mu.err
