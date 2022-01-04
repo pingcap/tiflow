@@ -7,7 +7,7 @@ WORKDIR /root/download
 
 COPY ./scripts/download-integration-test-binaries.sh .
 # Download all binaries into bin dir.
-RUN ./download-integration-test-binaries.sh master
+RUN ./download-integration-test-binaries.sh release-5.4
 RUN ls ./bin
 
 # Download go into /usr/local dir.
