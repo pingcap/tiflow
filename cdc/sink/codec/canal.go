@@ -458,7 +458,8 @@ func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, 
 
 // Build implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Build() []*MQMessage {
-	if len(d.messages.Messages) == 0 {
+	rowCount := len(d.messages.Messages)
+	if rowCount == 0 {
 		return nil
 	}
 
@@ -472,6 +473,7 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 		log.Panic("Error when serializing Canal packet", zap.Error(err))
 	}
 	ret := NewMQMessage(config.ProtocolCanal, nil, value, 0, model.MqMessageTypeRow, nil, nil)
+	ret.SetRowsCount(rowCount)
 	d.messages.Reset()
 	d.resetPacket()
 	return []*MQMessage{ret}
