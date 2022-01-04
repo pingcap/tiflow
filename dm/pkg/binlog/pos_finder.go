@@ -169,7 +169,7 @@ func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 	}
 	if len(binaryLogs) <= 0 {
 		// should not happen on a master with binlog enabled
-		return errors.New("cannot find binlog on master")
+		return errors.New("cannot find binlog files")
 	}
 
 	begin, end := 0, len(binaryLogs)-1

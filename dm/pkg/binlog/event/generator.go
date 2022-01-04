@@ -31,7 +31,7 @@ type Generator struct {
 	ServerID      uint32
 	LatestPos     uint32
 	LatestGTID    gtid.Set
-	PreviousGTIDs gtid.Set
+	ExecutedGTIDs gtid.Set
 	LatestXID     uint64
 
 	GenGTID       bool
@@ -107,7 +107,7 @@ func newGenerator(flavor, version string, serverID uint32, latestPos uint32, lat
 		ServerID:      serverID,
 		LatestPos:     latestPos,
 		LatestGTID:    latestGTID,
-		PreviousGTIDs: previousGTIDs,
+		ExecutedGTIDs: previousGTIDs,
 		LatestXID:     latestXID,
 		GenGTID:       genGTID,
 		AnonymousGTID: anonymousGTID,
@@ -124,7 +124,7 @@ func newGenerator(flavor, version string, serverID uint32, latestPos uint32, lat
 //   2. FormatDescriptionEvent
 //   3. MariadbGTIDListEvent
 func (g *Generator) GenFileHeader(ts int64) ([]*replication.BinlogEvent, []byte, error) {
-	events, data, err := GenCommonFileHeader(g.Flavor, g.ServerID, g.PreviousGTIDs, g.GenGTID, ts)
+	events, data, err := GenCommonFileHeader(g.Flavor, g.ServerID, g.ExecutedGTIDs, g.GenGTID, ts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -216,11 +216,14 @@ func (g *Generator) Rotate(nextName string, ts int64) (*replication.BinlogEvent,
 	if err != nil {
 		return nil, nil, err
 	}
-	g.updateLatestPosGTID(4, g.LatestGTID)
+	g.updateLatestPosGTID(4, nil)
 	return ev, ev.RawData, nil
 }
 
 func (g *Generator) updateLatestPosGTID(latestPos uint32, latestGTID gtid.Set) {
 	g.LatestPos = latestPos
-	g.LatestGTID = latestGTID
+	if latestGTID != nil {
+		g.LatestGTID = latestGTID
+		g.ExecutedGTIDs.Update(latestGTID.String())
+	}
 }
