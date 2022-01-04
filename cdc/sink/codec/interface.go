@@ -57,15 +57,14 @@ type EventBatchEncoder interface {
 
 // MQMessage represents an MQ message to the mqSink
 type MQMessage struct {
-	Key      []byte
-	Value    []byte
-	Ts       uint64              // reserved for possible output sorting
-	Schema   *string             // schema
-	Table    *string             // table
-	Type     model.MqMessageType // type
-	Protocol config.Protocol     // protocol
-	// rows in one MQ Message, once a `Row Changed Event` message attached into the `Value`, this value should be incremented.
-	rowsCount int
+	Key       []byte
+	Value     []byte
+	Ts        uint64              // reserved for possible output sorting
+	Schema    *string             // schema
+	Table     *string             // table
+	Type      model.MqMessageType // type
+	Protocol  config.Protocol     // protocol
+	rowsCount int                 // rows in one MQ Message
 }
 
 // maximumRecordOverhead is used to calculate ProducerMessage's byteSize by sarama kafka client.
@@ -101,13 +100,11 @@ func (m *MQMessage) IncRowsCount() {
 }
 
 func newDDLMQMessage(proto config.Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
-	result := NewMQMessage(proto, key, value, event.CommitTs, model.MqMessageTypeDDL, &event.TableInfo.Schema, &event.TableInfo.Table)
-	return result
+	return NewMQMessage(proto, key, value, event.CommitTs, model.MqMessageTypeDDL, &event.TableInfo.Schema, &event.TableInfo.Table)
 }
 
 func newResolvedMQMessage(proto config.Protocol, key, value []byte, ts uint64) *MQMessage {
-	result := NewMQMessage(proto, key, value, ts, model.MqMessageTypeResolved, nil, nil)
-	return result
+	return NewMQMessage(proto, key, value, ts, model.MqMessageTypeResolved, nil, nil)
 }
 
 // NewMQMessage should be used when creating a MQMessage struct.
