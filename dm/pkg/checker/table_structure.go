@@ -107,28 +107,19 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 		return r, err
 	}
 	if concurrency > maxConnections {
-		concurrency = maxConnections
+		concurrency = maxConnections / 2
 	}
 
 	var (
-		optCh   = make(chan *incompatibilityOption, MaxOptions*len(c.tables))
-		errCh   = make(chan error, 1)
-		inCh    = make(chan *filter.Table, concurrency)
+		inCh    = make(chan *filter.Table, len(c.tables))
 		checkWg sync.WaitGroup
+		reMu    sync.Mutex
 	)
+	defer close(inCh)
 
 	checkCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	go func() {
-		defer close(inCh)
-		for _, table := range c.tables {
-			select {
-			case inCh <- table:
-			case <-checkCtx.Done():
-				return
-			}
-		}
-	}()
+
 	log.L().Logger.Info("start to check tables", zap.Int("concurrency", concurrency), zap.Int("all table num", len(c.tables)))
 	checkFunc := func() {
 		defer checkWg.Done()
@@ -146,70 +137,58 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 					if isMySQLError(err, mysql.ErrNoSuchTable) {
 						continue
 					}
-					if errCh != nil {
-						errCh <- err
-						close(errCh)
-					}
+					reMu.Lock()
+					markCheckError(r, err)
+					reMu.Unlock()
+					cancel()
 					break
 				}
 
 				opts := c.checkCreateSQL(ctx, statement)
 				for _, opt := range opts {
 					opt.tableID = table.String()
-					optCh <- opt
+					tableMsg := "table " + opt.tableID + " "
+					reMu.Lock()
+					switch opt.state {
+					case StateWarning:
+						if r.State != StateFailure {
+							r.State = StateWarning
+						}
+						e := NewError(tableMsg + opt.errMessage)
+						e.Severity = StateWarning
+						e.Instruction = opt.instruction
+						r.Errors = append(r.Errors, e)
+					case StateFailure:
+						r.State = StateFailure
+						e := NewError(tableMsg + opt.errMessage)
+						e.Instruction = opt.instruction
+						r.Errors = append(r.Errors, e)
+					}
+					reMu.Unlock()
 				}
 			}
 		}
 	}
-
-	go func() {
-		defer cancel()
-		err, ok := <-errCh
-		if ok {
-			markCheckError(r, err)
-		}
-	}()
 
 	for i := 0; i < concurrency; i++ {
 		checkWg.Add(1)
 		go checkFunc()
 	}
 
-	go func() {
+	defer func() {
 		checkWg.Wait()
 		log.L().Logger.Info("check table structure over", zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
-		close(optCh)
-		if errCh != nil {
-			close(errCh)
-		}
 	}()
 
-	for {
+	for _, table := range c.tables {
 		select {
+		case inCh <- table:
 		case <-checkCtx.Done():
 			return r, nil
-		case option, ok := <-optCh:
-			if !ok {
-				return r, nil
-			}
-			tableMsg := "table " + option.tableID + " "
-			switch option.state {
-			case StateWarning:
-				if r.State != StateFailure {
-					r.State = StateWarning
-				}
-				e := NewError(tableMsg + option.errMessage)
-				e.Severity = StateWarning
-				e.Instruction = option.instruction
-				r.Errors = append(r.Errors, e)
-			case StateFailure:
-				r.State = StateFailure
-				e := NewError(tableMsg + option.errMessage)
-				e.Instruction = option.instruction
-				r.Errors = append(r.Errors, e)
-			}
 		}
 	}
+
+	return r, nil
 }
 
 // Name implements RealChecker interface.
@@ -487,16 +466,18 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 			return r, err
 		}
 		if concurrency > maxConnections {
-			concurrency = maxConnections
+			concurrency = maxConnections / 2
 		}
 
-		inChs[instance] = make(chan *filter.Table, concurrency)
-		go func(inCh chan *filter.Table, tables []*filter.Table) {
-			for _, table := range tables {
-				inCh <- table
+		inChs[instance] = make(chan *filter.Table, len(tables))
+		for _, table := range tables {
+			select {
+			case inChs[instance] <- table:
+			case <-checkCtx.Done():
+				return r, nil
 			}
-			close(inCh)
-		}(inChs[instance], tables)
+		}
+		close(inChs[instance])
 
 		log.L().Logger.Info("this source have", zap.String("source", instance), zap.Int("concurrency", concurrency), zap.Int("table num", len(tables)))
 		db, ok := c.dbs[instance]
