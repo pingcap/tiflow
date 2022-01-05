@@ -1882,10 +1882,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 							currentLocation: &currentLocation,
 							lastLocation:    &lastLocation,
 						}
-						originSQL := strings.TrimSpace(string(ev.Query))
-						sourceTbls, err := s.trackOriginDDL(ev, ec, originSQL)
+						var sourceTbls map[string]map[string]struct{}
+						sourceTbls, err = s.trackOriginDDL(ev, ec)
 						if err != nil {
-							tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), zap.String("sql", originSQL))
+							tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), zap.ByteString("sql", ev.Query))
 						}
 
 						s.saveGlobalPoint(currentLocation)
@@ -2988,7 +2988,8 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 	return nil
 }
 
-func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext, originSQL string) (map[string]map[string]struct{}, error) {
+func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (map[string]map[string]struct{}, error) {
+	originSQL := strings.TrimSpace(string(ev.Query))
 	if originSQL == "BEGIN" || originSQL == "" || utils.IsBuildInSkipDDL(originSQL) {
 		return nil, nil
 	}
