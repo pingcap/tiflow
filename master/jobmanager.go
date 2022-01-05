@@ -99,7 +99,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
 	switch req.Tp {
-	case pb.SubmitJobRequest_Benchmark:
+	case pb.JobType_Benchmark:
 		id := j.idAllocator.AllocJobID()
 		// TODO: supposing job master will be running independently, then the
 		// addresses of server can change because of failover, the job master

@@ -24,7 +24,7 @@ func NewCapRescMgr() *CapRescMgr {
 }
 
 // Register implements RescMgr.Register
-func (m *CapRescMgr) Register(id model.ExecutorID, addr string, capacity RescUnit) {
+func (m *CapRescMgr) Register(id model.ExecutorID, addr string, capacity model.RescUnit) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.executors[id] = &ExecutorResource{
@@ -51,7 +51,7 @@ func (m *CapRescMgr) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskScheduler
 }
 
 // Update implements RescMgr.Update
-func (m *CapRescMgr) Update(id model.ExecutorID, use RescUnit, status model.ExecutorStatus) error {
+func (m *CapRescMgr) Update(id model.ExecutorID, use model.RescUnit, status model.ExecutorStatus) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	exec, ok := m.executors[id]
@@ -92,12 +92,12 @@ func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
 				used = exec.Reserved
 			}
 			rest := exec.Capacity - used
-			if rest >= RescUnit(task.Cost) {
+			if rest >= model.RescUnit(task.Cost) {
 				result[task.GetTask().Id] = &pb.ScheduleResult{
 					ExecutorId: string(exec.ID),
 					Addr:       exec.Addr,
 				}
-				exec.Reserved = exec.Reserved + RescUnit(task.GetCost())
+				exec.Reserved = exec.Reserved + model.RescUnit(task.GetCost())
 				break
 			}
 			idx = (idx + 1) % len(resources)

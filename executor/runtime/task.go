@@ -82,6 +82,7 @@ type taskContainer struct {
 	inputs      []*Channel
 	outputs     []*Channel
 	ctx         *TaskContext
+	tru         TaskRescUnit
 
 	stopLock sync.Mutex
 }
@@ -89,7 +90,12 @@ type taskContainer struct {
 func (t *taskContainer) prepare() error {
 	t.inputCache = make([]Chunk, len(t.inputs))
 	t.outputCache = make([]Chunk, len(t.outputs))
-	return t.op.Prepare(t.ctx)
+	tru, err := t.op.Prepare(t.ctx)
+	if err != nil {
+		return err
+	}
+	t.tru = tru
+	return nil
 }
 
 func (t *taskContainer) tryAwake() bool {

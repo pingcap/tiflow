@@ -42,6 +42,10 @@ service Master {
     // QueryMetaStore queries metastore manager and returns
     // the information of a matching metastore
     rpc QueryMetaStore(QueryMetaStoreRequest) returns(QueryMetaStoreResponse) {}
+
+    // ReportExecutorWorkload is called from executor to server master to report
+    // resource usage in executor.
+    rpc ReportExecutorWorkload(ExecWorkloadRequest) returns(ExecWorkloadResponse) {}
 }
 
 message HeartbeatRequest {
@@ -57,13 +61,13 @@ message HeartbeatResponse {
     Error err = 1;
 }
 
+enum JobType {
+    Benchmark = 0;
+    DM = 1;
+    CDC = 2;
+}
+
 message SubmitJobRequest {
-    // For compatibility, we still use config file to present a job.
-    enum JobType {
-        DM = 0;
-        CDC = 1;
-        Benchmark = 2;
-    }
     JobType tp = 1;
     bytes config = 2;
     // User name, token, etc...
@@ -119,4 +123,18 @@ message ScheduleResult {
 
 message TaskSchedulerResponse {
     map<int64, ScheduleResult> schedule = 1;
+}
+
+message ExecWorkload {
+    JobType tp = 1;
+    int32 usage = 2;
+}
+
+message ExecWorkloadRequest {
+    string executor_id = 1;
+    repeated ExecWorkload workloads = 2;
+}
+
+message ExecWorkloadResponse {
+    Error err = 1;
 }

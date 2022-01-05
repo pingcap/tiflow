@@ -39,6 +39,17 @@ type Runtime struct {
 	wg        sync.WaitGroup
 }
 
+// Resource returns current usage resource snapshot of this runtime
+func (s *Runtime) Resource() map[model.WorkloadType]model.RescUnit {
+	s.tasksLock.Lock()
+	defer s.tasksLock.Unlock()
+	res := make(map[model.WorkloadType]model.RescUnit)
+	for _, t := range s.tasks {
+		res[t.tru.GetType()] += t.tru.GetUsage()
+	}
+	return res
+}
+
 func (s *Runtime) Stop(tasks []int64) error {
 	s.tasksLock.Lock()
 	defer s.tasksLock.Unlock()

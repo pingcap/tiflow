@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/executor/runtime"
+	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
@@ -27,15 +28,18 @@ type fileWriter struct {
 	tid      int32
 }
 
-func (f *fileWriter) Prepare() error {
+func (f *fileWriter) Prepare() (runtime.TaskRescUnit, error) {
 	dir := filepath.Dir(f.filePath)
 	err := os.MkdirAll(dir, 0o755)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	file, err := os.OpenFile(f.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o777)
+	if err != nil {
+		return nil, err
+	}
 	f.fd = file
-	return err
+	return runtime.NewSimpleTRU(model.Benchmark), err
 }
 
 func sprintPayload(r *pb.Record) string {
@@ -128,9 +132,9 @@ func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 	return
 }
 
-func (o *opReceive) Prepare(_ *runtime.TaskContext) error {
+func (o *opReceive) Prepare(_ *runtime.TaskContext) (runtime.TaskRescUnit, error) {
 	o.ctx, o.cancel = context.WithCancel(context.Background())
-	return nil
+	return runtime.NewSimpleTRU(model.Benchmark), nil
 }
 
 func (o *opReceive) connect() error {
@@ -203,7 +207,9 @@ type opSyncer struct{}
 func (o *opSyncer) Close() error { return nil }
 
 // TODO communicate with master.
-func (o *opSyncer) Prepare(_ *runtime.TaskContext) error { return nil }
+func (o *opSyncer) Prepare(_ *runtime.TaskContext) (runtime.TaskRescUnit, error) {
+	return runtime.NewSimpleTRU(model.Benchmark), nil
+}
 
 func (o *opSyncer) syncDDL(ctx *runtime.TaskContext) {
 	time.Sleep(1 * time.Second)
@@ -240,7 +246,7 @@ func (o *opSink) Close() error {
 	return o.writer.writeStats(o.stats)
 }
 
-func (o *opSink) Prepare(_ *runtime.TaskContext) error {
+func (o *opSink) Prepare(_ *runtime.TaskContext) (runtime.TaskRescUnit, error) {
 	o.stats = new(recordStats)
 	return o.writer.Prepare()
 }
@@ -271,7 +277,9 @@ type opProducer struct {
 
 func (o *opProducer) Close() error { return nil }
 
-func (o *opProducer) Prepare(_ *runtime.TaskContext) error { return nil }
+func (o *opProducer) Prepare(_ *runtime.TaskContext) (runtime.TaskRescUnit, error) {
+	return runtime.NewSimpleTRU(model.Benchmark), nil
+}
 
 func (o *opProducer) NextWantedInputIdx() int { return runtime.DontNeedData }
 
@@ -348,14 +356,18 @@ func (o *opBinlog) Close() error {
 	return nil
 }
 
-func (o *opBinlog) Prepare(_ *runtime.TaskContext) (err error) {
+func (o *opBinlog) Prepare(_ *runtime.TaskContext) (runtime.TaskRescUnit, error) {
 	o.binlogChan = make(chan *runtime.Record, 1024)
 	if test.GlobalTestFlag {
-		o.server, err = mock.NewTestServer(o.addr, o)
+		server, err := mock.NewTestServer(o.addr, o)
+		if err != nil {
+			return nil, err
+		}
+		o.server = server
 	} else {
 		lis, err := net.Listen("tcp", o.addr)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		s := grpc.NewServer()
 		o.server = s
@@ -368,7 +380,7 @@ func (o *opBinlog) Prepare(_ *runtime.TaskContext) (err error) {
 			}
 		}()
 	}
-	return err
+	return runtime.NewSimpleTRU(model.Benchmark), nil
 }
 
 func (o *opBinlog) NextWantedInputIdx() int {

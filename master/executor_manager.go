@@ -96,7 +96,7 @@ func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Heartbe
 	exec.lastUpdateTime = time.Now()
 	exec.heartbeatTTL = time.Duration(req.Ttl) * time.Millisecond
 	exec.Status = model.ExecutorStatus(req.Status)
-	usage := resource.RescUnit(req.GetResourceUsage())
+	usage := model.RescUnit(req.GetResourceUsage())
 	err := e.rescMgr.Update(exec.ID, usage, exec.Status)
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func (e *ExecutorManager) RegisterExec(info *model.ExecutorInfo) {
 	e.mu.Lock()
 	e.executors[info.ID] = exec
 	e.mu.Unlock()
-	e.rescMgr.Register(exec.ID, exec.Addr, resource.RescUnit(exec.Capability))
+	e.rescMgr.Register(exec.ID, exec.Addr, model.RescUnit(exec.Capability))
 }
 
 // AllocateNewExec allocates new executor info to a give RegisterExecutorRequest

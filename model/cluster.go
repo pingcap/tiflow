@@ -6,6 +6,9 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 )
 
+// RescUnit is the min unit of resource that we count.
+type RescUnit int
+
 type ExecutorID string
 
 // ExecutorInfo describes an Executor.

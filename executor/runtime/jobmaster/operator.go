@@ -16,7 +16,7 @@ type jobMasterAgent struct {
 	master system.JobMaster
 }
 
-func (j *jobMasterAgent) Prepare(ctx *runtime.TaskContext) error {
+func (j *jobMasterAgent) Prepare(ctx *runtime.TaskContext) (runtime.TaskRescUnit, error) {
 	if test.GlobalTestFlag {
 		j.metaKV = ctx.TestCtx.GetMetaKV()
 	}

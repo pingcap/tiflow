@@ -113,6 +113,16 @@ func (c *masterServerClient) QueryMetaStore(
 	return resp.(*pb.QueryMetaStoreResponse), nil
 }
 
+func (c *masterServerClient) ReportExecutorWorkload(
+	ctx context.Context, req *pb.ExecWorkloadRequest, opts ...grpc.CallOption,
+) (*pb.ExecWorkloadResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.(*pb.ExecWorkloadResponse), nil
+}
+
 func NewMasterClient(conn Conn) pb.MasterClient {
 	return &masterServerClient{conn}
 }

@@ -215,6 +215,17 @@ func (s *Server) QueryMetaStore(
 	}
 }
 
+func (s *Server) ReportExecutorWorkload(
+	ctx context.Context, req *pb.ExecWorkloadRequest,
+) (*pb.ExecWorkloadResponse, error) {
+	// TODO: pass executor workload to resource manager
+	log.L().Debug("receive workload report", zap.String("executor", req.ExecutorId))
+	for _, res := range req.GetWorkloads() {
+		log.L().Debug("workload", zap.Int32("type", int32(res.GetTp())), zap.Int32("usage", res.GetUsage()))
+	}
+	return &pb.ExecWorkloadResponse{}, nil
+}
+
 func (s *Server) startForTest(ctx context.Context) (err error) {
 	// TODO: implement mock-etcd and leader election
 

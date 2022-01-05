@@ -162,6 +162,10 @@ func (s *Server) Run(ctx context.Context) error {
 		return s.keepHeartbeat(ctx)
 	})
 
+	wg.Go(func() error {
+		return s.reportTaskResc(ctx)
+	})
+
 	return wg.Wait()
 }
 
@@ -334,4 +338,44 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 
 func getJoinURLs(addrs string) []string {
 	return strings.Split(addrs, ",")
+}
+
+func (s *Server) reportTaskRescOnce(ctx context.Context) error {
+	rescs := s.sch.Resource()
+	req := &pb.ExecWorkloadRequest{
+		// TODO: use which field as ExecutorId is more accurate
+		ExecutorId: s.cfg.WorkerAddr,
+		Workloads:  make([]*pb.ExecWorkload, 0, len(rescs)),
+	}
+	for tp, resc := range rescs {
+		req.Workloads = append(req.Workloads, &pb.ExecWorkload{
+			Tp:    pb.JobType(tp),
+			Usage: int32(resc),
+		})
+	}
+	resp, err := s.cli.Client().ReportExecutorWorkload(ctx, req)
+	if err != nil {
+		return err
+	}
+	if resp.Err != nil {
+		log.L().Warn("report executor workload error", zap.String("err", resp.Err.String()))
+	}
+	return nil
+}
+
+// reportTaskResc reports tasks resource usage to resource manager periodically
+func (s *Server) reportTaskResc(ctx context.Context) error {
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			err := s.reportTaskRescOnce(ctx)
+			if err != nil {
+				return err
+			}
+		}
+	}
 }

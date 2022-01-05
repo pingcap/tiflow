@@ -54,7 +54,7 @@ func main() {
 		}
 
 		req := &pb.SubmitJobRequest{
-			Tp:     pb.SubmitJobRequest_Benchmark,
+			Tp:     pb.JobType_Benchmark,
 			Config: configJSON,
 			User:   "hanfei",
 		}
