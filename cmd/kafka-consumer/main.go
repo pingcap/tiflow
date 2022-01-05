@@ -23,7 +23,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -572,7 +571,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			debug.FreeOSMemory()
 
 			// execute ddl
 			err = c.ddlSink.EmitDDLEvent(ctx, todoDDL)
@@ -590,18 +588,15 @@ func (c *Consumer) Run(ctx context.Context) error {
 			log.Fatal("global ResolvedTs fallback")
 		}
 
-		if lastGlobalResolvedTs < globalResolvedTs {
-			lastGlobalResolvedTs = globalResolvedTs
-			atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
-			log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
+		lastGlobalResolvedTs = globalResolvedTs
+		atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
+		log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
 
-			err = c.forEachSink(func(sink *partitionSink) error {
-				return syncFlushRowChangedEvents(ctx, sink, sink.resolvedTs)
-			})
-			if err != nil {
-				return errors.Trace(err)
-			}
-			debug.FreeOSMemory()
+		err = c.forEachSink(func(sink *partitionSink) error {
+			return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
+		})
+		if err != nil {
+			return errors.Trace(err)
 		}
 	}
 }
