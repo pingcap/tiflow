@@ -47,6 +47,3 @@ syncers:
   global:
     worker-count: 16
     batch: 100
-
-tidb:
-  backend: "tidb"
