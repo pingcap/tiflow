@@ -89,7 +89,7 @@ func testGetDefaultValue(srcs []*sql.DB) {
 		log.S().Info("running ddl test: ", i, " ", testName)
 
 		var wg sync.WaitGroup
-		ctx, cancel := context.WithTimeout(context.Background(), runTime)
+		ctx, _ := context.WithTimeout(context.Background(), runTime)
 
 		for idx, src := range srcs {
 			wg.Add(1)
@@ -108,8 +108,6 @@ func testGetDefaultValue(srcs []*sql.DB) {
 		}()
 
 		wg.Wait()
-		time.Sleep(runTime)
-		cancel()
 
 		util.MustExec(srcs[0], fmt.Sprintf("create table mark.finish_mark_%d(a int primary key);", i+finishIdx))
 		total++
@@ -668,7 +666,7 @@ func testGetZeroValue(srcs []*sql.DB) {
 
 	for i, unit := range addColumnUnits {
 		var wg sync.WaitGroup
-		ctx, cancel := context.WithTimeout(context.Background(), runTime)
+		ctx, _ := context.WithTimeout(context.Background(), runTime)
 
 		for idx, src := range srcs {
 			wg.Add(1)
@@ -705,8 +703,6 @@ func testGetZeroValue(srcs []*sql.DB) {
 		}()
 
 		wg.Wait()
-		time.Sleep(runTime)
-		cancel()
 	}
 	util.MustExec(srcs[0], fmt.Sprintf("create table mark.finish_mark_%d(a int primary key);", finishIdx))
 	finishIdx++
