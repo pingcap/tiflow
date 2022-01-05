@@ -86,7 +86,6 @@ func TestRetry(t *testing.T) {
 }
 
 func TestDelegateLease(t *testing.T) {
-
 	ctx := context.Background()
 	dir, err := ioutil.TempDir("", "test-deleate-lease")
 	require.Nil(t, err)
