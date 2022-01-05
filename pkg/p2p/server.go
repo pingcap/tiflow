@@ -36,6 +36,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const (
+	messageServerReportsIndividualMessageSize = true
+)
+
 // MessageServerConfig stores configurations for the MessageServer
 type MessageServerConfig struct {
 	// The maximum number of entries to be cached for topics with no handler registered
@@ -530,6 +534,7 @@ func (m *MessageServer) registerPeer(
 
 	log.Info("peer connection received",
 		zap.String("sender-id", streamMeta.SenderId),
+		zap.String("sender-advertise-addr", streamMeta.SenderAdvertisedAddr),
 		zap.String("addr", clientIP),
 		zap.Int64("epoch", streamMeta.Epoch))
 
@@ -697,6 +702,12 @@ func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, stre
 	metricsServerMessageBatchHistogram := serverMessageBatchHistogram.With(prometheus.Labels{
 		"from": streamHandle.GetStreamMeta().SenderAdvertisedAddr,
 	})
+	metricsServerMessageBatchBytesHistogram := serverMessageBatchBytesHistogram.With(prometheus.Labels{
+		"from": streamHandle.GetStreamMeta().SenderAdvertisedAddr,
+	})
+	metricsServerMessageBytesHistogram := serverMessageBytesHistogram.With(prometheus.Labels{
+		"from": streamHandle.GetStreamMeta().SenderAdvertisedAddr,
+	})
 
 	for {
 		failpoint.Inject("ServerInjectServerRestart", func() {
@@ -714,10 +725,24 @@ func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, stre
 		batchSize := len(packet.GetEntries())
 		log.Debug("received packet", zap.String("streamHandle", streamHandle.GetStreamMeta().SenderId),
 			zap.Int("num-entries", batchSize))
-		metricsServerMessageBatchHistogram.Observe(float64(batchSize))
 
-		if len(packet.GetEntries()) > 0 {
-			metricsServerMessageCount.Inc()
+		batchBytes := packet.Size()
+		metricsServerMessageBatchBytesHistogram.Observe(float64(batchBytes))
+		metricsServerMessageBatchHistogram.Observe(float64(batchSize))
+		metricsServerMessageCount.Add(float64(batchSize))
+
+		entries := packet.GetEntries()
+		if batchSize > 0 {
+			if messageServerReportsIndividualMessageSize /* true for now */ {
+				// Note that this can be costly if the number of messages is huge.
+				// However, the current usage of this package in TiCDC should not
+				// cause any problem, as the messages are for metadata only.
+				for _, entry := range entries {
+					messageWireSize := entry.Size()
+					metricsServerMessageBytesHistogram.Observe(float64(messageWireSize))
+				}
+			}
+
 			// See the comment above on why use scheduleTaskBlocking.
 			if err := m.scheduleTaskBlocking(stream.Context(), taskOnMessageBatch{
 				streamMeta:     streamHandle.GetStreamMeta(),

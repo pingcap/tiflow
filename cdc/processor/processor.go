@@ -224,6 +224,7 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 func newProcessor(ctx cdcContext.Context) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	advertiseAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	conf := config.GetGlobalServerConfig()
 	p := &processor{
 		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:         make(chan error, 1),
@@ -232,7 +233,7 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
 
-		newSchedulerEnabled: config.SchedulerV2Enabled,
+		newSchedulerEnabled: conf.Debug.EnableNewScheduler,
 
 		metricResolvedTsGauge:        resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricResolvedTsLagGauge:     resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
@@ -343,11 +344,20 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	}
 	// it is no need to check the err here, because we will use
 	// local time when an error return, which is acceptable
-	pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+	pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
 
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
-	p.handleWorkload()
+
+	// The workload key does not contain extra information and
+	// will not be used in the new scheduler. If we wrote to the
+	// key while there are many tables (>10000), we would risk burdening Etcd.
+	//
+	// The keys will still exist but will no longer be written to
+	// if we do not call handleWorkload.
+	if !p.newSchedulerEnabled {
+		p.handleWorkload()
+	}
 	p.doGCSchemaStorage(ctx)
 
 	if p.newSchedulerEnabled {
@@ -648,6 +658,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().RegionCache,
 		ctx.GlobalVars().KVStorage,
+		ctx.GlobalVars().PDClock,
 		checkpointTs, ddlspans, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
@@ -842,7 +853,7 @@ func (p *processor) pushResolvedTs2Table() {
 	if schemaResolvedTs < resolvedTs {
 		// Do not update barrier ts that is larger than
 		// DDL puller's resolved ts.
-		// When DDL puller stall, resolved events that outputed by sorter
+		// When DDL puller stall, resolved events that outputted by sorter
 		// may pile up in memory, as they have to wait DDL.
 		resolvedTs = schemaResolvedTs
 	}
@@ -919,7 +930,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			}
 			markTableID = tableInfo.ID
 			return nil
-		}, retry.WithBackoffMaxDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
+		}, retry.WithBackoffBaseDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

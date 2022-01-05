@@ -25,18 +25,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
-	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 )
-
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(
-		m,
-		goleak.IgnoreTopFunction("github.com/pingcap/tiflow/cdc/sorter/unified.newBackEndPool.func1"),
-	)
-}
 
 func TestUnifiedSorterFileLockConflict(t *testing.T) {
 	dir := t.TempDir()
@@ -104,7 +95,8 @@ func (c *checkSorter) Output() <-chan *model.PolymorphicEvent {
 
 func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	t.Parallel()
-	s := &checkSorter{ch: make(chan *model.PolymorphicEvent, 1)}
+	sch := make(chan *model.PolymorphicEvent, 1)
+	s := &checkSorter{ch: sch}
 	sn := newSorterNode("tableName", 1, 1, nil, nil, &config.ReplicaConfig{
 		Consistent: &config.ConsistentConfig{},
 	})
@@ -112,12 +104,22 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 
 	ch := make(chan pipeline.Message, 1)
 	require.EqualValues(t, 1, sn.ResolvedTs())
+
+	// Resolved ts must not regress even if there is no barrier ts message.
+	resolvedTs1 := pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 1))
 	nctx := pipeline.NewNodeContext(
+		cdcContext.NewContext(context.Background(), nil), resolvedTs1, ch)
+	err := sn.Receive(nctx)
+	require.Nil(t, err)
+	require.EqualValues(t, model.NewResolvedPolymorphicEvent(0, 1), <-sch)
+
+	// Advance barrier ts.
+	nctx = pipeline.NewNodeContext(
 		cdcContext.NewContext(context.Background(), nil),
 		pipeline.BarrierMessage(2),
 		ch,
 	)
-	err := sn.Receive(nctx)
+	err = sn.Receive(nctx)
 	require.Nil(t, err)
 	require.EqualValues(t, 2, sn.barrierTs)
 	// Barrier message must be passed to the next node.

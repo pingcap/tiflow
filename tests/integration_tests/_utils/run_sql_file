@@ -3,7 +3,7 @@
 # parameter 2: database host
 # parameter 3: database port
 
-set -e
+set -eu
 
 echo "[$(date)] Executing SQL: $1" >"$OUT_DIR/sql_res.$TEST_NAME.txt"
 mysql -uroot -h$2 -P$3 --default-character-set utf8mb4 -vv <"$1" >>"$OUT_DIR/sql_res.$TEST_NAME.txt"

@@ -278,7 +278,7 @@ func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
 
 // Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
 func (o *Owner) Bootstrap(state *orchestrator.GlobalReactorState) {
-	log.Info("Start bootstrapping", zap.Any("state", state))
+	log.Info("Start bootstrapping")
 	fixChangefeedInfos(state)
 }
 
@@ -287,6 +287,9 @@ func fixChangefeedInfos(state *orchestrator.GlobalReactorState) {
 	for _, changefeedState := range state.Changefeeds {
 		if changefeedState != nil {
 			changefeedState.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+				if info == nil {
+					return nil, false, nil
+				}
 				info.FixIncompatible()
 				return info, true, nil
 			})
