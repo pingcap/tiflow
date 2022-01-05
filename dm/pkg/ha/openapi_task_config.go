@@ -40,12 +40,12 @@ func openAPITaskFromResp(resp *clientv3.GetResponse) (*openapi.Task, error) {
 	return task, nil
 }
 
-// PutOpenAPITaskConfig puts the openapi task config of task-name.
-func PutOpenAPITaskConfig(cli *clientv3.Client, task openapi.Task, overWrite bool) error {
+// PutOpenAPITaskTemplate puts the openapi task config of task-name.
+func PutOpenAPITaskTemplate(cli *clientv3.Client, task openapi.Task, overWrite bool) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	key := common.OpenAPITaskConfigKeyAdapter.Encode(task.Name)
+	key := common.OpenAPITaskTemplateKeyAdapter.Encode(task.Name)
 	taskJSON, err := task.ToJSON()
 	if err != nil {
 		return err // it should not happen.
@@ -65,12 +65,12 @@ func PutOpenAPITaskConfig(cli *clientv3.Client, task openapi.Task, overWrite boo
 	return nil
 }
 
-// UpdateOpenAPITaskConfig updates the openapi task config by task-name.
-func UpdateOpenAPITaskConfig(cli *clientv3.Client, task openapi.Task) error {
+// UpdateOpenAPITaskTemplate updates the openapi task config by task-name.
+func UpdateOpenAPITaskTemplate(cli *clientv3.Client, task openapi.Task) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	key := common.OpenAPITaskConfigKeyAdapter.Encode(task.Name)
+	key := common.OpenAPITaskTemplateKeyAdapter.Encode(task.Name)
 	taskJSON, err := task.ToJSON()
 	if err != nil {
 		return err // it should not happen.
@@ -87,18 +87,18 @@ func UpdateOpenAPITaskConfig(cli *clientv3.Client, task openapi.Task) error {
 	return nil
 }
 
-// DeleteOpenAPITaskConfig deletes the openapi task config of task-name.
-func DeleteOpenAPITaskConfig(cli *clientv3.Client, taskName string) error {
+// DeleteOpenAPITaskTemplate deletes the openapi task config of task-name.
+func DeleteOpenAPITaskTemplate(cli *clientv3.Client, taskName string) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
-	if _, err := cli.Delete(ctx, common.OpenAPITaskConfigKeyAdapter.Encode(taskName)); err != nil {
+	if _, err := cli.Delete(ctx, common.OpenAPITaskTemplateKeyAdapter.Encode(taskName)); err != nil {
 		return err
 	}
 	return nil
 }
 
-// GetOpenAPITaskConfig gets the openapi task config of task-name.
-func GetOpenAPITaskConfig(cli *clientv3.Client, taskName string) (*openapi.Task, error) {
+// GetOpenAPITaskTemplate gets the openapi task config of task-name.
+func GetOpenAPITaskTemplate(cli *clientv3.Client, taskName string) (*openapi.Task, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
@@ -107,19 +107,19 @@ func GetOpenAPITaskConfig(cli *clientv3.Client, taskName string) (*openapi.Task,
 		resp *clientv3.GetResponse
 		err  error
 	)
-	resp, err = cli.Get(ctx, common.OpenAPITaskConfigKeyAdapter.Encode(taskName))
+	resp, err = cli.Get(ctx, common.OpenAPITaskTemplateKeyAdapter.Encode(taskName))
 	if err != nil {
 		return task, err
 	}
 	return openAPITaskFromResp(resp)
 }
 
-// GetAllOpenAPITaskConfig gets all openapi task config s.
-func GetAllOpenAPITaskConfig(cli *clientv3.Client) ([]*openapi.Task, error) {
+// GetAllOpenAPITaskTemplate gets all openapi task config s.
+func GetAllOpenAPITaskTemplate(cli *clientv3.Client) ([]*openapi.Task, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	resp, err := cli.Get(ctx, common.OpenAPITaskConfigKeyAdapter.Path(), clientv3.WithPrefix())
+	resp, err := cli.Get(ctx, common.OpenAPITaskTemplateKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
