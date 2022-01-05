@@ -595,7 +595,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
 
 			err = c.forEachSink(func(sink *partitionSink) error {
-				return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
+				return syncFlushRowChangedEvents(ctx, sink, sink.resolvedTs)
 			})
 			if err != nil {
 				return errors.Trace(err)
@@ -632,6 +632,7 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 			return err
 		}
 		if flushedResolvedTs {
+			log.Info("flush Row changed Events", zap.Int("partitionNo", sink.partitionNo), zap.Uint64("resolvedTs", resolvedTs))
 			return nil
 		}
 	}
