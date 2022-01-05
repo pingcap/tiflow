@@ -252,7 +252,7 @@ function test_noshard_task() {
 
 	# start no shard task success
 	openapi_task_check "start_noshard_task_success" $task_name $target_table_name
-
+  
 	# to avoid task is not started
 	sleep 1
 	# check noshard task dump status success
