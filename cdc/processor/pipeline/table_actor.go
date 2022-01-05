@@ -70,7 +70,7 @@ type tableActor struct {
 	sortNode   *sorterNode
 	sinkNode   *sinkNode
 
-	nodes   []*Node
+	nodes   []*ActorNode
 	actorID actor.ID
 }
 
@@ -201,14 +201,11 @@ func (t *tableActor) start(ctx context.Context) error {
 		return err
 	}
 	t.sortNode = sorterNode
-	var c AsyncDataHolderFunc = func() *pipeline.Message { return pCtx.tryGetProcessedMessage() }
-	var d AsyncDataProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+	var c AsyncMessageHolderFunc = func() *pipeline.Message { return pCtx.tryGetProcessedMessage() }
+	var d AsyncMessageProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
 		return sorterNode.TryHandleDataMessage(sCtx, msg)
 	}
-	t.nodes = append(t.nodes, &Node{
-		parentNode:    c,
-		dataProcessor: d,
-	})
+	t.nodes = append(t.nodes, NewActorNode(c, d))
 
 	var cCtx *cyclicNodeContext
 	if t.cyclicEnabled {
@@ -224,7 +221,7 @@ func (t *tableActor) start(ctx context.Context) error {
 		d = func(ctx context.Context, msg pipeline.Message) (bool, error) {
 			return cyclicNode.TryHandleDataMessage(cCtx, msg)
 		}
-		t.nodes = append(t.nodes, &Node{parentNode: c, dataProcessor: d})
+		t.nodes = append(t.nodes, NewActorNode(c, d))
 	}
 
 	actorSinkNode := newSinkNode(t.tableID, t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
@@ -245,7 +242,7 @@ func (t *tableActor) start(ctx context.Context) error {
 	d = func(ctx context.Context, msg pipeline.Message) (bool, error) {
 		return actorSinkNode.HandleMessage(sCtx, msg)
 	}
-	t.nodes = append(t.nodes, &Node{parentNode: c, dataProcessor: d})
+	t.nodes = append(t.nodes, NewActorNode(c, d))
 
 	t.started = true
 	log.Info("table actor is started", zap.Int64("tableID", t.tableID))
@@ -341,7 +338,6 @@ func (t *tableActor) Name() string {
 // Cancel stops this table actor immediately and destroy all resources
 // created by this table pipeline
 func (t *tableActor) Cancel() {
-	// TODO(neil): pass context.
 	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopPipelineMessage()); err != nil {
 		log.Warn("fails to send Stop message",
 			zap.Uint64("tableID", uint64(t.tableID)), zap.Error(err))
@@ -351,57 +347,4 @@ func (t *tableActor) Cancel() {
 // Wait waits for table pipeline destroyed
 func (t *tableActor) Wait() {
 	_ = t.wg.Wait()
-}
-
-type Node struct {
-	eventStash    *pipeline.Message
-	parentNode    AsyncDataHolder
-	dataProcessor AsyncDataProcessor
-}
-
-func (n *Node) TryRun(ctx context.Context) error {
-	for {
-		// batch?
-		if n.eventStash == nil {
-			n.eventStash = n.parentNode.TryGetProcessedMessage()
-		}
-		if n.eventStash == nil {
-			return nil
-		}
-		ok, err := n.dataProcessor.TryHandleDataMessage(ctx, *n.eventStash)
-		// process message failed, stop table actor
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		if ok {
-			n.eventStash = nil
-		} else {
-			return nil
-		}
-	}
-}
-
-type AsyncDataProcessor interface {
-	TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error)
-}
-
-type AsyncDataProcessorFunc func(ctx context.Context, msg pipeline.Message) (bool, error)
-
-func (fn AsyncDataProcessorFunc) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
-	return fn(ctx, msg)
-}
-
-type NodeStarter interface {
-	StartActorNode(ctx context.Context, router *actor.Router, wg *errgroup.Group, info *cdcContext.ChangefeedVars, vars *cdcContext.GlobalVars) error
-}
-
-type AsyncDataHolder interface {
-	TryGetProcessedMessage() *pipeline.Message
-}
-
-type AsyncDataHolderFunc func() *pipeline.Message
-
-func (fn AsyncDataHolderFunc) TryGetProcessedMessage() *pipeline.Message {
-	return fn()
 }
