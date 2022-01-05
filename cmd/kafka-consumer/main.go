@@ -410,7 +410,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				log.Fatal("decode message key failed", zap.Error(err))
 			}
 			if !hasNext {
-				debug.FreeOSMemory()
 				break
 			}
 
@@ -634,6 +633,7 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 		}
 		if flushedResolvedTs {
 			log.Info("flush Row changed Events", zap.Int("partitionNo", sink.partitionNo), zap.Uint64("resolvedTs", resolvedTs))
+			debug.FreeOSMemory()
 			return nil
 		}
 	}
