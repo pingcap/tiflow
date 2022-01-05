@@ -83,7 +83,8 @@ func testGetDefaultValue(srcs []*sql.DB) {
 
 	var total int
 	for i, ddlFunc := range []func(context.Context, *sql.DB){
-		addDropColumnDDL, modifyColumnDefaultValueDDL1, modifyColumnDefaultValueDDL2} {
+		addDropColumnDDL, modifyColumnDefaultValueDDL1, modifyColumnDefaultValueDDL2,
+	} {
 		testName := getFunctionName(ddlFunc)
 		log.S().Info("running ddl test: ", i, " ", testName)
 
