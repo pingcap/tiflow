@@ -201,6 +201,9 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		opts["enable-tidb-extension"] = s
 	}
 
+	opts["topic"] = strings.TrimFunc(sinkURI.Path, func(r rune) bool {
+		return r == '/'
+	})
 	return nil
 }
 
