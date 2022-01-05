@@ -192,7 +192,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
 	if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
-		pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
 		currentTs := oracle.GetPhysical(pdTime)
 		if newResolvedTs > barrierTs {
 			newResolvedTs = barrierTs
@@ -525,6 +525,9 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs model.Ts) {
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
+		if status == nil {
+			return nil, changed, nil
+		}
 		if status.ResolvedTs != resolvedTs {
 			status.ResolvedTs = resolvedTs
 			changed = true
