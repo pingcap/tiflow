@@ -63,6 +63,7 @@ func newTableNumberRebalancer(logger *zap.Logger) balancer {
 	}
 }
 
+// newDeterministicTableNumberRebalancer is only used in unit tests.
 func newDeterministicTableNumberRebalancer(logger *zap.Logger) balancer {
 	return &tableNumberBalancer{
 		logger: logger,
@@ -70,6 +71,10 @@ func newDeterministicTableNumberRebalancer(logger *zap.Logger) balancer {
 }
 
 // FindTarget returns the capture with the smallest workload (in table count).
+// Complexity note: This function can be called O(n) times during one scheduler tick,
+// where `n` is the number of tables. So we need to keep the time complexity of this function
+// reasonable. The current implementation has complexity O(c), where `c` is the number of
+// TiCDC nodes.
 func (r *tableNumberBalancer) FindTarget(
 	tables *util.TableSet,
 	captures map[model.CaptureID]*model.CaptureInfo,
@@ -123,6 +128,9 @@ func (r *tableNumberBalancer) randomizeWorkload(input int) int {
 
 // FindVictims returns some victims to remove.
 // Read the comment in the function body on the details of the victim selection.
+// Complexity note: This function is called O(c) times during one scheduler tick,
+// where `c` is the number of TiCDC nodes. The function itself has complexity O(n),
+// where `n` is the number of tables.
 func (r *tableNumberBalancer) FindVictims(
 	tables *util.TableSet,
 	captures map[model.CaptureID]*model.CaptureInfo,
