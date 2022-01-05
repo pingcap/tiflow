@@ -123,6 +123,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	}
 
 	mqMessage.Key = evlp
+	mqMessage.IncRowsCount()
 	a.resultBuf = append(a.resultBuf, mqMessage)
 
 	return EncoderNeedAsyncWrite, nil

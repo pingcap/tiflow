@@ -15,18 +15,16 @@ package etcd
 
 import (
 	"context"
+	"io/ioutil"
+	"os"
+	"testing"
 	"time"
 
 	"github.com/benbjohnson/clock"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3"
 )
-
-type clientSuite struct{}
-
-var _ = check.Suite(&clientSuite{})
 
 type mockClient struct {
 	clientv3.KV
@@ -68,8 +66,7 @@ func (m mockWatcher) RequestProgress(ctx context.Context) error {
 	return nil
 }
 
-func (s *clientSuite) TestRetry(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestRetry(t *testing.T) {
 	originValue := maxTries
 	// to speedup the test
 	maxTries = 2
@@ -78,46 +75,52 @@ func (s *clientSuite) TestRetry(c *check.C) {
 	cli.KV = &mockClient{}
 	retrycli := Wrap(cli, nil)
 	get, err := retrycli.Get(context.TODO(), "")
-	c.Assert(err, check.IsNil)
-	c.Assert(get, check.NotNil)
+
+	require.Nil(t, err)
+	require.NotNil(t, get)
 
 	_, err = retrycli.Put(context.TODO(), "", "")
-	c.Assert(err, check.NotNil)
-	c.Assert(errors.Cause(err), check.ErrorMatches, "mock error", check.Commentf("err:%v", err.Error()))
+	require.NotNil(t, err)
+	require.Containsf(t, errors.Cause(err).Error(), "mock error", "err:%v", err.Error())
 	maxTries = originValue
 }
 
-func (s *etcdSuite) TestDelegateLease(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
+func TestDelegateLease(t *testing.T) {
 	ctx := context.Background()
+	dir, err := ioutil.TempDir("", "delegate-lease-test")
+	require.Nil(t, err)
+	url, server, err := SetupEmbedEtcd(dir)
+	defer func() {
+		server.Close()
+		os.RemoveAll(dir)
+	}()
+	require.Nil(t, err)
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{s.clientURL.String()},
+		Endpoints:   []string{url.String()},
 		DialTimeout: 3 * time.Second,
 	})
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer cli.Close()
 
 	ttl := int64(10)
 	lease, err := cli.Grant(ctx, ttl)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	ttlResp, err := cli.TimeToLive(ctx, lease.ID)
-	c.Assert(err, check.IsNil)
-	c.Assert(ttlResp.GrantedTTL, check.Equals, ttl)
-	c.Assert(ttlResp.TTL, check.Less, ttl)
-	c.Assert(ttlResp.TTL, check.Greater, int64(0))
+	require.Nil(t, err)
+	require.Equal(t, ttlResp.GrantedTTL, ttl)
+	require.Less(t, ttlResp.TTL, ttl)
+	require.Greater(t, ttlResp.TTL, int64(0))
 
 	_, err = cli.Revoke(ctx, lease.ID)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	ttlResp, err = cli.TimeToLive(ctx, lease.ID)
-	c.Assert(err, check.IsNil)
-	c.Assert(ttlResp.TTL, check.Equals, int64(-1))
+	require.Nil(t, err)
+	require.Equal(t, ttlResp.TTL, int64(-1))
 }
 
 // test no data lost when WatchCh blocked
-func (s *clientSuite) TestWatchChBlocked(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestWatchChBlocked(t *testing.T) {
 	cli := clientv3.NewCtxClient(context.TODO())
 	resetCount := 0
 	requestCount := 0
@@ -168,19 +171,17 @@ func (s *clientSuite) TestWatchChBlocked(c *check.C) {
 		}
 	}
 
-	c.Check(sentRes, check.DeepEquals, receivedRes)
+	require.Equal(t, sentRes, receivedRes)
 	// make sure watchCh has been reset since timeout
-	c.Assert(*watcher.resetCount > 1, check.IsTrue)
+	require.True(t, *watcher.resetCount > 1)
 	// make sure RequestProgress has been call since timeout
-	c.Assert(*watcher.requestCount > 1, check.IsTrue)
+	require.True(t, *watcher.requestCount > 1)
 	// make sure etcdRequestProgressDuration is less than etcdWatchChTimeoutDuration
-	c.Assert(etcdRequestProgressDuration, check.Less, etcdWatchChTimeoutDuration)
+	require.Less(t, etcdRequestProgressDuration, etcdWatchChTimeoutDuration)
 }
 
 // test no data lost when OutCh blocked
-func (s *clientSuite) TestOutChBlocked(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestOutChBlocked(t *testing.T) {
 	cli := clientv3.NewCtxClient(context.TODO())
 	resetCount := 0
 	requestCount := 0
@@ -228,11 +229,10 @@ func (s *clientSuite) TestOutChBlocked(c *check.C) {
 		}
 	}
 
-	c.Check(sentRes, check.DeepEquals, receivedRes)
+	require.Equal(t, sentRes, receivedRes)
 }
 
-func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestRevisionNotFallBack(t *testing.T) {
 	cli := clientv3.NewCtxClient(context.TODO())
 
 	resetCount := 0
@@ -270,9 +270,9 @@ func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
 	// move time forward
 	mockClock.Add(time.Second * 30)
 	// make sure watchCh has been reset since timeout
-	c.Assert(*watcher.resetCount > 1, check.IsTrue)
+	require.True(t, *watcher.resetCount > 1)
 	// make suer revision in WatchWitchChan does not fall back
 	// even if there has not any response been received from WatchCh
 	// while WatchCh was reset
-	c.Assert(*watcher.rev, check.Equals, revision)
+	require.Equal(t, *watcher.rev, revision)
 }

@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/txnutil"
@@ -312,31 +313,30 @@ type CDCClient struct {
 	grpcPool GrpcPool
 
 	regionCache *tikv.RegionCache
-	kvStorage   TiKVStorage
+	kvStorage   tikv.Storage
+	pdClock     pdtime.Clock
 
 	regionLimiters *regionEventFeedLimiters
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grpcPool GrpcPool, regionCache *tikv.RegionCache) (c CDCKVClient) {
+func NewCDCClient(
+	ctx context.Context,
+	pd pd.Client,
+	kvStorage tikv.Storage,
+	grpcPool GrpcPool,
+	regionCache *tikv.RegionCache,
+	pdClock pdtime.Clock,
+) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
-
-	var store TiKVStorage
-	if kvStorage != nil {
-		// wrap to TiKVStorage if need.
-		if s, ok := kvStorage.(TiKVStorage); ok {
-			store = s
-		} else {
-			store = newStorageWithCurVersionCache(kvStorage, kvStorage.UUID())
-		}
-	}
 
 	c = &CDCClient{
 		clusterID:      clusterID,
 		pd:             pd,
-		kvStorage:      store,
+		kvStorage:      kvStorage,
 		grpcPool:       grpcPool,
 		regionCache:    regionCache,
+		pdClock:        pdClock,
 		regionLimiters: defaultRegionEventFeedLimiters,
 	}
 	return
@@ -398,7 +398,7 @@ func (c *CDCClient) EventFeed(
 	isPullerInit PullerInitialization,
 	eventCh chan<- model.RegionFeedEvent,
 ) error {
-	s := newEventFeedSession(ctx, c, c.regionCache, c.kvStorage, span,
+	s := newEventFeedSession(ctx, c, span,
 		lockResolver, isPullerInit,
 		enableOldValue, ts, eventCh)
 	return s.eventFeed(ctx, ts)
@@ -416,9 +416,7 @@ func currentRequestID() uint64 {
 }
 
 type eventFeedSession struct {
-	client      *CDCClient
-	regionCache *tikv.RegionCache
-	kvStorage   TiKVStorage
+	client *CDCClient
 
 	lockResolver txnutil.LockResolver
 	isPullerInit PullerInitialization
@@ -463,8 +461,6 @@ type rangeRequestTask struct {
 func newEventFeedSession(
 	ctx context.Context,
 	client *CDCClient,
-	regionCache *tikv.RegionCache,
-	kvStorage TiKVStorage,
 	totalSpan regionspan.ComparableSpan,
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
@@ -476,8 +472,6 @@ func newEventFeedSession(
 	kvClientCfg := config.GetGlobalServerConfig().KVClient
 	return &eventFeedSession{
 		client:            client,
-		regionCache:       regionCache,
-		kvStorage:         kvStorage,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
 		regionRouter:      NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit),
@@ -905,7 +899,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 		retryErr := retry.Do(ctx, func() error {
 			scanT0 := time.Now()
 			bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-			regions, err = s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
+			regions, err = s.client.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
 			scanRegionsDuration.WithLabelValues(captureAddr).Observe(time.Since(scanT0).Seconds())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrPDBatchLoadRegions, err)
@@ -1012,7 +1006,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		innerErr := eerr.err
 		if notLeader := innerErr.GetNotLeader(); notLeader != nil {
 			metricFeedNotLeaderCounter.Inc()
-			s.regionCache.UpdateLeader(errInfo.verID, notLeader.GetLeader(), errInfo.rpcCtx.AccessIdx)
+			s.client.regionCache.UpdateLeader(errInfo.verID, notLeader.GetLeader(), errInfo.rpcCtx.AccessIdx)
 		} else if innerErr.GetEpochNotMatch() != nil {
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
 			metricFeedEpochNotMatchCounter.Inc()
@@ -1055,7 +1049,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		// make some detection(peer may tell us where new leader is)
 		// RegionCache.OnSendFail is thread_safe inner.
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-		s.regionCache.OnSendFail(bo, errInfo.rpcCtx, regionScheduleReload, err)
+		s.client.regionCache.OnSendFail(bo, errInfo.rpcCtx, regionScheduleReload, err)
 	}
 
 	failpoint.Inject("kvClientRegionReentrantErrorDelay", nil)
@@ -1065,7 +1059,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 
 func (s *eventFeedSession) getRPCContextForRegion(ctx context.Context, id tikv.RegionVerID) (*tikv.RPCContext, error) {
 	bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-	rpcCtx, err := s.regionCache.GetTiKVRPCContext(bo, id, tidbkv.ReplicaReadLeader, 0)
+	rpcCtx, err := s.client.regionCache.GetTiKVRPCContext(bo, id, tidbkv.ReplicaReadLeader, 0)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrGetTiKVRPCContext, err)
 	}

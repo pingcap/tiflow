@@ -148,15 +148,11 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 	# dmls fail
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Paused" 2
-	#"Error 1054: Unknown column 'a' in 'field list'" 2 // may more than 2 dml error
+		"Paused" 1 \
+		"Unknown column 'a' in 'field list'" 1
 
 	# third, set schema to be same with upstream
-	# TODO: support set schema automatically base on upstream schema
 	echo 'CREATE TABLE `tb1` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema1.sql
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog-schema update -s mysql-replica-01 test ${shardddl1} ${tb1} ${WORK_DIR}/schema1.sql --flush --sync" \
-		"\"result\": true" 2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog-schema update -s mysql-replica-02 test ${shardddl1} ${tb1} ${WORK_DIR}/schema1.sql --flush --sync" \
 		"\"result\": true" 2
@@ -169,7 +165,7 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 	# source2.table2's dml fails
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Error 1054: Unknown column 'a' in 'field list'" 1
+		"Unknown column 'a' in 'field list'" 1
 
 	# WARN: set schema of source2.table2
 	# Actually it should be tb2(a,b), dml is {a: 9, b: 'iii'}
