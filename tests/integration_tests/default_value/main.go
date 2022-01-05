@@ -68,8 +68,8 @@ func main() {
 
 	go switchAsyncCommit(ctx, sourceDB0)
 	util.MustExec(sourceDB0, "create database mark;")
-	testGetDefaultValue([]*sql.DB{sourceDB0, sourceDB1})
 	testGetZeroValue([]*sql.DB{sourceDB0, sourceDB1})
+	testGetDefaultValue([]*sql.DB{sourceDB0, sourceDB1})
 	util.MustExec(sourceDB0, "create table mark.finish_mark(a int primary key);")
 }
 
@@ -708,6 +708,7 @@ func testGetZeroValue(srcs []*sql.DB) {
 		cancel()
 	}
 	util.MustExec(srcs[0], fmt.Sprintf("create table mark.finish_mark_%d(a int primary key);", finishIdx))
+	finishIdx++
 }
 
 const (
