@@ -19,9 +19,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
-	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -122,12 +120,13 @@ func (c *column) decodeCanalJSONColumn(name string, javaType JavaSQLType) *model
 }
 
 func (c *column) ToSinkColumn(name string) *model.Column {
-	col := new(model.Column)
-	col.Type = c.Type
-	col.Flag = c.Flag
-	col.Name = name
-	col.Value = c.Value
-	if c.Value == nil {
+	col := &model.Column{
+		Type:  c.Type,
+		Flag:  c.Flag,
+		Name:  name,
+		Value: c.Value,
+	}
+	if col.Value == nil {
 		return col
 	}
 	switch col.Type {
@@ -306,17 +305,16 @@ func sinkColumns2JsonColumns(cols []*model.Column) map[string]column {
 }
 
 func jsonColumns2SinkColumns(cols map[string]column) []*model.Column {
-	sinkCols := make([]*model.Column, 0, len(cols))
-	for name, col := range cols {
-		c := col.ToSinkColumn(name)
-		sinkCols = append(sinkCols, c)
-	}
-	if len(sinkCols) == 0 {
+	if len(cols) == 0 {
 		return nil
 	}
-	sort.Slice(sinkCols, func(i, j int) bool {
-		return strings.Compare(sinkCols[i].Name, sinkCols[j].Name) > 0
-	})
+	sinkCols := make([]*model.Column, 0, len(cols))
+	for name, col := range cols {
+		sinkCols = append(sinkCols, col.ToSinkColumn(name))
+	}
+	// sort.Slice(sinkCols, func(i, j int) bool {
+	// 	return strings.Compare(sinkCols[i].Name, sinkCols[j].Name) > 0
+	// })
 	return sinkCols
 }
 
