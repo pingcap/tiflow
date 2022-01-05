@@ -36,7 +36,8 @@ func NewActorNode(parentNode AsyncMessageHolder, messageProcessor AsyncMessagePr
 	}
 }
 
-// TryRun get message and process it util no message is available or message processing is blocked
+// TryRun get message from parentNode and handle it util there is no more message to come
+//  or message handling is blocking
 // only one message will be cached
 func (n *ActorNode) TryRun(ctx context.Context) error {
 	for {
