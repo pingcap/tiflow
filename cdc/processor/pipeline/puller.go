@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/tikv/client-go/v2/oracle"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -58,7 +57,15 @@ func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 }
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
+<<<<<<< HEAD
 	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
+=======
+	return n.InitWithWaitGroup(ctx, new(errgroup.Group))
+}
+
+func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Group) error {
+	n.wg = wg
+>>>>>>> 662354ad5 (processor(ticdc): add min resolved/checkpoint table ID metrics (#4198))
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	ctxC = util.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
@@ -80,9 +87,6 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 				if rawKV == nil {
 					continue
 				}
-				if rawKV.OpType == model.OpTypeResolved {
-					metricTableResolvedTsGauge.Set(float64(oracle.ExtractPhysical(rawKV.CRTs)))
-				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
 			}
@@ -100,7 +104,6 @@ func (n *pullerNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
-	tableResolvedTsGauge.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
 	n.cancel()
 	return n.wg.Wait()
 }
