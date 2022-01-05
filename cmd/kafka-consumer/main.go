@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -409,6 +410,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				log.Fatal("decode message key failed", zap.Error(err))
 			}
 			if !hasNext {
+				debug.FreeOSMemory()
 				break
 			}
 
