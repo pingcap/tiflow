@@ -30,7 +30,7 @@ func putTaskCliArgsOp(taskname string, sources []string, args config.TaskCliArgs
 		return nil, err
 	}
 
-	var ops []clientv3.Op
+	ops := []clientv3.Op{}
 	for _, source := range sources {
 		key := common.TaskCliArgsKeyAdapter.Encode(taskname, source)
 		ops = append(ops, clientv3.OpPut(key, data))
