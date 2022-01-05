@@ -152,12 +152,7 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 		"Unknown column 'a' in 'field list'" 1
 
 	# third, set schema to be same with upstream
-<<<<<<< HEAD
-	# TODO: support set schema automatically base on upstream schema
-	echo 'CREATE TABLE `tb1` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1' >${WORK_DIR}/schema1.sql
-=======
 	echo 'CREATE TABLE `tb1` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema1.sql
->>>>>>> 74a24d6df (syncer(dm): track skipped ddls when using dmctl binlog to skip some ddls (#4178))
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog-schema update -s mysql-replica-02 test ${shardddl1} ${tb1} ${WORK_DIR}/schema1.sql --flush --sync" \
 		"\"result\": true" 2
