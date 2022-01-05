@@ -58,6 +58,25 @@ func NewConfigCmd() *cobra.Command {
 	return cmd
 }
 
+func newConfigTaskTemplateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "task-template [task-name]",
+		Short: "show task template which is created by WebUI with task config format",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 || len(args) > 1 {
+				return cmd.Help()
+			}
+			name := args[0]
+			output, err := cmd.Flags().GetString("path")
+			if err != nil {
+				return err
+			}
+			return sendGetConfigRequest(pb.CfgType_TaskTemplateType, name, output)
+		},
+	}
+	return cmd
+}
+
 func newConfigTaskCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "task [task-name]",
@@ -77,25 +96,6 @@ func newConfigTaskCmd() *cobra.Command {
 	cmd.AddCommand(
 		newConfigTaskUpdateCmd(),
 	)
-	return cmd
-}
-
-func newConfigTaskTemplateCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "template [task-name]",
-		Short: "show task template which is created by WebUI",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 || len(args) > 1 {
-				return cmd.Help()
-			}
-			name := args[0]
-			output, err := cmd.Flags().GetString("path")
-			if err != nil {
-				return err
-			}
-			return sendGetConfigRequest(pb.CfgType_TaskTemplateType, name, output)
-		},
-	}
 	return cmd
 }
 

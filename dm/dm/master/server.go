@@ -2151,6 +2151,8 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		sort.Slice(subCfgList, func(i, j int) bool {
 			return subCfgList[i].SourceID < subCfgList[j].SourceID
 		})
+		// For the get-config command, we want to filter out fields that are not easily readable by humans,
+		// such as SSLXXBytes field in `Security` struct
 		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
 		taskCfg.TargetDB.Password = "******"
 		if taskCfg.TargetDB.Security != nil {
@@ -2158,24 +2160,24 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		}
 		return taskCfg.String()
 	}
-
-	// For the get-config command, you want to filter out fields that are not easily readable by humans,
-	// such as SSLXXBytes field in `Security` struct
 	switch req.Type {
 	case pb.CfgType_TaskTemplateType:
-		task, err := ha.GetOpenAPITaskConfig(s.etcdClient, req.Name)
+		task, err := ha.GetOpenAPITaskTemplate(s.etcdClient, req.Name)
 		if err != nil {
 			resp2.Msg = err.Error()
+			// nolint:nilerr
 			return resp2, nil
 		}
 		if task == nil {
 			resp2.Msg = "task not found"
+			// nolint:nilerr
 			return resp2, nil
 		}
 		toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
 		if adjustDBErr := adjustTargetDB(ctx, toDBCfg); adjustDBErr != nil {
 			if err != nil {
 				resp2.Msg = err.Error()
+				// nolint:nilerr
 				return resp2, nil
 			}
 		}
@@ -2191,11 +2193,12 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		subTaskConfigList, err := config.OpenAPITaskToSubTaskConfigs(task, toDBCfg, sourceCfgMap)
 		if err != nil {
 			resp2.Msg = err.Error()
+			// nolint:nilerr
 			return resp2, nil
 		}
 		subCfgList := make([]*config.SubTaskConfig, len(subTaskConfigList))
-		for i, subTaskConfig := range subTaskConfigList {
-			subCfgList[i] = &subTaskConfig
+		for i := range subTaskConfigList {
+			subCfgList[i] = &subTaskConfigList[i]
 		}
 		cfg = formartTaskString(subCfgList)
 	case pb.CfgType_TaskType:
