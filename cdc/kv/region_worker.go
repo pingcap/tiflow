@@ -632,7 +632,7 @@ func (w *regionWorker) handleEventEntry(
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(state.startFeedTime) > 20*time.Second {
 				log.Warn("The time cost of initializing is too much",
-					zap.Duration("timeCost", time.Since(state.startFeedTime)),
+					zap.Duration("duration", time.Since(state.startFeedTime)),
 					zap.Uint64("regionID", regionID))
 			}
 			w.metrics.metricPullEventInitializedCounter.Inc()

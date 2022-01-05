@@ -117,9 +117,9 @@ func (r *tableNumberBalancer) FindVictims(
 	upperLimitPerCapture := int(math.Ceil(float64(totalTableNum) / float64(captureNum)))
 
 	r.logger.Info("Start rebalancing",
-		zap.Int("table-num", totalTableNum),
-		zap.Int("capture-num", captureNum),
-		zap.Int("target-limit", upperLimitPerCapture))
+		zap.Int("tableNum", totalTableNum),
+		zap.Int("captureNum", captureNum),
+		zap.Int("targetLimit", upperLimitPerCapture))
 
 	var victims []*util.TableRecord
 	for _, tables := range tables.GetAllTablesGroupedByCaptures() {
@@ -148,7 +148,7 @@ func (r *tableNumberBalancer) FindVictims(
 			}
 
 			r.logger.Info("Rebalance: find victim table",
-				zap.Any("table-record", record))
+				zap.Any("tableRecord", record))
 			victims = append(victims, record)
 			tableNum2Remove--
 		}

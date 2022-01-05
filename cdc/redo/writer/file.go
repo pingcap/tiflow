@@ -183,12 +183,12 @@ func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
 		case <-ctx.Done():
 			err := w.Close()
 			if err != nil {
-				log.Error("runFlushToDisk close fail", zap.String("changefeedID", w.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("runFlushToDisk close fail", zap.String("changefeed", w.cfg.ChangeFeedID), zap.Error(err))
 			}
 		case <-ticker.C:
 			err := w.Flush()
 			if err != nil {
-				log.Error("redo log flush fail", zap.String("changefeedID", w.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("redo log flush fail", zap.String("changefeed", w.cfg.ChangeFeedID), zap.Error(err))
 			}
 		}
 	}
