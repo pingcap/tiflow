@@ -24,13 +24,13 @@ import (
 )
 
 func TestTryRun(t *testing.T) {
-	var pN AsyncDataHolderFunc = func() *pipeline.Message { return nil }
-	var dp AsyncDataProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+	var pN AsyncMessageHolderFunc = func() *pipeline.Message { return nil }
+	var dp AsyncMessageProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
 		return false, errors.New("error")
 	}
 	n := NewActorNode(pN, dp)
 	require.Nil(t, n.TryRun(context.TODO()))
-	require.Nil(t, n.eventStash)
+	require.Nil(t, n.messageStash)
 	// process failed
 	pN = func() *pipeline.Message {
 		return &pipeline.Message{
@@ -40,18 +40,18 @@ func TestTryRun(t *testing.T) {
 	}
 	n = NewActorNode(pN, dp)
 	require.NotNil(t, n.TryRun(context.TODO()))
-	require.NotNil(t, n.eventStash)
-	require.Equal(t, pipeline.MessageTypeBarrier, n.eventStash.Tp)
-	require.Equal(t, model.Ts(1), n.eventStash.BarrierTs)
+	require.NotNil(t, n.messageStash)
+	require.Equal(t, pipeline.MessageTypeBarrier, n.messageStash.Tp)
+	require.Equal(t, model.Ts(1), n.messageStash.BarrierTs)
 	// data process is blocked
 	dp = func(ctx context.Context, msg pipeline.Message) (bool, error) {
 		return false, nil
 	}
-	n.dataProcessor = dp
+	n.messageProcessor = dp
 	require.Nil(t, n.TryRun(context.TODO()))
-	require.NotNil(t, n.eventStash)
-	require.Equal(t, pipeline.MessageTypeBarrier, n.eventStash.Tp)
-	require.Equal(t, model.Ts(1), n.eventStash.BarrierTs)
+	require.NotNil(t, n.messageStash)
+	require.Equal(t, pipeline.MessageTypeBarrier, n.messageStash.Tp)
+	require.Equal(t, model.Ts(1), n.messageStash.BarrierTs)
 
 	// data process is ok
 	dp = func(ctx context.Context, msg pipeline.Message) (bool, error) { return true, nil }
@@ -68,7 +68,7 @@ func TestTryRun(t *testing.T) {
 	}
 	n = NewActorNode(pN, dp)
 	n.parentNode = pN
-	n.dataProcessor = dp
+	n.messageProcessor = dp
 	require.Nil(t, n.TryRun(context.TODO()))
-	require.Nil(t, n.eventStash)
+	require.Nil(t, n.messageStash)
 }
