@@ -190,6 +190,7 @@ func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 		if minTs >= targetTs {
 			end = mid - 1
 		} else {
+			// current binlog maybe the target binlog file, we'll backtrace to it later.
 			begin = mid + 1
 		}
 	}
