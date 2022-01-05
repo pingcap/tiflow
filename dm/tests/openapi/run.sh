@@ -339,7 +339,7 @@ function test_multi_tasks() {
 }
 
 function test_task_templates() {
-	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: TASK TEMPLATE"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: TASK TEMPLATES"
 	prepare_database
 
 	taskname="test-1"
@@ -382,7 +382,7 @@ function test_task_templates() {
 	openapi_source_check "delete_source_with_force_success" "mysql-02"
 	openapi_source_check "list_source_success" 0
 	openapi_task_check "get_task_list" 0
-	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: MULTI TASK TEMPLATE"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TASK TEMPLATES"
 }
 
 function test_cluster() {
