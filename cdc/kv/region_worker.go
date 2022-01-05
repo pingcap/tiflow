@@ -299,12 +299,11 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case rtsUpdate := <-w.rtsUpdateCh:
 			w.rtsManager.Upsert(rtsUpdate)
 		case <-advanceCheckTicker.C:
-			version, err := w.session.kvStorage.GetCachedCurrentVersion()
+			currentTimeFromPD, err := w.session.client.pdClock.CurrentTime()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
 				continue
 			}
-			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
 			expired := make([]*regionTsInfo, 0)
 			for w.rtsManager.Len() > 0 {
 				item := w.rtsManager.Pop()

@@ -65,7 +65,7 @@ type Capture struct {
 	etcdClient   *etcd.CDCEtcdClient
 	grpcPool     kv.GrpcPool
 	regionCache  *tikv.RegionCache
-	TimeAcquirer pdtime.TimeAcquirer
+	pdClock      *pdtime.PDClock
 	sorterSystem *ssystem.System
 
 	enableNewScheduler bool
@@ -137,10 +137,10 @@ func (c *Capture) reset(ctx context.Context) error {
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
 
-	if c.TimeAcquirer != nil {
-		c.TimeAcquirer.Stop()
+	if c.pdClock != nil {
+		c.pdClock.Stop()
 	}
-	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
+	c.pdClock = pdtime.NewClock(c.pdClient)
 
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
@@ -263,7 +263,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		EtcdClient:       c.etcdClient,
 		GrpcPool:         c.grpcPool,
 		RegionCache:      c.regionCache,
-		TimeAcquirer:     c.TimeAcquirer,
+		PDClock:          c.pdClock,
 		TableActorSystem: c.tableActorSystem,
 		SorterSystem:     c.sorterSystem,
 		MessageServer:    c.MessageServer,
@@ -319,7 +319,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.TimeAcquirer.Run(ctx)
+		c.pdClock.Run(ctx)
 	}()
 	wg.Add(1)
 	go func() {
