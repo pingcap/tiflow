@@ -292,26 +292,29 @@ func (t *testPosFinderSuite) TestMySQL57GTID(c *C) {
 		c.Assert(posType, Equals, BelowLowerBoundBinlogPos)
 	}
 	{
+		gtids := []string{
+			"ffffffff-ffff-ffff-ffff-ffffffffffff:1",
+			"ffffffff-ffff-ffff-ffff-ffffffffffff:1-2",
+			"ffffffff-ffff-ffff-ffff-ffffffffffff:1-3",
+		}
 		var targetEventStart uint32
 		var targetEvent *replication.BinlogEvent
 		cnt := 0
 		for _, ev := range file1Events {
 			if ev.Header.EventType == replication.GTID_EVENT {
 				targetEvent = ev
-				// second GTID event
+
+				finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
+				location, posType, err := finder.FindByTs(int64(targetEvent.Header.Timestamp))
+				c.Assert(err, IsNil)
+				c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000001", targetEventStart})
+				c.Assert(location.GTIDSetStr(), Equals, gtids[cnt])
+				c.Assert(posType, Equals, InRangeBinlogPos)
+
 				cnt++
-				if cnt == 2 {
-					break
-				}
 			}
 			targetEventStart = ev.Header.LogPos
 		}
-		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
-		location, posType, err := finder.FindByTs(int64(targetEvent.Header.Timestamp))
-		c.Assert(err, IsNil)
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000001", targetEventStart})
-		c.Assert(location.GTIDSetStr(), Equals, "ffffffff-ffff-ffff-ffff-ffffffffffff:1-2")
-		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
 	{
 		var targetEventStart = file2Events[len(file2Events)-1].Header.LogPos
