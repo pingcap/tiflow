@@ -315,6 +315,9 @@ func (s *oldScheduler) cleanUpFinishedOperations() {
 			}
 
 			changed := false
+			if status == nil {
+				return nil, changed, nil
+			}
 			for tableID, operation := range status.Operation {
 				if operation.Status == model.OperFinished {
 					delete(status.Operation, tableID)

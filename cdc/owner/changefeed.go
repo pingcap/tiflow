@@ -70,6 +70,8 @@ type changefeed struct {
 
 	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
+	metricsChangefeedResolvedTsGauge      prometheus.Gauge
+	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
@@ -190,7 +192,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
 	if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
-		pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
 		currentTs := oracle.GetPhysical(pdTime)
 		if newResolvedTs > barrierTs {
 			newResolvedTs = barrierTs
@@ -292,6 +294,8 @@ LOOP:
 	// init metrics
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
+	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.WithLabelValues(c.id)
+	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.WithLabelValues(c.id)
 
 	// create scheduler
 	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
@@ -323,10 +327,17 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	}
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
+
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsGauge = nil
 	c.metricsChangefeedCheckpointTsLagGauge = nil
+
+	changefeedResolvedTsGauge.DeleteLabelValues(c.id)
+	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id)
+	c.metricsChangefeedResolvedTsGauge = nil
+	c.metricsChangefeedResolvedTsLagGauge = nil
+
 	c.initialized = false
 }
 
@@ -514,6 +525,9 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs model.Ts) {
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
+		if status == nil {
+			return nil, changed, nil
+		}
 		if status.ResolvedTs != resolvedTs {
 			status.ResolvedTs = resolvedTs
 			changed = true
@@ -524,10 +538,13 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 		}
 		return status, changed, nil
 	})
-	phyTs := oracle.ExtractPhysical(checkpointTs)
+	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
+	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
+	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyCkpTs) / 1e3)
 
-	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
-	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyTs) / 1e3)
+	phyRTs := oracle.ExtractPhysical(resolvedTs)
+	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
+	c.metricsChangefeedResolvedTsLagGauge.Set(float64(currentTs-phyRTs) / 1e3)
 }
 
 func (c *changefeed) Close(ctx cdcContext.Context) {
