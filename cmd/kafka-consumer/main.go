@@ -223,7 +223,7 @@ func newSaramaConfig() (*sarama.Config, error) {
 }
 
 func main() {
-	log.Info("Starting a new TiCDC open protocol consumer")
+	log.Info("Starting a new TiCDC open protocol consumer", zap.String("GroupID", kafkaGroupID))
 
 	/**
 	 * Construct a new Sarama configuration.
