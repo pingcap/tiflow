@@ -39,4 +39,3 @@ function binlog_invalid_op() {
 		"binlog wrong_operation test-task" \
 		"Available Commands" 1
 }
-

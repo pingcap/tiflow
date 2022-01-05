@@ -862,7 +862,6 @@ function DM_153 {
 		"clean_table" "optimistic"
 }
 
-
 function DM_154_CASE {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,1);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2,2);"

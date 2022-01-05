@@ -325,7 +325,7 @@ function DM_INJECT_DDL_ERROR_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Unsupported modify column: this column has primary key flag" 1 \
+		"Unsupported modify column: this column has primary key flag" 1
 
 	# inject sql but length is 10
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -358,7 +358,7 @@ function DM_INJECT_DML_ERROR_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Duplicate entry '2' for key 'b'" 1 \
+		"Duplicate entry '2' for key 'b'" 1
 
 	# inject sql but length is 10
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
