@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -44,8 +45,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
-
-	_ "net/http/pprof"
 )
 
 // Sarama configuration options
@@ -572,6 +571,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			debug.FreeOSMemory()
 
 			// execute ddl
 			err = c.ddlSink.EmitDDLEvent(ctx, todoDDL)
@@ -600,6 +600,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			debug.FreeOSMemory()
 		}
 	}
 }
@@ -633,7 +634,6 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 		}
 		if flushedResolvedTs {
 			log.Info("flush Row changed Events", zap.Int("partitionNo", sink.partitionNo), zap.Uint64("resolvedTs", resolvedTs))
-			debug.FreeOSMemory()
 			return nil
 		}
 	}
