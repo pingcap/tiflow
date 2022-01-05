@@ -373,6 +373,7 @@ type Task struct {
 
 	// source-related configuration
 	SourceConfig TaskSourceConfig `json:"source_config"`
+	StatusList   *[]SubTaskStatus `json:"status_list,omitempty"`
 
 	// table migrate rule
 	TableMigrateRule []TaskTableMigrateRule `json:"table_migrate_rule"`
@@ -405,21 +406,6 @@ type TaskBinLogFilterRule struct {
 
 	// sql pattern to filter
 	IgnoreSql *[]string `json:"ignore_sql,omitempty"`
-}
-
-// TaskConfigRequest defines model for TaskConfigRequest.
-type TaskConfigRequest struct {
-	// whether to overwrite task config template
-	Overwrite bool `json:"overwrite"`
-}
-
-// TaskConfigResponse defines model for TaskConfigResponse.
-type TaskConfigResponse struct {
-	FailedTaskList []struct {
-		ErrorMsg string `json:"error_msg"`
-		TaskName string `json:"task_name"`
-	} `json:"failed_task_list"`
-	SuccessTaskList []string `json:"success_task_list"`
 }
 
 // configuration of full migrate tasks
@@ -516,6 +502,21 @@ type TaskTargetDataBase struct {
 	User string `json:"user"`
 }
 
+// TaskTemplateRequest defines model for TaskTemplateRequest.
+type TaskTemplateRequest struct {
+	// whether to overwrite task template template
+	Overwrite bool `json:"overwrite"`
+}
+
+// TaskTemplateResponse defines model for TaskTemplateResponse.
+type TaskTemplateResponse struct {
+	FailedTaskList []struct {
+		ErrorMsg string `json:"error_msg"`
+		TaskName string `json:"task_name"`
+	} `json:"failed_task_list"`
+	SuccessTaskList []string `json:"success_task_list"`
+}
+
 // worker name list
 type WorkerNameList []string
 
@@ -549,11 +550,17 @@ type DMAPIStopRelayJSONBody StopRelayRequest
 // DMAPITransferSourceJSONBody defines parameters for DMAPITransferSource.
 type DMAPITransferSourceJSONBody WorkerNameRequest
 
-// DMAPICreateTaskConfigJSONBody defines parameters for DMAPICreateTaskConfig.
-type DMAPICreateTaskConfigJSONBody Task
+// DMAPICreateTaskTemplateJSONBody defines parameters for DMAPICreateTaskTemplate.
+type DMAPICreateTaskTemplateJSONBody Task
 
-// DMAPIImportTaskConfigJSONBody defines parameters for DMAPIImportTaskConfig.
-type DMAPIImportTaskConfigJSONBody TaskConfigRequest
+// DMAPIImportTaskTemplateJSONBody defines parameters for DMAPIImportTaskTemplate.
+type DMAPIImportTaskTemplateJSONBody TaskTemplateRequest
+
+// DMAPIGetTaskListParams defines parameters for DMAPIGetTaskList.
+type DMAPIGetTaskListParams struct {
+	// get task with status
+	WithStatus *bool `json:"with_status,omitempty"`
+}
 
 // DMAPIStartTaskJSONBody defines parameters for DMAPIStartTask.
 type DMAPIStartTaskJSONBody CreateTaskRequest
@@ -591,11 +598,11 @@ type DMAPIStopRelayJSONRequestBody DMAPIStopRelayJSONBody
 // DMAPITransferSourceJSONRequestBody defines body for DMAPITransferSource for application/json ContentType.
 type DMAPITransferSourceJSONRequestBody DMAPITransferSourceJSONBody
 
-// DMAPICreateTaskConfigJSONRequestBody defines body for DMAPICreateTaskConfig for application/json ContentType.
-type DMAPICreateTaskConfigJSONRequestBody DMAPICreateTaskConfigJSONBody
+// DMAPICreateTaskTemplateJSONRequestBody defines body for DMAPICreateTaskTemplate for application/json ContentType.
+type DMAPICreateTaskTemplateJSONRequestBody DMAPICreateTaskTemplateJSONBody
 
-// DMAPIImportTaskConfigJSONRequestBody defines body for DMAPIImportTaskConfig for application/json ContentType.
-type DMAPIImportTaskConfigJSONRequestBody DMAPIImportTaskConfigJSONBody
+// DMAPIImportTaskTemplateJSONRequestBody defines body for DMAPIImportTaskTemplate for application/json ContentType.
+type DMAPIImportTaskTemplateJSONRequestBody DMAPIImportTaskTemplateJSONBody
 
 // DMAPIStartTaskJSONRequestBody defines body for DMAPIStartTask for application/json ContentType.
 type DMAPIStartTaskJSONRequestBody DMAPIStartTaskJSONBody

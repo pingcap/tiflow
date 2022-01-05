@@ -52,6 +52,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 		cfg.HeartbeatReportInterval = c.HeartbeatReportInterval
 		cfg.Timezone = c.Timezone
 		cfg.Meta = inst.Meta
+		cfg.CollationCompatible = c.CollationCompatible
 
 		fromClone := dbCfg.Clone()
 		if fromClone == nil {
@@ -292,6 +293,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	c.OnlineDDL = stCfg0.OnlineDDL
 	c.OnlineDDLScheme = stCfg0.OnlineDDLScheme
 	c.CleanDumpFile = stCfg0.CleanDumpFile
+	c.CollationCompatible = stCfg0.CollationCompatible
 	c.MySQLInstances = make([]*MySQLInstance, 0, len(stCfgs))
 	c.BAList = make(map[string]*filter.Rules)
 	c.Routes = make(map[string]*router.TableRule)
@@ -372,6 +374,9 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 			SyncerConfigName:   syncName,
 			ExpressionFilters:  exprFilterNames,
 		})
+	}
+	if c.CollationCompatible == "" {
+		c.CollationCompatible = LooseCollationCompatible
 	}
 	return c
 }

@@ -42,6 +42,14 @@ var (
 		Buckets:   prometheus.ExponentialBuckets(0.004, 2.0, 20),
 	}, []string{"capture", "id"})
 
+	sorterIterReadDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "ticdc",
+		Subsystem: "sorter",
+		Name:      "db_iter_read_duration_seconds",
+		Help:      "Bucketed histogram of db sorter iterator read duration",
+		Buckets:   prometheus.ExponentialBuckets(0.004, 2.0, 20),
+	}, []string{"capture", "id", "call"})
+
 	sorterCleanupKVCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
@@ -55,5 +63,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(sorterWriteDurationHistogram)
 	registry.MustRegister(sorterCompactDurationHistogram)
 	registry.MustRegister(sorterWriteBytesHistogram)
+	registry.MustRegister(sorterIterReadDurationHistogram)
 	registry.MustRegister(sorterCleanupKVCounter)
 }

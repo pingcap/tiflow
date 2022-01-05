@@ -70,7 +70,13 @@ func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Gr
 	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
-	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, ctx.GlobalVars().GrpcPool, ctx.GlobalVars().RegionCache, ctx.GlobalVars().KVStorage,
+	plr := puller.NewPuller(
+		ctxC,
+		ctx.GlobalVars().PDClient,
+		ctx.GlobalVars().GrpcPool,
+		ctx.GlobalVars().RegionCache,
+		ctx.GlobalVars().KVStorage,
+		ctx.GlobalVars().PDClock,
 		n.replicaInfo.StartTs, n.tableSpan(ctx), true)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
