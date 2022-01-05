@@ -87,7 +87,7 @@ func TestRetry(t *testing.T) {
 
 func TestDelegateLease(t *testing.T) {
 	ctx := context.Background()
-	dir, err := ioutil.TempDir("", "test-deleate-lease")
+	dir, err := ioutil.TempDir("", "delegate-lease-test")
 	require.Nil(t, err)
 	url, server, err := SetupEmbedEtcd(dir)
 	defer func() {
