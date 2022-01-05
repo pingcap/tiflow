@@ -7,7 +7,7 @@ PACKAGE_LIST := go list ./... | grep -vE 'proto|pb'
 PACKAGES := $$($(PACKAGE_LIST))
 GOFILES := $$(find . -name '*.go' -type f | grep -vE 'proto|pb\.go')
 
-all: df-proto df-master df-executor df-master-client
+all: df-proto df-master df-executor df-master-client df-demotask df-demoserver
 
 df-proto:
 	./generate-proto.sh
@@ -20,6 +20,12 @@ df-executor:
 
 df-master-client:
 	go build -o bin/master-client ./cmd/master-client
+
+df-demoserver:
+	go build -o bin/demoserver ./cmd/demoserver
+
+df-demotask:
+	go build -o bin/demotask ./cmd/demotask
 
 unit_test:
 	mkdir -p "$(TEST_DIR)"

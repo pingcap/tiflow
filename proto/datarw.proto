@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package pb;
+import "error.proto";
+
+service DataRWService {
+    rpc ReadLines(ReadLinesRequest ) returns (stream ReadLinesResponse) {}
+    rpc WriteLines(stream WriteLinesRequest) returns (WriteLinesResponse) {}
+    rpc ListFiles (ListFilesReq ) returns (ListFilesResponse);
+}
+
+message ListFilesReq {
+    string  folderName = 1;
+}
+
+message ListFilesResponse{
+    repeated string fileNames =1;
+}
+
+message ReadLinesRequest {
+    string  fileName = 1;
+    int64   lineNo = 2;
+}
+
+message ReadLinesResponse {
+    string  linestr = 1 ;
+}
+
+message WriteLinesRequest {
+    string fileName = 1;
+    string key = 2;
+    string value = 3;
+}
+
+message WriteLinesResponse {
+    Error err = 1;
+}
+
+
+
+
+
+
