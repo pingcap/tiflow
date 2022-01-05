@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { clamp } from 'lodash'
 import { useSafeState } from 'ahooks'
@@ -6,27 +6,29 @@ import QueueAnim from 'rc-queue-anim'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { ghcolors } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
-import { Button, Radio, Checkbox, Steps, StepProps, Alert } from '~/uikit'
+import { Button, Radio, Checkbox, Steps, Alert, StepProps } from '~/uikit'
 import {
   BatchImportTaskConfigResponse,
   useDmapiBatchImportTaskConfigMutation,
 } from '~/models/taskConfig'
 import { sleep } from '~/utils/sleep'
 
+const { Step } = Steps
+
 const BlinkingText: React.FC<{ text: string; active: boolean }> = ({
   text,
   active,
 }) => {
   const [count, setCount] = useSafeState(1)
-  let timer: number
+  let timer = useRef<number>()
 
   useEffect(() => {
     if (active) {
-      timer = setInterval(() => setCount(c => c + 1), 300)
+      timer.current = window.setInterval(() => setCount(c => c + 1), 300)
     }
     return () => {
-      if (timer) {
-        clearInterval(timer)
+      if (timer.current) {
+        clearInterval(timer.current)
       }
     }
   }, [active])
@@ -46,13 +48,10 @@ const BatchImportTaskConfig: React.FC = () => {
   const [currentStep, setCurrentStep] = useSafeState(-1)
   const [overwrite, setOverwrite] = useState(false)
   const [batchImportTaskConfig] = useDmapiBatchImportTaskConfigMutation()
+  const timerId = useRef<number>()
+  const stopTimer = useRef<boolean>(false)
 
-  let timerId: number
-  let stopTimer = false
-
-  const calcStepStatus = (
-    thisStep: number
-  ): { status: StepProps['status']; icon?: StepProps['icon'] } => {
+  const calcStepStatus = (thisStep: number): Pick<StepProps, 'status'> => {
     if (currentStep === thisStep) {
       if (currentStep === 1 && error) {
         return { status: 'error' }
@@ -63,13 +62,13 @@ const BatchImportTaskConfig: React.FC = () => {
     return { status: 'wait' }
   }
 
-  const handleStartImport = useCallback(() => {
+  const handleStartImport = () => {
     setCurrentStep(0)
     handleStartPlaceboProgress()
-  }, [overwrite, percent])
+  }
 
   const increment = () => {
-    timerId = setTimeout(increment, Math.random() * 100)
+    timerId.current = window.setTimeout(increment, Math.random() * 100)
 
     setPercent(percent => {
       if (percent >= 100) {
@@ -99,8 +98,8 @@ const BatchImportTaskConfig: React.FC = () => {
   }
 
   const clearTimer = () => {
-    stopTimer = true
-    clearTimeout(timerId)
+    stopTimer.current = true
+    clearTimeout(timerId.current)
   }
 
   const handleStartPlaceboProgress = useCallback(async () => {
@@ -138,8 +137,8 @@ const BatchImportTaskConfig: React.FC = () => {
 
   useEffect(() => {
     return () => {
-      if (timerId) {
-        clearTimeout(timerId)
+      if (timerId.current) {
+        clearTimeout(timerId.current)
       }
     }
   }, [])
@@ -170,7 +169,7 @@ const BatchImportTaskConfig: React.FC = () => {
 
       {currentStep >= 0 && currentStep < 3 && (
         <Steps direction="vertical" current={currentStep} percent={percent}>
-          <Steps.Step
+          <Step
             {...calcStepStatus(0)}
             title={
               <BlinkingText
@@ -179,7 +178,7 @@ const BatchImportTaskConfig: React.FC = () => {
               />
             }
           />
-          <Steps.Step
+          <Step
             {...calcStepStatus(1)}
             title={
               <BlinkingText
@@ -188,7 +187,7 @@ const BatchImportTaskConfig: React.FC = () => {
               />
             }
           />
-          <Steps.Step
+          <Step
             {...calcStepStatus(2)}
             title={
               <BlinkingText
