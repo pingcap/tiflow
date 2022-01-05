@@ -42,7 +42,7 @@ func (n *ActorNode) TryRun(ctx context.Context) error {
 	for {
 		// batch?
 		if n.messageStash == nil {
-			n.messageStash = n.parentNode.TryGetProcessedMessage()
+			n.messageStash = n.parentNode.TryGetMessage()
 		}
 		if n.messageStash == nil {
 			return nil
@@ -68,7 +68,7 @@ type AsyncMessageProcessor interface {
 
 // AsyncMessageHolder is an interface to get message non-blocking
 type AsyncMessageHolder interface {
-	TryGetProcessedMessage() *pipeline.Message
+	TryGetMessage() *pipeline.Message
 }
 
 type AsyncMessageProcessorFunc func(ctx context.Context, msg pipeline.Message) (bool, error)
@@ -79,6 +79,6 @@ func (fn AsyncMessageProcessorFunc) TryHandleDataMessage(ctx context.Context, ms
 
 type AsyncMessageHolderFunc func() *pipeline.Message
 
-func (fn AsyncMessageHolderFunc) TryGetProcessedMessage() *pipeline.Message {
+func (fn AsyncMessageHolderFunc) TryGetMessage() *pipeline.Message {
 	return fn()
 }
