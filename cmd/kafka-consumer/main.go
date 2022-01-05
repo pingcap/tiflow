@@ -18,6 +18,7 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -42,6 +43,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
+
+	_ "net/http/pprof"
 )
 
 // Sarama configuration options
@@ -248,7 +251,15 @@ func main() {
 	}
 
 	wg := &sync.WaitGroup{}
-	wg.Add(1)
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			log.Fatal("start pprof failed", zap.Error(err))
+		}
+	}()
+
 	go func() {
 		defer wg.Done()
 		for {
