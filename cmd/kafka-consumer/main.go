@@ -549,7 +549,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 			return ctx.Err()
 		default:
 		}
-		time.Sleep(100 * time.Millisecond)
 		// initialize the `globalResolvedTs` as min of all partition's `ResolvedTs`
 		globalResolvedTs := uint64(math.MaxUint64)
 		err := c.forEachSink(func(sink *partitionSink) error {
