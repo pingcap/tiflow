@@ -49,6 +49,7 @@ type LightningLoader struct {
 	sync.RWMutex
 
 	timeZone              string
+	sqlMode               string
 	lightningGlobalConfig *lcfg.GlobalConfig
 	cfg                   *config.SubTaskConfig
 
@@ -150,6 +151,21 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		}
 	}
 	l.timeZone = timeZone
+
+	for k, v := range l.cfg.To.Session {
+		if strings.ToLower(k) == "sql_mode" {
+			l.sqlMode = v
+			break
+		}
+	}
+
+	if len(l.sqlMode) == 0 {
+		sqlModes, err3 := utils.AdjustSQLModeCompatible(l.cfg.LoaderConfig.SQLMode)
+		if err3 != nil {
+			l.logger.Warn("cannot adjust sql_mode compatible, the sql_mode will stay the same", log.ShortError(err3))
+		}
+		l.sqlMode = sqlModes
+	}
 	return nil
 }
 
@@ -169,7 +185,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 		taskNames := strings.Split(tasks, ",")
 		for _, taskName := range taskNames {
 			if l.cfg.Name == taskName {
-				l.logger.Info("inject fail-point LoadDataSlowDownByTask in lightning loader", zap.String("task", taskName))
+				l.logger.Info("inject failpoint LoadDataSlowDownByTask in lightning loader", zap.String("task", taskName))
 				<-taskCtx.Done()
 			}
 		}
@@ -208,7 +224,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 				cfg.TiDB.Vars[k] = v
 			}
 		}
-		cfg.TiDB.StrSQLMode = l.cfg.LoaderConfig.SQLMode
+		cfg.TiDB.StrSQLMode = l.sqlMode
 		cfg.TiDB.Vars = map[string]string{
 			"time_zone": l.timeZone,
 			// always set transaction mode to optimistic

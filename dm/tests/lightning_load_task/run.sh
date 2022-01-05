@@ -208,8 +208,8 @@ function run() {
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 	dmctl_start_task "$cur/conf/dm-task2.yaml" "--remove-meta"
 
-	check_log_contain_with_retry 'inject fail-point LoadDataSlowDownByTask in lightning loader' $WORK_DIR/worker1/log/dm-worker.log
-	check_log_contain_with_retry 'inject fail-point LoadDataSlowDownByTask in lightning loader' $WORK_DIR/worker2/log/dm-worker.log
+	check_log_contain_with_retry 'inject failpoint LoadDataSlowDownByTask in lightning loader' $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry 'inject failpoint LoadDataSlowDownByTask in lightning loader' $WORK_DIR/worker2/log/dm-worker.log
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status load_task1" \
 		"\"unit\": \"Load\"" 1 \
