@@ -253,14 +253,9 @@ function test_noshard_task() {
 	# start no shard task success
 	openapi_task_check "start_noshard_task_success" $task_name $target_table_name
 
-	# to avoid task is not started
-	sleep 1
-	# check noshard task dump status success
-	openapi_task_check "check_noshard_task_dump_status_success" "$task_name" 0
-
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
-		"\"unit\": \"Sync\"" 2
+		"\"stage\": \"Running\"" 2
 
 	init_noshard_data
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
@@ -363,6 +358,55 @@ function test_cluster() {
 	openapi_cluster_check "list_worker_success" 1
 }
 
+function test_noshard_task_dump_status() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: NO SHARD TASK DUMP STATUS"
+	prepare_database
+
+	task_name="test-no-shard"
+	target_table_name="" # empty means no route
+
+	# create source succesfully
+	openapi_source_check "create_source1_success"
+	openapi_source_check "list_source_success" 1
+
+	# get source status success
+	openapi_source_check "get_source_status_success" "mysql-01"
+
+	# create source succesfully
+	openapi_source_check "create_source2_success"
+	# get source list success
+	openapi_source_check "list_source_success" 2
+
+	# get source status success
+	openapi_source_check "get_source_status_success" "mysql-02"
+
+	# start task success: not vaild task create request
+	openapi_task_check "start_task_failed"
+
+	# start no shard task success
+	openapi_task_check "start_noshard_task_success" $task_name $target_table_name
+
+	# to avoid task is not started
+	sleep 1
+	# check noshard task dump status success
+	openapi_task_check "check_noshard_task_dump_status_success" "$task_name" 0
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"unit\": \"Dump\"" 2
+
+	init_noshard_data
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
+
+	# delete source success and clean data for other test
+	openapi_source_check "delete_source_with_force_success" "mysql-01"
+	openapi_source_check "delete_source_with_force_success" "mysql-02"
+	openapi_source_check "list_source_success" 0
+	run_sql_tidb "DROP DATABASE if exists openapi;"
+	openapi_task_check "get_task_list" 0
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK DUMP STATUS SUCCESS"
+}
+
 function run() {
 	# run dm-master1
 	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $cur/conf/dm-master1.toml
@@ -381,8 +425,9 @@ function run() {
 	test_relay
 
 	test_shard_task
+	test_multi_tasks
 
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dumpling/dumpSleepStage=return()"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessForever=return()"
 	kill_dm_worker
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
@@ -394,7 +439,20 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	test_multi_tasks
+	test_noshard_task_dump_status
+
+	export GO_FAILPOINTS=""
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
 	test_noshard_task
 	test_cluster # note that this test case should running at last, becasue it will offline some memebrs of cluster
 }
