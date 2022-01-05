@@ -34,8 +34,8 @@ type MessagesConfig struct {
 
 // read only
 var defaultMessageConfig = &MessagesConfig{
-	ClientMaxBatchInterval:       TomlDuration(time.Millisecond * 100),
-	ClientMaxBatchSize:           8 * 1024, // 8MB
+	ClientMaxBatchInterval:       TomlDuration(time.Millisecond * 200),
+	ClientMaxBatchSize:           8 * 1024 * 1024, // 8MB
 	ClientMaxBatchCount:          128,
 	ClientRetryRateLimit:         1.0, // Once per second
 	ServerMaxPendingMessageCount: 102400,

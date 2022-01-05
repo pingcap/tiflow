@@ -43,10 +43,6 @@ func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
 }
 
-// SchedulerV2Enabled determines wether to used the peer-message based scheduler.
-// TODO set this to true
-const SchedulerV2Enabled = false
-
 // SecurityConfig represents security config for server
 type SecurityConfig = security.Credential
 
@@ -102,14 +98,15 @@ var defaultServerConfig = &ServerConfig{
 		RegionScanLimit:  40,
 	},
 	Debug: &DebugConfig{
-		EnableTableActor: false,
+		EnableTableActor:   false,
+		EnableNewScheduler: false,
 		// Default leveldb sorter config
 		EnableDBSorter: false,
 		DB: &DBConfig{
-			Count: 16,
-			// Following configs are optimized for write throughput.
+			Count: 8,
+			// Following configs are optimized for write/read throughput.
 			// Users should not change them.
-			Concurrency:                 256,
+			Concurrency:                 128,
 			MaxOpenFiles:                10000,
 			BlockSize:                   65536,
 			BlockCacheSize:              4294967296,
@@ -120,6 +117,8 @@ var defaultServerConfig = &ServerConfig{
 			WriteL0PauseTrigger:         math.MaxInt32,
 			CompactionL0Trigger:         160,
 			CompactionDeletionThreshold: 160000,
+			IteratorMaxAliveDuration:    10000,
+			IteratorSlowReadDuration:    256,
 			CleanupSpeedLimit:           10000,
 		},
 		Messages: defaultMessageConfig.Clone(),
