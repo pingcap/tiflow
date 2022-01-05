@@ -2365,7 +2365,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 			return
 		}
 		// why not `skipSQLByPattern` at beginning, but at defer?
-		// it is order to track every ddl except for the one that will cause error.
+		// it is in order to track every ddl except for the one that will cause error.
 		// if `skipSQLByPattern` at beginning, some ddl should be tracked may be skipped.
 		needSkip, err2 := s.skipSQLByPattern(qec.originSQL)
 		if err2 != nil {
