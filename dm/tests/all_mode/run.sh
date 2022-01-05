@@ -323,11 +323,11 @@ function run() {
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 	run_sql_source1 "SET @@global.time_zone = '+01:00';"
 	run_sql_source2 "SET @@global.time_zone = '+02:00';"
-	# test_expression_filter
-	# test_fail_job_between_event
-	# test_session_config
-	# test_query_timeout
-	# test_stop_task_before_checkpoint
+	test_expression_filter
+	test_fail_job_between_event
+	test_session_config
+	test_query_timeout
+	test_stop_task_before_checkpoint
 
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
