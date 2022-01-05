@@ -783,7 +783,7 @@ func (s *Server) DMAPIOperateTableStructure(c *gin.Context, taskName string, sou
 	}
 }
 
-// DMAPIImportTaskTemplate create task_config_template url is: (POST /api/v1/task/templates/import).
+// DMAPIImportTaskTemplate create task_config_template url is: (POST /api/v1/tasks/templates/import).
 func (s *Server) DMAPIImportTaskTemplate(c *gin.Context) {
 	var req openapi.TaskTemplateRequest
 	if err := c.Bind(&req); err != nil {
@@ -813,7 +813,7 @@ func (s *Server) DMAPIImportTaskTemplate(c *gin.Context) {
 	c.IndentedJSON(http.StatusAccepted, resp)
 }
 
-// DMAPICreateTaskTemplate create task_config_template url is: (POST /api/task/templates).
+// DMAPICreateTaskTemplate create task_config_template url is: (POST /api/tasks/templates).
 func (s *Server) DMAPICreateTaskTemplate(c *gin.Context) {
 	task := &openapi.Task{}
 	if err := c.Bind(task); err != nil {
@@ -838,7 +838,7 @@ func (s *Server) DMAPICreateTaskTemplate(c *gin.Context) {
 	c.IndentedJSON(http.StatusCreated, task)
 }
 
-// DMAPIGetTaskTemplateList get task_config_template list url is: (GET /api/v1/task/templates).
+// DMAPIGetTaskTemplateList get task_config_template list url is: (GET /api/v1/tasks/templates).
 func (s *Server) DMAPIGetTaskTemplateList(c *gin.Context) {
 	TaskConfigList, err := ha.GetAllOpenAPITaskTemplate(s.etcdClient)
 	if err != nil {
@@ -853,7 +853,7 @@ func (s *Server) DMAPIGetTaskTemplateList(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, resp)
 }
 
-// DMAPIDeleteTaskTemplate delete task_config_template url is: (DELETE /api/v1/task/templates/{task-name}).
+// DMAPIDeleteTaskTemplate delete task_config_template url is: (DELETE /api/v1/tasks/templates/{task-name}).
 func (s *Server) DMAPIDeleteTaskTemplate(c *gin.Context, taskName string) {
 	if err := ha.DeleteOpenAPITaskTemplate(s.etcdClient, taskName); err != nil {
 		_ = c.Error(err)
@@ -862,7 +862,7 @@ func (s *Server) DMAPIDeleteTaskTemplate(c *gin.Context, taskName string) {
 	c.Status(http.StatusNoContent)
 }
 
-// DMAPIGetTaskTemplate get task_config_template url is: (GET /api/v1/task/templates/{task-name}).
+// DMAPIGetTaskTemplate get task_config_template url is: (GET /api/v1/tasks/templates/{task-name}).
 func (s *Server) DMAPIGetTaskTemplate(c *gin.Context, taskName string) {
 	task, err := ha.GetOpenAPITaskTemplate(s.etcdClient, taskName)
 	if err != nil {
@@ -876,7 +876,7 @@ func (s *Server) DMAPIGetTaskTemplate(c *gin.Context, taskName string) {
 	c.IndentedJSON(http.StatusOK, task)
 }
 
-// DMAPUpdateTaskTemplate update task_config_template url is: (PUT /api/v1/task/templates/{task-name}).
+// DMAPUpdateTaskTemplate update task_config_template url is: (PUT /api/v1/tasks/templates/{task-name}).
 func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 	task := &openapi.Task{}
 	if err := c.Bind(task); err != nil {

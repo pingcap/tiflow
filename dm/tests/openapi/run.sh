@@ -338,6 +338,53 @@ function test_multi_tasks() {
 
 }
 
+function test_task_templates() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: TASK TEMPLATE"
+	prepare_database
+
+	taskname="test-1"
+
+	# create and check source
+	openapi_source_check "create_source1_success"
+	openapi_source_check "create_source2_success"
+	openapi_source_check "list_source_success" 2
+
+	# crud task temoplate
+	openapi_task_check "create_task_template_failed"
+	openapi_task_check "create_task_template_success" $taskname
+	openapi_task_check "list_task_template" 1
+	openapi_task_check "get_task_template" $taskname
+	openapi_task_check "update_task_template_success" $taskname "full"
+	openapi_task_check "delete_task_template" $taskname
+	openapi_task_check "list_task_template" 0
+
+	# improt from tasks and get from dmctl
+	init_noshard_data
+	openapi_task_check "start_noshard_task_success" $taskname
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $taskname" \
+		"\"stage\": \"Running\"" 2
+	openapi_task_check "import_task_template" 1 0
+	openapi_task_check "list_task_template" 1
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"config task $taskname --path $WORK_DIR/get_task_from_task.yaml" \
+		"\"result\": true" 1
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"config task-template $taskname --path $WORK_DIR/get_task_from_task_template.yaml" \
+		"\"result\": true" 1
+
+	diff $WORK_DIR/get_task_from_task.yaml $WORK_DIR/get_task_from_task_template.yaml || exit 1
+
+	# delete source success and clean data for other test
+	openapi_source_check "delete_source_with_force_success" "mysql-01"
+	openapi_source_check "delete_source_with_force_success" "mysql-02"
+	openapi_source_check "list_source_success" 0
+	openapi_task_check "get_task_list" 0
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: MULTI TASK TEMPLATE"
+}
+
 function test_cluster() {
 	# list master and worker node
 	openapi_cluster_check "list_master_success" 2
@@ -378,7 +425,10 @@ function run() {
 	test_shard_task
 	test_multi_tasks
 	test_noshard_task
-	test_cluster # note that this test case should running at last, becasue it will offline some memebrs of cluster
+	test_task_templates
+
+	# NOTE: this test case MUST running at last, becasue it will offline some memebrs of cluster
+	test_cluster
 }
 
 cleanup_data openapi
