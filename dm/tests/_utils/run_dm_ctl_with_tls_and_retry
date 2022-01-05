@@ -40,7 +40,7 @@ for ((k = 0; k < 10; k++)); do
 		fi
 	done
 	if [ $# -eq 0 ]; then
-	  cat $dmctl_log
+		cat $dmctl_log
 	fi
 	if $all_matched; then
 		exit 0
