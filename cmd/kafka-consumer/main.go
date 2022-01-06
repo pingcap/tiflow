@@ -18,7 +18,6 @@ import (
 	"flag"
 	"fmt"
 	"math"
-	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -335,7 +334,6 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
 	opts := map[string]string{}
-
 	for i := 0; i < int(kafkaPartitionNum); i++ {
 		s, err := sink.New(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 		if err != nil {
@@ -424,7 +422,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
-					log.Debug("RowChangedEvent fallback row",
+					log.Debug("RowChangedEvent fallback row, ignore it",
+						zap.Uint64("commitTs", row.CommitTs),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
 						zap.Int32("partition", partition),
@@ -452,9 +451,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if err != nil {
 					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
 				}
-				// TiCDC owner when sending `checkpointTs` to downstream sink,
-				// it tries to make the `checkpointTs` monotonically increase.
-				// But there is some scenario that the consumer would receive redundant `checkpointTs`.
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if ts < resolvedTs {
 					log.Fatal("partition resolved ts fallback",
@@ -559,7 +555,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
 			// flush DMLs
 			err := c.forEachSink(func(sink *partitionSink) error {
-				return c.syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
+				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			})
 			if err != nil {
 				return errors.Trace(err)
@@ -581,20 +577,22 @@ func (c *Consumer) Run(ctx context.Context) error {
 			log.Fatal("global ResolvedTs fallback")
 		}
 
-		lastGlobalResolvedTs = globalResolvedTs
-		atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
-		log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
+		if globalResolvedTs > lastGlobalResolvedTs {
+			lastGlobalResolvedTs = globalResolvedTs
+			atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
+			log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
 
-		err = c.forEachSink(func(sink *partitionSink) error {
-			return c.syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
-		})
-		if err != nil {
-			return errors.Trace(err)
+			err = c.forEachSink(func(sink *partitionSink) error {
+				return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
+			})
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 }
 
-func (c *Consumer) syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolvedTs uint64) error {
+func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolvedTs uint64) error {
 	for {
 		select {
 		case <-ctx.Done():
