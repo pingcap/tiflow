@@ -292,6 +292,7 @@ func main() {
 }
 
 type partitionSink struct {
+	sink.Sink
 	resolvedTs  uint64
 	partitionNo int
 	tablesMap   sync.Map
@@ -305,7 +306,6 @@ type Consumer struct {
 	maxDDLReceivedTs uint64
 	ddlListMu        sync.Mutex
 
-	dmlSink sink.Sink
 	sinks   []*partitionSink
 	sinksMu sync.Mutex
 
@@ -336,17 +336,14 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	errCh := make(chan error, 1)
 	opts := map[string]string{}
 
-	s, err := sink.New(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
-	if err != nil {
-		cancel()
-		return nil, errors.Trace(err)
-	}
-	c.dmlSink = s
-
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		c.sinks[i] = &partitionSink{partitionNo: i}
+		s, err := sink.New(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
+		if err != nil {
+			cancel()
+			return nil, errors.Trace(err)
+		}
+		c.sinks[i] = &partitionSink{Sink: s, partitionNo: i}
 	}
-
 	sink, err := sink.New(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 	if err != nil {
 		cancel()
@@ -442,8 +439,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 				row.Table.TableID =
 					c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
-				err = c.dmlSink.EmitRowChangedEvents(ctx, row)
-				//err = sink.EmitRowChangedEvents(ctx, row)
+				err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
@@ -613,7 +609,7 @@ func (c *Consumer) syncFlushRowChangedEvents(ctx context.Context, sink *partitio
 		flushedResolvedTs := true
 		sink.tablesMap.Range(func(key, value interface{}) bool {
 			tableID := key.(int64)
-			checkpointTs, err = c.dmlSink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+			checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
 			if err != nil {
 				return false
 			}
