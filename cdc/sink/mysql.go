@@ -491,13 +491,13 @@ func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
 			maxResolvedTs, ok := s.tableMaxResolvedTs.Load(tableID)
 			log.Warn("Barrier doesn't return in time, may be stuck",
 				zap.Int64("tableID", tableID),
-				zap.Bool("has resolvedTs", ok),
+				zap.Bool("hasResolvedTs", ok),
 				zap.Any("resolvedTs", maxResolvedTs),
 				zap.Uint64("checkpointTs", s.getTableCheckpointTs(tableID)))
 		default:
 			v, ok := s.tableMaxResolvedTs.Load(tableID)
 			if !ok {
-				log.Info("No table resolvedTs is found", zap.Int64("table-id", tableID))
+				log.Info("No table resolvedTs is found", zap.Int64("tableID", tableID))
 				return nil
 			}
 			maxResolvedTs := v.(uint64)

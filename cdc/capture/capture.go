@@ -218,8 +218,8 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 
 	log.Info("init capture",
-		zap.String("capture-id", c.info.ID),
-		zap.String("capture-addr", c.info.AdvertiseAddr))
+		zap.String("captureID", c.info.ID),
+		zap.String("captureAddr", c.info.AdvertiseAddr))
 	return nil
 }
 
@@ -254,7 +254,7 @@ func (c *Capture) Run(ctx context.Context) error {
 		//   2. the parent context canceled, it means that the caller of the capture hope the capture to exit, and this loop will return in the above `select` block
 		// TODO: make sure the internal cancel should return the real error instead of context.Canceled
 		if cerror.ErrCaptureSuicide.Equal(err) || context.Canceled == errors.Cause(err) {
-			log.Info("capture recovered", zap.String("capture-id", c.info.ID))
+			log.Info("capture recovered", zap.String("captureID", c.info.ID))
 			continue
 		}
 		return errors.Trace(err)
@@ -422,8 +422,8 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		}
 
 		log.Info("campaign owner successfully",
-			zap.String("capture-id", c.info.ID),
-			zap.Int64("owner-rev", ownerRev))
+			zap.String("captureID", c.info.ID),
+			zap.Int64("ownerRev", ownerRev))
 
 		owner := c.newOwner(c.pdClient)
 		c.setOwner(owner)

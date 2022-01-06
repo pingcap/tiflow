@@ -78,7 +78,8 @@ func (s *simpleReactor) Tick(_ context.Context, state ReactorState) (nextState R
 			}
 		}
 		if sum != expectedSum {
-			log.Panic("state is inconsistent", zap.Int("expected-sum", sum), zap.Int("actual-sum", s.state.sum))
+			log.Panic("state is inconsistent",
+				zap.Int("expectedSum", sum), zap.Int("actualSum", s.state.sum))
 		}
 
 		s.state.SetSum(sum)

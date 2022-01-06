@@ -1180,7 +1180,7 @@ func (s *eventFeedSession) receiveFromStream(
 				regionCount = len(cevent.ResolvedTs.Regions)
 			}
 			log.Warn("change data event size too large",
-				zap.Int("size", size), zap.Int("event length", len(cevent.Events)),
+				zap.Int("size", size), zap.Int("eventLen", len(cevent.Events)),
 				zap.Int("resolved region count", regionCount))
 		}
 
