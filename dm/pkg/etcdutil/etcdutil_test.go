@@ -140,7 +140,7 @@ func (t *testEtcdUtilSuite) testMemberUtilInternal(c *C, portCount int) {
 	etcd1 := t.startEtcd(c, cfg1)
 	defer etcd1.Close()
 
-	// // list member
+	// list member
 	cli := t.createEtcdClient(c, endpoints1)
 	listResp1, err := ListMembers(cli)
 	c.Assert(err, IsNil)
@@ -191,7 +191,7 @@ func (t *testEtcdUtilSuite) testRemoveMember(c *C) {
 	// always try to remove the first member, may or may not the leader
 	respRemove, err := RemoveMember(cli, respList.Members[0].ID)
 	if err != nil {
-		// remove the leader will meet this error
+		// remove the leader will meet this error, and next line will check the member count
 		c.Assert(err, ErrorMatches, ".*etcdserver: server stopped")
 	} else {
 		c.Assert(respRemove.Members, HasLen, 2)
