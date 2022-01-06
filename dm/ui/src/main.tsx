@@ -7,7 +7,6 @@ import React, { StrictMode } from 'react'
 import { render } from 'react-dom'
 
 import App from './App'
-import { startWorker } from './mock'
 
 function mountApp() {
   render(
@@ -18,8 +17,11 @@ function mountApp() {
   )
 }
 
-if (process.env.NODE_ENV === 'development') {
-  startWorker()
+if (import.meta.env.MODE === 'mock') {
+  import('./mock').then(({ startWorker }) => {
+    startWorker()
+    mountApp()
+  })
+} else {
+  mountApp()
 }
-
-mountApp()

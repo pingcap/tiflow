@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "scripts": {
     "start": "vite",
+    "start:mock": "vite --mode=mock",
     "build": "vite build",
     "type-check": "vite optimize --force && tsc --noEmit",
     "serve": "vite preview",
