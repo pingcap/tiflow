@@ -60,27 +60,25 @@ fi
 
 set -eu
 
-if [ "$test_case" == "*" ] && [ "$start_at" == "*" ];; then
+if [ "$start_at" == "*" ]; then
+	for script in $CUR/*/run.sh; do
+		test_name="$(basename "$(dirname "$script")")"
+		continue_test="no"
+		if [ "$continue_test" == "yes" ] || [ "$start_at" == "$test_name" ]; then
+			continue_test="*"
+			run_case $test_name $script $sink_type
+		fi
+	done
+elif [ "$test_case" != "*" ]; then
+	for name in $test_case; do
+		script="$CUR/$name/run.sh"
+		run_case $name $script $sink_type
+	done
+else
 	for script in $CUR/*/run.sh; do
 		test_name="$(basename "$(dirname "$script")")"
 		run_case $test_name $script $sink_type
 	done
-else
-	if [ "$start_at" != "*" ]; then
-		for script in $CUR/*/run.sh; do
-			test_name="$(basename "$(dirname "$script")")"
-			continue_test="no"
-			if [ "$continue_test" == "yes" ] || [ "$start_at" == "$test_name" ]; then
-				continue_test="*"
-				run_case $test_name $script $sink_type
-			fi
-		done
-	else
-		for name in $test_case; do
-			script="$CUR/$name/run.sh"
-			run_case $name $script $sink_type
-		done
-	fi
 fi
 
 # with color
