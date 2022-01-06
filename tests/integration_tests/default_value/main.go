@@ -212,7 +212,7 @@ func modifyColumnDefaultValueDDL1(ctx context.Context, db *sql.DB) {
 	}
 
 	for _, modifyFmt := range modifyColumnFmts {
-		for value := 1; value < 20; value++ {
+		for value := 1; value < 10; value++ {
 			select {
 			case <-ctx.Done():
 				return
@@ -254,7 +254,7 @@ func modifyColumnDefaultValueDDL2(ctx context.Context, db *sql.DB) {
 	}
 
 	for _, modifyFmt := range modifyColumnFmts {
-		for value := 1; value < 20; value++ {
+		for value := 1; value < 10; value++ {
 			select {
 			case <-ctx.Done():
 				return
@@ -630,7 +630,7 @@ func testGetZeroValue(srcs []*sql.DB) {
 	testName := getFunctionName(testGetZeroValue)
 	mustCreateTable(srcs[0], testName)
 
-	runTime := time.Second * 5
+	runTime := time.Second * 2
 	start := time.Now()
 	defer func() {
 		log.S().Infof("testGetZeroValue take %v", time.Since(start))
@@ -657,7 +657,7 @@ func testGetZeroValue(srcs []*sql.DB) {
 		time.Sleep(time.Millisecond)
 
 		ddlExecFunc := func(ctx context.Context, db *sql.DB, format string) {
-			for value := 1; ; value++ {
+			for value := 1; value < 10; value++ {
 				select {
 				case <-ctx.Done():
 					return
