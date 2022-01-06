@@ -43,10 +43,6 @@ func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
 }
 
-// SchedulerV2Enabled determines wether to used the peer-message based scheduler.
-// TODO set this to true
-const SchedulerV2Enabled = false
-
 // SecurityConfig represents security config for server
 type SecurityConfig = security.Credential
 
@@ -59,7 +55,8 @@ type LogFileConfig struct {
 
 // LogConfig represents log config for server
 type LogConfig struct {
-	File *LogFileConfig `toml:"file" json:"file"`
+	File              *LogFileConfig `toml:"file" json:"file"`
+	InternalErrOutput string         `toml:"error-output" json:"error-output"`
 }
 
 var defaultServerConfig = &ServerConfig{
@@ -73,6 +70,7 @@ var defaultServerConfig = &ServerConfig{
 			MaxDays:    0,
 			MaxBackups: 0,
 		},
+		InternalErrOutput: "stderr",
 	},
 	DataDir: "",
 	GcTTL:   24 * 60 * 60, // 24H
@@ -100,24 +98,28 @@ var defaultServerConfig = &ServerConfig{
 		RegionScanLimit:  40,
 	},
 	Debug: &DebugConfig{
-		EnableTableActor: true,
+		EnableTableActor:   false,
+		EnableNewScheduler: false,
 		// Default leveldb sorter config
 		EnableDBSorter: false,
 		DB: &DBConfig{
-			Count: 16,
-			// Following configs are optimized for write throughput.
+			Count: 8,
+			// Following configs are optimized for write/read throughput.
 			// Users should not change them.
-			Concurrency:            256,
-			MaxOpenFiles:           10000,
-			BlockSize:              65536,
-			BlockCacheSize:         4294967296,
-			WriterBufferSize:       8388608,
-			Compression:            "snappy",
-			TargetFileSizeBase:     8388608,
-			CompactionL0Trigger:    160,
-			WriteL0SlowdownTrigger: math.MaxInt32,
-			WriteL0PauseTrigger:    math.MaxInt32,
-			CleanupSpeedLimit:      10000,
+			Concurrency:                 128,
+			MaxOpenFiles:                10000,
+			BlockSize:                   65536,
+			BlockCacheSize:              4294967296,
+			WriterBufferSize:            8388608,
+			Compression:                 "snappy",
+			TargetFileSizeBase:          8388608,
+			WriteL0SlowdownTrigger:      math.MaxInt32,
+			WriteL0PauseTrigger:         math.MaxInt32,
+			CompactionL0Trigger:         160,
+			CompactionDeletionThreshold: 160000,
+			IteratorMaxAliveDuration:    10000,
+			IteratorSlowReadDuration:    256,
+			CleanupSpeedLimit:           10000,
 		},
 		Messages: defaultMessageConfig.Clone(),
 	},

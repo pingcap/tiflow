@@ -31,7 +31,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 		input         []*model.RowChangedEvent
 		resolvedTsMap map[model.TableID]uint64
 		expected      map[model.TableID][]*model.SingleTableTxn
-	}{{{ // Testing basic transaction collocation, no txns with the same committs
+	}{{{ // Testing basic transaction collocation, no txns with the same commitTs
 		input: []*model.RowChangedEvent{
 			{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
 			{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},

@@ -31,56 +31,53 @@ type canalBatchSuite struct {
 }
 
 var _ = check.Suite(&canalBatchSuite{
-	rowCases: [][]*model.RowChangedEvent{{{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-	}}, {{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-	}, {
-		CommitTs: 2,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-	}, {
-		CommitTs: 3,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-	}, {
-		CommitTs: 4,
-		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
-	}}, {}},
-	ddlCases: [][]*model.DDLEvent{{{
-		CommitTs: 1,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
+	rowCases: [][]*model.RowChangedEvent{
+		{{
+			CommitTs: 1,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		}},
+		{
+			{
+				CommitTs: 1,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+			},
+			{
+				CommitTs: 2,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+			},
 		},
-		Query: "create table a",
-		Type:  1,
-	}}, {{
-		CommitTs: 1,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
+	},
+	ddlCases: [][]*model.DDLEvent{
+		{{
+			CommitTs: 1,
+			TableInfo: &model.SimpleTableInfo{
+				Schema: "a", Table: "b",
+			},
+			Query: "create table a",
+			Type:  1,
+		}},
+		{
+			{
+				CommitTs: 2,
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "a", Table: "b",
+				},
+				Query: "create table b",
+				Type:  3,
+			},
+			{
+				CommitTs: 3,
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "a", Table: "b",
+				},
+				Query: "create table c",
+				Type:  3,
+			},
 		},
-		Query: "create table a",
-		Type:  1,
-	}, {
-		CommitTs: 2,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table b",
-		Type:  2,
-	}, {
-		CommitTs: 3,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table c",
-		Type:  3,
-	}}, {}},
+	},
 })
 
 func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
@@ -102,6 +99,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 		c.Assert(res, check.HasLen, 1)
 		c.Assert(res[0].Key, check.IsNil)
 		c.Assert(len(res[0].Value), check.Equals, size)
+		c.Assert(res[0].GetRowsCount(), check.Equals, len(cs))
 
 		packet := &canal.Packet{}
 		err := proto.Unmarshal(res[0].Value, packet)
@@ -187,7 +185,7 @@ func testInsert(c *check.C) {
 		c.Assert(col.GetUpdated(), check.IsTrue)
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeINTEGER))
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
@@ -199,12 +197,12 @@ func testInsert(c *check.C) {
 			c.Assert(col.GetValue(), check.Equals, "Bob")
 			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
 		case "tiny":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeSMALLINT))
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeTINYINT))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "255")
 		case "comment":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeCLOB))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(err, check.IsNil)
@@ -264,7 +262,7 @@ func testUpdate(c *check.C) {
 		c.Assert(col.GetUpdated(), check.IsTrue)
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeINTEGER))
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "2")
@@ -284,7 +282,7 @@ func testUpdate(c *check.C) {
 		c.Assert(col.GetUpdated(), check.IsTrue)
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeINTEGER))
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
@@ -334,7 +332,7 @@ func testDelete(c *check.C) {
 		c.Assert(col.GetUpdated(), check.IsFalse)
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeINTEGER))
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
@@ -367,4 +365,96 @@ func testDdl(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(rc.GetIsDdl(), check.IsTrue)
 	c.Assert(rc.GetDdlSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
+}
+
+type testColumnTuple struct {
+	column              *model.Column
+	expectedMySQLType   string
+	expectedJavaSQLType JavaSQLType
+	// expectedValue is expected by both encoding and decoding
+	expectedValue string
+}
+
+func collectAllColumns(groups []*testColumnTuple) []*model.Column {
+	result := make([]*model.Column, 0, len(groups))
+	for _, item := range groups {
+		result = append(result, item.column)
+	}
+	return result
+}
+
+func collectDecodeValueByColumns(columns []*testColumnTuple) map[string]string {
+	result := make(map[string]string, len(columns))
+	for _, item := range columns {
+		result[item.column.Name] = item.expectedValue
+	}
+	return result
+}
+
+var testColumnsTable = []*testColumnTuple{
+	{&model.Column{Name: "tinyint", Type: mysql.TypeTiny, Value: int64(127)}, "tinyint", JavaSQLTypeTINYINT, "127"}, // TinyInt
+	{&model.Column{Name: "tinyint unsigned", Type: mysql.TypeTiny, Value: uint64(127), Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeTINYINT, "127"},
+	{&model.Column{Name: "tinyint unsigned 2", Type: mysql.TypeTiny, Value: uint64(128), Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeSMALLINT, "128"},
+
+	{&model.Column{Name: "smallint", Type: mysql.TypeShort, Value: int64(32767)}, "smallint", JavaSQLTypeSMALLINT, "32767"},
+	{&model.Column{Name: "smallint unsigned", Type: mysql.TypeShort, Value: uint64(32767), Flag: model.UnsignedFlag}, "smallint unsigned", JavaSQLTypeSMALLINT, "32767"},
+	{&model.Column{Name: "smallint unsigned 2", Type: mysql.TypeShort, Value: uint64(32768), Flag: model.UnsignedFlag}, "smallint unsigned", JavaSQLTypeINTEGER, "32768"},
+
+	{&model.Column{Name: "mediumint", Type: mysql.TypeInt24, Value: int64(8388607)}, "mediumint", JavaSQLTypeINTEGER, "8388607"},
+	{&model.Column{Name: "mediumint unsigned", Type: mysql.TypeInt24, Value: uint64(8388607), Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER, "8388607"},
+	{&model.Column{Name: "mediumint unsigned 2", Type: mysql.TypeInt24, Value: uint64(8388608), Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER, "8388608"},
+
+	{&model.Column{Name: "int", Type: mysql.TypeLong, Value: int64(2147483647)}, "int", JavaSQLTypeINTEGER, "2147483647"},
+	{&model.Column{Name: "int unsigned", Type: mysql.TypeLong, Value: uint64(2147483647), Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeINTEGER, "2147483647"},
+	{&model.Column{Name: "int unsigned 2", Type: mysql.TypeLong, Value: uint64(2147483648), Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeBIGINT, "2147483648"},
+
+	{&model.Column{Name: "bigint", Type: mysql.TypeLonglong, Value: int64(9223372036854775807)}, "bigint", JavaSQLTypeBIGINT, "9223372036854775807"},
+	{&model.Column{Name: "bigint unsigned", Type: mysql.TypeLonglong, Value: uint64(9223372036854775807), Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeBIGINT, "9223372036854775807"},
+	{&model.Column{Name: "bigint unsigned 2", Type: mysql.TypeLonglong, Value: uint64(9223372036854775808), Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeDECIMAL, "9223372036854775808"},
+
+	{&model.Column{Name: "float", Type: mysql.TypeFloat, Value: 3.14}, "float", JavaSQLTypeREAL, "3.14"},
+	{&model.Column{Name: "double", Type: mysql.TypeDouble, Value: 2.71}, "double", JavaSQLTypeDOUBLE, "2.71"},
+	{&model.Column{Name: "decimal", Type: mysql.TypeNewDecimal, Value: "2333"}, "decimal", JavaSQLTypeDECIMAL, "2333"},
+
+	{&model.Column{Name: "float unsigned", Type: mysql.TypeFloat, Value: 3.14, Flag: model.UnsignedFlag}, "float unsigned", JavaSQLTypeREAL, "3.14"},
+	{&model.Column{Name: "double unsigned", Type: mysql.TypeDouble, Value: 2.71, Flag: model.UnsignedFlag}, "double unsigned", JavaSQLTypeDOUBLE, "2.71"},
+	{&model.Column{Name: "decimal unsigned", Type: mysql.TypeNewDecimal, Value: "2333", Flag: model.UnsignedFlag}, "decimal unsigned", JavaSQLTypeDECIMAL, "2333"},
+
+	// for column value type in `[]uint8` and have `BinaryFlag`, expectedValue is dummy.
+	{&model.Column{Name: "varchar", Type: mysql.TypeVarchar, Value: []uint8("测试Varchar")}, "varchar", JavaSQLTypeVARCHAR, "测试Varchar"},
+	{&model.Column{Name: "char", Type: mysql.TypeString, Value: []uint8("测试String")}, "char", JavaSQLTypeCHAR, "测试String"},
+	{&model.Column{Name: "binary", Type: mysql.TypeString, Value: []uint8("测试Binary"), Flag: model.BinaryFlag}, "binary", JavaSQLTypeBLOB, "测试Binary"},
+	{&model.Column{Name: "varbinary", Type: mysql.TypeVarchar, Value: []uint8("测试varbinary"), Flag: model.BinaryFlag}, "varbinary", JavaSQLTypeBLOB, "测试varbinary"},
+
+	{&model.Column{Name: "tinytext", Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")}, "tinytext", JavaSQLTypeCLOB, "测试Tinytext"},
+	{&model.Column{Name: "text", Type: mysql.TypeBlob, Value: []uint8("测试text")}, "text", JavaSQLTypeCLOB, "测试text"},
+	{&model.Column{Name: "mediumtext", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumtext")}, "mediumtext", JavaSQLTypeCLOB, "测试mediumtext"},
+	{&model.Column{Name: "longtext", Type: mysql.TypeLongBlob, Value: []uint8("测试longtext")}, "longtext", JavaSQLTypeCLOB, "测试longtext"},
+
+	{&model.Column{Name: "tinyblob", Type: mysql.TypeTinyBlob, Value: []uint8("测试tinyblob"), Flag: model.BinaryFlag}, "tinyblob", JavaSQLTypeBLOB, "测试tinyblob"},
+	{&model.Column{Name: "blob", Type: mysql.TypeBlob, Value: []uint8("测试blob"), Flag: model.BinaryFlag}, "blob", JavaSQLTypeBLOB, "测试blob"},
+	{&model.Column{Name: "mediumblob", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumblob"), Flag: model.BinaryFlag}, "mediumblob", JavaSQLTypeBLOB, "测试mediumblob"},
+	{&model.Column{Name: "longblob", Type: mysql.TypeLongBlob, Value: []uint8("测试longblob"), Flag: model.BinaryFlag}, "longblob", JavaSQLTypeBLOB, "测试longblob"},
+
+	{&model.Column{Name: "date", Type: mysql.TypeDate, Value: "2020-02-20"}, "date", JavaSQLTypeDATE, "2020-02-20"},
+	{&model.Column{Name: "datetime", Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"}, "datetime", JavaSQLTypeTIMESTAMP, "2020-02-20 02:20:20"},
+	{&model.Column{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"}, "timestamp", JavaSQLTypeTIMESTAMP, "2020-02-20 10:20:20"},
+	{&model.Column{Name: "time", Type: mysql.TypeDuration, Value: "02:20:20"}, "time", JavaSQLTypeTIME, "02:20:20"},
+	{&model.Column{Name: "year", Type: mysql.TypeYear, Value: "2020", Flag: model.UnsignedFlag}, "year", JavaSQLTypeVARCHAR, "2020"},
+
+	{&model.Column{Name: "enum", Type: mysql.TypeEnum, Value: uint64(1)}, "enum", JavaSQLTypeINTEGER, "1"},
+	{&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(3)}, "set", JavaSQLTypeBIT, "3"},
+	{&model.Column{Name: "bit", Type: mysql.TypeBit, Value: uint64(65), Flag: model.UnsignedFlag | model.BinaryFlag}, "bit", JavaSQLTypeBIT, "65"},
+	{&model.Column{Name: "json", Type: mysql.TypeJSON, Value: "{\"key1\": \"value1\"}", Flag: model.BinaryFlag}, "json", JavaSQLTypeVARCHAR, "{\"key1\": \"value1\"}"},
+}
+
+func (s *canalEntrySuite) TestGetMySQLTypeAndJavaSQLType(c *check.C) {
+	defer testleak.AfterTest(c)()
+	for _, item := range testColumnsTable {
+		obtainedMySQLType := getMySQLType(item.column)
+		c.Assert(obtainedMySQLType, check.Equals, item.expectedMySQLType)
+
+		obtainedJavaSQLType := getJavaSQLType(item.column, obtainedMySQLType)
+		c.Assert(obtainedJavaSQLType, check.Equals, item.expectedJavaSQLType)
+	}
 }
