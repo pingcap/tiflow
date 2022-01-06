@@ -400,7 +400,7 @@ func (s *sqlRequest) poll(ctx context.Context) (bool, error) {
 		if res == nil {
 			return true, nil
 		}
-		log.Debug("Delete not successful yet", zap.Reflect("where condition", s.getWhereCondition()))
+		log.Debug("Delete not successful yet", zap.Reflect("where", s.getWhereCondition()))
 		return false, nil
 	}
 	return true, nil
