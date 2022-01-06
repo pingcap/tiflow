@@ -31,8 +31,8 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/common"
-	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
+	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/cyclic"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
@@ -61,7 +61,7 @@ type mysqlSink struct {
 
 	txnCache           *common.UnresolvedTxnCache
 	workers            []*mysqlSinkWorker
-	txnDispatcher	dispatcher.Dispatcher
+	txnDispatcher      dispatcher.Dispatcher
 	tableCheckpointTs  sync.Map
 	tableMaxResolvedTs sync.Map
 
@@ -202,14 +202,14 @@ func newMySQLSink(
 		return nil, err
 	}
 
-	sink.txnDispatcher, err := dispatcher.NewDispatcher(replicaConfig, params.workerCount, model.SinkTypeMySQL)
+	sink.txnDispatcher, err = dispatcher.NewDispatcher(replicaConfig, int32(params.workerCount), model.SinkTypeMySQL)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	receiver, err := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
-	if err != nil {
-		return nil, err
+	receiver, errRev := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if errRev != nil {
+		return nil, errRev
 	}
 	go sink.flushRowChangedEvents(ctx, receiver)
 
@@ -433,23 +433,23 @@ func (s *mysqlSink) broadcastFinishTxn() {
 	}
 }
 
-func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model.TableID][]*model.SingleTableTxn) {
-	nWorkers := s.params.workerCount
-	dispatchTableTxn := func(txn *model.SingleTableTxn) {
-		// NOTICE: To some extend, causality dispatcher may affect other dispatcher due to the waitExec
-		workerIdx := txnDispatcher.Dispatch(txn)
-		if workerIdx > 0 {
-			workers[workerIdx].appendTxn(ctx, txn)
-			return
-		}
-		// need wait all txn finish here and redo the dispatch
-		s.notifyAndWaitExec(ctx)
-		dispatchTableTxn(txn)
+func (s *mysqlSink) dispatchTableTxn(ctx context.Context, txn *model.SingleTableTxn) {
+	// NOTICE: To some extend, causality dispatcher may affect other dispatcher due to the waitExec
+	workerIdx := s.txnDispatcher.Dispatch(&(txn.RawTableTxn))
+	if workerIdx > 0 {
+		s.workers[workerIdx].appendTxn(ctx, txn)
+		return
 	}
+	// need wait all txn finish here and redo the dispatch
+	s.notifyAndWaitExec(ctx)
+	s.dispatchTableTxn(ctx, txn)
+}
+
+func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model.TableID][]*model.SingleTableTxn) {
 	h := newTxnsHeap(txnsGroup)
 	h.iter(func(txn *model.SingleTableTxn) {
 		startTime := time.Now()
-		dispatchTableTxn(txn)
+		s.dispatchTableTxn(ctx, txn)
 		s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
 	})
 	s.notifyAndWaitExec(ctx)

@@ -1,12 +1,12 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-//
+// 2
 //     http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software
+// U 2 1nless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
@@ -16,36 +16,257 @@ package dispatcher
 import (
 	"bytes"
 	"sort"
+	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type testCausalitySuite struct{}
+func TestCausalityDispatcher(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&testCausalitySuite{})
+	ca := newCausalityDispatcher(3)
+	testCases := []struct {
+		txn         *model.RawTableTxn
+		expectedIdx int32
+	}{
+		{
+			txn: &model.RawTableTxn{
+				Rows: []*model.RowChangedEvent{
+					{
+						StartTs:  418658114257813514,
+						CommitTs: 418658114257813515,
+						Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+						PreColumns: []*model.Column{nil, {
+							Name:  "a1",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 12,
+						}, {
+							Name:  "a3",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 1,
+						}},
+						IndexColumns: [][]int{{1, 2}},
+					}, {
+						StartTs:  418658114257813514,
+						CommitTs: 418658114257813515,
+						Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+						PreColumns: []*model.Column{nil, {
+							Name:  "a1",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 1,
+						}, {
+							Name:  "a3",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 21,
+						}},
+						IndexColumns: [][]int{{1, 2}},
+					},
+				},
+			},
+			expectedIdx: 0,
+		}, {
+			txn: &model.RawTableTxn{
+				Rows: []*model.RowChangedEvent{
+					{
+						StartTs:  418658114257813514,
+						CommitTs: 418658114257813515,
+						Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+						PreColumns: []*model.Column{nil, {
+							Name:  "a1",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 12,
+						}, {
+							Name:  "a3",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 1,
+						}},
+						IndexColumns: [][]int{{1, 2}},
+					}, {
+						StartTs:  418658114257813514,
+						CommitTs: 418658114257813515,
+						Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+						PreColumns: []*model.Column{nil, {
+							Name:  "a1",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 1,
+						}, {
+							Name:  "a3",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 21,
+						}},
+						IndexColumns: [][]int{{1, 2}},
+					},
+				},
+			},
+			expectedIdx: 0,
+		}, {
+			txn: &model.RawTableTxn{
+				Rows: []*model.RowChangedEvent{
+					{
+						StartTs:  418658114257813514,
+						CommitTs: 418658114257813515,
+						Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+						PreColumns: []*model.Column{nil, {
+							Name:  "a1",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 13,
+						}, {
+							Name:  "a3",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 1,
+						}},
+						IndexColumns: [][]int{{1, 2}},
+					}, {
+						StartTs:  418658114257813514,
+						CommitTs: 418658114257813515,
+						Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+						PreColumns: []*model.Column{nil, {
+							Name:  "a1",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 1,
+						}, {
+							Name:  "a3",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 31,
+						}},
+						IndexColumns: [][]int{{1, 2}},
+					},
+				},
+			},
+			expectedIdx: 1,
+		}, {
+			txn: &model.RawTableTxn{
+				Rows: []*model.RowChangedEvent{
+					{
+						StartTs:  418658114257813514,
+						CommitTs: 418658114257813515,
+						Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+						PreColumns: []*model.Column{nil, {
+							Name:  "a1",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 12,
+						}, {
+							Name:  "a3",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 1,
+						}},
+						IndexColumns: [][]int{{1, 2}},
+					}, {
+						StartTs:  418658114257813514,
+						CommitTs: 418658114257813515,
+						Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+						PreColumns: []*model.Column{nil, {
+							Name:  "a1",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 1,
+						}, {
+							Name:  "a3",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 31,
+						}},
+						IndexColumns: [][]int{{1, 2}},
+					},
+				},
+			},
+			expectedIdx: -1, /*conflict with 0&1*/
+		}, {
+			txn: &model.RawTableTxn{
+				Rows: []*model.RowChangedEvent{
+					{
+						StartTs:  418658114257813514,
+						CommitTs: 418658114257813515,
+						Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+						PreColumns: []*model.Column{nil, {
+							Name:  "a1",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 13,
+						}, {
+							Name:  "a3",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 1,
+						}},
+						IndexColumns: [][]int{{1, 2}},
+					}, {
+						StartTs:  418658114257813514,
+						CommitTs: 418658114257813515,
+						Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+						PreColumns: []*model.Column{nil, {
+							Name:  "a1",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 1,
+						}, {
+							Name:  "a3",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 31,
+						}},
+						IndexColumns: [][]int{{1, 2}},
+					},
+				},
+			},
+			// After conflict with multi-worker, we expect inner key cache will be clear, but workerIdx don't set to 0
+			expectedIdx: 2,
+		},
+	}
 
-func (s *testCausalitySuite) TestCausality(c *check.C) {
-	defer testleak.AfterTest(c)()
+	for _, tc := range testCases {
+		require.Equal(t, tc.expectedIdx, ca.Dispatch(tc.txn))
+	}
+}
+
+func TestCausalityInner(t *testing.T) {
+	t.Parallel()
+
+	ca := newCausalityDispatcher(-1)
+	require.Equal(t, int32(1), ca.workerNum)
+
+	ca = newCausalityDispatcher(2)
+	{
+		// empty row
+		rows := [][]byte{}
+		conflict, idx := ca.detectConflict(rows)
+		require.False(t, conflict)
+		require.Equal(t, int32(0), idx)
+	}
+
 	rows := [][][]byte{
 		{[]byte("a")},
 		{[]byte("b")},
 		{[]byte("c")},
 	}
-	ca := newCausality()
 	for i, row := range rows {
 		conflict, idx := ca.detectConflict(row)
-		c.Assert(conflict, check.IsFalse)
-		c.Assert(idx, check.Equals, -1)
-		ca.add(row, i)
+		require.False(t, conflict)
+		require.Equal(t, int32(-1), idx)
+		ca.add(row, int32(i))
 		// Test for single key index conflict.
 		conflict, idx = ca.detectConflict(row)
-		c.Assert(conflict, check.IsTrue)
-		c.Assert(idx, check.Equals, i)
+		require.True(t, conflict)
+		require.Equal(t, int32(i), idx)
 	}
-	c.Assert(len(ca.relations), check.Equals, 3)
+	require.Equal(t, 3, len(ca.relations))
+
 	cases := []struct {
 		keys     [][]byte
 		conflict bool
@@ -64,24 +285,24 @@ func (s *testCausalitySuite) TestCausality(c *check.C) {
 	}
 	for _, cas := range cases {
 		conflict, idx := ca.detectConflict(cas.keys)
-		comment := check.Commentf("keys: %v", cas.keys)
-		c.Assert(conflict, check.Equals, cas.conflict, comment)
-		c.Assert(idx, check.Equals, cas.idx, comment)
+		require.Equal(t, cas.conflict, conflict)
+		require.Equal(t, int32(cas.idx), idx)
 	}
 	ca.reset()
-	c.Assert(len(ca.relations), check.Equals, 0)
+	require.Equal(t, 0, len(ca.relations))
 }
 
-func (s *testCausalitySuite) TestGenKeys(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestGenKeys(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
-		txn      *model.SingleTableTxn
+		txn      *model.RawTableTxn
 		expected [][]byte
 	}{{
-		txn:      &model.SingleTableTxn{},
+		txn:      &model.RawTableTxn{},
 		expected: nil,
 	}, {
-		txn: &model.SingleTableTxn{
+		txn: &model.RawTableTxn{
 			Rows: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813514,
@@ -123,7 +344,7 @@ func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 			{'1', 0x0, '2', '1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
 		},
 	}, {
-		txn: &model.SingleTableTxn{
+		txn: &model.RawTableTxn{
 			Rows: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813514,
@@ -167,7 +388,7 @@ func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 			{'1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
 		},
 	}, {
-		txn: &model.SingleTableTxn{
+		txn: &model.RawTableTxn{
 			Rows: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813514,
@@ -215,6 +436,6 @@ func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 		sort.Slice(keys, func(i, j int) bool {
 			return bytes.Compare(keys[i], keys[j]) > 0
 		})
-		c.Assert(keys, check.DeepEquals, tc.expected)
+		require.Equal(t, tc.expected, keys)
 	}
 }

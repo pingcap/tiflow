@@ -150,11 +150,11 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 			continue
 		}
 		// Make single row txn
-		txn := &RawTableTxn{
+		txn := &model.RawTableTxn{
 			Table:     row.Table,
 			StartTs:   row.StartTs,
 			CommitTs:  row.CommitTs,
-			Rows:      make([]*RowChangedEvent{row}, 1),
+			Rows:      []*model.RowChangedEvent{row},
 			ReplicaID: row.ReplicaID,
 		}
 		partition := k.dispatcher.Dispatch(txn)

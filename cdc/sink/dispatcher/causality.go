@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,9 +46,9 @@ func newCausalityDispatcher(workerNum int32) *causalityDispatcher {
 	}
 }
 
-// Dispatch return the oriented worker index
-// if return value = -1, it means current txn conflicts with multi-workers and will clear causality cache inner
-// if return value > 0, it means normal worker index
+// @discription: Dispatch return the oriented worker index
+// @return int32 "-1, means current txn conflicts with multi-workers and will clear causality cache inner"
+//				 ">=0, means normal worker index"
 func (c *causalityDispatcher) Dispatch(tbTxn *model.RawTableTxn) int32 {
 	keys := genTxnKeys(tbTxn)
 	if conflict, idx := c.detectConflict(keys); conflict {
@@ -80,7 +80,11 @@ func (c *causalityDispatcher) reset() {
 	// don't need to reset curWorkerIdx
 }
 
-// detectConflict detects whether there is a conflict
+// @discription: detectConflict detects whether there is a conflict
+// @param: concat keys for all pk/uks
+// @return: bool "true, if input keys are conflict with any exists worker keys"
+//			int32 "-1, means conflict with more than one worker keys when has conflicts or meaningless"
+//				  ">=0, means conflict with one specified worker keys when has conflicts or meaningless"
 func (c *causalityDispatcher) detectConflict(keys [][]byte) (bool, int32) {
 	if len(keys) == 0 {
 		return false, 0

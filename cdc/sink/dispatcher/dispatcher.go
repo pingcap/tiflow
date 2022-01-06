@@ -90,8 +90,8 @@ func (s *dispatcherSwitcher) matchDispatcher(tbTxn *model.RawTableTxn) Dispatche
 
 // NewDispatcher creates a new dispatcher
 func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32, sinkTp model.SinkType) (Dispatcher, error) {
-	if sinkTp != model.SinkTypeMQ || sinkTp != model.SinkTypeMQ {
-		return nil, cerror.WrapError(cerror.ErrSinkTypeForDispatcher, sinkTp)
+	if sinkTp != model.SinkTypeMQ && sinkTp != model.SinkTypeMySQL {
+		return nil, cerror.ErrSinkTypeForDispatcher.GenWithStackByArgs(sinkTp)
 	}
 
 	var ruleConfigs []*config.DispatchRule
@@ -126,11 +126,11 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32, sinkTp model.S
 		rule.fromString(ruleConfig.Dispatcher)
 		if sinkTp == model.SinkTypeMySQL && rule != dispatchRuleTable && rule != dispatchRuleCausality {
 			log.Error("MySQL sink only support `causality` and `table` dispatch rule.", zap.String("user dispatch rule", ruleConfig.Dispatcher))
-			return nil, cerror.WrapError(cerror.ErrFilterRuleUnsupported, fmt.Sprintf("%s for MySQL sink", ruleConfig.Dispatcher))
+			return nil, cerror.ErrFilterRuleUnsupported.GenWithStackByArgs(fmt.Sprintf("%s for MySQL sink", ruleConfig.Dispatcher))
 		}
 		if sinkTp == model.SinkTypeMQ && rule == dispatchRuleCausality {
 			log.Error("MQ sink can't support `causality` dispatch rule.", zap.String("user dispatch rule", ruleConfig.Dispatcher))
-			return nil, cerror.WrapError(cerror.ErrFilterRuleUnsupported, fmt.Sprintf("%s for MQ sink", ruleConfig.Dispatcher))
+			return nil, cerror.ErrFilterRuleUnsupported.GenWithStackByArgs(fmt.Sprintf("%s for MQ sink", ruleConfig.Dispatcher))
 		}
 
 		switch rule {
