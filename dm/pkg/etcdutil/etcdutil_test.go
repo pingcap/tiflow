@@ -35,7 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-var etcdTestSuite = Suite(&testEtcdUtilSuite{})
+var etcdTestSuite = SerialSuites(&testEtcdUtilSuite{})
 
 type testEtcdUtilSuite struct {
 	testT *testing.T
@@ -43,11 +43,11 @@ type testEtcdUtilSuite struct {
 
 func (t *testEtcdUtilSuite) SetUpSuite(c *C) {
 	// initialized the logger to make genEmbedEtcdConfig working.
-	c.Assert(log.InitLogger(&log.Config{Level: "debug"}), IsNil)
+	c.Assert(log.InitLogger(&log.Config{}), IsNil)
 }
 
 func TestSuite(t *testing.T) {
-	// inject *testing.T to sui
+	// inject *testing.T to suite
 	s := etcdTestSuite.(*testEtcdUtilSuite)
 	s.testT = t
 	TestingT(t)
@@ -61,8 +61,7 @@ func (t *testEtcdUtilSuite) newConfig(c *C, name string, portCount int) *embed.C
 	cfg.Dir = c.MkDir()
 	cfg.ZapLoggerBuilder = embed.NewZapCoreLoggerBuilder(log.L().Logger, log.L().Core(), log.Props().Syncer)
 	cfg.Logger = "zap"
-	err := cfg.Validate() // verify & trigger the builder
-	c.Assert(err, IsNil)
+	c.Assert(cfg.Validate(), IsNil)
 
 	cfg.LCUrls = []url.URL{}
 	for i := 0; i < portCount; i++ {
@@ -110,8 +109,8 @@ func (t *testEtcdUtilSuite) startEtcd(c *C, cfg *embed.Config) *embed.Etcd {
 	return e
 }
 
-func (t *testEtcdUtilSuite) createEtcdClient(c *C, cfg *embed.Config) *clientv3.Client {
-	cli, err := CreateClient(t.urlsToStrings(cfg.LCUrls), nil)
+func (t *testEtcdUtilSuite) createEtcdClient(c *C, endpoints []string) *clientv3.Client {
+	cli, err := CreateClient(endpoints, nil)
 	c.Assert(err, IsNil)
 	return cli
 }
@@ -129,16 +128,20 @@ func (t *testEtcdUtilSuite) TestMemberUtilInternal(c *C) {
 	for i := 1; i <= 3; i++ {
 		t.testMemberUtilInternal(c, i)
 	}
+
+	t.testRemoveMember(c)
+	t.testDoOpsInOneTxnWithRetry(c)
 }
 
 func (t *testEtcdUtilSuite) testMemberUtilInternal(c *C, portCount int) {
 	// start a etcd
 	cfg1 := t.newConfig(c, "etcd1", portCount)
+	endpoints1 := t.urlsToStrings(cfg1.LCUrls)
 	etcd1 := t.startEtcd(c, cfg1)
 	defer etcd1.Close()
 
-	// list member
-	cli := t.createEtcdClient(c, cfg1)
+	// // list member
+	cli := t.createEtcdClient(c, endpoints1)
 	listResp1, err := ListMembers(cli)
 	c.Assert(err, IsNil)
 	c.Assert(listResp1.Members, HasLen, 1)
@@ -173,7 +176,7 @@ func (t *testEtcdUtilSuite) testMemberUtilInternal(c *C, portCount int) {
 	}
 }
 
-func (t *testEtcdUtilSuite) TestRemoveMember(c *C) {
+func (t *testEtcdUtilSuite) testRemoveMember(c *C) {
 	cluster := integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 3})
 	defer cluster.Terminate(t.testT)
 
@@ -203,7 +206,7 @@ func (t *testEtcdUtilSuite) TestRemoveMember(c *C) {
 	c.Assert(respList.Members, HasLen, 2)
 }
 
-func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *C) {
+func (t *testEtcdUtilSuite) testDoOpsInOneTxnWithRetry(c *C) {
 	var (
 		key1 = "/test/etcdutil/do-ops-in-one-txn-with-retry-1"
 		key2 = "/test/etcdutil/do-ops-in-one-txn-with-retry-2"
