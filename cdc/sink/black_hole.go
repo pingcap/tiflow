@@ -35,14 +35,14 @@ type blackHoleSink struct {
 	lastAccumulated uint64
 }
 
-func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
 	for _, row := range rows {
 		log.Debug("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
 	}
 	rowsCount := len(rows)
 	atomic.AddUint64(&b.accumulated, uint64(rowsCount))
 	b.statistics.AddRowsCount(rowsCount)
-	return nil
+	return true, nil
 }
 
 func (b *blackHoleSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {

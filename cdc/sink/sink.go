@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -30,6 +31,11 @@ const (
 	OptCaptureAddr  = "_capture_addr"
 )
 
+const (
+	SinkBlockingWarnLogDuration = 10 * time.Second
+	SinkBlockingWarnLogInterval = 10 * time.Second
+)
+
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
 	// EmitRowChangedEvents sends Row Changed Event to Sink
@@ -37,7 +43,7 @@ type Sink interface {
 	//
 	// EmitRowChangedEvents is thread-safe.
 	// FIXME: some sink implementation, they should be.
-	EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error
+	EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error)
 
 	// EmitDDLEvent sends DDL Event to Sink
 	// EmitDDLEvent should execute DDL to downstream synchronously

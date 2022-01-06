@@ -175,6 +175,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 	tableID model.TableID,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
+	// table sink
 	sink sink.Sink,
 	targetTs model.Ts) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)

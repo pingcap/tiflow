@@ -42,12 +42,15 @@ func TestFlushTable(t *testing.T) {
 	go b.run(ctx, make(chan error))
 
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(2))
-	require.Nil(t, b.EmitRowChangedEvents(ctx))
+	ok, err := b.EmitRowChangedEvents(ctx)
+	require.Nil(t, err)
+	require.True(t, ok)
+
 	tbl1 := &model.TableName{TableID: 1}
 	tbl2 := &model.TableName{TableID: 2}
 	tbl3 := &model.TableName{TableID: 3}
 	tbl4 := &model.TableName{TableID: 4}
-	require.Nil(t, b.EmitRowChangedEvents(ctx, []*model.RowChangedEvent{
+	ok, err = b.EmitRowChangedEvents(ctx, []*model.RowChangedEvent{
 		{CommitTs: 6, Table: tbl1},
 		{CommitTs: 6, Table: tbl2},
 		{CommitTs: 6, Table: tbl3},
@@ -56,7 +59,9 @@ func TestFlushTable(t *testing.T) {
 		{CommitTs: 10, Table: tbl2},
 		{CommitTs: 10, Table: tbl3},
 		{CommitTs: 10, Table: tbl4},
-	}...))
+	}...)
+	require.Nil(t, err)
+	require.True(t, ok)
 	checkpoint, err := b.FlushRowChangedEvents(ctx, 1, 7)
 	require.True(t, checkpoint <= 7)
 	require.Nil(t, err)
@@ -106,8 +111,8 @@ type benchSink struct {
 
 func (b *benchSink) EmitRowChangedEvents(
 	ctx context.Context, rows ...*model.RowChangedEvent,
-) error {
-	return nil
+) (bool, error) {
+	return true, nil
 }
 
 func (b *benchSink) FlushRowChangedEvents(

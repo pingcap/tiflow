@@ -131,7 +131,7 @@ func newMqSink(
 	return s, nil
 }
 
-func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
 	rowsCount := 0
 	for _, row := range rows {
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
@@ -141,7 +141,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		partition := k.dispatcher.Dispatch(row)
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return false, ctx.Err()
 		case k.partitionInput[partition] <- struct {
 			row        *model.RowChangedEvent
 			resolvedTs uint64
@@ -150,7 +150,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		rowsCount++
 	}
 	k.statistics.AddRowsCount(rowsCount)
-	return nil
+	return true, nil
 }
 
 func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {

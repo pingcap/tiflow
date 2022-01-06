@@ -92,7 +92,8 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 		CommitTs: 120,
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
-	err = sink.EmitRowChangedEvents(ctx, row)
+	ok, err := sink.EmitRowChangedEvents(ctx, row)
+	c.Assert(ok, check.IsTrue)
 	c.Assert(err, check.IsNil)
 	checkpointTs, err := sink.FlushRowChangedEvents(ctx, tableID, uint64(120))
 	c.Assert(err, check.IsNil)
@@ -122,7 +123,8 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	cancel()
-	err = sink.EmitRowChangedEvents(ctx, row)
+	ok, err = sink.EmitRowChangedEvents(ctx, row)
+	c.Assert(ok, check.IsTrue)
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}
@@ -187,7 +189,8 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 		StartTs:  100,
 		CommitTs: 120,
 	}
-	err = sink.EmitRowChangedEvents(ctx, row)
+	ok, err := sink.EmitRowChangedEvents(ctx, row)
+	c.Assert(ok, check.IsTrue)
 	c.Assert(err, check.IsNil)
 	c.Assert(sink.statistics.TotalRowsCount(), check.Equals, uint64(0))
 
@@ -288,9 +291,9 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 		CommitTs: 120,
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
-	err = sink.EmitRowChangedEvents(ctx, row1)
+	ok, err := sink.EmitRowChangedEvents(ctx, row1)
 	c.Assert(err, check.IsNil)
-
+	c.Assert(ok, check.IsTrue)
 	tableID2 := model.TableID(2)
 	row2 := &model.RowChangedEvent{
 		Table: &model.TableName{
@@ -302,9 +305,9 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 		CommitTs: 110,
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
-	err = sink.EmitRowChangedEvents(ctx, row2)
+	ok, err = sink.EmitRowChangedEvents(ctx, row2)
 	c.Assert(err, check.IsNil)
-
+	c.Assert(ok, check.IsTrue)
 	tableID3 := model.TableID(3)
 	row3 := &model.RowChangedEvent{
 		Table: &model.TableName{
@@ -317,9 +320,9 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 
-	err = sink.EmitRowChangedEvents(ctx, row3)
+	ok, err = sink.EmitRowChangedEvents(ctx, row3)
 	c.Assert(err, check.IsNil)
-
+	c.Assert(ok, check.IsTrue)
 	// mock kafka broker processes 1 row resolvedTs event
 	leader.Returns(prodSuccess)
 	checkpointTs1, err := sink.FlushRowChangedEvents(ctx, tableID1, row1.CommitTs)

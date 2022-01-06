@@ -133,10 +133,15 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 		}
 		state.metricTotalRows.Add(float64(i))
 
-		err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)
-		if err != nil {
-			b.bufferMu.Unlock()
-			return false, errors.Trace(err)
+		for {
+			ok, err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)
+			if err != nil {
+				b.bufferMu.Unlock()
+				return false, errors.Trace(err)
+			}
+			if ok {
+				break
+			}
 		}
 
 		// put remaining rows back to buffer
@@ -167,20 +172,20 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 	return true, nil
 }
 
-func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return false, ctx.Err()
 	default:
 		if len(rows) == 0 {
-			return nil
+			return true, nil
 		}
 		tableID := rows[0].Table.TableID
 		b.bufferMu.Lock()
 		b.buffer[tableID] = append(b.buffer[tableID], rows...)
 		b.bufferMu.Unlock()
+		return true, nil
 	}
-	return nil
 }
 
 func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {

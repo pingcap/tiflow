@@ -943,6 +943,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		tableNameStr = tableName.QuoteString()
 	}
 
+	// table sink
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs, p.redoManager)
 	table := tablepipeline.NewTablePipeline(
 		ctx,

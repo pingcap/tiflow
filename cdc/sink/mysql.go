@@ -209,10 +209,10 @@ func newMySQLSink(
 	return sink, nil
 }
 
-func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
 	count := s.txnCache.Append(s.filter, rows...)
 	s.statistics.AddRowsCount(count)
-	return nil
+	return true, nil
 }
 
 // FlushRowChangedEvents will flush all received events, we don't allow mysql

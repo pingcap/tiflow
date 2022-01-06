@@ -28,6 +28,9 @@ import (
 	"syscall"
 	"time"
 
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
+
 	"github.com/Shopify/sarama"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -435,12 +438,26 @@ ClaimMessages:
 				if row.Table.IsPartition {
 					partitionID = row.Table.TableID
 				}
-				row.Table.TableID =
-					c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
-				err = sink.EmitRowChangedEvents(ctx, row)
+				row.Table.TableID = c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema,
+					row.Table.Table, partitionID)
+
+				// We must retry until success here
+				err = retry.Do(ctx, func() error {
+					ok, err := sink.EmitRowChangedEvents(ctx, row)
+					if err == nil && !ok {
+						err = cerror.ErrSinkBlocking.FastGenByArgs()
+					}
+					return err
+				}, retry.WithBackoffBaseDelay(20),
+					retry.WithBackoffMaxDelay(500),
+					retry.WithInfiniteTries(),
+					retry.WithIsRetryableErr(func(err error) bool {
+						return cerror.ErrSinkBlocking.Equal(err)
+					}))
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
+
 				log.Info("Emit RowChangedEvent", zap.Any("row", row))
 				lastCommitTs, ok := sink.tablesMap.Load(row.Table.TableID)
 				if !ok || lastCommitTs.(uint64) < row.CommitTs {

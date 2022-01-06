@@ -33,13 +33,16 @@ type tableSink struct {
 
 var _ Sink = (*tableSink)(nil)
 
-func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	if t.redoManager.Enabled() {
+		ok, err := t.redoManager.EmitRowChangedEvents(ctx, t.tableID, rows...)
+		if err != nil || !ok {
+			return false, errors.Trace(err)
+		}
+	}
 	t.buffer = append(t.buffer, rows...)
 	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
-	if t.redoManager.Enabled() {
-		return t.redoManager.EmitRowChangedEvents(ctx, t.tableID, rows...)
-	}
-	return nil
+	return true, nil
 }
 
 func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -62,12 +65,14 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 		return t.flushResolvedTs(ctx, resolvedTs)
 	}
 	resolvedRows := t.buffer[:i]
-	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
 
-	err := t.manager.bufSink.EmitRowChangedEvents(ctx, resolvedRows...)
-	if err != nil {
+	ok, err := t.manager.bufSink.EmitRowChangedEvents(ctx, resolvedRows...)
+	if err != nil || !ok {
 		return t.manager.getCheckpointTs(tableID), errors.Trace(err)
 	}
+
+	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
+
 	return t.flushResolvedTs(ctx, resolvedTs)
 }
 

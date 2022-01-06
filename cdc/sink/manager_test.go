@@ -48,13 +48,13 @@ func newCheckSink(c *check.C) *checkSink {
 	}
 }
 
-func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
 	for _, row := range rows {
 		c.rows[row.Table.TableID] = append(c.rows[row.Table.TableID], row)
 	}
-	return nil
+	return true, nil
 }
 
 func (c *checkSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -129,7 +129,7 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 					c.Assert(err, check.IsNil)
 					lastResolvedTs = resolvedTs
 				} else {
-					err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+					_, err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 						Table:    &model.TableName{TableID: int64(i)},
 						CommitTs: uint64(j),
 					})
@@ -181,7 +181,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				continue
 			}
 			for i := lastResolvedTs + 1; i <= resolvedTs; i++ {
-				err := sink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+				_, err := sink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 					Table:    &model.TableName{TableID: index},
 					CommitTs: i,
 				})
@@ -246,7 +246,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 
 	tableID := int64(49)
 	tableSink := manager.CreateTableSink(tableID, 100, redo.NewDisabledManager())
-	err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+	_, err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		Table:    &model.TableName{TableID: tableID},
 		CommitTs: uint64(110),
 	})
@@ -287,7 +287,7 @@ func BenchmarkManagerFlushing(b *testing.B) {
 		go func() {
 			defer wg.Done()
 			for j := 1; j < rowNum; j++ {
-				err := tableSink.EmitRowChangedEvents(context.Background(), &model.RowChangedEvent{
+				_, err := tableSink.EmitRowChangedEvents(context.Background(), &model.RowChangedEvent{
 					Table:    &model.TableName{TableID: int64(i)},
 					CommitTs: uint64(j),
 				})
@@ -340,8 +340,8 @@ type errorSink struct {
 	*check.C
 }
 
-func (e *errorSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	return errors.New("error in emit row changed events")
+func (e *errorSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	return false, errors.New("error in emit row changed events")
 }
 
 func (e *errorSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -372,7 +372,7 @@ func (s *managerSuite) TestManagerError(c *check.C) {
 	manager := NewManager(ctx, &errorSink{C: c}, errCh, 0, "", "")
 	defer manager.Close(ctx)
 	sink := manager.CreateTableSink(1, 0, redo.NewDisabledManager())
-	err := sink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+	_, err := sink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{TableID: 1},
 	})

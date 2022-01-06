@@ -114,7 +114,7 @@ var (
 	ErrOldValueNotEnabled       = errors.Normalize("old value is not enabled", errors.RFCCodeText("CDC:ErrOldValueNotEnabled"))
 	ErrSinkInvalidConfig        = errors.Normalize("sink config invalid", errors.RFCCodeText("CDC:ErrSinkInvalidConfig"))
 	ErrCraftCodecInvalidData    = errors.Normalize("craft codec invalid data", errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"))
-
+	ErrSinkBlocking             = errors.Normalize("sink is blocking, please try to seed event again if needed", errors.RFCCodeText("CDC:ErrSinkBlocking"))
 	// utilities related errors
 	ErrToTLSConfigFailed         = errors.Normalize("generate tls config failed", errors.RFCCodeText("CDC:ErrToTLSConfigFailed"))
 	ErrCheckClusterVersionFromPD = errors.Normalize("failed to request PD", errors.RFCCodeText("CDC:ErrCheckClusterVersionFromPD"))

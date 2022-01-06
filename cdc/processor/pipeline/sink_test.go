@@ -53,14 +53,14 @@ func (c *mockFlowController) GetConsumption() uint64 {
 	return 0
 }
 
-func (s *mockSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+func (s *mockSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
 	for _, row := range rows {
 		s.received = append(s.received, struct {
 			resolvedTs model.Ts
 			row        *model.RowChangedEvent
 		}{row: row})
 	}
-	return nil
+	return true, nil
 }
 
 func (s *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -289,7 +289,45 @@ func TestManyTs(t *testing.T) {
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
 		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil)))
 	require.Equal(t, TableStatusRunning, node.Status())
-	sink.Check(t, nil)
+	sink.Check(t, []struct {
+		resolvedTs model.Ts
+		row        *model.RowChangedEvent
+	}{
+		{
+			row: &model.RowChangedEvent{
+				CommitTs: 1,
+				Columns: []*model.Column{
+					{
+						Name:  "col1",
+						Flag:  model.BinaryFlag,
+						Value: "col1-value-updated",
+					},
+					{
+						Name:  "col2",
+						Flag:  model.HandleKeyFlag,
+						Value: "col2-value",
+					},
+				},
+			},
+		},
+		{
+			row: &model.RowChangedEvent{
+				CommitTs: 2,
+				Columns: []*model.Column{
+					{
+						Name:  "col1",
+						Flag:  model.BinaryFlag,
+						Value: "col1-value-updated",
+					},
+					{
+						Name:  "col2",
+						Flag:  model.HandleKeyFlag,
+						Value: "col2-value",
+					},
+				},
+			},
+		},
+	})
 
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.BarrierMessage(1), nil)))
 	require.Equal(t, TableStatusRunning, node.Status())

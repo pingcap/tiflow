@@ -891,6 +891,11 @@ error = '''
 service safepoint lost. current safepoint is %d, please remove all changefeed(s) whose checkpoints are behind the current safepoint
 '''
 
+["CDC:ErrSinkBlocking"]
+error = '''
+sink is blocking, please try to seed event again if needed
+'''
+
 ["CDC:ErrSinkInvalidConfig"]
 error = '''
 sink config invalid

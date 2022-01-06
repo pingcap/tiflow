@@ -657,8 +657,9 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 		},
 	}
 
-	err = sink.EmitRowChangedEvents(ctx, rows...)
+	ok, err := sink.EmitRowChangedEvents(ctx, rows...)
 	require.Nil(t, err)
+	require.True(t, ok)
 
 	// retry to make sure event is flushed
 	err = retry.Do(context.Background(), func() error {
@@ -1157,8 +1158,9 @@ func TestMySQLSinkFlushResovledTs(t *testing.T) {
 			},
 		},
 	}
-	err = sink.EmitRowChangedEvents(ctx, rows...)
+	ok, err := sink.EmitRowChangedEvents(ctx, rows...)
 	require.Nil(t, err)
+	require.True(t, ok)
 	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(1), 6)
 	require.True(t, checkpoint <= 5)
 	time.Sleep(500 * time.Millisecond)
@@ -1173,8 +1175,9 @@ func TestMySQLSinkFlushResovledTs(t *testing.T) {
 			},
 		},
 	}
-	err = sink.EmitRowChangedEvents(ctx, rows...)
+	ok, err = sink.EmitRowChangedEvents(ctx, rows...)
 	require.Nil(t, err)
+	require.True(t, ok)
 	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), 5)
 	require.True(t, checkpoint <= 5)
 	time.Sleep(500 * time.Millisecond)

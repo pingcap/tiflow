@@ -145,7 +145,8 @@ func TestLogManagerInProcessor(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		err := logMgr.EmitRowChangedEvents(ctx, tc.tableID, tc.rows...)
+		ok, err := logMgr.EmitRowChangedEvents(ctx, tc.tableID, tc.rows...)
+		require.True(t, ok)
 		require.Nil(t, err)
 	}
 	checkResovledTs(logMgr, uint64(130))

@@ -16,6 +16,9 @@ package applier
 import (
 	"context"
 	"net/url"
+	"time"
+
+	"github.com/pingcap/tiflow/pkg/retry"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -145,7 +148,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 				tableResolvedTsMap[tableID] = lastSafeResolvedTs
 			}
 			if len(cachedRows) >= emitBatch {
-				err := s.EmitRowChangedEvents(ctx, cachedRows...)
+				err = ra.emitRow2Sink(ctx, s, cachedRows...)
 				if err != nil {
 					return err
 				}
@@ -165,7 +168,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 			}
 		}
 	}
-	err = s.EmitRowChangedEvents(ctx, cachedRows...)
+	err = ra.emitRow2Sink(ctx, s, cachedRows...)
 	if err != nil {
 		return err
 	}
@@ -181,6 +184,31 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		}
 	}
 	return errApplyFinished
+}
+
+func (ra *RedoApplier) emitRow2Sink(ctx context.Context, s sink.Sink, row ...*model.RowChangedEvent) error {
+	start := time.Now()
+	lastTimeToRetry := start
+	err := retry.Do(ctx, func() error {
+		// We must retry until success when emitRow2Sink return false.
+		ok, err := s.EmitRowChangedEvents(ctx, row...)
+		if err == nil && !ok {
+			err = cerror.ErrSinkBlocking.FastGenByArgs()
+		}
+		cost := time.Since(start)
+		retryInterval := time.Since(lastTimeToRetry)
+		if cost >= sink.SinkBlockingWarnLogDuration && retryInterval >= sink.SinkBlockingWarnLogInterval {
+			lastTimeToRetry = time.Now()
+			log.Warn("sink blocking too long", zap.Duration("blocking time(s)", cost))
+		}
+		return err
+	}, retry.WithBackoffBaseDelay(20),
+		retry.WithBackoffMaxDelay(500),
+		retry.WithInfiniteTries(),
+		retry.WithIsRetryableErr(func(err error) bool {
+			return cerror.ErrSinkBlocking.Equal(err)
+		}))
+	return err
 }
 
 var createRedoReader = createRedoReaderImpl
