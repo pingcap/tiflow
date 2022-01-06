@@ -731,12 +731,12 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/task/configs:
+  /api/v1/task/templates:
     post:
       tags:
         - task
-      summary: "create task config"
-      operationId: "DMAPICreateTaskConfig"
+      summary: "create task template"
+      operationId: "DMAPICreateTaskTemplate"
       requestBody:
         description: "request body"
         content:
@@ -759,8 +759,8 @@ paths:
     get:
       tags:
         - task
-      summary: "get task config list"
-      operationId: "DMAPIGetTaskConfigList"
+      summary: "get task template list"
+      operationId: "DMAPIGetTaskTemplateList"
       responses:
         "200":
           description: "task list"
@@ -774,37 +774,37 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/task/configs/import:
+  /api/v1/task/templates/import:
     post:
       tags:
         - task
-      summary: "import task config"
-      operationId: "DMAPIImportTaskConfig"
+      summary: "import task template"
+      operationId: "DMAPIImportTaskTemplate"
       requestBody:
         description: "request body"
         content:
           "application/json":
             schema:
-              $ref: "#/components/schemas/TaskConfigRequest"
+              $ref: "#/components/schemas/TaskTemplateRequest"
       responses:
         "202":
           description: "success"
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/TaskConfigResponse"
+                $ref: "#/components/schemas/TaskTemplateResponse"
         "400":
           description: "failed"
           content:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/task/configs/{task-name}:
+  /api/v1/task/templates/{task-name}:
     get:
       tags:
         - task
-      summary: "get task_config"
-      operationId: "DMAPIGetTaskConfig"
+      summary: "get task template template"
+      operationId: "DMAPIGetTaskTemplate"
       parameters:
         - name: task-name
           in: path
@@ -829,8 +829,8 @@ paths:
     put:
       tags:
         - task
-      summary: "update task_config"
-      operationId: "DMAPUpdateTaskConfig"
+      summary: "update task template template"
+      operationId: "DMAPUpdateTaskTemplate"
       parameters:
         - name: task-name
           in: path
@@ -855,8 +855,8 @@ paths:
     delete:
       tags:
         - task
-      summary: "delete task_config"
-      operationId: "DMAPIDeleteTaskConfig"
+      summary: "delete task template template"
+      operationId: "DMAPIDeleteTaskTemplate"
       parameters:
         - name: task-name
           in: path
@@ -1774,16 +1774,16 @@ components:
         - "total"
         - "data"
 
-    TaskConfigRequest:
+    TaskTemplateRequest:
       type: object
       properties:
         overwrite:
           type: boolean
           default: false
-          description: whether to overwrite task config template
+          description: whether to overwrite task template template
       required:
         - "overwrite"
-    TaskConfigResponse:
+    TaskTemplateResponse:
       type: object
       properties:
         success_task_list:
