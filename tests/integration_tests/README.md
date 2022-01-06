@@ -60,7 +60,7 @@ We recommend that you provide docker with at least 6+ cores and 8G+ memory. Of c
 
    > If want to run one integration test case only, just pass the CASE parameter, such as `make integration_test CASE=simple`.
    
-   > If want to run integration test cases from the specified one, pass the CASE parameter and CONTINUE parameter, such as `make integration_test CASE=simple CONTINUE=yes` .
+   > If want to run integration test cases from the specified one, just pass the START_AT parameter, such as `make integration_test START_AT=simple` .
 
    > There exists some environment variables that you can set by yourself, variable details can be found in [test_prepare](_utils/test_prepare).
 
@@ -78,7 +78,7 @@ We recommend that you provide docker with at least 6+ cores and 8G+ memory. Of c
 > We will try to resolve these issues as soon as possible.
 
 1. If you want to run kafka tests,
-   run `CASE="clustered_index" CONTINUE="yes" docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml up --build`
+   run `START_AT="clustered_index" docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml up --build`
 
 2. If you want to run MySQL tests,
    run `CASE="clustered_index" docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql-integration.yml up --build`

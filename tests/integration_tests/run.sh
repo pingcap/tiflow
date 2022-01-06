@@ -53,9 +53,9 @@ if [ -z "$test_case" ]; then
 	test_case="*"
 fi
 
-continue_test=$3
-if [ -z "$continue_test" ]; then
-	continue_test="no"
+start_at=$3
+if [ -z "$start_at" ]; then
+	start_at=""
 fi
 
 set -eu
@@ -66,11 +66,12 @@ if [ "$test_case" == "*" ]; then
 		run_case $test_name $script $sink_type
 	done
 else
-	if [ "$continue_test" == "yes" ]; then
+	if [ "$start_at" != "" ]; then
 		for script in $CUR/*/run.sh; do
 			test_name="$(basename "$(dirname "$script")")"
-			if [ "$test_case" == "*" ] || [ "$test_case" == "$test_name" ]; then
-				test_case="*"
+			continue_test="no"
+			if [ "$continue_test" == "yes" ] || [ "$start_at" == "$test_name" ]; then
+				continue_test="*"
 				run_case $test_name $script $sink_type
 			fi
 		done
