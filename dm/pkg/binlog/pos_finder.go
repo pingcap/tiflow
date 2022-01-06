@@ -222,9 +222,7 @@ func (r *binlogPosFinder) processGTIDRelatedEvent(ev *replication.BinlogEvent, p
 			return nil, err
 		}
 		return newSet, nil
-	case replication.MARIADB_GTID_EVENT:
-		fallthrough
-	case replication.GTID_EVENT:
+	case replication.MARIADB_GTID_EVENT, replication.GTID_EVENT:
 		gtidStr, _ := event.GetGTIDStr(ev)
 		if err := prevSet.Update(gtidStr); err != nil {
 			return nil, err
@@ -254,11 +252,8 @@ func (r *binlogPosFinder) checkTransactionBoundaryEvent(ev *replication.BinlogEv
 		if err != nil {
 			return false, err
 		}
-	case replication.GTID_EVENT:
-		fallthrough
-	case replication.ANONYMOUS_GTID_EVENT: // since 5.7, when GTID not enabled. we use this to avoid parsing query event
-		fallthrough
-	case replication.MARIADB_GTID_EVENT:
+	case replication.GTID_EVENT, replication.ANONYMOUS_GTID_EVENT, replication.MARIADB_GTID_EVENT:
+		// since 5.7, when GTID not enabled, mysql add a anonymous gtid event. we use this to avoid parsing query event
 		r.everMetGTIDEvent = true
 		transactionBeginEvent = true
 	case replication.QUERY_EVENT:
