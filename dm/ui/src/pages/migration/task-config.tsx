@@ -2,13 +2,24 @@ import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useLocation } from 'react-router-dom'
 
-import { Table, Row, Col, Space, Button, Dropdown, Menu, Modal } from '~/uikit'
+import {
+  Input,
+  Table,
+  Row,
+  Col,
+  Space,
+  Button,
+  Dropdown,
+  Menu,
+  Modal,
+} from '~/uikit'
 import {
   RedoOutlined,
   PlusSquareOutlined,
   ExportOutlined,
   ImportOutlined,
   DownOutlined,
+  SearchOutlined,
 } from '~/uikit/icons'
 import i18n from '~/i18n'
 import { useDmapiGetTaskConfigListQuery } from '~/models/taskConfig'
@@ -16,6 +27,7 @@ import { Task } from '~/models/task'
 import { unimplemented } from '~/utils/unimplemented'
 import CreateTaskConfig from '~/components/CreateTaskConfig'
 import BatchImportTaskConfig from '~/components/BatchImportTaskConfig'
+import { useFuseSearch } from '~/utils/search'
 
 const TaskConfig: React.FC = () => {
   const [t] = useTranslation()
@@ -29,6 +41,9 @@ const TaskConfig: React.FC = () => {
   )
 
   const dataSource = data?.data
+  const { result, setKeyword } = useFuseSearch(dataSource, {
+    keys: ['name'],
+  })
   const columns = [
     {
       title: t('name'),
@@ -101,6 +116,12 @@ const TaskConfig: React.FC = () => {
       <Row className="p-4" justify="space-between">
         <Col span={22}>
           <Space>
+            <Input
+              onChange={e => setKeyword(e.target.value)}
+              suffix={<SearchOutlined />}
+              placeholder={t('search placeholder')}
+            />
+
             <Button icon={<RedoOutlined />} onClick={refetch}>
               {t('refresh')}
             </Button>
@@ -138,7 +159,7 @@ const TaskConfig: React.FC = () => {
 
       <Table
         className="p-4"
-        dataSource={dataSource}
+        dataSource={result}
         columns={columns}
         loading={isFetching}
         rowKey="name"

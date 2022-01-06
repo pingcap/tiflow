@@ -2,9 +2,10 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 
 import i18n from '~/i18n'
-import { Row, Col, Button, Space, Table } from '~/uikit'
-import { RedoOutlined } from '~/uikit/icons'
+import { Input, Row, Col, Button, Space, Table } from '~/uikit'
+import { RedoOutlined, SearchOutlined } from '~/uikit/icons'
 import { useDmapiGetTaskListQuery } from '~/models/task'
+import { useFuseSearch } from '~/utils/search'
 
 const SyncDetail: React.FC = () => {
   const [t] = useTranslation()
@@ -13,6 +14,9 @@ const SyncDetail: React.FC = () => {
   })
 
   const dataSource = data?.data
+  const { result, setKeyword } = useFuseSearch(dataSource, {
+    keys: ['name'],
+  })
   const columns = [
     {
       title: t('task name'),
@@ -24,6 +28,11 @@ const SyncDetail: React.FC = () => {
       <Row className="p-4" justify="space-between">
         <Col span={22}>
           <Space>
+            <Input
+              onChange={e => setKeyword(e.target.value)}
+              suffix={<SearchOutlined />}
+              placeholder={t('search placeholder')}
+            />
             <Button icon={<RedoOutlined />} onClick={refetch}>
               {t('refresh')}
             </Button>
@@ -33,7 +42,7 @@ const SyncDetail: React.FC = () => {
 
       <Table
         className="p-4"
-        dataSource={dataSource}
+        dataSource={result}
         columns={columns}
         loading={isFetching}
         rowKey="name"

@@ -29,6 +29,7 @@ import {
   useDmapiGetSourceListQuery,
 } from '~/models/source'
 import i18n from '~/i18n'
+import { useFuseSearch } from '~/utils/search'
 
 const SourceList: React.FC = () => {
   const [t] = useTranslation()
@@ -86,6 +87,11 @@ const SourceList: React.FC = () => {
   }, [selectedSources])
 
   const dataSource = data?.data
+
+  const { result, setKeyword } = useFuseSearch(dataSource, {
+    keys: ['source_name', 'host'],
+  })
+
   const columns = [
     {
       title: t('name'),
@@ -153,6 +159,7 @@ const SourceList: React.FC = () => {
         <Col span={22}>
           <Space>
             <Input
+              onChange={e => setKeyword(e.target.value)}
               suffix={<SearchOutlined />}
               placeholder={t('search placeholder')}
             />
@@ -181,7 +188,7 @@ const SourceList: React.FC = () => {
 
       <Table
         className="p-4"
-        dataSource={dataSource}
+        dataSource={result}
         columns={columns}
         loading={isFetching}
         rowKey="source_name"

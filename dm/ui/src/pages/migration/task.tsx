@@ -40,6 +40,7 @@ import {
   useDmapiGetTaskStatusQuery,
 } from '~/models/task'
 import i18n from '~/i18n'
+import { useFuseSearch } from '~/utils/search'
 
 const TaskList: React.FC = () => {
   const [t] = useTranslation()
@@ -100,7 +101,6 @@ const TaskList: React.FC = () => {
       handler: pauseTask,
     })
   }, [selectedSources, handleRequest])
-
   const handleResumeTask = useCallback(() => {
     if (!selectedSources.length) {
       return
@@ -111,7 +111,6 @@ const TaskList: React.FC = () => {
       handler: resumeTask,
     })
   }, [selectedSources, handleRequest])
-
   const handleDeleteTask = useCallback(() => {
     if (!selectedSources.length) {
       return
@@ -122,13 +121,17 @@ const TaskList: React.FC = () => {
       handler: deleteTask,
     })
   }, [selectedSources, handleRequest])
-
   const handlePageChange = useCallback((page: number, pageSize: number) => {
     const start = (page - 1) * pageSize
     setDisplayedSubtaskOffset({ start, end: start + pageSize })
   }, [])
 
   const dataSource = data?.data
+
+  const { result, setKeyword } = useFuseSearch(dataSource, {
+    keys: ['name'],
+  })
+
   const columns: TableColumnsType<Task> | undefined = [
     {
       title: t('task name'),
@@ -168,6 +171,12 @@ const TaskList: React.FC = () => {
       <Row className="p-4" justify="space-between">
         <Col span={22}>
           <Space>
+            <Input
+              suffix={<SearchOutlined />}
+              onChange={e => setKeyword(e.target.value)}
+              placeholder={t('search placeholder')}
+            />
+
             <Button icon={<RedoOutlined />} onClick={refetch}>
               {t('refresh')}
             </Button>
@@ -194,17 +203,13 @@ const TaskList: React.FC = () => {
                 {t('pause')} <DownOutlined />
               </Button>
             </Dropdown>
-            <Input
-              suffix={<SearchOutlined />}
-              placeholder={t('search placeholder')}
-            />
           </Space>
         </Col>
       </Row>
 
       <Table
         className="p-4"
-        dataSource={dataSource}
+        dataSource={result}
         columns={columns}
         loading={isFetching}
         rowKey="name"
