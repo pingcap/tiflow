@@ -172,6 +172,8 @@ fmt: tools/bin/gofumports tools/bin/shfmt
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
 	tools/bin/shfmt -d -w .
+	@echo "check log style"
+	scripts/check-log-style.sh
 
 errdoc: tools/bin/errdoc-gen
 	@echo "generator errors.toml"
