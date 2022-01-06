@@ -60,10 +60,10 @@ fi
 
 set -eu
 
+continue_test="no"
 if [ "$start_at" != "*" ]; then
 	for script in $CUR/*/run.sh; do
 		test_name="$(basename "$(dirname "$script")")"
-		continue_test="no"
 		if [ "$continue_test" == "yes" ] || [ "$start_at" == "$test_name" ]; then
 			continue_test="yes"
 			run_case $test_name $script $sink_type
