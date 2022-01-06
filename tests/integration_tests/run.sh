@@ -60,7 +60,7 @@ fi
 
 set -eu
 
-if [ "$start_at" == "*" ]; then
+if [ "$start_at" != "*" ]; then
 	for script in $CUR/*/run.sh; do
 		test_name="$(basename "$(dirname "$script")")"
 		continue_test="no"
