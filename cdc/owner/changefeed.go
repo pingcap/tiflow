@@ -17,6 +17,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -321,10 +322,14 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.redoManagerCleanup(ctx)
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
+
+	start := time.Now()
 	// We don't need to wait sink Close, pass a canceled context is ok
 	if err := c.sink.close(canceledCtx); err != nil {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeed", c.state.ID), zap.Error(err))
 	}
+	log.Info("close the sink", zap.Duration("elapsed", time.Since(start)))
+
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
 
