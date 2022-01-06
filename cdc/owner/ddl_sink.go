@@ -168,7 +168,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				}
 				// If DDL executing failed, and the error can not be ignored, throw an error and pause the changefeed
 				log.Error("Execute DDL failed",
-					zap.String("ChangeFeedID", ctx.ChangefeedVars().ID),
+					zap.String("changefeed", ctx.ChangefeedVars().ID),
 					zap.Error(err),
 					zap.Reflect("ddl", ddl))
 				ctx.Throw(errors.Trace(err))

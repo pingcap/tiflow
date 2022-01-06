@@ -541,7 +541,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 		default:
 			d = table.GetZeroValue(col)
 			if d.IsNull() {
-				log.Error("meet unsupported column type", zap.String("column info", col.String()))
+				log.Error("meet unsupported column type", zap.String("columnInfo", col.String()))
 			}
 		}
 	}

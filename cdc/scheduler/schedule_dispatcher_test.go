@@ -66,10 +66,10 @@ func (m *mockScheduleDispatcherCommunicator) DispatchTable(
 ) (done bool, err error) {
 	if !m.isBenchmark {
 		log.Info("dispatch table called",
-			zap.String("changefeed-id", changeFeedID),
+			zap.String("changefeed", changeFeedID),
 			zap.Int64("table-id", tableID),
-			zap.String("capture-id", captureID),
-			zap.Bool("is-delete", isDelete),
+			zap.String("captureID", captureID),
+			zap.Bool("isDelete", isDelete),
 			zap.String("epoch", epoch))
 		if !isDelete {
 			m.addTableRecords[captureID] = append(m.addTableRecords[captureID], tableID)

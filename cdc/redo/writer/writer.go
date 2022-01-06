@@ -165,7 +165,7 @@ func NewLogWriter(
 	err = logWriter.initMeta(ctx)
 	if err != nil {
 		log.Warn("init redo meta fail",
-			zap.String("change feed", cfg.ChangeFeedID),
+			zap.String("changefeed", cfg.ChangeFeedID),
 			zap.Error(err))
 	}
 	if cfg.S3Storage {
@@ -276,12 +276,12 @@ func (l *LogWriter) runGC(ctx context.Context) {
 		case <-ctx.Done():
 			err := l.Close()
 			if err != nil {
-				log.Error("runGC close fail", zap.String("changefeedID", l.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("runGC close fail", zap.String("changefeed", l.cfg.ChangeFeedID), zap.Error(err))
 			}
 		case <-ticker.C:
 			err := l.gc()
 			if err != nil {
-				log.Error("redo log GC fail", zap.String("changefeedID", l.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("redo log GC fail", zap.String("changefeed", l.cfg.ChangeFeedID), zap.Error(err))
 			}
 		}
 	}
