@@ -18,7 +18,6 @@ import (
 	"flag"
 	"fmt"
 	"math"
-	"net/http"
 	_ "net/http/pprof"
 	"net/url"
 	"os"
@@ -221,7 +220,7 @@ func newSaramaConfig() (*sarama.Config, error) {
 }
 
 func main() {
-	log.Info("Starting a new TiCDC open protocol consumer", zap.String("GroupID", kafkaGroupID))
+	log.Info("Starting a new TiCDC open protocol consumer")
 
 	/**
 	 * Construct a new Sarama configuration.
@@ -250,15 +249,7 @@ func main() {
 	}
 
 	wg := &sync.WaitGroup{}
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		if err := http.ListenAndServe(":6060", nil); err != nil {
-			log.Fatal("start pprof failed", zap.Error(err))
-		}
-	}()
-
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for {
