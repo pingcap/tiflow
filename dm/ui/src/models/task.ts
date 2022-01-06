@@ -198,6 +198,7 @@ export type Task = {
   }
   table_migrate_rule: TaskTableMigrateRule[]
   source_config: TaskSourceConfig
+  status_list?: SubTaskStatus[]
 }
 
 export interface TaskFormData extends Task {
