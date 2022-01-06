@@ -63,10 +63,7 @@ func main() {
 			log.S().Errorf("Failed to close source database: %s\n", err)
 		}
 	}()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
-	go switchAsyncCommit(ctx, sourceDB0)
 	util.MustExec(sourceDB0, "create database mark;")
 	testGetZeroValue([]*sql.DB{sourceDB0, sourceDB1})
 	testGetDefaultValue([]*sql.DB{sourceDB0, sourceDB1})
@@ -114,25 +111,6 @@ func testGetDefaultValue(srcs []*sql.DB) {
 	}
 
 	finishIdx += total
-}
-
-func switchAsyncCommit(ctx context.Context, db *sql.DB) {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-	enabled := false
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if enabled {
-				util.MustExec(db, "set global tidb_enable_async_commit = off")
-			} else {
-				util.MustExec(db, "set global tidb_enable_async_commit = on")
-			}
-			enabled = !enabled
-		}
-	}
 }
 
 func getFunctionName(i interface{}) string {
