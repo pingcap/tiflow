@@ -325,10 +325,12 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	start := time.Now()
 	// We don't need to wait sink Close, pass a canceled context is ok
-	if err := c.sink.close(canceledCtx); err != nil {
-		log.Warn("Closing sink failed in Owner", zap.String("changefeed", c.state.ID), zap.Error(err))
+	err := c.sink.close(canceledCtx)
+	if err != nil {
+		log.Warn("Closing ddl sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err), zap.Duration("elapsed", time.Since(start)))
+	} else {
+		log.Info("close the ddl sink", zap.String("changefeedID", c.state.ID), zap.Duration("elapsed", time.Since(start)))
 	}
-	log.Info("close the sink", zap.Duration("elapsed", time.Since(start)))
 
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
