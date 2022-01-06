@@ -38,11 +38,11 @@ type Operator struct {
 	op            pb.ErrorOp
 	isAllInjected bool                       // is all injected, used by inject
 	events        []*replication.BinlogEvent // startLocation -> events
-	originReq     pb.HandleWorkerErrorRequest
+	originReq     *pb.HandleWorkerErrorRequest
 }
 
 // newOperator creates a new operator with a random UUID.
-func newOperator(op pb.ErrorOp, events []*replication.BinlogEvent, originReq pb.HandleWorkerErrorRequest) *Operator {
+func newOperator(op pb.ErrorOp, events []*replication.BinlogEvent, originReq *pb.HandleWorkerErrorRequest) *Operator {
 	return &Operator{
 		uuid:      uuid.New().String(),
 		op:        op,
@@ -93,7 +93,7 @@ func (h *Holder) Set(req *pb.HandleWorkerErrorRequest, events []*replication.Bin
 		return nil
 	}
 
-	oper := newOperator(op, events, *req)
+	oper := newOperator(op, events, req)
 	pre, ok := h.operators[pos]
 	if ok {
 		h.logger.Warn("overwrite operator", zap.String("position", pos), zap.Stringer("old operator", pre))
@@ -104,7 +104,7 @@ func (h *Holder) Set(req *pb.HandleWorkerErrorRequest, events []*replication.Bin
 }
 
 // GetBehindCommands gets behind commands.
-func (h *Holder) GetBehindCommands(pos string) []pb.HandleWorkerErrorRequest {
+func (h *Holder) GetBehindCommands(pos string) []*pb.HandleWorkerErrorRequest {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -122,7 +122,7 @@ func (h *Holder) GetBehindCommands(pos string) []pb.HandleWorkerErrorRequest {
 		return behindPositions[i].Compare(behindPositions[j]) < 0
 	})
 
-	res := make([]pb.HandleWorkerErrorRequest, 0, len(behindPositions))
+	res := make([]*pb.HandleWorkerErrorRequest, 0, len(behindPositions))
 	for _, behindPosition := range behindPositions {
 		res = append(res, h.operators[behindPosition.String()].originReq)
 	}
