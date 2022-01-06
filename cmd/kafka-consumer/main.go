@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -399,6 +398,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		panic("sink should initialized")
 	}
 
+	lastResolvedTsReceived := time.Now()
+
 	for message := range claim.Messages() {
 		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 		batchDecoder, err := codec.NewJSONEventBatchDecoder(message.Key, message.Value)
@@ -466,6 +467,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if err != nil {
 					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
 				}
+				log.Info("receive resolved ts", zap.Uint64("resolvedTs", ts), zap.Duration("elapsed", time.Since(lastResolvedTsReceived)))
+				lastResolvedTsReceived = time.Now()
 				// TiCDC owner when sending `checkpointTs` to downstream sink,
 				// it tries to make the `checkpointTs` monotonically increase.
 				// But there is some scenario that the consumer would receive redundant `checkpointTs`.
