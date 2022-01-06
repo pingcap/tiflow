@@ -55,18 +55,18 @@ fi
 
 start_at=$3
 if [ -z "$start_at" ]; then
-	start_at=""
+	start_at="*"
 fi
 
 set -eu
 
-if [ "$test_case" == "*" ] && [ "$start_at" == "" ];; then
+if [ "$test_case" == "*" ] && [ "$start_at" == "*" ];; then
 	for script in $CUR/*/run.sh; do
 		test_name="$(basename "$(dirname "$script")")"
 		run_case $test_name $script $sink_type
 	done
 else
-	if [ "$start_at" != "" ]; then
+	if [ "$start_at" != "*" ]; then
 		for script in $CUR/*/run.sh; do
 			test_name="$(basename "$(dirname "$script")")"
 			continue_test="no"
