@@ -595,15 +595,17 @@ func (c *Consumer) Run(ctx context.Context) error {
 			log.Fatal("global ResolvedTs fallback")
 		}
 
-		lastGlobalResolvedTs = globalResolvedTs
-		atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
-		log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
+		if globalResolvedTs > lastGlobalResolvedTs {
+			lastGlobalResolvedTs = globalResolvedTs
+			atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
+			log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
 
-		err = c.forEachSink(func(sink *partitionSink) error {
-			return c.syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
-		})
-		if err != nil {
-			return errors.Trace(err)
+			err = c.forEachSink(func(sink *partitionSink) error {
+				return c.syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
+			})
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 }
