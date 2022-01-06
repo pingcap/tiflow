@@ -483,7 +483,7 @@ func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, erro
 		ret, err := w.shouldRemoved(checkPointTs, f)
 		if err != nil {
 			log.Warn("check removed log file fail",
-				zap.String("log file", f.Name()),
+				zap.String("logFile", f.Name()),
 				zap.Error(err))
 			continue
 		}

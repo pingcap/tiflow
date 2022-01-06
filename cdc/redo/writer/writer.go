@@ -163,7 +163,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 	err = logWriter.initMeta(ctx)
 	if err != nil {
 		log.Warn("init redo meta fail",
-			zap.String("change feed", cfg.ChangeFeedID),
+			zap.String("changefeed", cfg.ChangeFeedID),
 			zap.Error(err))
 	}
 	if cfg.S3Storage {

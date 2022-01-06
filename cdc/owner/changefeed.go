@@ -472,7 +472,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		}
 		c.feedStateManager.MarkFinished()
 	default:
-		log.Panic("Unknown barrier type", zap.Int("barrier type", int(barrierTp)))
+		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
 	}
 	return barrierTs, nil
 }
