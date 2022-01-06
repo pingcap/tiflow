@@ -470,12 +470,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Uint64("ts", ts),
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Int32("partition", partition))
-				}
-				if ts > resolvedTs {
+				} else if ts > resolvedTs {
 					log.Debug("update sink resolved ts",
 						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition))
 					atomic.StoreUint64(&sink.resolvedTs, ts)
+				} else {
+					log.Info("redundant sink resolved ts", zap.Uint64("ts", ts), zap.Int32("partition", partition))
 				}
 			}
 			session.MarkMessage(message, "")
@@ -542,13 +543,14 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSink) error) error {
 // Run runs the Consumer
 func (c *Consumer) Run(ctx context.Context) error {
 	var lastGlobalResolvedTs uint64
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
+		case <-ticker.C:
 		}
-		time.Sleep(100 * time.Millisecond)
 		// initialize the `globalResolvedTs` as min of all partition's `ResolvedTs`
 		globalResolvedTs := uint64(math.MaxUint64)
 		err := c.forEachSink(func(sink *partitionSink) error {
