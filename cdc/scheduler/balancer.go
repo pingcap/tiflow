@@ -57,9 +57,13 @@ type tableNumberBalancer struct {
 }
 
 func newTableNumberRebalancer(logger *zap.Logger) balancer {
+	return newTableNumberRebalancerWithRandomSeed(logger, time.Now().UnixNano())
+}
+
+func newTableNumberRebalancerWithRandomSeed(logger *zap.Logger, seed int64) balancer {
 	return &tableNumberBalancer{
 		logger: logger,
-		random: rand.New(rand.NewSource(time.Now().UnixNano())),
+		random: rand.New(rand.NewSource(seed)),
 	}
 }
 

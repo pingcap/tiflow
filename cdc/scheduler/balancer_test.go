@@ -23,6 +23,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	randomSeedForTestingBalancer = 0x1234
+)
+
 func TestBalancerFindVictimsDeterministic(t *testing.T) {
 	balancer := newDeterministicTableNumberRebalancer(zap.L())
 	tables := util.NewTableSet()
@@ -182,7 +186,7 @@ func TestBalancerFindTarget(t *testing.T) {
 }
 
 func TestBalancerFindTargetTied(t *testing.T) {
-	balancer := newTableNumberRebalancer(zap.L())
+	balancer := newTableNumberRebalancerWithRandomSeed(zap.L(), randomSeedForTestingBalancer)
 	tables := util.NewTableSet()
 
 	tables.AddTableRecord(&util.TableRecord{
@@ -235,7 +239,7 @@ func TestBalancerFindTargetTied(t *testing.T) {
 }
 
 func TestBalancerNoCaptureAvailable(t *testing.T) {
-	balancer := newTableNumberRebalancer(zap.L())
+	balancer := newTableNumberRebalancerWithRandomSeed(zap.L(), randomSeedForTestingBalancer)
 	tables := util.NewTableSet()
 
 	_, ok := balancer.FindTarget(tables, map[model.CaptureID]*model.CaptureInfo{})
@@ -243,7 +247,7 @@ func TestBalancerNoCaptureAvailable(t *testing.T) {
 }
 
 func TestBalancerRandomizeWorkload(t *testing.T) {
-	balancer := newTableNumberRebalancer(zap.L())
+	balancer := newTableNumberRebalancerWithRandomSeed(zap.L(), randomSeedForTestingBalancer)
 	workload1 := balancer.(*tableNumberBalancer).randomizeWorkload(0)
 	workload2 := balancer.(*tableNumberBalancer).randomizeWorkload(0)
 	require.NotEqual(t, workload1, workload2)
