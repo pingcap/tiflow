@@ -11126,9 +11126,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-<<<<<<< HEAD
-  "version": 29
-=======
   "version": 32
->>>>>>> 662354ad5 (processor(ticdc): add min resolved/checkpoint table ID metrics (#4198))
 }

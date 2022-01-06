@@ -98,17 +98,6 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
 
-<<<<<<< HEAD
-		metricResolvedTsGauge:        resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricResolvedTsLagGauge:     resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsGauge:      checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsLagGauge:   checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricSyncTableNumGauge:      syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricProcessorErrorCounter:  processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
-		metricSchemaStorageGcTsGauge: processorSchemaStorageGcTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-=======
-		newSchedulerEnabled: conf.Debug.EnableNewScheduler,
-
 		metricResolvedTsGauge:           resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricResolvedTsLagGauge:        resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricMinResolvedTableIDGuage:   resolvedTsMinTableIDGauge.WithLabelValues(changefeedID, advertiseAddr),
@@ -118,7 +107,6 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		metricSyncTableNumGauge:         syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricProcessorErrorCounter:     processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
 		metricSchemaStorageGcTsGauge:    processorSchemaStorageGcTsGauge.WithLabelValues(changefeedID, advertiseAddr),
->>>>>>> 662354ad5 (processor(ticdc): add min resolved/checkpoint table ID metrics (#4198))
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
