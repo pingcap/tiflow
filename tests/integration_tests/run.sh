@@ -66,19 +66,19 @@ if [ "$test_case" == "*" ]; then
 		run_case $test_name $script $sink_type
 	done
 else
-  if [ "$continue_test" == "yes" ]; then
-    for script in $CUR/*/run.sh; do
-      test_name="$(basename "$(dirname "$script")")"
-      if [ "$test_case" == "*" ] || [ "$test_case" == "$test_name" ]; then
-         test_case="*"
-         run_case $test_name $script $sink_type
-      fi
-    done
-  else
-    for name in $test_case; do
-      script="$CUR/$name/run.sh"
-      run_case $name $script $sink_type
-    done
+	if [ "$continue_test" == "yes" ]; then
+		for script in $CUR/*/run.sh; do
+			test_name="$(basename "$(dirname "$script")")"
+			if [ "$test_case" == "*" ] || [ "$test_case" == "$test_name" ]; then
+				test_case="*"
+				run_case $test_name $script $sink_type
+			fi
+		done
+	else
+		for name in $test_case; do
+			script="$CUR/$name/run.sh"
+			run_case $name $script $sink_type
+		done
 	fi
 fi
 
