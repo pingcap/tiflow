@@ -301,7 +301,6 @@ func main() {
 }
 
 type partitionSink struct {
-	sink.Sink
 	resolvedTs  uint64
 	partitionNo int
 	tablesMap   sync.Map
@@ -315,6 +314,7 @@ type Consumer struct {
 	maxDDLReceivedTs uint64
 	ddlListMu        sync.Mutex
 
+	dmlSink sink.Sink
 	sinks   []*partitionSink
 	sinksMu sync.Mutex
 
@@ -344,14 +344,18 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
 	opts := map[string]string{}
-	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.New(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
-		if err != nil {
-			cancel()
-			return nil, errors.Trace(err)
-		}
-		c.sinks[i] = &partitionSink{Sink: s, partitionNo: i}
+
+	s, err := sink.New(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
+	if err != nil {
+		cancel()
+		return nil, errors.Trace(err)
 	}
+	c.dmlSink = s
+
+	for i := 0; i < int(kafkaPartitionNum); i++ {
+		c.sinks[i] = &partitionSink{partitionNo: i}
+	}
+
 	sink, err := sink.New(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 	if err != nil {
 		cancel()
@@ -447,7 +451,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 				row.Table.TableID =
 					c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
-				err = sink.EmitRowChangedEvents(ctx, row)
+				err = c.dmlSink.EmitRowChangedEvents(ctx, row)
+				//err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
@@ -567,7 +572,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
 			// flush DMLs
 			err := c.forEachSink(func(sink *partitionSink) error {
-				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
+				return c.syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			})
 			if err != nil {
 				return errors.Trace(err)
@@ -594,7 +599,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
 
 		err = c.forEachSink(func(sink *partitionSink) error {
-			return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
+			return c.syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
 		})
 		if err != nil {
 			return errors.Trace(err)
@@ -602,7 +607,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 	}
 }
 
-func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolvedTs uint64) error {
+func (c *Consumer) syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolvedTs uint64) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -617,7 +622,7 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 		flushedResolvedTs := true
 		sink.tablesMap.Range(func(key, value interface{}) bool {
 			tableID := key.(int64)
-			checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+			checkpointTs, err = c.dmlSink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
 			if err != nil {
 				return false
 			}
