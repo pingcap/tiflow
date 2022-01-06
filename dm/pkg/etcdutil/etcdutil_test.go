@@ -124,7 +124,7 @@ func (t *testEtcdUtilSuite) checkMember(c *C, mid uint64, m *etcdserverpb.Member
 	require.ElementsMatch(t.testT, m.PeerURLs, t.urlsToStrings(cfg.APUrls))
 }
 
-func (t *testEtcdUtilSuite) TestMemberUtilInternal(c *C) {
+func (t *testEtcdUtilSuite) TestMemberUtil(c *C) {
 	for i := 1; i <= 3; i++ {
 		t.testMemberUtilInternal(c, i)
 	}
@@ -194,7 +194,6 @@ func (t *testEtcdUtilSuite) testRemoveMember(c *C) {
 		// remove the leader will meet this error
 		c.Assert(err, ErrorMatches, ".*etcdserver: server stopped")
 	} else {
-		c.Assert(err, IsNil)
 		c.Assert(respRemove.Members, HasLen, 2)
 	}
 
