@@ -441,23 +441,19 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 		return
 	}
 	// check subtask config
-	subTaskConfigPList := make([]*config.SubTaskConfig, len(subTaskConfigList))
-	for i := range subTaskConfigList {
-		subTaskConfigPList[i] = &subTaskConfigList[i]
-	}
-	if err = checker.CheckSyncConfigFunc(newCtx, subTaskConfigPList,
+	if err = checker.CheckSyncConfigFunc(newCtx, subTaskConfigList,
 		common.DefaultErrorCnt, common.DefaultWarnCnt); err != nil {
 		_ = c.Error(terror.WithClass(err, terror.ClassDMMaster))
 		return
 	}
 	// specify only start task on partial sources
-	var needStartSubTaskList []config.SubTaskConfig
+	var needStartSubTaskList []*config.SubTaskConfig
 	if req.SourceNameList != nil {
 		// source name -> sub task config
 		subTaskCfgM := make(map[string]*config.SubTaskConfig, len(subTaskConfigList))
 		for idx := range subTaskConfigList {
 			cfg := subTaskConfigList[idx]
-			subTaskCfgM[cfg.SourceID] = &cfg
+			subTaskCfgM[cfg.SourceID] = cfg
 		}
 		for _, sourceName := range *req.SourceNameList {
 			subTaskCfg, ok := subTaskCfgM[sourceName]
@@ -465,7 +461,7 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 				_ = c.Error(terror.ErrOpenAPITaskSourceNotFound.Generatef("source name %s", sourceName))
 				return
 			}
-			needStartSubTaskList = append(needStartSubTaskList, *subTaskCfg)
+			needStartSubTaskList = append(needStartSubTaskList, subTaskCfg)
 		}
 	} else {
 		needStartSubTaskList = subTaskConfigList
@@ -490,7 +486,7 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 			return
 		}
 	}
-	err = s.scheduler.AddSubTasks(latched, needStartSubTaskList...)
+	err = s.scheduler.AddSubTasks(latched, subtaskCfgPointersToInstances(needStartSubTaskList...)...)
 	if err != nil {
 		_ = c.Error(err)
 		return

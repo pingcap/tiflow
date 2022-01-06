@@ -2175,7 +2175,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		}
 		toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
 		if adjustDBErr := adjustTargetDB(ctx, toDBCfg); adjustDBErr != nil {
-			if err != nil {
+			if adjustDBErr != nil {
 				resp2.Msg = err.Error()
 				// nolint:nilerr
 				return resp2, nil
@@ -2196,11 +2196,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 			// nolint:nilerr
 			return resp2, nil
 		}
-		subCfgList := make([]*config.SubTaskConfig, len(subTaskConfigList))
-		for i := range subTaskConfigList {
-			subCfgList[i] = &subTaskConfigList[i]
-		}
-		cfg = formartTaskString(subCfgList)
+		cfg = formartTaskString(subTaskConfigList)
 	case pb.CfgType_TaskType:
 		subCfgMap := s.scheduler.GetSubTaskCfgsByTask(req.Name)
 		if len(subCfgMap) == 0 {

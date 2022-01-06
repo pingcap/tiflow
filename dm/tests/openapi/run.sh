@@ -35,7 +35,7 @@ function init_shard_data() {
 function test_source() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: SOURCE"
 	prepare_database
-	# create source succesfully
+	# create source successfully
 	openapi_source_check "create_source1_success"
 
 	# recreate source will failed
@@ -75,7 +75,7 @@ function test_source() {
 function test_relay() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: RELAY"
 	prepare_database
-	# create source succesfully
+	# create source successfully
 	openapi_source_check "create_source1_success"
 
 	# we need make sure that source is bounded by worker1 because we will start relay on worker1
@@ -159,20 +159,20 @@ function test_shard_task() {
 
 	task_name="test-shard"
 
-	# create source succesfully
+	# create source successfully
 	openapi_source_check "create_source1_success"
 	openapi_source_check "list_source_success" 1
 	# get source status success
 	openapi_source_check "get_source_status_success" "mysql-01"
 
-	# create source succesfully
+	# create source successfully
 	openapi_source_check "create_source2_success"
 	# get source list success
 	openapi_source_check "list_source_success" 2
 	# get source status success
 	openapi_source_check "get_source_status_success" "mysql-02"
 
-	# start task success: not vaild task create request
+	# start task success: not valid task create request
 	openapi_task_check "start_task_failed"
 
 	# start shard task success
@@ -232,14 +232,14 @@ function test_noshard_task() {
 	task_name="test-no-shard"
 	target_table_name="" # empty means no route
 
-	# create source succesfully
+	# create source successfully
 	openapi_source_check "create_source1_success"
 	openapi_source_check "list_source_success" 1
 
 	# get source status success
 	openapi_source_check "get_source_status_success" "mysql-01"
 
-	# create source succesfully
+	# create source successfully
 	openapi_source_check "create_source2_success"
 	# get source list success
 	openapi_source_check "list_source_success" 2
@@ -247,7 +247,7 @@ function test_noshard_task() {
 	# get source status success
 	openapi_source_check "get_source_status_success" "mysql-02"
 
-	# start task success: not vaild task create request
+	# start task success: not valid task create request
 	openapi_task_check "start_task_failed"
 
 	# start no shard task success
@@ -278,7 +278,7 @@ function test_noshard_task() {
 	# pause task first for operate schema
 	openapi_task_check "pause_task_success" "$task_name" "mysql-02"
 
-	# opreate schema
+	# operate schema
 	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-02" "openapi" "t2"
 
 	# resume task
@@ -349,7 +349,7 @@ function test_task_templates() {
 	openapi_source_check "create_source2_success"
 	openapi_source_check "list_source_success" 2
 
-	# crud task temoplate
+	# crud task template
 	openapi_task_check "create_task_template_failed"
 	openapi_task_check "create_task_template_success" $taskname
 	openapi_task_check "list_task_template" 1
@@ -358,7 +358,7 @@ function test_task_templates() {
 	openapi_task_check "delete_task_template" $taskname
 	openapi_task_check "list_task_template" 0
 
-	# improt from tasks and get from dmctl
+	# import from tasks and get from dmctl
 	init_noshard_data
 	openapi_task_check "start_noshard_task_success" $taskname
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -395,7 +395,7 @@ function test_cluster() {
 	openapi_cluster_check "delete_master_with_retry_success" "master2"
 	openapi_cluster_check "list_master_success" 1
 
-	# delete worker node fialed because of worker is still online
+	# delete worker node failed because of worker is still online
 	openapi_cluster_check "delete_worker_failed" "worker1"
 	kill_dm_worker
 	check_port_offline $WORKER1_PORT 20
@@ -427,7 +427,7 @@ function run() {
 	test_noshard_task
 	test_task_templates
 
-	# NOTE: this test case MUST running at last, becasue it will offline some memebrs of cluster
+	# NOTE: this test case MUST running at last, because it will offline some members of cluster
 	test_cluster
 }
 

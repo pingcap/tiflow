@@ -2047,6 +2047,7 @@ func (t *testMaster) TestGetCfg(c *check.C) {
 	openapiTask, err := fixtures.GenNoShardOpenAPITaskForTest()
 	openapiTask.Name = notExistTaskName
 	c.Assert(err, check.IsNil)
+	// put this not exist task to templates
 	c.Assert(ha.PutOpenAPITaskTemplate(t.etcdTestCli, openapiTask, true), check.IsNil)
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
 	resp2, err = server.GetCfg(context.Background(), &pb.GetCfgRequest{Name: notExistTaskName, Type: pb.CfgType_TaskTemplateType})
