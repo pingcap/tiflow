@@ -59,12 +59,14 @@ We recommend that you provide docker with at least 6+ cores and 8G+ memory. Of c
    2. Execute `tests/integration_tests/run.sh`
 
    > If want to run one integration test case only, just pass the CASE parameter, such as `make integration_test CASE=simple`.
+   
+   > If want to run integration test cases from the specified one, pass the CASE parameter and CONTINUE parameter, such as `make integration_test CASE=simple CONTINUE=yes` .
 
    > There exists some environment variables that you can set by yourself, variable details can be found in [test_prepare](_utils/test_prepare).
 
    > `MySQL sink` will be used by default, if you want to test `Kafka sink`, please run with `make integration_test_kafka CASE=simple`.
 
-3. After executing the tests, run `make coverage` to get a coverage report at `/tmp/tidb_cdc_test/all_cov.html`.
+4. After executing the tests, run `make coverage` to get a coverage report at `/tmp/tidb_cdc_test/all_cov.html`.
 
 #### Run integration tests in docker
 
@@ -76,7 +78,7 @@ We recommend that you provide docker with at least 6+ cores and 8G+ memory. Of c
 > We will try to resolve these issues as soon as possible.
 
 1. If you want to run kafka tests,
-   run `CASE="clustered_index" docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml up --build`
+   run `CASE="clustered_index" CONTINUE="yes" docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml up --build`
 
 2. If you want to run MySQL tests,
    run `CASE="clustered_index" docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql-integration.yml up --build`
