@@ -21,24 +21,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func (s SwitcherSuite) TestDefaultSwitcher(t *testing.T) {
+func TestDefaultSwitcher(t *testing.T) {
 	t.Parallel()
 
 	d, err := NewDispatcher(config.GetDefaultReplicaConfig(), 4, model.SinkTypeUnknown)
 	require.Nil(t, d)
 	require.Error(t, err)
 
-	d, err = NewDispatcher(config.GetDefaultReplicaConfig(), 4, SinkTypeMQ)
+	d, err = NewDispatcher(config.GetDefaultReplicaConfig(), 4, model.SinkTypeMQ)
 	require.Nil(t, err)
-	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test", Table: "test",
 		},
 	}))
 
-	d, err = NewDispatcher(config.GetDefaultReplicaConfig(), 4, SinkTypeMySQL)
+	d, err = NewDispatcher(config.GetDefaultReplicaConfig(), 4, model.SinkTypeMySQL)
 	require.Nil(t, err)
-	require.IsType(t, &causalityDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	require.IsType(t, &causalityDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test", Table: "test",
 		},
@@ -58,8 +58,9 @@ func TestSupportedSwitcher(t *testing.T) {
 				{Matcher: []string{"*.*", "!*.test"}, Dispatcher: "ts"},
 			},
 		},
-	}, 4, SinkTypeMQ)
+	}, 4, model.SinkTypeMQ)
 	require.Nil(t, err)
+	require.NotNil(t, d)
 
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
@@ -67,8 +68,9 @@ func TestSupportedSwitcher(t *testing.T) {
 				{Matcher: []string{"test.*"}, Dispatcher: "causality"},
 			},
 		},
-	}, 4, SinkTypeMQ)
-	require.Error(err)
+	}, 4, model.SinkTypeMQ)
+	require.Error(t, err)
+	require.NotNil(t, d)
 
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
@@ -77,8 +79,9 @@ func TestSupportedSwitcher(t *testing.T) {
 				{Matcher: []string{"test.*"}, Dispatcher: "causality"},
 			},
 		},
-	}, 4, SinkTypeMySQL)
-	require.Nil(err)
+	}, 4, model.SinkTypeMySQL)
+	require.Nil(t, err)
+	require.NotNil(t, d)
 
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
@@ -86,8 +89,9 @@ func TestSupportedSwitcher(t *testing.T) {
 				{Matcher: []string{"test_default.*"}, Dispatcher: "default"},
 			},
 		},
-	}, 4, SinkTypeMySQL)
-	require.Error(err)
+	}, 4, model.SinkTypeMySQL)
+	require.Error(t, err)
+	require.NotNil(t, d)
 
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
@@ -95,8 +99,9 @@ func TestSupportedSwitcher(t *testing.T) {
 				{Matcher: []string{"test_default.*"}, Dispatcher: "index-value"},
 			},
 		},
-	}, 4, SinkTypeMySQL)
-	require.Error(err)
+	}, 4, model.SinkTypeMySQL)
+	require.Error(t, err)
+	require.NotNil(t, d)
 
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
@@ -104,8 +109,9 @@ func TestSupportedSwitcher(t *testing.T) {
 				{Matcher: []string{"test_default.*"}, Dispatcher: "ts"},
 			},
 		},
-	}, 4, SinkTypeMySQL)
-	require.Error(err)
+	}, 4, model.SinkTypeMySQL)
+	require.Error(t, err)
+	require.NotNil(t, d)
 
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
@@ -113,14 +119,15 @@ func TestSupportedSwitcher(t *testing.T) {
 				{Matcher: []string{"test_default.*"}, Dispatcher: "rowid"},
 			},
 		},
-	}, 4, SinkTypeMySQL)
-	require.Error(err)
+	}, 4, model.SinkTypeMySQL)
+	require.Error(t, err)
+	require.NotNil(t, d)
 }
 
-func (s SwitcherSuite) TestMQSwitcher(t *testing.T) {
-	d, err := NewDispatcher(config.GetDefaultReplicaConfig(), 4, SinkTypeMQ)
+func TestMQSwitcher(t *testing.T) {
+	d, err := NewDispatcher(config.GetDefaultReplicaConfig(), 4, model.SinkTypeMQ)
 	require.Nil(t, err)
-	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test", Table: "test",
 		},
@@ -136,34 +143,34 @@ func (s SwitcherSuite) TestMQSwitcher(t *testing.T) {
 				{Matcher: []string{"*.*", "!*.test"}, Dispatcher: "ts"},
 			},
 		},
-	}, 4)
+	}, 4, model.SinkTypeMQ)
 	require.Nil(t, err)
-	require.IsType(t, &indexValueDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	require.IsType(t, &indexValueDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test", Table: "table1",
 		},
 	}))
-	require.IsType(t, &tsDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	require.IsType(t, &tsDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "sbs", Table: "table2",
 		},
 	}))
-	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "sbs", Table: "test",
 		},
 	}))
-	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test_default", Table: "test",
 		},
 	}))
-	require.IsType(t, &tableDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	require.IsType(t, &tableDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test_table", Table: "test",
 		},
 	}))
-	require.IsType(t, &indexValueDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	require.IsType(t, &indexValueDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test_index_value", Table: "test",
 		},

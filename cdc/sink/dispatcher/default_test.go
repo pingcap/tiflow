@@ -22,7 +22,7 @@ import (
 
 // [TODO] add multi-rows test
 func TestDefaultDispatcher(t *testing.T) {
-	t.Parellel()
+	t.Parallel()
 
 	testCases := []struct {
 		row             *model.RowChangedEvent
@@ -200,10 +200,10 @@ func TestDefaultDispatcher(t *testing.T) {
 			Table:     tc.row.Table,
 			StartTs:   tc.row.StartTs,
 			CommitTs:  tc.row.CommitTs,
-			Rows:      make([]*RowChangedEvent{tc.row}, 1),
+			Rows:      []*model.RowChangedEvent{tc.row},
 			ReplicaID: tc.row.ReplicaID,
 		}
-		require.Equals(t, p.Dispatch(rowTxn), tc.exceptPartition)
+		require.Equal(t, tc.exceptPartition, p.Dispatch(rowTxn))
 	}
 }
 
@@ -257,9 +257,9 @@ func TestDefaultDispatcherWithOldValue(t *testing.T) {
 			Table:     tc.row.Table,
 			StartTs:   tc.row.StartTs,
 			CommitTs:  tc.row.CommitTs,
-			Rows:      make([]*RowChangedEvent{tc.row}, 1),
+			Rows:      []*model.RowChangedEvent{tc.row},
 			ReplicaID: tc.row.ReplicaID,
 		}
-		require.Equals(t, tc.exceptPartition, p.Dispatch(rowTxn))
+		require.Equal(t, tc.exceptPartition, p.Dispatch(rowTxn))
 	}
 }

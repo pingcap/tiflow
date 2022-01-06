@@ -83,9 +83,9 @@ func TestTableDispatcher(t *testing.T) {
 			Table:     tc.row.Table,
 			StartTs:   tc.row.StartTs,
 			CommitTs:  tc.row.CommitTs,
-			Rows:      make([]*RowChangedEvent{tc.row}, 1),
+			Rows:      []*model.RowChangedEvent{tc.row},
 			ReplicaID: tc.row.ReplicaID,
 		}
-		require.Equals(t, tc.exceptPartition, p.Dispatch(rowTxn))
+		require.Equal(t, tc.exceptPartition, p.Dispatch(rowTxn))
 	}
 }
