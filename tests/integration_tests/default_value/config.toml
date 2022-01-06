@@ -1,5 +1,4 @@
-# Importer Configuration.
-
+# Source DB config
 log-level = "info"
 
 worker-count = 10
