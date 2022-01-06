@@ -429,7 +429,7 @@ func (a *BaseAgent) updateOwnerInfo(ownerCaptureID model.CaptureID, ownerRev int
 	if a.ownerInfo.OwnerRev > ownerRev {
 		// the owner where the message just came from is stale.
 		a.logger.Info("message received from stale owner",
-			zap.Any("old-owner", ownerInfo{
+			zap.Any("oldOwner", ownerInfo{
 				OwnerCaptureID: ownerCaptureID,
 				OwnerRev:       ownerRev,
 			}),
