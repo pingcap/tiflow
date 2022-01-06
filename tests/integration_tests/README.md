@@ -66,7 +66,7 @@ We recommend that you provide docker with at least 6+ cores and 8G+ memory. Of c
 
    > `MySQL sink` will be used by default, if you want to test `Kafka sink`, please run with `make integration_test_kafka CASE=simple`.
 
-4. After executing the tests, run `make coverage` to get a coverage report at `/tmp/tidb_cdc_test/all_cov.html`.
+3. After executing the tests, run `make coverage` to get a coverage report at `/tmp/tidb_cdc_test/all_cov.html`.
 
 #### Run integration tests in docker
 
