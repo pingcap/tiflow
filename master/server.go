@@ -348,7 +348,7 @@ func (s *Server) name() string {
 
 func (s *Server) reset(ctx context.Context) error {
 	sess, err := concurrency.NewSession(
-		s.etcdClient, concurrency.WithTTL(int(s.cfg.KeepAliveTTL.Seconds())))
+		s.etcdClient, concurrency.WithTTL(int(defaultSessionTTL.Seconds())))
 	if err != nil {
 		return errors.Wrap(errors.ErrMasterNewServer, err)
 	}
@@ -453,7 +453,6 @@ func (s *Server) isLeaderAndNeedForward(ctx context.Context) (isLeader, needForw
 // arguments with `Pointer` suffix should be pointer to that variable its name indicated
 // return `true` means caller should return with variable that `xxPointer` modified.
 func (s *Server) rpcForwardIfNeeded(ctx context.Context, req interface{}, respPointer interface{}, errPointer *error) bool {
-	// nolint:dogsled
 	pc, _, _, _ := runtime.Caller(1)
 	fullMethodName := runtime.FuncForPC(pc).Name()
 	methodName := fullMethodName[strings.LastIndexByte(fullMethodName, '.')+1:]
@@ -476,7 +475,7 @@ func (s *Server) rpcForwardIfNeeded(ctx context.Context, req interface{}, respPo
 			zap.String("to", leader.Name), zap.String("request", methodName))
 
 		params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)}
-		results := reflect.ValueOf(s.leaderClient.Client()).MethodByName(methodName).Call(params)
+		results := reflect.ValueOf(s.leaderClient.GetLeaderClient()).MethodByName(methodName).Call(params)
 		// result's inner types should be (*pb.XXResponse, error), which is same as s.leaderClient.XXRPCMethod
 		reflect.ValueOf(respPointer).Elem().Set(results[0])
 		errInterface := results[1].Interface()

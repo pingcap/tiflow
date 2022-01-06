@@ -308,7 +308,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				// executor actually wait for a timeout when ttl is nearly up.
 				Ttl: uint64(s.cfg.KeepAliveTTL.Milliseconds() + s.cfg.RPCTimeout.Milliseconds()),
 			}
-			resp, err := s.cli.SendHeartbeat(ctx, req, s.cfg.RPCTimeout)
+			resp, err := s.cli.Heartbeat(ctx, req, s.cfg.RPCTimeout)
 			if err != nil {
 				log.L().Error("heartbeat rpc meet error", zap.Error(err))
 				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
@@ -353,7 +353,7 @@ func (s *Server) reportTaskRescOnce(ctx context.Context) error {
 			Usage: int32(resc),
 		})
 	}
-	resp, err := s.cli.Client().ReportExecutorWorkload(ctx, req)
+	resp, err := s.cli.ReportExecutorWorkload(ctx, req)
 	if err != nil {
 		return err
 	}

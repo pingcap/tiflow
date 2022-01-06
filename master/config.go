@@ -32,6 +32,7 @@ import (
 )
 
 const (
+	defaultSessionTTL        = 5 * time.Second
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"

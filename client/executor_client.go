@@ -17,12 +17,12 @@ type ExecutorClient interface {
 	Send(context.Context, *ExecutorRequest) (*ExecutorResponse, error)
 }
 
-type closeable interface {
+type closeableConnIface interface {
 	Close() error
 }
 
 type executorClient struct {
-	conn   closeable
+	conn   closeableConnIface
 	client pb.ExecutorClient
 }
 

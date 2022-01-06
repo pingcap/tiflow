@@ -164,7 +164,7 @@ func (m *Master) scheduleTask(group scheduleGroup) error {
 		reqTasks = append(reqTasks, task.ToScheduleTaskPB())
 	}
 	req := &pb.TaskSchedulerRequest{Tasks: reqTasks}
-	resp, err := m.clients.MasterClient().RequestForSchedule(m.ctx, req, time.Minute)
+	resp, err := m.clients.MasterClient().ScheduleTask(m.ctx, req, time.Minute)
 	if err != nil {
 		// TODO: convert grpc error to rfc error
 		return err
