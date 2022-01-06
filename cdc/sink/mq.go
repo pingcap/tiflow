@@ -260,9 +260,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 func (k *mqSink) Close(ctx context.Context) error {
-	start := time.Now()
 	err := k.mqProducer.Close()
-	log.Info("close mqSink", zap.Duration("elapsed", time.Since(start)))
 	return errors.Trace(err)
 }
 
