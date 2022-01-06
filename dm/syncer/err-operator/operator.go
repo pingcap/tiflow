@@ -108,14 +108,12 @@ func (h *Holder) GetBehindCommands(pos string) []pb.HandleWorkerErrorRequest {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	current := mysql.Position{}
-	fmt.Sscanf(strings.ReplaceAll(pos[1:len(pos)-1], ",", ""), "%s %d", &current.Name, &current.Pos)
+	current, _ := binlog.PositionFromPosStr(pos)
 
 	// find behind position
 	var behindPositions []mysql.Position
 	for key := range h.operators {
-		p := mysql.Position{}
-		fmt.Sscanf(strings.ReplaceAll(key[1:len(key)-1], ",", ""), "%s %d", &p.Name, &p.Pos)
+		p, _ := binlog.PositionFromPosStr(key)
 		if current.Compare(p) <= 0 {
 			behindPositions = append(behindPositions, p)
 		}
@@ -145,8 +143,8 @@ func (h *Holder) SetHasAllInjected(startLocation binlog.Location) {
 }
 
 func (h *Holder) IsInject(startLocation binlog.Location) bool {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
 	key := startLocation.Position.String()
 	operator, ok := h.operators[key]
@@ -176,13 +174,13 @@ func (h *Holder) GetEvent(startLocation binlog.Location) (*replication.BinlogEve
 	}
 
 	if len(operator.events) <= startLocation.Suffix {
-		return nil, terror.ErrSyncerEvent.Generatef("%s events out of range, index: %d, total: %d", pb.ErrorOp_name[int32(operator.op)], startLocation.Suffix, len(operator.events))
+		return nil, terror.ErrSyncerEvent.Generatef("%s events out of range, index: %d, total: %d", operator.op.String(), startLocation.Suffix, len(operator.events))
 	}
 
 	e := operator.events[startLocation.Suffix]
 	buf := new(bytes.Buffer)
 	e.Dump(buf)
-	h.logger.Info("get event", zap.String("operatorType", pb.ErrorOp_name[int32(operator.op)]), zap.Stringer("event", buf))
+	h.logger.Info("get event", zap.String("operatorType", operator.op.String()), zap.Stringer("event", buf))
 
 	return e, nil
 }

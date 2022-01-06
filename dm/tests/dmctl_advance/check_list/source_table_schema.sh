@@ -11,6 +11,9 @@ function source_table_schema_lack_arguments() {
 		"binlog-schema test" \
 		"Available Commands" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog-schema list test" \
+		"dmctl binlog-schema list <task-name> <database> <table>" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog-schema update test" \
 		"dmctl binlog-schema update <task-name> <database> <table> \[schema-file\] \[flags\]" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

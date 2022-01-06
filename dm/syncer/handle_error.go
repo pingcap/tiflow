@@ -51,15 +51,7 @@ func (s *Syncer) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReque
 		pos = startLocation.String()
 	}
 
-	events := make([]*replication.BinlogEvent, 0)
 	var err error
-	if req.Op == pb.ErrorOp_Replace || req.Op == pb.ErrorOp_Inject {
-		events, err = s.genEvents(ctx, req.Sqls)
-		if err != nil {
-			return "", err
-		}
-	}
-
 	// remove outdated operators when add operator
 	err = s.errOperatorHolder.RemoveOutdated(s.checkpoint.FlushedGlobalPoint())
 	if err != nil {
@@ -75,13 +67,17 @@ func (s *Syncer) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReque
 		return string(commandsJSON), err1
 	}
 
-	req.BinlogPos = pos
-	err = s.errOperatorHolder.Set(req, events)
-	if err != nil {
-		return "", err
+	events := make([]*replication.BinlogEvent, 0)
+
+	if req.Op == pb.ErrorOp_Replace || req.Op == pb.ErrorOp_Inject {
+		events, err = s.genEvents(ctx, req.Sqls)
+		if err != nil {
+			return "", err
+		}
 	}
 
-	return "", nil
+	req.BinlogPos = pos
+	return "", s.errOperatorHolder.Set(req, events)
 }
 
 func (s *Syncer) genEvents(ctx context.Context, sqls []string) ([]*replication.BinlogEvent, error) {

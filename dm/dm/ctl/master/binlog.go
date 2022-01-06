@@ -24,7 +24,7 @@ import (
 func NewBinlogCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "binlog <command>",
-		Short: "manage or show upstream binlog operations",
+		Short: "manage or show binlog operations",
 	}
 	cmd.PersistentFlags().StringP("binlog-pos", "b", "", "position used to match binlog event if matched the binlog operation will be applied. The format like \"mysql-bin|000001.000003:3270\"")
 	cmd.AddCommand(
@@ -81,7 +81,7 @@ func newBinlogListCmd() *cobra.Command {
 func newBinlogReplaceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "replace <task-name> <replace-sql1> <replace-sql2>...",
-		Short: "replace the current error event or a specific binlog position (binlog-pos) ddl event with some ddls",
+		Short: "replace the current error event or a specific binlog position (binlog-pos) with some ddls",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) <= 1 {
 				return cmd.Help()
@@ -126,7 +126,7 @@ func newBinlogRevertCmd() *cobra.Command {
 func newBinlogInjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "inject <task-name> <inject-sql1> <inject-sql2>...",
-		Short: "inject the current error event or a specific binlog position (binlog-pos) ddl event with some ddls",
+		Short: "inject the current error event or a specific binlog position (binlog-pos) with some ddls",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) <= 1 {
 				return cmd.Help()
