@@ -65,7 +65,7 @@ if [ "$start_at" != "*" ]; then
 		test_name="$(basename "$(dirname "$script")")"
 		continue_test="no"
 		if [ "$continue_test" == "yes" ] || [ "$start_at" == "$test_name" ]; then
-			continue_test="*"
+			continue_test="yes"
 			run_case $test_name $script $sink_type
 		fi
 	done
