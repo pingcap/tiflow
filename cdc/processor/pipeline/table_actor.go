@@ -288,12 +288,10 @@ func (t *tableActor) CheckpointTs() model.Ts {
 
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
-	if t.sinkNode.BarrierTs() != ts {
-		msg := message.BarrierMessage(ts)
-		err := t.tableActorRouter.Send(t.actorID, msg)
-		if err != nil {
-			log.Warn("send fails", zap.Reflect("msg", msg), zap.Error(err))
-		}
+	msg := message.BarrierMessage(ts)
+	err := t.tableActorRouter.Send(t.actorID, msg)
+	if err != nil {
+		log.Warn("send fails", zap.Reflect("msg", msg), zap.Error(err))
 	}
 }
 
