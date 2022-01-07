@@ -56,8 +56,8 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 	}
 	owner := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
-	}, func() DDLSink {
-		return &mockDDLSink{}
+	}, func(ctx cdcContext.Context) (AsyncSink, error) {
+		return &mockAsyncSink{}, nil
 	},
 		ctx.GlobalVars().PDClient,
 	)
@@ -78,9 +78,6 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, cancel := cdcContext.WithCancel(ctx)
-	defer cancel()
-
 	owner, state, tester := createOwner4Test(ctx, c)
 
 	changefeedID := "test-changefeed"
@@ -149,9 +146,6 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
-	ctx, cancel := cdcContext.WithCancel(ctx)
-	defer cancel()
-
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
@@ -277,9 +271,6 @@ func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
-	ctx, cancel := cdcContext.WithCancel(ctx)
-	defer cancel()
-
 	tester.MustUpdate("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"v6.0.0"}`))
 
 	changefeedID := "test-changefeed"
@@ -314,9 +305,6 @@ func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 func (s *ownerSuite) TestAdminJob(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, cancel := cdcContext.WithCancel(ctx)
-	defer cancel()
-
 	owner, _, _ := createOwner4Test(ctx, c)
 	owner.EnqueueJob(model.AdminJob{
 		CfID: "test-changefeed1",
@@ -364,8 +352,6 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	o := NewOwner(mockPDClient)
 	o.gcManager = gc.NewManager(mockPDClient)
 	ctx := cdcContext.NewBackendContext4Test(true)
-	ctx, cancel := cdcContext.WithCancel(ctx)
-	defer cancel()
 	state := orchestrator.NewGlobalState()
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
@@ -463,8 +449,6 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, cancel := cdcContext.WithCancel(ctx)
-	defer cancel()
 	owner, state, tester := createOwner4Test(ctx, c)
 
 	statusProvider := owner.StatusProvider()
