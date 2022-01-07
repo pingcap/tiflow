@@ -146,11 +146,11 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					continue
 				}
 				log.Info("ddl sink try to send checkpointTs", zap.Uint64("checkpointTs", checkpointTs))
-				lastCheckpointTs = checkpointTs
 				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs); err != nil {
 					ctx.Throw(errors.Trace(err))
 					return
 				}
+				lastCheckpointTs = checkpointTs
 			case ddl := <-s.ddlCh:
 				err := s.sink.EmitDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
