@@ -154,6 +154,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("flushSink", zap.Uint64("checkpointTs", checkpointTs))
 
 	// we must call flowController.Release immediately after we call
 	// FlushRowChangedEvents to prevent deadlock cause by checkpointTs

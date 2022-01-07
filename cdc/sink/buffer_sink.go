@@ -153,6 +153,7 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
+		log.Info("runOnce", zap.Uint64("checkpointTs", checkpointTs))
 		b.tableCheckpointTsMap.Store(tableID, checkpointTs)
 	}
 	now := time.Now()
