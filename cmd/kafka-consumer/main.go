@@ -80,16 +80,16 @@ func init() {
 		File:  logPath,
 	})
 	if err != nil {
-		log.Fatal("init logger failed", zap.Error(err))
+		log.Panic("init logger failed", zap.Error(err))
 	}
 
 	upstreamURI, err := url.Parse(upstreamURIStr)
 	if err != nil {
-		log.Fatal("invalid upstream-uri", zap.Error(err))
+		log.Panic("invalid upstream-uri", zap.Error(err))
 	}
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if scheme != "kafka" {
-		log.Fatal("invalid upstream-uri scheme, the scheme of upstream-uri must be `kafka`",
+		log.Panic("invalid upstream-uri scheme, the scheme of upstream-uri must be `kafka`",
 			zap.String("upstreamURI", upstreamURIStr))
 	}
 	s := upstreamURI.Query().Get("version")
@@ -107,20 +107,20 @@ func init() {
 
 	config, err := newSaramaConfig()
 	if err != nil {
-		log.Fatal("Error creating sarama config", zap.Error(err))
+		log.Panic("Error creating sarama config", zap.Error(err))
 	}
 
 	s = upstreamURI.Query().Get("partition-num")
 	if s == "" {
 		partition, err := getPartitionNum(kafkaAddrs, kafkaTopic, config)
 		if err != nil {
-			log.Fatal("can not get partition number", zap.String("topic", kafkaTopic), zap.Error(err))
+			log.Panic("can not get partition number", zap.String("topic", kafkaTopic), zap.Error(err))
 		}
 		kafkaPartitionNum = partition
 	} else {
 		c, err := strconv.ParseInt(s, 10, 32)
 		if err != nil {
-			log.Fatal("invalid partition-num of upstream-uri")
+			log.Panic("invalid partition-num of upstream-uri")
 		}
 		kafkaPartitionNum = int32(c)
 	}
@@ -129,7 +129,7 @@ func init() {
 	if s != "" {
 		c, err := strconv.Atoi(s)
 		if err != nil {
-			log.Fatal("invalid max-message-bytes of upstream-uri")
+			log.Panic("invalid max-message-bytes of upstream-uri")
 		}
 		log.Info("Setting max-message-bytes", zap.Int("max-message-bytes", c))
 		kafkaMaxMessageBytes = c
@@ -139,7 +139,7 @@ func init() {
 	if s != "" {
 		c, err := strconv.Atoi(s)
 		if err != nil {
-			log.Fatal("invalid max-batch-size of upstream-uri")
+			log.Panic("invalid max-batch-size of upstream-uri")
 		}
 		log.Info("Setting max-batch-size", zap.Int("max-batch-size", c))
 		kafkaMaxBatchSize = c
@@ -228,24 +228,24 @@ func main() {
 	 */
 	config, err := newSaramaConfig()
 	if err != nil {
-		log.Fatal("Error creating sarama config", zap.Error(err))
+		log.Panic("Error creating sarama config", zap.Error(err))
 	}
 	err = waitTopicCreated(kafkaAddrs, kafkaTopic, config)
 	if err != nil {
-		log.Fatal("wait topic created failed", zap.Error(err))
+		log.Panic("wait topic created failed", zap.Error(err))
 	}
 	/**
 	 * Setup a new Sarama consumer group
 	 */
 	consumer, err := NewConsumer(context.TODO())
 	if err != nil {
-		log.Fatal("Error creating consumer", zap.Error(err))
+		log.Panic("Error creating consumer", zap.Error(err))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	client, err := sarama.NewConsumerGroup(kafkaAddrs, kafkaGroupID, config)
 	if err != nil {
-		log.Fatal("Error creating consumer group client", zap.Error(err))
+		log.Panic("Error creating consumer group client", zap.Error(err))
 	}
 
 	wg := &sync.WaitGroup{}
@@ -257,7 +257,7 @@ func main() {
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
 			if err := client.Consume(ctx, strings.Split(kafkaTopic, ","), consumer); err != nil {
-				log.Fatal("Error from consumer: %v", zap.Error(err))
+				log.Panic("Error from consumer: %v", zap.Error(err))
 			}
 			// check if context was cancelled, signaling that the consumer should stop
 			if ctx.Err() != nil {
@@ -269,7 +269,7 @@ func main() {
 
 	go func() {
 		if err := consumer.Run(ctx); err != nil {
-			log.Fatal("Error running consumer: %v", zap.Error(err))
+			log.Panic("Error running consumer: %v", zap.Error(err))
 		}
 	}()
 
@@ -287,7 +287,7 @@ func main() {
 	cancel()
 	wg.Wait()
 	if err = client.Close(); err != nil {
-		log.Fatal("Error closing client", zap.Error(err))
+		log.Panic("Error closing client", zap.Error(err))
 	}
 }
 
@@ -396,7 +396,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		for {
 			tp, hasNext, err := batchDecoder.HasNext()
 			if err != nil {
-				log.Fatal("decode message key failed", zap.Error(err))
+				log.Panic("decode message key failed", zap.Error(err))
 			}
 			if !hasNext {
 				break
@@ -405,7 +405,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			counter++
 			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
 			if len(message.Key)+len(message.Value) > kafkaMaxMessageBytes && counter > 1 {
-				log.Fatal("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
+				log.Panic("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
 					zap.Int("receviedBytes", len(message.Key)+len(message.Value)))
 			}
 
@@ -413,13 +413,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			case model.MqMessageTypeDDL:
 				ddl, err := batchDecoder.NextDDLEvent()
 				if err != nil {
-					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				c.appendDDL(ddl)
 			case model.MqMessageTypeRow:
 				row, err := batchDecoder.NextRowChangedEvent()
 				if err != nil {
-					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
@@ -441,7 +441,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
 				err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
-					log.Fatal("emit row changed event failed", zap.Error(err))
+					log.Panic("emit row changed event failed", zap.Error(err))
 				}
 				lastCommitTs, ok := sink.tablesMap.Load(row.Table.TableID)
 				if !ok || lastCommitTs.(uint64) < row.CommitTs {
@@ -450,7 +450,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			case model.MqMessageTypeResolved:
 				ts, err := batchDecoder.NextResolvedEvent()
 				if err != nil {
-					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if ts < resolvedTs {
@@ -471,7 +471,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		}
 
 		if counter > kafkaMaxBatchSize {
-			log.Fatal("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", kafkaMaxBatchSize),
+			log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", kafkaMaxBatchSize),
 				zap.Int("actual-batch-size", counter))
 		}
 	}
@@ -487,7 +487,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	}
 	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 	if ddl.CommitTs < globalResolvedTs {
-		log.Fatal("unexpected ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
+		log.Panic("unexpected ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
 	}
 	if ddl.CommitTs == globalResolvedTs {
 		log.Warn("receive redundant ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
@@ -575,7 +575,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			globalResolvedTs = todoDDL.CommitTs
 		}
 		if lastGlobalResolvedTs > globalResolvedTs {
-			log.Fatal("global ResolvedTs fallback")
+			log.Panic("global ResolvedTs fallback")
 		}
 
 		if globalResolvedTs > lastGlobalResolvedTs {
