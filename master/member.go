@@ -11,8 +11,8 @@ import (
 // Member stores server member information
 // TODO: make it a protobuf field and can be shared by gRPC API
 type Member struct {
-	IsServLeader bool     `json:"-"`
-	IsEtcdLeader bool     `json:"-"`
+	IsServLeader bool     `json:"is-serv-leader"`
+	IsEtcdLeader bool     `json:"is-etcd-leader"`
 	Name         string   `json:"name"`
 	Addrs        []string `json:"addrs"`
 }
@@ -28,34 +28,28 @@ func (m *Member) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, m)
 }
 
-// nolint:unused
 func (s *Server) updateServerMasterMembers(ctx context.Context) error {
-	leader, exists := s.checkLeader()
 	resp, err := s.etcdClient.MemberList(ctx)
 	if err != nil {
 		return err
 	}
+
 	members := make([]*Member, 0, len(resp.Members))
-	currLeader, exist := s.checkLeader()
+	leader, exists := s.checkLeader()
+	etcdLeaderID := s.etcd.Server.Lead()
 	for _, m := range resp.Members {
 		isServLeader := exists && m.Name == leader.Name
-		if isServLeader && (!exist || currLeader.Name != m.Name) {
-			s.leader.Store(&Member{
-				Name:         m.Name,
-				IsServLeader: true,
-				IsEtcdLeader: true,
-				Addrs:        m.ClientURLs,
-			})
-			s.createLeaderClient(ctx, m.ClientURLs)
-		}
+		isEtcdLeader := m.ID == etcdLeaderID
 		members = append(members, &Member{
 			Name:         m.Name,
 			Addrs:        m.ClientURLs,
-			IsEtcdLeader: false, /* TODO */
+			IsEtcdLeader: isEtcdLeader,
 			IsServLeader: isServLeader,
 		})
 	}
-	s.members = members
-	log.L().Info("update members", zap.Any("members", members))
+	s.members.Lock()
+	defer s.members.Unlock()
+	s.members.m = members
+	log.L().Info("update server master members", zap.Any("members", members))
 	return nil
 }

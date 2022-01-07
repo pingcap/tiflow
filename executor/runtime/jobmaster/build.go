@@ -81,7 +81,7 @@ func (b *jobMasterBuilder) Build(op model.Operator) (runtime.Operator, bool, err
 		return nil, false, err
 	}
 	var metaKV metadata.MetaKV
-	if !test.GlobalTestFlag {
+	if !test.GetGlobalTestFlag() {
 		metaKV, err = getEtcdMetaKV(context.Background(), clients)
 		if err != nil {
 			return nil, false, err

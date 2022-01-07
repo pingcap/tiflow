@@ -53,7 +53,7 @@ func newExecutorClientForTest(addr string) (*executorClient, error) {
 }
 
 func newExecutorClient(addr string) (*executorClient, error) {
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		return newExecutorClientForTest(addr)
 	}
 	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoff.DefaultConfig}))

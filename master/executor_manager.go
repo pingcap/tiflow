@@ -63,7 +63,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 	//}
 	e.offExecutor <- id
 	log.L().Logger.Info("notify to offline exec")
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		e.testContext.NotifyExecutorChange(&test.ExecutorChangeEvent{
 			Tp:   test.Delete,
 			Time: time.Now(),

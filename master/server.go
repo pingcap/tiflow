@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
@@ -35,13 +36,16 @@ import (
 type Server struct {
 	etcd *embed.Etcd
 
-	etcdClient   *clientv3.Client
-	session      *concurrency.Session
-	election     cluster.Election
-	leaderCtx    context.Context
-	resignFn     context.CancelFunc
-	leader       atomic.Value
-	members      []*Member //nolint:unused
+	etcdClient *clientv3.Client
+	session    *concurrency.Session
+	election   cluster.Election
+	leaderCtx  context.Context
+	resignFn   context.CancelFunc
+	leader     atomic.Value
+	members    struct {
+		sync.RWMutex
+		m []*Member
+	}
 	leaderClient *client.MasterClient
 
 	// sched scheduler
@@ -94,11 +98,25 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 		return resp2, err2
 	}
 
-	err := s.apiPreCheck()
-	if err != nil {
-		return &pb.HeartbeatResponse{Err: err}, nil
+	checkErr := s.apiPreCheck()
+	if checkErr != nil {
+		return &pb.HeartbeatResponse{Err: checkErr}, nil
 	}
-	return s.executorManager.HandleHeartbeat(req)
+	resp, err := s.executorManager.HandleHeartbeat(req)
+	if err == nil && resp.Err == nil {
+		s.members.RLock()
+		defer s.members.RUnlock()
+		addrs := make([]string, 0, len(s.members.m))
+		for _, member := range s.members.m {
+			addrs = append(addrs, strings.Join(member.Addrs, ","))
+		}
+		resp.Addrs = addrs
+		leader, exists := s.checkLeader()
+		if exists {
+			resp.Leader = strings.Join(leader.Addrs, ",")
+		}
+	}
+	return resp, err
 }
 
 // SubmitJob passes request onto "JobManager".
@@ -263,7 +281,7 @@ func (s *Server) Stop() {
 
 // Run the master-server.
 func (s *Server) Run(ctx context.Context) (err error) {
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		return s.startForTest(ctx)
 	}
 
@@ -281,6 +299,10 @@ func (s *Server) Run(ctx context.Context) (err error) {
 
 	wg.Go(func() error {
 		return s.leaderLoop(ctx)
+	})
+
+	wg.Go(func() error {
+		return s.memberLoop(ctx)
 	})
 
 	return wg.Wait()
@@ -366,6 +388,10 @@ func (s *Server) reset(ctx context.Context) error {
 	})
 	if err != nil {
 		return err
+	}
+	err = s.updateServerMasterMembers(ctx)
+	if err != nil {
+		log.L().Warn("failed to update server master members", zap.Error(err))
 	}
 	return nil
 }
@@ -514,4 +540,19 @@ func withHost(addr string) string {
 	}
 
 	return addr
+}
+
+func (s *Server) memberLoop(ctx context.Context) error {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			if err := s.updateServerMasterMembers(ctx); err != nil {
+				log.L().Warn("update server master members failed", zap.Error(err))
+			}
+		}
+	}
 }

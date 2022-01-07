@@ -30,11 +30,12 @@ type Server struct {
 	cfg     *Config
 	testCtx *test.Context
 
-	tcpServer tcpserver.TCPServer
-	grpcSrv   *grpc.Server
-	cli       *client.MasterClient
-	sch       *runtime.Runtime
-	info      *model.ExecutorInfo
+	tcpServer   tcpserver.TCPServer
+	grpcSrv     *grpc.Server
+	cli         *client.MasterClient
+	cliUpdateCh chan []string
+	sch         *runtime.Runtime
+	info        *model.ExecutorInfo
 
 	lastHearbeatTime time.Time
 
@@ -45,8 +46,9 @@ type Server struct {
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
 	s := Server{
-		cfg:     cfg,
-		testCtx: ctx,
+		cfg:         cfg,
+		testCtx:     ctx,
+		cliUpdateCh: make(chan []string),
 	}
 	return &s
 }
@@ -131,7 +133,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		return s.startForTest(ctx)
 	}
 
@@ -164,6 +166,10 @@ func (s *Server) Run(ctx context.Context) error {
 
 	wg.Go(func() error {
 		return s.reportTaskResc(ctx)
+	})
+
+	wg.Go(func() error {
+		return s.bgUpdateServerMasterClients(ctx)
 	})
 
 	return wg.Wait()
@@ -285,7 +291,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 	ticker := time.NewTicker(s.cfg.KeepAliveInterval)
 	s.lastHearbeatTime = time.Now()
 	defer func() {
-		if test.GlobalTestFlag {
+		if test.GetGlobalTestFlag() {
 			s.testCtx.NotifyExecutorChange(&test.ExecutorChangeEvent{
 				Tp:   test.Delete,
 				Time: time.Now(),
@@ -331,7 +337,14 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			// later than master's, which might cause that master wait for less time than executor.
 			// This gap is unsafe.
 			s.lastHearbeatTime = t
-			log.L().Info("heartbeat success")
+			log.L().Info("heartbeat success", zap.String("leader", resp.Leader), zap.Strings("members", resp.Addrs))
+			// update master client could cost long time, we make it a background
+			// job and if there is running update task, we ignore once since more
+			// heartbeats will be called later.
+			select {
+			case s.cliUpdateCh <- resp.Addrs:
+			default:
+			}
 		}
 	}
 }
@@ -376,6 +389,17 @@ func (s *Server) reportTaskResc(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+		}
+	}
+}
+
+func (s *Server) bgUpdateServerMasterClients(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case urls := <-s.cliUpdateCh:
+			s.cli.UpdateClients(ctx, urls)
 		}
 	}
 }

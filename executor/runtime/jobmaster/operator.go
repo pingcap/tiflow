@@ -17,7 +17,7 @@ type jobMasterAgent struct {
 }
 
 func (j *jobMasterAgent) Prepare(ctx *runtime.TaskContext) (runtime.TaskRescUnit, error) {
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		j.metaKV = ctx.TestCtx.GetMetaKV()
 	}
 	// TODO: the starting routine cannot be cancelled here.

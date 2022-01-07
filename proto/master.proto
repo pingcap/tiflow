@@ -59,6 +59,8 @@ message HeartbeatRequest {
 
 message HeartbeatResponse {
     Error err = 1;
+    string leader = 2;
+    repeated string addrs = 3;
 }
 
 enum JobType {
