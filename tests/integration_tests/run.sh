@@ -72,9 +72,9 @@ if [ "$test_case" == "*" ]; then
 		fi
 	done
 else
-	for script in $CUR/*/run.sh; do
-		test_name="$(basename "$(dirname "$script")")"
-		run_case $test_name $script $sink_type
+	for name in $test_case; do
+		script="$CUR/$name/run.sh"
+		run_case $name $script $sink_type
 	done
 fi
 
