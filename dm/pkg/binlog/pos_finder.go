@@ -79,7 +79,6 @@ const (
 func NewLocalBinlogPosFinder(tctx *tcontext.Context, enableGTID bool, flavor string, relayDir string) *binlogPosFinder {
 	parser := replication.NewBinlogParser()
 	parser.SetFlavor(flavor)
-	parser.SetUseDecimal(true)
 	parser.SetVerifyChecksum(true)
 
 	return &binlogPosFinder{
@@ -102,7 +101,6 @@ func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *sql.DB, syncCfg replic
 
 	parser := replication.NewBinlogParser()
 	parser.SetFlavor(syncCfg.Flavor)
-	parser.SetUseDecimal(true)
 	parser.SetVerifyChecksum(true)
 
 	return &binlogPosFinder{
@@ -222,22 +220,22 @@ func (r *binlogPosFinder) processGTIDRelatedEvent(ev *replication.BinlogEvent, p
 			return nil, err
 		}
 		return newSet, nil
-	case replication.MARIADB_GTID_EVENT, replication.GTID_EVENT:
-		gtidStr, _ := event.GetGTIDStr(ev)
-		if err := prevSet.Update(gtidStr); err != nil {
-			return nil, err
-		}
 	case replication.MARIADB_GTID_LIST_EVENT:
 		newSet, err := event.GTIDsFromMariaDBGTIDListEvent(ev)
 		if err != nil {
 			return nil, err
 		}
 		return newSet, nil
+	case replication.MARIADB_GTID_EVENT, replication.GTID_EVENT:
+		gtidStr, _ := event.GetGTIDStr(ev)
+		if err := prevSet.Update(gtidStr); err != nil {
+			return nil, err
+		}
 	}
 	return prevSet, nil
 }
 
-func (r *binlogPosFinder) checkTransactionBoundaryEvent(ev *replication.BinlogEvent) (bool, error) {
+func (r *binlogPosFinder) checkTransactionBeginEvent(ev *replication.BinlogEvent) (bool, error) {
 	// we find the timestamp at transaction boundary
 	// When there are GTID events in this binlog file, we use GTID event as the start event, else:
 	// for DML
@@ -259,7 +257,8 @@ func (r *binlogPosFinder) checkTransactionBoundaryEvent(ev *replication.BinlogEv
 	case replication.QUERY_EVENT:
 		if !r.everMetGTIDEvent {
 			// user may change session level binlog-format=statement, but it's an unusual operation, so we parse it every time
-			// In MySQL 5.6.x without GTID, the timestamp of BEGIN is not the timestamp of the transaction,
+			// In MySQL 5.6.x without GTID, the timestamp of BEGIN is the timestamp of the first statement in the transaction,
+			// not the commit timestamp of the transaction.
 			// To simplify implementation, we use timestamp of BEGIN as the transaction timestamp,
 			// but this may cause some transaction with timestamp >= target timestamp be skipped.
 			// TODO maybe add backtrace to support this case later
@@ -317,7 +316,7 @@ func (r *binlogPosFinder) FindByTs(ts int64) (*Location, PosType, error) {
 			continue
 		}
 
-		transactionBeginEvent, err := r.checkTransactionBoundaryEvent(ev)
+		transactionBeginEvent, err := r.checkTransactionBeginEvent(ev)
 		if err != nil {
 			return nil, InvalidBinlogPos, err
 		}
