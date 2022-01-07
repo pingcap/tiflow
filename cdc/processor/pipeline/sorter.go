@@ -105,7 +105,7 @@ func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode b
 	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
 		if sortEngine == model.SortInFile {
 			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
-				zap.String("changefeed-id", ctx.ChangefeedVars().ID), zap.String("table-name", n.tableName))
+				zap.String("changefeed", ctx.ChangefeedVars().ID), zap.String("tableName", n.tableName))
 		}
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {

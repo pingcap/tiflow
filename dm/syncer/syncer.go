@@ -230,6 +230,8 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
+	locations *locationRecorder
+
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
@@ -273,6 +275,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	}
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
+	syncer.locations = &locationRecorder{}
 	return syncer
 }
 
@@ -1540,6 +1543,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	tctx.L().Info("replicate binlog from checkpoint", zap.Stringer("checkpoint", lastLocation))
 
 	if s.streamerController.IsClosed() {
+		s.locations.reset(lastLocation)
 		err = s.streamerController.Start(tctx, lastLocation)
 		if err != nil {
 			return terror.Annotate(err, "fail to restart streamer controller")
@@ -1655,6 +1659,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		// if suffix>0, we are replacing error
 		s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
 
+		s.locations.reset(currentLocation)
 		err3 := s.streamerController.RedirectStreamer(tctx, currentLocation)
 		if err3 != nil {
 			return err3
@@ -1720,6 +1725,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			currentLocation = shardingReSync.currLocation
 			// if suffix>0, we are replacing error
 			s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
+			s.locations.reset(shardingReSync.currLocation)
 			err = s.streamerController.RedirectStreamer(tctx, shardingReSync.currLocation)
 			if err != nil {
 				return err
@@ -1735,6 +1741,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		startTime := time.Now()
 		e, err = s.getEvent(tctx, currentLocation)
+		s.tctx.L().Debug("location refactor",
+			zap.Stringer("current", currentLocation),
+			zap.Stringer("start", startLocation),
+			zap.Stringer("last", lastLocation))
 
 		failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
 			if intVal, ok := val.(int); ok && intVal == 1 {
@@ -1913,6 +1923,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if currentLocation.Suffix > 0 && e.Header.EventSize > 0 {
 				currentLocation.Suffix = 0
 				s.isReplacingOrInjectingErr = false
+				s.locations.reset(currentLocation)
 				if s.errOperatorHolder.IsInject(startLocation) {
 					s.errOperatorHolder.SetHasAllInjected(startLocation)
 					// reset event as startLocation, avoid to be marked in checkpoint
@@ -3610,7 +3621,13 @@ func (s *Syncer) getEvent(tctx *tcontext.Context, startLocation binlog.Location)
 		return s.errOperatorHolder.GetEvent(startLocation)
 	}
 
-	return s.streamerController.GetEvent(tctx)
+	e, err := s.streamerController.GetEvent(tctx)
+	if err == nil {
+		s.locations.update(e)
+		// TODO: observe below log in integration test
+		s.tctx.L().Debug("location refactor", zap.Stringer("locations", s.locations))
+	}
+	return e, err
 }
 
 func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
