@@ -390,7 +390,7 @@ def list_task_template(count):
     resp = requests.get(url=url)
     data = resp.json()
     assert resp.status_code == 200
-    print("get_task_list resp=", data)
+    print("list_task_template resp=", data)
     assert data["total"] == int(count)
 
 
@@ -420,7 +420,7 @@ def update_task_template_success(name, task_mode):
     task = requests.get(url=url).json()
     task["task_mode"] = task_mode
     resp = requests.put(url=url, json=task)
-    print("update_task_template resp=", resp.json())
+    print("update_task_template_success resp=", resp.json())
     assert resp.status_code == 200
 
     # update task template success
