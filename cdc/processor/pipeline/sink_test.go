@@ -663,27 +663,27 @@ func (s *emitSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowC
 	return ok, err
 }
 
-func TestRetryEmitRow2Sink(t *testing.T) {
+func TestRetryEmitRowToSink(t *testing.T) {
 	t.Parallel()
 	sink := &emitSink{}
 
-	// retryEmitRow2Sink successful without error
+	// retryEmitRowToSink successful without error
 	sink.On("EmitRowChangedEvents", mock.Anything).Return(true, nil).Once()
 	sNode := newSinkNode(1, sink, 0, 10, &mockFlowController{})
-	err := sNode.retryEmitRow2Sink(context.Background())
+	err := sNode.retryEmitRowToSink(context.Background())
 	require.Nil(t, err)
 	require.Equal(t, 1, sink.emitCount)
 
-	// retryEmitRow2Sink failed due to a not retry error return
+	// retryEmitRowToSink failed due to a not retry error return
 	sink.On("EmitRowChangedEvents", mock.Anything).Return(false, errors.New("not retry error")).Once()
-	err = sNode.retryEmitRow2Sink(context.Background())
+	err = sNode.retryEmitRowToSink(context.Background())
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "not retry error")
 	require.Equal(t, 1, sink.emitCount)
 
-	// retryEmitRow2Sink failed due to reach the max retry times
+	// retryEmitRowToSink failed due to reach the max retry times
 	sink.On("EmitRowChangedEvents", mock.Anything).Return(false, nil)
-	err = sNode.retryEmitRow2Sink(context.Background())
+	err = sNode.retryEmitRowToSink(context.Background())
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "retry reach max times")
 	require.Equal(t, maxRetryTime, sink.retryCount)
