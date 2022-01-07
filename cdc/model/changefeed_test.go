@@ -258,7 +258,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminNone,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+					Code: string(cerror.ErrGCTTLExceeded.RFCCode()),
 				},
 			},
 			expectedState: StateFailed,
@@ -268,7 +268,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminResume,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+					Code: string(cerror.ErrGCTTLExceeded.RFCCode()),
 				},
 			},
 			expectedState: StateFailed,
@@ -278,7 +278,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminNone,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
+					Code: string(cerror.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
 			expectedState: StateError,
@@ -288,7 +288,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminResume,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
+					Code: string(cerror.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
 			expectedState: StateError,

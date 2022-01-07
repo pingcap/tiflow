@@ -23,7 +23,6 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
