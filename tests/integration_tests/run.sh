@@ -54,25 +54,22 @@ if [ -z "$test_case" ]; then
 fi
 
 start_at=$3
-if [ -z "$start_at" ]; then
-	start_at="*"
+run_test="no"
+if [ "$start_at" != ""]; then
+	test_case="*"
+else
+	run_test="yes"
 fi
 
 set -eu
 
-run_test="no"
-if [ "$start_at" != "*" ]; then
+if [ "$test_case" == "*" ]; then
 	for script in $CUR/*/run.sh; do
 		test_name="$(basename "$(dirname "$script")")"
 		if [ "$run_test" == "yes" ] || [ "$start_at" == "$test_name" ]; then
 			run_test="yes"
 			run_case $test_name $script $sink_type
 		fi
-	done
-elif [ "$test_case" != "*" ]; then
-	for name in $test_case; do
-		script="$CUR/$name/run.sh"
-		run_case $name $script $sink_type
 	done
 else
 	for script in $CUR/*/run.sh; do
