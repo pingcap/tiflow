@@ -130,7 +130,7 @@ func (n *sinkNode) stop(ctx context.Context) (err error) {
 }
 
 // flushSink flushes all rows received before resolvedTs to downstream.
-// We must call retryEmitRow2Sink before we call flushSink to make sure all
+// We must call retryEmitRowToSink before we call flushSink to make sure all
 // received rows in sinkNode.rowBuffer was emitted to backend sink
 func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err error) {
 	defer func() {
@@ -174,8 +174,8 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 	return nil
 }
 
-// addEvent2Buffer checks and adds the event to sinkNode.eventBuffer
-func (n *sinkNode) addEvent2Buffer(event *model.PolymorphicEvent) error {
+// addEventToBuffer checks and adds the event to sinkNode.eventBuffer
+func (n *sinkNode) addEventToBuffer(event *model.PolymorphicEvent) error {
 	if event == nil || event.Row == nil {
 		log.Warn("skip emit nil event", zap.Any("event", event))
 		return nil
@@ -300,10 +300,11 @@ func (n *sinkNode) clearBuffers() {
 	}
 }
 
-// emitRow2Sink emit rows in sinkNode.rowBuffer to backend sink (table sink in this case).
+// emitRowToSink emit rows in sinkNode.rowBuffer to backend sink (table sink in this case).
 // If it returns false and error is nil, the caller should retry until it returns true.
 // Otherwise, the rows will be lost.
-func (n *sinkNode) emitRow2Sink(ctx context.Context) (bool, error) {
+func (n *sinkNode) emitRowToSink(ctx context.Context) (bool, error) {
+	// TODO(dongmen): sinkNode.eventBuffer is redundant, remove it ASAP
 	for _, ev := range n.eventBuffer {
 		n.rowBuffer = append(n.rowBuffer, ev.Row)
 	}
@@ -343,7 +344,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))
 			})
-			err := n.retryEmitRow2Sink(ctx)
+			err := n.retryEmitRowToSink(ctx)
 			if err != nil {
 				return false, errors.Trace(err)
 			}
@@ -355,19 +356,19 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 			return true, nil
 		}
 
-		err := n.addEvent2Buffer(event)
+		err := n.addEventToBuffer(event)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
 		if len(n.eventBuffer) >= defaultSyncResolvedBatch {
-			err = n.retryEmitRow2Sink(ctx)
+			err = n.retryEmitRowToSink(ctx)
 			if err != nil {
 				return false, errors.Trace(err)
 			}
 		}
 
 	case pipeline.MessageTypeTick:
-		err := n.retryEmitRow2Sink(ctx)
+		err := n.retryEmitRowToSink(ctx)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
@@ -383,7 +384,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 		}
 	case pipeline.MessageTypeBarrier:
 		n.barrierTs = msg.BarrierTs
-		err := n.retryEmitRow2Sink(ctx)
+		err := n.retryEmitRowToSink(ctx)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
@@ -401,14 +402,14 @@ func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 	return n.sink.Close(ctx)
 }
 
-// retryEmitRow2Sink is a blocking method, it retries emit rows in sinkNode.rowBuffer
+// retryEmitRowToSink is a blocking method, it retries emit rows in sinkNode.rowBuffer
 // to sink until success. We must call it before we call flushSink.
-func (n *sinkNode) retryEmitRow2Sink(ctx context.Context) error {
+func (n *sinkNode) retryEmitRowToSink(ctx context.Context) error {
 	start := time.Now()
 	lastTimeToRetry := start
 	err := retry.Do(ctx, func() error {
-		// We must retry until success when emitRow2Sink returns false.
-		ok, err := n.emitRow2Sink(ctx)
+		// We must retry until success when emitRowToSink returns false.
+		ok, err := n.emitRowToSink(ctx)
 		if err == nil && !ok {
 			err = cerror.ErrSinkBlocking.FastGenByArgs()
 		}
