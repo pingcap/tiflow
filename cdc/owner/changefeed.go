@@ -606,6 +606,8 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 	phyRTs := oracle.ExtractPhysical(resolvedTs)
 	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
 	c.metricsChangefeedResolvedTsLagGauge.Set(float64(currentTs-phyRTs) / 1e3)
+
+	log.Info("updateStatus", zap.Uint64("resolvedTs", resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
 }
 
 func (c *changefeed) Close(ctx cdcContext.Context) {
