@@ -209,7 +209,7 @@ func Intersect(lhs ComparableSpan, rhs ComparableSpan) (span ComparableSpan, err
 // IsSubSpan returns true if the sub span is parents spans
 func IsSubSpan(sub ComparableSpan, parents ...ComparableSpan) bool {
 	if bytes.Compare(sub.Start, sub.End) >= 0 {
-		log.Panic("the sub span is invalid", zap.Reflect("sub span", sub))
+		log.Panic("the sub span is invalid", zap.Reflect("subSpan", sub))
 	}
 	for _, parent := range parents {
 		if StartCompare(parent.Start, sub.Start) <= 0 &&
