@@ -301,7 +301,7 @@ func (n *sinkNode) clearBuffers() {
 }
 
 // emitRow2Sink emit rows in sinkNode.rowBuffer to backend sink (table sink in this case).
-// If it returns false and error is nil, the call should retry until it returns true.
+// If it returns false and error is nil, the caller should retry until it returns true.
 // Otherwise, the rows will be lost.
 func (n *sinkNode) emitRow2Sink(ctx context.Context) (bool, error) {
 	for _, ev := range n.eventBuffer {
