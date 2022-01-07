@@ -2176,7 +2176,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
 		if adjustDBErr := adjustTargetDB(ctx, toDBCfg); adjustDBErr != nil {
 			if adjustDBErr != nil {
-				resp2.Msg = err.Error()
+				resp2.Msg = adjustDBErr.Error()
 				// nolint:nilerr
 				return resp2, nil
 			}

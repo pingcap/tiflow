@@ -295,7 +295,7 @@ def stop_task_success(task_name):
     print("stop_task_success")
 
 
-def create_task_template_success(task_name, tartget_table_name=""):
+def create_task_template_success(task_name, target_table_name=""):
     url = API_ENDPOINT + "/templates"
     task = {
         "name": task_name,
@@ -317,7 +317,7 @@ def create_task_template_success(task_name, tartget_table_name=""):
                     "schema": "openapi",
                     "table": "*",
                 },
-                "target": {"schema": "openapi", "table": tartget_table_name},
+                "target": {"schema": "openapi", "table": target_table_name},
             },
             {
                 "source": {
@@ -325,7 +325,7 @@ def create_task_template_success(task_name, tartget_table_name=""):
                     "schema": "openapi",
                     "table": "*",
                 },
-                "target": {"schema": "openapi", "table": tartget_table_name},
+                "target": {"schema": "openapi", "table": target_table_name},
             },
         ],
         "source_config": {
@@ -398,7 +398,7 @@ def import_task_template(success_count, failed_count):
     url = API_ENDPOINT + "/templates/import"
     resp = requests.post(url=url)
     data = resp.json()
-    print("create_task_template_success resp=", data)
+    print("import_task_template resp=", data)
     assert resp.status_code == 202
     assert len(data["success_task_list"]) == int(success_count)
     assert len(data["failed_task_list"]) == int(failed_count)
