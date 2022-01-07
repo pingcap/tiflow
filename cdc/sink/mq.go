@@ -166,6 +166,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 
 func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	if checkpointTs, ok := k.tableCheckpointTs[tableID]; ok && resolvedTs <= checkpointTs {
+		log.Info("resolvedTs fall back", zap.Uint64("checkpointTs", checkpointTs), zap.Uint64("resolvedTs", resolvedTs))
 		return checkpointTs, nil
 	}
 
@@ -201,6 +202,7 @@ flushLoop:
 	}
 	k.tableCheckpointTs[tableID] = resolvedTs
 	k.statistics.PrintStatus(ctx)
+	log.Info("flushed row change event", zap.Uint64("resolvedTs", resolvedTs))
 	return resolvedTs, nil
 }
 
