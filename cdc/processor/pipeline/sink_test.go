@@ -19,11 +19,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -113,6 +116,7 @@ func (s *mockCloseControlSink) Close(ctx context.Context) error {
 }
 
 func TestStatus(t *testing.T) {
+	t.Parallel()
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test-status",
@@ -198,6 +202,7 @@ func TestStatus(t *testing.T) {
 // TestStopStatus tests the table status of a pipeline is not set to stopped
 // until the underlying sink is closed
 func TestStopStatus(t *testing.T) {
+	t.Parallel()
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test-status",
@@ -233,6 +238,7 @@ func TestStopStatus(t *testing.T) {
 }
 
 func TestManyTs(t *testing.T) {
+	t.Parallel()
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test-many-ts",
@@ -390,6 +396,7 @@ func TestManyTs(t *testing.T) {
 }
 
 func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
+	t.Parallel()
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test-ignore-empty-row-change-event",
@@ -409,6 +416,7 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 }
 
 func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
+	t.Parallel()
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test-split-update-event",
@@ -463,6 +471,7 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 }
 
 func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
+	t.Parallel()
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.EnableOldValue = false
@@ -600,9 +609,9 @@ func (s *flushSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, 
 // call flowController.Release to release the memory quota of the table to avoid
 // deadlock if there is no error occur
 func TestFlushSinkReleaseFlowController(t *testing.T) {
+	t.Parallel()
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	cfg := config.GetDefaultReplicaConfig()
-	cfg.EnableOldValue = false
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test-flushSink",
 		Info: &model.ChangeFeedInfo{
@@ -626,4 +635,57 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, uint64(8), sNode.checkpointTs)
 	require.Equal(t, 2, flowController.releaseCounter)
+}
+
+type emitSink struct {
+	mockSink
+	mock.Mock
+	// indicate emit successfully
+	emitCount int
+	// indicate emit failed
+	retryCount int
+}
+
+// for test only
+var maxRetryTime = 2
+
+func (s *emitSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	args := s.Called()
+	ok, err := args.Get(0).(bool), args.Error(1)
+	if ok && err == nil {
+		s.emitCount++
+	}
+	if !ok && err == nil {
+		s.retryCount++
+	}
+	if s.retryCount == maxRetryTime {
+		return false, errors.New("retry reach max times")
+	}
+	return ok, err
+}
+
+func TestRetryEmitRow2Sink(t *testing.T) {
+	t.Parallel()
+	sink := &emitSink{}
+
+	// retryEmitRow2Sink successful without error
+	sink.On("EmitRowChangedEvents", mock.Anything).Return(true, nil).Once()
+	sNode := newSinkNode(1, sink, 0, 10, &mockFlowController{})
+	err := sNode.retryEmitRow2Sink(context.Background())
+	require.Nil(t, err)
+	require.Equal(t, 1, sink.emitCount)
+
+	// retryEmitRow2Sink failed due to a not retry error return
+	sink.On("EmitRowChangedEvents", mock.Anything).Return(false, errors.New("not retry error")).Once()
+	err = sNode.retryEmitRow2Sink(context.Background())
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "not retry error")
+	require.Equal(t, 1, sink.emitCount)
+
+	// retryEmitRow2Sink failed due to reach the max retry times
+	sink.On("EmitRowChangedEvents", mock.Anything).Return(false, nil)
+	err = sNode.retryEmitRow2Sink(context.Background())
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "retry reach max times")
+	require.Equal(t, maxRetryTime, sink.retryCount)
 }
