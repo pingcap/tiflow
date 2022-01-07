@@ -151,6 +151,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					ctx.Throw(errors.Trace(err))
 					return
 				}
+				log.Info("ddl sink send checkpointTs", zap.Uint64("checkpointTs", checkpointTs))
 				lastCheckpointTs = checkpointTs
 			case ddl := <-s.ddlCh:
 				err := s.sink.EmitDDLEvent(ctx, ddl)
