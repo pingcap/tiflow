@@ -114,11 +114,11 @@ func (n *sinkNode) InitWithReplicaConfig(isTableActorMode bool, replicaConfig *c
 	return nil
 }
 
-// stop is called when sink receives a stop command or checkpointTs reaches targetTs.
-// In this method, the builtin table sink will be closed by calling `Close`, and
-// no more events can be sent to this sink node afterwards.
+// stop is called when sinkNode receives a stop command or checkpointTs reaches targetTs.
+// After stop is called, the builtin table sink will be closed,
+// and no more events can be sent to this sinkNode.
 func (n *sinkNode) stop(ctx context.Context) (err error) {
-	// table stopped status must be set after underlying sink is closed
+	// table stopped status must be set after backend sink is closed
 	defer n.status.Store(TableStatusStopped)
 	err = n.sink.Close(ctx)
 	if err != nil {
@@ -129,8 +129,8 @@ func (n *sinkNode) stop(ctx context.Context) (err error) {
 	return
 }
 
-// flushSink flushes all events received before resolvedTs to downstream
-// we must call retryEmitRow2Sink before we call flushSink to make sure all
+// flushSink flushes all rows received before resolvedTs to downstream.
+// We must call retryEmitRow2Sink before we call flushSink to make sure all
 // received rows in sinkNode.rowBuffer was emitted to backend sink
 func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err error) {
 	defer func() {
@@ -157,12 +157,12 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 		return errors.Trace(err)
 	}
 
-	// we must call flowController.Release immediately after we call
+	// We must call flowController.Release immediately after we call
 	// FlushRowChangedEvents to prevent deadlock cause by checkpointTs
 	// fall back
 	n.flowController.Release(checkpointTs)
 
-	// the checkpointTs may fall back in some situation such as:
+	// The checkpointTs may be fallen back in some case, such as:
 	//   1. This table is newly added to the processor
 	//   2. There is one table in the processor that has a smaller
 	//   checkpointTs than this one
