@@ -849,6 +849,6 @@ func mockTaskQueryStatus(
 	).Return(queryResp, nil).MaxTimes(maxRetryNum)
 }
 
-func mockCheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) error {
-	return nil
+func mockCheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error) {
+	return "", nil
 }
