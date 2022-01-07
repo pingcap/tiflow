@@ -131,14 +131,8 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message 
 	case <-k.closeCh:
 		return nil
 	default:
-		if err := k.syncClient.SendMessages(msgs); err != nil {
-			log.Info("failed", zap.Error(err))
-			return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
-		}
-		log.Info("broadcast messages", zap.Any("msgs", msgs))
-		return nil
-		//err :=
-		//return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+		err := k.syncClient.SendMessages(msgs)
+		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
 
