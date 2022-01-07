@@ -249,7 +249,7 @@ func generateDSNByParams(
 
 	dsnClone := dsnCfg.Clone()
 	dsnClone.Passwd = "******"
-	log.Info("sink uri is configured", zap.String("format dsn", dsnClone.FormatDSN()))
+	log.Info("sink uri is configured", zap.String("dsn", dsnClone.FormatDSN()))
 
 	return dsnCfg.FormatDSN(), nil
 }
