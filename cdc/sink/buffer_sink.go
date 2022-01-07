@@ -23,6 +23,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -133,15 +135,31 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 		}
 		state.metricTotalRows.Add(float64(i))
 
-		for {
+		// TODO: duplicate codes in redo.go and in pipeline/sink.go, try to find a better way
+		start := time.Now()
+		lastTimeToRetry := start
+		err := retry.Do(ctx, func() error {
+			// We must retry until success when EmitRowChangedEvents returns false.
 			ok, err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)
-			if err != nil {
-				b.bufferMu.Unlock()
-				return false, errors.Trace(err)
+			if err == nil && !ok {
+				err = cerror.ErrSinkBlocking.FastGenByArgs()
 			}
-			if ok {
-				break
+			cost := time.Since(start)
+			retryInterval := time.Since(lastTimeToRetry)
+			if cost >= BlockingWarnLogDuration && retryInterval >= BlockingWarnLogInterval {
+				lastTimeToRetry = time.Now()
+				log.Warn("sink blocking too long", zap.Duration("duration", cost))
 			}
+			return err
+		}, retry.WithBackoffBaseDelay(20),
+			retry.WithBackoffMaxDelay(500),
+			retry.WithInfiniteTries(),
+			retry.WithIsRetryableErr(func(err error) bool {
+				return cerror.ErrSinkBlocking.Equal(err)
+			}))
+		if err != nil {
+			b.bufferMu.Unlock()
+			return false, errors.Trace(err)
 		}
 
 		// put remaining rows back to buffer

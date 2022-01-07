@@ -131,7 +131,7 @@ func (n *sinkNode) stop(ctx context.Context) (err error) {
 
 // flushSink flushes all events received before resolvedTs to downstream
 // we must call retryEmitRow2Sink before we call flushSink to make sure all
-// received events in sinkNode buffer was emitted to backend sink
+// received rows in sinkNode.rowBuffer was emitted to backend sink
 func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err error) {
 	defer func() {
 		if err != nil {
@@ -174,8 +174,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 	return nil
 }
 
-// emitEvent would return false the caller should retry until it success,
-// otherwise the event will be lost
+// addEvent2Buffer checks and adds the event to sinkNode.eventBuffer
 func (n *sinkNode) addEvent2Buffer(event *model.PolymorphicEvent) error {
 	if event == nil || event.Row == nil {
 		log.Warn("skip emit nil event", zap.Any("event", event))
@@ -301,6 +300,9 @@ func (n *sinkNode) clearBuffers() {
 	}
 }
 
+// emitRow2Sink emit rows in sinkNode.rowBuffer to backend sink (table sink in this case).
+// If it returns false and error is nil, the call should retry until it returns true.
+// Otherwise, the rows will be lost.
 func (n *sinkNode) emitRow2Sink(ctx context.Context) (bool, error) {
 	for _, ev := range n.eventBuffer {
 		n.rowBuffer = append(n.rowBuffer, ev.Row)
@@ -399,22 +401,22 @@ func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 	return n.sink.Close(ctx)
 }
 
-// retryEmitRow2Sink is a blocking method, it retries emit rows to sink until success
-// We must call this method before we call flushSink
+// retryEmitRow2Sink is a blocking method, it retries emit rows in sinkNode.rowBuffer
+// to sink until success. We must call it before we call flushSink.
 func (n *sinkNode) retryEmitRow2Sink(ctx context.Context) error {
 	start := time.Now()
 	lastTimeToRetry := start
 	err := retry.Do(ctx, func() error {
-		// We must retry until success when emitRow2Sink return false.
+		// We must retry until success when emitRow2Sink returns false.
 		ok, err := n.emitRow2Sink(ctx)
 		if err == nil && !ok {
 			err = cerror.ErrSinkBlocking.FastGenByArgs()
 		}
 		cost := time.Since(start)
 		retryInterval := time.Since(lastTimeToRetry)
-		if cost >= sink.SinkBlockingWarnLogDuration && retryInterval >= sink.SinkBlockingWarnLogInterval {
+		if cost >= sink.BlockingWarnLogDuration && retryInterval >= sink.BlockingWarnLogInterval {
 			lastTimeToRetry = time.Now()
-			log.Warn("sink blocking too long", zap.Duration("blocking time(s)", cost))
+			log.Warn("sink blocking too long", zap.Duration("duration", cost))
 		}
 		return err
 	}, retry.WithBackoffBaseDelay(20),

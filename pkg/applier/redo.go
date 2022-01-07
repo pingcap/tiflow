@@ -18,8 +18,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/retry"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -29,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -190,16 +189,16 @@ func (ra *RedoApplier) emitRow2Sink(ctx context.Context, s sink.Sink, row ...*mo
 	start := time.Now()
 	lastTimeToRetry := start
 	err := retry.Do(ctx, func() error {
-		// We must retry until success when emitRow2Sink return false.
+		// We must retry until success when EmitRowChangedEvents return false.
 		ok, err := s.EmitRowChangedEvents(ctx, row...)
 		if err == nil && !ok {
 			err = cerror.ErrSinkBlocking.FastGenByArgs()
 		}
 		cost := time.Since(start)
 		retryInterval := time.Since(lastTimeToRetry)
-		if cost >= sink.SinkBlockingWarnLogDuration && retryInterval >= sink.SinkBlockingWarnLogInterval {
+		if cost >= sink.BlockingWarnLogDuration && retryInterval >= sink.BlockingWarnLogInterval {
 			lastTimeToRetry = time.Now()
-			log.Warn("sink blocking too long", zap.Duration("blocking time(s)", cost))
+			log.Warn("sink blocking too long", zap.Duration("duration", cost))
 		}
 		return err
 	}, retry.WithBackoffBaseDelay(20),

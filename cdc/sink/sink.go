@@ -32,8 +32,12 @@ const (
 )
 
 const (
-	SinkBlockingWarnLogDuration = 10 * time.Second
-	SinkBlockingWarnLogInterval = 10 * time.Second
+	// BlockingWarnLogDuration is used to tell whether we should print warn logs
+	// when Sink is blocking
+	BlockingWarnLogDuration = 10 * time.Second
+	// BlockingWarnLogInterval is used to control the frequency of warn logs output
+	// caused by Sink blocking
+	BlockingWarnLogInterval = 10 * time.Second
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.

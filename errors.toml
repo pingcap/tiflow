@@ -893,7 +893,7 @@ service safepoint lost. current safepoint is %d, please remove all changefeed(s)
 
 ["CDC:ErrSinkBlocking"]
 error = '''
-sink is blocking, please try to seed event again if needed
+sink is blocking, please try to send event again if needed
 '''
 
 ["CDC:ErrSinkInvalidConfig"]
