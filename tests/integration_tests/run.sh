@@ -55,10 +55,10 @@ fi
 
 start_at=$3
 run_test="no"
-if [ "$start_at" != ""]; then
-	test_case="*"
-else
+if [ -z "$start_at" ]; then
 	run_test="yes"
+else
+	test_case="*"
 fi
 
 set -eu
