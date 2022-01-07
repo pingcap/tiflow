@@ -343,7 +343,7 @@ func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
