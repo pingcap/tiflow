@@ -1,38 +1,8 @@
-// Copyright 2021 PingCAP, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-package api
-
-import (
-	"bytes"
-	"encoding/json"
-	"strings"
-
-	"github.com/alecthomas/template"
-	"github.com/swaggo/swag"
-)
-
-var doc = `{
-    "schemes": {{ marshal .Schemes }},
+{
     "swagger": "2.0",
     "info": {
-        "description": "{{.Description}}",
-        "title": "{{.Title}}",
-        "contact": {},
-        "version": "{{.Version}}"
+        "contact": {}
     },
-    "host": "{{.Host}}",
-    "basePath": "{{.BasePath}}",
     "paths": {
         "/api/v1/captures": {
             "get": {
@@ -58,7 +28,7 @@ var doc = `{
                         }
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -139,7 +109,7 @@ var doc = `{
                         "description": ""
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -183,7 +153,7 @@ var doc = `{
                         }
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -273,7 +243,7 @@ var doc = `{
                         "description": ""
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -312,7 +282,7 @@ var doc = `{
                         "description": ""
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -353,7 +323,7 @@ var doc = `{
                         "description": ""
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -394,7 +364,7 @@ var doc = `{
                         "description": ""
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -453,7 +423,7 @@ var doc = `{
                         "description": ""
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -494,7 +464,7 @@ var doc = `{
                         "description": ""
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -589,7 +559,7 @@ var doc = `{
                         "description": ""
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -627,7 +597,7 @@ var doc = `{
                         }
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -662,7 +632,7 @@ var doc = `{
                         }
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -697,7 +667,7 @@ var doc = `{
                         }
                     },
                     "400": {
-                        "description": "Internal Server Error",
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
@@ -713,6 +683,23 @@ var doc = `{
         }
     },
     "definitions": {
+        "config.ColumnSelector": {
+            "type": "object",
+            "properties": {
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "matcher": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "config.DispatchRule": {
             "type": "object",
             "properties": {
@@ -730,6 +717,12 @@ var doc = `{
         "config.SinkConfig": {
             "type": "object",
             "properties": {
+                "column-selectors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/config.ColumnSelector"
+                    }
+                },
                 "dispatchers": {
                     "type": "array",
                     "items": {
@@ -873,6 +866,9 @@ var doc = `{
                 "id": {
                     "type": "string"
                 },
+                "resolved_ts": {
+                    "type": "integer"
+                },
                 "sink_uri": {
                     "type": "string"
                 },
@@ -923,6 +919,10 @@ var doc = `{
             "properties": {
                 "checkpoint_ts": {
                     "description": "The maximum event CommitTs that has been synchronized.",
+                    "type": "integer"
+                },
+                "count": {
+                    "description": "The count of events that have been replicated.",
                     "type": "integer"
                 },
                 "error": {
@@ -986,10 +986,6 @@ var doc = `{
                 "delete": {
                     "type": "boolean"
                 },
-                "done": {
-                    "description": "deprecated, will be removed in the next version",
-                    "type": "boolean"
-                },
                 "flag": {
                     "type": "integer"
                 },
@@ -999,51 +995,4 @@ var doc = `{
             }
         }
     }
-}`
-
-type swaggerInfo struct {
-	Version     string
-	Host        string
-	BasePath    string
-	Schemes     []string
-	Title       string
-	Description string
-}
-
-// SwaggerInfo holds exported Swagger Info so clients can modify it
-var SwaggerInfo = swaggerInfo{
-	Version:     "1.0",
-	Host:        "",
-	BasePath:    "",
-	Schemes:     []string{},
-	Title:       "TiCDC OpenAPI",
-	Description: "This is a docs of TiCDC OpenAPI.",
-}
-
-type s struct{}
-
-func (s *s) ReadDoc() string {
-	sInfo := SwaggerInfo
-	sInfo.Description = strings.Replace(sInfo.Description, "\n", "\\n", -1)
-
-	t, err := template.New("swagger_info").Funcs(template.FuncMap{
-		"marshal": func(v interface{}) string {
-			a, _ := json.Marshal(v)
-			return string(a)
-		},
-	}).Parse(doc)
-	if err != nil {
-		return doc
-	}
-
-	var tpl bytes.Buffer
-	if err := t.Execute(&tpl, sInfo); err != nil {
-		return doc
-	}
-
-	return tpl.String()
-}
-
-func init() {
-	swag.Register(swag.Name, &s{})
 }

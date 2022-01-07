@@ -212,7 +212,7 @@ check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm,tests
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
-check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts
+check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts swagger-spec
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
@@ -230,6 +230,9 @@ unit_test_coverage:
 
 data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
+
+swagger-spec: tools/bin/swag
+	tools/bin/swag init --parseVendor -generalInfo cdc/capture/http_handler.go --exclude vendor/github.com/pingcap/tidb-dashboard --output docs/swagger
 
 clean:
 	go clean -i ./...
@@ -412,6 +415,9 @@ tools/bin/gotestsum: tools/check/go.mod
 
 tools/bin/errdoc-gen: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
+
+tools/bin/swag: tools/check/go.mod
+	cd tools/check && $(GO) build -mod=mod -o ../bin/swag github.com/swaggo/swag/cmd/swag
 
 check_failpoint_ctl: tools/bin/failpoint-ctl
 

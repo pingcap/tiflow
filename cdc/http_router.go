@@ -30,7 +30,7 @@ import (
 	"go.uber.org/zap"
 
 	// use for OpenAPI online docs
-	_ "github.com/pingcap/tiflow/api"
+	_ "github.com/pingcap/tiflow/docs/swagger"
 )
 
 // newRouter create a router for OpenAPI
