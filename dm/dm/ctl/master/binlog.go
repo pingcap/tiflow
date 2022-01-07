@@ -122,7 +122,6 @@ func newBinlogRevertCmd() *cobra.Command {
 	return cmd
 }
 
-// FIXME: implement this later.
 func newBinlogInjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "inject <task-name> <inject-sql1> <inject-sql2>...",
