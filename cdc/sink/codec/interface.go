@@ -180,7 +180,7 @@ func NewEventBatchEncoderBuilder(p config.Protocol, credential *security.Credent
 	case config.ProtocolCraft:
 		return newCraftEventBatchEncoderBuilder(opts), nil
 	default:
-		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Int("protocol_value", int(p)))
+		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Int("protocolValue", int(p)))
 		return newJSONEventBatchEncoderBuilder(opts), nil
 	}
 }
