@@ -40,7 +40,10 @@ func TestChangefeedStateFromAdminJob(t *testing.T) {
 		},
 		{
 			creatorVersion: "4.0.15",
-			expected:       false,
+			expected:       true,
+		},
+		{
+			creatorVersion: "4.0.16",
 		},
 		{
 			creatorVersion: "5.0.0",
@@ -49,6 +52,10 @@ func TestChangefeedStateFromAdminJob(t *testing.T) {
 		{
 			creatorVersion: "5.0.1",
 			expected:       true,
+		},
+		{
+			creatorVersion: "5.0.6",
+			expected:       false,
 		},
 		{
 			creatorVersion: "5.1.0",
