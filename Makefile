@@ -172,6 +172,8 @@ fmt: tools/bin/gofumports tools/bin/shfmt
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
 	tools/bin/shfmt -d -w .
+	@echo "check log style"
+	scripts/check-log-style.sh
 
 errdoc: tools/bin/errdoc-gen
 	@echo "generator errors.toml"
@@ -376,7 +378,7 @@ tools/bin/goveralls: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/goveralls github.com/mattn/goveralls
 
 tools/bin/golangci-lint: tools/check/go.mod
-	cd tools/check && $(GO) build  -mod=mod -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
+	cd tools/check && $(GO) build -mod=mod -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 
 tools/bin/mockgen: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/mockgen github.com/golang/mock/mockgen

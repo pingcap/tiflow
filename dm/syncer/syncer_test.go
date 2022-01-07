@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -56,8 +57,6 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
 var _ = Suite(&testSyncerSuite{})
@@ -90,6 +89,11 @@ const (
 	Write
 	Update
 	Delete
+
+	DMLQuery
+
+	Headers
+	Rotate
 )
 
 type testSyncerSuite struct {
