@@ -274,7 +274,6 @@ const (
 	codeTaskCheckSyncConfigError
 	codeTaskCheckGenBAList
 	codeSourceCheckGTID
-	codeTaskCheckSyncConfigWarn
 )
 
 // Relay log utils error code.

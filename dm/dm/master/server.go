@@ -627,8 +627,8 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 	resp := &pb.UpdateTaskResponse{}
 	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task)
 	if err != nil {
-		// nolint:nilerr
 		resp.Msg = err.Error()
+		// nolint:nilerr
 		return resp, nil
 	}
 
@@ -1190,8 +1190,8 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 	resp := &pb.CheckTaskResponse{}
 	_, stCfgs, err := s.generateSubTask(ctx, req.Task)
 	if err != nil {
-		// nolint:nilerr
 		resp.Msg = err.Error()
+		// nolint:nilerr
 		return resp, nil
 	}
 
