@@ -454,7 +454,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if ts < resolvedTs {
-					log.Fatal("partition resolved ts fallback",
+					log.Panic("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Int32("partition", partition))
