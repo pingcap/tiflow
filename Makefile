@@ -232,7 +232,7 @@ data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
 
 swagger-spec: tools/bin/swag
-	tools/bin/swag init --parseVendor -generalInfo cdc/capture/http_handler.go --exclude vendor/github.com/pingcap/tidb-dashboard --output docs/swagger
+	tools/bin/swag init --parseVendor -generalInfo cdc/api/http_handler.go --output docs/swagger
 
 clean:
 	go clean -i ./...

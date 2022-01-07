@@ -23,7 +23,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/model"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -34,8 +34,7 @@ import (
 )
 
 // newRouter create a router for OpenAPI
-
-func newRouter(captureHandler capture.HTTPHandler) *gin.Engine {
+func newRouter(captureHandler api.HTTPHandler) *gin.Engine {
 	// discard gin log output
 	gin.DefaultWriter = io.Discard
 
@@ -52,7 +51,7 @@ func newRouter(captureHandler capture.HTTPHandler) *gin.Engine {
 	// common API
 	router.GET("/api/v1/status", captureHandler.ServerStatus)
 	router.GET("/api/v1/health", captureHandler.Health)
-	router.POST("/api/v1/log", capture.SetLogLevel)
+	router.POST("/api/v1/log", api.SetLogLevel)
 
 	// changefeed API
 	changefeedGroup := router.Group("/api/v1/changefeeds")
@@ -167,7 +166,7 @@ func errorHandleMiddleware() gin.HandlerFunc {
 		if lastError != nil {
 			err := lastError.Err
 			// put the error into response
-			if capture.IsHTTPBadRequestError(err) {
+			if api.IsHTTPBadRequestError(err) {
 				c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
 			} else {
 				c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package capture
+package api
 
 import (
 	"bufio"
@@ -21,6 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/httputil"
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -47,11 +48,11 @@ const (
 
 // HTTPHandler is a  HTTPHandler of capture
 type HTTPHandler struct {
-	capture *Capture
+	capture *capture.Capture
 }
 
 // NewHTTPHandler return a HTTPHandler for OpenAPI
-func NewHTTPHandler(capture *Capture) HTTPHandler {
+func NewHTTPHandler(capture *capture.Capture) HTTPHandler {
 	return HTTPHandler{
 		capture: capture,
 	}
@@ -72,7 +73,7 @@ func (h *HTTPHandler) ListChangefeed(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	statusProvider := h.capture.owner.StatusProvider()
+	statusProvider := h.capture.StatusProvider()
 	ctx := c.Request.Context()
 	state := c.Query(apiOpVarChangefeedState)
 	// get all changefeed status
@@ -137,7 +138,7 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	statusProvider := h.capture.owner.StatusProvider()
+	statusProvider := h.capture.StatusProvider()
 
 	ctx := c.Request.Context()
 	changefeedID := c.Param(apiOpVarChangefeedID)
@@ -225,7 +226,7 @@ func (h *HTTPHandler) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.etcdClient.CreateChangefeedInfo(ctx, info, changefeedConfig.ID)
+	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, info, changefeedConfig.ID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -250,7 +251,7 @@ func (h *HTTPHandler) PauseChangefeed(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	statusProvider := h.capture.owner.StatusProvider()
+	statusProvider := h.capture.StatusProvider()
 	ctx := c.Request.Context()
 
 	changefeedID := c.Param(apiOpVarChangefeedID)
@@ -293,7 +294,7 @@ func (h *HTTPHandler) ResumeChangefeed(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	statusProvider := h.capture.owner.StatusProvider()
+	statusProvider := h.capture.StatusProvider()
 	ctx := c.Request.Context()
 	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
@@ -341,7 +342,7 @@ func (h *HTTPHandler) UpdateChangefeed(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	statusProvider := h.capture.owner.StatusProvider()
+	statusProvider := h.capture.StatusProvider()
 	ctx := c.Request.Context()
 	changefeedID := c.Param(apiOpVarChangefeedID)
 
@@ -373,7 +374,7 @@ func (h *HTTPHandler) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.etcdClient.SaveChangeFeedInfo(ctx, newInfo, changefeedID)
+	err = h.capture.EtcdClient.SaveChangeFeedInfo(ctx, newInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -397,7 +398,7 @@ func (h *HTTPHandler) RemoveChangefeed(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	statusProvider := h.capture.owner.StatusProvider()
+	statusProvider := h.capture.StatusProvider()
 	ctx := c.Request.Context()
 	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
@@ -439,7 +440,7 @@ func (h *HTTPHandler) RebalanceTable(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	statusProvider := h.capture.owner.StatusProvider()
+	statusProvider := h.capture.StatusProvider()
 	ctx := c.Request.Context()
 	changefeedID := c.Param(apiOpVarChangefeedID)
 
@@ -479,7 +480,7 @@ func (h *HTTPHandler) MoveTable(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	statusProvider := h.capture.owner.StatusProvider()
+	statusProvider := h.capture.StatusProvider()
 	ctx := c.Request.Context()
 	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
@@ -553,7 +554,7 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	statusProvider := h.capture.owner.StatusProvider()
+	statusProvider := h.capture.StatusProvider()
 
 	ctx := c.Request.Context()
 
@@ -619,7 +620,7 @@ func (h *HTTPHandler) ListProcessor(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	statusProvider := h.capture.owner.StatusProvider()
+	statusProvider := h.capture.StatusProvider()
 
 	ctx := c.Request.Context()
 	infos, err := statusProvider.GetProcessors(ctx)
@@ -649,7 +650,7 @@ func (h *HTTPHandler) ListCapture(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	statusProvider := h.capture.owner.StatusProvider()
+	statusProvider := h.capture.StatusProvider()
 
 	ctx := c.Request.Context()
 	captureInfos, err := statusProvider.GetCaptures(ctx)

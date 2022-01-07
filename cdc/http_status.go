@@ -25,7 +25,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -44,7 +44,7 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 	conf := config.GetGlobalServerConfig()
 
 	// OpenAPI handling logic is injected here.
-	router := newRouter(capture.NewHTTPHandler(s.capture))
+	router := newRouter(api.NewHTTPHandler(s.capture))
 
 	// Inject the legacy API handlers.
 	router.GET("/status", gin.WrapF(s.handleStatus))
