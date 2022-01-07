@@ -150,10 +150,12 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 				t.stop(err)
 			}
 		case message.TypeStop:
-			_, err := t.sinkNode.HandleMessage(ctx, pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}))
-			if err != nil {
-				t.stop(err)
-			}
+			go func() {
+				_, err := t.sinkNode.HandleMessage(ctx, pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}))
+				if err != nil {
+					t.stop(err)
+				}
+			}()
 		case message.TypeStopPipeline:
 			t.stop(nil)
 			return false
