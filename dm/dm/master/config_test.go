@@ -115,6 +115,7 @@ func (t *testConfigSuite) TestConfig(c *check.C) {
 			c.Assert(cfg.Join, check.Equals, "")
 			c.Assert(cfg.String(), check.Matches, fmt.Sprintf("{.*master-addr\":\"%s\".*}", masterAddr))
 			c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
+			c.Assert(cfg.OpenAPI, check.Equals, false)
 		}
 	}
 }
@@ -298,4 +299,28 @@ func (t *testConfigSuite) TestAdjustAddr(c *check.C) {
 	cfg.MasterAddr = "127.0.0.1:8261"
 	c.Assert(cfg.adjust(), check.IsNil)
 	c.Assert(cfg.AdvertiseAddr, check.Equals, cfg.MasterAddr)
+}
+
+func (t *testConfigSuite) TestAdjustOpenAPI(c *check.C) {
+	cfg := NewConfig()
+	c.Assert(cfg.configFromFile(defaultConfigFile), check.IsNil)
+	c.Assert(cfg.adjust(), check.IsNil)
+
+	// test default value
+	c.Assert(cfg.OpenAPI, check.Equals, false)
+	c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
+
+	//  adjust openapi from experimental-features
+	cfg.ExperimentalFeatures.OpenAPI = true
+	c.Assert(cfg.adjust(), check.IsNil)
+	c.Assert(cfg.OpenAPI, check.Equals, true)
+	c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
+
+	// test from flags
+	c.Assert(cfg.Parse([]string{"--openapi=false", "--master-addr=127.0.0.1:8261"}), check.IsNil)
+	c.Assert(cfg.adjust(), check.IsNil)
+	c.Assert(cfg.OpenAPI, check.Equals, false)
+	c.Assert(cfg.Parse([]string{"--openapi=true", "--master-addr=127.0.0.1:8261"}), check.IsNil)
+	c.Assert(cfg.adjust(), check.IsNil)
+	c.Assert(cfg.OpenAPI, check.Equals, true)
 }

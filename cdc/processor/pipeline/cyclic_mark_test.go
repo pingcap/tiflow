@@ -17,24 +17,19 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	"github.com/pingcap/tiflow/pkg/pipeline"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type markSuite struct{}
-
-var _ = check.Suite(&markSuite{})
-
-func (s *markSuite) TestCyclicMarkNode(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCyclicMarkNode(t *testing.T) {
 	markTableID := model.TableID(161025)
 	testCases := []struct {
 		input     []*model.RowChangedEvent
@@ -145,7 +140,7 @@ func (s *markSuite) TestCyclicMarkNode(c *check.C) {
 		})
 		n := newCyclicMarkNode(markTableID)
 		err := n.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil))
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		outputCh := make(chan pipeline.Message)
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -162,11 +157,11 @@ func (s *markSuite) TestCyclicMarkNode(c *check.C) {
 				})
 				event.Row = row
 				err := n.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.PolymorphicEventMessage(event), outputCh))
-				c.Assert(err, check.IsNil)
+				require.Nil(t, err)
 				lastCommitTs = row.CommitTs
 			}
 			err := n.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCommitTs+1)), outputCh))
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 		}()
 		output := []*model.RowChangedEvent{}
 		go func() {
@@ -182,9 +177,9 @@ func (s *markSuite) TestCyclicMarkNode(c *check.C) {
 		// check the commitTs is increasing
 		var lastCommitTs model.Ts
 		for _, row := range output {
-			c.Assert(row.CommitTs, check.GreaterEqual, lastCommitTs)
+			require.GreaterOrEqual(t, row.CommitTs, lastCommitTs)
 			// Ensure that the ReplicaID of the row is set correctly.
-			c.Assert(row.ReplicaID, check.Not(check.Equals), 0)
+			require.NotEqual(t, 0, row.ReplicaID)
 			lastCommitTs = row.CommitTs
 		}
 		sort.Slice(output, func(i, j int) bool {
@@ -193,7 +188,74 @@ func (s *markSuite) TestCyclicMarkNode(c *check.C) {
 			}
 			return output[i].CommitTs < output[j].CommitTs
 		})
-		c.Assert(output, check.DeepEquals, tc.expected,
-			check.Commentf("%s", cmp.Diff(output, tc.expected)))
+		require.Equal(t, tc.expected, output, cmp.Diff(output, tc.expected))
+	}
+
+	// table actor
+	for _, tc := range testCases {
+		ctx := NewCyclicNodeContext(NewContext(context.TODO(), nil, 1, &cdcContext.ChangefeedVars{
+			Info: &model.ChangeFeedInfo{
+				Config: &config.ReplicaConfig{
+					Cyclic: &config.CyclicConfig{
+						Enable:          true,
+						ReplicaID:       tc.replicaID,
+						FilterReplicaID: tc.filterID,
+					},
+				},
+			},
+		}, nil))
+		n := newCyclicMarkNode(markTableID).(*cyclicMarkNode)
+		err := n.Init(ctx)
+		require.Nil(t, err)
+		output := []*model.RowChangedEvent{}
+		putToOutput := func(row *pipeline.Message) {
+			if row == nil || row.PolymorphicEvent.RawKV.OpType == model.OpTypeResolved {
+				return
+			}
+			output = append(output, row.PolymorphicEvent.Row)
+		}
+
+		var lastCommitTs model.Ts
+		for _, row := range tc.input {
+			event := model.NewPolymorphicEvent(&model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				Key:     tablecodec.GenTableRecordPrefix(row.Table.TableID),
+				StartTs: row.StartTs,
+				CRTs:    row.CommitTs,
+			})
+			event.Row = row
+			ok, err := n.TryHandleDataMessage(ctx, pipeline.PolymorphicEventMessage(event))
+			require.Nil(t, err)
+			require.True(t, ok)
+			putToOutput(ctx.tryGetProcessedMessage())
+			lastCommitTs = row.CommitTs
+		}
+		ok, err := n.TryHandleDataMessage(ctx, pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCommitTs+1)))
+		require.True(t, ok)
+		putToOutput(ctx.tryGetProcessedMessage())
+		require.Nil(t, err)
+		for {
+			msg := ctx.tryGetProcessedMessage()
+			if msg == nil {
+				break
+			}
+			putToOutput(msg)
+		}
+
+		// check the commitTs is increasing
+		lastCommitTs = 0
+		for _, row := range output {
+			require.GreaterOrEqual(t, row.CommitTs, lastCommitTs)
+			// Ensure that the ReplicaID of the row is set correctly.
+			require.NotEqual(t, 0, row.ReplicaID)
+			lastCommitTs = row.CommitTs
+		}
+		sort.Slice(output, func(i, j int) bool {
+			if output[i].CommitTs == output[j].CommitTs {
+				return output[i].StartTs < output[j].StartTs
+			}
+			return output[i].CommitTs < output[j].CommitTs
+		})
+		require.Equal(t, tc.expected, output, cmp.Diff(output, tc.expected))
 	}
 }

@@ -73,7 +73,7 @@ type Server struct {
 func NewServer(pdEndpoints []string) (*Server, error) {
 	conf := config.GetGlobalServerConfig()
 	log.Info("creating CDC server",
-		zap.Strings("pd-addrs", pdEndpoints),
+		zap.Strings("pd", pdEndpoints),
 		zap.Stringer("config", conf),
 	)
 
@@ -274,7 +274,8 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return s.tcpServer.Run(cctx)
 	})
 
-	if config.SchedulerV2Enabled {
+	conf := config.GetGlobalServerConfig()
+	if conf.Debug.EnableNewScheduler {
 		grpcServer := grpc.NewServer()
 		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 

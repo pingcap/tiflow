@@ -30,14 +30,24 @@ type Task struct {
 	// encoded key -> serde.marshal(event)
 	// If a value is empty, it deletes the key/value entry in db.
 	Events map[Key][]byte
-	// Must be buffered channel to avoid blocking.
-	SnapCh chan LimitedSnapshot `json:"-"` // Make Task JSON printable.
-	// Set NeedSnap whenever caller wants to read something from a snapshot.
-	NeedSnap bool
+	// Requests an iterator when it is not nil.
+	IterReq *IterRequest
 
 	// For clean-up table task.
 	Cleanup            bool
 	CleanupRatelimited bool
+}
+
+// IterRequest contains parameters that necessary to build an iterator.
+type IterRequest struct {
+	UID uint32
+
+	// The resolved ts at the time of issuing the request.
+	ResolvedTs uint64
+	// Range of a requested iterator.
+	Range [2][]byte
+	// Must be buffered channel to avoid blocking.
+	IterCh chan *LimitedIterator `json:"-"` // Make Task JSON printable.
 }
 
 // Key is the key that is written to db.
@@ -51,17 +61,18 @@ func (k Key) String() string {
 		uid, tableID, startTs, CRTs)
 }
 
-// LimitedSnapshot is a wrapper of db.Snapshot that has a sema to limit
-// the total number of alive snapshots.
-type LimitedSnapshot struct {
-	db.Snapshot
-	Sema *semaphore.Weighted
+// LimitedIterator is a wrapper of db.Iterator that has a sema to limit
+// the total number of alive iterator.
+type LimitedIterator struct {
+	db.Iterator
+	Sema       *semaphore.Weighted
+	ResolvedTs uint64
 }
 
 // Release resources of the snapshot.
-func (s *LimitedSnapshot) Release() error {
+func (s *LimitedIterator) Release() error {
 	s.Sema.Release(1)
-	return errors.Trace(s.Snapshot.Release())
+	return errors.Trace(s.Iterator.Release())
 }
 
 // NewCleanupTask returns a clean up task to clean up table data.

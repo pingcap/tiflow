@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/db"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -50,6 +51,7 @@ func init() {
 	initServerMetrics(registry)
 	actor.InitMetrics(registry)
 	orchestrator.InitMetrics(registry)
+	p2p.InitMetrics(registry)
 	// Sorter metrics
 	sorter.InitMetrics(registry)
 	memory.InitMetrics(registry)
