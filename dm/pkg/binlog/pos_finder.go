@@ -180,7 +180,7 @@ func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 			return err
 		}
 
-		r.tctx.L().Info("min timestamp in binlog file", zap.Reflect("file", currBinlog), zap.Uint32("ts", minTs))
+		r.tctx.L().Debug("min timestamp in binlog file", zap.Reflect("file", currBinlog), zap.Uint32("ts", minTs))
 
 		lastTs = minTs
 		lastMid = mid
@@ -205,6 +205,11 @@ func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 		r.targetBinlog = binaryLogs[lastMid]
 	}
 	r.lastBinlogFile = r.targetBinlog.name == binaryLogs[len(binaryLogs)-1].name
+
+	r.tctx.L().Info("target binlog file", zap.Reflect("file", r.targetBinlog),
+		zap.Bool("before first binlog", r.tsBeforeFirstBinlog),
+		zap.Bool("last binlog", r.lastBinlogFile))
+
 	return nil
 }
 
