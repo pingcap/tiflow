@@ -230,6 +230,8 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
+	locations *locationRecorder
+
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
@@ -273,6 +275,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	}
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
+	syncer.locations = &locationRecorder{}
 	return syncer
 }
 
@@ -1540,6 +1543,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	tctx.L().Info("replicate binlog from checkpoint", zap.Stringer("checkpoint", lastLocation))
 
 	if s.streamerController.IsClosed() {
+		s.locations.reset(lastLocation)
 		err = s.streamerController.Start(tctx, lastLocation)
 		if err != nil {
 			return terror.Annotate(err, "fail to restart streamer controller")
@@ -1655,6 +1659,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		// if suffix>0, we are replacing error
 		s.isReplacingErr = currentLocation.Suffix != 0
 
+		s.locations.reset(currentLocation)
 		err3 := s.streamerController.RedirectStreamer(tctx, currentLocation)
 		if err3 != nil {
 			return err3
@@ -1665,32 +1670,34 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 
 	maybeSkipNRowsEvent := func(n int) error {
-		if s.cfg.EnableGTID && n > 0 {
-			for i := 0; i < n; {
-				e, err1 := s.getEvent(tctx, currentLocation)
-				if err1 != nil {
-					return err
-				}
-				switch e.Event.(type) {
-				case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
-					gtidStr, err2 := event.GetGTIDStr(e)
-					if err2 != nil {
-						return err2
-					}
-					if currentGTID != gtidStr {
-						s.tctx.L().Error("after recover GTID-based replication, the first GTID is not same as broken one. May meet duplicate entry or corrupt data if table has no PK/UK.",
-							zap.String("last GTID", currentGTID),
-							zap.String("GTID after reset", gtidStr),
-						)
-						return nil
-					}
-				case *replication.RowsEvent:
-					i++
-				}
-			}
-			log.L().Info("discard event already consumed", zap.Int("count", n),
-				zap.Any("cur_loc", currentLocation))
+		if n == 0 {
+			return nil
 		}
+
+		for i := 0; i < n; {
+			e, err1 := s.getEvent(tctx, currentLocation)
+			if err1 != nil {
+				return err
+			}
+			switch e.Event.(type) {
+			case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+				gtidStr, err2 := event.GetGTIDStr(e)
+				if err2 != nil {
+					return err2
+				}
+				if currentGTID != gtidStr {
+					s.tctx.L().Error("after recover GTID-based replication, the first GTID is not same as broken one. May meet duplicate entry or corrupt data if table has no PK/UK.",
+						zap.String("last GTID", currentGTID),
+						zap.String("GTID after reset", gtidStr),
+					)
+					return nil
+				}
+			case *replication.RowsEvent:
+				i++
+			}
+		}
+		log.L().Info("discard event already consumed", zap.Int("count", n),
+			zap.Any("cur_loc", currentLocation))
 		return nil
 	}
 
@@ -1718,6 +1725,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			currentLocation = shardingReSync.currLocation
 			// if suffix>0, we are replacing error
 			s.isReplacingErr = currentLocation.Suffix != 0
+			s.locations.reset(shardingReSync.currLocation)
 			err = s.streamerController.RedirectStreamer(tctx, shardingReSync.currLocation)
 			if err != nil {
 				return err
@@ -1733,6 +1741,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		startTime := time.Now()
 		e, err = s.getEvent(tctx, currentLocation)
+		s.tctx.L().Debug("location refactor",
+			zap.Stringer("current", currentLocation),
+			zap.Stringer("start", startLocation),
+			zap.Stringer("last", lastLocation))
 
 		failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
 			if intVal, ok := val.(int); ok && intVal == 1 {
@@ -1741,7 +1753,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		})
 		failpoint.Inject("GetEventErrorInTxn", func(val failpoint.Value) {
-			if intVal, ok := val.(int); ok && intVal == eventIndex {
+			if intVal, ok := val.(int); ok && intVal == eventIndex && failOnce.CAS(false, true) {
 				err = errors.New("failpoint triggered")
 				s.tctx.L().Warn("failed to get event", zap.Int("event_index", eventIndex),
 					zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
@@ -1764,7 +1776,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 			continue
 		case err == relay.ErrorMaybeDuplicateEvent:
-			tctx.L().Warn("read binlog met a truncated file, need to open safe-mode until the next transaction")
+			tctx.L().Warn("read binlog met a truncated file, will skip events that has been consumed")
 			err = maybeSkipNRowsEvent(eventIndex)
 			if err == nil {
 				continue
@@ -1780,7 +1792,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			if s.streamerController.CanRetry(err) {
-				// GlobalPoint is the last finished GTID
+				// GlobalPoint is the last finished transaction location
 				err = s.streamerController.ResetReplicationSyncer(tctx, s.checkpoint.GlobalPoint())
 				if err != nil {
 					return err
@@ -1873,7 +1885,28 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 						// revert currentLocation to startLocation
 						currentLocation = startLocation
 					} else if op == pb.ErrorOp_Skip {
+						ec := eventContext{
+							tctx:            tctx,
+							header:          e.Header,
+							startLocation:   &startLocation,
+							currentLocation: &currentLocation,
+							lastLocation:    &lastLocation,
+						}
+						var sourceTbls map[string]map[string]struct{}
+						sourceTbls, err = s.trackOriginDDL(ev, ec)
+						if err != nil {
+							tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), zap.ByteString("sql", ev.Query))
+						}
+
 						s.saveGlobalPoint(currentLocation)
+						for sourceSchema, tableMap := range sourceTbls {
+							if sourceSchema == "" {
+								continue
+							}
+							for sourceTable := range tableMap {
+								s.saveTablePoint(&filter.Table{Schema: sourceSchema, Name: sourceTable}, currentLocation)
+							}
+						}
 						err = s.flushJobs()
 						if err != nil {
 							tctx.L().Warn("failed to flush jobs when handle-error skip", zap.Error(err))
@@ -1890,6 +1923,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if currentLocation.Suffix > 0 && e.Header.EventSize > 0 {
 				currentLocation.Suffix = 0
 				s.isReplacingErr = false
+				s.locations.reset(currentLocation)
 				err = s.streamerController.RedirectStreamer(tctx, currentLocation)
 				if err != nil {
 					return err
@@ -2357,6 +2391,29 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		sourceTbls:      make(map[string]map[string]struct{}),
 		eventStatusVars: ev.StatusVars,
 	}
+
+	defer func() {
+		if err == nil {
+			return
+		}
+		// why not `skipSQLByPattern` at beginning, but at defer?
+		// it is in order to track every ddl except for the one that will cause error.
+		// if `skipSQLByPattern` at beginning, some ddl should be tracked may be skipped.
+		needSkip, err2 := s.skipSQLByPattern(qec.originSQL)
+		if err2 != nil {
+			err = err2
+			return
+		}
+		if !needSkip {
+			return
+		}
+		// don't return error if filter success
+		metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
+		ec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
+		*ec.lastLocation = *ec.currentLocation // before record skip location, update lastLocation
+		err = s.recordSkipSQLsLocation(&ec)
+	}()
+
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
 	if err != nil {
 		log.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
@@ -2364,19 +2421,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 
 	stmt, err := parseOneStmt(qec)
 	if err != nil {
-		// return error if parse fail and filter fail
-		needSkip, err2 := s.skipSQLByPattern(qec.originSQL)
-		if err2 != nil {
-			return err2
-		}
-		if !needSkip {
-			return err
-		}
-		// don't return error if parse fail and filter success
-		metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
-		ec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
-		*ec.lastLocation = *ec.currentLocation // before record skip location, update lastLocation
-		return s.recordSkipSQLsLocation(&ec)
+		return err
 	}
 
 	if node, ok := stmt.(ast.DMLNode); ok {
@@ -2965,6 +3010,71 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 	return nil
 }
 
+func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (map[string]map[string]struct{}, error) {
+	originSQL := strings.TrimSpace(string(ev.Query))
+	if originSQL == "BEGIN" || originSQL == "" || utils.IsBuildInSkipDDL(originSQL) {
+		return nil, nil
+	}
+	var err error
+	qec := &queryEventContext{
+		eventContext:    &ec,
+		ddlSchema:       string(ev.Schema),
+		originSQL:       utils.TrimCtrlChars(originSQL),
+		splitDDLs:       make([]string, 0),
+		appliedDDLs:     make([]string, 0),
+		sourceTbls:      make(map[string]map[string]struct{}),
+		eventStatusVars: ev.StatusVars,
+	}
+	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
+	if err != nil {
+		log.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
+	}
+	stmt, err := parseOneStmt(qec)
+	if err != nil {
+		// originSQL can't be parsed => can't be tracked by schema tracker
+		// we can use operate-schema to set a compatible schema after this
+		return nil, err
+	}
+
+	if _, ok := stmt.(ast.DDLNode); !ok {
+		return nil, nil
+	}
+
+	// TiDB can't handle multi schema change DDL, so we split it here.
+	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
+	if err != nil {
+		return nil, err
+	}
+
+	affectedTbls := make(map[string]map[string]struct{})
+	for _, sql := range qec.splitDDLs {
+		ddlInfo, err := s.genDDLInfo(qec, sql)
+		if err != nil {
+			return nil, err
+		}
+		sourceTable := ddlInfo.sourceTables[0]
+		switch ddlInfo.originStmt.(type) {
+		case *ast.DropDatabaseStmt:
+			delete(affectedTbls, sourceTable.Schema)
+		case *ast.DropTableStmt:
+			if affectedTable, ok := affectedTbls[sourceTable.Schema]; ok {
+				delete(affectedTable, sourceTable.Name)
+			}
+		default:
+			if _, ok := affectedTbls[sourceTable.Schema]; !ok {
+				affectedTbls[sourceTable.Schema] = make(map[string]struct{})
+			}
+			affectedTbls[sourceTable.Schema][sourceTable.Name] = struct{}{}
+		}
+		err = s.trackDDL(qec.ddlSchema, ddlInfo, qec.eventContext)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return affectedTbls, nil
+}
+
 func (s *Syncer) genRouter() error {
 	s.tableRouter, _ = router.NewTableRouter(s.cfg.CaseSensitive, []*router.TableRule{})
 	for _, rule := range s.cfg.RouteRules {
@@ -3505,7 +3615,13 @@ func (s *Syncer) getEvent(tctx *tcontext.Context, startLocation binlog.Location)
 		return s.errOperatorHolder.GetEvent(startLocation)
 	}
 
-	return s.streamerController.GetEvent(tctx)
+	e, err := s.streamerController.GetEvent(tctx)
+	if err == nil {
+		s.locations.update(e)
+		// TODO: observe below log in integration test
+		s.tctx.L().Debug("location refactor", zap.Stringer("locations", s.locations))
+	}
+	return e, err
 }
 
 func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
