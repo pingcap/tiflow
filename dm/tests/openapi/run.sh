@@ -386,14 +386,12 @@ function test_noshard_task_dump_status() {
 	# start no shard task success
 	openapi_task_check "start_noshard_task_success" $task_name $target_table_name
 
-	# to avoid task is not started
-	sleep 1
-	# check noshard task dump status success
-	openapi_task_check "check_noshard_task_dump_status_success" "$task_name" 0
-
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"unit\": \"Dump\"" 2
+
+	# check noshard task dump status success
+	openapi_task_check "check_noshard_task_dump_status_success" "$task_name" 0
 
 	init_noshard_data
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml

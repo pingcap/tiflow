@@ -125,17 +125,6 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		m.mu.Lock()
 		m.core = dumpling
 		m.mu.Unlock()
-
-		failpoint.Inject("dumpUnitProcessForever", func() {
-			m.logger.Info("dump unit runs forever", zap.String("failpoint", "dumpUnitProcessForever"))
-			<-ctx.Done()
-			pr <- pb.ProcessResult{
-				IsCanceled: true,
-				Errors:     []*pb.ProcessError{unit.NewProcessError(ctx.Err())},
-			}
-			failpoint.Return()
-		})
-
 		err = dumpling.Dump()
 		dumpling.Close()
 	}
