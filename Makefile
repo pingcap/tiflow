@@ -162,10 +162,10 @@ integration_test_build: check_failpoint_ctl
 integration_test: integration_test_mysql
 
 integration_test_mysql:
-	tests/integration_tests/run.sh mysql "$(CASE)"
+	tests/integration_tests/run.sh mysql "$(CASE)" "$(START_AT)"
 
 integration_test_kafka: check_third_party_binary
-	tests/integration_tests/run.sh kafka "$(CASE)"
+	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
 fmt: tools/bin/gofumports tools/bin/shfmt
 	@echo "gofmt (simplify)"
