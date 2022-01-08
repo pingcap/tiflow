@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/tikv/client-go/v2/oracle"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -63,14 +62,19 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 
 func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Group) error {
 	n.wg = wg
-	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	ctxC = util.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
-	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, ctx.GlobalVars().GrpcPool, ctx.GlobalVars().RegionCache, ctx.GlobalVars().KVStorage,
+	plr := puller.NewPuller(
+		ctxC,
+		ctx.GlobalVars().PDClient,
+		ctx.GlobalVars().GrpcPool,
+		ctx.GlobalVars().RegionCache,
+		ctx.GlobalVars().KVStorage,
+		ctx.GlobalVars().PDClock,
 		n.replicaInfo.StartTs, n.tableSpan(ctx), true)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
@@ -84,9 +88,6 @@ func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Gr
 			case rawKV := <-plr.Output():
 				if rawKV == nil {
 					continue
-				}
-				if rawKV.OpType == model.OpTypeResolved {
-					metricTableResolvedTsGauge.Set(float64(oracle.ExtractPhysical(rawKV.CRTs)))
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
@@ -105,7 +106,6 @@ func (n *pullerNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
-	tableResolvedTsGauge.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
 	n.cancel()
 	return n.wg.Wait()
 }

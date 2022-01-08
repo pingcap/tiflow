@@ -334,6 +334,8 @@ message OperateWorkerSchemaRequest {
     string schema = 6; // schema content, a `CREATE TABLE` statement
     bool flush = 7; // flush table info and checkpoint
     bool sync = 8; // sync the table info to master
+    bool fromSource = 9; // update schema from source schema
+    bool fromTarget = 10; // update schema from target schema
 }
 
 // copied `TaskMeta` from release-1.0 branch.
@@ -365,6 +367,8 @@ enum ErrorOp {
     Skip = 1; // skip the error event
     Replace = 2; // replace the error event with a specified SQL
     Revert = 3; // remove the error operator
+    Inject = 4; // inject a specified SQL
+    List = 5; // show handle error commands
 }
 
 message HandleWorkerErrorRequest {

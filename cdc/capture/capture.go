@@ -65,7 +65,7 @@ type Capture struct {
 	etcdClient   *etcd.CDCEtcdClient
 	grpcPool     kv.GrpcPool
 	regionCache  *tikv.RegionCache
-	TimeAcquirer pdtime.TimeAcquirer
+	pdClock      *pdtime.PDClock
 	sorterSystem *ssystem.System
 
 	enableNewScheduler bool
@@ -137,10 +137,10 @@ func (c *Capture) reset(ctx context.Context) error {
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
 
-	if c.TimeAcquirer != nil {
-		c.TimeAcquirer.Stop()
+	if c.pdClock != nil {
+		c.pdClock.Stop()
 	}
-	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
+	c.pdClock = pdtime.NewClock(c.pdClient)
 
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
@@ -212,8 +212,8 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 
 	log.Info("init capture",
-		zap.String("capture-id", c.info.ID),
-		zap.String("capture-addr", c.info.AdvertiseAddr))
+		zap.String("captureID", c.info.ID),
+		zap.String("captureAddr", c.info.AdvertiseAddr))
 	return nil
 }
 
@@ -248,7 +248,7 @@ func (c *Capture) Run(ctx context.Context) error {
 		//   2. the parent context canceled, it means that the caller of the capture hope the capture to exit, and this loop will return in the above `select` block
 		// TODO: make sure the internal cancel should return the real error instead of context.Canceled
 		if cerror.ErrCaptureSuicide.Equal(err) || context.Canceled == errors.Cause(err) {
-			log.Info("capture recovered", zap.String("capture-id", c.info.ID))
+			log.Info("capture recovered", zap.String("captureID", c.info.ID))
 			continue
 		}
 		return errors.Trace(err)
@@ -263,7 +263,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		EtcdClient:       c.etcdClient,
 		GrpcPool:         c.grpcPool,
 		RegionCache:      c.regionCache,
-		TimeAcquirer:     c.TimeAcquirer,
+		PDClock:          c.pdClock,
 		TableActorSystem: c.tableActorSystem,
 		SorterSystem:     c.sorterSystem,
 		MessageServer:    c.MessageServer,
@@ -319,7 +319,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.TimeAcquirer.Run(ctx)
+		c.pdClock.Run(ctx)
 	}()
 	wg.Add(1)
 	go func() {
@@ -408,8 +408,8 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
 
 		log.Info("campaign owner successfully",
-			zap.String("capture-id", c.info.ID),
-			zap.Int64("owner-rev", ownerRev))
+			zap.String("captureID", c.info.ID),
+			zap.Int64("ownerRev", ownerRev))
 
 		owner := c.newOwner(c.pdClient)
 		c.setOwner(owner)
