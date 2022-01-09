@@ -232,7 +232,7 @@ data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
 
 swagger-spec: tools/bin/swag
-	tools/bin/swag init --parseVendor -generalInfo cdc/api/http_handler.go --output docs/swagger
+	tools/bin/swag init --parseVendor -generalInfo cdc/api/open.go --output docs/swagger
 
 clean:
 	go clean -i ./...

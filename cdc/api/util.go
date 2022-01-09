@@ -14,10 +14,14 @@
 package api
 
 import (
+	"encoding/json"
+	"net/http"
 	"strings"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // httpBadRequestError is some errors that will cause a BadRequestError in http handler
@@ -48,4 +52,27 @@ func IsHTTPBadRequestError(err error) bool {
 		}
 	}
 	return false
+}
+
+func writeError(w http.ResponseWriter, statusCode int, err error) {
+	w.WriteHeader(statusCode)
+	_, err = w.Write([]byte(err.Error()))
+	if err != nil {
+		log.Error("write error", zap.Error(err))
+	}
+}
+
+func writeData(w http.ResponseWriter, data interface{}) {
+	js, err := json.MarshalIndent(data, "", " ")
+	if err != nil {
+		log.Error("invalid json data", zap.Reflect("data", data), zap.Error(err))
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(js)
+	if err != nil {
+		log.Error("fail to write data", zap.Error(err))
+	}
 }

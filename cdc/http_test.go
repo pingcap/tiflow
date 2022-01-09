@@ -14,20 +14,17 @@
 package cdc
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/br/pkg/httputil"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -37,7 +34,6 @@ import (
 	security2 "github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
 type httpStatusSuite struct{}
@@ -46,10 +42,10 @@ var _ = check.Suite(&httpStatusSuite{})
 
 const retryTime = 20
 
-var advertiseAddr4Test = "127.0.0.1:8300"
+var addr = "127.0.0.1:8300"
 
 func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
-	statusURL := fmt.Sprintf("http://%s/status", advertiseAddr4Test)
+	statusURL := fmt.Sprintf("%s/status", addr)
 	for i := 0; i < retryTime; i++ {
 		resp, err := http.Get(statusURL)
 		if err == nil {
@@ -61,130 +57,6 @@ func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
 		time.Sleep(time.Millisecond * 50)
 	}
 	c.Errorf("failed to connect http status for %d retries in every 50ms", retryTime)
-}
-
-func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
-	defer testleak.AfterTest(c)()
-	conf := config.GetDefaultServerConfig()
-	conf.Addr = advertiseAddr4Test
-	conf.AdvertiseAddr = advertiseAddr4Test
-	config.StoreGlobalServerConfig(conf)
-	server, err := NewServer([]string{"http://127.0.0.1:2379"})
-	c.Assert(err, check.IsNil)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := server.tcpServer.Run(ctx)
-		c.Check(err, check.ErrorMatches, ".*ErrTCPServerClosed.*")
-	}()
-
-	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
-	c.Assert(err, check.IsNil)
-	defer func() {
-		c.Assert(server.statusServer.Close(), check.IsNil)
-	}()
-
-	s.waitUntilServerOnline(c)
-
-	testPprof(c)
-	testReisgnOwner(c)
-	testHandleChangefeedAdmin(c)
-	testHandleRebalance(c)
-	testHandleMoveTable(c)
-	testHandleChangefeedQuery(c)
-	testHandleFailpoint(c)
-
-	cancel()
-	wg.Wait()
-}
-
-func testPprof(c *check.C) {
-	testValidPprof := func(uri string) {
-		resp, err := http.Get(uri)
-		c.Assert(err, check.IsNil)
-		defer resp.Body.Close()
-		c.Assert(resp.StatusCode, check.Equals, 200)
-		_, err = io.ReadAll(resp.Body)
-		c.Assert(err, check.IsNil)
-	}
-	testValidPprof(fmt.Sprintf("http://%s/debug/pprof", advertiseAddr4Test))
-	testValidPprof(fmt.Sprintf("http://%s/debug/pprof/cmdline", advertiseAddr4Test))
-	testValidPprof(fmt.Sprintf("http://%s/debug/pprof/mutex", advertiseAddr4Test))
-	testValidPprof(fmt.Sprintf("http://%s/debug/pprof/heap?debug=1", advertiseAddr4Test))
-}
-
-func testReisgnOwner(c *check.C) {
-	uri := fmt.Sprintf("http://%s/capture/owner/resign", advertiseAddr4Test)
-	testRequestNonOwnerFailed(c, uri)
-}
-
-func testHandleChangefeedAdmin(c *check.C) {
-	uri := fmt.Sprintf("http://%s/capture/owner/admin", advertiseAddr4Test)
-	testRequestNonOwnerFailed(c, uri)
-}
-
-func testHandleRebalance(c *check.C) {
-	uri := fmt.Sprintf("http://%s/capture/owner/rebalance_trigger", advertiseAddr4Test)
-	testRequestNonOwnerFailed(c, uri)
-}
-
-func testHandleMoveTable(c *check.C) {
-	uri := fmt.Sprintf("http://%s/capture/owner/move_table", advertiseAddr4Test)
-	testRequestNonOwnerFailed(c, uri)
-}
-
-func testHandleChangefeedQuery(c *check.C) {
-	uri := fmt.Sprintf("http://%s/capture/owner/changefeed/query", advertiseAddr4Test)
-	testRequestNonOwnerFailed(c, uri)
-}
-
-func testRequestNonOwnerFailed(c *check.C, uri string) {
-	resp, err := http.PostForm(uri, url.Values{})
-	c.Assert(err, check.IsNil)
-	data, err := io.ReadAll(resp.Body)
-	c.Assert(err, check.IsNil)
-	defer resp.Body.Close()
-	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
-	c.Assert(string(data), check.Equals, concurrency.ErrElectionNotLeader.Error())
-}
-
-func testHandleFailpoint(c *check.C) {
-	fp := "github.com/pingcap/tiflow/cdc/TestHandleFailpoint"
-	uri := fmt.Sprintf("http://%s/debug/fail/%s", advertiseAddr4Test, fp)
-	body := bytes.NewReader([]byte("return(true)"))
-	req, err := http.NewRequest("PUT", uri, body)
-	c.Assert(err, check.IsNil)
-
-	resp, err := http.DefaultClient.Do(req)
-	c.Assert(err, check.IsNil)
-	defer resp.Body.Close()
-	c.Assert(resp.StatusCode, check.GreaterEqual, 200)
-	c.Assert(resp.StatusCode, check.Less, 300)
-
-	failpointHit := false
-	failpoint.Inject("TestHandleFailpoint", func() {
-		failpointHit = true
-	})
-	c.Assert(failpointHit, check.IsTrue)
-
-	req, err = http.NewRequest("DELETE", uri, body)
-	c.Assert(err, check.IsNil)
-	resp, err = http.DefaultClient.Do(req)
-	c.Assert(err, check.IsNil)
-	defer resp.Body.Close()
-	c.Assert(resp.StatusCode, check.GreaterEqual, 200)
-	c.Assert(resp.StatusCode, check.Less, 300)
-
-	failpointHit = false
-	failpoint.Inject("TestHandleFailpoint", func() {
-		failpointHit = true
-	})
-	c.Assert(failpointHit, check.IsFalse)
 }
 
 func (s *httpStatusSuite) TestServerTLSWithoutCommonName(c *check.C) {
@@ -265,7 +137,6 @@ func (s *httpStatusSuite) TestServerTLSWithoutCommonName(c *check.C) {
 	wg.Wait()
 }
 
-//
 func (s *httpStatusSuite) TestServerTLSWithCommonName(c *check.C) {
 	defer testleak.AfterTest(c)
 	addr := tempurl.Alloc()[len("http://"):]
