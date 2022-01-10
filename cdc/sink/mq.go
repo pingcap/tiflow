@@ -201,7 +201,6 @@ flushLoop:
 	}
 	k.tableCheckpointTs[tableID] = resolvedTs
 	k.statistics.PrintStatus(ctx)
-	log.Info("flushed row change event", zap.Uint64("resolvedTs", resolvedTs))
 	return resolvedTs, nil
 }
 
