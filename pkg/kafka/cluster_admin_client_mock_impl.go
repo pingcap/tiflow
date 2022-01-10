@@ -103,6 +103,16 @@ func (c *ClusterAdminClientMockImpl) Close() error {
 	return nil
 }
 
+func (c *ClusterAdminClientMockImpl) SetMinInsyncReplicas(minInsyncReplicas string) {
+	c.topics[DefaultMockTopicName].ConfigEntries[MinInsyncReplicasConfigName] = &minInsyncReplicas
+
+	for i, config := range c.brokerConfigs {
+		if config.Name == MinInsyncReplicasConfigName {
+			c.brokerConfigs[i].Value = minInsyncReplicas
+		}
+	}
+}
+
 // GetDefaultMockTopicName returns the default topic name
 func (c *ClusterAdminClientMockImpl) GetDefaultMockTopicName() string {
 	return DefaultMockTopicName

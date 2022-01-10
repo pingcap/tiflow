@@ -354,7 +354,7 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 
 	err = validateMinInsyncReplicas(admin, topics, topic, int(config.ReplicationFactor))
 	if err != nil {
-		return cerror.ErrKafkaInvalidConfig.GenWithStack(
+		return cerror.ErrKafkaInvalidConfig.Wrap(err).GenWithStack(
 			"because TiCDC Kafka producer's `request.required.acks` defaults to -1, " +
 				"TiCDC cannot deliver messages when the `replication-factor` is less than `min.insync.replicas`")
 	}
