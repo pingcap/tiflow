@@ -94,6 +94,27 @@ func (s *Server) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksR
 	return &pb.CancelBatchTasksResponse{}, nil
 }
 
+// PauseBatchTasks implements pb interface.
+func (s *Server) PauseBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest) (*pb.PauseBatchTasksResponse, error) {
+	log.L().Info("pause tasks", zap.String("req", req.String()))
+	err := s.sch.Pause(req.TaskIdList)
+	if err != nil {
+		return &pb.PauseBatchTasksResponse{
+			Err: &pb.Error{
+				Message: err.Error(),
+			},
+		}, nil
+	}
+	return &pb.PauseBatchTasksResponse{}, nil
+}
+
+// ResumeBatchTasks implements pb interface.
+func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest) (*pb.PauseBatchTasksResponse, error) {
+	log.L().Info("resume tasks", zap.String("req", req.String()))
+	s.sch.Continue(req.TaskIdList)
+	return &pb.PauseBatchTasksResponse{}, nil
+}
+
 func (s *Server) Stop() {
 	if s.grpcSrv != nil {
 		s.grpcSrv.Stop()

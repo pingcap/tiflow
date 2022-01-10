@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/metadata"
@@ -53,7 +54,20 @@ func (c *Context) SendRecord(data interface{}) {
 	c.dataCh <- data
 }
 
-func (c *Context) RecvRecord() interface{} {
-	data := <-c.dataCh
-	return data
+func (c *Context) RecvRecord(ctx context.Context) interface{} {
+	select {
+	case data := <-c.dataCh:
+		return data
+	case <-ctx.Done():
+		return nil
+	}
+}
+
+func (c *Context) TryRecvRecord() interface{} {
+	select {
+	case data := <-c.dataCh:
+		return data
+	default:
+		return nil
+	}
 }

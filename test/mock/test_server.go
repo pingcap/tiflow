@@ -3,6 +3,7 @@ package mock
 import (
 	"context"
 	"errors"
+	"io"
 	"sync/atomic"
 
 	"github.com/hanfei1991/microcosm/pb"
@@ -38,6 +39,7 @@ func (s *testServerConn) Close() error {
 }
 
 type testStream struct {
+	ctx    context.Context
 	data   chan *pb.Record
 	err    error
 	closed int32
@@ -45,6 +47,7 @@ type testStream struct {
 
 func (s *testStream) close() {
 	if atomic.CompareAndSwapInt32(&s.closed, 0, 1) {
+		s.err = io.EOF
 		close(s.data)
 	}
 }
@@ -58,11 +61,15 @@ func (s *testStream) Send(r *pb.Record) error {
 }
 
 func (s *testStream) Recv() (*pb.Record, error) {
-	r := <-s.data
-	if r == nil {
-		return nil, s.err
+	select {
+	case r := <-s.data:
+		if r == nil {
+			return nil, s.err
+		}
+		return r, nil
+	case <-s.ctx.Done():
+		return nil, errors.New("cancelled")
 	}
-	return r, nil
 }
 
 func (s *testStream) SetHeader(metadata.MD) error {
@@ -100,6 +107,7 @@ func (s *testServerConn) sendRequest(ctx context.Context, req interface{}) (inte
 	case *pb.TestBinlogRequest:
 		stream := &testStream{
 			data: make(chan *pb.Record, 1024),
+			ctx:  ctx,
 		}
 		if s.stream != nil {
 			return nil, errors.New("internal error")

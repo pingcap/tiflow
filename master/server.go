@@ -154,6 +154,23 @@ func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.C
 	return s.jobManager.CancelJob(ctx, req), nil
 }
 
+func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.PauseJobResponse, error) {
+	var (
+		resp2 *pb.PauseJobResponse
+		err2  error
+	)
+	shouldRet := s.rpcForwardIfNeeded(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+
+	err := s.apiPreCheck()
+	if err != nil {
+		return &pb.PauseJobResponse{Err: err}, nil
+	}
+	return s.jobManager.PauseJob(ctx, req), nil
+}
+
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	var (

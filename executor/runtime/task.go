@@ -15,6 +15,7 @@ const (
 	Runnable TaskStatus = iota
 	Blocked
 	Waking
+	Pauseed
 	Stop
 )
 
@@ -100,28 +101,28 @@ func (t *taskContainer) prepare() error {
 
 func (t *taskContainer) tryAwake() bool {
 	for {
-		if atomic.LoadInt32(&t.status) == int32(Stop) {
+		if atomic.LoadInt32(&t.status) == int32(Stop) || atomic.LoadInt32(&t.status) == int32(Pauseed) {
 			return false
 		}
 		//		log.Printf("try wake task %d", t.id)
 		if atomic.CompareAndSwapInt32(&t.status, int32(Blocked), int32(Waking)) {
-			// log.Printf("wake task %d successful", t.id)
 			return true
 		}
 
 		if atomic.CompareAndSwapInt32(&t.status, int32(Runnable), int32(Waking)) {
-			// log.Printf("task %d runnable", t.id)
 			return false
 		}
 
 		if atomic.LoadInt32(&t.status) == int32(Waking) {
-			// log.Printf("task %d waking", t.id)
 			return false
 		}
 	}
 }
 
 func (t *taskContainer) tryBlock() bool {
+	if atomic.LoadInt32(&t.status) == int32(Pauseed) {
+		return true
+	}
 	return atomic.CompareAndSwapInt32(&t.status, int32(Runnable), int32(Blocked))
 }
 
@@ -182,6 +183,10 @@ func (t *taskContainer) Stop() error {
 			break
 		}
 
+		if atomic.CompareAndSwapInt32(&t.status, int32(Pauseed), int32(Stop)) {
+			break
+		}
+
 		if atomic.CompareAndSwapInt32(&t.status, int32(Blocked), int32(Stop)) {
 			break
 		}
@@ -193,12 +198,44 @@ func (t *taskContainer) Stop() error {
 	return t.op.Close()
 }
 
+func (t *taskContainer) Continue() {
+	if atomic.LoadInt32(&t.status) == int32(Pauseed) {
+		atomic.StoreInt32(&t.status, int32(Blocked))
+		t.ctx.Wake()
+	}
+}
+
+func (t *taskContainer) Pauseed() error {
+	for {
+		if atomic.LoadInt32(&t.status) == int32(Pauseed) || atomic.LoadInt32(&t.status) == int32(Stop) {
+			return nil
+		}
+
+		if atomic.CompareAndSwapInt32(&t.status, int32(Runnable), int32(Pauseed)) {
+			break
+		}
+
+		if atomic.CompareAndSwapInt32(&t.status, int32(Blocked), int32(Pauseed)) {
+			break
+		}
+	}
+	t.stopLock.Lock()
+	defer t.stopLock.Unlock()
+
+	return t.op.Pause()
+}
+
 func (t *taskContainer) Poll() TaskStatus {
 	t.stopLock.Lock()
 	defer t.stopLock.Unlock()
 	if atomic.LoadInt32(&t.status) == int32(Stop) {
 		return Stop
 	}
+
+	if atomic.LoadInt32(&t.status) == int32(Pauseed) {
+		return Blocked
+	}
+
 	if t.tryFlush() {
 		return Blocked
 	}

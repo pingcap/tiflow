@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/test"
 )
 
@@ -64,6 +65,33 @@ func (s *Runtime) Stop(tasks []int64) error {
 		}
 	}
 	return retErr
+}
+
+func (s *Runtime) Continue(tasks []int64) {
+	s.tasksLock.Lock()
+	defer s.tasksLock.Unlock()
+	for _, id := range tasks {
+		if task, ok := s.tasks[model.ID(id)]; ok {
+			task.Continue()
+		}
+		// TODO: Report missed tasks.
+	}
+}
+
+func (s *Runtime) Pause(tasks []int64) error {
+	s.tasksLock.Lock()
+	defer s.tasksLock.Unlock()
+	for _, id := range tasks {
+		if task, ok := s.tasks[model.ID(id)]; ok {
+			err := task.Pauseed()
+			if err != nil {
+				return err
+			}
+		} else {
+			return errors.ErrTaskNotFound.FastGenByArgs(id)
+		}
+	}
+	return nil
 }
 
 func (s *Runtime) Run(ctx context.Context, cur int) {

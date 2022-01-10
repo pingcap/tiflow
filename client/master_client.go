@@ -165,6 +165,11 @@ func (c *MasterClient) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) 
 	return
 }
 
+func (c *MasterClient) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (resp *pb.PauseJobResponse, err error) {
+	err = c.rpcWrap(ctx, req, &resp)
+	return
+}
+
 func (c *MasterClient) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error) {
 	err = c.rpcWrap(ctx, req, &resp)
 	return

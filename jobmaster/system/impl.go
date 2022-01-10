@@ -20,6 +20,20 @@ import (
 	"golang.org/x/time/rate"
 )
 
+func arrangeTasksByExecID(tasks []*model.Task) map[model.ExecutorID]scheduleGroup {
+	arrangement := make(map[model.ExecutorID]scheduleGroup)
+	for _, task := range tasks {
+		subjob, ok := arrangement[task.Exec]
+		if !ok {
+			arrangement[task.Exec] = []*model.Task{task}
+		} else {
+			subjob = append(subjob, task)
+			arrangement[task.Exec] = subjob
+		}
+	}
+	return arrangement
+}
+
 // Master implements the master of benchmark workload.
 type Master struct {
 	ctx    context.Context
@@ -29,12 +43,40 @@ type Master struct {
 	clients *client.Manager
 	MetaKV  metadata.MetaKV
 
-	mu           sync.Mutex
-	runningTasks map[model.ID]*model.Task
+	runningTasks sync.Map
 
 	scheduleWaitingTasks chan scheduleGroup
 	// rate limit for rescheduling when error happens
 	scheduleRateLimit *rate.Limiter
+	monitorTasksLimit *rate.Limiter
+}
+
+type TaskStatus int
+
+const (
+	Serving TaskStatus = iota
+	Scheduling
+	Pauseed
+	Stopped
+)
+
+type Task struct {
+	sync.Mutex
+	*model.Task
+	currentStatus TaskStatus
+	targetStatus  TaskStatus
+}
+
+func (t *Task) setCurStatus(status TaskStatus) {
+	t.Lock()
+	t.currentStatus = status
+	t.Unlock()
+}
+
+func (t *Task) setTargetStatus(status TaskStatus) {
+	t.Lock()
+	t.targetStatus = status
+	t.Unlock()
 }
 
 // New creates a master instance
@@ -48,8 +90,7 @@ func New(
 
 		scheduleWaitingTasks: make(chan scheduleGroup, 1024),
 		scheduleRateLimit:    rate.NewLimiter(rate.Every(time.Second), 1),
-
-		runningTasks: make(map[model.ID]*model.Task),
+		monitorTasksLimit:    rate.NewLimiter(rate.Every(300*time.Millisecond), 1),
 	}
 }
 
@@ -61,6 +102,14 @@ func (m *Master) Cancel() {
 
 // scheduleGroup is the min unit of scheduler, and the tasks in the same group have to be scheduled in the same node.
 type scheduleGroup []*model.Task
+
+func (s scheduleGroup) toIDListPB() []int64 {
+	ids := make([]int64, 0, len(s))
+	for _, t := range s {
+		ids = append(ids, int64(t.ID))
+	}
+	return ids
+}
 
 // ID implements JobMaster interface.
 func (m *Master) ID() model.ID {
@@ -83,10 +132,8 @@ func (m *Master) RestoreTask(ctx context.Context, task *model.Task) error {
 	if err != nil {
 		return err
 	}
-	m.mu.Lock()
-	m.runningTasks[taskInfo.ID] = taskInfo
-	// And wait task to report heartbeat.
-	m.mu.Unlock()
+	m.runningTasks.Store(taskInfo.ID, taskInfo)
+	// TODO: wait task to report heartbeat.
 	return nil
 }
 
@@ -112,17 +159,8 @@ func (m *Master) dispatch(ctx context.Context, tasks []*model.Task) error {
 	if err := m.updateEtcd(ctx, tasks); err != nil {
 		return err
 	}
-	arrangement := make(map[model.ExecutorID][]*model.Task)
+	arrangement := arrangeTasksByExecID(tasks)
 	var errTasks scheduleGroup
-	for _, task := range tasks {
-		subjob, ok := arrangement[task.Exec]
-		if !ok {
-			arrangement[task.Exec] = []*model.Task{task}
-		} else {
-			subjob = append(subjob, task)
-			arrangement[task.Exec] = subjob
-		}
-	}
 
 	for execID, taskList := range arrangement {
 		// construct sub job
@@ -139,22 +177,31 @@ func (m *Master) dispatch(ctx context.Context, tasks []*model.Task) error {
 		if err != nil {
 			log.L().Logger.Info("Dispatch task meet error", zap.Error(err))
 			errTasks = append(errTasks, taskList...)
+			continue
 		}
 		respPb := resp.Resp.(*pb.SubmitBatchTasksResponse)
 		if respPb.Err != nil {
 			log.L().Logger.Info("Dispatch task meet error", zap.String("err", respPb.Err.Message))
 			errTasks = append(errTasks, taskList...)
+			continue
+		}
+		for _, t := range taskList {
+			if value, ok := m.runningTasks.Load(t.ID); ok {
+				task := value.(*Task)
+				task.setCurStatus(Serving)
+			} else {
+				task := &Task{
+					Task:          t,
+					currentStatus: Serving,
+					targetStatus:  Serving,
+				}
+				m.runningTasks.Store(t.ID, task)
+			}
 		}
 	}
 
 	m.addScheduleTasks(errTasks)
 
-	// apply the new arrangement.
-	m.mu.Lock()
-	for _, t := range tasks {
-		m.runningTasks[t.ID] = t
-	}
-	m.mu.Unlock()
 	return nil
 }
 
@@ -189,24 +236,27 @@ func (m *Master) DispatchTasks(tasks ...*model.Task) {
 	m.addScheduleTasks(tasks)
 }
 
-func (m *Master) StopTasks(ctx context.Context, tasks []*model.Task) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	arrange := make(map[model.ExecutorID][]int64)
-	for _, task := range tasks {
-		runningTask := m.runningTasks[task.ID]
-		li, ok := arrange[runningTask.Exec]
+func (m *Master) AsyncPauseTasks(tasks ...*model.Task) error {
+	for _, t := range tasks {
+		_, ok := m.runningTasks.Load(t.ID)
 		if !ok {
-			arrange[runningTask.Exec] = []int64{int64(task.ID)}
-		} else {
-			li = append(li, int64(task.ID))
-			arrange[runningTask.Exec] = li
+			return errors.ErrTaskNotFound.FastGenByArgs(t.ID)
 		}
 	}
+
+	for _, t := range tasks {
+		value, _ := m.runningTasks.Load(t.ID)
+		value.(*Task).setTargetStatus(Pauseed)
+	}
+	return nil
+}
+
+func (m *Master) StopTasks(ctx context.Context, tasks []*model.Task) error {
+	arrange := arrangeTasksByExecID(tasks)
 	var retErr error
 	for exec, taskList := range arrange {
 		req := &pb.CancelBatchTasksRequest{
-			TaskIdList: taskList,
+			TaskIdList: taskList.toIDListPB(),
 		}
 		log.L().Info("begin to cancel tasks", zap.String("exec", string(exec)), zap.Any("task", taskList))
 		resp, err := m.clients.ExecutorClient(exec).Send(ctx, &client.ExecutorRequest{
@@ -231,6 +281,7 @@ func (m *Master) StartInternal(parentCtx context.Context) {
 	// Register Listen Handler to Msg Servers
 
 	// Run watch goroutines
+	go m.monitorRunningTasks()
 	// TODO: keep the goroutines alive.
 	go m.monitorSchedulingTasks()
 }
@@ -239,9 +290,84 @@ func (m *Master) addScheduleTasks(group scheduleGroup) {
 	if len(group) == 0 {
 		return
 	}
+	for _, t := range group {
+		if value, ok := m.runningTasks.Load(t.ID); ok {
+			task := value.(*Task)
+			task.setCurStatus(Scheduling)
+		} else {
+			task := &Task{
+				Task:          t,
+				currentStatus: Scheduling,
+				targetStatus:  Serving,
+			}
+			m.runningTasks.Store(t.ID, task)
+		}
+	}
+
 	go func() {
 		m.scheduleWaitingTasks <- group
 	}()
+}
+
+func (m *Master) monitorRunningTasks() {
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		default:
+		}
+		delay := m.monitorTasksLimit.Reserve().Delay()
+		if delay != 0 {
+			log.L().Logger.Warn("monitor task rate limit", zap.Duration("delay", delay))
+			timer := time.NewTimer(delay)
+			select {
+			case <-m.ctx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+				timer.Stop()
+			}
+		}
+		tasksToPause := make([]*model.Task, 0)
+		m.runningTasks.Range(func(_, value interface{}) bool {
+			t := value.(*Task)
+			t.Lock()
+			if t.targetStatus == Pauseed && t.currentStatus == Serving {
+				log.L().Logger.Info("plan to pause", zap.Int32("id", int32(t.ID)))
+				tasksToPause = append(tasksToPause, t.Task)
+			}
+			t.Unlock()
+			return true
+		})
+		m.pauseTaskImpl(tasksToPause)
+	}
+}
+
+func (m *Master) pauseTaskImpl(tasks []*model.Task) {
+	arrangement := arrangeTasksByExecID(tasks)
+	for execID, tasks := range arrangement {
+		req := &pb.PauseBatchTasksRequest{
+			TaskIdList: tasks.toIDListPB(),
+		}
+		resp, err := m.clients.ExecutorClient(execID).Send(m.ctx, &client.ExecutorRequest{
+			Cmd: client.CmdPauseBatchTasks,
+			Req: req,
+		})
+		if err != nil {
+			log.L().Logger.Info("pause task failed", zap.Error(err))
+			continue
+		}
+		if err := resp.Resp.(*pb.PauseBatchTasksResponse).Err; err != nil {
+			log.L().Logger.Info("pause task failed", zap.String("error", err.Message))
+			continue
+		}
+		for _, t := range tasks {
+			value, ok := m.runningTasks.Load(t.ID)
+			if ok {
+				value.(*Task).setCurStatus(Pauseed)
+			}
+		}
+	}
 }
 
 func (m *Master) monitorSchedulingTasks() {

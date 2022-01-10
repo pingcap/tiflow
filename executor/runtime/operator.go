@@ -7,5 +7,6 @@ type Operator interface {
 	// Application can do any preparatory work in Prepare function, besides the
 	// task resource unit will be initialized and returned from this function.
 	Prepare(ctx *TaskContext) (TaskRescUnit, error)
+	Pause() error
 	Close() error
 }

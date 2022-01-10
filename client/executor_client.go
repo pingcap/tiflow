@@ -34,6 +34,8 @@ func (c *executorClient) Send(ctx context.Context, req *ExecutorRequest) (*Execu
 		resp.Resp, err = c.client.SubmitBatchTasks(ctx, req.SubmitBatchTasks())
 	case CmdCancelBatchTasks:
 		resp.Resp, err = c.client.CancelBatchTasks(ctx, req.CancelBatchTasks())
+	case CmdPauseBatchTasks:
+		resp.Resp, err = c.client.PauseBatchTasks(ctx, req.PauseBatchTasks())
 	}
 	if err != nil {
 		log.L().Logger.Error("send req meet error", zap.Error(err))
@@ -71,6 +73,7 @@ type CmdType uint16
 const (
 	CmdSubmitBatchTasks CmdType = 1 + iota
 	CmdCancelBatchTasks
+	CmdPauseBatchTasks
 )
 
 type ExecutorRequest struct {
@@ -84,6 +87,10 @@ func (e *ExecutorRequest) SubmitBatchTasks() *pb.SubmitBatchTasksRequest {
 
 func (e *ExecutorRequest) CancelBatchTasks() *pb.CancelBatchTasksRequest {
 	return e.Req.(*pb.CancelBatchTasksRequest)
+}
+
+func (e *ExecutorRequest) PauseBatchTasks() *pb.PauseBatchTasksRequest {
+	return e.Req.(*pb.PauseBatchTasksRequest)
 }
 
 type ExecutorResponse struct {

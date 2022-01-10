@@ -22,6 +22,12 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
+type baseOp struct{}
+
+func (o *baseOp) Pause() error {
+	return nil
+}
+
 type fileWriter struct {
 	filePath string
 	fd       *os.File
@@ -90,6 +96,7 @@ type Closeable interface {
 }
 
 type opReceive struct {
+	baseOp
 	flowID string
 	addr   string
 	data   chan *runtime.Record
@@ -202,7 +209,9 @@ func (o *opReceive) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([]
 	return []runtime.Chunk{o.cache}, false, nil
 }
 
-type opSyncer struct{}
+type opSyncer struct {
+	baseOp
+}
 
 func (o *opSyncer) Close() error { return nil }
 
@@ -238,6 +247,7 @@ func (s *recordStats) String() string {
 }
 
 type opSink struct {
+	baseOp
 	writer fileWriter
 	stats  *recordStats
 }
@@ -264,6 +274,7 @@ func (o *opSink) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]run
 func (o *opSink) NextWantedInputIdx() int { return 0 }
 
 type opProducer struct {
+	baseOp
 	tid       int32
 	pk        int32
 	schemaVer int32
@@ -341,6 +352,7 @@ type stoppable interface {
 }
 
 type opBinlog struct {
+	baseOp
 	binlogChan chan *runtime.Record
 	wal        []*runtime.Record
 	addr       string

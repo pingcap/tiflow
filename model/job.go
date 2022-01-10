@@ -9,12 +9,20 @@ type (
 	// that job id is the higher 32-bit and task id is the lower 32-bit.
 	ID           int64
 	WorkloadType int32
+	TaskStatus   int32
 )
 
 const (
 	Benchmark WorkloadType = iota
 	DM
 	CDC
+)
+
+const (
+	Init TaskStatus = iota
+	Serving
+	Pauseed
+	Stopped
 )
 
 type JobMaster struct {
@@ -38,7 +46,8 @@ type Task struct {
 	Cost              int          `json:"cost"`
 	PreferredLocation string       `json:"location"`
 
-	Exec ExecutorID `json:"exec"`
+	Exec   ExecutorID `json:"exec"`
+	Status TaskStatus
 }
 
 func (t *Task) ToPB() *pb.TaskRequest {
