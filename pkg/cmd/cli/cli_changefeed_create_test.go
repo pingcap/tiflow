@@ -65,3 +65,5 @@ func (s *changefeedSuite) TestStrictDecodeConfig(c *check.C) {
 	c.Assert(err, check.NotNil)
 	c.Assert(err, check.ErrorMatches, ".*CDC:ErrFilterRuleInvalid.*")
 }
+
+// [TODO] add validateDispatcherRule test

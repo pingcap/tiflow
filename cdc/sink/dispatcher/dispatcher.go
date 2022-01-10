@@ -14,7 +14,6 @@
 package dispatcher
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/pingcap/log"
@@ -37,7 +36,8 @@ type Dispatcher interface {
 type dispatchRule int
 
 const (
-	dispatchRuleDefault dispatchRule = iota
+	dispatchRuleUnknown dispatchRule = iota
+	dispatchRuleDefault
 	dispatchRuleRowID
 	dispatchRuleTS
 	dispatchRuleTable
@@ -60,24 +60,23 @@ func (r *dispatchRule) fromString(rule string) {
 		*r = dispatchRuleIndexValue
 	case "causality":
 		*r = dispatchRuleCausality
-	default: // [TODO] check
-		*r = dispatchRuleDefault
-		log.Warn("can't support dispatch rule, using default rule", zap.String("rule", rule))
+	default:
+		*r = dispatchRuleUnknown
 	}
 }
 
-type dispatcherSwitcher struct {
+type mqDispatcherSwitcher struct {
 	rules []struct {
 		Dispatcher
 		filter.Filter
 	}
 }
 
-func (s *dispatcherSwitcher) Dispatch(tbTxn *model.RawTableTxn) int32 {
+func (s *mqDispatcherSwitcher) Dispatch(tbTxn *model.RawTableTxn) int32 {
 	return s.matchDispatcher(tbTxn).Dispatch(tbTxn)
 }
 
-func (s *dispatcherSwitcher) matchDispatcher(tbTxn *model.RawTableTxn) Dispatcher {
+func (s *mqDispatcherSwitcher) matchDispatcher(tbTxn *model.RawTableTxn) Dispatcher {
 	for _, rule := range s.rules {
 		if !rule.MatchTable(tbTxn.Table.Schema, tbTxn.Table.Table) {
 			continue
@@ -89,24 +88,11 @@ func (s *dispatcherSwitcher) matchDispatcher(tbTxn *model.RawTableTxn) Dispatche
 }
 
 // NewDispatcher creates a new dispatcher
-func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32, sinkTp model.SinkType) (Dispatcher, error) {
-	if sinkTp != model.SinkTypeMQ && sinkTp != model.SinkTypeMySQL {
-		return nil, cerror.ErrSinkTypeForDispatcher.GenWithStackByArgs(sinkTp)
-	}
-
-	var ruleConfigs []*config.DispatchRule
-	// NOTICE: New sink need to add default dispatcher here
-	if model.SinkTypeMySQL == sinkTp {
-		ruleConfigs = append(cfg.Sink.DispatchRules, &config.DispatchRule{
-			Matcher:    []string{"*.*"},
-			Dispatcher: "causality",
-		})
-	} else if model.SinkTypeMQ == sinkTp {
-		ruleConfigs = append(cfg.Sink.DispatchRules, &config.DispatchRule{
-			Matcher:    []string{"*.*"},
-			Dispatcher: "default",
-		})
-	}
+func NewMQDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, error) {
+	ruleConfigs := append(cfg.Sink.DispatchRules, &config.DispatchRule{
+		Matcher:    []string{"*.*"},
+		Dispatcher: "default",
+	})
 
 	rules := make([]struct {
 		Dispatcher
@@ -124,15 +110,6 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32, sinkTp model.S
 		var d Dispatcher
 		var rule dispatchRule
 		rule.fromString(ruleConfig.Dispatcher)
-		if sinkTp == model.SinkTypeMySQL && rule != dispatchRuleTable && rule != dispatchRuleCausality {
-			log.Error("MySQL sink only support `causality` and `table` dispatch rule.", zap.String("user dispatch rule", ruleConfig.Dispatcher))
-			return nil, cerror.ErrFilterRuleUnsupported.GenWithStackByArgs(fmt.Sprintf("%s for MySQL sink", ruleConfig.Dispatcher))
-		}
-		if sinkTp == model.SinkTypeMQ && rule == dispatchRuleCausality {
-			log.Error("MQ sink can't support `causality` dispatch rule.", zap.String("user dispatch rule", ruleConfig.Dispatcher))
-			return nil, cerror.ErrFilterRuleUnsupported.GenWithStackByArgs(fmt.Sprintf("%s for MQ sink", ruleConfig.Dispatcher))
-		}
-
 		switch rule {
 		case dispatchRuleRowID, dispatchRuleIndexValue:
 			if cfg.EnableOldValue {
@@ -147,15 +124,90 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32, sinkTp model.S
 			d = newTableDispatcher(partitionNum)
 		case dispatchRuleDefault:
 			d = newDefaultDispatcher(partitionNum, cfg.EnableOldValue)
-		case dispatchRuleCausality:
-			d = newCausalityDispatcher(partitionNum)
+		default:
+			d = newDefaultDispatcher(partitionNum, cfg.EnableOldValue)
+			log.Warn("this dispatch rule is not supported by MQ sink, use default dispatch rule instead.", zap.String("unsupported dispatch rule", ruleConfig.Dispatcher))
 		}
 		rules = append(rules, struct {
 			Dispatcher
 			filter.Filter
 		}{Dispatcher: d, Filter: f})
 	}
-	return &dispatcherSwitcher{
+	return &mqDispatcherSwitcher{
 		rules: rules,
 	}, nil
+}
+
+type mysqlDispatcherSwitcher struct {
+	rules []struct {
+		Dispatcher
+		filter.Filter
+	}
+}
+
+func (s *mysqlDispatcherSwitcher) Dispatch(tbTxn *model.RawTableTxn) int32 {
+	return s.matchDispatcher(tbTxn).Dispatch(tbTxn)
+}
+
+func (s *mysqlDispatcherSwitcher) matchDispatcher(tbTxn *model.RawTableTxn) Dispatcher {
+	for _, rule := range s.rules {
+		if !rule.MatchTable(tbTxn.Table.Schema, tbTxn.Table.Table) {
+			continue
+		}
+		return rule.Dispatcher
+	}
+	log.Panic("the dispatch rule must cover all tables")
+	return nil
+}
+
+// NewDispatcher creates a new dispatcher
+func NewMySQLDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, error) {
+	ruleConfigs := append(cfg.Sink.DispatchRules, &config.DispatchRule{
+		Matcher:    []string{"*.*"},
+		Dispatcher: "causality",
+	})
+
+	rules := make([]struct {
+		Dispatcher
+		filter.Filter
+	}, 0, len(ruleConfigs))
+
+	for _, ruleConfig := range ruleConfigs {
+		f, err := filter.Parse(ruleConfig.Matcher)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
+		}
+		if !cfg.CaseSensitive {
+			f = filter.CaseInsensitive(f)
+		}
+		var d Dispatcher
+		var rule dispatchRule
+		rule.fromString(ruleConfig.Dispatcher)
+		switch rule {
+		case dispatchRuleTable:
+			d = newTableDispatcher(partitionNum)
+		case dispatchRuleCausality:
+			d = newCausalityDispatcher(partitionNum)
+		default:
+			d = newCausalityDispatcher(partitionNum)
+			log.Warn("this dispatch rule is not supported by MySQL sink, use causality dispatch rule instead.", zap.String("unsupported dispatch rule", ruleConfig.Dispatcher))
+		}
+		rules = append(rules, struct {
+			Dispatcher
+			filter.Filter
+		}{Dispatcher: d, Filter: f})
+	}
+	return &mysqlDispatcherSwitcher{
+		rules: rules,
+	}, nil
+}
+
+func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32, sinkTp model.SinkType) (Dispatcher, error) {
+	if model.SinkTypeMySQL == sinkTp {
+		return NewMysqlDispatcher(cfg, partitionNum)
+	} else if model.SinkTypeMQ == sinkTp {
+		return NewMQDispatcher(cfg, partitionNum)
+	}
+
+	return nil, cerror.ErrSinkTypeForDispatcher.GenWithStackByArgs(sinkTp.String())
 }

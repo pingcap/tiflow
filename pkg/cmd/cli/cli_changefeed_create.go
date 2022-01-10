@@ -216,17 +216,6 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 		}
 	}
 
-	for _, rules := range cfg.Sink.DispatchRules {
-		switch strings.ToLower(rules.Dispatcher) {
-		case "rowid", "index-value":
-			if cfg.EnableOldValue {
-				cmd.Printf("[WARN] This index-value distribution mode "+
-					"does not guarantee row-level orderliness when "+
-					"switching on the old value, so please use caution! dispatch-rules: %#v", rules)
-			}
-		}
-	}
-
 	if o.commonChangefeedOptions.sortEngine == model.SortUnified && !cdcClusterVer.ShouldEnableUnifiedSorterByDefault() {
 		o.commonChangefeedOptions.sortEngine = model.SortInMemory
 		log.Warn("The TiCDC cluster is built from an older version, disabling Unified Sorter by default",
@@ -278,6 +267,10 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Comma
 	}
 
 	if err := o.validateTargetTs(); err != nil {
+		return err
+	}
+
+	if err := o.validateDispatcherRule(cmd); err != nil {
 		return err
 	}
 
@@ -342,6 +335,18 @@ func (o *createChangefeedOptions) getInfo(cmd *cobra.Command) *model.ChangeFeedI
 	}
 
 	return info
+}
+
+// validateStartTs checks if startTs is a valid value.
+func (o *createChangefeedOptions) validateDispatcherRule(cmd *cobra.Command) error {
+	warning, err := o.cfg.ValidateDispatcherRule(o.commonChangefeedOptions.SinkURI)
+	if err != nil {
+		return err
+	}
+	if warning != "" {
+		cmd.Printf(warning)
+	}
+	return nil
 }
 
 // validateStartTs checks if startTs is a valid value.
