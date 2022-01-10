@@ -1719,12 +1719,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 			currentLocation = shardingReSync.currLocation
 			// if suffix>0, we are replacing error
-<<<<<<< HEAD
-			s.isReplacingErr = currentLocation.Suffix != 0
-=======
 			s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
-			s.locations.reset(shardingReSync.currLocation)
->>>>>>> 952a87438 (syncer(dm): enhance error handling about binlog and binlog-schema command (#4017))
 			err = s.streamerController.RedirectStreamer(tctx, shardingReSync.currLocation)
 			if err != nil {
 				return err
@@ -1896,12 +1891,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			// also redirect stream to next event
 			if currentLocation.Suffix > 0 && e.Header.EventSize > 0 {
 				currentLocation.Suffix = 0
-<<<<<<< HEAD
-				s.isReplacingErr = false
-				err = s.streamerController.RedirectStreamer(tctx, currentLocation)
-=======
 				s.isReplacingOrInjectingErr = false
-				s.locations.reset(currentLocation)
 				if s.errOperatorHolder.IsInject(startLocation) {
 					s.errOperatorHolder.SetHasAllInjected(startLocation)
 					// reset event as startLocation, avoid to be marked in checkpoint
@@ -1910,7 +1900,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				} else {
 					err = s.streamerController.RedirectStreamer(tctx, currentLocation)
 				}
->>>>>>> 952a87438 (syncer(dm): enhance error handling about binlog and binlog-schema command (#4017))
 				if err != nil {
 					return err
 				}
