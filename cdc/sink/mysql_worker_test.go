@@ -49,10 +49,12 @@ func TestMysqlSinkWorker(t *testing.T) {
 		}, {
 			txns: []*model.SingleTableTxn{
 				{
-					Table:     tbl,
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
-					ReplicaID: 1,
+					RawTableTxn: model.RawTableTxn{
+						Table:     tbl,
+						CommitTs:  1,
+						Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
+						ReplicaID: 1,
+					},
 				},
 			},
 			expectedOutputRows:       [][]*model.RowChangedEvent{{{CommitTs: 1}}},
@@ -61,10 +63,12 @@ func TestMysqlSinkWorker(t *testing.T) {
 		}, {
 			txns: []*model.SingleTableTxn{
 				{
-					Table:     tbl,
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
-					ReplicaID: 1,
+					RawTableTxn: model.RawTableTxn{
+						Table:     tbl,
+						CommitTs:  1,
+						Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
+						ReplicaID: 1,
+					},
 				},
 			},
 			expectedOutputRows: [][]*model.RowChangedEvent{
@@ -75,22 +79,28 @@ func TestMysqlSinkWorker(t *testing.T) {
 		}, {
 			txns: []*model.SingleTableTxn{
 				{
-					Table:     tbl,
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}},
-					ReplicaID: 1,
+					RawTableTxn: model.RawTableTxn{
+						Table:     tbl,
+						CommitTs:  1,
+						Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}},
+						ReplicaID: 1,
+					},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  2,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 2}},
-					ReplicaID: 1,
+					RawTableTxn: model.RawTableTxn{
+						Table:     tbl,
+						CommitTs:  2,
+						Rows:      []*model.RowChangedEvent{{CommitTs: 2}},
+						ReplicaID: 1,
+					},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  3,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 3}, {CommitTs: 3}},
-					ReplicaID: 1,
+					RawTableTxn: model.RawTableTxn{
+						Table:     tbl,
+						CommitTs:  3,
+						Rows:      []*model.RowChangedEvent{{CommitTs: 3}, {CommitTs: 3}},
+						ReplicaID: 1,
+					},
 				},
 			},
 			expectedOutputRows: [][]*model.RowChangedEvent{
@@ -102,22 +112,28 @@ func TestMysqlSinkWorker(t *testing.T) {
 		}, {
 			txns: []*model.SingleTableTxn{
 				{
-					Table:     tbl,
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
-					ReplicaID: 1,
+					RawTableTxn: model.RawTableTxn{
+						Table:     tbl,
+						CommitTs:  1,
+						Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
+						ReplicaID: 1,
+					},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  2,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 2}},
-					ReplicaID: 2,
+					RawTableTxn: model.RawTableTxn{
+						Table:     tbl,
+						CommitTs:  2,
+						Rows:      []*model.RowChangedEvent{{CommitTs: 2}},
+						ReplicaID: 2,
+					},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  3,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
-					ReplicaID: 3,
+					RawTableTxn: model.RawTableTxn{
+						Table:     tbl,
+						CommitTs:  3,
+						Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
+						ReplicaID: 3,
+					},
 				},
 			},
 			expectedOutputRows: [][]*model.RowChangedEvent{
@@ -130,28 +146,36 @@ func TestMysqlSinkWorker(t *testing.T) {
 		}, {
 			txns: []*model.SingleTableTxn{
 				{
-					Table:     tbl,
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
-					ReplicaID: 1,
+					RawTableTxn: model.RawTableTxn{
+						Table:     tbl,
+						CommitTs:  1,
+						Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
+						ReplicaID: 1,
+					},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  2,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
-					ReplicaID: 1,
+					RawTableTxn: model.RawTableTxn{
+						Table:     tbl,
+						CommitTs:  2,
+						Rows:      []*model.RowChangedEvent{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
+						ReplicaID: 1,
+					},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  3,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
-					ReplicaID: 1,
+					RawTableTxn: model.RawTableTxn{
+						Table:     tbl,
+						CommitTs:  3,
+						Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
+						ReplicaID: 1,
+					},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  4,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 4}},
-					ReplicaID: 1,
+					RawTableTxn: model.RawTableTxn{
+						Table:     tbl,
+						CommitTs:  4,
+						Rows:      []*model.RowChangedEvent{{CommitTs: 4}},
+						ReplicaID: 1,
+					},
 				},
 			},
 			expectedOutputRows: [][]*model.RowChangedEvent{
@@ -212,36 +236,48 @@ func TestMySQLSinkWorkerExitWithError(t *testing.T) {
 	}
 	txns1 := []*model.SingleTableTxn{
 		{
-			Table:    tbl,
-			CommitTs: 1,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
+			RawTableTxn: model.RawTableTxn{
+				Table:    tbl,
+				CommitTs: 1,
+				Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
+			},
 		},
 		{
-			Table:    tbl,
-			CommitTs: 2,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
+			RawTableTxn: model.RawTableTxn{
+				Table:    tbl,
+				CommitTs: 2,
+				Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
+			},
 		},
 		{
-			Table:    tbl,
-			CommitTs: 3,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 3}},
+			RawTableTxn: model.RawTableTxn{
+				Table:    tbl,
+				CommitTs: 3,
+				Rows:     []*model.RowChangedEvent{{CommitTs: 3}},
+			},
 		},
 		{
-			Table:    tbl,
-			CommitTs: 4,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 4}},
+			RawTableTxn: model.RawTableTxn{
+				Table:    tbl,
+				CommitTs: 4,
+				Rows:     []*model.RowChangedEvent{{CommitTs: 4}},
+			},
 		},
 	}
 	txns2 := []*model.SingleTableTxn{
 		{
-			Table:    tbl,
-			CommitTs: 5,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
+			RawTableTxn: model.RawTableTxn{
+				Table:    tbl,
+				CommitTs: 5,
+				Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
+			},
 		},
 		{
-			Table:    tbl,
-			CommitTs: 6,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 6}},
+			RawTableTxn: model.RawTableTxn{
+				Table:    tbl,
+				CommitTs: 6,
+				Rows:     []*model.RowChangedEvent{{CommitTs: 6}},
+			},
 		},
 	}
 	maxTxnRow := 1
@@ -298,21 +334,27 @@ func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
 	}
 	txns1 := []*model.SingleTableTxn{
 		{
-			Table:    tbl,
-			CommitTs: 1,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
+			RawTableTxn: model.RawTableTxn{
+				Table:    tbl,
+				CommitTs: 1,
+				Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
+			},
 		},
 		{
-			Table:    tbl,
-			CommitTs: 2,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
+			RawTableTxn: model.RawTableTxn{
+				Table:    tbl,
+				CommitTs: 2,
+				Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
+			},
 		},
 	}
 	txns2 := []*model.SingleTableTxn{
 		{
-			Table:    tbl,
-			CommitTs: 5,
-			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
+			RawTableTxn: model.RawTableTxn{
+				Table:    tbl,
+				CommitTs: 5,
+				Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
+			},
 		},
 	}
 

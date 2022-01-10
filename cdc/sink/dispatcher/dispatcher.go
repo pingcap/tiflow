@@ -204,7 +204,7 @@ func NewMySQLDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatch
 
 func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32, sinkTp model.SinkType) (Dispatcher, error) {
 	if model.SinkTypeMySQL == sinkTp {
-		return NewMysqlDispatcher(cfg, partitionNum)
+		return NewMySQLDispatcher(cfg, partitionNum)
 	} else if model.SinkTypeMQ == sinkTp {
 		return NewMQDispatcher(cfg, partitionNum)
 	}

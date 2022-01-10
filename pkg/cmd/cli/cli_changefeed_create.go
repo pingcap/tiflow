@@ -138,7 +138,7 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 }
 
 // complete adapts from the command line args to the data and client required.
-func (o *createChangefeedOptions) complete(ctx context.Context, f factory.Factory, cmd *cobra.Command) error {
+func (o *createChangefeedOptions) complete(ctx context.Context, f factory.Factory) error {
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
 		return err
@@ -164,11 +164,11 @@ func (o *createChangefeedOptions) complete(ctx context.Context, f factory.Factor
 		o.startTs = oracle.ComposeTS(ts, logical)
 	}
 
-	return o.completeCfg(ctx, cmd)
+	return o.completeCfg(ctx)
 }
 
 // completeCfg complete the replica config from file and cmd flags.
-func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Command) error {
+func (o *createChangefeedOptions) completeCfg(ctx context.Context) error {
 	_, captureInfos, err := o.etcdClient.GetCaptures(ctx)
 	if err != nil {
 		return err
@@ -339,7 +339,7 @@ func (o *createChangefeedOptions) getInfo(cmd *cobra.Command) *model.ChangeFeedI
 
 // validateStartTs checks if startTs is a valid value.
 func (o *createChangefeedOptions) validateDispatcherRule(cmd *cobra.Command) error {
-	warning, err := o.cfg.ValidateDispatcherRule(o.commonChangefeedOptions.SinkURI)
+	warning, err := config.ValidateDispatcherRule(o.commonChangefeedOptions.sinkURI, o.cfg.Sink, o.cfg.EnableOldValue)
 	if err != nil {
 		return err
 	}
@@ -460,7 +460,7 @@ func newCmdCreateChangefeed(f factory.Factory) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmdcontext.GetDefaultContext()
 
-			err := o.complete(ctx, f, cmd)
+			err := o.complete(ctx, f)
 			if err != nil {
 				return err
 			}
