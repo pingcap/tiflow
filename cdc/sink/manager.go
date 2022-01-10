@@ -236,10 +236,6 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	return ckpt, err
 }
 
-func (t *tableSink) getEmittedTs() uint64 {
-	return atomic.LoadUint64(&t.emittedTs)
-}
-
 func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	// the table sink doesn't receive the checkpoint event
 	return nil
