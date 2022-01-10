@@ -11,8 +11,10 @@ services:
     ports:
       - "9092:9092"
     environment:
-      KAFKA_MESSAGE_MAX_BYTES: 1073741824
-      KAFKA_REPLICA_FETCH_MAX_BYTES: 1073741824
+      # Set the max.message.bytes of the kafka broker to 11MiB.
+      KAFKA_MESSAGE_MAX_BYTES: 11534336
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 11534336
+      KAFKA_CREATE_TOPICS: "big-message-test:1:1"
       KAFKA_BROKER_ID: 1
       RACK_COMMAND: "curl -sfL https://git.io/JJZXX -o /tmp/kafka.server.keystore.jks && curl -sfL https://git.io/JJZXM -o /tmp/kafka.server.truststore.jks"
       KAFKA_LISTENERS: "SSL://127.0.0.1:9093,PLAINTEXT://127.0.0.1:9092"
@@ -27,6 +29,25 @@ services:
     depends_on:
       - "zookeeper"
 
+  canal-adapter:
+    # Build from https://github.com/pingcap/tiflow/tree/master/scripts/canal/docker.
+    image: rustinliu/ticdc-canal-json-adapter:latest
+    environment:
+      # Since we are all under the kafka service's network, we use 127.0.0.1 directly.
+      KAFKA_SERVER: 127.0.0.1:9092
+      ZOOKEEPER_SERVER: zookeeper:2181
+      # This is actually the name of the topic.
+      DB_NAME: test
+      DOWNSTREAM_DB_HOST: 127.0.0.1
+      DOWNSTREAM_DB_PORT: 3306
+      USE_FLAT_MESSAGE: true
+    network_mode: "service:kafka"
+    volumes:
+      - ./logs/tidb_cdc_test:/root/logs
+    depends_on:
+      - "zookeeper"
+      - "kafka"
+
   kafka_integration_test:
     build:
       context: ../../../
@@ -34,10 +55,11 @@ services:
     depends_on:
       - "zookeeper"
       - "kafka"
+      - "canal-adapter"
     command:
       - bash
       - -c
-      - make integration_test_kafka CASE="${CASE}" & tail -f /dev/null
+      - make integration_test_kafka CASE="${CASE}" START_AT="${START_AT}"  & tail -f /dev/null
     network_mode: "service:kafka"
     volumes:
       - ./logs/tidb_cdc_test:/tmp/tidb_cdc_test

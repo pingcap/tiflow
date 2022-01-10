@@ -92,6 +92,29 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Nil(t, err)
 	}
 
+	// Check invalid PD/TiKV version.
+	{
+		mock.getVersion = func() string {
+			return "testPD"
+		}
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
+		require.Regexp(t, ".*invalid PD version.*", err)
+	}
+
+	{
+		mock.getVersion = func() string {
+			return minPDVersion.String()
+		}
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{{Version: "testKV"}}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
+		require.Regexp(t, ".*invalid TiKV version.*", err)
+	}
+
 	{
 		mock.getVersion = func() string {
 			return `v1.0.0-alpha-271-g824ae7fd`
@@ -240,6 +263,19 @@ func TestGetTiCDCClusterVersion(t *testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, ver, tc.expected)
 	}
+
+	invalidTestCase := struct {
+		captureVersions []string
+		expected        TiCDCClusterVersion
+	}{
+		captureVersions: []string{
+			"",
+			"testCDC",
+		},
+		expected: TiCDCClusterVersionUnknown,
+	}
+	_, err := GetTiCDCClusterVersion(invalidTestCase.captureVersions)
+	require.Regexp(t, ".*invalid CDC cluster version.*", err)
 }
 
 func TestTiCDCClusterVersionFeaturesCompatible(t *testing.T) {

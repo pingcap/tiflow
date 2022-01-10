@@ -82,9 +82,10 @@ type canalFlatMessageInterface interface {
 	getOld() map[string]interface{}
 	getData() map[string]interface{}
 	getMySQLType() map[string]string
+	getJavaSQLType() map[string]int32
 }
 
-// adapted from https://github.com/alibaba/canal/blob/master/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java
+// adapted from https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java#L1
 type canalFlatMessage struct {
 	// ignored by consumers
 	ID        int64    `json:"id"`
@@ -132,15 +133,25 @@ func (c *canalFlatMessage) getQuery() string {
 }
 
 func (c *canalFlatMessage) getOld() map[string]interface{} {
+	if c.Old == nil {
+		return nil
+	}
 	return c.Old[0]
 }
 
 func (c *canalFlatMessage) getData() map[string]interface{} {
+	if c.Data == nil {
+		return nil
+	}
 	return c.Data[0]
 }
 
 func (c *canalFlatMessage) getMySQLType() map[string]string {
 	return c.MySQLType
+}
+
+func (c *canalFlatMessage) getJavaSQLType() map[string]int32 {
+	return c.SQLType
 }
 
 type tidbExtension struct {
@@ -157,36 +168,8 @@ type canalFlatMessageWithTiDBExtension struct {
 	Extensions *tidbExtension `json:"_tidb"`
 }
 
-func (c *canalFlatMessageWithTiDBExtension) getTikvTs() uint64 {
-	return c.tikvTs
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getSchema() *string {
-	return &c.Schema
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getTable() *string {
-	return &c.Table
-}
-
 func (c *canalFlatMessageWithTiDBExtension) getCommitTs() uint64 {
 	return c.Extensions.CommitTs
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getQuery() string {
-	return c.Query
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getOld() map[string]interface{} {
-	return c.Old[0]
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getData() map[string]interface{} {
-	return c.Data[0]
-}
-
-func (c *canalFlatMessageWithTiDBExtension) getMySQLType() map[string]string {
-	return c.MySQLType
 }
 
 func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEvent) (canalFlatMessageInterface, error) {
@@ -242,10 +225,6 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 				data[rowData.AfterColumns[i].Name] = nil
 			}
 		}
-	} else {
-		// The event type is DELETE
-		// The following line is important because Alibaba's adapter expects this, and so does Flink.
-		data = oldData
 	}
 
 	flatMessage := &canalFlatMessage{
@@ -261,14 +240,20 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		SQLType:       sqlType,
 		MySQLType:     mysqlType,
 		Data:          make([]map[string]interface{}, 0),
-		Old:           make([]map[string]interface{}, 0),
+		Old:           nil,
 		tikvTs:        e.CommitTs,
 	}
 
-	// We need to ensure that both Data and Old have exactly one element,
-	// even if the element could be nil. Changing this could break Alibaba's adapter
-	flatMessage.Data = append(flatMessage.Data, data)
-	flatMessage.Old = append(flatMessage.Old, oldData)
+	if e.IsDelete() {
+		flatMessage.Data = append(flatMessage.Data, oldData)
+	} else if e.IsInsert() {
+		flatMessage.Data = append(flatMessage.Data, data)
+	} else if e.IsUpdate() {
+		flatMessage.Old = []map[string]interface{}{oldData}
+		flatMessage.Data = append(flatMessage.Data, data)
+	} else {
+		log.Panic("unreachable event type", zap.Any("event", e))
+	}
 
 	if !c.enableTiDBExtension {
 		return flatMessage, nil
@@ -381,7 +366,9 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 			log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
 			return nil
 		}
-		ret[i] = NewMQMessage(config.ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MqMessageTypeRow, msg.getSchema(), msg.getTable())
+		m := NewMQMessage(config.ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MqMessageTypeRow, msg.getSchema(), msg.getTable())
+		m.IncRowsCount()
+		ret[i] = m
 	}
 	c.resolvedBuf = c.resolvedBuf[0:0]
 	return ret
@@ -509,11 +496,11 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 	}
 
 	var err error
-	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(), flatMessage.getMySQLType())
+	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(), flatMessage.getMySQLType(), flatMessage.getJavaSQLType())
 	if err != nil {
 		return nil, err
 	}
-	result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(), flatMessage.getMySQLType())
+	result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(), flatMessage.getMySQLType(), flatMessage.getJavaSQLType())
 	if err != nil {
 		return nil, err
 	}
@@ -521,21 +508,24 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 	return result, nil
 }
 
-func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType map[string]string) ([]*model.Column, error) {
+func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType map[string]string, javaSQLType map[string]int32) ([]*model.Column, error) {
 	result := make([]*model.Column, 0, len(cols))
 	for name, value := range cols {
-		typeStr, ok := mysqlType[name]
+		javaType, ok := javaSQLType[name]
+		if !ok {
+			// this should not happen, else we have to check encoding for javaSQLType.
+			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
+				"java sql type does not found, column: %+v, mysqlType: %+v", name, javaSQLType)
+		}
+		mysqlTypeStr, ok := mysqlType[name]
 		if !ok {
 			// this should not happen, else we have to check encoding for mysqlType.
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		tp := types.StrToType(typeStr)
-		if !ok {
-			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
-				"mysql type does not found, column: %+v, type: %+v", name, tp)
-		}
-		col := NewColumn(value, tp).ToSinkColumn(name)
+		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
+		mysqlType := types.StrToType(mysqlTypeStr)
+		col := NewColumn(value, mysqlType).decodeCanalJSONColumn(name, JavaSQLType(javaType))
 		result = append(result, col)
 	}
 	if len(result) == 0 {

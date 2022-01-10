@@ -31,13 +31,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/text/encoding/charmap"
 )
 
 const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
-	// DefaultMaxMessageBytes sets the default value for max-message-bytes
-	DefaultMaxMessageBytes int = 1 * 1024 * 1024 // 1M
 	// DefaultMaxBatchSize sets the default value for max-batch-size
 	DefaultMaxBatchSize int = 16
 )
@@ -89,6 +88,37 @@ func (c *column) FromSinkColumn(col *model.Column) {
 	default:
 		c.Value = col.Value
 	}
+}
+
+func (c *column) decodeCanalJSONColumn(name string, javaType JavaSQLType) *model.Column {
+	col := new(model.Column)
+	col.Type = c.Type
+	col.Flag = c.Flag
+	col.Name = name
+	col.Value = c.Value
+	if c.Value == nil {
+		return col
+	}
+
+	value, ok := col.Value.(string)
+	if !ok {
+		log.Panic("canal-json encoded message should have type in `string`")
+	}
+
+	if javaType != JavaSQLTypeBLOB {
+		col.Value = value
+		return col
+	}
+
+	// when encoding the `JavaSQLTypeBLOB`, use `ISO8859_1` decoder, now reverse it back.
+	encoder := charmap.ISO8859_1.NewEncoder()
+	value, err := encoder.String(value)
+	if err != nil {
+		log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+	}
+
+	col.Value = value
+	return col
 }
 
 func (c *column) ToSinkColumn(name string) *model.Column {
@@ -351,13 +381,13 @@ type JSONEventBatchEncoder struct {
 	messageBuf   []*MQMessage
 	curBatchSize int
 	// configs
-	maxMessageSize int
-	maxBatchSize   int
+	maxMessageBytes int
+	maxBatchSize    int
 }
 
-// GetMaxMessageSize is only for unit testing.
-func (d *JSONEventBatchEncoder) GetMaxMessageSize() int {
-	return d.maxMessageSize
+// GetMaxMessageBytes is only for unit testing.
+func (d *JSONEventBatchEncoder) GetMaxMessageBytes() int {
+	return d.maxMessageBytes
 }
 
 // GetMaxBatchSize is only for unit testing.
@@ -436,15 +466,15 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		// for single message that longer than max-message-size, do not send it.
 		// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 		length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
-		if length > d.maxMessageSize {
+		if length > d.maxMessageBytes {
 			log.Warn("Single message too large",
-				zap.Int("max-message-size", d.maxMessageSize), zap.Int("length", length), zap.Any("table", e.Table))
+				zap.Int("max-message-size", d.maxMessageBytes), zap.Int("length", length), zap.Any("table", e.Table))
 			return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
 		}
 
 		if len(d.messageBuf) == 0 ||
 			d.curBatchSize >= d.maxBatchSize ||
-			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxMessageSize {
+			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxMessageBytes {
 
 			versionHead := make([]byte, 8)
 			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
@@ -463,10 +493,10 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		message.Table = &e.Table.Table
 		message.IncRowsCount()
 
-		if message.Length() > d.maxMessageSize {
+		if message.Length() > d.maxMessageBytes {
 			// `len(d.messageBuf) == 1` is implied
 			log.Debug("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
-				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxMessageSize))
+				zap.Int("eventLen", message.Length()), zap.Int("max-message-bytes", d.maxMessageBytes))
 		}
 		d.curBatchSize++
 	}
@@ -585,15 +615,17 @@ func (d *JSONEventBatchEncoder) Reset() {
 func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
 
-	d.maxMessageSize = DefaultMaxMessageBytes
-	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
-		d.maxMessageSize, err = strconv.Atoi(maxMessageBytes)
-		if err != nil {
-			return cerror.ErrSinkInvalidConfig.Wrap(err)
-		}
+	maxMessageBytes, ok := params["max-message-bytes"]
+	if !ok {
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.New("max-message-bytes not found"))
 	}
-	if d.maxMessageSize <= 0 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageSize))
+
+	d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
+	if err != nil {
+		return cerror.ErrSinkInvalidConfig.Wrap(err)
+	}
+	if d.maxMessageBytes <= 0 {
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageBytes))
 	}
 
 	d.maxBatchSize = DefaultMaxBatchSize

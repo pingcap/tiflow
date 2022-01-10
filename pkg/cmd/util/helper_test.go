@@ -193,7 +193,7 @@ func (s *utilsSuite) TestAndWriteExampleReplicaTOML(c *check.C) {
 			{Matcher: []string{"test1.*", "test2.*"}, Columns: []string{"column1", "column2"}},
 			{Matcher: []string{"test3.*", "test4.*"}, Columns: []string{"!a", "column3"}},
 		},
-		Protocol: "default",
+		Protocol: "open-protocol",
 	})
 	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
 		Enable:          false,
@@ -273,4 +273,15 @@ max-backups = 1
 
 	err = StrictDecodeFile(configPath, "test", conf, "unknown")
 	c.Assert(err, check.ErrorMatches, ".*contained unknown configuration options: unknown2.*")
+
+	configContent = fmt.Sprintf(`
+data-dir = "%+v"
+[debug]
+unknown = 1
+`, dataDir)
+	err = os.WriteFile(configPath, []byte(configContent), 0o644)
+	c.Assert(err, check.IsNil)
+
+	err = StrictDecodeFile(configPath, "test", conf, "debug")
+	c.Assert(err, check.IsNil)
 }

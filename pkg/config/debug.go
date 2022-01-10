@@ -18,6 +18,7 @@ import "github.com/pingcap/errors"
 // DebugConfig represents config for ticdc unexposed feature configurations
 type DebugConfig struct {
 	// identify if the table actor is enabled for table pipeline
+	// TODO: turn on after GA.
 	EnableTableActor bool `toml:"enable-table-actor" json:"enable-table-actor"`
 
 	// EnableDBSorter enables db sorter.
@@ -27,7 +28,11 @@ type DebugConfig struct {
 	EnableDBSorter bool      `toml:"enable-db-sorter" json:"enable-db-sorter"`
 	DB             *DBConfig `toml:"db" json:"db"`
 
-	Messages *MessagesConfig `toml:"messages" json:"messages"`
+	// EnableNewScheduler enables the peer-messaging based new scheduler.
+	// The default value is false.
+	// TODO: turn on after GA.
+	EnableNewScheduler bool            `toml:"enable-new-scheduler" json:"enable-new-scheduler"`
+	Messages           *MessagesConfig `toml:"messages" json:"messages"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration

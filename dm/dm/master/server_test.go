@@ -1769,35 +1769,30 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 
 	// 5. start workers, the unbounded sources should be bounded
 	var wg sync.WaitGroup
-	ctx1, cancel1 := context.WithCancel(ctx)
-	ctx2, cancel2 := context.WithCancel(ctx)
-	ctx3, cancel3 := context.WithCancel(ctx)
 	workerName1 := "worker1"
 	workerName2 := "worker2"
 	workerName3 := "worker3"
 	defer func() {
-		t.clearSchedulerEnv(c, cancel1, &wg)
-		t.clearSchedulerEnv(c, cancel2, &wg)
-		t.clearSchedulerEnv(c, cancel3, &wg)
+		t.clearSchedulerEnv(c, cancel, &wg)
 	}()
 	c.Assert(s1.scheduler.AddWorker(workerName1, "172.16.10.72:8262"), check.IsNil)
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
-	}(ctx1, workerName1)
+	}(ctx, workerName1)
 	c.Assert(s1.scheduler.AddWorker(workerName2, "172.16.10.72:8263"), check.IsNil)
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
-	}(ctx2, workerName2)
+	}(ctx, workerName2)
 	c.Assert(s1.scheduler.AddWorker(workerName3, "172.16.10.72:8264"), check.IsNil)
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
-	}(ctx3, workerName3)
+	}(ctx, workerName3)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		w := s1.scheduler.GetWorkerBySource(sourceID)
 		return w != nil

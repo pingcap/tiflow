@@ -309,7 +309,15 @@ func (s *oldScheduler) handleJobs(jobs []*schedulerJob) {
 func (s *oldScheduler) cleanUpFinishedOperations() {
 	for captureID := range s.state.TaskStatuses {
 		s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+			if status == nil {
+				log.Warn("task status of the capture is not found, may be the key in etcd was deleted", zap.String("captureID", captureID), zap.String("changefeed", s.state.ID))
+				return status, false, nil
+			}
+
 			changed := false
+			if status == nil {
+				return nil, changed, nil
+			}
 			for tableID, operation := range status.Operation {
 				if operation.Status == model.OperFinished {
 					delete(status.Operation, tableID)
@@ -354,9 +362,9 @@ func (s *oldScheduler) rebalanceByTableNum() (shouldUpdateState bool) {
 
 	log.Info("Start rebalancing",
 		zap.String("changefeed", s.state.ID),
-		zap.Int("table-num", totalTableNum),
-		zap.Int("capture-num", captureNum),
-		zap.Int("target-limit", upperLimitPerCapture))
+		zap.Int("tableNum", totalTableNum),
+		zap.Int("captureNum", captureNum),
+		zap.Int("targetLimit", upperLimitPerCapture))
 
 	for captureID, taskStatus := range s.state.TaskStatuses {
 		tableNum2Remove := len(taskStatus.Tables) - upperLimitPerCapture
@@ -383,9 +391,9 @@ func (s *oldScheduler) rebalanceByTableNum() (shouldUpdateState bool) {
 				}
 				status.RemoveTable(tableID, s.state.Status.CheckpointTs, false)
 				log.Info("Rebalance: Move table",
-					zap.Int64("table-id", tableID),
+					zap.Int64("tableID", tableID),
 					zap.String("capture", captureID),
-					zap.String("changefeed-id", s.state.ID))
+					zap.String("changefeed", s.state.ID))
 				return status, true, nil
 			})
 			tableNum2Remove--
