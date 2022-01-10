@@ -34,14 +34,12 @@ type tableSink struct {
 	redoManager redo.LogManager
 }
 
-<<<<<<< HEAD
 func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	// do nothing
 	return nil
 }
-=======
+
 var _ Sink = (*tableSink)(nil)
->>>>>>> 623143076 (sink (ticdc): fix a deadlock due to checkpointTs fall back in sinkNode (#4084))
 
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.buffer = append(t.buffer, rows...)
