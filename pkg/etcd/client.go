@@ -114,10 +114,10 @@ func (c *Client) Get(ctx context.Context, key string, opts ...clientv3.OpOption)
 
 // Delete delegates request to clientv3.KV.Delete
 func (c *Client) Delete(ctx context.Context, key string, opts ...clientv3.OpOption) (resp *clientv3.DeleteResponse, err error) {
-	if metric, ok := c.metrics[EtcdTxn]; ok {
+	if metric, ok := c.metrics[EtcdDel]; ok {
 		metric.Inc()
 	}
-	// We don't retry on delete operatoin. It's dangerous.
+	// We don't retry on delete operation. It's dangerous.
 	return c.cli.Delete(ctx, key, opts...)
 }
 
