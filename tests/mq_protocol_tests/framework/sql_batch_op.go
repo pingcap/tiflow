@@ -105,7 +105,7 @@ func (s *sqlAllAwaiter) poll(ctx context.Context) (bool, error) {
 		}
 	}
 
-	log.Debug("poll finished", zap.Int("total-retrieved", len(s.retrievedValues)))
+	log.Debug("poll finished", zap.Int("totalRetrieved", len(s.retrievedValues)))
 
 	if len(s.data) == len(s.retrievedValues) {
 		return true, nil
