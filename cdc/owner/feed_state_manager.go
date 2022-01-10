@@ -341,9 +341,9 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 		}
 		// if no errors occurred in a time window, we can assume that changefeed
-		// was running normally before. So if we get an error for this changefeed now,
+		// was running normally before. So if we get errors for this changefeed now,
 		// we must reset the expBackoff and re-backoff from InitialInterval.
-		if !info.ErrorsReachedThreshold(m.backoffInterval) {
+		if len(errs) > 0 && !info.ErrorsReachedThreshold(m.backoffInterval) {
 			m.expBackoff.Reset()
 			m.backoffInterval = m.expBackoff.NextBackOff()
 		}
