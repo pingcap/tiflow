@@ -160,7 +160,7 @@ func ValidateDispatcherRule(sinkURI string, sinkCfg *SinkConfig, enableOldValue 
 				return "", cerror.ErrDispatchRuleUnsupported.GenWithStackByArgs(fmt.Sprintf("unsupported dispatcher:%s for schema:%s", dispatcher, scheme))
 			}
 			if (dispatcher == "rowid" || dispatcher == "index-value") && enableOldValue {
-				return fmt.Sprintf("[WARN] This index-value distribution mode "+
+				return fmt.Sprintf("[WARN] This index-value or rowid distribution mode "+
 					"does not guarantee row-level orderliness when "+
 					"switching on the old value, so please use caution! dispatch-rules: %#v", rules), nil
 			}
