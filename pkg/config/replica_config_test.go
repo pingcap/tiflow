@@ -16,6 +16,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -94,4 +95,71 @@ func TestReplicaConfigValidate(t *testing.T) {
 	conf.Sink.Protocol = "canal"
 	conf.EnableOldValue = false
 	require.Regexp(t, ".*canal protocol requires old value to be enabled.*", conf.Validate())
+}
+
+func TestValidateDispatcherRule(t *testing.T) {
+	t.Parallel()
+
+	sinkURI := "mysql@@tt://root:123456@127.0.0.1:3306/"
+	warning, err := ValidateDispatcherRule(sinkURI, &SinkConfig{}, true)
+	require.Error(t, err)
+	require.Equal(t, warning, "")
+
+	sinkURI = "mysql://root:123456@127.0.0.1:3306/"
+	sinkCfg := &SinkConfig{DispatchRules: []*DispatchRule{
+		{Matcher: []string{"a.b"}, Dispatcher: "ts"},
+	}}
+	warning, err = ValidateDispatcherRule(sinkURI, sinkCfg, true)
+	require.Error(t, err)
+	require.Equal(t, warning, "")
+
+	sinkURI = "tidb://root:123456@127.0.0.1:3306/"
+	sinkCfg = &SinkConfig{DispatchRules: []*DispatchRule{
+		{Matcher: []string{"a.b"}, Dispatcher: "index-value"},
+	}}
+	warning, err = ValidateDispatcherRule(sinkURI, sinkCfg, true)
+	require.Error(t, err)
+	require.Equal(t, warning, "")
+
+	sinkURI = "tidb://root:123456@127.0.0.1:3306/"
+	sinkCfg = &SinkConfig{DispatchRules: []*DispatchRule{
+		{Matcher: []string{"a.b"}, Dispatcher: "table"},
+		{Matcher: []string{"a.c"}, Dispatcher: "casuality"},
+	}}
+	warning, err = ValidateDispatcherRule(sinkURI, sinkCfg, true)
+	require.Nil(t, err)
+	require.Equal(t, warning, "")
+
+	sinkURI = "kafka://root:123456@127.0.0.1:3306/"
+	sinkCfg = &SinkConfig{DispatchRules: []*DispatchRule{
+		{Matcher: []string{"a.b"}, Dispatcher: "casuality"},
+	}}
+	warning, err = ValidateDispatcherRule(sinkURI, sinkCfg, true)
+	require.Error(t, err)
+	require.Equal(t, warning, "")
+
+	sinkURI = "kafka://root:123456@127.0.0.1:3306/"
+	sinkCfg = &SinkConfig{DispatchRules: []*DispatchRule{
+		{Matcher: []string{"a.b"}, Dispatcher: "rowid"},
+	}}
+	warning, err = ValidateDispatcherRule(sinkURI, sinkCfg, true)
+	require.Nil(t, err)
+	require.Regexp(t, regexp.MustCompile(".*index-value or rowid distribution mode.*"), warning)
+
+	sinkURI = "kafka://root:123456@127.0.0.1:3306/"
+	sinkCfg = &SinkConfig{DispatchRules: []*DispatchRule{
+		{Matcher: []string{"a.b"}, Dispatcher: "index-value"},
+	}}
+	warning, err = ValidateDispatcherRule(sinkURI, sinkCfg, true)
+	require.Nil(t, err)
+	require.Regexp(t, regexp.MustCompile(".*index-value or rowid distribution mode.*"), warning)
+
+	sinkURI = "kafka://root:123456@127.0.0.1:3306/"
+	sinkCfg = &SinkConfig{DispatchRules: []*DispatchRule{
+		{Matcher: []string{"a.b"}, Dispatcher: "ts"},
+		{Matcher: []string{"a.c"}, Dispatcher: "default"},
+	}}
+	warning, err = ValidateDispatcherRule(sinkURI, sinkCfg, true)
+	require.Nil(t, err)
+	require.Equal(t, warning, "")
 }
