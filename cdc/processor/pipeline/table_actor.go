@@ -149,14 +149,14 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 			if err != nil {
 				t.stop(err)
 			}
-		case message.TypeStop:
+		case message.TypeStopSink:
 			go func() {
 				_, err := t.sinkNode.HandleMessage(ctx, pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}))
 				if err != nil {
 					t.stop(err)
 				}
 			}()
-		case message.TypeStopPipeline:
+		case message.TypeStop:
 			t.stop(nil)
 			return false
 		}
@@ -299,7 +299,7 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 
 // AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
 func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
-	msg := message.StopMessage()
+	msg := message.StopSinkMessage()
 	err := t.tableActorRouter.Send(t.actorID, msg)
 	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
 	if err != nil {
@@ -338,7 +338,7 @@ func (t *tableActor) Name() string {
 // Cancel stops this table actor immediately and destroy all resources
 // created by this table pipeline
 func (t *tableActor) Cancel() {
-	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopPipelineMessage()); err != nil {
+	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
 		log.Warn("fails to send Stop message",
 			zap.Uint64("tableID", uint64(t.tableID)), zap.Error(err))
 	}
