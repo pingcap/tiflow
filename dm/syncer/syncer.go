@@ -965,7 +965,7 @@ func (s *Syncer) addJob(job *job) {
 	}
 }
 
-// checkShouldFlush checks syncer should flush now because last flushing is outdated.
+// checkShouldFlush checks whether syncer should flush now because last flushing is outdated.
 func (s *Syncer) checkShouldFlush() {
 	if !s.checkpoint.CheckGlobalPoint() || !s.checkpoint.CheckLastSnapshotCreationTime() {
 		return
