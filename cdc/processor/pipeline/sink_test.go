@@ -602,7 +602,7 @@ func (s *outputSuite) TestFlushSinkReleaseFlowController(c *check.C) {
 	flowController := &flushFlowController{}
 	sink := &flushSink{}
 	// sNode is a sinkNode
-	sNode := newSinkNode(sink, 0, 10, flowController)
+	sNode := newSinkNode(1, sink, 0, 10, flowController)
 	c.Assert(sNode.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
 	sNode.barrierTs = 10
 
