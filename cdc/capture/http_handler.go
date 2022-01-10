@@ -544,28 +544,12 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-<<<<<<< HEAD
-=======
-	status, exist := statuses[captureID]
-	if !exist {
-		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
-		return
-	}
->>>>>>> 998ec3ad3 (http_api (ticdc): fix http api 'get processor' panic. (#4117))
 
 	_, position, err := h.capture.etcdClient.GetTaskPosition(ctx, changefeedID, captureID)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-<<<<<<< HEAD
-=======
-	position, exist := positions[captureID]
-	if !exist {
-		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
-		return
-	}
->>>>>>> 998ec3ad3 (http_api (ticdc): fix http api 'get processor' panic. (#4117))
 
 	processorDetail := &model.ProcessorDetail{CheckPointTs: position.CheckPointTs, ResolvedTs: position.ResolvedTs, Error: position.Error}
 	tables := make([]int64, 0)
