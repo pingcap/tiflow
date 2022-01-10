@@ -542,7 +542,6 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 		if status.CheckpointTs != checkpointTs {
 			status.CheckpointTs = checkpointTs
 			changed = true
-			log.Info("updateStatus", zap.Uint64("checkpointTs", checkpointTs))
 		}
 		return status, changed, nil
 	})
