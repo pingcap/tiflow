@@ -15,21 +15,16 @@ package etcd
 import (
 	"math"
 	"math/rand"
+	"testing"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3"
 )
 
-type utilSuit struct{}
-
-var _ = check.Suite(&utilSuit{})
-
-func (s utilSuit) TestGetRevisionFromWatchOpts(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestGetRevisionFromWatchOpts(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		rev := rand.Int63n(math.MaxInt64)
 		opt := clientv3.WithRev(rev)
-		c.Assert(getRevisionFromWatchOpts(opt), check.Equals, rev)
+		require.Equal(t, getRevisionFromWatchOpts(opt), rev)
 	}
 }

@@ -374,6 +374,8 @@ message OperateSchemaRequest {
     string schema = 6; // schema content, a `CREATE TABLE` statement
     bool flush = 7; // flush table info and checkpoint
     bool sync = 8; // sync the table info to master
+    bool fromSource = 9; // update schema from source schema
+    bool fromTarget = 10; // update schema from target schema
 }
 
 message OperateSchemaResponse {
