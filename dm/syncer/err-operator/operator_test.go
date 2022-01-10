@@ -86,14 +86,14 @@ func (o *testOperatorSuite) TestOperator(c *C) {
 	// skip event
 	err = h.Set(&pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Skip, BinlogPos: startLocation.Position.String()}, nil)
 	c.Assert(err, IsNil)
-	apply, op := h.MatchAndApply(startLocation, endLocation, event1.Header.Timestamp)
+	apply, op := h.MatchAndApply(startLocation, endLocation, event1)
 	c.Assert(apply, IsTrue)
 	c.Assert(op, Equals, pb.ErrorOp_Skip)
 
 	// overwrite operator
 	err = h.Set(&pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, BinlogPos: startLocation.Position.String()}, []*replication.BinlogEvent{event1, event2})
 	c.Assert(err, IsNil)
-	apply, op = h.MatchAndApply(startLocation, endLocation, event2.Header.Timestamp)
+	apply, op = h.MatchAndApply(startLocation, endLocation, event2)
 	c.Assert(apply, IsTrue)
 	c.Assert(op, Equals, pb.ErrorOp_Replace)
 
@@ -126,7 +126,7 @@ func (o *testOperatorSuite) TestOperator(c *C) {
 	// revert exist operator
 	err = h.Set(&pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Revert, BinlogPos: startLocation.Position.String()}, nil)
 	c.Assert(err, IsNil)
-	apply, op = h.MatchAndApply(startLocation, endLocation, event1.Header.Timestamp)
+	apply, op = h.MatchAndApply(startLocation, endLocation, event1)
 	c.Assert(apply, IsFalse)
 	c.Assert(op, Equals, pb.ErrorOp_InvalidErrorOp)
 
@@ -139,17 +139,17 @@ func (o *testOperatorSuite) TestOperator(c *C) {
 	// test removeOutdated
 	flushLocation := startLocation
 	c.Assert(h.RemoveOutdated(flushLocation), IsNil)
-	apply, op = h.MatchAndApply(startLocation, endLocation, event1.Header.Timestamp)
+	apply, op = h.MatchAndApply(startLocation, endLocation, event1)
 	c.Assert(apply, IsTrue)
 	c.Assert(op, Equals, pb.ErrorOp_Replace)
 
 	flushLocation = endLocation
 	c.Assert(h.RemoveOutdated(flushLocation), IsNil)
-	apply, op = h.MatchAndApply(startLocation, endLocation, event1.Header.Timestamp)
+	apply, op = h.MatchAndApply(startLocation, endLocation, event1)
 	c.Assert(apply, IsFalse)
 	c.Assert(op, Equals, pb.ErrorOp_InvalidErrorOp)
 
-	apply, op = h.MatchAndApply(endLocation, nextLocation, event1.Header.Timestamp)
+	apply, op = h.MatchAndApply(endLocation, nextLocation, event1)
 	c.Assert(apply, IsTrue)
 	c.Assert(op, Equals, pb.ErrorOp_Replace)
 }
@@ -211,20 +211,10 @@ func (o *testOperatorSuite) TestInjectOperator(c *C) {
 	c.Assert(isInject, IsFalse)
 
 	// test MatchAndApply
-	apply, op := h.MatchAndApply(startLocation, endLocation, event2.Header.Timestamp)
+	apply, op := h.MatchAndApply(startLocation, endLocation, event2)
 	c.Assert(apply, IsTrue)
 	c.Assert(op, Equals, pb.ErrorOp_Inject)
-	apply, op = h.MatchAndApply(endLocation, nextLocation, event2.Header.Timestamp)
-	c.Assert(apply, IsFalse)
-	c.Assert(op, Equals, pb.ErrorOp_InvalidErrorOp)
-
-	// test set all injected
-	h.SetHasAllInjected(endLocation)
-	apply, op = h.MatchAndApply(startLocation, endLocation, event2.Header.Timestamp)
-	c.Assert(apply, IsTrue)
-	c.Assert(op, Equals, pb.ErrorOp_Inject)
-	h.SetHasAllInjected(startLocation)
-	apply, op = h.MatchAndApply(startLocation, endLocation, event2.Header.Timestamp)
+	apply, op = h.MatchAndApply(endLocation, nextLocation, event2)
 	c.Assert(apply, IsFalse)
 	c.Assert(op, Equals, pb.ErrorOp_InvalidErrorOp)
 }

@@ -365,17 +365,18 @@ function DM_INJECT_DML_ERROR_CASE() {
 		"binlog inject test alter table ${db}.${tb1} drop index b;alter table ${db}.${tb1} add unique(c);" \
 		"\"result\": true" 2
 
-	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where d = 2;" "count(1): 1"
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where b = 2;" "count(1): 2"
 }
 
 function DM_INJECT_ERROR() {
+	# inject at ddl
 	run_case INJECT_DDL_ERROR "single-source-no-sharding" \
 		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"" \
 		"clean_table" ""
-	# TODO inject dml, because get dml error position is not supported.
-	# run_case INJECT_DML_ERROR "single-source-no-sharding" \
-	# 	"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b varchar(10));\"" \
-	# 	"clean_table" ""
+	# inject at dml
+	run_case INJECT_DML_ERROR "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b varchar(10));\"" \
+		"clean_table" ""
 }
 
 function DM_LIST_ERROR_CASE() {
