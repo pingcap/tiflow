@@ -175,6 +175,9 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			return
 		}
 		m.shouldBeRunning = true
+		m.lastErrorTime = time.Unix(0, 0)
+		m.expBackoff.Reset()
+		m.backoffInterval = m.expBackoff.NextBackOff()
 		jobsPending = true
 		m.patchState(model.StateNormal)
 		// to make sure the changefeed can running in next tick,
@@ -186,9 +189,6 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			if info.Error != nil || len(info.ErrorHis) != 0 {
 				info.Error = nil
 				info.ErrorHis = nil
-				m.lastErrorTime = time.Unix(0, 0)
-				m.expBackoff.Reset()
-				m.backoffInterval = m.expBackoff.NextBackOff()
 				return info, true, nil
 			}
 			return info, false, nil
@@ -340,7 +340,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			m.lastErrorTime = time.Now()
 			info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 		}
-		// if no errors occured in a time window, we can assume that changefeed
+		// if no errors occurred in a time window, we can assume that changefeed
 		// was running normally before. So if we get an error for this changefeed now,
 		// we must reset the expBackoff and re-backoff from InitialInterval.
 		if !info.ErrorsReachedThreshold(m.backoffInterval) {
@@ -363,7 +363,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			// if the duration since backoff start exceeds MaxElapsedTime,
 			// we set the state of changefeed to "failed" and don't let it run again unless it is manually resumed.
 			if m.backoffInterval == backoff.Stop {
-				log.Warn("changefeed will not be restarted because the duration since backoff start exceeds",
+				log.Warn("changefeed will not be restarted because it has been failing for a long time period",
 					zap.Duration("max-elapsed-time", m.expBackoff.MaxElapsedTime))
 				m.shouldBeRunning = false
 				m.patchState(model.StateFailed)

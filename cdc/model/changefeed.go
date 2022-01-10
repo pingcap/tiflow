@@ -100,7 +100,7 @@ const (
 	ErrorHistoryThreshold = 1
 
 	// deltaBackoffInterval is added to the time window to safely ensure that
-	// no errors occured in that window
+	// no errors occurred in that window
 	deltaBackoffInterval = 30 * time.Second
 )
 
