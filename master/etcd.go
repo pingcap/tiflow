@@ -14,10 +14,12 @@
 package master
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	perrors "github.com/pingcap/errors"
 	"go.etcd.io/etcd/embed"
 	"google.golang.org/grpc"
 )
@@ -28,7 +30,9 @@ const (
 )
 
 // startEtcd starts an embedded etcd server.
-func startEtcd(etcdCfg *embed.Config,
+func startEtcd(
+	ctx context.Context,
+	etcdCfg *embed.Config,
 	gRPCSvr func(*grpc.Server),
 	httpHandles map[string]http.Handler,
 	startTimeout time.Duration,
@@ -47,6 +51,9 @@ func startEtcd(etcdCfg *embed.Config,
 	}
 
 	select {
+	case <-ctx.Done():
+		e.Server.Stop()
+		return nil, perrors.Trace(ctx.Err())
 	case <-e.Server.ReadyNotify():
 	case <-time.After(startTimeout):
 		// if fail to startup, the etcd server may be still blocking in

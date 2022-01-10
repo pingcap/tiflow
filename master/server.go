@@ -302,7 +302,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.startForTest(ctx)
 	}
 
-	err = s.startGrpcSrv()
+	err = s.startGrpcSrv(ctx)
 	if err != nil {
 		return
 	}
@@ -325,7 +325,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	return wg.Wait()
 }
 
-func (s *Server) startGrpcSrv() (err error) {
+func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	etcdCfg := etcdutils.GenEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
 	// prepare to join an existing etcd cluster.
 	err = etcdutils.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
@@ -356,7 +356,7 @@ func (s *Server) startGrpcSrv() (err error) {
 	}
 
 	// generate grpcServer
-	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, httpHandlers, etcdStartTimeout)
+	s.etcd, err = startEtcd(ctx, etcdCfg, gRPCSvr, httpHandlers, etcdStartTimeout)
 	if err != nil {
 		return
 	}
