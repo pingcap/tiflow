@@ -225,6 +225,7 @@ func (c *TablesChecker) checkAST(stmt ast.StmtNode) []*incompatibilityOption {
 	}
 
 	var options []*incompatibilityOption
+
 	// check columns
 	for _, def := range st.Cols {
 		option := c.checkColumnDef(def)
@@ -256,6 +257,8 @@ func (c *TablesChecker) checkAST(stmt ast.StmtNode) []*incompatibilityOption {
 	}
 
 	// check options
+	// TODO: in fact, this doesn't work
+	// unsupported character report an error in `ParseOneStmt`
 	for _, opt := range st.Options {
 		option := c.checkTableOption(opt)
 		if option != nil {

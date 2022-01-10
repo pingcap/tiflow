@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
@@ -152,7 +153,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage tikv.Storage, kvStor
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	regionCache := tikv.NewRegionCache(pdCli)
 
-	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache)
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache, pdtime.NewClock4Test())
 
 	startTS := mustGetTimestamp(t, storage)
 
@@ -242,7 +243,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage tikv.Storage, 
 
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	regionCache := tikv.NewRegionCache(pdCli)
-	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache)
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache, pdtime.NewClock4Test())
 
 	startTS := mustGetTimestamp(t, storage)
 	lockresolver := txnutil.NewLockerResolver(storage)

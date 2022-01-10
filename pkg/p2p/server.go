@@ -36,6 +36,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const (
+	messageServerReportsIndividualMessageSize = true
+)
+
 // MessageServerConfig stores configurations for the MessageServer
 type MessageServerConfig struct {
 	// The maximum number of entries to be cached for topics with no handler registered
@@ -96,7 +100,7 @@ func newCDCPeer(senderID NodeID, epoch int64, sender *streamHandle) *cdcPeer {
 func (p *cdcPeer) abortWithError(ctx context.Context, err error) {
 	if err1 := p.sender.Send(ctx, errorToRPCResponse(err)); err1 != nil {
 		log.Warn("could not send error to peer", zap.Error(err),
-			zap.NamedError("send-err", err1))
+			zap.NamedError("sendErr", err1))
 		return
 	}
 	log.Debug("sent error to peer", zap.Error(err))
@@ -397,10 +401,10 @@ func (m *MessageServer) AddHandler(
 			}).Inc()
 
 			log.Debug("skipping peer message",
-				zap.String("sender-id", sm.SenderId),
+				zap.String("senderID", sm.SenderId),
 				zap.String("topic", topic),
-				zap.Int64("skipped-Seq", entry.Sequence),
-				zap.Int64("last-ack", lastAck))
+				zap.Int64("skippedSeq", entry.Sequence),
+				zap.Int64("lastAck", lastAck))
 			return nil
 		}
 
@@ -529,7 +533,8 @@ func (m *MessageServer) registerPeer(
 	streamMeta := sender.GetStreamMeta()
 
 	log.Info("peer connection received",
-		zap.String("sender-id", streamMeta.SenderId),
+		zap.String("senderID", streamMeta.SenderId),
+		zap.String("senderAdvertiseAddr", streamMeta.SenderAdvertisedAddr),
 		zap.String("addr", clientIP),
 		zap.Int64("epoch", streamMeta.Epoch))
 
@@ -549,7 +554,7 @@ func (m *MessageServer) registerPeer(
 		// there is an existing peer
 		if peer.Epoch > streamMeta.Epoch {
 			log.Warn("incoming connection is stale",
-				zap.String("sender-id", streamMeta.SenderId),
+				zap.String("senderID", streamMeta.SenderId),
 				zap.String("addr", clientIP),
 				zap.Int64("epoch", streamMeta.Epoch))
 
@@ -563,7 +568,7 @@ func (m *MessageServer) registerPeer(
 			m.peerLock.Unlock()
 		} else {
 			log.Warn("incoming connection is duplicate",
-				zap.String("sender-id", streamMeta.SenderId),
+				zap.String("senderID", streamMeta.SenderId),
 				zap.String("addr", clientIP),
 				zap.Int64("epoch", streamMeta.Epoch))
 
@@ -644,8 +649,8 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 			case resp, ok := <-sendCh:
 				if !ok {
 					log.Info("peer stream handle is closed",
-						zap.String("peer-addr", streamHandle.GetStreamMeta().SenderAdvertisedAddr),
-						zap.String("peer-id", streamHandle.GetStreamMeta().SenderId))
+						zap.String("peerAddr", streamHandle.GetStreamMeta().SenderAdvertisedAddr),
+						zap.String("peerID", streamHandle.GetStreamMeta().SenderId))
 					// cancel the stream when sendCh is closed
 					cancel()
 					return nil
@@ -697,6 +702,12 @@ func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, stre
 	metricsServerMessageBatchHistogram := serverMessageBatchHistogram.With(prometheus.Labels{
 		"from": streamHandle.GetStreamMeta().SenderAdvertisedAddr,
 	})
+	metricsServerMessageBatchBytesHistogram := serverMessageBatchBytesHistogram.With(prometheus.Labels{
+		"from": streamHandle.GetStreamMeta().SenderAdvertisedAddr,
+	})
+	metricsServerMessageBytesHistogram := serverMessageBytesHistogram.With(prometheus.Labels{
+		"from": streamHandle.GetStreamMeta().SenderAdvertisedAddr,
+	})
 
 	for {
 		failpoint.Inject("ServerInjectServerRestart", func() {
@@ -713,11 +724,25 @@ func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, stre
 
 		batchSize := len(packet.GetEntries())
 		log.Debug("received packet", zap.String("streamHandle", streamHandle.GetStreamMeta().SenderId),
-			zap.Int("num-entries", batchSize))
-		metricsServerMessageBatchHistogram.Observe(float64(batchSize))
+			zap.Int("numEntries", batchSize))
 
-		if len(packet.GetEntries()) > 0 {
-			metricsServerMessageCount.Inc()
+		batchBytes := packet.Size()
+		metricsServerMessageBatchBytesHistogram.Observe(float64(batchBytes))
+		metricsServerMessageBatchHistogram.Observe(float64(batchSize))
+		metricsServerMessageCount.Add(float64(batchSize))
+
+		entries := packet.GetEntries()
+		if batchSize > 0 {
+			if messageServerReportsIndividualMessageSize /* true for now */ {
+				// Note that this can be costly if the number of messages is huge.
+				// However, the current usage of this package in TiCDC should not
+				// cause any problem, as the messages are for metadata only.
+				for _, entry := range entries {
+					messageWireSize := entry.Size()
+					metricsServerMessageBytesHistogram.Observe(float64(messageWireSize))
+				}
+			}
+
 			// See the comment above on why use scheduleTaskBlocking.
 			if err := m.scheduleTaskBlocking(stream.Context(), taskOnMessageBatch{
 				streamMeta:     streamHandle.GetStreamMeta(),

@@ -52,7 +52,7 @@ type sorterNode struct {
 
 	mounter entry.Mounter
 
-	eg     errgroup.Group
+	eg     *errgroup.Group
 	cancel context.CancelFunc
 
 	cleanID     actor.ID
@@ -66,6 +66,9 @@ type sorterNode struct {
 	barrierTs model.Ts
 
 	replConfig *config.ReplicaConfig
+
+	// isTableActorMode identify if the sorter node is run is actor mode, todo: remove it after GA
+	isTableActorMode bool
 }
 
 func newSorterNode(
@@ -85,34 +88,44 @@ func newSorterNode(
 }
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
+	wg := errgroup.Group{}
+	return n.StartActorNode(ctx, false, &wg)
+}
+
+func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group) error {
+	n.isTableActorMode = isTableActorMode
+	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
-	var sorter sorter.EventSorter
+	var eventSorter sorter.EventSorter
 	sortEngine := ctx.ChangefeedVars().Info.Engine
 	switch sortEngine {
 	case model.SortInMemory:
-		sorter = memory.NewEntrySorter()
+		eventSorter = memory.NewEntrySorter()
 	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
 		if sortEngine == model.SortInFile {
 			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
-				zap.String("changefeed-id", ctx.ChangefeedVars().ID), zap.String("table-name", n.tableName))
+				zap.String("changefeed", ctx.ChangefeedVars().ID), zap.String("tableName", n.tableName))
 		}
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
 			startTs := ctx.ChangefeedVars().Info.StartTs
 			actorID := ctx.GlobalVars().SorterSystem.ActorID(uint64(n.tableID))
 			router := ctx.GlobalVars().SorterSystem.Router()
-			levelSorter := leveldb.NewSorter(ctx, n.tableID, startTs, router, actorID)
+			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
+			levelSorter := leveldb.NewSorter(
+				ctx, n.tableID, startTs, router, actorID, compactScheduler,
+				config.GetGlobalServerConfig().Debug.DB)
 			n.cleanID = actorID
 			n.cleanTask = levelSorter.CleanupTask()
 			n.cleanRouter = ctx.GlobalVars().SorterSystem.CleanerRouter()
-			sorter = levelSorter
+			eventSorter = levelSorter
 		} else {
 			// Sorter dir has been set and checked when server starts.
 			// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 			sortDir := config.GetGlobalServerConfig().Sorter.SortDir
 			var err error
-			sorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+			eventSorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -124,7 +137,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
 	n.eg.Go(func() error {
-		ctx.Throw(errors.Trace(sorter.Run(stdCtx)))
+		ctx.Throw(errors.Trace(eventSorter.Run(stdCtx)))
 		return nil
 	})
 	n.eg.Go(func() error {
@@ -150,7 +163,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 				return nil
 			case <-metricsTicker.C:
 				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
-			case msg, ok := <-sorter.Output():
+			case msg, ok := <-eventSorter.Output():
 				if !ok {
 					// sorter output channel closed
 					return nil
@@ -230,13 +243,17 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			}
 		}
 	})
-	n.sorter = sorter
+	n.sorter = eventSorter
 	return nil
 }
 
 // Receive receives the message from the previous node
 func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
-	msg := ctx.Message()
+	_, err := n.TryHandleDataMessage(ctx, ctx.Message())
+	return err
+}
+
+func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		rawKV := msg.PolymorphicEvent.RawKV
@@ -256,7 +273,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 				!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
 				// Do not send resolved ts events that is larger than
 				// barrier ts.
-				// When DDL puller stall, resolved events that outputed by
+				// When DDL puller stall, resolved events that outputted by
 				// sorter may pile up in memory, as they have to wait DDL.
 				//
 				// Disabled if redolog is on, it requires sink reports
@@ -267,16 +284,25 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 					model.NewResolvedPolymorphicEvent(0, n.barrierTs))
 			}
 		}
+		// todo: remove feature switcher after GA
+		if n.isTableActorMode {
+			return n.sorter.TryAddEntry(ctx, msg.PolymorphicEvent)
+		}
 		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
+		return true, nil
 	case pipeline.MessageTypeBarrier:
 		if msg.BarrierTs > n.barrierTs {
 			n.barrierTs = msg.BarrierTs
 		}
 		fallthrough
 	default:
-		ctx.SendToNextNode(msg)
+		// todo: remove feature switcher after GA
+		if n.isTableActorMode {
+			return ctx.(*actorNodeContext).TrySendToNextNode(msg), nil
+		}
+		ctx.(pipeline.NodeContext).SendToNextNode(msg)
+		return true, nil
 	}
-	return nil
 }
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {

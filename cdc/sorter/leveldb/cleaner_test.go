@@ -87,66 +87,48 @@ func TestCleanerPoll(t *testing.T) {
 	// Ensure there are some key/values belongs to uid2 table1.
 	start := encoding.EncodeTsKey(2, 1, 0)
 	limit := encoding.EncodeTsKey(2, 2, 0)
-	snap, err := db.Snapshot()
-	require.Nil(t, err)
-	iter := snap.Iterator(start, limit)
+	iter := db.Iterator(start, limit)
 	require.True(t, iter.First())
 	require.Nil(t, iter.Release())
-	require.Nil(t, snap.Release())
 
 	// Clean up uid2 table1
 	closed := !clean.Poll(ctx, makeCleanTask(2, 1))
 	require.False(t, closed)
 
 	// Ensure no key/values belongs to uid2 table1
-	snap, err = db.Snapshot()
-	require.Nil(t, err)
-	iter = snap.Iterator(start, limit)
+	iter = db.Iterator(start, limit)
 	require.False(t, iter.First())
 	require.Nil(t, iter.Release())
-	require.Nil(t, snap.Release())
 
 	// Ensure uid1 table1 is untouched.
 	start = encoding.EncodeTsKey(1, 1, 0)
 	limit = encoding.EncodeTsKey(1, 2, 0)
-	snap, err = db.Snapshot()
-	require.Nil(t, err)
-	iter = snap.Iterator(start, limit)
+	iter = db.Iterator(start, limit)
 	require.True(t, iter.First())
 	require.Nil(t, iter.Release())
-	require.Nil(t, snap.Release())
 
 	// Ensure uid3 table2 is untouched.
 	start = encoding.EncodeTsKey(3, 2, 0)
 	limit = encoding.EncodeTsKey(3, 3, 0)
-	snap, err = db.Snapshot()
-	require.Nil(t, err)
-	iter = snap.Iterator(start, limit)
+	iter = db.Iterator(start, limit)
 	require.True(t, iter.First())
 	require.Nil(t, iter.Release())
-	require.Nil(t, snap.Release())
 
 	// Clean up uid3 table2
 	closed = !clean.Poll(ctx, makeCleanTask(3, 2))
 	require.False(t, closed)
 
 	// Ensure no key/values belongs to uid3 table2
-	snap, err = db.Snapshot()
-	require.Nil(t, err)
-	iter = snap.Iterator(start, limit)
+	iter = db.Iterator(start, limit)
 	require.False(t, iter.First())
 	require.Nil(t, iter.Release())
-	require.Nil(t, snap.Release())
 
 	// Ensure uid4 table2 is untouched.
 	start = encoding.EncodeTsKey(4, 2, 0)
 	limit = encoding.EncodeTsKey(4, 3, 0)
-	snap, err = db.Snapshot()
-	require.Nil(t, err)
-	iter = snap.Iterator(start, limit)
+	iter = db.Iterator(start, limit)
 	require.True(t, iter.First())
 	require.Nil(t, iter.Release())
-	require.Nil(t, snap.Release())
 
 	// Close leveldb.
 	closed = !clean.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
@@ -207,15 +189,12 @@ func TestCleanerWriteRateLimited(t *testing.T) {
 	keys := [][]byte{}
 	start := encoding.EncodeTsKey(0, 0, 0)
 	limit := encoding.EncodeTsKey(5, 0, 0)
-	snap, err := db.Snapshot()
-	require.Nil(t, err)
-	iter := snap.Iterator(start, limit)
+	iter := db.Iterator(start, limit)
 	for iter.Next() {
 		key := append([]byte{}, iter.Key()...)
 		keys = append(keys, key)
 	}
 	require.Nil(t, iter.Release())
-	require.Nil(t, snap.Release())
 	require.Equal(t, 7, len(keys), "%v", keys)
 
 	// Must speed limited.
@@ -341,12 +320,9 @@ func TestCleanerTaskRescheduled(t *testing.T) {
 	// Ensure all data are deleted.
 	start := encoding.EncodeTsKey(0, 0, 0)
 	limit := encoding.EncodeTsKey(4, 0, 0)
-	snap, err := db.Snapshot()
-	require.Nil(t, err)
-	iter := snap.Iterator(start, limit)
+	iter := db.Iterator(start, limit)
 	require.False(t, iter.First(), fmt.Sprintln(hex.EncodeToString(iter.Key())))
 	require.Nil(t, iter.Release())
-	require.Nil(t, snap.Release())
 
 	// Close leveldb.
 	closed = !clean.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
