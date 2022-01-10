@@ -26,8 +26,11 @@ const (
 	defaultMockControllerID = 1
 )
 
-// defaultMaxMessageBytes specifies the default max message bytes.
-var defaultMaxMessageBytes = "10485760"
+var (
+	// defaultMaxMessageBytes specifies the default max message bytes.
+	defaultMaxMessageBytes   = "10485760"
+	defaultMinInsyncReplicas = "1"
+)
 
 // ClusterAdminClientMockImpl mock implements the admin client interface.
 type ClusterAdminClientMockImpl struct {
@@ -42,15 +45,22 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	topics := make(map[string]sarama.TopicDetail)
 	configEntries := make(map[string]*string)
 	configEntries[TopicMaxMessageBytesConfigName] = &defaultMaxMessageBytes
+	configEntries[MinInsyncReplicasConfigName] = &defaultMinInsyncReplicas
 	topics[DefaultMockTopicName] = sarama.TopicDetail{
 		NumPartitions: 3,
 		ConfigEntries: configEntries,
 	}
 
-	brokerConfigs := []sarama.ConfigEntry{{
-		Name:  BrokerMessageMaxBytesConfigName,
-		Value: defaultMaxMessageBytes,
-	}}
+	brokerConfigs := []sarama.ConfigEntry{
+		{
+			Name:  BrokerMessageMaxBytesConfigName,
+			Value: defaultMaxMessageBytes,
+		},
+		{
+			Name:  MinInsyncReplicasConfigName,
+			Value: defaultMinInsyncReplicas,
+		},
+	}
 
 	return &ClusterAdminClientMockImpl{
 		topics:        topics,
@@ -70,8 +80,16 @@ func (c *ClusterAdminClientMockImpl) DescribeCluster() (brokers []*sarama.Broker
 }
 
 // DescribeConfig return brokerConfigs directly.
-func (c *ClusterAdminClientMockImpl) DescribeConfig(_ sarama.ConfigResource) ([]sarama.ConfigEntry, error) {
-	return c.brokerConfigs, nil
+func (c *ClusterAdminClientMockImpl) DescribeConfig(resource sarama.ConfigResource) ([]sarama.ConfigEntry, error) {
+	var result []sarama.ConfigEntry
+	for _, name := range resource.ConfigNames {
+		for _, config := range c.brokerConfigs {
+			if name == config.Name {
+				result = append(result, config)
+			}
+		}
+	}
+	return result, nil
 }
 
 // CreateTopic adds topic into map.

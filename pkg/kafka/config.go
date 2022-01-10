@@ -22,4 +22,5 @@ const (
 	// Kafka topics.
 	// See: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
 	TopicMaxMessageBytesConfigName = "max.message.bytes"
+	MinInsyncReplicasConfigName    = "min.insync.replicas"
 )
