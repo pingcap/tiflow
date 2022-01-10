@@ -18,7 +18,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -41,23 +40,6 @@ type httpStatusSuite struct{}
 var _ = check.Suite(&httpStatusSuite{})
 
 const retryTime = 20
-
-var addr = "127.0.0.1:8300"
-
-func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
-	statusURL := fmt.Sprintf("%s/status", addr)
-	for i := 0; i < retryTime; i++ {
-		resp, err := http.Get(statusURL)
-		if err == nil {
-			_, err := io.ReadAll(resp.Body)
-			c.Assert(err, check.IsNil)
-			resp.Body.Close()
-			return
-		}
-		time.Sleep(time.Millisecond * 50)
-	}
-	c.Errorf("failed to connect http status for %d retries in every 50ms", retryTime)
-}
 
 func (s *httpStatusSuite) TestServerTLSWithoutCommonName(c *check.C) {
 	defer testleak.AfterTest(c)
