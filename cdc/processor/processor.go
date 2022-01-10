@@ -106,7 +106,7 @@ func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID) (boo
 	}
 
 	log.Info("adding table",
-		zap.Int64("table-id", tableID),
+		zap.Int64("tableID", tableID),
 		cdcContext.ZapFieldChangefeed(ctx))
 	err := p.addTable(ctx, tableID, &model.TableReplicaInfo{})
 	if err != nil {

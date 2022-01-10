@@ -2046,14 +2046,16 @@ func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateSchemaRequest
 			workerReq := workerrpc.Request{
 				Type: workerrpc.CmdOperateSchema,
 				OperateSchema: &pb.OperateWorkerSchemaRequest{
-					Op:       req.Op,
-					Task:     req.Task,
-					Source:   source,
-					Database: req.Database,
-					Table:    req.Table,
-					Schema:   req.Schema,
-					Flush:    req.Flush,
-					Sync:     req.Sync,
+					Op:         req.Op,
+					Task:       req.Task,
+					Source:     source,
+					Database:   req.Database,
+					Table:      req.Table,
+					Schema:     req.Schema,
+					Flush:      req.Flush,
+					Sync:       req.Sync,
+					FromSource: req.FromSource,
+					FromTarget: req.FromTarget,
 				},
 			}
 
