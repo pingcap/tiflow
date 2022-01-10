@@ -157,7 +157,7 @@ func ValidateDispatcherRule(sinkURI string, sinkCfg *SinkConfig, enableOldValue 
 			}
 		} else {
 			if dispatcher == "casuality" {
-				return "", cerror.ErrDispatchRuleUnsupported.GenWithStackByArgs(fmt.Sprintf("unsupported dispatcher:%s for schema:%s", dispatcher, scheme))
+				return "", cerror.ErrDispatchRuleUnsupported.GenWithStackByArgs(fmt.Sprintf("unsupported dispatcher:%s for scheme:%s", dispatcher, scheme))
 			}
 			if (dispatcher == "rowid" || dispatcher == "index-value") && enableOldValue {
 				return fmt.Sprintf("[WARN] This index-value or rowid distribution mode "+
