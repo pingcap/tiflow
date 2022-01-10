@@ -118,7 +118,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		actorID:          actorID,
 	}
 
-	log.Info("spawn and start table actor", zap.Int64("tableID", tableID))
+	log.Info("spawn and start table actor", zap.String("tableName", tableName), zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
 		table.stop(err)
 		return nil, errors.Trace(err)
@@ -127,7 +127,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Info("spawn and start table actor done", zap.Int64("tableID", tableID))
+	log.Info("spawn and start table actor done", zap.String("tableName", tableName), zap.Int64("tableID", tableID))
 	return table, nil
 }
 
@@ -163,7 +163,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 		// process message for each node
 		for _, n := range t.nodes {
 			if err := n.TryRun(ctx); err != nil {
-				log.Error("failed to process message, stop table actor ", zap.Int64("tableID", t.tableID), zap.Error(err))
+				log.Error("failed to process message, stop table actor ", zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Error(err))
 				t.stop(err)
 				break
 			}
@@ -188,18 +188,18 @@ func (t *tableActor) start(ctx context.Context) error {
 		zap.Uint64("quota", t.memoryQuota))
 
 	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName)
-	pCtx := NewContext(ctx, t.vars.TableActorSystem.Router(), t.actorID, t.info, t.vars)
+	pCtx := NewContext(ctx, t.tableName, t.vars.TableActorSystem.Router(), t.actorID, t.info, t.vars)
 	if err := pullerNode.Init(pCtx); err != nil {
-		log.Error("puller fails to start", zap.Error(err))
+		log.Error("puller fails to start", zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Error(err))
 		return err
 	}
 	t.pullerNode = pullerNode
 
 	flowController := common.NewTableFlowController(t.memoryQuota)
 	sorterNode := newSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs, flowController, t.mounter, t.replConfig)
-	sCtx := NewContext(ctx, t.vars.TableActorSystem.Router(), t.actorID, t.info, t.vars)
+	sCtx := NewContext(ctx, t.tableName, t.vars.TableActorSystem.Router(), t.actorID, t.info, t.vars)
 	if err := sorterNode.StartActorNode(sCtx, true, t.wg); err != nil {
-		log.Error("sorter fails to start", zap.Error(err))
+		log.Error("sorter fails to start", zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Error(err))
 		return err
 	}
 	t.sortNode = sorterNode
@@ -212,9 +212,9 @@ func (t *tableActor) start(ctx context.Context) error {
 	var cCtx *cyclicNodeContext
 	if t.cyclicEnabled {
 		cyclicNode := newCyclicMarkNode(t.markTableID)
-		cCtx = NewCyclicNodeContext(NewContext(ctx, t.vars.TableActorSystem.Router(), t.actorID, t.info, t.vars))
+		cCtx = NewCyclicNodeContext(NewContext(ctx, t.tableName, t.vars.TableActorSystem.Router(), t.actorID, t.info, t.vars))
 		if err := cyclicNode.Init(cCtx); err != nil {
-			log.Error("sink fails to start", zap.Error(err))
+			log.Error("sink fails to start", zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Error(err))
 			return err
 		}
 		c = func() *pipeline.Message {
@@ -228,7 +228,7 @@ func (t *tableActor) start(ctx context.Context) error {
 
 	actorSinkNode := newSinkNode(t.tableID, t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
 	if err := actorSinkNode.InitWithReplicaConfig(true, t.replConfig); err != nil {
-		log.Error("sink fails to start", zap.Error(err))
+		log.Error("sink fails to start", zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Error(err))
 		return err
 	}
 	t.sinkNode = actorSinkNode
@@ -247,7 +247,7 @@ func (t *tableActor) start(ctx context.Context) error {
 	t.nodes = append(t.nodes, NewActorNode(c, d))
 
 	t.started = true
-	log.Info("table actor is started", zap.Int64("tableID", t.tableID))
+	log.Info("table actor is started", zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID))
 	return nil
 }
 
@@ -259,7 +259,7 @@ func (t *tableActor) stop(err error) {
 	t.err = err
 	t.cancel()
 	log.Info("table actor will be stopped",
-		zap.Int64("tableID", t.tableID), zap.Error(err))
+		zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Error(err))
 }
 
 func (t *tableActor) checkError() {
@@ -293,7 +293,7 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 	msg := message.BarrierMessage(ts)
 	err := t.tableActorRouter.Send(t.actorID, msg)
 	if err != nil {
-		log.Warn("send fails", zap.Reflect("msg", msg), zap.Error(err))
+		log.Warn("send fails", zap.Reflect("msg", msg), zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Error(err))
 	}
 }
 
@@ -301,7 +301,7 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
 	msg := message.StopSinkMessage()
 	err := t.tableActorRouter.Send(t.actorID, msg)
-	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
+	log.Info("send async stop signal to table", zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
 	if err != nil {
 		if cerror.ErrMailboxFull.Equal(err) {
 			return false
@@ -340,7 +340,7 @@ func (t *tableActor) Name() string {
 func (t *tableActor) Cancel() {
 	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
 		log.Warn("fails to send Stop message",
-			zap.Uint64("tableID", uint64(t.tableID)), zap.Error(err))
+			zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Error(err))
 	}
 }
 

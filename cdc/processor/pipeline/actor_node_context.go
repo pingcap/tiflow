@@ -43,9 +43,11 @@ type actorNodeContext struct {
 	tickMessageThreshold int32
 	// noTickMessageCount is the count of pipeline message that no tick message is sent to actor
 	noTickMessageCount int32
+	tableName          string
 }
 
 func NewContext(stdCtx sdtContext.Context,
+	tableName string,
 	tableActorRouter *actor.Router,
 	tableActorID actor.ID,
 	changefeedVars *context.ChangefeedVars,
@@ -78,7 +80,7 @@ func (c *actorNodeContext) Throw(err error) {
 	if err == nil {
 		return
 	}
-	log.Error("puller stopped", zap.Error(err))
+	log.Error("error occurred during message processing, stop table actor", zap.String("tableName", c.tableName), zap.Error(err))
 	_ = c.tableActorRouter.SendB(c, c.tableActorID, message.StopMessage())
 }
 
