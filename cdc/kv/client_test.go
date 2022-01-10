@@ -43,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -3484,4 +3485,20 @@ func (s *etcdSuite) TestHandleRateLimit(c *check.C) {
 	session.handleRateLimit(ctx)
 	c.Assert(session.rateLimitQueue, check.HasLen, 0)
 	c.Assert(cap(session.rateLimitQueue), check.Equals, 128)
+}
+
+func TestRegionErrorInfoLogRateLimitedHint(t *testing.T) {
+	t.Parallel()
+
+	errInfo := newRegionErrorInfo(singleRegionInfo{}, nil)
+	errInfo.logRateLimitDuration = time.Second
+
+	// True on the first rate limited.
+	require.True(t, errInfo.logRateLimitedHint())
+	require.False(t, errInfo.logRateLimitedHint())
+
+	// True if it lasts too long.
+	time.Sleep(2 * errInfo.logRateLimitDuration)
+	require.True(t, errInfo.logRateLimitedHint())
+	require.False(t, errInfo.logRateLimitedHint())
 }
