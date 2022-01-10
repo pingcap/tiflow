@@ -205,7 +205,7 @@ type Syncer struct {
 
 	errOperatorHolder *operator.Holder
 
-	isReplacingErr bool // true if we are in replace events by handle-error
+	isReplacingOrInjectingErr bool // true if we are in replace or inject events by handle-error
 
 	currentLocationMu struct {
 		sync.RWMutex
@@ -566,7 +566,7 @@ func (s *Syncer) reset() {
 
 	s.execError.Store(nil)
 	s.setErrLocation(nil, nil, false)
-	s.isReplacingErr = false
+	s.isReplacingOrInjectingErr = false
 	s.waitXIDJob.Store(int64(noWait))
 	s.isTransactionEnd = true
 	s.flushSeq = 0
@@ -1657,7 +1657,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			lastLocation = savedGlobalLastLocation // restore global last pos
 		}
 		// if suffix>0, we are replacing error
-		s.isReplacingErr = currentLocation.Suffix != 0
+		s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
 
 		s.locations.reset(currentLocation)
 		err3 := s.streamerController.RedirectStreamer(tctx, currentLocation)
@@ -1724,7 +1724,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 			currentLocation = shardingReSync.currLocation
 			// if suffix>0, we are replacing error
-			s.isReplacingErr = currentLocation.Suffix != 0
+			s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
 			s.locations.reset(shardingReSync.currLocation)
 			err = s.streamerController.RedirectStreamer(tctx, shardingReSync.currLocation)
 			if err != nil {
@@ -1860,7 +1860,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			startLocation.Suffix = currentLocation.Suffix
 
 			endSuffix := startLocation.Suffix
-			if s.isReplacingErr {
+			if s.isReplacingOrInjectingErr {
 				endSuffix++
 			}
 			currentLocation = binlog.InitLocation(
@@ -1877,11 +1877,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				return terror.Annotatef(err, "fail to record GTID %v", ev.GSet)
 			}
 
-			if !s.isReplacingErr {
+			if !s.isReplacingOrInjectingErr {
 				apply, op := s.errOperatorHolder.MatchAndApply(startLocation, currentLocation, e.Header.Timestamp)
 				if apply {
-					if op == pb.ErrorOp_Replace {
-						s.isReplacingErr = true
+					if op == pb.ErrorOp_Replace || op == pb.ErrorOp_Inject {
+						s.isReplacingOrInjectingErr = true
 						// revert currentLocation to startLocation
 						currentLocation = startLocation
 					} else if op == pb.ErrorOp_Skip {
@@ -1918,13 +1918,20 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					continue
 				}
 			}
-			// set endLocation.Suffix=0 of last replace event
+			// set endLocation.Suffix=0 of last replace or inject event
 			// also redirect stream to next event
 			if currentLocation.Suffix > 0 && e.Header.EventSize > 0 {
 				currentLocation.Suffix = 0
-				s.isReplacingErr = false
+				s.isReplacingOrInjectingErr = false
 				s.locations.reset(currentLocation)
-				err = s.streamerController.RedirectStreamer(tctx, currentLocation)
+				if s.errOperatorHolder.IsInject(startLocation) {
+					s.errOperatorHolder.SetHasAllInjected(startLocation)
+					// reset event as startLocation, avoid to be marked in checkpoint
+					currentLocation.Position.Pos = startLocation.Position.Pos
+					err = s.streamerController.RedirectStreamer(tctx, startLocation)
+				} else {
+					err = s.streamerController.RedirectStreamer(tctx, currentLocation)
+				}
 				if err != nil {
 					return err
 				}
@@ -1933,7 +1940,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		// check pass SafeModeExitLoc and try disable safe mode, but not in sharding or replacing error
 		safeModeExitLoc := s.checkpoint.SafeModeExitPoint()
-		if safeModeExitLoc != nil && !s.isReplacingErr && shardingReSync == nil {
+		if safeModeExitLoc != nil && !s.isReplacingOrInjectingErr && shardingReSync == nil {
 			// TODO: for RowsEvent (in fact other than QueryEvent), `currentLocation` is updated in `handleRowsEvent`
 			// so here the meaning of `currentLocation` is the location of last event
 			if binlog.CompareLocation(currentLocation, *safeModeExitLoc, s.cfg.EnableGTID) > 0 {
@@ -3599,7 +3606,6 @@ func (s *Syncer) handleEventError(err error, startLocation, endLocation binlog.L
 	if err == nil {
 		return nil
 	}
-
 	s.setErrLocation(&startLocation, &endLocation, isQueryEvent)
 	if len(originSQL) > 0 {
 		return terror.Annotatef(err, "startLocation: [%s], endLocation: [%s], origin SQL: [%s]", startLocation, endLocation, originSQL)
@@ -3609,9 +3615,9 @@ func (s *Syncer) handleEventError(err error, startLocation, endLocation binlog.L
 
 // getEvent gets an event from streamerController or errOperatorHolder.
 func (s *Syncer) getEvent(tctx *tcontext.Context, startLocation binlog.Location) (*replication.BinlogEvent, error) {
-	// next event is a replace event
-	if s.isReplacingErr {
-		s.tctx.L().Info("try to get replace event", zap.Stringer("location", startLocation))
+	// next event is a replace or inject event
+	if s.isReplacingOrInjectingErr {
+		s.tctx.L().Info("try to get replace or inject event", zap.Stringer("location", startLocation))
 		return s.errOperatorHolder.GetEvent(startLocation)
 	}
 
