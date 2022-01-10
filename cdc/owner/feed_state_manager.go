@@ -359,11 +359,17 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			// clear lastErrorTime to give the changefeed another chance to run
 			m.lastErrorTime = time.Unix(0, 0)
 			m.backoffInterval = m.expBackoff.NextBackOff()
+
 			// if the duration since backoff start exceeds MaxElapsedTime,
 			// we set the state of changefeed to "failed" and don't let it run again unless it is manually resumed.
 			if m.backoffInterval == backoff.Stop {
+				log.Warn("changefeed will not be restarted because the duration since backoff start exceeds",
+					zap.Duration("max-elapsed-time", m.expBackoff.MaxElapsedTime))
 				m.shouldBeRunning = false
 				m.patchState(model.StateFailed)
+			} else {
+				log.Info("changefeed restart backoff interval is changed", zap.String("changefeedID", m.state.ID),
+					zap.Duration("backoff-interval", m.backoffInterval))
 			}
 		}
 	}
