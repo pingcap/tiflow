@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/master"
+	"github.com/hanfei1991/microcosm/servermaster"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/stretchr/testify/require"
@@ -23,7 +23,7 @@ func TestMasterClient(t *testing.T) {
 		if addr == abnormalHost {
 			continue
 		}
-		srv := &master.Server{}
+		srv := &servermaster.Server{}
 		_, err := mock.NewMasterServer(addr, srv)
 		require.Nil(t, err)
 	}
@@ -37,7 +37,7 @@ func TestMasterClient(t *testing.T) {
 	require.Len(t, mcli.Endpoints(), 2)
 
 	// abnormal server master comes back
-	srv := &master.Server{}
+	srv := &servermaster.Server{}
 	_, err = mock.NewMasterServer(abnormalHost, srv)
 	require.Nil(t, err)
 	mcli.UpdateClients(ctx, []string{abnormalHost})

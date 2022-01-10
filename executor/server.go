@@ -115,6 +115,10 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 	return &pb.PauseBatchTasksResponse{}, nil
 }
 
+func (s *Server) DispatchTask(ctx context.Context, request *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
+	panic("implement me")
+}
+
 func (s *Server) Stop() {
 	if s.grpcSrv != nil {
 		s.grpcSrv.Stop()

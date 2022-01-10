@@ -7,8 +7,8 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor"
-	"github.com/hanfei1991/microcosm/master"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/servermaster"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +25,7 @@ func TestClientManager(t *testing.T) {
 	require.NotNil(t, err)
 	require.Nil(t, manager.MasterClient())
 
-	masterCfg := &master.Config{
+	masterCfg := &servermaster.Config{
 		Etcd: &etcdutils.ConfigParams{
 			Name:    "master1",
 			DataDir: "/tmp/df",
@@ -36,7 +36,7 @@ func TestClientManager(t *testing.T) {
 		RPCTimeout:        time.Second,
 	}
 
-	masterServer, err := master.NewServer(masterCfg, test.NewContext())
+	masterServer, err := servermaster.NewServer(masterCfg, test.NewContext())
 	require.Nil(t, err)
 
 	masterCtx, masterCancel := context.WithCancel(ctx)

@@ -1,4 +1,4 @@
-package master
+package servermaster
 
 import (
 	"context"

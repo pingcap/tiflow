@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/executor"
-	"github.com/hanfei1991/microcosm/master"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/servermaster"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/phayes/freeport"
@@ -17,7 +17,7 @@ import (
 
 // TODO: support multi master / executor
 type MiniCluster struct {
-	master       *master.Server
+	master       *servermaster.Server
 	masterCancel func()
 
 	exec       *executor.Server
@@ -32,10 +32,10 @@ func NewEmptyMiniCluster() *MiniCluster {
 	return c
 }
 
-func (c *MiniCluster) CreateMaster(cfg *master.Config) (*test.Context, error) {
+func (c *MiniCluster) CreateMaster(cfg *servermaster.Config) (*test.Context, error) {
 	masterCtx := test.NewContext()
 	masterCtx.SetMetaKV(c.metastore)
-	master, err := master.NewServer(cfg, masterCtx)
+	master, err := servermaster.NewServer(cfg, masterCtx)
 	c.master = master
 	return masterCtx, err
 }
@@ -83,7 +83,7 @@ func (c *MiniCluster) Start1M1E(cc *C) (
 	cc.Assert(err, IsNil)
 	masterAddr = fmt.Sprintf("127.0.0.1:%d", ports[0])
 	workerAddr = fmt.Sprintf("127.0.0.1:%d", ports[1])
-	masterCfg := &master.Config{
+	masterCfg := &servermaster.Config{
 		Etcd: &etcdutils.ConfigParams{
 			Name:    "master1",
 			DataDir: "/tmp/df",

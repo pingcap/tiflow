@@ -180,6 +180,10 @@ func (c *executorClient) PauseBatchTasks(ctx context.Context, req *pb.PauseBatch
 	return resp.(*pb.PauseBatchTasksResponse), err
 }
 
+func (c *executorClient) DispatchTask(ctx context.Context, in *pb.DispatchTaskRequest, opts ...grpc.CallOption) (*pb.DispatchTaskResponse, error) {
+	panic("implement me")
+}
+
 func (s *executorServerConn) Close() error {
 	return nil
 }
