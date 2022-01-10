@@ -46,13 +46,13 @@ func TestSplitResolvedTxn(test *testing.T) {
 			2: uint64(6),
 		},
 		expected: map[model.TableID][]*model.SingleTableTxn{
-			1: {{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 5, Rows: []*model.RowChangedEvent{
+			1: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 5, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
 				{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
-			}}},
-			2: {{Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 6, Rows: []*model.RowChangedEvent{
+			}}}},
+			2: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 6, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
-			}}},
+			}}}},
 		},
 	}, {
 		input: []*model.RowChangedEvent{
@@ -64,19 +64,19 @@ func TestSplitResolvedTxn(test *testing.T) {
 			3: uint64(13),
 		},
 		expected: map[model.TableID][]*model.SingleTableTxn{
-			1: {{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 8, Rows: []*model.RowChangedEvent{
+			1: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 8, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			}}, {Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 11, Rows: []*model.RowChangedEvent{
+			}}}, {RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 11, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 11, Table: &model.TableName{TableID: 1}},
-			}}},
-			2: {{Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 12, Rows: []*model.RowChangedEvent{
+			}}}},
+			2: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 12, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 12, Table: &model.TableName{TableID: 2}},
-			}}},
-			3: {{Table: &model.TableName{TableID: 3}, StartTs: 1, CommitTs: 7, Rows: []*model.RowChangedEvent{
+			}}}},
+			3: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 3}, StartTs: 1, CommitTs: 7, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 3}},
-			}}, {Table: &model.TableName{TableID: 3}, StartTs: 1, CommitTs: 8, Rows: []*model.RowChangedEvent{
+			}}}, {RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 3}, StartTs: 1, CommitTs: 8, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 3}},
-			}}},
+			}}}},
 		},
 	}}, {{ // Testing the short circuit path
 		input: []*model.RowChangedEvent{},
@@ -114,15 +114,15 @@ func TestSplitResolvedTxn(test *testing.T) {
 			2: uint64(6),
 		},
 		expected: map[model.TableID][]*model.SingleTableTxn{
-			1: {{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 5, Rows: []*model.RowChangedEvent{
+			1: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 5, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
-			}}},
-			2: {{Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 6, Rows: []*model.RowChangedEvent{
+			}}}},
+			2: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 6, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
 				{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
-			}}, {Table: &model.TableName{TableID: 2}, StartTs: 2, CommitTs: 6, Rows: []*model.RowChangedEvent{
+			}}}, {RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 2}, StartTs: 2, CommitTs: 6, Rows: []*model.RowChangedEvent{
 				{StartTs: 2, CommitTs: 6, Table: &model.TableName{TableID: 2}},
-			}}},
+			}}}},
 		},
 	}, {
 		input: []*model.RowChangedEvent{
@@ -137,23 +137,23 @@ func TestSplitResolvedTxn(test *testing.T) {
 			2: uint64(13),
 		},
 		expected: map[model.TableID][]*model.SingleTableTxn{
-			1: {{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 8, Rows: []*model.RowChangedEvent{
+			1: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 8, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
 				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
 				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			}}, {Table: &model.TableName{TableID: 1}, StartTs: 2, CommitTs: 8, Rows: []*model.RowChangedEvent{
+			}}}, {RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 1}, StartTs: 2, CommitTs: 8, Rows: []*model.RowChangedEvent{
 				{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
 				{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
 				{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			}}, {Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 9, Rows: []*model.RowChangedEvent{
+			}}}, {RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 9, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 9, Table: &model.TableName{TableID: 1}},
-			}}},
-			2: {{Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 7, Rows: []*model.RowChangedEvent{
+			}}}},
+			2: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 7, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 2}},
 				{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 2}},
-			}}, {Table: &model.TableName{TableID: 2}, StartTs: 2, CommitTs: 7, Rows: []*model.RowChangedEvent{
+			}}}, {RawTableTxn: model.RawTableTxn{Table: &model.TableName{TableID: 2}, StartTs: 2, CommitTs: 7, Rows: []*model.RowChangedEvent{
 				{StartTs: 2, CommitTs: 7, Table: &model.TableName{TableID: 2}},
-			}}},
+			}}}},
 		},
 	}}}
 	for _, tc := range testCases {

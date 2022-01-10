@@ -140,14 +140,15 @@ func (c *ReplicaConfig) Validate() error {
 	return nil
 }
 
+// [TODO] After merging cli/openapi parameter check code, pls make this function as member function of ReplicaConfig
 // @return: string, warning info if nessesary
 //			error
-func (c *ReplicaConfig) ValidateDispatcherRule(sinkURI string) (string, error) {
+func ValidateDispatcherRule(sinkURI string, sinkCfg *SinkConfig, enableOldValue bool) (string, error) {
 	sinkURIParsed, err := url.Parse(sinkURI)
 	if err != nil {
 		return "", cerror.ErrSinkURIInvalid.Wrap(errors.Annotatef(err, "sink-uri:%s", sinkURI))
 	}
-	for _, rules := range c.Sink.DispatchRules {
+	for _, rules := range sinkCfg.DispatchRules {
 		scheme := strings.ToLower(sinkURIParsed.Scheme)
 		dispatcher := strings.ToLower(rules.Dispatcher)
 		if scheme == "mysql" || scheme == "tidb" {
@@ -158,7 +159,7 @@ func (c *ReplicaConfig) ValidateDispatcherRule(sinkURI string) (string, error) {
 			if dispatcher == "casuality" {
 				return "", cerror.ErrDispatchRuleUnsupported.GenWithStackByArgs(fmt.Sprintf("unsupported dispatcher:%s for schema:%s", dispatcher, scheme))
 			}
-			if (dispatcher == "rowid" || dispatcher == "index-value") && c.EnableOldValue {
+			if (dispatcher == "rowid" || dispatcher == "index-value") && enableOldValue {
 				return fmt.Sprintf("[WARN] This index-value distribution mode "+
 					"does not guarantee row-level orderliness when "+
 					"switching on the old value, so please use caution! dispatch-rules: %#v", rules), nil

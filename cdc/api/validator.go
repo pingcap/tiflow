@@ -84,7 +84,7 @@ func verifyCreateChangefeedConfig(
 	}
 
 	// verify sink config
-	warning, err := changefeedConfig.SinkConfig.validateDispatcherRule(changefeedConfig.SinkURI)
+	warning, err := config.ValidateDispatcherRule(changefeedConfig.SinkURI, changefeedConfig.SinkConfig, true /*enableOldValue*/)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +196,7 @@ func verifyUpdateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 	}
 
 	// verify sink config
-	warning, err := changefeedConfig.SinkConfig.validateDispatcherRule(changefeedConfig.SinkURI)
+	warning, err := config.ValidateDispatcherRule(changefeedConfig.SinkURI, changefeedConfig.SinkConfig, true /*enableOldValue*/)
 	if err != nil {
 		return nil, err
 	}

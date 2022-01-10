@@ -276,6 +276,11 @@ error = '''
 filter rule is invalid
 '''
 
+["CDC:ErrFilterRuleUnsupported"]
+error = '''
+dispatch rule is unsupported: %s
+'''
+
 ["CDC:ErrFlowControllerAborted"]
 error = '''
 flow controller is aborted
@@ -894,6 +899,11 @@ service safepoint lost. current safepoint is %d, please remove all changefeed(s)
 ["CDC:ErrSinkInvalidConfig"]
 error = '''
 sink config invalid
+'''
+
+["CDC:ErrSinkTypeForDispatcher"]
+error = '''
+unsupported sink type for dispatcher: %s
 '''
 
 ["CDC:ErrSinkURIInvalid"]

@@ -38,8 +38,8 @@ func TestFilterAndReduceTxns(t *testing.T) {
 			replicaID: 0,
 		},
 		{
-			input:     map[model.TableID][]*model.SingleTableTxn{1: {{Table: &model.TableName{Table: "a"}, StartTs: 1}}},
-			output:    map[model.TableID][]*model.SingleTableTxn{1: {{Table: &model.TableName{Table: "a"}, StartTs: 1, ReplicaID: 1}}},
+			input:     map[model.TableID][]*model.SingleTableTxn{1: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "a"}, StartTs: 1}}}},
+			output:    map[model.TableID][]*model.SingleTableTxn{1: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "a"}, StartTs: 1, ReplicaID: 1}}}},
 			filterID:  []uint64{},
 			replicaID: 1,
 		},
@@ -47,9 +47,11 @@ func TestFilterAndReduceTxns(t *testing.T) {
 			input: map[model.TableID][]*model.SingleTableTxn{
 				2: {
 					{
-						Table:   &model.TableName{Schema: "tidb_cdc"}, /* cyclic.SchemaName */
-						StartTs: 1,
-						Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						RawTableTxn: model.RawTableTxn{
+							Table:   &model.TableName{Schema: "tidb_cdc"}, /* cyclic.SchemaName */
+							StartTs: 1,
+							Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						},
 					},
 				},
 			},
@@ -59,12 +61,14 @@ func TestFilterAndReduceTxns(t *testing.T) {
 		},
 		{
 			input: map[model.TableID][]*model.SingleTableTxn{
-				1: {{Table: &model.TableName{Table: "a"}, StartTs: 1}},
+				1: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "a"}, StartTs: 1}}},
 				2: {
 					{
-						Table:   &model.TableName{Schema: "tidb_cdc"}, /* cyclic.SchemaName */
-						StartTs: 1,
-						Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						RawTableTxn: model.RawTableTxn{
+							Table:   &model.TableName{Schema: "tidb_cdc"}, /* cyclic.SchemaName */
+							StartTs: 1,
+							Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						},
 					},
 				},
 			},
@@ -74,26 +78,32 @@ func TestFilterAndReduceTxns(t *testing.T) {
 		},
 		{
 			input: map[model.TableID][]*model.SingleTableTxn{
-				1: {{Table: &model.TableName{Table: "a"}, StartTs: 1}},
+				1: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "a"}, StartTs: 1}}},
 				2: {
 					{
-						Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
-						StartTs: 1,
-						Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						RawTableTxn: model.RawTableTxn{
+							Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
+							StartTs: 1,
+							Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						},
 					},
 				},
 				3: {
 					{
-						Table:   &model.TableName{Schema: "tidb_cdc", Table: "2"},
-						StartTs: 2,
-						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						RawTableTxn: model.RawTableTxn{
+							Table:   &model.TableName{Schema: "tidb_cdc", Table: "2"},
+							StartTs: 2,
+							Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						},
 					},
 				},
 				4: {
 					{
-						Table:   &model.TableName{Schema: "tidb_cdc", Table: "3"},
-						StartTs: 3,
-						Rows:    []*model.RowChangedEvent{{StartTs: 3, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						RawTableTxn: model.RawTableTxn{
+							Table:   &model.TableName{Schema: "tidb_cdc", Table: "3"},
+							StartTs: 3,
+							Rows:    []*model.RowChangedEvent{{StartTs: 3, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						},
 					},
 				},
 			},
@@ -103,79 +113,89 @@ func TestFilterAndReduceTxns(t *testing.T) {
 		},
 		{
 			input: map[model.TableID][]*model.SingleTableTxn{
-				1: {{Table: &model.TableName{Table: "a"}, StartTs: 1}},
-				2: {{Table: &model.TableName{Table: "b2"}, StartTs: 2}},
-				3: {{Table: &model.TableName{Table: "b2_1"}, StartTs: 2}},
+				1: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "a"}, StartTs: 1}}},
+				2: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b2"}, StartTs: 2}}},
+				3: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b2_1"}, StartTs: 2}}},
 				4: {
 					{
-						Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
-						StartTs: 1,
-						Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						RawTableTxn: model.RawTableTxn{
+							Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
+							StartTs: 1,
+							Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						},
 					},
 				},
 			},
 			output: map[model.TableID][]*model.SingleTableTxn{
-				2: {{Table: &model.TableName{Table: "b2"}, StartTs: 2, ReplicaID: 1}},
-				3: {{Table: &model.TableName{Table: "b2_1"}, StartTs: 2, ReplicaID: 1}},
+				2: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b2"}, StartTs: 2, ReplicaID: 1}}},
+				3: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b2_1"}, StartTs: 2, ReplicaID: 1}}},
 			},
 			filterID:  []uint64{10},
 			replicaID: 1,
 		},
 		{
 			input: map[model.TableID][]*model.SingleTableTxn{
-				1: {{Table: &model.TableName{Table: "a"}, StartTs: 1}},
-				2: {{Table: &model.TableName{Table: "b2"}, StartTs: 2}},
-				3: {{Table: &model.TableName{Table: "b2_1"}, StartTs: 2}},
-				4: {{Table: &model.TableName{Table: "b3"}, StartTs: 3}},
-				5: {{Table: &model.TableName{Table: "b3_1"}, StartTs: 3}},
+				1: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "a"}, StartTs: 1}}},
+				2: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b2"}, StartTs: 2}}},
+				3: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b2_1"}, StartTs: 2}}},
+				4: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b3"}, StartTs: 3}}},
+				5: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b3_1"}, StartTs: 3}}},
 				6: {
 					{
-						Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
-						StartTs: 2,
-						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						RawTableTxn: model.RawTableTxn{
+							Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
+							StartTs: 2,
+							Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						},
 					},
 					{
-						Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
-						StartTs: 3,
-						Rows:    []*model.RowChangedEvent{{StartTs: 3, Columns: []*model.Column{{Name: rID, Value: uint64(11)}}}},
+						RawTableTxn: model.RawTableTxn{
+							Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
+							StartTs: 3,
+							Rows:    []*model.RowChangedEvent{{StartTs: 3, Columns: []*model.Column{{Name: rID, Value: uint64(11)}}}},
+						},
 					},
 				},
 			},
 			output: map[model.TableID][]*model.SingleTableTxn{
-				1: {{Table: &model.TableName{Table: "a"}, StartTs: 1, ReplicaID: 1}},
-				4: {{Table: &model.TableName{Table: "b3"}, StartTs: 3, ReplicaID: 11}},
-				5: {{Table: &model.TableName{Table: "b3_1"}, StartTs: 3, ReplicaID: 11}},
+				1: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "a"}, StartTs: 1, ReplicaID: 1}}},
+				4: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b3"}, StartTs: 3, ReplicaID: 11}}},
+				5: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b3_1"}, StartTs: 3, ReplicaID: 11}}},
 			},
 			filterID:  []uint64{10}, // 10 -> 2, filter start ts 2
 			replicaID: 1,
 		},
 		{
 			input: map[model.TableID][]*model.SingleTableTxn{
-				2: {{Table: &model.TableName{Table: "b2"}, StartTs: 2, CommitTs: 2}},
+				2: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b2"}, StartTs: 2, CommitTs: 2}}},
 				3: {
-					{Table: &model.TableName{Table: "b3"}, StartTs: 2, CommitTs: 2},
-					{Table: &model.TableName{Table: "b3"}, StartTs: 3, CommitTs: 3},
-					{Table: &model.TableName{Table: "b3"}, StartTs: 3, CommitTs: 3},
-					{Table: &model.TableName{Table: "b3"}, StartTs: 4, CommitTs: 4},
+					{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b3"}, StartTs: 2, CommitTs: 2}},
+					{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b3"}, StartTs: 3, CommitTs: 3}},
+					{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b3"}, StartTs: 3, CommitTs: 3}},
+					{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b3"}, StartTs: 4, CommitTs: 4}},
 				},
 				6: {
 					{
-						Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
-						StartTs: 2,
-						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						RawTableTxn: model.RawTableTxn{
+							Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
+							StartTs: 2,
+							Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						},
 					},
 					{
-						Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
-						StartTs: 3,
-						Rows:    []*model.RowChangedEvent{{StartTs: 3, Columns: []*model.Column{{Name: rID, Value: uint64(11)}}}},
+						RawTableTxn: model.RawTableTxn{
+							Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
+							StartTs: 3,
+							Rows:    []*model.RowChangedEvent{{StartTs: 3, Columns: []*model.Column{{Name: rID, Value: uint64(11)}}}},
+						},
 					},
 				},
 			},
 			output: map[model.TableID][]*model.SingleTableTxn{
 				3: {
-					{Table: &model.TableName{Table: "b3"}, StartTs: 3, CommitTs: 3, ReplicaID: 11},
-					{Table: &model.TableName{Table: "b3"}, StartTs: 3, CommitTs: 3, ReplicaID: 11},
-					{Table: &model.TableName{Table: "b3"}, StartTs: 4, CommitTs: 4, ReplicaID: 1},
+					{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b3"}, StartTs: 3, CommitTs: 3, ReplicaID: 11}},
+					{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b3"}, StartTs: 3, CommitTs: 3, ReplicaID: 11}},
+					{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b3"}, StartTs: 4, CommitTs: 4, ReplicaID: 1}},
 				},
 			},
 			filterID:  []uint64{10}, // 10 -> 2, filter start ts 2
@@ -183,17 +203,21 @@ func TestFilterAndReduceTxns(t *testing.T) {
 		},
 		{
 			input: map[model.TableID][]*model.SingleTableTxn{
-				2: {{Table: &model.TableName{Table: "b2"}, StartTs: 2}},
+				2: {{RawTableTxn: model.RawTableTxn{Table: &model.TableName{Table: "b2"}, StartTs: 2}}},
 				6: {
 					{
-						Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
-						StartTs: 2,
-						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						RawTableTxn: model.RawTableTxn{
+							Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
+							StartTs: 2,
+							Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						},
 					},
 					{
-						Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
-						StartTs: 2,
-						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						RawTableTxn: model.RawTableTxn{
+							Table:   &model.TableName{Schema: "tidb_cdc", Table: "1"},
+							StartTs: 2,
+							Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
+						},
 					},
 				},
 			},
