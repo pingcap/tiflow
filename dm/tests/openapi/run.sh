@@ -393,9 +393,6 @@ function test_noshard_task_dump_status() {
 	# check noshard task dump status success
 	openapi_task_check "check_noshard_task_dump_status_success" "$task_name" 0
 
-	init_noshard_data
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
-
 	# delete source success and clean data for other test
 	openapi_source_check "delete_source_with_force_success" "mysql-01"
 	openapi_source_check "delete_source_with_force_success" "mysql-02"
