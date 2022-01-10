@@ -338,14 +338,14 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		for _, err := range errs {
 			info.Error = err
 			m.lastErrorTime = time.Now()
-			// if no errors occured in a time window, we can assume that changefeed
-			// was running normally before. So if we get an error for this changefeed now,
-			// we must reset the expBackoff and re-backoff from InitialInterval.
-			if !info.ErrorsReachedThreshold(m.backoffInterval) {
-				m.expBackoff.Reset()
-				m.backoffInterval = m.expBackoff.NextBackOff()
-			}
 			info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
+		}
+		// if no errors occured in a time window, we can assume that changefeed
+		// was running normally before. So if we get an error for this changefeed now,
+		// we must reset the expBackoff and re-backoff from InitialInterval.
+		if !info.ErrorsReachedThreshold(m.backoffInterval) {
+			m.expBackoff.Reset()
+			m.backoffInterval = m.expBackoff.NextBackOff()
 		}
 		changed := info.CleanUpOutdatedErrorHistory(m.backoffInterval)
 		return info, changed || len(errs) > 0, nil
