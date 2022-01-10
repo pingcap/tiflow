@@ -48,7 +48,6 @@ type Master struct {
 	scheduleWaitingTasks chan scheduleGroup
 	// rate limit for rescheduling when error happens
 	scheduleRateLimit *rate.Limiter
-	monitorTasksLimit *rate.Limiter
 }
 
 type TaskStatus int
@@ -90,7 +89,6 @@ func New(
 
 		scheduleWaitingTasks: make(chan scheduleGroup, 1024),
 		scheduleRateLimit:    rate.NewLimiter(rate.Every(time.Second), 1),
-		monitorTasksLimit:    rate.NewLimiter(rate.Every(300*time.Millisecond), 1),
 	}
 }
 
@@ -310,37 +308,31 @@ func (m *Master) addScheduleTasks(group scheduleGroup) {
 }
 
 func (m *Master) monitorRunningTasks() {
+	timer := time.NewTicker(time.Second * 1)
+	defer timer.Stop()
 	for {
 		select {
 		case <-m.ctx.Done():
 			return
-		default:
+		case <-timer.C:
+			m.checkRunningTasks()
 		}
-		delay := m.monitorTasksLimit.Reserve().Delay()
-		if delay != 0 {
-			log.L().Logger.Warn("monitor task rate limit", zap.Duration("delay", delay))
-			timer := time.NewTimer(delay)
-			select {
-			case <-m.ctx.Done():
-				timer.Stop()
-				return
-			case <-timer.C:
-				timer.Stop()
-			}
-		}
-		tasksToPause := make([]*model.Task, 0)
-		m.runningTasks.Range(func(_, value interface{}) bool {
-			t := value.(*Task)
-			t.Lock()
-			if t.targetStatus == Pauseed && t.currentStatus == Serving {
-				log.L().Logger.Info("plan to pause", zap.Int32("id", int32(t.ID)))
-				tasksToPause = append(tasksToPause, t.Task)
-			}
-			t.Unlock()
-			return true
-		})
-		m.pauseTaskImpl(tasksToPause)
 	}
+}
+
+func (m *Master) checkRunningTasks() {
+	tasksToPause := make([]*model.Task, 0)
+	m.runningTasks.Range(func(_, value interface{}) bool {
+		t := value.(*Task)
+		t.Lock()
+		if t.targetStatus == Pauseed && t.currentStatus == Serving {
+			log.L().Logger.Info("plan to pause", zap.Int32("id", int32(t.ID)))
+			tasksToPause = append(tasksToPause, t.Task)
+		}
+		t.Unlock()
+		return true
+	})
+	m.pauseTaskImpl(tasksToPause)
 }
 
 func (m *Master) pauseTaskImpl(tasks []*model.Task) {

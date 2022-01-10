@@ -2,6 +2,7 @@ package test_test
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/hanfei1991/microcosm/executor"
@@ -10,6 +11,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
+	"github.com/phayes/freeport"
 	. "github.com/pingcap/check"
 )
 
@@ -73,29 +75,36 @@ func (c *MiniCluster) StopMaster() {
 }
 
 // Start 1 master 1 executor.
-func (c *MiniCluster) Start1M1E(cc *C) (*test.Context, *test.Context) {
+func (c *MiniCluster) Start1M1E(cc *C) (
+	masterAddr string, workerAddr string,
+	masterCtx *test.Context, workerCtx *test.Context,
+) {
+	ports, err := freeport.GetFreePorts(2)
+	cc.Assert(err, IsNil)
+	masterAddr = fmt.Sprintf("127.0.0.1:%d", ports[0])
+	workerAddr = fmt.Sprintf("127.0.0.1:%d", ports[1])
 	masterCfg := &master.Config{
 		Etcd: &etcdutils.ConfigParams{
 			Name:    "master1",
 			DataDir: "/tmp/df",
 		},
-		MasterAddr:        "127.0.0.1:1991",
+		MasterAddr:        masterAddr,
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,
 		RPCTimeout:        time.Second,
 	}
 	// one master + one executor
 	executorCfg := &executor.Config{
-		Join:              "127.0.0.1:1991",
-		WorkerAddr:        "127.0.0.1:1992",
+		Join:              masterAddr,
+		WorkerAddr:        workerAddr,
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,
 		RPCTimeout:        time.Second,
 	}
 
-	masterCtx, err := c.CreateMaster(masterCfg)
+	masterCtx, err = c.CreateMaster(masterCfg)
 	cc.Assert(err, IsNil)
-	executorCtx := c.CreateExecutor(executorCfg)
+	workerCtx = c.CreateExecutor(executorCfg)
 	// Start cluster
 	err = c.AsyncStartMaster()
 	cc.Assert(err, IsNil)
@@ -104,7 +113,7 @@ func (c *MiniCluster) Start1M1E(cc *C) (*test.Context, *test.Context) {
 	cc.Assert(err, IsNil)
 
 	time.Sleep(2 * time.Second)
-	return masterCtx, executorCtx
+	return
 }
 
 func (c *MiniCluster) StopCluster() {

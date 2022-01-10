@@ -3,6 +3,7 @@ package test_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
@@ -11,6 +12,7 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/phayes/freeport"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.etcd.io/etcd/clientv3"
@@ -23,11 +25,11 @@ type testJobSuite struct{}
 
 func (t *testJobSuite) TestSubmit(c *C) {
 	cluster := NewEmptyMiniCluster()
-	masterCtx, executorCtx := cluster.Start1M1E(c)
-	client, err := client.NewMasterClient(context.Background(), []string{"127.0.0.1:1991"})
+	masterAddr, _, masterCtx, executorCtx := cluster.Start1M1E(c)
+	client, err := client.NewMasterClient(context.Background(), []string{masterAddr})
 	c.Assert(err, IsNil)
 	testJobConfig := benchmark.Config{
-		Servers:      []string{"127.0.0.1:9999", "127.0.0.1:9998", "127.0.0.1:9997"},
+		Servers:      getBenchmarkServers(3, c),
 		FlowID:       "jobtest",
 		TableNum:     10,
 		RecordCnt:    10000,
@@ -67,13 +69,23 @@ func (t *testJobSuite) TestSubmit(c *C) {
 	cluster.StopCluster()
 }
 
+func getBenchmarkServers(n int, c *C) []string {
+	ports, err := freeport.GetFreePorts(n)
+	c.Assert(err, IsNil)
+	servers := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		servers = append(servers, fmt.Sprintf("127.0.0.1:%d", ports[i]))
+	}
+	return servers
+}
+
 func (t *testJobSuite) TestPause(c *C) {
 	cluster := NewEmptyMiniCluster()
-	_, executorCtx := cluster.Start1M1E(c)
-	client, err := client.NewMasterClient(context.Background(), []string{"127.0.0.1:1991"})
+	masterAddr, _, _, executorCtx := cluster.Start1M1E(c)
+	client, err := client.NewMasterClient(context.Background(), []string{masterAddr})
 	c.Assert(err, IsNil)
 	testJobConfig := benchmark.Config{
-		Servers:      []string{"127.0.0.1:9999", "127.0.0.1:9998", "127.0.0.1:9997"},
+		Servers:      getBenchmarkServers(3, c),
 		FlowID:       "jobtest",
 		TableNum:     10,
 		RecordCnt:    100000,
