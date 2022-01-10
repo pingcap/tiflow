@@ -489,6 +489,7 @@ func validateMinInsyncReplicas(admin kafka.ClusterAdminClient,
 	return nil
 }
 
+// getBrokerConfig gets broker config by name.
 func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (string, error) {
 	_, controllerID, err := admin.DescribeCluster()
 	if err != nil {
@@ -512,6 +513,9 @@ func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (s
 	return configEntries[0].Value, nil
 }
 
+// getTopicConfig gets topic config by name.
+// If the topic does not have this configuration, we will try to get it from the broker's configuration.
+// NOTICE: The configuration names of topic and broker may be different for the same configuration.
 func getTopicConfig(admin kafka.ClusterAdminClient, detail sarama.TopicDetail, topicConfigName string, brokerConfigName string) (string, error) {
 	if a, ok := detail.ConfigEntries[topicConfigName]; ok {
 		return *a, nil
