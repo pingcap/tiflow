@@ -34,7 +34,7 @@ func NewMySQLBinlogEnableChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecke
 }
 
 // Check implements the RealChecker interface.
-func (pc *MySQLBinlogEnableChecker) Check(ctx context.Context) (*Result, error) {
+func (pc *MySQLBinlogEnableChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check whether mysql binlog is enabled",
@@ -44,15 +44,16 @@ func (pc *MySQLBinlogEnableChecker) Check(ctx context.Context) (*Result, error) 
 
 	value, err := dbutil.ShowLogBin(ctx, pc.db)
 	if err != nil {
-		return result, err
+		markCheckError(result, err)
+		return result
 	}
 	if strings.ToUpper(value) != "ON" {
 		result.Errors = append(result.Errors, NewError("log_bin is %s, and should be ON", value))
 		result.Instruction = "ref document: https://dev.mysql.com/doc/refman/5.7/en/replication-howto-masterbaseconfig.html"
-		return result, nil
+		return result
 	}
 	result.State = StateSuccess
-	return result, nil
+	return result
 }
 
 // Name implements the RealChecker interface.
@@ -74,7 +75,7 @@ func NewMySQLBinlogFormatChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecke
 }
 
 // Check implements the RealChecker interface.
-func (pc *MySQLBinlogFormatChecker) Check(ctx context.Context) (*Result, error) {
+func (pc *MySQLBinlogFormatChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check whether mysql binlog_format is ROW",
@@ -84,16 +85,17 @@ func (pc *MySQLBinlogFormatChecker) Check(ctx context.Context) (*Result, error) 
 
 	value, err := dbutil.ShowBinlogFormat(ctx, pc.db)
 	if err != nil {
-		return result, err
+		markCheckError(result, err)
+		return result
 	}
 	if strings.ToUpper(value) != "ROW" {
 		result.Errors = append(result.Errors, NewError("binlog_format is %s, and should be ROW", value))
 		result.Instruction = "please execute 'set global binlog_format=ROW;'"
-		return result, nil
+		return result
 	}
 	result.State = StateSuccess
 
-	return result, nil
+	return result
 }
 
 // Name implements the RealChecker interface.
@@ -126,7 +128,7 @@ func NewMySQLBinlogRowImageChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChec
 // ref:
 // - https://dev.mysql.com/doc/refman/5.6/en/replication-options-binary-log.html#sysvar_binlog_row_image
 // - https://mariadb.com/kb/en/library/replication-and-binary-log-server-system-variables/#binlog_row_image
-func (pc *MySQLBinlogRowImageChecker) Check(ctx context.Context) (*Result, error) {
+func (pc *MySQLBinlogRowImageChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check whether mysql binlog_row_image is FULL",
@@ -137,30 +139,33 @@ func (pc *MySQLBinlogRowImageChecker) Check(ctx context.Context) (*Result, error
 	// check version firstly
 	value, err := dbutil.ShowVersion(ctx, pc.db)
 	if err != nil {
-		return result, err
+		markCheckError(result, err)
+		return result
 	}
 	version, err := toMySQLVersion(value)
 	if err != nil {
-		return result, err
+		markCheckError(result, err)
+		return result
 	}
 
 	// for mysql.version < 5.6.2 || mariadb.version < 10.1.6,  we don't need to check binlog_row_image.
 	if (!IsMariaDB(value) && !version.Ge(mysqlBinlogRowImageRequired)) || (IsMariaDB(value) && !version.Ge(mariadbBinlogRowImageRequired)) {
 		result.State = StateSuccess
-		return result, nil
+		return result
 	}
 
 	value, err = dbutil.ShowBinlogRowImage(ctx, pc.db)
 	if err != nil {
-		return result, err
+		markCheckError(result, err)
+		return result
 	}
 	if strings.ToUpper(value) != "FULL" {
 		result.Errors = append(result.Errors, NewError("binlog_row_image is %s, and should be FULL", value))
 		result.Instruction = "please execute 'set global binlog_row_image = FULL;'"
-		return result, nil
+		return result
 	}
 	result.State = StateSuccess
-	return result, nil
+	return result
 }
 
 // Name implements the RealChecker interface.

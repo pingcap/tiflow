@@ -57,8 +57,7 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 		}},
 		nil,
 		false)
-	result, err := checker.Check(ctx)
-	markCheckError(result, err)
+	result := checker.Check(ctx)
 	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
 	printJSON(result)
@@ -77,8 +76,7 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
 
-	result, err = checker.Check(ctx)
-	markCheckError(result, err)
+	result = checker.Check(ctx)
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
@@ -97,8 +95,7 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
 
-	result, err = checker.Check(ctx)
-	markCheckError(result, err)
+	result = checker.Check(ctx)
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
@@ -132,8 +129,7 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 	checker := NewTablesChecker(db,
 		&dbutil.DBConfig{},
 		[]*filter.Table{{Schema: "test-db", Name: "test-table-1"}})
-	result, err := checker.Check(ctx)
-	markCheckError(result, err)
+	result := checker.Check(ctx)
 	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
 	printJSON(result)
@@ -152,8 +148,7 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 		AddRow("sql_mode", "ANSI_QUOTES")
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
 
-	result, err = checker.Check(ctx)
-	markCheckError(result, err)
+	result = checker.Check(ctx)
 	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 2) // no PK/UK + has FK
@@ -173,8 +168,7 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 		AddRow("sql_mode", "ANSI_QUOTES")
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
 
-	result, err = checker.Check(ctx)
-	markCheckError(result, err)
+	result = checker.Check(ctx)
 
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)

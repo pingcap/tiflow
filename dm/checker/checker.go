@@ -117,7 +117,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: c.closeDBs})
 
 	c.tctx = tcontext.NewContext(ctx, log.With(zap.String("unit", "task check")))
-  // targetTableID => source => [tables]
+	// targetTableID => source => [tables]
 	sharding := make(map[string]map[string][]*filter.Table)
 	shardingCounter := make(map[string]int)
 	dbs := make(map[string]*sql.DB)
@@ -212,17 +212,19 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 
 		var checkTables []*filter.Table
-    checkSchemas := make(map[string]struct{}, len(mapping))
+		checkSchemas := make(map[string]struct{}, len(mapping))
 		for targetTableID, tables := range mapping {
 			checkTables = append(checkTables, tables...)
 			if _, ok := sharding[targetTableID]; !ok {
 				sharding[targetTableID] = make(map[string][]*filter.Table)
-      }
-      if _, ok := checkSchemas[table.Schema]; !ok {
-				checkSchemas[table.Schema] = struct{}{}
 			}
 			sharding[targetTableID][instance.cfg.SourceID] = append(sharding[targetTableID][instance.cfg.SourceID], tables...)
 			shardingCounter[targetTableID] += len(tables)
+			for _, table := range tables {
+				if _, ok := checkSchemas[table.Schema]; !ok {
+					checkSchemas[table.Schema] = struct{}{}
+				}
+			}
 		}
 		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
 

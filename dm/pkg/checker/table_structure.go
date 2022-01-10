@@ -88,7 +88,7 @@ func NewTablesChecker(db *sql.DB, dbinfo *dbutil.DBConfig, tables []*filter.Tabl
 }
 
 // Check implements RealChecker interface.
-func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
+func (c *TablesChecker) Check(ctx context.Context) *Result {
 	r := &Result{
 		Name:  c.Name(),
 		Desc:  "check compatibility of table structure",
@@ -104,7 +104,8 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 	}
 	maxConnections, err := utils.GetMaxConnections(ctx, c.db)
 	if err != nil {
-		return r, err
+		markCheckError(r, err)
+		return r
 	}
 	if concurrency > maxConnections {
 		concurrency = maxConnections / 2
@@ -181,7 +182,7 @@ func (c *TablesChecker) Check(ctx context.Context) (*Result, error) {
 
 	checkWg.Wait()
 	log.L().Logger.Info("check table structure over", zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
-	return r, nil
+	return r
 }
 
 // Name implements RealChecker interface.
@@ -330,7 +331,7 @@ func NewShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tabl
 }
 
 // Check implements RealChecker interface.
-func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
+func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	r := &Result{
 		Name:  c.Name(),
 		Desc:  "check consistency of sharding table structures",
@@ -351,13 +352,15 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 	for instance, tables := range c.tableMap {
 		db, ok := c.dbs[instance]
 		if !ok {
-			return r, errors.NotFoundf("client for instance %s", instance)
+			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
+			return r
 		}
 
 		parser2, err := dbutil.GetParserForDB(ctx, db)
 		if err != nil {
 			r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
-			return r, err
+			markCheckError(r, err)
+			return r
 		}
 		r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
 		for _, table := range tables {
@@ -367,17 +370,20 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 				if isMySQLError(err, mysql.ErrNoSuchTable) {
 					continue
 				}
-				return r, err
+				markCheckError(r, err)
+				return r
 			}
 
 			stmt, err := parser2.ParseOneStmt(statement, "", "")
 			if err != nil {
-				return r, errors.Annotatef(err, "statement %s", statement)
+				markCheckError(r, errors.Annotatef(err, "statement %s", statement))
+				return r
 			}
 
 			ctStmt, ok := stmt.(*ast.CreateTableStmt)
 			if !ok {
-				return r, errors.Errorf("Expect CreateTableStmt but got %T", stmt)
+				markCheckError(r, errors.Errorf("Expect CreateTableStmt but got %T", stmt))
+				return r
 			}
 
 			stmtNode = ctStmt
@@ -465,7 +471,8 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 		}
 		maxConnections, err := utils.GetMaxConnections(ctx, c.dbs[instance])
 		if err != nil {
-			return r, err
+			markCheckError(r, err)
+			return r
 		}
 		if concurrency > maxConnections {
 			concurrency = maxConnections / 2
@@ -480,13 +487,15 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 		log.L().Logger.Info("this source have", zap.String("source", instance), zap.Int("concurrency", concurrency), zap.Int("table num", len(tables)))
 		db, ok := c.dbs[instance]
 		if !ok {
-			return r, errors.NotFoundf("client for instance %s", instance)
+			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
+			return r
 		}
 
 		parser2, err := dbutil.GetParserForDB(ctx, db)
 		if err != nil {
 			r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
-			return r, err
+			markCheckError(r, err)
+			return r
 		}
 		for i := 0; i < concurrency; i++ {
 			checkWg.Add(1)
@@ -495,7 +504,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) (*Result, error) {
 	}
 
 	checkWg.Wait()
-	return r, nil
+	return r
 }
 
 func (c *ShardingTablesChecker) checkAutoIncrementKey(instance, schema, table string, ctStmt *ast.CreateTableStmt, info *model.TableInfo, r *Result) bool {
