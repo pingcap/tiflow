@@ -28,7 +28,8 @@ const (
 
 var (
 	// defaultMaxMessageBytes specifies the default max message bytes.
-	defaultMaxMessageBytes   = "10485760"
+	defaultMaxMessageBytes = "10485760"
+	// defaultMaxMessageBytes specifies the default min insync replicas for broker and default topic.
 	defaultMinInsyncReplicas = "1"
 )
 
@@ -103,6 +104,7 @@ func (c *ClusterAdminClientMockImpl) Close() error {
 	return nil
 }
 
+// SetMinInsyncReplicas sets the MinInsyncReplicas for broker and default topic.
 func (c *ClusterAdminClientMockImpl) SetMinInsyncReplicas(minInsyncReplicas string) {
 	c.topics[DefaultMockTopicName].ConfigEntries[MinInsyncReplicasConfigName] = &minInsyncReplicas
 
