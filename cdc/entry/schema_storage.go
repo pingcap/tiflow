@@ -77,6 +77,9 @@ func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo,
 			return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(job.TableID)
 		}
 		return table, nil
+	case timodel.ActionRenameTables:
+		// DDL on multiple tables, ignore pre table info
+		return nil, nil
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
@@ -348,6 +351,10 @@ func (s *schemaSnapshot) IsIneligibleTableID(id int64) bool {
 
 // FillSchemaName fills the schema name in ddl job
 func (s *schemaSnapshot) FillSchemaName(job *timodel.Job) error {
+	if job.Type == timodel.ActionRenameTables {
+		// DDLs on multiple schema or tables, ignore them.
+		return nil
+	}
 	if job.Type == timodel.ActionCreateSchema ||
 		job.Type == timodel.ActionDropSchema {
 		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
@@ -584,6 +591,8 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+	case timodel.ActionRenameTables:
+		return s.renameTables(job)
 	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
 		err := s.createTable(getWrapTableInfo(job))
 		if err != nil {
@@ -630,6 +639,37 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 		}
 	}
 	s.currentTs = job.BinlogInfo.FinishedTS
+	return nil
+}
+
+func (s *schemaSnapshot) renameTables(job *timodel.Job) error {
+	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
+	var newTableNames, oldSchemaNames []*timodel.CIStr
+	err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs, &newTableNames, &oldTableIDs, &oldSchemaNames)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if len(job.BinlogInfo.MultipleTableInfos) < len(newTableNames) {
+		return cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
+	}
+	// NOTE: should handle failures in halfway better.
+	for _, tableID := range oldTableIDs {
+		if err := s.dropTable(tableID); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	for i, tableInfo := range job.BinlogInfo.MultipleTableInfos {
+		newSchema, ok := s.SchemaByID(newSchemaIDs[i])
+		if !ok {
+			return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(newSchemaIDs[i])
+		}
+		newSchemaName := newSchema.Name.L
+		err = s.createTable(model.WrapTableInfo(
+			newSchemaIDs[i], newSchemaName, job.BinlogInfo.FinishedTS, tableInfo))
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
 	return nil
 }
 
@@ -839,6 +879,7 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
 func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
+	log.Debug("handle DDL new commit", zap.String("DDL", job.Query), zap.Stringer("job", job))
 	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
 		log.Info("discard DDL", zap.Int64("jobID", job.ID), zap.String("DDL", job.Query))
 		return true

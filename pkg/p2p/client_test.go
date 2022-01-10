@@ -60,8 +60,8 @@ type testMessage struct {
 }
 
 var clientConfigForUnitTesting = &MessageClientConfig{
-	SendChannelSize:         0, // unbuffered channel to make tests more reliable
-	BatchSendInterval:       time.Second,
+	SendChannelSize:         0,               // unbuffered channel to make tests more reliable
+	BatchSendInterval:       128 * time.Hour, // essentially disables flushing
 	MaxBatchBytes:           math.MaxInt64,
 	MaxBatchCount:           math.MaxInt64,
 	RetryRateLimitPerSecond: 999.0,
@@ -231,10 +231,7 @@ func TestClientPermanentFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	configCloned := *clientConfigForUnitTesting
-	configCloned.BatchSendInterval = time.Hour // disables flushing
-
-	client := NewMessageClient("node-1", &configCloned)
+	client := NewMessageClient("node-1", clientConfigForUnitTesting)
 	sender := &mockClientBatchSender{}
 	client.newSenderFn = func(stream clientStream) clientBatchSender {
 		return sender
@@ -285,7 +282,12 @@ func TestClientSendAnomalies(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	client := NewMessageClient("node-1", clientConfigForUnitTesting)
+	// copies the config
+	config := &*clientConfigForUnitTesting
+	// disables flushing to make this case deterministic.
+	config.BatchSendInterval = 999 * time.Second
+
+	client := NewMessageClient("node-1", config)
 	sender := &mockClientBatchSender{}
 
 	runCtx, closeClient := context.WithCancel(ctx)

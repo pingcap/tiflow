@@ -17,19 +17,24 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/etcd"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
@@ -43,6 +48,12 @@ var (
 	logLevel = flag.String("log-level", "debug", "Set log level of the logger")
 )
 
+const (
+	maxCheckSourceEmptyRetries = 30
+)
+
+// This program moves all tables replicated by a certain capture to other captures,
+// and makes sure that the original capture becomes empty.
 func main() {
 	flag.Parse()
 	if strings.ToLower(*logLevel) == "debug" {
@@ -110,7 +121,7 @@ func main() {
 
 	log.Info("all tables are moved", zap.String("sourceCapture", sourceCapture), zap.String("targetCapture", targetCapture))
 
-	for counter := 0; counter < 30; counter++ {
+	for counter := 0; counter < maxCheckSourceEmptyRetries; counter++ {
 		err := retry.Do(ctx, func() error {
 			return cluster.refreshInfo(ctx)
 		}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(5+1), retry.WithIsRetryableErr(cerrors.IsRetryableError))
@@ -129,9 +140,12 @@ func main() {
 			break
 		}
 
-		if counter != 30 {
+		if counter != maxCheckSourceEmptyRetries {
 			log.Debug("source capture is not empty, will try again", zap.String("sourceCapture", sourceCapture))
 			time.Sleep(time.Second * 10)
+		} else {
+			// non-zero error code indicates failed test.
+			os.Exit(1)
 		}
 	}
 }
@@ -211,7 +225,6 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 	}
 
 	log.Debug("retrieved changefeeds", zap.Reflect("changefeeds", changefeeds))
-
 	var changefeed string
 	for k := range changefeeds {
 		changefeed = k
@@ -225,29 +238,64 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 	}
 	for _, capture := range captures {
 		c.captures[capture.ID] = make([]*tableInfo, 0)
-	}
-
-	allTasks, err := c.cdcEtcdCli.GetAllTaskStatus(ctx, changefeed)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	log.Debug("retrieved all tasks", zap.Reflect("tasks", allTasks))
-
-	for capture, taskInfo := range allTasks {
-		if _, ok := c.captures[capture]; !ok {
-			c.captures[capture] = make([]*tableInfo, 0, len(taskInfo.Tables))
+		processorDetails, err := queryProcessor(c.ownerAddr, changefeed, capture.ID)
+		if err != nil {
+			return errors.Trace(err)
 		}
 
-		for tableID := range taskInfo.Tables {
-			c.captures[capture] = append(c.captures[capture], &tableInfo{
+		log.Debug("retrieved processor details",
+			zap.String("changefeed", changefeed),
+			zap.String("captureID", capture.ID),
+			zap.Any("processorDetail", processorDetails))
+		for _, tableID := range processorDetails.Tables {
+			c.captures[capture.ID] = append(c.captures[capture.ID], &tableInfo{
 				ID:         tableID,
 				Changefeed: changefeed,
 			})
 		}
 	}
-
 	return nil
+}
+
+// queryProcessor invokes the following API to get the mapping from
+// captureIDs to tableIDs:
+//     GET /api/v1/processors/{changefeed_id}/{capture_id}
+func queryProcessor(
+	apiEndpoint string,
+	changefeed string,
+	captureID string,
+) (*model.ProcessorDetail, error) {
+	httpClient, err := httputil.NewClient(&security.Credential{ /* no TLS */ })
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	requestURL := fmt.Sprintf("http://%s/api/v1/processors/%s/%s", apiEndpoint, changefeed, captureID)
+	httpClient.Timeout = 3 * time.Second
+	resp, err := httpClient.Get(requestURL)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, errors.Trace(
+			errors.Errorf("HTTP API returned error status: %d, url: %s", resp.StatusCode, requestURL))
+	}
+
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	var ret model.ProcessorDetail
+	err = json.Unmarshal(bodyBytes, &ret)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &ret, nil
 }
 
 func moveTable(ctx context.Context, ownerAddr string, changefeed string, target string, tableID int64) error {

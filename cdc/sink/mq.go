@@ -242,7 +242,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	k.statistics.AddDDLCount()
-	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs), zap.Int32("partition", partition))
+	log.Debug("emit ddl event", zap.String("query", ddl.Query),
+		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition))
 	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
 	return errors.Trace(err)
 }
@@ -395,7 +396,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, errCh)
+	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
