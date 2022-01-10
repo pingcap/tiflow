@@ -78,6 +78,16 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		return nil, cerror.ErrTargetTsBeforeStartTs.GenWithStackByArgs(changefeedConfig.TargetTS, changefeedConfig.StartTS)
 	}
 
+	// verify sink config
+	warning, err := changefeedConfig.SinkConfig.validateDispatcherRule(changefeedConfig.SinkURI)
+	if err != nil {
+		return nil, err
+	}
+	// [TODO] how to throw such warning to user??
+	if warning != "" {
+		log.Warn(warning)
+	}
+
 	// init replicaConfig
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.ForceReplicate = changefeedConfig.ForceReplicate
@@ -180,6 +190,15 @@ func verifyUpdateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		newInfo.Config.Mounter.WorkerNum = changefeedConfig.MounterWorkerNum
 	}
 
+	// verify sink config
+	warning, err := changefeedConfig.SinkConfig.validateDispatcherRule(changefeedConfig.SinkURI)
+	if err != nil {
+		return nil, err
+	}
+	// [TODO] how to throw such warning to user??
+	if warning != "" {
+		log.Warn(warning)
+	}
 	if changefeedConfig.SinkConfig != nil {
 		newInfo.Config.Sink = changefeedConfig.SinkConfig
 	}

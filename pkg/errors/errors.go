@@ -56,11 +56,11 @@ var (
 	ErrRegionWorkerExit       = errors.Normalize("region worker exited", errors.RFCCodeText("CDC:ErrRegionWorkerExit"))
 
 	// rule related errors
-	ErrEncodeFailed          = errors.Normalize("encode failed: %s", errors.RFCCodeText("CDC:ErrEncodeFailed"))
-	ErrDecodeFailed          = errors.Normalize("decode failed: %s", errors.RFCCodeText("CDC:ErrDecodeFailed"))
-	ErrFilterRuleInvalid     = errors.Normalize("filter rule is invalid", errors.RFCCodeText("CDC:ErrFilterRuleInvalid"))
-	ErrFilterRuleUnsupported = errors.Normalize("filter rule is unsupported: %s", errors.RFCCodeText("CDC:ErrFilterRuleUnsupported"))
-	ErrSinkTypeForDispatcher = errors.Normalize("unsupported sink type for dispatcher: %s", errors.RFCCodeText("CDC:ErrSinkTypeForDispatcher"))
+	ErrEncodeFailed            = errors.Normalize("encode failed: %s", errors.RFCCodeText("CDC:ErrEncodeFailed"))
+	ErrDecodeFailed            = errors.Normalize("decode failed: %s", errors.RFCCodeText("CDC:ErrDecodeFailed"))
+	ErrFilterRuleInvalid       = errors.Normalize("filter rule is invalid", errors.RFCCodeText("CDC:ErrFilterRuleInvalid"))
+	ErrDispatchRuleUnsupported = errors.Normalize("dispatch rule is unsupported: %s", errors.RFCCodeText("CDC:ErrFilterRuleUnsupported"))
+	ErrSinkTypeForDispatcher   = errors.Normalize("unsupported sink type for dispatcher: %s", errors.RFCCodeText("CDC:ErrSinkTypeForDispatcher"))
 
 	// internal errors
 	ErrAdminStopProcessor = errors.Normalize("stop processor by admin command", errors.RFCCodeText("CDC:ErrAdminStopProcessor"))

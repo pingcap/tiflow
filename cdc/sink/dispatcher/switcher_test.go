@@ -30,7 +30,7 @@ func TestDefaultSwitcher(t *testing.T) {
 
 	d, err = NewDispatcher(config.GetDefaultReplicaConfig(), 4, model.SinkTypeMQ)
 	require.Nil(t, err)
-	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+	require.IsType(t, &defaultDispatcher{}, d.(*mqDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test", Table: "test",
 		},
@@ -38,7 +38,7 @@ func TestDefaultSwitcher(t *testing.T) {
 
 	d, err = NewDispatcher(config.GetDefaultReplicaConfig(), 4, model.SinkTypeMySQL)
 	require.Nil(t, err)
-	require.IsType(t, &causalityDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+	require.IsType(t, &causalityDispatcher{}, d.(*mysqlDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test", Table: "test",
 		},
@@ -62,27 +62,33 @@ func TestSupportedSwitcher(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, d)
 
+	// When we meet unsupported dispatch rule, mq expects to use default dispatcher
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test.*"}, Dispatcher: "causality"},
+				{Matcher: []string{"test_causality.*"}, Dispatcher: "causality"},
 			},
 		},
 	}, 4, model.SinkTypeMQ)
-	require.Error(t, err)
-	require.NotNil(t, d)
+	require.Nil(t, err)
+	require.IsType(t, &defaultDispatcher{}, d.(*mqDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+		Table: &model.TableName{
+			Schema: "test_causality", Table: "test",
+		},
+	}))
 
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_default.*"}, Dispatcher: "table"},
-				{Matcher: []string{"test.*"}, Dispatcher: "causality"},
+				{Matcher: []string{"test_table.*"}, Dispatcher: "table"},
+				{Matcher: []string{"test_causality.*"}, Dispatcher: "causality"},
 			},
 		},
 	}, 4, model.SinkTypeMySQL)
 	require.Nil(t, err)
 	require.NotNil(t, d)
 
+	// When we meet unsupported dispatch rule, mysql expects to use causality dispatcher
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
@@ -90,44 +96,62 @@ func TestSupportedSwitcher(t *testing.T) {
 			},
 		},
 	}, 4, model.SinkTypeMySQL)
+	require.Nil(t, err)
+	require.IsType(t, &causalityDispatcher{}, d.(*mysqlDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+		Table: &model.TableName{
+			Schema: "test_default", Table: "test",
+		},
+	}))
+
+	d, err = NewDispatcher(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{Matcher: []string{"test_index.*"}, Dispatcher: "index-value"},
+			},
+		},
+	}, 4, model.SinkTypeMySQL)
+	require.Nil(t, err)
+	require.IsType(t, &causalityDispatcher{}, d.(*mysqlDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+		Table: &model.TableName{
+			Schema: "test_index", Table: "test",
+		},
+	}))
+
+	d, err = NewDispatcher(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{Matcher: []string{"test_ts.*"}, Dispatcher: "ts"},
+			},
+		},
+	}, 4, model.SinkTypeMySQL)
+	require.Nil(t, err)
+	require.IsType(t, &causalityDispatcher{}, d.(*mysqlDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+		Table: &model.TableName{
+			Schema: "test_ts", Table: "test",
+		},
+	}))
 	require.Error(t, err)
 	require.NotNil(t, d)
 
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_default.*"}, Dispatcher: "index-value"},
+				{Matcher: []string{"test_rowid.*"}, Dispatcher: "rowid"},
 			},
 		},
 	}, 4, model.SinkTypeMySQL)
-	require.Error(t, err)
-	require.NotNil(t, d)
-
-	d, err = NewDispatcher(&config.ReplicaConfig{
-		Sink: &config.SinkConfig{
-			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_default.*"}, Dispatcher: "ts"},
-			},
+	require.Nil(t, err)
+	require.IsType(t, &causalityDispatcher{}, d.(*mysqlDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+		Table: &model.TableName{
+			Schema: "test_rowid", Table: "test",
 		},
-	}, 4, model.SinkTypeMySQL)
-	require.Error(t, err)
-	require.NotNil(t, d)
-
-	d, err = NewDispatcher(&config.ReplicaConfig{
-		Sink: &config.SinkConfig{
-			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_default.*"}, Dispatcher: "rowid"},
-			},
-		},
-	}, 4, model.SinkTypeMySQL)
-	require.Error(t, err)
-	require.NotNil(t, d)
+	}))
 }
 
 func TestMQSwitcher(t *testing.T) {
 	d, err := NewDispatcher(config.GetDefaultReplicaConfig(), 4, model.SinkTypeMQ)
 	require.Nil(t, err)
-	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+	require.IsType(t, &defaultDispatcher{}, d.(*mqDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test", Table: "test",
 		},
@@ -145,32 +169,32 @@ func TestMQSwitcher(t *testing.T) {
 		},
 	}, 4, model.SinkTypeMQ)
 	require.Nil(t, err)
-	require.IsType(t, &indexValueDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+	require.IsType(t, &indexValueDispatcher{}, d.(*mqDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
-			Schema: "test", Table: "table1",
+			Schema: "test_index_value", Table: "table1",
 		},
 	}))
-	require.IsType(t, &tsDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+	require.IsType(t, &tsDispatcher{}, d.(*mqDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "sbs", Table: "table2",
 		},
 	}))
-	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+	require.IsType(t, &defaultDispatcher{}, d.(*mqDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "sbs", Table: "test",
 		},
 	}))
-	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+	require.IsType(t, &defaultDispatcher{}, d.(*mqDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test_default", Table: "test",
 		},
 	}))
-	require.IsType(t, &tableDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+	require.IsType(t, &tableDispatcher{}, d.(*mqDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test_table", Table: "test",
 		},
 	}))
-	require.IsType(t, &indexValueDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
+	require.IsType(t, &indexValueDispatcher{}, d.(*mqDispatcherSwitcher).matchDispatcher(&model.RawTableTxn{
 		Table: &model.TableName{
 			Schema: "test_index_value", Table: "test",
 		},

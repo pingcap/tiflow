@@ -16,6 +16,8 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 
@@ -137,6 +139,36 @@ func (c *ReplicaConfig) Validate() error {
 	}
 	return nil
 }
+
+// @return: string, warning info if nessesary
+//			error
+func (c *ReplicaConfig) ValidateDispatcherRule(sinkURI string) (string, error) {
+	sinkURIParsed, err := url.Parse(sinkURI)
+	if err != nil {
+		return "", cerror.ErrSinkURIInvalid.Wrap(errors.Annotatef(err, "sink-uri:%s", sinkURI))
+	}
+	for _, rules := range c.Sink.DispatchRules {
+		scheme := strings.ToLower(sinkURIParsed.Scheme)
+		dispatcher := strings.ToLower(rules.Dispatcher)
+		if scheme == "mysql" || scheme == "tidb" {
+			if dispatcher != "table" && dispatcher != "casuality" {
+				return "", cerror.ErrDispatchRuleUnsupported.GenWithStackByArgs(fmt.Sprintf("dispatcher:%s for scheme:%s", dispatcher, scheme))
+			}
+		} else {
+			if dispatcher == "casuality" {
+				return "", cerror.ErrDispatchRuleUnsupported.GenWithStackByArgs(fmt.Sprintf("unsupported dispatcher:%s for schema:%s", dispatcher, scheme))
+			}
+			if (dispatcher == "rowid" || dispatcher == "index-value") && c.EnableOldValue {
+				return fmt.Sprintf("[WARN] This index-value distribution mode "+
+					"does not guarantee row-level orderliness when "+
+					"switching on the old value, so please use caution! dispatch-rules: %#v", rules), nil
+			}
+		}
+	}
+	return "", nil
+}
+
+// [TODO] move all related replica parameters check here to avoid duplicate code in openapi and cli
 
 // GetDefaultReplicaConfig returns the default replica config.
 func GetDefaultReplicaConfig() *ReplicaConfig {
