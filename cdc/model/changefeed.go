@@ -387,7 +387,6 @@ func (info *ChangeFeedInfo) findActiveErrors(backoffInterval time.Duration) []in
 		ts := info.ErrorHis[i]
 		// ts is a errors occurrence time, here to find all errors occurring within a time window
 		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < backoffInterval+deltaBackoffInterval
-
 	})
 	return info.ErrorHis[i:]
 }
