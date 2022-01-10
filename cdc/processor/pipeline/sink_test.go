@@ -602,16 +602,17 @@ func (s *outputSuite) TestFlushSinkReleaseFlowController(c *check.C) {
 	flowController := &flushFlowController{}
 	sink := &flushSink{}
 	// sNode is a sinkNode
-	sNode := newSinkNode(1, sink, 0, 10, flowController)
+	sNode := newSinkNode(sink, 0, 10, flowController)
 	c.Assert(sNode.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
 	sNode.barrierTs = 10
 
-	err := sNode.flushSink(context.Background(), uint64(8))
+	cctx := pipeline.MockNodeContext4Test(nil, pipeline.TickMessage(), nil)
+	err := sNode.flushSink(cctx, uint64(8))
 	c.Assert(err, check.IsNil)
 	c.Assert(sNode.checkpointTs, check.Equals, uint64(8))
 	c.Assert(flowController.releaseCounter, check.Equals, 1)
 	// resolvedTs will fall back in this call
-	err = sNode.flushSink(context.Background(), uint64(10))
+	err = sNode.flushSink(cctx, uint64(10))
 	c.Assert(err, check.IsNil)
 	c.Assert(sNode.checkpointTs, check.Equals, uint64(8))
 	c.Assert(flowController.releaseCounter, check.Equals, 2)
