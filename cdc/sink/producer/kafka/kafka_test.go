@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -106,9 +107,11 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 		NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	opts := make(map[string]string)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
+	c.Assert(opts, check.HasKey, "max-message-bytes")
 	for i := 0; i < 100; i++ {
 		err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
 			Key:   []byte("test-key-1"),
@@ -198,22 +201,40 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 
 	// When topic exists and max message bytes is set correctly.
 	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes()
-	err := validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config)
+	cfg, err := newSaramaConfigImpl(context.Background(), config)
 	c.Assert(err, check.IsNil)
+	opts := make(map[string]string)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
 
 	// When topic exists and max message bytes is not set correctly.
-	// It is larger than the value of topic.
-	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config)
-	c.Assert(
-		errors.Cause(err),
-		check.ErrorMatches,
-		".*Please make sure `max-message-bytes` not greater than topic's `max.message.bytes`.*",
-	)
+	// use the smaller one.
+	defaultMaxMessageBytes := adminClient.GetDefaultMaxMessageBytes()
+	config.MaxMessageBytes = defaultMaxMessageBytes + 1
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
+
+	config.MaxMessageBytes = defaultMaxMessageBytes - 1
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
 
 	// When topic does not exist and auto-create is not enabled.
 	config.AutoCreate = false
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "non-exist", config)
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "non-exist", config, cfg, opts)
 	c.Assert(
 		errors.Cause(err),
 		check.ErrorMatches,
@@ -222,26 +243,34 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 
 	// When the topic does not exist, use the broker's configuration to create the topic.
 	// It is less than the value of broker.
-	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() - 1024
 	config.AutoCreate = true
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-success", config)
+	config.MaxMessageBytes = defaultMaxMessageBytes - 1
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
 	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-success", config, cfg, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
 
 	// When the topic does not exist, use the broker's configuration to create the topic.
 	// It is larger than the value of broker.
-	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
+	config.MaxMessageBytes = defaultMaxMessageBytes + 1
 	config.AutoCreate = true
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-fail", config)
-	c.Assert(
-		errors.Cause(err),
-		check.ErrorMatches,
-		".*Please make sure `max-message-bytes` not greater than broker's `message.max.bytes`.*",
-	)
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-fail", config, cfg, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
 
 	// When the topic exists, but the topic does not store max message bytes info,
 	// the check of parameter succeeds.
 	// It is less than the value of broker.
-	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() - 1024
+	config.MaxMessageBytes = defaultMaxMessageBytes - 1
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
 	detail := &sarama.TopicDetail{
 		NumPartitions: 3,
 		// Does not contain max message bytes information.
@@ -249,19 +278,23 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	}
 	err = adminClient.CreateTopic("test-topic", detail, false)
 	c.Assert(err, check.IsNil)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config)
+	opts = make(map[string]string)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config, cfg, opts)
 	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
 
 	// When the topic exists, but the topic does not store max message bytes info,
 	// the check of parameter fails.
 	// It is larger than the value of broker.
-	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes() + 1024
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config)
-	c.Assert(
-		errors.Cause(err),
-		check.ErrorMatches,
-		".*Please make sure `max-message-bytes` not greater than topic's `max.message.bytes`.*",
-	)
+	config.MaxMessageBytes = defaultMaxMessageBytes + 1
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config, cfg, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
@@ -276,7 +309,8 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	defer func() {
 		NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
-	_, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	opts := make(map[string]string)
+	_, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 }
 
@@ -323,7 +357,9 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	}()
 
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	opts := make(map[string]string)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
+	c.Assert(opts, check.HasKey, "max-message-bytes")
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
@@ -390,7 +426,9 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	}()
 
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	opts := make(map[string]string)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
+	c.Assert(opts, check.HasKey, "max-message-bytes")
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)

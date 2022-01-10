@@ -162,16 +162,18 @@ integration_test_build: check_failpoint_ctl
 integration_test: integration_test_mysql
 
 integration_test_mysql:
-	tests/integration_tests/run.sh mysql "$(CASE)"
+	tests/integration_tests/run.sh mysql "$(CASE)" "$(START_AT)"
 
 integration_test_kafka: check_third_party_binary
-	tests/integration_tests/run.sh kafka "$(CASE)"
+	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
 fmt: tools/bin/gofumports tools/bin/shfmt
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
 	tools/bin/shfmt -d -w .
+	@echo "check log style"
+	scripts/check-log-style.sh
 
 errdoc: tools/bin/errdoc-gen
 	@echo "generator errors.toml"
@@ -207,7 +209,7 @@ tidy:
 
 # TODO: Unified cdc and dm config.
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm
+	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm,tests
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
 check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts
@@ -375,7 +377,7 @@ tools/bin/goveralls: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/goveralls github.com/mattn/goveralls
 
 tools/bin/golangci-lint: tools/check/go.mod
-	cd tools/check && $(GO) build  -mod=mod -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
+	cd tools/check && $(GO) build -mod=mod -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 
 tools/bin/mockgen: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/mockgen github.com/golang/mock/mockgen

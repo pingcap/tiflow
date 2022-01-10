@@ -49,7 +49,6 @@ var InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStor
 	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
 		SendCredentials: false,
 		HTTPClient:      nil,
-		SkipCheckPath:   true,
 	})
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, err)

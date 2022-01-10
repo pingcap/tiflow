@@ -18,11 +18,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
+	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -247,6 +250,27 @@ func (w *Worker) reportMetrics() {
 		s = n
 	}
 	metrics.ReportWorkerStage(w.baseInfo.Name, s)
+}
+
+func (w *Worker) queryStatus(ctx context.Context) (*workerrpc.Response, error) {
+	rpcTimeOut := time.Second * 10 // we relay on ctx.Done() to cancel the rpc, so just set a very long timeout
+	req := &workerrpc.Request{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusRequest{}}
+	failpoint.Inject("operateWorkerQueryStatus", func(v failpoint.Value) {
+		resp := &workerrpc.Response{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusResponse{}}
+		switch v.(string) {
+		case "notInSyncUnit":
+			resp.QueryStatus.SubTaskStatus = append(
+				resp.QueryStatus.SubTaskStatus, &pb.SubTaskStatus{Unit: pb.UnitType_Dump})
+			failpoint.Return(resp, nil)
+		case "allTaskIsPaused":
+			resp.QueryStatus.SubTaskStatus = append(
+				resp.QueryStatus.SubTaskStatus, &pb.SubTaskStatus{Stage: pb.Stage_Paused, Unit: pb.UnitType_Sync})
+			failpoint.Return(resp, nil)
+		default:
+			failpoint.Return(nil, errors.New("query error"))
+		}
+	})
+	return w.SendRequest(ctx, req, rpcTimeOut)
 }
 
 // NewMockWorker is used in tests.

@@ -31,10 +31,12 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/checker"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
@@ -68,7 +70,7 @@ type mysqlInstance struct {
 type Checker struct {
 	closed atomic.Bool
 
-	logger log.Logger
+	tctx *tcontext.Context
 
 	instances []*mysqlInstance
 
@@ -80,6 +82,8 @@ type Checker struct {
 	}
 	errCnt  int64
 	warnCnt int64
+
+	onlineDDL onlineddl.OnlinePlugin
 }
 
 // NewChecker returns a checker.
@@ -87,9 +91,9 @@ func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, e
 	c := &Checker{
 		instances:     make([]*mysqlInstance, 0, len(cfgs)),
 		checkingItems: checkingItems,
-		logger:        log.With(zap.String("unit", "task check")),
-		errCnt:        errCnt,
-		warnCnt:       warnCnt,
+
+		errCnt:  errCnt,
+		warnCnt: warnCnt,
 	}
 
 	for _, cfg := range cfgs {
@@ -114,6 +118,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: c.closeDBs})
 
+	c.tctx = tcontext.NewContext(ctx, log.With(zap.String("unit", "task check")))
 	// target name => source => schema => [tables]
 	sharding := make(map[string]map[string]map[string][]string)
 	shardingCounter := make(map[string]int)
@@ -131,6 +136,14 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		r, err := router.NewTableRouter(instance.cfg.CaseSensitive, instance.cfg.RouteRules)
 		if err != nil {
 			return terror.ErrTaskCheckGenTableRouter.Delegate(err)
+		}
+
+		if instance.cfg.OnlineDDL && c.onlineDDL == nil {
+			c.onlineDDL, err = onlineddl.NewRealOnlinePlugin(c.tctx, instance.cfg)
+			if err != nil {
+				return err
+			}
+			rollbackHolder.Add(fr.FuncRollback{Name: "close-onlineDDL", Fn: c.closeOnlineDDL})
 		}
 
 		columnMapping[instance.cfg.SourceID], err = column.NewMapping(instance.cfg.CaseSensitive, instance.cfg.ColumnMappingRules)
@@ -195,9 +208,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 		// checkTables map schema => {table1, table2, ...}
 		checkTables := make(map[string][]string)
+		checkSchemas := make(map[string]struct{}, len(mapping))
 		for name, tables := range mapping {
 			for _, table := range tables {
 				checkTables[table.Schema] = append(checkTables[table.Schema], table.Name)
+				if _, ok := checkSchemas[table.Schema]; !ok {
+					checkSchemas[table.Schema] = struct{}{}
+				}
 				if _, ok := sharding[name]; !ok {
 					sharding[name] = make(map[string]map[string][]string)
 				}
@@ -220,6 +237,9 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				return err
 			}
 			c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables, exportCfg.Consistency))
+    }
+		if c.onlineDDL != nil {
+			c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, bw))
 		}
 		if checkSchema {
 			c.checkList = append(c.checkList, checker.NewTablesChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables))
@@ -235,7 +255,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.checkList = append(c.checkList, checker.NewShardingTablesChecker(name, dbs, shardingSet, columnMapping, checkingShardID))
 		}
 	}
-	c.logger.Info(c.displayCheckingItems())
+
+	c.tctx.Logger.Info(c.displayCheckingItems())
 	return nil
 }
 
@@ -366,6 +387,7 @@ func (c *Checker) Close() {
 	}
 
 	c.closeDBs()
+	c.closeOnlineDDL()
 
 	c.closed.Store(true)
 }
@@ -374,24 +396,31 @@ func (c *Checker) closeDBs() {
 	for _, instance := range c.instances {
 		if instance.sourceDB != nil {
 			if err := instance.sourceDB.Close(); err != nil {
-				c.logger.Error("close source db", zap.Stringer("db", instance.sourceDBinfo), log.ShortError(err))
+				c.tctx.Logger.Error("close source db", zap.Stringer("db", instance.sourceDBinfo), log.ShortError(err))
 			}
 			instance.sourceDB = nil
 		}
 
 		if instance.targetDB != nil {
 			if err := instance.targetDB.Close(); err != nil {
-				c.logger.Error("close target db", zap.Stringer("db", instance.targetDBInfo), log.ShortError(err))
+				c.tctx.Logger.Error("close target db", zap.Stringer("db", instance.targetDBInfo), log.ShortError(err))
 			}
 			instance.targetDB = nil
 		}
 	}
 }
 
+func (c *Checker) closeOnlineDDL() {
+	if c.onlineDDL != nil {
+		c.onlineDDL.Close()
+		c.onlineDDL = nil
+	}
+}
+
 // Pause implements Unit interface.
 func (c *Checker) Pause() {
 	if c.closed.Load() {
-		c.logger.Warn("try to pause, but already closed")
+		c.tctx.Logger.Warn("try to pause, but already closed")
 		return
 	}
 }
@@ -399,7 +428,7 @@ func (c *Checker) Pause() {
 // Resume resumes the paused process.
 func (c *Checker) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	if c.closed.Load() {
-		c.logger.Warn("try to resume, but already closed")
+		c.tctx.Logger.Warn("try to resume, but already closed")
 		return
 	}
 

@@ -287,6 +287,9 @@ func fixChangefeedInfos(state *orchestrator.GlobalReactorState) {
 	for _, changefeedState := range state.Changefeeds {
 		if changefeedState != nil {
 			changefeedState.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+				if info == nil {
+					return nil, false, nil
+				}
 				info.FixIncompatible()
 				return info, true, nil
 			})
@@ -323,7 +326,8 @@ func (o *Owner) clusterVersionConsistent(captures map[model.CaptureID]*model.Cap
 	for _, capture := range captures {
 		if myVersion != capture.Version {
 			if o.logLimiter.Allow() {
-				log.Warn("the capture version is different with the owner", zap.Reflect("capture", capture), zap.String("owner-version", myVersion))
+				log.Warn("the capture version is different with the owner",
+					zap.Reflect("capture", capture), zap.String("ownerVer", myVersion))
 			}
 			return false
 		}

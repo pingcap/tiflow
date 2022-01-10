@@ -55,7 +55,7 @@ function run() {
 		"\"isCanceled\": true" 1
 
 	sleep 5
-	check_log_not_contains "dispatch auto resume task" $WORK_DIR/worker1/log/dm-worker.log
+	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log "dispatch auto resume task"
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \

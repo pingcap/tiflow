@@ -181,6 +181,7 @@ ErrConfigOnlineDDLInvalidRegex,[code=20048:class=config:scope=internal:level=hig
 ErrConfigOnlineDDLMistakeRegex,[code=20049:class=config:scope=internal:level=high], "Message: online ddl sql '%s' invalid, table %s fail to match '%s' online ddl regex, Workaround: Please update your `shadow-table-rules` or `trash-table-rules` in the configuration file."
 ErrOpenAPITaskConfigExist,[code=20050:class=config:scope=internal:level=low], "Message: the openapi task config for '%s' already exist, Workaround: If you want to override it, please use the overwrite flag."
 ErrOpenAPITaskConfigNotExist,[code=20051:class=config:scope=internal:level=low], "Message: the openapi task config for '%s' does not exist"
+ErrConfigCollationCompatibleNotSupport,[code=20052:class=config:scope=internal:level=medium], "Message: collation compatible %s not supported, Workaround: Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
 ErrBinlogExtractPosition,[code=22001:class=binlog-op:scope=internal:level=high]
 ErrBinlogInvalidFilename,[code=22002:class=binlog-op:scope=internal:level=high], "Message: invalid binlog filename"
 ErrBinlogParsePosFromStr,[code=22003:class=binlog-op:scope=internal:level=high]
@@ -332,9 +333,9 @@ ErrSyncerUnitGenBAList,[code=36060:class=sync-unit:scope=internal:level=high], "
 ErrSyncerUnitHandleDDLFailed,[code=36061:class=sync-unit:scope=internal:level=high], "Message: fail to handle ddl job for %s"
 ErrSyncerShardDDLConflict,[code=36062:class=sync-unit:scope=internal:level=high], "Message: fail to handle shard ddl %v in optimistic mode, because schema conflict detected, conflict error: %s, Workaround: Please use show-ddl-locks command for more details."
 ErrSyncerFailpoint,[code=36063:class=sync-unit:scope=internal:level=low], "Message: failpoint specified error"
-ErrSyncerReplaceEvent,[code=36064:class=sync-unit:scope=internal:level=high]
+ErrSyncerEvent,[code=36064:class=sync-unit:scope=internal:level=high]
 ErrSyncerOperatorNotExist,[code=36065:class=sync-unit:scope=internal:level=low], "Message: error operator not exist, position: %s"
-ErrSyncerReplaceEventNotExist,[code=36066:class=sync-unit:scope=internal:level=high], "Message: replace event not exist, location: %s"
+ErrSyncerEventNotExist,[code=36066:class=sync-unit:scope=internal:level=high], "Message: replace or inject event not exist, location: %s"
 ErrSyncerParseDDL,[code=36067:class=sync-unit:scope=internal:level=high], "Message: parse DDL: %s, Workaround: Please confirm your DDL statement is correct and needed. For TiDB compatible DDL, see https://docs.pingcap.com/tidb/stable/mysql-compatibility#ddl. You can use `handle-error` command to skip or replace the DDL or add a binlog filter rule to ignore it if the DDL is not needed."
 ErrSyncerUnsupportedStmt,[code=36068:class=sync-unit:scope=internal:level=high], "Message: `%s` statement not supported in %s mode"
 ErrSyncerGetEvent,[code=36069:class=sync-unit:scope=upstream:level=high], "Message: get binlog event error: %v, Workaround: Please check if the binlog file could be parsed by `mysqlbinlog`."
@@ -519,7 +520,7 @@ ErrSchedulerSubTaskStageInvalidUpdate,[code=46015:class=dm-master:scope=internal
 ErrSchedulerSubTaskOpTaskNotExist,[code=46016:class=dm-master:scope=internal:level=medium], "Message: subtasks with name %s need to be operate not exist, Workaround: Please use `query-status` command to see tasks."
 ErrSchedulerSubTaskOpSourceNotExist,[code=46017:class=dm-master:scope=internal:level=medium], "Message: sources %v need to be operate not exist"
 ErrSchedulerTaskNotExist,[code=46018:class=scheduler:scope=internal:level=medium], "Message: task with name %s not exist, Workaround: Please use `query-status` command to see tasks."
-ErrSchedulerRequireNotRunning,[code=46019:class=scheduler:scope=internal:level=high], "Message: tasks %v on source %s should not be running, Workaround: Please use `pause-task [-s source ...] task` to pause them first."
+ErrSchedulerRequireRunningTaskInSyncUnit,[code=46019:class=scheduler:scope=internal:level=high], "Message: running tasks %v to be transferred on source %s should in sync unit, Workaround: Please use `pause-task [-s source ...] task` to pause them first."
 ErrSchedulerRelayWorkersBusy,[code=46020:class=scheduler:scope=internal:level=high], "Message: these workers %s have started relay for sources %s respectively, Workaround: Please use `stop-relay` to stop them, or change your topology."
 ErrSchedulerRelayWorkersWrongBound,[code=46021:class=scheduler:scope=internal:level=high], "Message: these workers %s have bound for another sources %s respectively, Workaround: Please `start-relay` on free or same source workers."
 ErrSchedulerRelayWorkersWrongRelay,[code=46022:class=scheduler:scope=internal:level=high], "Message: these workers %s have started relay for another sources %s respectively, Workaround: Please correct sources in `stop-relay`."
@@ -532,6 +533,7 @@ ErrSchedulerStartRelayOnSpecified,[code=46028:class=scheduler:scope=internal:lev
 ErrSchedulerStopRelayOnSpecified,[code=46029:class=scheduler:scope=internal:level=low], "Message: the source has `start-relay` with worker name for workers %v, so it can't `stop-relay` without worker name now, Workaround: Please specify worker names for `stop-relay`."
 ErrSchedulerStartRelayOnBound,[code=46030:class=scheduler:scope=internal:level=low], "Message: the source has `start-relay` automatically for bound worker, so it can't `start-relay` with worker name now, Workaround: Please stop relay by `stop-relay` without worker name first."
 ErrSchedulerStopRelayOnBound,[code=46031:class=scheduler:scope=internal:level=low], "Message: the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now, Workaround: Please use `stop-relay` without worker name."
+ErrSchedulerPauseTaskForTransferSource,[code=46032:class=scheduler:scope=internal:level=low], "Message: failed to auto pause tasks %s when transfer-source, Workaround: Please pause task by `dmctl pause-task`."
 ErrCtlGRPCCreateConn,[code=48001:class=dmctl:scope=internal:level=high], "Message: can not create grpc connection, Workaround: Please check your network connection."
 ErrCtlInvalidTLSCfg,[code=48002:class=dmctl:scope=internal:level=medium], "Message: invalid TLS config, Workaround: Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in command line."
 ErrCtlLoadTLSCfg,[code=48003:class=dmctl:scope=internal:level=high], "Message: can not load tls config, Workaround: Please ensure that the tls certificate is accessible on the node currently running dmctl."
