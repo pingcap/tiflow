@@ -43,3 +43,12 @@ func (t *testConfig) TestTaskCliArgsDowngrade(c *C) {
 	c.Assert(afterDowngrade.Decode([]byte(data)), IsNil)
 	c.Assert(afterDowngrade.StartTime, Equals, "123")
 }
+
+func (t *testConfig) TestTaskCliArgsVerify(c *C) {
+	empty := TaskCliArgs{}
+	c.Assert(empty.Verify(), IsNil)
+	wrongStartTime := TaskCliArgs{StartTime: "2006-01-02T15:04:05"}
+	c.Assert(wrongStartTime.Verify(), NotNil)
+	rightStartTime := TaskCliArgs{StartTime: "2006-01-02 15:04:05"}
+	c.Assert(rightStartTime.Verify(), IsNil)
+}

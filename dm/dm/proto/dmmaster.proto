@@ -112,8 +112,9 @@ service Master {
 
 message StartTaskRequest {
     string task = 1; // task's configuration, yaml format
-    repeated string sources = 2; // mysql source need to do start task, empty for all sources defiend in the task config
+    repeated string sources = 2; // mysql source need to do start task, empty for all sources defined in the task config
     bool removeMeta = 3; // whether to remove meta data for this task or not
+    string startTime = 4; // a highest priority field to specify starting of binlog replication
 }
 
 message StartTaskResponse {
@@ -251,6 +252,7 @@ message CheckTaskRequest {
     string task = 1; // task's configuration, yaml format
     int64 errCnt = 2; // max error count to display
     int64 warnCnt = 3; // max warn count to display
+    string startTime = 4; // a highest priority field to specify starting of binlog replication
 }
 
 message CheckTaskResponse {
