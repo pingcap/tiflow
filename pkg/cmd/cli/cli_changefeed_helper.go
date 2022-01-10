@@ -136,7 +136,7 @@ func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClien
 	}
 
 	resp, err := httpClient.PostForm(url, map[string][]string{
-		api.APIOpVarChangefeedID: {id},
+		api.OpVarChangefeedID: {id},
 	})
 	if err != nil {
 		return "", err
@@ -178,9 +178,9 @@ func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClie
 	}
 
 	resp, err := httpClient.PostForm(url, map[string][]string{
-		api.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
-		api.APIOpVarChangefeedID:       {job.CfID},
-		api.APIOpForceRemoveChangefeed: {forceRemoveOpt},
+		api.OpVarAdminJob:           {fmt.Sprint(int(job.Type))},
+		api.OpVarChangefeedID:       {job.CfID},
+		api.OpForceRemoveChangefeed: {forceRemoveOpt},
 	})
 	if err != nil {
 		return err

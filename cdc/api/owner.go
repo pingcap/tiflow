@@ -35,16 +35,16 @@ import (
 )
 
 const (
-	// APIOpVarAdminJob is the key of admin job in HTTP API
-	APIOpVarAdminJob = "admin-job"
-	// APIOpVarChangefeedID is the key of changefeed ID in HTTP API
-	APIOpVarChangefeedID = "cf-id"
-	// APIOpVarTargetCaptureID is the key of to-capture ID in HTTP API
-	APIOpVarTargetCaptureID = "target-cp-id"
-	// APIOpVarTableID is the key of table ID in HTTP API
-	APIOpVarTableID = "table-id"
-	// APIOpForceRemoveChangefeed is used when remove a changefeed
-	APIOpForceRemoveChangefeed = "force-remove"
+	// OpVarAdminJob is the key of admin job in HTTP API
+	OpVarAdminJob = "admin-job"
+	// OpVarChangefeedID is the key of changefeed ID in HTTP API
+	OpVarChangefeedID = "cf-id"
+	// OpVarTargetCaptureID is the key of to-capture ID in HTTP API
+	OpVarTargetCaptureID = "target-cp-id"
+	// OpVarTableID is the key of table ID in HTTP API
+	OpVarTableID = "table-id"
+	// OpForceRemoveChangefeed is used when remove a changefeed
+	OpForceRemoveChangefeed = "force-remove"
 )
 
 type commonResp struct {
@@ -74,7 +74,7 @@ func (c ChangefeedResp) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// ownerAPI provides capture APIs.
+// ownerAPI provides owner APIs.
 type ownerAPI struct {
 	capture *capture.Capture
 }
@@ -126,14 +126,14 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	typeStr := req.Form.Get(APIOpVarAdminJob)
+	typeStr := req.Form.Get(OpVarAdminJob)
 	typ, err := strconv.ParseInt(typeStr, 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, cerror.ErrAPIInvalidParam.GenWithStack("invalid admin job type: %s", typeStr))
 		return
 	}
 	opts := &model.AdminJobOption{}
-	if forceRemoveStr := req.Form.Get(APIOpForceRemoveChangefeed); forceRemoveStr != "" {
+	if forceRemoveStr := req.Form.Get(OpForceRemoveChangefeed); forceRemoveStr != "" {
 		forceRemoveOpt, err := strconv.ParseBool(forceRemoveStr)
 		if err != nil {
 			writeError(w, http.StatusBadRequest,
@@ -143,7 +143,7 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 		opts.ForceRemove = forceRemoveOpt
 	}
 	job := model.AdminJob{
-		CfID: req.Form.Get(APIOpVarChangefeedID),
+		CfID: req.Form.Get(OpVarChangefeedID),
 		Type: model.AdminJobType(typ),
 		Opts: opts,
 	}
@@ -168,7 +168,7 @@ func (h *ownerAPI) handleRebalanceTrigger(w http.ResponseWriter, req *http.Reque
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	changefeedID := req.Form.Get(APIOpVarChangefeedID)
+	changefeedID := req.Form.Get(OpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		writeError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
@@ -196,19 +196,19 @@ func (h *ownerAPI) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 			cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
 	}
-	changefeedID := req.Form.Get(APIOpVarChangefeedID)
+	changefeedID := req.Form.Get(OpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		writeError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	to := req.Form.Get(APIOpVarTargetCaptureID)
+	to := req.Form.Get(OpVarTargetCaptureID)
 	if err := model.ValidateChangefeedID(to); err != nil {
 		writeError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid target capture id: %s", to))
 		return
 	}
-	tableIDStr := req.Form.Get(APIOpVarTableID)
+	tableIDStr := req.Form.Get(OpVarTableID)
 	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest,
@@ -236,7 +236,7 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	changefeedID := req.Form.Get(APIOpVarChangefeedID)
+	changefeedID := req.Form.Get(OpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		writeError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
