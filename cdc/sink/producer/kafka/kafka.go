@@ -447,29 +447,27 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 
 func validateMinInsyncReplicas(admin kafka.ClusterAdminClient,
 	topics map[string]sarama.TopicDetail, topic string, replicationFactor int) error {
-	info, exists := topics[topic]
-	if exists {
-		minInsyncReplicasStr, err := getTopicConfig(admin, info,
-			kafka.MinInsyncReplicasConfigName,
-			kafka.MinInsyncReplicasConfigName)
-		if err != nil {
-			return err
-		}
-		minInsyncReplicas, err := strconv.Atoi(minInsyncReplicasStr)
-		if err != nil {
-			return err
+	minInsyncReplicasConfigGetter := func() (string, bool, error) {
+		info, exists := topics[topic]
+		if exists {
+			minInsyncReplicasStr, err := getTopicConfig(admin, info,
+				kafka.MinInsyncReplicasConfigName,
+				kafka.MinInsyncReplicasConfigName)
+			if err != nil {
+				return "", true, err
+			}
+			return minInsyncReplicasStr, true, nil
 		}
 
-		if replicationFactor < minInsyncReplicas {
-			msg := fmt.Sprintf("`replication-factor` cannot be smaller than the `%s` of topic",
-				kafka.MinInsyncReplicasConfigName)
-			log.Error(msg, zap.Int("replicationFactor", replicationFactor),
-				zap.Int("minInsyncReplicas", minInsyncReplicas))
-			return errors.New(msg)
+		minInsyncReplicasStr, err := getBrokerConfig(admin, kafka.MinInsyncReplicasConfigName)
+		if err != nil {
+			return "", false, err
 		}
+
+		return minInsyncReplicasStr, false, nil
 	}
 
-	minInsyncReplicasStr, err := getBrokerConfig(admin, kafka.MinInsyncReplicasConfigName)
+	minInsyncReplicasStr, exists, err := minInsyncReplicasConfigGetter()
 	if err != nil {
 		return err
 	}
@@ -478,9 +476,14 @@ func validateMinInsyncReplicas(admin kafka.ClusterAdminClient,
 		return err
 	}
 
+	configFrom := "topic"
+	if !exists {
+		configFrom = "broker"
+	}
+
 	if replicationFactor < minInsyncReplicas {
-		msg := fmt.Sprintf("`replication-factor` cannot be smaller than the `%s` of broker",
-			kafka.MinInsyncReplicasConfigName)
+		msg := fmt.Sprintf("`replication-factor` cannot be smaller than the `%s` of %s",
+			kafka.MinInsyncReplicasConfigName, configFrom)
 		log.Error(msg, zap.Int("replicationFactor", replicationFactor),
 			zap.Int("minInsyncReplicas", minInsyncReplicas))
 		return errors.New(msg)
