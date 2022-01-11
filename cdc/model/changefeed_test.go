@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -420,7 +419,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminNone,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+					Code: string(cerror.ErrGCTTLExceeded.RFCCode()),
 				},
 			},
 			expectedState: StateFailed,
@@ -430,7 +429,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminResume,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+					Code: string(cerror.ErrGCTTLExceeded.RFCCode()),
 				},
 			},
 			expectedState: StateFailed,
@@ -440,7 +439,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminNone,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
+					Code: string(cerror.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
 			expectedState: StateError,
@@ -450,7 +449,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminResume,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
+					Code: string(cerror.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
 			expectedState: StateError,
