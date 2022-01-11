@@ -86,7 +86,7 @@ type Owner struct {
 	logLimiter   *rate.Limiter
 	lastTickTime time.Time
 	closed       int32
-	// bootstrapped specifies whether the owner has been initialized.
+	// bootstrapped specifies whether the owner has been runningStatus.
 	// This will only be done when the owner starts the first Tick.
 	// NOTICE: Do not use it in a method other than tick unexpectedly, as it is not a thread-safe value.
 	bootstrapped bool
