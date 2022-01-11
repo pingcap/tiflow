@@ -355,13 +355,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		}
 
 		if atomic.CompareAndSwapInt32(&c.runningStatus, changeFeedRunning, changeFeedClosing) {
-			log.Info("changefeed ddl sink closed",
-				zap.String("changefeedID", c.state.ID),
-				zap.Int32("runningStatus", c.runningStatus))
+			log.Info("changefeed ddl sink closed", zap.String("changefeedID", c.state.ID))
 		} else if atomic.CompareAndSwapInt32(&c.runningStatus, changeFeedClosing, changeFeedClosed) {
-			log.Info("changefeed fully closed",
-				zap.String("changefeedID", c.state.ID),
-				zap.Int32("runningStatus", c.runningStatus))
+			log.Info("changefeed fully closed", zap.String("changefeedID", c.state.ID))
 		}
 	}()
 
@@ -379,13 +375,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.metricsChangefeedResolvedTsLagGauge = nil
 
 	if atomic.CompareAndSwapInt32(&c.runningStatus, changeFeedRunning, changeFeedClosing) {
-		log.Info("changefeed closing",
-			zap.String("changefeedID", c.state.ID),
-			zap.Int32("runningStatus", c.runningStatus))
+		log.Info("changefeed closing", zap.String("changefeedID", c.state.ID))
 	} else if atomic.CompareAndSwapInt32(&c.runningStatus, changeFeedClosing, changeFeedClosed) {
-		log.Info("changefeed fully closed",
-			zap.String("changefeedID", c.state.ID),
-			zap.Int32("runningStatus", c.runningStatus))
+		log.Info("changefeed fully closed", zap.String("changefeedID", c.state.ID))
 	}
 }
 
