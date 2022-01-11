@@ -434,6 +434,15 @@ def delete_task_template(name):
     print("delete_task_template")
 
 
+def check_noshard_task_dump_status_success(task_name, total):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("check_dump_status_success resp=", data)
+    assert data["data"][0]["dump_status"]["finished_bytes"] == int(total)
+
+
 if __name__ == "__main__":
     FUNC_MAP = {
         "start_task_failed": start_task_failed,
@@ -456,6 +465,7 @@ if __name__ == "__main__":
         "get_task_template": get_task_template,
         "update_task_template_success": update_task_template_success,
         "delete_task_template": delete_task_template,
+        "check_noshard_task_dump_status_success": check_noshard_task_dump_status_success,
     }
 
     func = FUNC_MAP[sys.argv[1]]

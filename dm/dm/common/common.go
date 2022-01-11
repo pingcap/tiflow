@@ -96,7 +96,6 @@ var (
 	// task config template is used to generate task config before user create a real task by openapi. user can modify eg:
 	// import from running tasks/create/update/delete the template and those changes will not affect the running tasks.
 	OpenAPITaskTemplateKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/openapi-task-template/")
-
 	// TaskCliArgsKeyAdapter is used to store the command line arguments of task. They are different from the task
 	// config because the command line arguments may be expected to take effect only once when failover.
 	// kv: Encode(task-name, source-id) -> TaskCliArgs.
