@@ -45,8 +45,8 @@ cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9
 cloud.google.com/go/storage v1.16.1 h1:sMEIc4wxvoY3NXG7Rn9iP7jb/2buJgWR1vNXCR/UPfs=
 cloud.google.com/go/storage v1.16.1/go.mod h1:LaNorbty3ehnU3rEjXSNV/NRgQA0O8Y+uh6bPe5UOk4=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
-github.com/3AceShowHand/sarama v1.30.1-0.20220106135735-59c9d415ff0a h1:989UqO7ETPCw9yGae8eDpRu+MIH+Imt7OHXS4ejz0m0=
-github.com/3AceShowHand/sarama v1.30.1-0.20220106135735-59c9d415ff0a/go.mod h1:hGgx05L/DiW8XYBXeJdKIN6V2QUy2H6JqME5VT1NLRw=
+github.com/3AceShowHand/sarama v1.30.1-0.20220110160834-c0984e52028b h1:oCAZHM7yZqVZXSXSOfpddOiJDna791SVXqdZ2rDn1mQ=
+github.com/3AceShowHand/sarama v1.30.1-0.20220110160834-c0984e52028b/go.mod h1:hGgx05L/DiW8XYBXeJdKIN6V2QUy2H6JqME5VT1NLRw=
 github.com/99designs/keyring v1.1.5 h1:wLv7QyzYpFIyMSwOADq1CLTF9KbjbBfcnfmOGJ64aO4=
 github.com/99designs/keyring v1.1.5/go.mod h1:7hsVvt2qXgtadGevGJ4ujg+u8m6SpJ5TpHqTozIPqf0=
 github.com/AndreasBriese/bbloom v0.0.0-20190306092124-e2d15f34fcf9/go.mod h1:bOvUY6CB00SOBii9/FifXqc0awNKxLFCL/+pkDPuyl8=
