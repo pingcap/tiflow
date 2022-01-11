@@ -6,7 +6,6 @@ require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Shopify/sarama v1.27.2
-	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/apache/pulsar-client-go v0.6.0
 	github.com/aws/aws-sdk-go v1.35.3
 	github.com/benbjohnson/clock v1.1.0
