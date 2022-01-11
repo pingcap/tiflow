@@ -115,7 +115,6 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	s.cancel = cancel
 
-	lastEmitCheckpointTs := time.Now()
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -148,16 +147,11 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
 					continue
 				}
-				log.Info("ddl sink try to send checkpointTs", zap.Uint64("checkpointTs", checkpointTs))
 				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs); err != nil {
 					ctx.Throw(errors.Trace(err))
 					return
 				}
-				log.Info("ddl sink send checkpointTs",
-					zap.Uint64("checkpointTs", checkpointTs),
-					zap.Duration("elapsed", time.Since(lastEmitCheckpointTs)))
 				lastCheckpointTs = checkpointTs
-				lastEmitCheckpointTs = time.Now()
 			case ddl := <-s.ddlCh:
 				err := s.sink.EmitDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
