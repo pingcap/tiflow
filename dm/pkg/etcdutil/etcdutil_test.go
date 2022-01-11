@@ -20,10 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/phayes/freeport"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/clientv3util"
 	"go.etcd.io/etcd/embed"
@@ -35,7 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-var etcdTestSuite = SerialSuites(&testEtcdUtilSuite{})
+var etcdTestSuite = Suite(&testEtcdUtilSuite{})
 
 type testEtcdUtilSuite struct {
 	testT *testing.T
@@ -44,6 +44,9 @@ type testEtcdUtilSuite struct {
 func (t *testEtcdUtilSuite) SetUpSuite(c *C) {
 	// initialized the logger to make genEmbedEtcdConfig working.
 	c.Assert(log.InitLogger(&log.Config{}), IsNil)
+	// this is to trigger  `etcd.io/etcd/embed.(*Config).setupLogging()`
+	// otherwise `newConfig` will datarace with `TestDoOpsInOneTxnWithRetry.NewClusterV3.Launch.m.grpcServer.Serve(m.grpcListener)`
+	t.newConfig(c, "not used", 1)
 }
 
 func TestSuite(t *testing.T) {
@@ -54,8 +57,6 @@ func TestSuite(t *testing.T) {
 }
 
 func (t *testEtcdUtilSuite) newConfig(c *C, name string, portCount int) *embed.Config {
-	freePort := freeport.GetPort()
-
 	cfg := embed.NewConfig()
 	cfg.Name = name
 	cfg.Dir = c.MkDir()
@@ -65,21 +66,21 @@ func (t *testEtcdUtilSuite) newConfig(c *C, name string, portCount int) *embed.C
 
 	cfg.LCUrls = []url.URL{}
 	for i := 0; i < portCount; i++ {
-		cu, err2 := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", freePort))
+		endPoint := tempurl.Alloc()
+		cu, err2 := url.Parse(endPoint)
 		c.Assert(err2, IsNil)
 		cfg.LCUrls = append(cfg.LCUrls, *cu)
-		freePort = freeport.GetPort()
 	}
 
 	cfg.ACUrls = cfg.LCUrls
 	cfg.LPUrls = []url.URL{}
 	ic := make([]string, 0, portCount)
 	for i := 0; i < portCount; i++ {
-		pu, err2 := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", freePort))
+		endPoint := tempurl.Alloc()
+		pu, err2 := url.Parse(endPoint)
 		c.Assert(err2, IsNil)
 		cfg.LPUrls = append(cfg.LPUrls, *pu)
 		ic = append(ic, fmt.Sprintf("%s=%s", cfg.Name, pu))
-		freePort = freeport.GetPort()
 	}
 	cfg.APUrls = cfg.LPUrls
 	cfg.InitialCluster = strings.Join(ic, ",")
@@ -128,9 +129,6 @@ func (t *testEtcdUtilSuite) TestMemberUtil(c *C) {
 	for i := 1; i <= 3; i++ {
 		t.testMemberUtilInternal(c, i)
 	}
-
-	t.testRemoveMember(c)
-	t.testDoOpsInOneTxnWithRetry(c)
 }
 
 func (t *testEtcdUtilSuite) testMemberUtilInternal(c *C, portCount int) {
@@ -176,7 +174,7 @@ func (t *testEtcdUtilSuite) testMemberUtilInternal(c *C, portCount int) {
 	}
 }
 
-func (t *testEtcdUtilSuite) testRemoveMember(c *C) {
+func (t *testEtcdUtilSuite) TestRemoveMember(c *C) {
 	// test remove one member that is not the one we connected to.
 	// if we remove the one we connected to, the test might fail, see more in https://github.com/etcd-io/etcd/pull/7242
 	cluster := integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 3})
@@ -189,8 +187,8 @@ func (t *testEtcdUtilSuite) testRemoveMember(c *C) {
 	c.Assert(respList.Members, HasLen, 3)
 	for _, m := range respList.Members {
 		if m.ID != respList.Header.MemberId {
-			respRemove, err := RemoveMember(cli, m.ID)
-			c.Assert(err, IsNil)
+			respRemove, removeErr := RemoveMember(cli, m.ID)
+			c.Assert(removeErr, IsNil)
 			c.Assert(respRemove.Members, HasLen, 2)
 			break
 		}
@@ -200,7 +198,7 @@ func (t *testEtcdUtilSuite) testRemoveMember(c *C) {
 	c.Assert(respList.Members, HasLen, 2)
 }
 
-func (t *testEtcdUtilSuite) testDoOpsInOneTxnWithRetry(c *C) {
+func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *C) {
 	var (
 		key1 = "/test/etcdutil/do-ops-in-one-txn-with-retry-1"
 		key2 = "/test/etcdutil/do-ops-in-one-txn-with-retry-2"
