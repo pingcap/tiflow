@@ -295,6 +295,15 @@ def stop_task_success(task_name):
     print("stop_task_success")
 
 
+def check_noshard_task_dump_status_success(task_name, total):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("check_dump_status_success resp=", data)
+    assert data["data"][0]["dump_status"]["finished_bytes"] == int(total)
+
+
 if __name__ == "__main__":
     FUNC_MAP = {
         "start_task_failed": start_task_failed,
@@ -310,6 +319,7 @@ if __name__ == "__main__":
         "get_illegal_char_task_status_failed": get_illegal_char_task_status_failed,
         "get_task_status_success": get_task_status_success,
         "operate_schema_and_table_success": operate_schema_and_table_success,
+        "check_noshard_task_dump_status_success": check_noshard_task_dump_status_success,
     }
 
     func = FUNC_MAP[sys.argv[1]]
