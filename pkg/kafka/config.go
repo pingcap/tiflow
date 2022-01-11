@@ -22,4 +22,9 @@ const (
 	// Kafka topics.
 	// See: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
 	TopicMaxMessageBytesConfigName = "max.message.bytes"
+	// MinInsyncReplicasConfigName the minimum number of replicas that must acknowledge a write
+	// for the write to be considered successful. Only works if the producer's acks is "all" (or "-1").
+	// See: https://kafka.apache.org/documentation/#brokerconfigs_min.insync.replicas and
+	// https://kafka.apache.org/documentation/#topicconfigs_min.insync.replicas
+	MinInsyncReplicasConfigName = "min.insync.replicas"
 )
