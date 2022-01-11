@@ -177,29 +177,24 @@ func (t *testEtcdUtilSuite) testMemberUtilInternal(c *C, portCount int) {
 }
 
 func (t *testEtcdUtilSuite) testRemoveMember(c *C) {
+	// test remove one member that is not the one we connected to.
+	// if we remove the one we connected to, the test might fail, see more in https://github.com/etcd-io/etcd/pull/7242
 	cluster := integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 3})
 	defer cluster.Terminate(t.testT)
-
 	leaderIdx := cluster.WaitLeader(t.testT)
 	c.Assert(leaderIdx, Not(Equals), -1)
-	cli := cluster.Client(leaderIdx) // client to the leader.
-
+	cli := cluster.Client(leaderIdx)
 	respList, err := ListMembers(cli)
 	c.Assert(err, IsNil)
 	c.Assert(respList.Members, HasLen, 3)
-
-	// always try to remove the first member, may or may not the leader
-	respRemove, err := RemoveMember(cli, respList.Members[0].ID)
-	if err != nil {
-		// remove the leader will meet this error, and next line will check the member count
-		c.Assert(err, ErrorMatches, ".*etcdserver: server stopped")
-	} else {
-		c.Assert(respRemove.Members, HasLen, 2)
+	for _, m := range respList.Members {
+		if m.ID != respList.Header.MemberId {
+			respRemove, err := RemoveMember(cli, m.ID)
+			c.Assert(err, IsNil)
+			c.Assert(respRemove.Members, HasLen, 2)
+			break
+		}
 	}
-
-	// update client to leader
-	cli = cluster.Client(cluster.WaitLeader(t.testT))
-	// only 2 members exist now
 	respList, err = ListMembers(cli)
 	c.Assert(err, IsNil)
 	c.Assert(respList.Members, HasLen, 2)
