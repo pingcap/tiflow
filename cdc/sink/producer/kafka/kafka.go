@@ -441,7 +441,21 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	if config.PartitionNum < 0 {
 		return nil, cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(config.PartitionNum)
 	}
+<<<<<<< HEAD
 	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
+=======
+	defer func() {
+		if err := admin.Close(); err != nil {
+			log.Warn("close kafka cluster admin failed", zap.Error(err))
+		}
+	}()
+
+	if err := validateAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	asyncClient, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)
+>>>>>>> afa9a2bf5 (sink(ticdc): actively checks the size of min.insync.replicas and replication-factor (#4263))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -514,23 +528,178 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
+<<<<<<< HEAD
 // NewSaramaConfig return the default config and set the according version and metrics
 func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
 	version, err := sarama.ParseKafkaVersion(c.Version)
+=======
+func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config,
+	opts map[string]string) error {
+	topics, err := admin.ListTopics()
+	if err != nil {
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	err = validateMinInsyncReplicas(admin, topics, topic, int(config.ReplicationFactor))
+	if err != nil {
+		return cerror.ErrKafkaInvalidConfig.Wrap(err).GenWithStack(
+			"because TiCDC Kafka producer's `request.required.acks` defaults to -1, " +
+				"TiCDC cannot deliver messages when the `replication-factor` is less than `min.insync.replicas`")
+	}
+
+	info, exists := topics[topic]
+	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
+	if exists {
+		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
+		topicMaxMessageBytesStr, err := getTopicConfig(admin, info, kafka.TopicMaxMessageBytesConfigName,
+			kafka.BrokerMessageMaxBytesConfigName)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
+		topicMaxMessageBytes, err := strconv.Atoi(topicMaxMessageBytesStr)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
+
+		if topicMaxMessageBytes < config.MaxMessageBytes {
+			log.Warn("topic's `max.message.bytes` less than the user set `max-message-bytes`,"+
+				"use topic's `max.message.bytes` to initialize the Kafka producer",
+				zap.Int("max.message.bytes", topicMaxMessageBytes),
+				zap.Int("max-message-bytes", config.MaxMessageBytes))
+			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
+		}
+		opts["max-message-bytes"] = strconv.Itoa(saramaConfig.Producer.MaxMessageBytes)
+
+		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
+		if config.AutoCreate {
+			log.Warn("topic already exist, TiCDC will not create the topic",
+				zap.String("topic", topic), zap.Any("detail", info))
+		}
+
+		if err := config.setPartitionNum(info.NumPartitions); err != nil {
+			return errors.Trace(err)
+		}
+
+		return nil
+	}
+
+	if !config.AutoCreate {
+		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
+	}
+
+	brokerMessageMaxBytesStr, err := getBrokerConfig(admin, kafka.BrokerMessageMaxBytesConfigName)
+>>>>>>> afa9a2bf5 (sink(ticdc): actively checks the size of min.insync.replicas and replication-factor (#4263))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
 	}
+<<<<<<< HEAD
 	var role string
 	if util.IsOwnerFromCtx(ctx) {
 		role = "owner"
 	} else {
 		role = "processor"
+=======
+	brokerMessageMaxBytes, err := strconv.Atoi(brokerMessageMaxBytesStr)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	// when create the topic, `max.message.bytes` is decided by the broker,
+	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
+	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
+	// broker's `message.max.bytes`.
+	if brokerMessageMaxBytes < config.MaxMessageBytes {
+		log.Warn("broker's `message.max.bytes` less than the user set `max-message-bytes`,"+
+			"use broker's `message.max.bytes` to initialize the Kafka producer",
+			zap.Int("message.max.bytes", brokerMessageMaxBytes),
+			zap.Int("max-message-bytes", config.MaxMessageBytes))
+		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
+	}
+	opts["max-message-bytes"] = strconv.Itoa(saramaConfig.Producer.MaxMessageBytes)
+
+	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
+	if config.PartitionNum == 0 {
+		config.PartitionNum = defaultPartitionNum
+		log.Warn("partition-num is not set, use the default partition count",
+			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
+	}
+
+	err = admin.CreateTopic(topic, &sarama.TopicDetail{
+		NumPartitions:     config.PartitionNum,
+		ReplicationFactor: config.ReplicationFactor,
+	}, false)
+	// TODO identify the cause of "Topic with this name already exists"
+	if err != nil && !strings.Contains(err.Error(), "already exists") {
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	log.Info("TiCDC create the topic",
+		zap.Int32("partition-num", config.PartitionNum),
+		zap.Int16("replication-factor", config.ReplicationFactor))
+
+	return nil
+}
+
+func validateMinInsyncReplicas(admin kafka.ClusterAdminClient,
+	topics map[string]sarama.TopicDetail, topic string, replicationFactor int) error {
+	minInsyncReplicasConfigGetter := func() (string, bool, error) {
+		info, exists := topics[topic]
+		if exists {
+			minInsyncReplicasStr, err := getTopicConfig(admin, info,
+				kafka.MinInsyncReplicasConfigName,
+				kafka.MinInsyncReplicasConfigName)
+			if err != nil {
+				return "", true, err
+			}
+			return minInsyncReplicasStr, true, nil
+		}
+
+		minInsyncReplicasStr, err := getBrokerConfig(admin, kafka.MinInsyncReplicasConfigName)
+		if err != nil {
+			return "", false, err
+		}
+
+		return minInsyncReplicasStr, false, nil
+	}
+
+	minInsyncReplicasStr, exists, err := minInsyncReplicasConfigGetter()
+	if err != nil {
+		return err
+	}
+	minInsyncReplicas, err := strconv.Atoi(minInsyncReplicasStr)
+	if err != nil {
+		return err
+	}
+
+	configFrom := "topic"
+	if !exists {
+		configFrom = "broker"
+	}
+
+	if replicationFactor < minInsyncReplicas {
+		msg := fmt.Sprintf("`replication-factor` cannot be smaller than the `%s` of %s",
+			kafka.MinInsyncReplicasConfigName, configFrom)
+		log.Error(msg, zap.Int("replicationFactor", replicationFactor),
+			zap.Int("minInsyncReplicas", minInsyncReplicas))
+		return errors.New(msg)
+	}
+
+	return nil
+}
+
+// getBrokerConfig gets broker config by name.
+func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (string, error) {
+	_, controllerID, err := admin.DescribeCluster()
+	if err != nil {
+		return "", err
+>>>>>>> afa9a2bf5 (sink(ticdc): actively checks the size of min.insync.replicas and replication-factor (#4263))
 	}
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
+<<<<<<< HEAD
 	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID, c.ClientID)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -605,4 +774,32 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	}
 
 	return config, err
+=======
+	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
+		Type:        sarama.BrokerResource,
+		Name:        strconv.Itoa(int(controllerID)),
+		ConfigNames: []string{brokerConfigName},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if len(configEntries) == 0 || configEntries[0].Name != brokerConfigName {
+		return "", errors.New(fmt.Sprintf(
+			"cannot find the `%s` from the broker's configuration", brokerConfigName))
+	}
+
+	return configEntries[0].Value, nil
+}
+
+// getTopicConfig gets topic config by name.
+// If the topic does not have this configuration, we will try to get it from the broker's configuration.
+// NOTICE: The configuration names of topic and broker may be different for the same configuration.
+func getTopicConfig(admin kafka.ClusterAdminClient, detail sarama.TopicDetail, topicConfigName string, brokerConfigName string) (string, error) {
+	if a, ok := detail.ConfigEntries[topicConfigName]; ok {
+		return *a, nil
+	}
+
+	return getBrokerConfig(admin, brokerConfigName)
+>>>>>>> afa9a2bf5 (sink(ticdc): actively checks the size of min.insync.replicas and replication-factor (#4263))
 }
