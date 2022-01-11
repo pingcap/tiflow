@@ -417,10 +417,14 @@ func testChangefeedReleaseResource(
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 <<<<<<< HEAD
+<<<<<<< HEAD
 	c.Assert(cf.runningStatus, check.Equals, expectedRunningStatus)
 =======
 	c.Assert(cf.runningStatus, check.Equals, expectedInitialized)
 >>>>>>> 360ebdad0 (refine the log.)
+=======
+	c.Assert(cf.runningStatus, check.Equals, expectedRunningStatus)
+>>>>>>> 3972a2726 (fix changefeed ut.)
 
 	// remove changefeed from state manager by admin job
 	cf.feedStateManager.PushAdminJob(&model.AdminJob{
