@@ -137,7 +137,7 @@ type Syncer struct {
 	streamerController *StreamerController
 
 	wg    sync.WaitGroup // counts goroutines
-	jobWg sync.WaitGroup // counts ddl/flush job in-flight in s.dmlJobCh and s.ddlJobCh
+	jobWg sync.WaitGroup // counts ddl/flush/asyncFlush job in-flight in s.dmlJobCh and s.ddlJobCh
 
 	schemaTracker *schema.Tracker
 
@@ -219,8 +219,8 @@ type Syncer struct {
 		isQueryEvent  bool
 	}
 
-	addJobFunc func(*job) error
-	flushSeq   int64
+	handleJobFunc func(*job) error
+	flushSeq      int64
 
 	// `lower_case_table_names` setting of upstream db
 	SourceTableNamesFlavor utils.LowerCaseTableNamesFlavor
@@ -255,7 +255,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.lastCount.Store(0)
 	syncer.count.Store(0)
 	syncer.done = nil
-	syncer.addJobFunc = syncer.addJob
+	syncer.handleJobFunc = syncer.handleJob
 	syncer.cli = etcdClient
 
 	syncer.checkpoint = NewRemoteCheckPoint(syncer.tctx, cfg, syncer.checkpointID())
@@ -892,51 +892,112 @@ var (
 	lastLocation    binlog.Location
 	lastLocationNum int
 	waitJobsDone    bool
-	flushFirstJob   bool
 	failExecuteSQL  bool
 	failOnce        atomic.Bool
 )
 
-func (s *Syncer) addJob(job *job) error {
-	s.waitTransactionLock.Lock()
-	defer s.waitTransactionLock.Unlock()
-
+// TODO: move to syncer/job.go
+// addJob adds one job to DML queue or DDL queue according to its type.
+// Caller should prepare all needed jobs before calling this function, addJob should not generate any new jobs.
+// There should not be a second way to send jobs to DML queue or DDL queue.
+func (s *Syncer) addJob(job *job) {
 	failpoint.Inject("countJobFromOneEvent", func() {
-		if job.currentLocation.Position.Compare(lastLocation.Position) == 0 {
-			lastLocationNum++
-		} else {
-			lastLocation = job.currentLocation
-			lastLocationNum = 1
-		}
-		// trigger a flush after see one job
-		if lastLocationNum == 1 {
-			waitJobsDone = true
-			s.tctx.L().Info("meet the first job of an event", zap.Any("binlog position", lastLocation))
-		}
-		// mock a execution error after see two jobs.
-		if lastLocationNum == 2 {
-			failExecuteSQL = true
-			s.tctx.L().Info("meet the second job of an event", zap.Any("binlog position", lastLocation))
+		if job.tp == insert {
+			if job.currentLocation.Position.Compare(lastLocation.Position) == 0 {
+				lastLocationNum++
+			} else {
+				lastLocation = job.currentLocation
+				lastLocationNum = 1
+			}
+			// trigger a flush after see one job
+			if lastLocationNum == 1 {
+				waitJobsDone = true
+				s.tctx.L().Info("meet the first job of an event", zap.Any("binlog position", lastLocation))
+			}
+			// mock a execution error after see two jobs.
+			if lastLocationNum == 2 {
+				failExecuteSQL = true
+				s.tctx.L().Info("meet the second job of an event", zap.Any("binlog position", lastLocation))
+			}
 		}
 	})
 	failpoint.Inject("countJobFromOneGTID", func() {
-		if binlog.CompareLocation(job.currentLocation, lastLocation, true) == 0 {
-			lastLocationNum++
-		} else {
-			lastLocation = job.currentLocation
-			lastLocationNum = 1
-		}
-		// trigger a flush after see one job
-		if lastLocationNum == 1 {
-			waitJobsDone = true
-			s.tctx.L().Info("meet the first job of a GTID", zap.Any("binlog position", lastLocation))
-		}
-		// mock a execution error after see two jobs.
-		if lastLocationNum == 2 {
-			failExecuteSQL = true
-			s.tctx.L().Info("meet the second job of a GTID", zap.Any("binlog position", lastLocation))
+		if job.tp == insert {
+			if binlog.CompareLocation(job.currentLocation, lastLocation, true) == 0 {
+				lastLocationNum++
+			} else {
+				lastLocation = job.currentLocation
+				lastLocationNum = 1
+			}
+			// trigger a flush after see one job
+			if lastLocationNum == 1 {
+				waitJobsDone = true
+				s.tctx.L().Info("meet the first job of a GTID", zap.Any("binlog position", lastLocation))
+			}
+			// mock a execution error after see two jobs.
+			if lastLocationNum == 2 {
+				failExecuteSQL = true
+				s.tctx.L().Info("meet the second job of a GTID", zap.Any("binlog position", lastLocation))
+			}
 		}
 	})
+
+	// avoid job.type data race with compactor.run()
+	// simply copy the opType for performance, though copy a new job in compactor is better
+	tp := job.tp
+	switch tp {
+	case flush:
+		s.jobWg.Add(1)
+		s.dmlJobCh <- job
+	case asyncFlush:
+		s.jobWg.Add(1)
+		s.dmlJobCh <- job
+	case ddl:
+		s.addCount(false, adminQueueName, job.tp, 1, job.targetTable)
+		s.jobWg.Add(1)
+		startTime := time.Now()
+		s.ddlJobCh <- job
+		metrics.AddJobDurationHistogram.WithLabelValues("ddl", s.cfg.Name, adminQueueName, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
+	case insert, update, del:
+		s.dmlJobCh <- job
+		failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
+			s.tctx.L().Info("receive dml job", zap.Any("dml job", job))
+			time.Sleep(100 * time.Millisecond)
+		})
+	case gc:
+		s.dmlJobCh <- job
+	default:
+		s.tctx.L().DPanic("unhandled job type", zap.Stringer("job", job))
+	}
+}
+
+// checkShouldFlush checks whether syncer should flush now because last flushing is outdated.
+func (s *Syncer) checkShouldFlush() {
+	if !s.checkpoint.CheckGlobalPoint() || !s.checkpoint.CheckLastSnapshotCreationTime() {
+		return
+	}
+
+	jobSeq := s.getFlushSeq()
+	s.tctx.L().Info("Start to async flush current checkpoint to downstream based on flush interval", zap.Int64("job sequence", jobSeq))
+	j := newAsyncFlushJob(s.cfg.WorkerCount, jobSeq)
+	s.addJob(j)
+	s.flushCheckPointsAsync(j)
+}
+
+// TODO: move to syncer/job.go
+// handleJob will do many actions based on job type.
+func (s *Syncer) handleJob(job *job) (err error) {
+	skipCheckFlush := false
+	defer func() {
+		if !skipCheckFlush && err == nil {
+			s.checkShouldFlush()
+		}
+	}()
+
+	// 1. handle jobs that not needed to be sent to queue
+
+	s.waitTransactionLock.Lock()
+	defer s.waitTransactionLock.Unlock()
 
 	failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
 		if waitXIDStatus(s.waitXIDJob.Load()) == waiting {
@@ -949,10 +1010,7 @@ func (s *Syncer) addJob(job *job) error {
 		return nil
 	}
 
-	// avoid job.type data race with compactor.run()
-	// simply copy the opType for performance, though copy a new job in compactor is better
-	tp := job.tp
-	switch tp {
+	switch job.tp {
 	case xid:
 		s.waitXIDJob.CAS(int64(waiting), int64(waitComplete))
 		s.saveGlobalPoint(job.location)
@@ -960,61 +1018,45 @@ func (s *Syncer) addJob(job *job) error {
 		return nil
 	case skip:
 		s.updateReplicationJobTS(job, skipJobIdx)
-	case flush:
-		s.jobWg.Add(1)
-		s.dmlJobCh <- job
-		s.jobWg.Wait()
-		return s.flushCheckPoints()
-	case ddl:
-		s.addCount(false, adminQueueName, job.tp, 1, job.targetTable)
-		s.updateReplicationJobTS(job, ddlJobIdx)
-		s.jobWg.Add(1)
-		startTime := time.Now()
-		s.ddlJobCh <- job
-		metrics.AddJobDurationHistogram.WithLabelValues("ddl", s.cfg.Name, adminQueueName, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
-		s.jobWg.Wait()
-	case insert, update, del:
-		s.dmlJobCh <- job
-		s.isTransactionEnd = false
-		failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
-			s.tctx.L().Info("receive dml job", zap.Any("dml job", job))
-			time.Sleep(100 * time.Millisecond)
-		})
-	}
-
-	failpoint.Inject("flushFirstJob", func() {
-		if waitJobsDone {
-			s.tctx.L().Info("trigger flushFirstJob")
-			waitJobsDone = false
-			flushFirstJob = true
-		}
-	})
-	if flushFirstJob {
-		flushJob := newFlushJob(s.cfg.WorkerCount, s.getFlushSeq())
-		s.jobWg.Add(1)
-		s.dmlJobCh <- flushJob
-		s.jobWg.Wait()
-	}
-
-	if s.execError.Load() != nil {
-		// nolint:nilerr
 		return nil
 	}
 
-	switch tp {
+	// 2. send the job to queue
+
+	s.addJob(job)
+
+	// 3. after job is sent to queue
+
+	switch job.tp {
+	case insert, update, del:
+		// DMl events will generate many jobs and only caller knows all jobs has been sent, so many logics are done by
+		// caller
+		s.isTransactionEnd = false
+		skipCheckFlush = true
+		return nil
 	case ddl:
+		s.jobWg.Wait()
+
+		// skip rest logic when downstream error
+		if s.execError.Load() != nil {
+			// nolint:nilerr
+			return nil
+		}
+
+		s.updateReplicationJobTS(job, ddlJobIdx)
+
 		failpoint.Inject("ExitAfterDDLBeforeFlush", func() {
 			s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ExitAfterDDLBeforeFlush"))
 			utils.OsExit(1)
 		})
 		// interrupted after executed DDL and before save checkpoint.
 		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
-			err := handleFlushCheckpointStage(3, val.(int), "before save checkpoint")
+			err = handleFlushCheckpointStage(3, val.(int), "before save checkpoint")
 			if err != nil {
 				failpoint.Return(err)
 			}
 		})
-		// only save checkpoint for DDL and XID (see above)
+		// save global checkpoint for DDL
 		s.saveGlobalPoint(job.location)
 		for sourceSchema, tbs := range job.sourceTbls {
 			if len(sourceSchema) == 0 {
@@ -1026,40 +1068,24 @@ func (s *Syncer) addJob(job *job) error {
 		}
 		// reset sharding group after checkpoint saved
 		s.resetShardingGroup(job.targetTable)
-	case insert, update, del:
-		// save job's current pos for DML events
-		for sourceSchema, tbs := range job.sourceTbls {
-			if len(sourceSchema) == 0 {
-				continue
-			}
-			for _, sourceTable := range tbs {
-				s.saveTablePoint(sourceTable, job.currentLocation)
-			}
-		}
-	}
 
-	if flushFirstJob || tp == ddl {
 		// interrupted after save checkpoint and before flush checkpoint.
 		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
-			err := handleFlushCheckpointStage(4, val.(int), "before flush checkpoint")
+			err = handleFlushCheckpointStage(4, val.(int), "before flush checkpoint")
 			if err != nil {
 				failpoint.Return(err)
 			}
 		})
+		skipCheckFlush = true
 		return s.flushCheckPoints()
+	case flush:
+		s.jobWg.Wait()
+		skipCheckFlush = true
+		return s.flushCheckPoints()
+	case asyncFlush:
+		skipCheckFlush = true
 	}
-
-	// Periodically create checkpoint snapshot and async flush checkpoint snapshot
-	if s.checkpoint.CheckGlobalPoint() && s.checkpoint.CheckLastSnapshotCreationTime() {
-		s.jobWg.Add(1)
-		jobSeq := s.getFlushSeq()
-		s.tctx.L().Info("Start to async flush current checkpoint to downstream based on flush interval", zap.Int64("job sequence", jobSeq))
-		j := newAsyncFlushJob(s.cfg.WorkerCount, jobSeq)
-		s.dmlJobCh <- j
-		s.flushCheckPointsAsync(j)
-	}
-
-	return nil
+	return err
 }
 
 func (s *Syncer) saveGlobalPoint(globalLocation binlog.Location) {
@@ -1189,10 +1215,10 @@ func (s *Syncer) afterFlushCheckpoint(task *checkpointFlushTask) error {
 	// add a gc job to let causality module gc outdated kvs.
 	if task.asyncflushJob != nil {
 		s.tctx.L().Info("after async flushed checkpoint, gc stale causality keys", zap.Int64("flush job seq", task.asyncflushJob.flushSeq))
-		s.dmlJobCh <- newGCJob(task.asyncflushJob.flushSeq)
+		s.addJob(newGCJob(task.asyncflushJob.flushSeq))
 	} else {
 		s.tctx.L().Info("after async flushed checkpoint, gc all causality keys")
-		s.dmlJobCh <- newGCJob(math.MaxInt64)
+		s.addJob(newGCJob(math.MaxInt64))
 	}
 
 	// update current active relay log after checkpoint flushed
@@ -1337,8 +1363,6 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.
 		}
 		s.jobWg.Done()
 		s.addCount(true, queueBucket, ddlJob.tp, int64(len(ddlJob.ddls)), ddlJob.targetTable)
-		// reset job TS when this ddl is finished.
-		s.updateReplicationJobTS(nil, ddlJobIdx)
 	}
 }
 
@@ -2024,7 +2048,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			job := newXIDJob(currentLocation, startLocation, currentLocation)
-			err2 = s.addJobFunc(job)
+			err2 = s.handleJobFunc(job)
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
@@ -2296,12 +2320,34 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	startTime := time.Now()
 	for i := range dmls {
 		job := newDMLJob(jobType, sourceTable, targetTable, dmls[i], &ec)
-		err = s.addJobFunc(job)
+		err = s.handleJobFunc(job)
 		if err != nil {
 			return err
 		}
 	}
 	metrics.DispatchBinlogDurationHistogram.WithLabelValues(jobType.String(), s.cfg.Name, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
+
+	if len(sourceTable.Schema) != 0 {
+		// when in position-based replication, now events before table checkpoint is sent to queue. But in GTID-based
+		// replication events may share one GTID, so event whose end position is equal to table checkpoint may not be
+		// sent to queue. We may need event index in GTID to resolve it.
+		s.saveTablePoint(sourceTable, *ec.currentLocation)
+	}
+
+	failpoint.Inject("flushFirstJob", func() {
+		if waitJobsDone {
+			s.tctx.L().Info("trigger flushFirstJob")
+			waitJobsDone = false
+
+			err2 := s.flushJobs()
+			if err2 != nil {
+				s.tctx.L().DPanic("flush checkpoint failed", zap.Error(err2))
+			}
+			failpoint.Return(nil)
+		}
+	})
+
+	s.checkShouldFlush()
 	return nil
 }
 
@@ -2642,7 +2688,7 @@ func (s *Syncer) handleQueryEventNoSharding(qec *queryEventContext) error {
 	})
 
 	job := newDDLJob(qec)
-	err := s.addJobFunc(job)
+	err := s.handleJobFunc(job)
 	if err != nil {
 		return err
 	}
@@ -2864,7 +2910,7 @@ func (s *Syncer) handleQueryEventPessimistic(qec *queryEventContext) error {
 	})
 
 	job := newDDLJob(qec)
-	err = s.addJobFunc(job)
+	err = s.handleJobFunc(job)
 	if err != nil {
 		return err
 	}
@@ -3249,7 +3295,7 @@ func (s *Syncer) closeDBs() {
 // make newJob's sql argument empty to distinguish normal sql and skips sql.
 func (s *Syncer) recordSkipSQLsLocation(ec *eventContext) error {
 	job := newSkipJob(ec)
-	return s.addJobFunc(job)
+	return s.handleJobFunc(job)
 }
 
 // flushJobs add a flush job and wait for all jobs finished.
@@ -3258,7 +3304,7 @@ func (s *Syncer) flushJobs() error {
 	flushJobSeq := s.getFlushSeq()
 	s.tctx.L().Info("flush all jobs", zap.Stringer("global checkpoint", s.checkpoint), zap.Int64("flush job seq", flushJobSeq))
 	job := newFlushJob(s.cfg.WorkerCount, flushJobSeq)
-	return s.addJobFunc(job)
+	return s.handleJobFunc(job)
 }
 
 func (s *Syncer) reSyncBinlog(tctx tcontext.Context, location binlog.Location) error {
