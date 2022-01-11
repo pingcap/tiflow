@@ -364,12 +364,12 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			// we set the state of changefeed to "failed" and don't let it run again unless it is manually resumed.
 			if m.backoffInterval == backoff.Stop {
 				log.Warn("changefeed will not be restarted because it has been failing for a long time period",
-					zap.Duration("max-elapsed-time", m.expBackoff.MaxElapsedTime))
+					zap.Duration("maxElapsedTime", m.expBackoff.MaxElapsedTime))
 				m.shouldBeRunning = false
 				m.patchState(model.StateFailed)
 			} else {
 				log.Info("changefeed restart backoff interval is changed", zap.String("changefeedID", m.state.ID),
-					zap.Duration("backoff-interval", m.backoffInterval))
+					zap.Duration("backoffInterval", m.backoffInterval))
 			}
 		}
 	}
