@@ -2149,7 +2149,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		return resp2, err2
 	}
 
-	formartTaskString := func(subCfgList []*config.SubTaskConfig) string {
+	formartAndSortTaskString := func(subCfgList []*config.SubTaskConfig) string {
 		sort.Slice(subCfgList, func(i, j int) bool {
 			return subCfgList[i].SourceID < subCfgList[j].SourceID
 		})
@@ -2198,18 +2198,18 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 			// nolint:nilerr
 			return resp2, nil
 		}
-		cfg = formartTaskString(subTaskConfigList)
+		cfg = formartAndSortTaskString(subTaskConfigList)
 	case pb.CfgType_TaskType:
 		subCfgMap := s.scheduler.GetSubTaskCfgsByTask(req.Name)
 		if len(subCfgMap) == 0 {
 			resp2.Msg = "task not found"
 			return resp2, nil
 		}
-		subCfgList := make([]*config.SubTaskConfig, 0, len(subCfgMap))
+		subTaskConfigList := make([]*config.SubTaskConfig, 0, len(subCfgMap))
 		for _, subCfg := range subCfgMap {
-			subCfgList = append(subCfgList, subCfg)
+			subTaskConfigList = append(subTaskConfigList, subCfg)
 		}
-		cfg = formartTaskString(subCfgList)
+		cfg = formartAndSortTaskString(subTaskConfigList)
 	case pb.CfgType_MasterType:
 		if req.Name == s.cfg.Name {
 			cfg, err2 = s.cfg.Toml()
