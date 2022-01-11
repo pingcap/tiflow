@@ -150,6 +150,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 				t.stop(err)
 			}
 		case message.TypeStopSink:
+			// async stop the sink
 			go func() {
 				_, err := t.sinkNode.HandleMessage(ctx, pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}))
 				if err != nil {
@@ -338,10 +339,7 @@ func (t *tableActor) Name() string {
 // Cancel stops this table actor immediately and destroy all resources
 // created by this table pipeline
 func (t *tableActor) Cancel() {
-	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
-		log.Warn("fails to send Stop message",
-			zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Error(err))
-	}
+	t.stop(nil)
 }
 
 // Wait waits for table pipeline destroyed
