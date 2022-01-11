@@ -65,6 +65,12 @@ const CreateTaskConfig: React.FC = () => {
       message.loading({ content: t('saving'), key })
       const payload = { ...taskData }
       delete payload.binlog_filter_rule_array
+      if (
+        Object.values(payload.target_config.security).filter(Boolean).length ===
+        0
+      ) {
+        delete payload.target_config.security
+      }
       createTaskConfig(payload as Task)
         .unwrap()
         .then(() => {
