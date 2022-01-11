@@ -339,7 +339,10 @@ func (t *tableActor) Name() string {
 // Cancel stops this table actor immediately and destroy all resources
 // created by this table pipeline
 func (t *tableActor) Cancel() {
-	t.stop(nil)
+	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
+		log.Warn("fails to send Stop message",
+			zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Error(err))
+	}
 }
 
 // Wait waits for table pipeline destroyed
