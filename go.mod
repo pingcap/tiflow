@@ -1,4 +1,4 @@
-module github.com/pingcap/ticdc
+module github.com/pingcap/tiflow
 
 go 1.13
 
@@ -7,6 +7,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.3.3
 	github.com/Shopify/sarama v1.27.2
 	github.com/apache/pulsar-client-go v0.1.1
+	github.com/benbjohnson/clock v1.0.3
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e

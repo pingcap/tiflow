@@ -17,7 +17,7 @@ import (
 	"math"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
 type barrierType int

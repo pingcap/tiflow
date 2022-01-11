@@ -16,8 +16,7 @@ package httputil
 import (
 	"net/http"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/pkg/security"
 )
 
 // Client wraps an HTTP client and support TLS requests.
@@ -43,22 +42,4 @@ func NewClient(credential *security.Credential) (*Client, error) {
 	return &Client{
 		Client: http.Client{Transport: transport},
 	}, nil
-}
-
-// IsFiltered return true if the given feedState matches the whiteList.
-func IsFiltered(whiteList string, feedState model.FeedState) bool {
-	if whiteList == "all" {
-		return true
-	}
-	if whiteList == "" {
-		switch feedState {
-		case model.StateNormal:
-			return true
-		case model.StateStopped:
-			return true
-		case model.StateFailed:
-			return true
-		}
-	}
-	return whiteList == string(feedState)
 }

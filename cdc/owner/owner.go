@@ -25,12 +25,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/txnutil/gc"
-	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/tiflow/cdc/model"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -76,6 +76,10 @@ type Owner struct {
 	lastTickTime time.Time
 
 	closed int32
+	// bootstrapped specifies whether the owner has been initialized.
+	// This will only be done when the owner starts the first Tick.
+	// NOTICE: Do not use it in a method other than tick unexpectedly, as it is not a thread-safe value.
+	bootstrapped bool
 
 	newChangefeed func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed
 }
@@ -97,6 +101,8 @@ func NewOwner4Test(
 	pdClient pd.Client,
 ) *Owner {
 	o := NewOwner(pdClient)
+	// Most tests do not need to test bootstrap.
+	o.bootstrapped = true
 	o.newChangefeed = func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		return newChangefeed4Test(id, gcManager, newDDLPuller, newSink)
 	}
@@ -109,8 +115,15 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		failpoint.Return(nil, errors.New("owner run with injected error"))
 	})
 	failpoint.Inject("sleep-in-owner-tick", nil)
-	ctx := stdCtx.(cdcContext.Context)
 	state := rawState.(*model.GlobalReactorState)
+	// At the first Tick, we need to do a bootstrap operation.
+	// Fix incompatible or incorrect meta information.
+	if !o.bootstrapped {
+		o.Bootstrap(state)
+		o.bootstrapped = true
+		return state, nil
+	}
+
 	o.updateMetrics(state)
 	if !o.clusterVersionConsistent(state.Captures) {
 		// sleep one second to avoid printing too much log
@@ -128,6 +141,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	}
 
 	o.handleJobs()
+	ctx := stdCtx.(cdcContext.Context)
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
 			o.cleanUpChangefeed(changefeedState)
@@ -235,6 +249,24 @@ func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
 		state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 			return nil, workload != nil, nil
 		})
+	}
+}
+
+// Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
+func (o *Owner) Bootstrap(state *model.GlobalReactorState) {
+	log.Info("Start bootstrapping", zap.Any("state", state))
+	fixChangefeedInfos(state)
+}
+
+// fixChangefeedInfos attempts to fix incompatible or incorrect meta information in changefeed state.
+func fixChangefeedInfos(state *model.GlobalReactorState) {
+	for _, changefeedState := range state.Changefeeds {
+		if changefeedState != nil {
+			changefeedState.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+				info.FixIncompatible()
+				return info, true, nil
+			})
+		}
 	}
 }
 
