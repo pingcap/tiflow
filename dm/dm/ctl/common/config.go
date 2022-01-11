@@ -20,6 +20,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -214,4 +215,37 @@ func validateAddr(addr string) error {
 		}
 	}
 	return nil
+}
+
+// SplitArgsRespectQuote splits args by space, but won't split space inside single or double quotes.
+func SplitArgsRespectQuote(line string) []string {
+	lastQuote := rune(0)
+	quoted := false
+	prevIsSpace := true
+
+	splitRespectQuote := func(r rune) bool {
+		if quoted {
+			if r == lastQuote {
+				quoted = false
+				// handle two adjacent quoted strings
+				prevIsSpace = true
+				// we want to exclude the quote, so split at the point of quote
+				return true
+			}
+			return false
+		} else {
+			if prevIsSpace && (r == '"' || r == '\'') {
+				quoted = true
+				lastQuote = r
+				// we want to exclude the quote, so split at the point of quote
+				return true
+			} else if unicode.IsSpace(r) {
+				prevIsSpace = true
+				return true
+			}
+			prevIsSpace = false
+			return false
+		}
+	}
+	return strings.FieldsFunc(line, splitRespectQuote)
 }

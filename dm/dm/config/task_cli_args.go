@@ -47,5 +47,5 @@ func (t *TaskCliArgs) Verify() error {
 		return nil
 	}
 	_, err := time.Parse("2006-01-02 15:04:05", t.StartTime)
-	return terror.Annotate(err, "while parse start-time, expected in the format '2006-01-02 15:04:05'")
+	return terror.Annotate(err, "error while parse start-time, expected in the format '2006-01-02 15:04:05'")
 }
