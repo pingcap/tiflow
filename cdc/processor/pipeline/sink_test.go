@@ -20,13 +20,13 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/pipeline"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pipeline"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 func TestSuite(t *testing.T) {
@@ -72,7 +72,7 @@ func (s *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	panic("unreachable")
 }
 
-func (s *mockSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (s *mockSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {
 	s.received = append(s.received, struct {
 		resolvedTs model.Ts
 		row        *model.RowChangedEvent
@@ -88,7 +88,7 @@ func (s *mockSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (s *mockSink) Barrier(ctx context.Context) error {
+func (s *mockSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
@@ -133,7 +133,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	})
 
 	// test stop at targetTs
-	node := newSinkNode(&mockSink{}, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
@@ -159,7 +159,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	c.Assert(node.CheckpointTs(), check.Equals, uint64(10))
 
 	// test the stop at ts command
-	node = newSinkNode(&mockSink{}, 0, 10, &mockFlowController{})
+	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
@@ -182,7 +182,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	c.Assert(node.CheckpointTs(), check.Equals, uint64(2))
 
 	// test the stop at ts command is after then resolvedTs and checkpointTs is greater than stop ts
-	node = newSinkNode(&mockSink{}, 0, 10, &mockFlowController{})
+	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
@@ -219,7 +219,7 @@ func (s *outputSuite) TestStopStatus(c *check.C) {
 	})
 
 	closeCh := make(chan interface{}, 1)
-	node := newSinkNode(&mockCloseControlSink{mockSink: mockSink{}, closeCh: closeCh}, 0, 100, &mockFlowController{})
+	node := newSinkNode(1, &mockCloseControlSink{mockSink: mockSink{}, closeCh: closeCh}, 0, 100, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
@@ -254,7 +254,7 @@ func (s *outputSuite) TestManyTs(c *check.C) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(sink, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
@@ -375,7 +375,7 @@ func (s *outputSuite) TestIgnoreEmptyRowChangeEvent(c *check.C) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(sink, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
 
 	// empty row, no Columns and PreColumns.
@@ -395,7 +395,7 @@ func (s *outputSuite) TestSplitUpdateEventWhenEnableOldValue(c *check.C) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(sink, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
 
 	// nil row.
@@ -454,7 +454,7 @@ func (s *outputSuite) TestSplitUpdateEventWhenDisableOldValue(c *check.C) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(sink, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
 
 	// nil row.

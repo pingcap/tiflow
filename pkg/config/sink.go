@@ -13,6 +13,9 @@
 
 package config
 
+// DefaultMaxMessageBytes sets the default value for max-message-bytes
+const DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
+
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
 	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers"`
