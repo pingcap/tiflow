@@ -387,7 +387,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
-func topicPreProcess(topic string, protocol codec.Protocol, config *Config, saramaConfig *sarama.Config) error {
+func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) error {
 	// FIXME: find a way to remove this failpoint for workload the unit test
 	failpoint.Inject("SkipTopicAutoCreate", func() {
 		failpoint.Return(nil)
@@ -413,17 +413,15 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 		// make sure that topic's `max.message.bytes` is not less than given `max-message-bytes`
 		// else the producer will send message that too large to make topic reject, then changefeed would error.
 		// only the default `open protocol` and `craft protocol` use `max-message-bytes`, so check this for them.
-		if protocol == codec.ProtocolDefault || protocol == codec.ProtocolCraft {
-			topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-			}
-			if topicMaxMessageBytes < config.MaxMessageBytes {
-				return cerror.ErrKafkaInvalidConfig.GenWithStack(
-					"topic already exist, and topic's max.message.bytes(%d) less than max-message-bytes(%d)."+
-						"Please make sure `max-message-bytes` not greater than topic `max.message.bytes`",
-					topicMaxMessageBytes, config.MaxMessageBytes)
-			}
+		topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
+		if topicMaxMessageBytes < config.MaxMessageBytes {
+			return cerror.ErrKafkaInvalidConfig.GenWithStack(
+				"topic already exist, and topic's max.message.bytes(%d) less than max-message-bytes(%d)."+
+					"Please make sure `max-message-bytes` not greater than topic `max.message.bytes`",
+				topicMaxMessageBytes, config.MaxMessageBytes)
 		}
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
@@ -446,19 +444,17 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 	// when try to create the topic, we don't know how to set the `max.message.bytes` for the topic.
 	// Kafka would create the topic with broker's `message.max.bytes`,
 	// we have to make sure it's not greater than `max-message-bytes` for the default open protocol.
-	if protocol == codec.ProtocolDefault || protocol == codec.ProtocolCraft {
-		brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
-		if err != nil {
-			log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
-			return errors.Trace(err)
-		}
+	brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
+	if err != nil {
+		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
+		return errors.Trace(err)
+	}
 
-		if brokerMessageMaxBytes < config.MaxMessageBytes {
-			return cerror.ErrKafkaInvalidConfig.GenWithStack(
-				"broker's message.max.bytes(%d) less than max-message-bytes(%d)"+
-					"Please make sure `max-message-bytes` not greater than broker's `message.max.bytes`",
-				brokerMessageMaxBytes, config.MaxMessageBytes)
-		}
+	if brokerMessageMaxBytes < config.MaxMessageBytes {
+		return cerror.ErrKafkaInvalidConfig.GenWithStack(
+			"broker's message.max.bytes(%d) less than max-message-bytes(%d)"+
+				"Please make sure `max-message-bytes` not greater than broker's `message.max.bytes`",
+			brokerMessageMaxBytes, config.MaxMessageBytes)
 	}
 
 	// topic not created yet, and user does not specify the `partition-num` in the sink uri.
@@ -487,14 +483,14 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 var newSaramaConfigImpl = newSaramaConfig
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, topic string, protocol codec.Protocol, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := topicPreProcess(topic, protocol, config, cfg); err != nil {
+	if err := topicPreProcess(topic, config, cfg); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
