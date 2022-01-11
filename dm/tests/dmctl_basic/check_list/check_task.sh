@@ -36,7 +36,7 @@ function check_task_error_database_config() {
 }
 
 function check_task_wrong_start_time_format() {
-  task_conf=$1
+	task_conf=$1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $task_conf --start-time '20060102 150405'" \
 		"error while parse start-time" 1

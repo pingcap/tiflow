@@ -279,7 +279,7 @@ function run() {
 
 	echo "dmctl_check_task"
 	check_task_pass $TASK_CONF
-  check_task_wrong_start_time_format $cur/conf/dm-task3.yaml
+	check_task_wrong_start_time_format $cur/conf/dm-task3.yaml
 	check_task_not_pass $cur/conf/dm-task2.yaml
 	check_task_error_count $cur/conf/dm-task3.yaml
 

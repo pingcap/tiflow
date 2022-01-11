@@ -232,7 +232,6 @@ func SplitArgsRespectQuote(line string) []string {
 				// we want to exclude the quote, so split at the point of quote
 				return true
 			}
-			return false
 		} else {
 			if prevIsSpace && (r == '"' || r == '\'') {
 				quoted = true
@@ -244,8 +243,8 @@ func SplitArgsRespectQuote(line string) []string {
 				return true
 			}
 			prevIsSpace = false
-			return false
 		}
+		return false
 	}
 	return strings.FieldsFunc(line, splitRespectQuote)
 }
