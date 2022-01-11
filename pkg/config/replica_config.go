@@ -144,6 +144,9 @@ func (c *ReplicaConfig) Validate() error {
 // @return: string, warning info if nessesary
 //			error
 func ValidateDispatcherRule(sinkURI string, sinkCfg *SinkConfig, enableOldValue bool) (string, error) {
+	if sinkCfg == nil {
+		return "", nil
+	}
 	sinkURIParsed, err := url.Parse(sinkURI)
 	if err != nil {
 		return "", cerror.ErrSinkURIInvalid.Wrap(errors.Annotatef(err, "sink-uri:%s", sinkURI))
