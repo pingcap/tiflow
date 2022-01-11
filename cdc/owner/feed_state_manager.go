@@ -381,7 +381,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			m.shouldBeRunning = false
 			m.patchState(model.StateFailed)
 		} else {
-			log.Info("changefeed restart backoff interval is changed", zap.String("changefeedID", m.state.ID),
+			log.Info("changefeed restart backoff interval is changed", zap.String("changefeed", m.state.ID),
 				zap.Duration("backoffInterval", m.backoffInterval))
 		}
 	}
