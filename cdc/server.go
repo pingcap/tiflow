@@ -24,15 +24,15 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/capture"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/puller/sorter"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/httputil"
-	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/puller/sorter"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
@@ -45,8 +45,7 @@ import (
 )
 
 const (
-	ownerRunInterval = time.Millisecond * 500
-	defaultDataDir   = "/tmp/cdc_data"
+	defaultDataDir = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	dataDirThreshold = 500
 )
@@ -283,23 +282,6 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		config.StoreGlobalServerConfig(conf)
 
 		return nil
-	}
-
-	// s.etcdClient maybe nil if NewReplicaImpl is not set to true
-	// todo: remove this after NewReplicaImpl set to true in a specific branch, and use server.etcdClient instead.
-	cli := s.etcdClient
-	if cli == nil {
-		client, err := clientv3.New(clientv3.Config{
-			Endpoints:   s.pdEndpoints,
-			Context:     ctx,
-			DialTimeout: 5 * time.Second,
-		})
-		if err != nil {
-			return err
-		}
-		etcdClient := kv.NewCDCEtcdClient(ctx, client)
-		cli = &etcdClient
-		defer cli.Close()
 	}
 
 	// data-dir will be decided by exist changefeed for backward compatibility

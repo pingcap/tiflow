@@ -28,12 +28,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/notify"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/notify"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -587,20 +587,25 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// in this broker is broken, Kafka will election a new partition leader and
 	// replication logs, this process will last from a few seconds to a few minutes.
 	// Kafka cluster will not provide a writing service in this process.
-	// Time out in one minute(120 * 500ms).
+	// Time out in one minute.
 	config.Metadata.Retry.Max = 120
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
+	// If it is not set, this means a metadata request against an unreachable
+	// cluster (all brokers are unreachable or unresponsive) can take up to
+	// `Net.[Dial|Read]Timeout * BrokerCount * (Metadata.Retry.Max + 1) +
+	// Metadata.Retry.Backoff * Metadata.Retry.Max`
+	// to fail.
+	// See: https://github.com/Shopify/sarama/issues/765
+	// and https://github.com/pingcap/tiflow/issues/3352.
+	config.Metadata.Timeout = 1 * time.Minute
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
-
-	// Time out in five minutes(600 * 500ms).
 	config.Producer.Retry.Max = 600
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
-
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
 	case "none":
 		config.Producer.Compression = sarama.CompressionNone
@@ -629,7 +634,6 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 			return nil, errors.Trace(err)
 		}
 	}
-
 	if c.SaslScram != nil && len(c.SaslScram.SaslUser) != 0 {
 		config.Net.SASL.Enable = true
 		config.Net.SASL.User = c.SaslScram.SaslUser

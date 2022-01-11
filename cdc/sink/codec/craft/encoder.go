@@ -19,7 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // create byte slice from string without copying
