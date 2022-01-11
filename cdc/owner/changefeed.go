@@ -17,6 +17,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -38,6 +39,12 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	changeFeedClosed  = 0
+	changeFeedRunning = 1
+	changeFeedClosing = 2
+)
+
 type changefeed struct {
 	id    model.ChangeFeedID
 	state *orchestrator.ChangefeedReactorState
@@ -51,7 +58,7 @@ type changefeed struct {
 	schema      *schemaWrap4Owner
 	sink        DDLSink
 	ddlPuller   DDLPuller
-	initialized bool
+	initialized int32
 	// isRemoved is true if the changefeed is removed
 	isRemoved bool
 
@@ -207,7 +214,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 }
 
 func (c *changefeed) initialize(ctx cdcContext.Context) error {
-	if c.initialized {
+	// ignore changefeed that may be in `changeFeedRunning` or `changeFeedClosing`
+	if atomic.LoadInt32(&c.initialized) != changeFeedClosed {
 		return nil
 	}
 	// clean the errCh
@@ -304,12 +312,13 @@ LOOP:
 		return errors.Trace(err)
 	}
 
-	c.initialized = true
+	atomic.StoreInt32(&c.initialized, changeFeedRunning)
+	//c.initialized = true
 	return nil
 }
 
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
-	if !c.initialized {
+	if atomic.LoadInt32(&c.initialized) == changeFeedClosed {
 		c.redoManagerCleanup(ctx)
 		return
 	}
@@ -334,6 +343,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		} else {
 			log.Info("close ddl sink", zap.String("changefeedID", c.state.ID), zap.Duration("duration", time.Since(start)))
 		}
+		atomic.StoreInt32(&c.initialized, changeFeedClosed)
 	}()
 
 	c.wg.Wait()
@@ -349,7 +359,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.metricsChangefeedResolvedTsGauge = nil
 	c.metricsChangefeedResolvedTsLagGauge = nil
 
-	c.initialized = false
+	atomic.StoreInt32(&c.initialized, changeFeedClosing)
 }
 
 // redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
