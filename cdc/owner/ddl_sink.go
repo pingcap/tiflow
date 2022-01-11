@@ -121,6 +121,8 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 		defer s.wg.Done()
 
 		start := time.Now()
+		// initialize the sink asynchronously to the owner, since it would be blocked on network IO,
+		// which would then cause owner blocked.
 		if err := s.sinkInitHandler(ctx, s, id, info); err != nil {
 			log.Warn("ddl sink initialize failed",
 				zap.Duration("duration", time.Since(start)))
