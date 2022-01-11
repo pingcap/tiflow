@@ -27,12 +27,12 @@ import (
 
 const (
 	// When errors occurred and we need to do backoff, we start an exponential backoff
-	// with an interval from 10s to 30min (10s, 20s, 40s, ... 30min, 30min...).
-	// And when the duration (now - backoff start) exceeds 1 hour,
+	// with an interval from 2min to 30min (2min, 4min, 8min, 16min, 30min, 30min...).
+	// And when the duration (now - backoff start) exceeds 90 min (about 6 tries),
 	// the backoff will be stopped. To avoid thunderherd, a random factor is added to backoff interval.
-	defaultBackoffInitInterval        = 10 * time.Second
+	defaultBackoffInitInterval        = 2 * time.Minute
 	defaultBackoffMaxInterval         = 30 * time.Minute
-	defaultBackoffMaxElapsedTime      = 1 * time.Hour
+	defaultBackoffMaxElapsedTime      = 90 * time.Minute
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
 )
@@ -48,9 +48,9 @@ type feedStateManager struct {
 	shouldBeRemoved bool
 
 	adminJobQueue   []*model.AdminJob
-	lastErrorTime   time.Time
-	backoffInterval time.Duration
-	errBackoff      *backoff.ExponentialBackOff
+	lastErrorTime   time.Time                   // time of last error for a changefeed
+	backoffInterval time.Duration               // the interval for restarting a changefeed in 'error' state
+	errBackoff      *backoff.ExponentialBackOff // an exponential backoff for restarting a changefeed
 }
 
 // newFeedStateManager creates feedStateManager and initialize the exponential backoff
@@ -352,6 +352,9 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		return info, changed || len(errs) > 0, nil
 	})
 
+	// if we get an error for this changefeed now but haven't seen errors in a time window,
+	// it can be assumed that this changefeed runs abnormally from now on. So we can reset
+	// the exponential backoff and re-backoff from the InitialInterval.
 	if len(errs) > 0 {
 		m.lastErrorTime = time.Now()
 		if !m.state.Info.ErrorsReachedThreshold(m.backoffInterval) {
