@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package capture
+package api
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -35,7 +36,11 @@ import (
 )
 
 // verifyCreateChangefeedConfig verify ChangefeedConfig for create a changefeed
-func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.ChangefeedConfig, capture *Capture) (*model.ChangeFeedInfo, error) {
+func verifyCreateChangefeedConfig(
+	ctx context.Context,
+	changefeedConfig model.ChangefeedConfig,
+	capture *capture.Capture,
+) (*model.ChangeFeedInfo, error) {
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {
 		return nil, cerror.ErrSinkURIInvalid.GenWithStackByArgs("sink-uri is empty, can't not create a changefeed without sink-uri")
@@ -46,7 +51,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		return nil, cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedConfig.ID)
 	}
 	// check if the changefeed exists
-	cfStatus, err := capture.owner.StatusProvider().GetChangeFeedStatus(ctx, changefeedConfig.ID)
+	cfStatus, err := capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedConfig.ID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
@@ -56,7 +61,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 
 	// verify start-ts
 	if changefeedConfig.StartTS == 0 {
-		ts, logical, err := capture.pdClient.GetTS(ctx)
+		ts, logical, err := capture.PDClient.GetTS(ctx)
 		if err != nil {
 			return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
 		}
@@ -66,7 +71,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 	// Ensure the start ts is valid in the next 1 hour.
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
-		ctx, capture.pdClient, changefeedConfig.ID, ensureTTL, changefeedConfig.StartTS); err != nil {
+		ctx, capture.PDClient, changefeedConfig.ID, ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
 		}
@@ -104,7 +109,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		replicaConfig.Filter.Rules = changefeedConfig.FilterRules
 	}
 
-	captureInfos, err := capture.owner.StatusProvider().GetCaptures(ctx)
+	captureInfos, err := capture.StatusProvider().GetCaptures(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +143,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 	}
 
 	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {
-		ineligibleTables, _, err := verifyTables(replicaConfig, capture.kvStorage, changefeedConfig.StartTS)
+		ineligibleTables, _, err := verifyTables(replicaConfig, capture.Storage, changefeedConfig.StartTS)
 		if err != nil {
 			return nil, err
 		}
