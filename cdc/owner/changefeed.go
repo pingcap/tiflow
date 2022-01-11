@@ -343,23 +343,24 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	// when try to close the kafka sink, it would be blocked on network IO for about 1 minutes.
 	// this could happen for bad network connection between kafka producer and brokers.
-	go func() {
+	changeFeedID := c.state.ID
+	go func(id model.ChangeFeedID) {
 		start := time.Now()
 		// We don't need to wait sink Close, pass a canceled context is ok
 
 		err := c.sink.close(canceledCtx)
 		if err != nil {
-			log.Warn("close ddl sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err), zap.Duration("duration", time.Since(start)))
+			log.Warn("close ddl sink failed in Owner", zap.String("changefeedID", id), zap.Error(err), zap.Duration("duration", time.Since(start)))
 		} else {
-			log.Info("close ddl sink", zap.String("changefeedID", c.state.ID), zap.Duration("duration", time.Since(start)))
+			log.Info("close ddl sink", zap.String("changefeedID", id), zap.Duration("duration", time.Since(start)))
 		}
 
 		if atomic.CompareAndSwapInt32(&c.runningStatus, changeFeedRunning, changeFeedClosing) {
-			log.Info("changefeed ddl sink closed", zap.String("changefeedID", c.state.ID))
+			log.Info("changefeed ddl sink closed", zap.String("changefeedID", id))
 		} else if atomic.CompareAndSwapInt32(&c.runningStatus, changeFeedClosing, changeFeedClosed) {
-			log.Info("changefeed fully closed", zap.String("changefeedID", c.state.ID))
+			log.Info("changefeed fully closed", zap.String("changefeedID", id))
 		}
-	}()
+	}(changeFeedID)
 
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
