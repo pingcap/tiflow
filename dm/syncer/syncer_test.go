@@ -57,8 +57,6 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
 var _ = Suite(&testSyncerSuite{})
