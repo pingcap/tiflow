@@ -358,7 +358,7 @@ func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName 
 		return err
 	}
 
-	_, err = s.tryBoundForSourceWorker(cfg.SourceID, w)
+	_, err = s.tryBoundSourceToWorker(cfg.SourceID, w)
 	return err
 }
 
@@ -2225,9 +2225,9 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 	return true, nil
 }
 
-// tryBoundForSourceWorker tries to bound a source to the specified worker.
+// tryBoundSourceToWorker tries to bound a source to the specified worker.
 // returns (true, nil) after bounded.
-func (s *Scheduler) tryBoundForSourceWorker(source string, w *Worker) (bool, error) {
+func (s *Scheduler) tryBoundSourceToWorker(source string, w *Worker) (bool, error) {
 	boundedSource := ""
 	for s, worker := range s.bounds {
 		if worker.baseInfo.Name == w.baseInfo.Name {
