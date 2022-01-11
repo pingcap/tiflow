@@ -182,6 +182,11 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	default:
 	}
 
+	// changefeed maybe in the `closing` progress.
+	if atomic.LoadInt32(&c.initialized) != changeFeedRunning {
+		return nil
+	}
+
 	c.sink.emitCheckpointTs(ctx, checkpointTs)
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
@@ -312,16 +317,24 @@ LOOP:
 		return errors.Trace(err)
 	}
 
+	// todo (Ling Jin): add a new state `changeFeedInitializing`
 	atomic.StoreInt32(&c.initialized, changeFeedRunning)
-	//c.initialized = true
+	log.Info("changefeed initialized",
+		zap.String("changefeed", c.state.ID),
+		zap.Int32("initialized", c.initialized))
 	return nil
 }
 
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if atomic.LoadInt32(&c.initialized) == changeFeedClosed {
+		log.Info("changeFeed closed, try cleanup redo manager")
 		c.redoManagerCleanup(ctx)
 		return
 	}
+	if atomic.LoadInt32(&c.initialized) == changeFeedClosing {
+		return
+	}
+
 	log.Info("close changefeed", zap.String("changefeed", c.state.ID),
 		zap.Stringer("info", c.state.Info), zap.Bool("isRemoved", c.isRemoved))
 	c.cancel()
@@ -343,7 +356,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		} else {
 			log.Info("close ddl sink", zap.String("changefeedID", c.state.ID), zap.Duration("duration", time.Since(start)))
 		}
-		atomic.StoreInt32(&c.initialized, changeFeedClosed)
+		if atomic.CompareAndSwapInt32(&c.initialized, changeFeedClosing, changeFeedClosed) {
+			log.Info("changefeed fully closed")
+		}
 	}()
 
 	c.wg.Wait()
@@ -359,7 +374,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.metricsChangefeedResolvedTsGauge = nil
 	c.metricsChangefeedResolvedTsLagGauge = nil
 
-	atomic.StoreInt32(&c.initialized, changeFeedClosing)
+	if atomic.CompareAndSwapInt32(&c.initialized, changeFeedRunning, changeFeedClosing) {
+		log.Info("changefeed become closing")
+	}
 }
 
 // redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
