@@ -26,9 +26,12 @@ import (
 )
 
 const (
+	// When errors occurred and we need to do backoff, we start an exponential backoff
+	// with an interval from 10s to 30min. And when the duration (now - backoff start) exceeds 1 hour,
+	// the backoff will be stopped. To avoid thunderherd, a random factor is added to backoff interval.
 	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 30 * time.Minute
-	defaultBackoffMaxElapsedTime      = 2 * time.Hour
+	defaultBackoffMaxElapsedTime      = 1 * time.Hour
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
 )
@@ -46,25 +49,30 @@ type feedStateManager struct {
 	adminJobQueue   []*model.AdminJob
 	lastErrorTime   time.Time
 	backoffInterval time.Duration
-	expBackoff      *backoff.ExponentialBackOff
+	errBackoff      *backoff.ExponentialBackOff
 }
 
 // newFeedStateManager creates feedStateManager and initialize the exponential backoff
 func newFeedStateManager() *feedStateManager {
 	f := new(feedStateManager)
 
-	f.expBackoff = backoff.NewExponentialBackOff()
-	f.expBackoff.InitialInterval = defaultBackoffInitInterval
-	f.expBackoff.MaxInterval = defaultBackoffMaxInterval
-	f.expBackoff.MaxElapsedTime = defaultBackoffMaxElapsedTime
-	f.expBackoff.Multiplier = defaultBackoffMultiplier
-	f.expBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
-	f.expBackoff.Reset()
+	f.errBackoff = backoff.NewExponentialBackOff()
+	f.errBackoff.InitialInterval = defaultBackoffInitInterval
+	f.errBackoff.MaxInterval = defaultBackoffMaxInterval
+	f.errBackoff.MaxElapsedTime = defaultBackoffMaxElapsedTime
+	f.errBackoff.Multiplier = defaultBackoffMultiplier
+	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
 
-	f.backoffInterval = f.expBackoff.NextBackOff()
+	f.resetErrBackoff()
 	f.lastErrorTime = time.Unix(0, 0)
 
 	return f
+}
+
+func (m *feedStateManager) resetErrBackoff() {
+	m.errBackoff.Reset()
+
+	m.backoffInterval = m.errBackoff.NextBackOff()
 }
 
 func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) {
@@ -175,13 +183,13 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			return
 		}
 		m.shouldBeRunning = true
+		// when the changefeed is manually resumed, we must reset the backoff
+		m.resetErrBackoff()
 		m.lastErrorTime = time.Unix(0, 0)
-		m.expBackoff.Reset()
-		m.backoffInterval = m.expBackoff.NextBackOff()
 		jobsPending = true
 		m.patchState(model.StateNormal)
 		// to make sure the changefeed can running in next tick,
-		// we remove the error history and reset the exponential backoff
+		// we remove the error history
 		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			if info == nil {
 				return nil, false, nil
@@ -320,7 +328,6 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 					return nil, false, nil
 				}
 				info.Error = err
-				m.lastErrorTime = time.Now()
 				info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 				info.CleanUpOutdatedErrorHistory(m.backoffInterval)
 				return info, true, nil
@@ -337,40 +344,40 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		}
 		for _, err := range errs {
 			info.Error = err
-			m.lastErrorTime = time.Now()
 			info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
-		}
-		// if no errors occurred in a time window, we can assume that changefeed
-		// was running normally before. So if we get errors for this changefeed now,
-		// we must reset the expBackoff and re-backoff from InitialInterval.
-		if len(errs) > 0 && !info.ErrorsReachedThreshold(m.backoffInterval) {
-			m.expBackoff.Reset()
-			m.backoffInterval = m.expBackoff.NextBackOff()
 		}
 		changed := info.CleanUpOutdatedErrorHistory(m.backoffInterval)
 		return info, changed || len(errs) > 0, nil
 	})
 
-	if m.lastErrorTime != time.Unix(0, 0) {
-		if time.Since(m.lastErrorTime) < m.backoffInterval {
-			m.shouldBeRunning = false
-			m.patchState(model.StateError)
-		} else {
-			// clear lastErrorTime to give the changefeed another chance to run
-			m.lastErrorTime = time.Unix(0, 0)
-			m.backoffInterval = m.expBackoff.NextBackOff()
+	if len(errs) > 0 {
+		m.lastErrorTime = time.Now()
+		if !m.state.Info.ErrorsReachedThreshold(m.backoffInterval) {
+			m.resetErrBackoff()
+		}
+	}
 
-			// if the duration since backoff start exceeds MaxElapsedTime,
-			// we set the state of changefeed to "failed" and don't let it run again unless it is manually resumed.
-			if m.backoffInterval == backoff.Stop {
-				log.Warn("changefeed will not be restarted because it has been failing for a long time period",
-					zap.Duration("maxElapsedTime", m.expBackoff.MaxElapsedTime))
-				m.shouldBeRunning = false
-				m.patchState(model.StateFailed)
-			} else {
-				log.Info("changefeed restart backoff interval is changed", zap.String("changefeedID", m.state.ID),
-					zap.Duration("backoffInterval", m.backoffInterval))
-			}
+	if m.lastErrorTime == time.Unix(0, 0) {
+		return
+	}
+
+	if time.Since(m.lastErrorTime) < m.backoffInterval {
+		m.shouldBeRunning = false
+		m.patchState(model.StateError)
+	} else {
+		m.backoffInterval = m.errBackoff.NextBackOff()
+		m.lastErrorTime = time.Unix(0, 0)
+
+		// if the duration since backoff start exceeds MaxElapsedTime,
+		// we set the state of changefeed to "failed" and don't let it run again unless it is manually resumed.
+		if m.backoffInterval == backoff.Stop {
+			log.Warn("changefeed will not be restarted because it has been failing for a long time period",
+				zap.Duration("maxElapsedTime", m.errBackoff.MaxElapsedTime))
+			m.shouldBeRunning = false
+			m.patchState(model.StateFailed)
+		} else {
+			log.Info("changefeed restart backoff interval is changed", zap.String("changefeedID", m.state.ID),
+				zap.Duration("backoffInterval", m.backoffInterval))
 		}
 	}
 }
