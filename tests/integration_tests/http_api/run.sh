@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -eu
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
@@ -65,6 +65,9 @@ function run() {
 	python $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
 	# wait for changefeed created
 	sleep 2
+
+	# test processor query with no attached tables
+	python $CUR/util/test_case.py get_processor $TLS_DIR
 
 	run_sql "CREATE table test.simple0(id int primary key, val int);"
 	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"

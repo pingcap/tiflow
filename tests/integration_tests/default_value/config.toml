@@ -1,0 +1,20 @@
+# Source DB config
+log-level = "info"
+
+worker-count = 10
+job-count = 1000
+batch = 10
+
+pd = "127.0.0.1:2379"
+
+[[source-db]]
+host = "127.0.0.1"
+user = "root"
+password = ""
+port = 4000
+
+[[source-db]]
+host = "127.0.0.1"
+user = "root"
+password = ""
+port = 4001

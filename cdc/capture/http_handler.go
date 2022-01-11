@@ -181,6 +181,7 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 		TargetTs:       info.TargetTs,
 		CheckpointTSO:  status.CheckpointTs,
 		CheckpointTime: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
+		ResolvedTs:     status.ResolvedTs,
 		Engine:         info.Engine,
 		FeedState:      info.State,
 		TaskStatus:     taskStatus,
@@ -585,18 +586,23 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 		return
 	}
 	position, exist := positions[captureID]
-	if !exist {
-		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
-		return
+	// Note: for the case that no tables are attached to a newly created changefeed,
+	//       we just do not report an error.
+	var processorDetail model.ProcessorDetail
+	if exist {
+		processorDetail = model.ProcessorDetail{
+			CheckPointTs: position.CheckPointTs,
+			ResolvedTs:   position.ResolvedTs,
+			Count:        position.Count,
+			Error:        position.Error,
+		}
+		tables := make([]int64, 0)
+		for tableID := range status.Tables {
+			tables = append(tables, tableID)
+		}
+		processorDetail.Tables = tables
 	}
-
-	processorDetail := &model.ProcessorDetail{CheckPointTs: position.CheckPointTs, ResolvedTs: position.ResolvedTs, Error: position.Error}
-	tables := make([]int64, 0)
-	for tableID := range status.Tables {
-		tables = append(tables, tableID)
-	}
-	processorDetail.Tables = tables
-	c.IndentedJSON(http.StatusOK, processorDetail)
+	c.IndentedJSON(http.StatusOK, &processorDetail)
 }
 
 // ListProcessor lists all processors in the TiCDC cluster
