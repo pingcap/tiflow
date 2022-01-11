@@ -75,6 +75,15 @@ type DeleteSourceResponse struct {
 	TaskNameList *TaskNameList `json:"task_name_list,omitempty"`
 }
 
+// status of dump unit
+type DumpStatus struct {
+	CompletedTables   float64 `json:"completed_tables"`
+	EstimateTotalRows float64 `json:"estimate_total_rows"`
+	FinishedBytes     float64 `json:"finished_bytes"`
+	FinishedRows      float64 `json:"finished_rows"`
+	TotalTables       int64   `json:"total_tables"`
+}
+
 // operation error
 type ErrorWithMessage struct {
 	// error code
@@ -294,6 +303,9 @@ type StopRelayRequest struct {
 
 // SubTaskStatus defines model for SubTaskStatus.
 type SubTaskStatus struct {
+	// status of dump unit
+	DumpStatus *DumpStatus `json:"dump_status,omitempty"`
+
 	// status of load unit
 	LoadStatus *LoadStatus `json:"load_status,omitempty"`
 
