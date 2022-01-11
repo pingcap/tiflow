@@ -91,10 +91,7 @@ const SiderMenu: React.FC<{
         theme="light"
         mode="inline"
         defaultSelectedKeys={[loc.pathname]}
-        defaultOpenKeys={[
-          '/migration',
-          loc.pathname.includes('/cluster') ? '/cluster' : '',
-        ]}
+        defaultOpenKeys={['/migration', '/cluster']}
       >
         {items.map(item => {
           if (item.items) {
