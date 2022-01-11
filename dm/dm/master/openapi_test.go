@@ -88,7 +88,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
-	cfg1.ExperimentalFeatures.OpenAPI = true
+	cfg1.OpenAPI = true
 
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
@@ -108,7 +108,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg2.PeerUrls = tempurl.Alloc()
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
-	cfg2.ExperimentalFeatures.OpenAPI = true
+	cfg2.OpenAPI = true
 
 	s2 := NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
@@ -497,11 +497,11 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(resultTaskList.Data[0].Name, check.Equals, task.Name)
 
 	// test batch import task config
-	taskBatchImportURL := "/api/v1/task/configs/import"
-	req := openapi.TaskConfigRequest{Overwrite: false}
+	taskBatchImportURL := "/api/v1/task/templates/import"
+	req := openapi.TaskTemplateRequest{Overwrite: false}
 	result = testutil.NewRequest().Post(taskBatchImportURL).WithJsonBody(req).GoWithHTTPHandler(t.testT, s.openapiHandles)
 	c.Assert(result.Code(), check.Equals, http.StatusAccepted)
-	var resp openapi.TaskConfigResponse
+	var resp openapi.TaskTemplateResponse
 	c.Assert(result.UnmarshalBodyToObject(&resp), check.IsNil)
 	c.Assert(resp.SuccessTaskList, check.HasLen, 1)
 	c.Assert(resp.SuccessTaskList[0], check.Equals, task.Name)
@@ -548,7 +548,9 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(resultTaskStatus.Data[0].Name, check.Equals, task.Name)
 	c.Assert(resultTaskStatus.Data[0].Stage, check.Equals, pb.Stage_Running.String())
 	c.Assert(resultTaskStatus.Data[0].WorkerName, check.Equals, workerName1)
-
+	c.Assert(resultTaskStatus.Data[0].DumpStatus.CompletedTables, check.Equals, float64(0))
+	c.Assert(resultTaskStatus.Data[0].DumpStatus.TotalTables, check.Equals, int64(1))
+	c.Assert(resultTaskStatus.Data[0].DumpStatus.EstimateTotalRows, check.Equals, float64(10))
 	// get task status with source name
 	taskStatusURL = fmt.Sprintf("%s/%s/status?source_name_list=%s", taskURL, task.Name, source1Name)
 	result = testutil.NewRequest().Get(taskStatusURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
@@ -557,6 +559,22 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	err = result.UnmarshalBodyToObject(&resultTaskStatusWithStatus)
 	c.Assert(err, check.IsNil)
 	c.Assert(resultTaskStatusWithStatus, check.DeepEquals, resultTaskStatus)
+
+	// list task with status
+	result = testutil.NewRequest().Get(taskURL+"?with_status=true").GoWithHTTPHandler(t.testT, s.openapiHandles)
+	// check http status code
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	var resultListTask openapi.GetTaskListResponse
+	err = result.UnmarshalBodyToObject(&resultListTask)
+	c.Assert(err, check.IsNil)
+	c.Assert(resultListTask.Data, check.HasLen, 1)
+	c.Assert(resultListTask.Total, check.Equals, 1)
+	c.Assert(resultListTask.Data[0].StatusList, check.NotNil)
+	statusList := *resultListTask.Data[0].StatusList
+	c.Assert(statusList, check.HasLen, 1)
+	status := statusList[0]
+	c.Assert(status.WorkerName, check.Equals, workerName1)
+	c.Assert(status.Name, check.Equals, task.Name)
 
 	// stop task
 	result = testutil.NewRequest().Delete(fmt.Sprintf("%s/%s", taskURL, task.Name)).GoWithHTTPHandler(t.testT, s.openapiHandles)
@@ -661,7 +679,7 @@ func (t *openAPISuite) TestClusterAPI(c *check.C) {
 	cancel1()
 }
 
-func (t *openAPISuite) TestTaskConfigsAPI(c *check.C) {
+func (t *openAPISuite) TestTaskTemplatesAPI(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := setupServer(ctx, c)
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
@@ -689,7 +707,7 @@ func (t *openAPISuite) TestTaskConfigsAPI(c *check.C) {
 	c.Assert(result.Code(), check.Equals, http.StatusCreated)
 
 	// create task config template
-	url := "/api/v1/task/configs"
+	url := "/api/v1/task/templates"
 
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
@@ -778,7 +796,7 @@ func setupServer(ctx context.Context, c *check.C) *Server {
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
-	cfg1.ExperimentalFeatures.OpenAPI = true
+	cfg1.OpenAPI = true
 
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
@@ -841,11 +859,24 @@ func mockTaskQueryStatus(
 					},
 				},
 			},
+			{
+				Stage: pb.Stage_Running,
+				Name:  taskName,
+				Status: &pb.SubTaskStatus_Dump{
+					Dump: &pb.DumpStatus{
+						CompletedTables:   0.0,
+						EstimateTotalRows: 10.0,
+						FinishedBytes:     0.0,
+						FinishedRows:      5.0,
+						TotalTables:       1,
+					},
+				},
+			},
 		},
 	}
 	mockWorkerClient.EXPECT().QueryStatus(
 		gomock.Any(),
-		&pb.QueryStatusRequest{Name: taskName},
+		gomock.Any(),
 	).Return(queryResp, nil).MaxTimes(maxRetryNum)
 }
 

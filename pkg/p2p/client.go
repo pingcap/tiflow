@@ -115,7 +115,7 @@ func (c *MessageClient) Run(
 
 		log.Info("peer message client exited",
 			zap.String("addr", addr),
-			zap.String("capture-id", receiverID),
+			zap.String("captureID", receiverID),
 			zap.Error(ret))
 	}()
 

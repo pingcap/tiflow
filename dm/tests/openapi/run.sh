@@ -18,9 +18,9 @@ function prepare_database() {
 function init_noshard_data() {
 
 	run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
-	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
-
 	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (1, 2);"
+
+	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
 	run_sql_source2 "INSERT INTO openapi.t2(i,j) VALUES (3, 4);"
 }
 
@@ -230,6 +230,7 @@ function test_noshard_task() {
 	prepare_database
 
 	task_name="test-no-shard"
+	target_table_name="" # empty means no route
 
 	# create source succesfully
 	openapi_source_check "create_source1_success"
@@ -250,7 +251,7 @@ function test_noshard_task() {
 	openapi_task_check "start_task_failed"
 
 	# start no shard task success
-	openapi_task_check "start_noshard_task_success"
+	openapi_task_check "start_noshard_task_success" $task_name $target_table_name
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
@@ -265,7 +266,7 @@ function test_noshard_task() {
 	# get task status success
 	openapi_task_check "get_task_status_success" "$task_name" 2
 
-	# delte source with force
+	# delete source with force
 	openapi_source_check "delete_source_with_force_success" "mysql-01"
 
 	# after delete source-1, there is only one subtask status
@@ -294,6 +295,49 @@ function test_noshard_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK SUCCESS"
 }
 
+function test_multi_tasks() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: MULTI TASK"
+	prepare_database
+
+	task1="test-1"
+	task1_target_table_name="task1_target_table"
+
+	task2="test-2"
+	task2_target_db_name="task2_target_table"
+
+	# create and check source
+	openapi_source_check "create_source1_success"
+	openapi_source_check "create_source2_success"
+	openapi_source_check "list_source_success" 2
+
+	init_noshard_data
+
+	openapi_task_check "start_noshard_task_success" $task1 $task1_target_table_name
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task1" \
+		"\"stage\": \"Running\"" 2
+
+	# test get task list with status, now we have 1 task with two status
+	openapi_task_check "get_task_list_with_status" 1 $task1 2
+
+	openapi_task_check "start_noshard_task_success" $task2 $task2_target_db_name
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task2" \
+		"\"stage\": \"Running\"" 2
+
+	# now we have 2 task and each one has two status
+	openapi_task_check "get_task_list_with_status" 2 $task2 2
+
+	# delete source success and clean data for other test
+	openapi_source_check "delete_source_with_force_success" "mysql-01"
+	openapi_source_check "delete_source_with_force_success" "mysql-02"
+	openapi_source_check "list_source_success" 0
+	run_sql_tidb "DROP DATABASE if exists openapi;"
+	openapi_task_check "get_task_list" 0
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: MULTI TASK SUCCESS"
+
+}
+
 function test_cluster() {
 	# list master and worker node
 	openapi_cluster_check "list_master_success" 2
@@ -314,6 +358,50 @@ function test_cluster() {
 	openapi_cluster_check "list_worker_success" 1
 }
 
+function test_noshard_task_dump_status() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: NO SHARD TASK DUMP STATUS"
+	prepare_database
+
+	task_name="test-no-shard"
+	target_table_name="" # empty means no route
+
+	# create source succesfully
+	openapi_source_check "create_source1_success"
+	openapi_source_check "list_source_success" 1
+
+	# get source status success
+	openapi_source_check "get_source_status_success" "mysql-01"
+
+	# create source succesfully
+	openapi_source_check "create_source2_success"
+	# get source list success
+	openapi_source_check "list_source_success" 2
+
+	# get source status success
+	openapi_source_check "get_source_status_success" "mysql-02"
+
+	# start task success: not vaild task create request
+	openapi_task_check "start_task_failed"
+
+	# start no shard task success
+	openapi_task_check "start_noshard_task_success" $task_name $target_table_name
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"unit\": \"Dump\"" 2
+
+	# check noshard task dump status success
+	openapi_task_check "check_noshard_task_dump_status_success" "$task_name" 0
+
+	# delete source success and clean data for other test
+	openapi_source_check "delete_source_with_force_success" "mysql-01"
+	openapi_source_check "delete_source_with_force_success" "mysql-02"
+	openapi_source_check "list_source_success" 0
+	run_sql_tidb "DROP DATABASE if exists openapi;"
+	openapi_task_check "get_task_list" 0
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK DUMP STATUS SUCCESS"
+}
+
 function run() {
 	# run dm-master1
 	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $cur/conf/dm-master1.toml
@@ -332,8 +420,36 @@ function run() {
 	test_relay
 
 	test_shard_task
+	test_multi_tasks
+
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessForever=return()"
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	test_noshard_task_dump_status
+
+	export GO_FAILPOINTS=""
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
 	test_noshard_task
-	test_cluster
+	test_cluster # note that this test case should running at last, becasue it will offline some memebrs of cluster
 }
 
 cleanup_data openapi

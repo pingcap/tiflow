@@ -191,7 +191,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		"/status": getStatusHandle(),
 		"/debug/": getDebugHandler(),
 	}
-	if s.cfg.ExperimentalFeatures.OpenAPI {
+	if s.cfg.OpenAPI {
 		if initOpenAPIErr := s.InitOpenAPIHandles(); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
@@ -501,6 +501,8 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 		if release != nil {
 			release()
 		}
+
+		go s.scheduler.TryResolveLoadTask(sources)
 
 		resp.Result = true
 		if cfg.RemoveMeta {
@@ -2044,14 +2046,16 @@ func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateSchemaRequest
 			workerReq := workerrpc.Request{
 				Type: workerrpc.CmdOperateSchema,
 				OperateSchema: &pb.OperateWorkerSchemaRequest{
-					Op:       req.Op,
-					Task:     req.Task,
-					Source:   source,
-					Database: req.Database,
-					Table:    req.Table,
-					Schema:   req.Schema,
-					Flush:    req.Flush,
-					Sync:     req.Sync,
+					Op:         req.Op,
+					Task:       req.Task,
+					Source:     source,
+					Database:   req.Database,
+					Table:      req.Table,
+					Schema:     req.Schema,
+					Flush:      req.Flush,
+					Sync:       req.Sync,
+					FromSource: req.FromSource,
+					FromTarget: req.FromTarget,
 				},
 			}
 
@@ -2321,7 +2325,7 @@ func (s *Server) TransferSource(ctx context.Context, req *pb.TransferSourceReque
 		return resp2, err2
 	}
 
-	err := s.scheduler.TransferSource(req.Source, req.Worker)
+	err := s.scheduler.TransferSource(ctx, req.Source, req.Worker)
 	if err != nil {
 		resp2.Msg = err.Error()
 		// nolint:nilerr

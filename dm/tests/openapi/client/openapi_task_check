@@ -3,7 +3,6 @@
 import sys
 import requests
 
-NO_SHARD_TASK_NAME = "test-no-shard"
 SHARD_TASK_NAME = "test-shard"
 ILLEGAL_CHAR_TASK_NAME = "t-Ë!s`t"
 SOURCE1_NAME = "mysql-01"
@@ -57,9 +56,9 @@ def start_task_failed():
     assert resp.status_code == 400
 
 
-def start_noshard_task_success():
+def start_noshard_task_success(task_name, tartget_table_name=""):
     task = {
-        "name": NO_SHARD_TASK_NAME,
+        "name": task_name,
         "task_mode": "all",
         "shard_mode": "pessimistic",
         "meta_schema": "dm-meta",
@@ -78,6 +77,7 @@ def start_noshard_task_success():
                     "schema": "openapi",
                     "table": "*",
                 },
+                "target": {"schema": "openapi", "table": tartget_table_name},
             },
             {
                 "source": {
@@ -85,6 +85,7 @@ def start_noshard_task_success():
                     "schema": "openapi",
                     "table": "*",
                 },
+                "target": {"schema": "openapi", "table": tartget_table_name},
             },
         ],
         "source_config": {
@@ -179,7 +180,7 @@ def get_task_status_success(task_name, total):
     resp = requests.get(url=url)
     data = resp.json()
     assert resp.status_code == 200
-    print("get_task_status_failed resp=", data)
+    print("get_task_status_success resp=", data)
     assert data["total"] == int(total)
 
 
@@ -192,6 +193,22 @@ def get_task_list(task_count):
     assert data["total"] == int(task_count)
 
 
+def get_task_list_with_status(task_count, task_name, status_count):
+    url = API_ENDPOINT + "?with_status=true"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("get_task_list_with_status resp=", data)
+
+    assert data["total"] == int(task_count)
+    find_task = False
+    for task in data["data"]:
+        if task["name"] == task_name:
+            find_task = True
+            assert len(task["status_list"]) == int(status_count)
+    assert find_task
+
+
 def pause_task_success(task_name, source_name):
     url = API_ENDPOINT + "/" + task_name + "/pause"
     resp = requests.post(
@@ -200,6 +217,8 @@ def pause_task_success(task_name, source_name):
             source_name,
         ],
     )
+    if resp.status_code != 200:
+        print("pause_task_failed resp=", resp.json())
     assert resp.status_code == 200
 
 
@@ -211,6 +230,8 @@ def resume_task_success(task_name, source_name):
             source_name,
         ],
     )
+    if resp.status_code != 200:
+        print("resume_task_failed resp=", resp.json())
     assert resp.status_code == 200
 
 
@@ -274,6 +295,15 @@ def stop_task_success(task_name):
     print("stop_task_success")
 
 
+def check_noshard_task_dump_status_success(task_name, total):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("check_dump_status_success resp=", data)
+    assert data["data"][0]["dump_status"]["finished_bytes"] == int(total)
+
+
 if __name__ == "__main__":
     FUNC_MAP = {
         "start_task_failed": start_task_failed,
@@ -284,10 +314,12 @@ if __name__ == "__main__":
         "resume_task_success": resume_task_success,
         "stop_task_success": stop_task_success,
         "get_task_list": get_task_list,
+        "get_task_list_with_status": get_task_list_with_status,
         "get_task_status_failed": get_task_status_failed,
         "get_illegal_char_task_status_failed": get_illegal_char_task_status_failed,
         "get_task_status_success": get_task_status_success,
         "operate_schema_and_table_success": operate_schema_and_table_success,
+        "check_noshard_task_dump_status_success": check_noshard_task_dump_status_success,
     }
 
     func = FUNC_MAP[sys.argv[1]]

@@ -14,6 +14,8 @@
 package master
 
 import (
+	"errors"
+
 	"github.com/pingcap/tiflow/dm/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 
@@ -23,36 +25,22 @@ import (
 // NewSourceTableSchemaCmd creates a SourceTableSchema command.
 func NewSourceTableSchemaCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "binlog-schema <task-name> <table-filter1> <table-filter2> ...",
-		Short: "manage or show source-table schema schemas",
-		RunE:  sourceTableSchemaList,
+		Use:   "binlog-schema <command>",
+		Short: "manage or show table schema in schema tracker",
 	}
 	cmd.AddCommand(
 		newSourceTableSchemaUpdateCmd(),
 		newSourceTableSchemaDeleteCmd(),
+		newSourceTableSchemaListCmd(),
 	)
 
 	return cmd
 }
 
-func sourceTableSchemaList(cmd *cobra.Command, args []string) error {
-	if len(args) < 3 {
-		return cmd.Help()
-	}
-	taskName := common.GetTaskNameFromArgOrFile(args[0])
-	sources, err := common.GetSourceArgs(cmd)
-	if err != nil {
-		return err
-	}
-	database := args[1]
-	table := args[2]
-	return sendOperateSchemaRequest(pb.SchemaOp_GetSchema, taskName, sources, database, table, "", false, false)
-}
-
-func newSourceTableSchemaUpdateCmd() *cobra.Command {
+func newSourceTableSchemaListCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "update <task-name> <table-filter1> <table-filter2> ... <schema-file>",
-		Short: "update tables schema structures",
+		Use:   "list <task-name> <database> <table>",
+		Short: "show table schema structure",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 3 {
 				return cmd.Help()
@@ -64,20 +52,101 @@ func newSourceTableSchemaUpdateCmd() *cobra.Command {
 			}
 			database := args[1]
 			table := args[2]
-			schemaFile := args[3]
-			schemaContent, err := common.GetFileContent(schemaFile)
+			request := &pb.OperateSchemaRequest{
+				Op:         pb.SchemaOp_GetSchema,
+				Task:       taskName,
+				Sources:    sources,
+				Database:   database,
+				Table:      table,
+				Schema:     "",
+				Flush:      false,
+				Sync:       false,
+				FromSource: false,
+				FromTarget: false,
+			}
+			return sendOperateSchemaRequest(request)
+		},
+	}
+	return cmd
+}
+
+func newSourceTableSchemaUpdateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "update <task-name> <database> <table> [schema-file]",
+		Short: "update tables schema structure",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) < 3 {
+				return cmd.Help()
+			}
+
+			var (
+				taskName, database, table           string
+				sources                             []string
+				schemaContent                       []byte
+				flush, sync, fromSource, fromTarget bool
+				err                                 error
+			)
+
+			fromSource, err = cmd.Flags().GetBool("from-source")
 			if err != nil {
 				return err
 			}
-			flush, err := cmd.Flags().GetBool("flush")
+			fromTarget, err = cmd.Flags().GetBool("from-target")
 			if err != nil {
 				return err
 			}
-			sync, err := cmd.Flags().GetBool("sync")
+
+			if fromSource && fromTarget {
+				common.PrintLinesf("from-source and from-target can not be used together")
+				return errors.New("please check output to see error")
+			}
+
+			if !fromSource && !fromTarget && len(args) < 4 {
+				return cmd.Help()
+			}
+
+			if len(args) == 4 && (fromSource || fromTarget) {
+				common.PrintLinesf("can not set schema-file when use from-source or from-target")
+				return errors.New("please check output to see error")
+			}
+
+			taskName = common.GetTaskNameFromArgOrFile(args[0])
+			sources, err = common.GetSourceArgs(cmd)
 			if err != nil {
 				return err
 			}
-			return sendOperateSchemaRequest(pb.SchemaOp_SetSchema, taskName, sources, database, table, string(schemaContent), flush, sync)
+			database = args[1]
+			table = args[2]
+
+			if !fromSource && !fromTarget {
+				schemaFile := args[3]
+				schemaContent, err = common.GetFileContent(schemaFile)
+				if err != nil {
+					return err
+				}
+			}
+
+			flush, err = cmd.Flags().GetBool("flush")
+			if err != nil {
+				return err
+			}
+			sync, err = cmd.Flags().GetBool("sync")
+			if err != nil {
+				return err
+			}
+			request := &pb.OperateSchemaRequest{
+				Op:         pb.SchemaOp_SetSchema,
+				Task:       taskName,
+				Sources:    sources,
+				Database:   database,
+				Table:      table,
+				Schema:     string(schemaContent),
+				Flush:      flush,
+				Sync:       sync,
+				FromSource: fromSource,
+				FromTarget: fromTarget,
+			}
+			return sendOperateSchemaRequest(request)
 		},
 	}
 	cmd.Flags().Bool("flush", true, "flush the table info and checkpoint immediately")
@@ -89,8 +158,8 @@ func newSourceTableSchemaUpdateCmd() *cobra.Command {
 
 func newSourceTableSchemaDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "delete <task-name> <table-filter1> <table-filter2> ...",
-		Short: "delete tables schema structures",
+		Use:   "delete <task-name> <database> <table>",
+		Short: "delete table schema structure",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 3 {
 				return cmd.Help()
@@ -102,7 +171,19 @@ func newSourceTableSchemaDeleteCmd() *cobra.Command {
 			}
 			database := args[1]
 			table := args[2]
-			return sendOperateSchemaRequest(pb.SchemaOp_RemoveSchema, taskName, sources, database, table, "", false, false)
+			request := &pb.OperateSchemaRequest{
+				Op:         pb.SchemaOp_SetSchema,
+				Task:       taskName,
+				Sources:    sources,
+				Database:   database,
+				Table:      table,
+				Schema:     "",
+				Flush:      false,
+				Sync:       false,
+				FromSource: false,
+				FromTarget: false,
+			}
+			return sendOperateSchemaRequest(request)
 		},
 	}
 	return cmd
