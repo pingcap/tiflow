@@ -100,7 +100,7 @@ func newCDCPeer(senderID NodeID, epoch int64, sender *streamHandle) *cdcPeer {
 func (p *cdcPeer) abortWithError(ctx context.Context, err error) {
 	if err1 := p.sender.Send(ctx, errorToRPCResponse(err)); err1 != nil {
 		log.Warn("could not send error to peer", zap.Error(err),
-			zap.NamedError("send-err", err1))
+			zap.NamedError("sendErr", err1))
 		return
 	}
 	log.Debug("sent error to peer", zap.Error(err))
@@ -401,10 +401,10 @@ func (m *MessageServer) AddHandler(
 			}).Inc()
 
 			log.Debug("skipping peer message",
-				zap.String("sender-id", sm.SenderId),
+				zap.String("senderID", sm.SenderId),
 				zap.String("topic", topic),
-				zap.Int64("skipped-Seq", entry.Sequence),
-				zap.Int64("last-ack", lastAck))
+				zap.Int64("skippedSeq", entry.Sequence),
+				zap.Int64("lastAck", lastAck))
 			return nil
 		}
 
@@ -533,8 +533,8 @@ func (m *MessageServer) registerPeer(
 	streamMeta := sender.GetStreamMeta()
 
 	log.Info("peer connection received",
-		zap.String("sender-id", streamMeta.SenderId),
-		zap.String("sender-advertise-addr", streamMeta.SenderAdvertisedAddr),
+		zap.String("senderID", streamMeta.SenderId),
+		zap.String("senderAdvertiseAddr", streamMeta.SenderAdvertisedAddr),
 		zap.String("addr", clientIP),
 		zap.Int64("epoch", streamMeta.Epoch))
 
@@ -554,7 +554,7 @@ func (m *MessageServer) registerPeer(
 		// there is an existing peer
 		if peer.Epoch > streamMeta.Epoch {
 			log.Warn("incoming connection is stale",
-				zap.String("sender-id", streamMeta.SenderId),
+				zap.String("senderID", streamMeta.SenderId),
 				zap.String("addr", clientIP),
 				zap.Int64("epoch", streamMeta.Epoch))
 
@@ -568,7 +568,7 @@ func (m *MessageServer) registerPeer(
 			m.peerLock.Unlock()
 		} else {
 			log.Warn("incoming connection is duplicate",
-				zap.String("sender-id", streamMeta.SenderId),
+				zap.String("senderID", streamMeta.SenderId),
 				zap.String("addr", clientIP),
 				zap.Int64("epoch", streamMeta.Epoch))
 
@@ -649,8 +649,8 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 			case resp, ok := <-sendCh:
 				if !ok {
 					log.Info("peer stream handle is closed",
-						zap.String("peer-addr", streamHandle.GetStreamMeta().SenderAdvertisedAddr),
-						zap.String("peer-id", streamHandle.GetStreamMeta().SenderId))
+						zap.String("peerAddr", streamHandle.GetStreamMeta().SenderAdvertisedAddr),
+						zap.String("peerID", streamHandle.GetStreamMeta().SenderId))
 					// cancel the stream when sendCh is closed
 					cancel()
 					return nil
@@ -724,7 +724,7 @@ func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, stre
 
 		batchSize := len(packet.GetEntries())
 		log.Debug("received packet", zap.String("streamHandle", streamHandle.GetStreamMeta().SenderId),
-			zap.Int("num-entries", batchSize))
+			zap.Int("numEntries", batchSize))
 
 		batchBytes := packet.Size()
 		metricsServerMessageBatchBytesHistogram.Observe(float64(batchBytes))
