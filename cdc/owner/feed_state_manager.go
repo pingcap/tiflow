@@ -28,11 +28,12 @@ import (
 const (
 	// When errors occurred and we need to do backoff, we start an exponential backoff
 	// with an interval from 2min to 30min (2min, 4min, 8min, 16min, 30min, 30min...).
-	// And when the duration (now - backoff start) exceeds 90 min (about 6 tries),
-	// the backoff will be stopped. To avoid thunderherd, a random factor is added to backoff interval.
+	// And the backoff will be stopped after 90 min (about 6 tries) because if we do another 30min backoff,
+	// the total duration (120min) will exceeds the MaxElapsedTime (100min).
+	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 2 * time.Minute
 	defaultBackoffMaxInterval         = 30 * time.Minute
-	defaultBackoffMaxElapsedTime      = 90 * time.Minute
+	defaultBackoffMaxElapsedTime      = 100 * time.Minute
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
 )
@@ -63,6 +64,22 @@ func newFeedStateManager() *feedStateManager {
 	f.errBackoff.MaxElapsedTime = defaultBackoffMaxElapsedTime
 	f.errBackoff.Multiplier = defaultBackoffMultiplier
 	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
+
+	f.resetErrBackoff()
+	f.lastErrorTime = time.Unix(0, 0)
+
+	return f
+}
+
+func newFeedStateManager4Test() *feedStateManager {
+	f := new(feedStateManager)
+
+	f.errBackoff = backoff.NewExponentialBackOff()
+	f.errBackoff.InitialInterval = 200 * time.Millisecond
+	f.errBackoff.MaxInterval = 1600 * time.Millisecond
+	f.errBackoff.MaxElapsedTime = 6 * time.Second
+	f.errBackoff.Multiplier = 2.0
+	f.errBackoff.RandomizationFactor = 0
 
 	f.resetErrBackoff()
 	f.lastErrorTime = time.Unix(0, 0)
