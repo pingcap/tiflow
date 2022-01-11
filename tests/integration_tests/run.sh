@@ -52,12 +52,24 @@ test_case=$2
 if [ -z "$test_case" ]; then
 	test_case="*"
 fi
+
+start_at=$3
+run_test="no"
+if [ -z "$start_at" ]; then
+	run_test="yes"
+else
+	test_case="*"
+fi
+
 set -eu
 
 if [ "$test_case" == "*" ]; then
 	for script in $CUR/*/run.sh; do
 		test_name="$(basename "$(dirname "$script")")"
-		run_case $test_name $script $sink_type
+		if [ "$run_test" == "yes" ] || [ "$start_at" == "$test_name" ]; then
+			run_test="yes"
+			run_case $test_name $script $sink_type
+		fi
 	done
 else
 	for name in $test_case; do
