@@ -182,7 +182,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	default:
 	}
 
-	// changefeed maybe in the `closing` progress.
 	if atomic.LoadInt32(&c.runningStatus) != changeFeedRunning {
 		return nil
 	}
@@ -219,7 +218,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 }
 
 func (c *changefeed) initialize(ctx cdcContext.Context) error {
-	// ignore changefeed that may be in `changeFeedRunning` or `changeFeedClosing`
 	if atomic.LoadInt32(&c.runningStatus) != changeFeedClosed {
 		return nil
 	}
@@ -317,7 +315,6 @@ LOOP:
 		return errors.Trace(err)
 	}
 
-	// todo (Ling Jin): add a new state `changeFeedInitializing`
 	atomic.StoreInt32(&c.runningStatus, changeFeedRunning)
 	log.Info("changefeed runningStatus",
 		zap.String("changefeed", c.state.ID),
