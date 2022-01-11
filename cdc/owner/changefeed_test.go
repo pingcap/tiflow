@@ -378,7 +378,7 @@ func (s *changefeedSuite) TestRemoveChangefeed(c *check.C) {
 		ID:   ctx.ChangefeedVars().ID,
 		Info: info,
 	})
-	testChangefeedReleaseResource(c, ctx, cancel, dir, true /*expectedInitialized*/)
+	testChangefeedReleaseResource(c, ctx, cancel, dir, changeFeedRunning /*expectedInitialized*/)
 }
 
 func (s *changefeedSuite) TestRemovePausedChangefeed(c *check.C) {
@@ -397,7 +397,7 @@ func (s *changefeedSuite) TestRemovePausedChangefeed(c *check.C) {
 		ID:   ctx.ChangefeedVars().ID,
 		Info: info,
 	})
-	testChangefeedReleaseResource(c, ctx, cancel, dir, false /*expectedInitialized*/)
+	testChangefeedReleaseResource(c, ctx, cancel, dir, changeFeedClosed /*expectedInitialized*/)
 }
 
 func testChangefeedReleaseResource(
@@ -405,7 +405,7 @@ func testChangefeedReleaseResource(
 	ctx cdcContext.Context,
 	cancel context.CancelFunc,
 	redoLogDir string,
-	expectedInitialized bool,
+	expectedRunningStatus int32,
 ) {
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
 
@@ -416,7 +416,7 @@ func testChangefeedReleaseResource(
 	// initialize
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
-	c.Assert(cf.runningStatus, check.Equals, expectedInitialized)
+	c.Assert(cf.runningStatus, check.Equals, expectedRunningStatus)
 
 	// remove changefeed from state manager by admin job
 	cf.feedStateManager.PushAdminJob(&model.AdminJob{
