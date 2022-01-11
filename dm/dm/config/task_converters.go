@@ -167,10 +167,17 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		// set shard config
 		if task.ShardMode != nil {
 			subTaskCfg.IsSharding = true
-			mode := *task.ShardMode
-			subTaskCfg.ShardMode = string(mode)
+			subTaskCfg.ShardMode = string(*task.ShardMode)
 		} else {
 			subTaskCfg.IsSharding = false
+		}
+		// set timezone
+		if task.TimeZone != nil {
+			subTaskCfg.Timezone = *task.TimeZone
+		}
+		// set collation_compatible
+		if task.CollationCompatible != nil {
+			subTaskCfg.CollationCompatible = string(*task.CollationCompatible)
 		}
 		// set online ddl plugin config
 		subTaskCfg.OnlineDDL = task.EnhanceOnlineSchemaChange
@@ -205,6 +212,12 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 			}
 			if incrCfg.ReplBatch != nil {
 				subTaskCfg.SyncerConfig.Batch = *incrCfg.ReplBatch
+			}
+			if incrCfg.Compact != nil {
+				subTaskCfg.SyncerConfig.Compact = *incrCfg.Compact
+			}
+			if incrCfg.MultipleRows != nil {
+				subTaskCfg.SyncerConfig.MultipleRows = *incrCfg.MultipleRows
 			}
 		}
 		// set route,blockAllowList,filter config
@@ -422,8 +435,10 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigMap map[string]map[string]SubTaskC
 			ImportThreads: &oneSubtaskConfig.LoaderConfig.PoolSize,
 		}
 		taskSourceConfig.IncrMigrateConf = &openapi.TaskIncrMigrateConf{
-			ReplBatch:   &oneSubtaskConfig.SyncerConfig.Batch,
-			ReplThreads: &oneSubtaskConfig.SyncerConfig.WorkerCount,
+			ReplBatch:    &oneSubtaskConfig.SyncerConfig.Batch,
+			Compact:      &oneSubtaskConfig.SyncerConfig.Compact,
+			ReplThreads:  &oneSubtaskConfig.SyncerConfig.WorkerCount,
+			MultipleRows: &oneSubtaskConfig.SyncerConfig.MultipleRows,
 		}
 		// set filter rules
 		filterRuleMap := openapi.Task_BinlogFilterRule{}
@@ -494,6 +509,9 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigMap map[string]map[string]SubTaskC
 		if len(filterMap) > 0 {
 			task.BinlogFilterRule = &filterRuleMap
 		}
+		task.TimeZone = &oneSubtaskConfig.Timezone
+		collationCompatible := openapi.TaskCollationCompatible(oneSubtaskConfig.CollationCompatible)
+		task.CollationCompatible = &collationCompatible
 		task.TableMigrateRule = tableMigrateRuleList
 		taskList = append(taskList, task)
 	}

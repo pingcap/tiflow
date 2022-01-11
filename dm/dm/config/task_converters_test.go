@@ -75,6 +75,10 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTaskConfig.ShardMode, check.Equals, "")
 	// check online schema change
 	c.Assert(subTaskConfig.OnlineDDL, check.Equals, true)
+	// check timezone
+	c.Assert(subTaskConfig.Timezone, check.Equals, *task.TimeZone)
+	// check collation
+	c.Assert(subTaskConfig.CollationCompatible, check.Equals, string(*task.CollationCompatible))
 	// check case sensitive
 	c.Assert(subTaskConfig.CaseSensitive, check.Equals, sourceCfg1.CaseSensitive)
 	// check from
@@ -86,8 +90,11 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTaskConfig.LoaderConfig.Dir, check.Equals, fmt.Sprintf(
 		"%s.%s", *task.SourceConfig.FullMigrateConf.DataDir, task.Name))
 	c.Assert(subTaskConfig.LoaderConfig.PoolSize, check.Equals, *task.SourceConfig.FullMigrateConf.ImportThreads)
-	c.Assert(subTaskConfig.SyncerConfig.WorkerCount, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplThreads)
+	c.Assert(subTaskConfig.SyncerConfig.Compact, check.Equals, *task.SourceConfig.IncrMigrateConf.Compact)
 	c.Assert(subTaskConfig.SyncerConfig.Batch, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplBatch)
+	c.Assert(subTaskConfig.SyncerConfig.WorkerCount, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplThreads)
+	c.Assert(subTaskConfig.SyncerConfig.MultipleRows, check.Equals, *task.SourceConfig.IncrMigrateConf.MultipleRows)
+
 	// check route
 	c.Assert(subTaskConfig.RouteRules, check.HasLen, 1)
 	rule := subTaskConfig.RouteRules[0]
@@ -279,6 +286,21 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	taskList := SubTaskConfigsToOpenAPITask(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)
 	newTask := taskList[0]
+
+	t1, _ := newTask.ToJSON()
+	t2, _ := task.ToJSON()
+	c.Assert(string(t1), check.Equals, string(t2))
+
+	// println("~~~~~~t1~~~~~~~", task.CollationCompatible, task.TimeZone)
+	// println("~~~~~~t2~~~~~~~", newTask.CollationCompatible, newTask.TimeZone)
+
+	// c.Assert(*task.CollationCompatible, check.Equals, *newTask.CollationCompatible)
+	// c.Assert(*task.TimeZone, check.Equals, *newTask.TimeZone)
+	// c.Assert(task.SourceConfig.IncrMigrateConf, check.DeepEquals, newTask.SourceConfig.IncrMigrateConf)
+
+	// newTask.TimeZone = task.TimeZone
+	// newTask.CollationCompatible = task.CollationCompatible
+	// newTask.SourceConfig.IncrMigrateConf = task.SourceConfig.IncrMigrateConf
 
 	c.Assert(task, check.DeepEquals, newTask)
 }

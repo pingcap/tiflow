@@ -1390,6 +1390,14 @@ components:
           type: integer
           description: incremental synchronization of batch execution sql quantities
           default: 100
+        multiple_rows:
+          type: boolean
+          default: false
+          description: if set to true, DM combines as many statements of the same type as possible into a single statement and generates a single SQL statement with multiple rows of data.
+        compact:
+          type: boolean
+          default: false
+          description: if set to true, DM compacts as many upstream statements on the same rows as possible into a single statements without increasing latency.
     TaskSourceConf:
       type: object
       properties:
@@ -1467,6 +1475,18 @@ components:
           example: "dm-meta"
           description: "downstream database for storing meta information"
           default: "dm-meta"
+        time_zone:
+          type: string
+          example: "Asia/Shanghai"
+          description: "timezone of database session, if timezone is empty, timezone will auto adjusted in each unit"
+          default: ""
+        collation_compatible:
+          type: string
+          description: default value is `loose` handle create sql by original sql, will not add default collation as upstream but `strict` will add default collation as upstream, and downstream will occur error when downstream don't support
+          default: "loose"
+          enum:
+            - "loose"
+            - "strict"
         enhance_online_schema_change:
           type: boolean
           example: true

@@ -25,6 +25,8 @@ var (
 		"enhance_online_schema_change": true,
 		"meta_schema": "dm_meta",
 		"name": "test",
+		"time_zone": "Asia/Shanghai",
+		"collation_compatible": "loose",
 		"on_duplicate": "error",
 		"source_config": {
 		  "full_migrate_conf": {
@@ -32,7 +34,12 @@ var (
 			"export_threads": 4,
 			"import_threads": 16
 		  },
-		  "incr_migrate_conf": { "repl_batch": 200, "repl_threads": 32 },
+		  "incr_migrate_conf": {
+			"repl_threads": 16,
+			"repl_batch": 100,
+			"multiple_rows": false,
+			"compact": false
+		  },
 		  "source_conf": [{ "source_name": "mysql-replica-01" }]
 		},
 		"table_migrate_rule": [

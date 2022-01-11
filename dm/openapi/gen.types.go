@@ -8,6 +8,13 @@ import (
 	"fmt"
 )
 
+// Defines values for TaskCollationCompatible.
+const (
+	TaskCollationCompatibleLoose TaskCollationCompatible = "loose"
+
+	TaskCollationCompatibleStrict TaskCollationCompatible = "strict"
+)
+
 // Defines values for TaskOnDuplicate.
 const (
 	TaskOnDuplicateError TaskOnDuplicate = "error"
@@ -344,6 +351,9 @@ type TableNameList []string
 type Task struct {
 	BinlogFilterRule *Task_BinlogFilterRule `json:"binlog_filter_rule,omitempty"`
 
+	// default value is `loose` handle create sql by original sql, will not add default collation as upstream but `strict` will add default collation as upstream, and downstream will occur error when downstream don't support
+	CollationCompatible *TaskCollationCompatible `json:"collation_compatible,omitempty"`
+
 	// whether to enable support for the online ddl plugin
 	EnhanceOnlineSchemaChange bool `json:"enhance_online_schema_change"`
 
@@ -371,12 +381,18 @@ type Task struct {
 
 	// migrate mode
 	TaskMode TaskTaskMode `json:"task_mode"`
+
+	// timezone of database session, if timezone is empty, timezone will auto adjusted in each unit
+	TimeZone *string `json:"time_zone,omitempty"`
 }
 
 // Task_BinlogFilterRule defines model for Task.BinlogFilterRule.
 type Task_BinlogFilterRule struct {
 	AdditionalProperties map[string]TaskBinLogFilterRule `json:"-"`
 }
+
+// default value is `loose` handle create sql by original sql, will not add default collation as upstream but `strict` will add default collation as upstream, and downstream will occur error when downstream don't support
+type TaskCollationCompatible string
 
 // how to handle conflicted data
 type TaskOnDuplicate string
@@ -413,6 +429,12 @@ type TaskFullMigrateConf struct {
 
 // configuration of incremental tasks
 type TaskIncrMigrateConf struct {
+	// if set to true, DM compacts as many upstream statements on the same rows as possible into a single statements without increasing latency.
+	Compact *bool `json:"compact,omitempty"`
+
+	// if set to true, DM combines as many statements of the same type as possible into a single statement and generates a single SQL statement with multiple rows of data.
+	MultipleRows *bool `json:"multiple_rows,omitempty"`
+
 	// incremental synchronization of batch execution sql quantities
 	ReplBatch *int `json:"repl_batch,omitempty"`
 
