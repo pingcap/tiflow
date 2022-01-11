@@ -985,6 +985,16 @@ func getOpenAPISubtaskStatusByTaskName(taskName string,
 				}
 			}
 		}
+		// add dump status
+		if dumpS := subTaskStatus.GetDump(); dumpS != nil {
+			openapiSubTaskStatus.DumpStatus = &openapi.DumpStatus{
+				CompletedTables:   dumpS.CompletedTables,
+				EstimateTotalRows: dumpS.EstimateTotalRows,
+				FinishedBytes:     dumpS.FinishedBytes,
+				FinishedRows:      dumpS.FinishedRows,
+				TotalTables:       dumpS.TotalTables,
+			}
+		}
 		subTaskStatusList = append(subTaskStatusList, openapiSubTaskStatus)
 	}
 	return subTaskStatusList, nil
