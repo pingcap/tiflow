@@ -99,8 +99,9 @@ const (
 	// changefeed, if it is less than ErrorHistoryThreshold, then initialize it.
 	ErrorHistoryThreshold = 1
 
-	// deltaBackoffInterval is added to the time window to safely ensure that
-	// no errors occurred in that window
+	// If we don't have this delta value, we will get no error after searching
+	// info.ErrHis at next tick. As a result, ErrorsReachedThreshold()
+	// will alway return false and the exponential backoff will be reset again and again.
 	deltaBackoffInterval = 30 * time.Second
 )
 
