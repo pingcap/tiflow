@@ -100,8 +100,13 @@ func TestReplicaConfigValidate(t *testing.T) {
 func TestValidateDispatcherRule(t *testing.T) {
 	t.Parallel()
 
-	sinkURI := "mysql@@tt://root:123456@127.0.0.1:3306/"
-	warning, err := ValidateDispatcherRule(sinkURI, &SinkConfig{}, true)
+	sinkURI := "mysql://root:123456@127.0.0.1:3306/"
+	warning, err := ValidateDispatcherRule(sinkURI, nil, true)
+	require.Nil(t, err)
+	require.Equal(t, warning, "")
+
+	sinkURI = "mysql@@tt://root:123456@127.0.0.1:3306/"
+	warning, err = ValidateDispatcherRule(sinkURI, &SinkConfig{}, true)
 	require.Error(t, err)
 	require.Equal(t, warning, "")
 
