@@ -234,22 +234,51 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	}
 }
 
+<<<<<<< HEAD
 func (s *kafkaSuite) TestAdjustPartitionNum(c *check.C) {
 	defer testleak.AfterTest(c)()
+=======
+func (s *kafkaSuite) TestValidateAndCreateTopic(c *check.C) {
+	defer testleak.AfterTest(c)
+>>>>>>> afa9a2bf5 (sink(ticdc): actively checks the size of min.insync.replicas and replication-factor (#4263))
 	config := NewConfig()
 	err := config.adjustPartitionNum(2)
 	c.Assert(err, check.IsNil)
+<<<<<<< HEAD
 	c.Assert(config.PartitionNum, check.Equals, int32(2))
+=======
+	opts := make(map[string]string)
+	err = validateAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
+>>>>>>> afa9a2bf5 (sink(ticdc): actively checks the size of min.insync.replicas and replication-factor (#4263))
 
 	config.PartitionNum = 1
 	err = config.adjustPartitionNum(2)
 	c.Assert(err, check.IsNil)
+<<<<<<< HEAD
 	c.Assert(config.PartitionNum, check.Equals, int32(1))
 
 	config.PartitionNum = 3
 	err = config.adjustPartitionNum(2)
 	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
 }
+=======
+	opts = make(map[string]string)
+	err = validateAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
+
+	config.MaxMessageBytes = defaultMaxMessageBytes - 1
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = validateAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
+>>>>>>> afa9a2bf5 (sink(ticdc): actively checks the size of min.insync.replicas and replication-factor (#4263))
 
 func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	defer testleak.AfterTest(c)
@@ -272,11 +301,33 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 	config.PartitionNum = int32(0)
 	config.BrokerEndpoints = strings.Split(broker.Addr(), ",")
 	config.AutoCreate = false
+<<<<<<< HEAD
 
 	cfg, err := newSaramaConfigImpl(ctx, config)
+=======
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = validateAndCreateTopic(adminClient, "non-exist", config, cfg, opts)
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*auto-create-topic` is false, and topic not found.*",
+	)
+
+	// When the topic does not exist, use the broker's configuration to create the topic.
+	// It is less than the value of broker.
+	config.AutoCreate = true
+	config.MaxMessageBytes = defaultMaxMessageBytes - 1
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = validateAndCreateTopic(adminClient, "create-random1", config, cfg, opts)
+>>>>>>> afa9a2bf5 (sink(ticdc): actively checks the size of min.insync.replicas and replication-factor (#4263))
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
 
+<<<<<<< HEAD
 	config.BrokerEndpoints = []string{""}
 	cfg.Metadata.Retry.Max = 1
 
@@ -345,6 +396,76 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	c.Assert(cfg.Net.SASL.User, check.Equals, "user")
 	c.Assert(cfg.Net.SASL.Password, check.Equals, "password")
 	c.Assert(cfg.Net.SASL.Mechanism, check.Equals, sarama.SASLMechanism("SCRAM-SHA-256"))
+=======
+	// When the topic does not exist, use the broker's configuration to create the topic.
+	// It is larger than the value of broker.
+	config.MaxMessageBytes = defaultMaxMessageBytes + 1
+	config.AutoCreate = true
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = validateAndCreateTopic(adminClient, "create-random2", config, cfg, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
+
+	// When the topic exists, but the topic does not store max message bytes info,
+	// the check of parameter succeeds.
+	// It is less than the value of broker.
+	config.MaxMessageBytes = defaultMaxMessageBytes - 1
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	detail := &sarama.TopicDetail{
+		NumPartitions: 3,
+		// Does not contain max message bytes information.
+		ConfigEntries: make(map[string]*string),
+	}
+	err = adminClient.CreateTopic("test-topic", detail, false)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = validateAndCreateTopic(adminClient, "test-topic", config, cfg, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
+
+	// When the topic exists, but the topic does not store max message bytes info,
+	// the check of parameter fails.
+	// It is larger than the value of broker.
+	config.MaxMessageBytes = defaultMaxMessageBytes + 1
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	opts = make(map[string]string)
+	err = validateAndCreateTopic(adminClient, "test-topic", config, cfg, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
+	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
+
+	// Report an error if the replication-factor is less than min.insync.replicas
+	// when the topic does not exist.
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	adminClient.SetMinInsyncReplicas("2")
+	opts = make(map[string]string)
+	err = validateAndCreateTopic(adminClient, "create-new-fail-invalid-min-insync-replicas", config, cfg, opts)
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*`replication-factor` cannot be smaller than the `min.insync.replicas` of broker.*",
+	)
+
+	// Report an error if the replication-factor is less than min.insync.replicas
+	// when the topic does exist.
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	adminClient.SetMinInsyncReplicas("2")
+	opts = make(map[string]string)
+	err = validateAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*`replication-factor` cannot be smaller than the `min.insync.replicas` of topic.*",
+	)
+>>>>>>> afa9a2bf5 (sink(ticdc): actively checks the size of min.insync.replicas and replication-factor (#4263))
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
