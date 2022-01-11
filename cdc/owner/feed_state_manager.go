@@ -27,7 +27,8 @@ import (
 
 const (
 	// When errors occurred and we need to do backoff, we start an exponential backoff
-	// with an interval from 10s to 30min. And when the duration (now - backoff start) exceeds 1 hour,
+	// with an interval from 10s to 30min (10s, 20s, 40s, ... 30min, 30min...).
+	// And when the duration (now - backoff start) exceeds 1 hour,
 	// the backoff will be stopped. To avoid thunderherd, a random factor is added to backoff interval.
 	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 30 * time.Minute
