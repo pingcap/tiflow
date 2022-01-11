@@ -22,18 +22,19 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
 type bufferSink struct {
 	Sink
-	checkpointTs uint64
-	buffer       map[model.TableID][]*model.RowChangedEvent
-	bufferMu     sync.Mutex
-	flushTsChan  chan uint64
-	drawbackChan chan drawbackMsg
+	changeFeedCheckpointTs uint64
+	tableCheckpointTsMap   sync.Map
+	buffer                 map[model.TableID][]*model.RowChangedEvent
+	bufferMu               sync.Mutex
+	flushTsChan            chan flushMsg
+	drawbackChan           chan drawbackMsg
 }
 
 func newBufferSink(
@@ -42,14 +43,14 @@ func newBufferSink(
 	errCh chan error,
 	checkpointTs model.Ts,
 	drawbackChan chan drawbackMsg,
-) Sink {
+) *bufferSink {
 	sink := &bufferSink{
 		Sink: backendSink,
 		// buffer shares the same flow control with table sink
-		buffer:       make(map[model.TableID][]*model.RowChangedEvent),
-		checkpointTs: checkpointTs,
-		flushTsChan:  make(chan uint64, 128),
-		drawbackChan: drawbackChan,
+		buffer:                 make(map[model.TableID][]*model.RowChangedEvent),
+		changeFeedCheckpointTs: checkpointTs,
+		flushTsChan:            make(chan flushMsg, 128),
+		drawbackChan:           drawbackChan,
 	}
 	go sink.run(ctx, errCh)
 	return sink
@@ -81,8 +82,9 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 			delete(b.buffer, drawback.tableID)
 			b.bufferMu.Unlock()
 			close(drawback.callback)
-		case resolvedTs := <-b.flushTsChan:
+		case flushEvent := <-b.flushTsChan:
 			b.bufferMu.Lock()
+			resolvedTs := flushEvent.resolvedTs
 			// find all rows before resolvedTs and emit to backend sink
 			for tableID, rows := range b.buffer {
 				i := sort.Search(len(rows), func(i int) bool {
@@ -109,14 +111,15 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 			b.bufferMu.Unlock()
 
 			start := time.Now()
-			checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, resolvedTs)
+			tableID := flushEvent.tableID
+			checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, flushEvent.tableID, resolvedTs)
 			if err != nil {
 				if errors.Cause(err) != context.Canceled {
 					errCh <- err
 				}
 				return
 			}
-			atomic.StoreUint64(&b.checkpointTs, checkpointTs)
+			b.tableCheckpointTsMap.Store(tableID, checkpointTs)
 
 			dur := time.Since(start)
 			metricFlushDuration.Observe(dur.Seconds())
@@ -146,11 +149,32 @@ func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Ro
 	return nil
 }
 
-func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	select {
 	case <-ctx.Done():
-		return atomic.LoadUint64(&b.checkpointTs), ctx.Err()
-	case b.flushTsChan <- resolvedTs:
+		return b.getTableCheckpointTs(tableID), ctx.Err()
+	case b.flushTsChan <- flushMsg{
+		tableID:    tableID,
+		resolvedTs: resolvedTs,
+	}:
 	}
-	return atomic.LoadUint64(&b.checkpointTs), nil
+	return b.getTableCheckpointTs(tableID), nil
+}
+
+type flushMsg struct {
+	tableID    model.TableID
+	resolvedTs uint64
+}
+
+func (b *bufferSink) getTableCheckpointTs(tableID model.TableID) uint64 {
+	checkPoints, ok := b.tableCheckpointTsMap.Load(tableID)
+	if ok {
+		return checkPoints.(uint64)
+	}
+	return atomic.LoadUint64(&b.changeFeedCheckpointTs)
+}
+
+// UpdateChangeFeedCheckpointTs update the changeFeedCheckpointTs every processor tick
+func (b *bufferSink) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
+	atomic.StoreUint64(&b.changeFeedCheckpointTs, checkpointTs)
 }

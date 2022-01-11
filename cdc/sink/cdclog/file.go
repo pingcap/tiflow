@@ -21,11 +21,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/quotes"
 	parsemodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
@@ -225,7 +225,7 @@ func (f *fileSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowC
 	return f.emitRowChangedEvents(ctx, newTableStream, rows...)
 }
 
-func (f *fileSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (f *fileSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	log.Debug("[FlushRowChangedEvents] enter", zap.Uint64("ts", resolvedTs))
 	return f.flushRowChangedEvents(ctx, resolvedTs)
 }
@@ -349,7 +349,7 @@ func (f *fileSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (f *fileSink) Barrier(ctx context.Context) error {
+func (f *fileSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	// Barrier does nothing because FlushRowChangedEvents in file sink has flushed
 	// all buffered events forcedlly.
 	return nil

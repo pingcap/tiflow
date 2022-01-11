@@ -17,7 +17,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/pb"
 
 	"github.com/pingcap/check"
 )
