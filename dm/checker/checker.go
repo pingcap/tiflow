@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -31,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/checker"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -243,13 +245,34 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 	}
 
-	if checkingShard {
-		for name, shardingSet := range sharding {
-			if shardingCounter[name] <= 1 {
-				continue
+	instance := c.instances[0]
+	if checkingShard && instance.cfg.Mode != config.ModeIncrement {
+		checkpointSQLs := []string{
+			fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", instance.cfg.MetaSchema, cputil.LoaderCheckpoint(instance.cfg.Name)),
+			fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", instance.cfg.MetaSchema, cputil.LightningCheckpoint(instance.cfg.Name)),
+			fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", instance.cfg.MetaSchema, cputil.SyncerCheckpoint(instance.cfg.Name)),
+		}
+		var existCheckpoint bool
+		for _, sql := range checkpointSQLs {
+			c.tctx.Logger.Info("exec query", zap.String("sql", sql))
+			_, err := instance.targetDB.DB.QueryContext(c.tctx.Ctx, sql)
+			if err != nil && !utils.IsMySQLError(err, mysql.ErrNoSuchTable) {
+				return err
 			}
+			if err == nil {
+				existCheckpoint = true
+				c.tctx.Logger.Info("exist checkpoint, so don't check sharding tables")
+				break
+			}
+		}
+		if !existCheckpoint {
+			for name, shardingSet := range sharding {
+				if shardingCounter[name] <= 1 {
+					continue
+				}
 
-			c.checkList = append(c.checkList, checker.NewShardingTablesChecker(name, dbs, shardingSet, columnMapping, checkingShardID))
+				c.checkList = append(c.checkList, checker.NewShardingTablesChecker(name, dbs, shardingSet, columnMapping, checkingShardID))
+			}
 		}
 	}
 
