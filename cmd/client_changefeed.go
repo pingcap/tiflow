@@ -274,6 +274,10 @@ func verifyChangefeedParameters(
 			return nil, err
 		}
 	}
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	cfg := config.GetDefaultReplicaConfig()
 
 	if !cdcClusterVer.ShouldEnableOldValueByDefault() {
