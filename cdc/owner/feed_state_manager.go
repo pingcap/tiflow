@@ -36,6 +36,10 @@ const (
 	defaultBackoffMaxElapsedTime      = 90 * time.Minute
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
+
+	// If we get no errors after 512 consecutive ticks, it can be assumed that the changfeed
+	// is running steady. And then if we get an error at next tick, the backoff must be reset.
+	defaultErrorWindowSize = 512
 )
 
 // feedStateManager manages the ReactorState of a changefeed
@@ -49,6 +53,7 @@ type feedStateManager struct {
 	shouldBeRemoved bool
 
 	adminJobQueue   []*model.AdminJob
+	errHistory      [defaultErrorWindowSize]bool
 	lastErrorTime   time.Time                   // time of last error for a changefeed
 	backoffInterval time.Duration               // the interval for restarting a changefeed in 'error' state
 	errBackoff      *backoff.ExponentialBackOff // an exponential backoff for restarting a changefeed
@@ -71,6 +76,7 @@ func newFeedStateManager() *feedStateManager {
 	return f
 }
 
+// newFeedStateManager4Test creates feedStateManager for test
 func newFeedStateManager4Test() *feedStateManager {
 	f := new(feedStateManager)
 
@@ -87,10 +93,30 @@ func newFeedStateManager4Test() *feedStateManager {
 	return f
 }
 
+// retErrBackoff reset the backoff-related fields
 func (m *feedStateManager) resetErrBackoff() {
 	m.errBackoff.Reset()
-
 	m.backoffInterval = m.errBackoff.NextBackOff()
+}
+
+// hasErrorInWindow check if error occurred in this time window
+func (m *feedStateManager) hasErrorsInWindow() bool {
+	for _, val := range m.errHistory {
+		if val {
+			return true
+		}
+	}
+
+	return false
+}
+
+// moveErrorWindow shift the sliding window
+func (m *feedStateManager) shiftErrorWindow(hasError bool) {
+	for i := 0; i < defaultErrorWindowSize-1; i++ {
+		m.errHistory[i] = m.errHistory[i+1]
+	}
+
+	m.errHistory[defaultErrorWindowSize-1] = hasError
 }
 
 func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) {
@@ -213,9 +239,8 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			if info == nil {
 				return nil, false, nil
 			}
-			if info.Error != nil || len(info.ErrorHis) != 0 {
+			if info.Error != nil {
 				info.Error = nil
-				info.ErrorHis = nil
 				return info, true, nil
 			}
 			return info, false, nil
@@ -347,8 +372,6 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 					return nil, false, nil
 				}
 				info.Error = err
-				info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
-				info.CleanUpOutdatedErrorHistory(m.backoffInterval)
 				return info, true, nil
 			})
 			m.shouldBeRunning = false
@@ -363,21 +386,23 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		}
 		for _, err := range errs {
 			info.Error = err
-			info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 		}
-		changed := info.CleanUpOutdatedErrorHistory(m.backoffInterval)
-		return info, changed || len(errs) > 0, nil
+		return info, len(errs) > 0, nil
 	})
 
-	// if we get an error for this changefeed now but haven't seen errors in a time window,
+	// If we get an error for this changefeed now but haven't seen errors in a time window (512 ticks),
 	// it can be assumed that this changefeed runs abnormally from now on. So we can reset
 	// the exponential backoff and re-backoff from the InitialInterval.
-	if len(errs) > 0 {
+	// TODO: this error detection policy should be tested.
+	hasError := len(errs) > 0
+	if hasError {
 		m.lastErrorTime = time.Now()
-		if !m.state.Info.ErrorsReachedThreshold(m.backoffInterval) {
+
+		if !m.hasErrorsInWindow() {
 			m.resetErrBackoff()
 		}
 	}
+	m.shiftErrorWindow(hasError)
 
 	if m.lastErrorTime == time.Unix(0, 0) {
 		return
