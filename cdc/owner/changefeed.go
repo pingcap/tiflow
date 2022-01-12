@@ -353,8 +353,8 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// when try to close the kafka sink, it would be blocked on network IO for about 1 minutes.
-	// this could happen for bad network connection between kafka producer and brokers.
+	// When we try to close the Kafka sink, it could be blocked for network IO for about 1 minutes.
+	// This could happen due to bad network connection between the Kafka producer and the brokers.
 	go func(id model.ChangeFeedID) {
 		start := time.Now()
 		// We don't need to wait sink Close, pass a canceled context is ok
