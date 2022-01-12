@@ -233,8 +233,6 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.lastErrorTime = time.Unix(0, 0)
 		jobsPending = true
 		m.patchState(model.StateNormal)
-		// to make sure the changefeed can running in next tick,
-		// we remove the error history
 		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			if info == nil {
 				return nil, false, nil
