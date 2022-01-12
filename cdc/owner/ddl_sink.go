@@ -128,7 +128,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			ctx.Throw(err)
 			return
 		}
-		log.Info("ddl sink initialized, start processing...",
+		log.Info("ddl sink initialize successfully, start processing...",
 			zap.Duration("duration", time.Since(start)))
 
 		// TODO make the tick duration configurable

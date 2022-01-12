@@ -170,7 +170,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	}
 
 	if !c.preflightCheck(captures) {
-		log.Info("preflightCheck failed", zap.String("changefeedID", c.state.ID))
 		return nil
 	}
 	if err := c.initialize(ctx); err != nil {
@@ -199,7 +198,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
-		log.Info("barrierTs < checkpointTs",
+		log.Debug("barrierTs < checkpointTs",
 			zap.Uint64("barrierTs", barrierTs),
 			zap.Uint64("checkpointTs", checkpointTs),
 			zap.String("changeFeedID", c.state.ID))
@@ -339,8 +338,10 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		return
 	}
 
-	log.Info("close changefeed", zap.String("changefeed", c.state.ID),
-		zap.Stringer("info", c.state.Info), zap.Bool("isRemoved", c.isRemoved))
+	log.Info("close changefeed",
+		zap.String("changefeed", c.state.ID),
+		zap.Any("info", c.state.Info),
+		zap.Bool("isRemoved", c.isRemoved))
 	c.cancel()
 	c.cancel = func() {}
 	c.ddlPuller.Close()
@@ -357,9 +358,14 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 		err := c.sink.close(canceledCtx)
 		if err != nil {
-			log.Warn("close ddl sink failed in Owner", zap.String("changefeedID", id), zap.Error(err), zap.Duration("duration", time.Since(start)))
+			log.Warn("close ddl sink failed in Owner",
+				zap.String("changefeedID", id),
+				zap.Error(err),
+				zap.Duration("duration", time.Since(start)))
 		} else {
-			log.Info("close ddl sink", zap.String("changefeedID", id), zap.Duration("duration", time.Since(start)))
+			log.Info("close ddl sink",
+				zap.String("changefeedID", id),
+				zap.Duration("duration", time.Since(start)))
 		}
 
 		if atomic.CompareAndSwapInt32(&c.runningStatus, changeFeedRunning, changeFeedClosing) {
@@ -583,9 +589,6 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 		}
 		if status.CheckpointTs != checkpointTs {
 			status.CheckpointTs = checkpointTs
-			log.Info("checkpointTs update",
-				zap.Uint64("checkpointTs", status.CheckpointTs),
-				zap.String("changefeedID", c.state.ID))
 			changed = true
 		}
 		return status, changed, nil
