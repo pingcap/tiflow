@@ -107,7 +107,7 @@ func newGenerator(flavor, version string, serverID uint32, latestPos uint32, lat
 		ServerID:      serverID,
 		LatestPos:     latestPos,
 		LatestGTID:    latestGTID,
-		ExecutedGTIDs: previousGTIDs,
+		ExecutedGTIDs: previousGTIDs.Clone(),
 		LatestXID:     latestXID,
 		GenGTID:       genGTID,
 		AnonymousGTID: anonymousGTID,
