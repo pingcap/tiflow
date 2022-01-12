@@ -158,10 +158,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		case <-sessionDone:
 			return cerrors.ErrEtcdSessionDone.GenWithStackByArgs()
 		case <-ticker.C:
-			log.Info("etcd_worker tick, no new event", zap.String("role", role))
 			// There is no new event to handle on timer ticks, so we have nothing here.
 		case response := <-watchCh:
-			log.Info("etcd_worker get response", zap.String("role", role))
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
@@ -237,7 +235,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				continue
 			}
 			startTime := time.Now()
-			log.Info("EtcdWorker start tick", zap.Time("now", time.Now()), zap.String("role", role))
 			// it is safe that a batch of updates has been applied to worker.state before worker.reactor.Tick
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			costTime := time.Since(startTime)
