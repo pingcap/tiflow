@@ -18,6 +18,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -74,7 +75,7 @@ func (o *incompatibilityOption) String() string {
 type TablesChecker struct {
 	db     *sql.DB
 	dbinfo *dbutil.DBConfig
-	tables []*filter.Table // tableID => filter.Table
+	tables []*filter.Table
 }
 
 // NewTablesChecker returns a RealChecker.
@@ -98,18 +99,12 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 
 	startTime := time.Now()
 
-	concurrency := len(c.tables)/tablesForOneThread + 1
-	if concurrency > maxThreadNum {
-		concurrency = maxThreadNum
-	}
 	maxConnections, err := utils.GetMaxConnections(ctx, c.db)
 	if err != nil {
 		markCheckError(r, err)
 		return r
 	}
-	if concurrency > maxConnections {
-		concurrency = maxConnections / 2
-	}
+	concurrency := int(math.Min(maxThreadNum, float64(maxConnections/2)))
 
 	var (
 		inCh    = make(chan *filter.Table, len(c.tables))
@@ -176,10 +171,18 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	for _, table := range c.tables {
-		inCh <- table
+		isDone := false
+		select {
+		case inCh <- table:
+		case <-checkCtx.Done():
+			isDone = true
+		}
+		if isDone {
+			break
+		}
 	}
-	close(inCh)
 
+	close(inCh)
 	checkWg.Wait()
 	log.L().Logger.Info("check table structure over", zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
 	return r
@@ -341,59 +344,47 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	log.L().Logger.Info("start to check sharding tables")
 	var (
 		stmtNode      *ast.CreateTableStmt
-		firstTable    string
+		firstTable    *filter.Table
 		firstInstance string
 		inChs         = make(map[string]chan *filter.Table, len(c.tableMap))
 		checkWg       sync.WaitGroup
 		reMu          sync.Mutex
 	)
 
-	// get first table
 	for instance, tables := range c.tableMap {
-		db, ok := c.dbs[instance]
-		if !ok {
-			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
-			return r
-		}
+		firstInstance = instance
+		firstTable = tables[0]
+		break
+	}
+	db, ok := c.dbs[firstInstance]
+	if !ok {
+		markCheckError(r, errors.NotFoundf("client for instance %s", firstInstance))
+		return r
+	}
 
-		parser2, err := dbutil.GetParserForDB(ctx, db)
-		if err != nil {
-			r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
-			markCheckError(r, err)
-			return r
-		}
-		r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
-		for _, table := range tables {
-			statement, err := dbutil.GetCreateTableSQL(ctx, db, table.Schema, table.Name)
-			if err != nil {
-				// continue if table was deleted when checking
-				if isMySQLError(err, mysql.ErrNoSuchTable) {
-					continue
-				}
-				markCheckError(r, err)
-				return r
-			}
+	parser2, err := dbutil.GetParserForDB(ctx, db)
+	if err != nil {
+		r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", firstInstance, c.targetTableID)
+		markCheckError(r, err)
+		return r
+	}
+	r.Extra = fmt.Sprintf("instance %s on sharding %s", firstInstance, c.targetTableID)
+	statement, err := dbutil.GetCreateTableSQL(ctx, db, firstTable.Schema, firstTable.Name)
+	if err != nil {
+		markCheckError(r, err)
+		return r
+	}
 
-			stmt, err := parser2.ParseOneStmt(statement, "", "")
-			if err != nil {
-				markCheckError(r, errors.Annotatef(err, "statement %s", statement))
-				return r
-			}
+	stmt, err := parser2.ParseOneStmt(statement, "", "")
+	if err != nil {
+		markCheckError(r, errors.Annotatef(err, "statement %s", statement))
+		return r
+	}
 
-			ctStmt, ok := stmt.(*ast.CreateTableStmt)
-			if !ok {
-				markCheckError(r, errors.Errorf("Expect CreateTableStmt but got %T", stmt))
-				return r
-			}
-
-			stmtNode = ctStmt
-			firstTable = table.String()
-			firstInstance = instance
-			break
-		}
-		if stmtNode != nil {
-			break
-		}
+	stmtNode, ok = stmt.(*ast.CreateTableStmt)
+	if !ok {
+		markCheckError(r, errors.Errorf("Expect CreateTableStmt but got %T", stmt))
+		return r
 	}
 
 	checkCtx, cancel := context.WithCancel(ctx)
@@ -428,6 +419,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 					return
 				}
 
+				fmt.Println(statement)
 				info, err2 := dbutil.GetTableInfoBySQL(statement, p)
 				if err2 != nil {
 					err = err2
@@ -452,7 +444,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 					}
 				}
 
-				checkErr := c.checkConsistency(stmtNode, ctStmt, firstTable, table.String(), firstInstance, instance)
+				checkErr := c.checkConsistency(stmtNode, ctStmt, firstTable.String(), table.String(), firstInstance, instance)
 				if checkErr != nil {
 					r.State = StateFailure
 					r.Errors = append(r.Errors, checkErr)
@@ -465,22 +457,24 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	for instance, tables := range c.tableMap {
-		concurrency := len(tables)/tablesForOneThread + 1
-		if concurrency > maxThreadNum {
-			concurrency = maxThreadNum
-		}
 		maxConnections, err := utils.GetMaxConnections(ctx, c.dbs[instance])
 		if err != nil {
 			markCheckError(r, err)
 			return r
 		}
-		if concurrency > maxConnections {
-			concurrency = maxConnections / 2
-		}
+		concurrency := int(math.Min(maxThreadNum, float64(maxConnections/2)))
 
 		inChs[instance] = make(chan *filter.Table, len(tables))
 		for _, table := range tables {
-			inChs[instance] <- table
+			isDone := false
+			select {
+			case inChs[instance] <- table:
+			case <-checkCtx.Done():
+				isDone = true
+			}
+			if isDone {
+				break
+			}
 		}
 		close(inChs[instance])
 
@@ -490,16 +484,14 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
 			return r
 		}
-
-		parser2, err := dbutil.GetParserForDB(ctx, db)
+		p, err := dbutil.GetParserForDB(ctx, db)
 		if err != nil {
 			r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
-			markCheckError(r, err)
 			return r
 		}
 		for i := 0; i < concurrency; i++ {
 			checkWg.Add(1)
-			go checkFunc(instance, db, parser2)
+			go checkFunc(instance, db, p)
 		}
 	}
 
