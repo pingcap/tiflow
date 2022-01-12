@@ -467,8 +467,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if err != nil {
 					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
 				}
-				log.Info("receive resolved ts", zap.Uint64("resolvedTs", ts), zap.Duration("elapsed", time.Since(lastResolvedTsReceived)))
-				lastResolvedTsReceived = time.Now()
 				// TiCDC owner when sending `checkpointTs` to downstream sink,
 				// it tries to make the `checkpointTs` monotonically increase.
 				// But there is some scenario that the consumer would receive redundant `checkpointTs`.
@@ -481,8 +479,10 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				} else if ts > resolvedTs {
 					log.Debug("update sink resolved ts",
 						zap.Uint64("ts", ts),
-						zap.Int32("partition", partition))
+						zap.Int32("partition", partition),
+						zap.Duration("duration", time.Since(lastResolvedTsReceived)))
 					atomic.StoreUint64(&sink.resolvedTs, ts)
+					lastResolvedTsReceived = time.Now()
 				} else {
 					log.Info("redundant sink resolved ts", zap.Uint64("ts", ts), zap.Int32("partition", partition))
 				}
