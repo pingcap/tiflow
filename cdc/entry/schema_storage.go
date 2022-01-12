@@ -879,6 +879,7 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
 func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
+	log.Debug("handle DDL new commit", zap.String("DDL", job.Query), zap.Stringer("job", job))
 	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
 		log.Info("discard DDL", zap.Int64("jobID", job.ID), zap.String("DDL", job.Query))
 		return true

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package api
 
 import (
 	"fmt"
@@ -19,15 +19,17 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPProfPath(t *testing.T) {
 	t.Parallel()
-	router := newRouter(capture.NewHTTPHandler(nil))
 
-	apis := []*openAPI{
+	router := gin.New()
+	RegisterRoutes(router, nil, nil)
+
+	apis := []*testCase{
 		{"/debug/pprof/", http.MethodGet},
 		{"/debug/pprof/cmdline", http.MethodGet},
 		{"/debug/pprof/symbol", http.MethodGet},
@@ -48,11 +50,11 @@ func TestPProfPath(t *testing.T) {
 	}
 }
 
-type openAPI struct {
+type testCase struct {
 	url    string
 	method string
 }
 
-func (a *openAPI) String() string {
+func (a *testCase) String() string {
 	return fmt.Sprintf("%s:%s", a.method, a.url)
 }

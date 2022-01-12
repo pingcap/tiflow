@@ -1232,6 +1232,31 @@ components:
         - "synced"
         - "binlog_type"
         - "seconds_behind_master"
+    DumpStatus:
+      type: object
+      description: "status of dump unit"
+      properties:
+        total_tables:
+          type: integer
+          format: int64
+        completed_tables:
+          type: number
+          format: double
+        finished_bytes:
+          type: number
+          format: double
+        finished_rows:
+          type: number
+          format: double
+        estimate_total_rows:
+          type: number
+          format: double
+      required:
+        - "total_tables"
+        - "completed_tables"
+        - "finished_bytes"
+        - "finished_rows"
+        - "estimate_total_rows" 
     SubTaskStatus:
       type: object
       properties:
@@ -1260,6 +1285,9 @@ components:
         sync_status:
           nullable: true
           $ref: "#/components/schemas/SyncStatus"
+        dump_status:
+          nullable: true
+          $ref: "#/components/schemas/DumpStatus"
       required:
         - "name"
         - "source_name"

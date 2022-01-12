@@ -16,15 +16,19 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -73,7 +77,7 @@ type Server struct {
 func NewServer(pdEndpoints []string) (*Server, error) {
 	conf := config.GetGlobalServerConfig()
 	log.Info("creating CDC server",
-		zap.Strings("pd-addrs", pdEndpoints),
+		zap.Strings("pd", pdEndpoints),
 		zap.Stringer("config", conf),
 	)
 
@@ -204,6 +208,38 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	return s.run(ctx)
+}
+
+// startStatusHTTP starts the HTTP server.
+// `lis` is a listener that gives us plain-text HTTP requests.
+// TODO can we decouple the HTTP server from the capture server?
+func (s *Server) startStatusHTTP(lis net.Listener) error {
+	conf := config.GetGlobalServerConfig()
+
+	// discard gin log output
+	gin.DefaultWriter = io.Discard
+
+	router := gin.New()
+
+	router.Use(logMiddleware())
+	// request will timeout after 10 second
+	router.Use(timeoutMiddleware(time.Second * 10))
+	router.Use(errorHandleMiddleware())
+
+	// Register APIs.
+	api.RegisterRoutes(router, s.capture, registry)
+
+	// No need to configure TLS because it is already handled by `s.tcpServer`.
+	s.statusServer = &http.Server{Handler: router}
+
+	go func() {
+		log.Info("http server is running", zap.String("addr", conf.Addr))
+		err := s.statusServer.Serve(lis)
+		if err != nil && err != http.ErrServerClosed {
+			log.Error("http server error", zap.Error(cerror.WrapError(cerror.ErrServeHTTP, err)))
+		}
+	}()
+	return nil
 }
 
 func (s *Server) etcdHealthChecker(ctx context.Context) error {

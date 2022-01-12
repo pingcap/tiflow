@@ -14,16 +14,12 @@
 package etcd
 
 import (
-	"github.com/pingcap/check"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-type etcdkeySuite struct{}
-
-var _ = check.Suite(&etcdkeySuite{})
-
-func (s *etcdkeySuite) TestEtcdKey(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestEtcdKey(t *testing.T) {
 	testcases := []struct {
 		key      string
 		expected *CDCKey
@@ -95,14 +91,13 @@ func (s *etcdkeySuite) TestEtcdKey(c *check.C) {
 	for _, tc := range testcases {
 		k := new(CDCKey)
 		err := k.Parse(tc.key)
-		c.Assert(err, check.IsNil)
-		c.Assert(k, check.DeepEquals, tc.expected)
-		c.Assert(k.String(), check.Equals, tc.key)
+		require.NoError(t, err)
+		require.Equal(t, k, tc.expected)
+		require.Equal(t, k.String(), tc.key)
 	}
 }
 
-func (s *etcdkeySuite) TestEtcdKeyParseError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestEtcdKeyParseError(t *testing.T) {
 	testCases := []struct {
 		key   string
 		error bool
@@ -132,9 +127,9 @@ func (s *etcdkeySuite) TestEtcdKeyParseError(c *check.C) {
 		k := new(CDCKey)
 		err := k.Parse(tc.key)
 		if tc.error {
-			c.Assert(err, check.NotNil)
+			require.NotNil(t, err)
 		} else {
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 		}
 	}
 }
