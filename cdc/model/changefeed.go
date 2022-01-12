@@ -20,14 +20,13 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/version"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
 
