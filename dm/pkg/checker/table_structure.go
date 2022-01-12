@@ -42,7 +42,6 @@ const (
 	// AutoIncrementKeyChecking is an identification for auto increment key checking.
 	AutoIncrementKeyChecking = "auto-increment key checking"
 	MaxOptions               = 4
-	tablesForOneThread       = 300
 	maxThreadNum             = 32
 )
 
