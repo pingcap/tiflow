@@ -15,6 +15,7 @@ package scheduler
 
 import (
 	"testing"
+	"time"
 
 	"github.com/facebookgo/subset"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -81,7 +82,7 @@ func TestBalancerFindVictimsDeterministic(t *testing.T) {
 }
 
 func TestBalancerFindVictimsRandomized(t *testing.T) {
-	balancer := newTableNumberRebalancer(zap.L())
+	balancer := newTableNumberRebalancerWithRandomSeed(zap.L(), randomSeedForTestingBalancer)
 	tables := util.NewTableSet()
 
 	tables.AddTableRecord(&util.TableRecord{
@@ -140,7 +141,7 @@ func TestBalancerFindVictimsRandomized(t *testing.T) {
 }
 
 func TestBalancerFindTarget(t *testing.T) {
-	balancer := newTableNumberRebalancer(zap.L())
+	balancer := newTableNumberRebalancerWithRandomSeed(zap.L(), randomSeedForTestingBalancer)
 	tables := util.NewTableSet()
 
 	tables.AddTableRecord(&util.TableRecord{
@@ -229,13 +230,11 @@ func TestBalancerFindTargetTied(t *testing.T) {
 	target1, ok := balancer.FindTarget(tables, mockCaptureInfos)
 	require.True(t, ok)
 
-	target2, ok := balancer.FindTarget(tables, mockCaptureInfos)
-	require.True(t, ok)
-
-	target3, ok := balancer.FindTarget(tables, mockCaptureInfos)
-	require.True(t, ok)
-
-	require.False(t, target1 == target2 && target2 == target3)
+	require.Eventually(t, func() bool {
+		target2, ok := balancer.FindTarget(tables, mockCaptureInfos)
+		require.True(t, ok)
+		return target2 != target1
+	}, 500*time.Millisecond, 1*time.Millisecond)
 }
 
 func TestBalancerNoCaptureAvailable(t *testing.T) {
