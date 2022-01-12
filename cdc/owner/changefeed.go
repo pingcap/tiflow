@@ -170,6 +170,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	}
 
 	if !c.preflightCheck(captures) {
+		log.Info("preflightCheck failed", zap.String("changefeedID", c.state.ID))
 		return nil
 	}
 	if err := c.initialize(ctx); err != nil {
@@ -183,6 +184,9 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	}
 
 	if atomic.LoadInt32(&c.runningStatus) != changeFeedRunning {
+		log.Info("runningStatus can not continue",
+			zap.String("changeFeedID", c.state.ID),
+			zap.Int32("runningStatus", atomic.LoadInt32(&c.runningStatus)))
 		return nil
 	}
 
@@ -195,6 +199,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
+		log.Info("barrierTs < checkpointTs",
+			zap.Uint64("barrierTs", barrierTs),
+			zap.Uint64("checkpointTs", checkpointTs),
+			zap.String("changeFeedID", c.state.ID))
 		return nil
 	}
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(ctx, c.state, c.schema.AllPhysicalTables(), captures)
@@ -343,7 +351,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	// when try to close the kafka sink, it would be blocked on network IO for about 1 minutes.
 	// this could happen for bad network connection between kafka producer and brokers.
-	changeFeedID := c.state.ID
 	go func(id model.ChangeFeedID) {
 		start := time.Now()
 		// We don't need to wait sink Close, pass a canceled context is ok
@@ -360,7 +367,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		} else if atomic.CompareAndSwapInt32(&c.runningStatus, changeFeedClosing, changeFeedClosed) {
 			log.Info("changefeed fully closed", zap.String("changefeedID", id))
 		}
-	}(changeFeedID)
+	}(c.state.ID)
 
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
@@ -567,6 +574,7 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
 		if status == nil {
+			log.Info("status is nil", zap.String("changefeedID", c.state.ID))
 			return nil, changed, nil
 		}
 		if status.ResolvedTs != resolvedTs {
@@ -575,6 +583,9 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 		}
 		if status.CheckpointTs != checkpointTs {
 			status.CheckpointTs = checkpointTs
+			log.Info("checkpointTs update",
+				zap.Uint64("checkpointTs", status.CheckpointTs),
+				zap.String("changefeedID", c.state.ID))
 			changed = true
 		}
 		return status, changed, nil
