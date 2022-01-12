@@ -73,19 +73,18 @@ func NewConfig() *Config {
 
 // Initialize the kafka configuration
 func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
-<<<<<<< HEAD
-	s := sinkURI.Query().Get("partition-num")
-=======
 	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
->>>>>>> 6a64873d4 (cdc/sink: adjust kafka initialization logic (#3192))
 	if s != "" {
 		a, err := strconv.Atoi(s)
 		if err != nil {
 			return err
 		}
 		c.PartitionNum = int32(a)
+		if c.PartitionNum <= 0 {
+			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
+		}
 	}
 
 	s = sinkURI.Query().Get("replication-factor")
