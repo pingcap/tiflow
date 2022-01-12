@@ -77,7 +77,7 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 		if len(r.Detail) == 0 {
 			return CheckTaskSuccess, nil
 		}
-		return fmt.Sprintf("%s: no errors but some warnings\n detail: %v", CheckTaskMsgHeader, string(r.Detail)), nil
+		return fmt.Sprintf("%s: no errors but some warnings\n detail: %s", CheckTaskMsgHeader, string(r.Detail)), nil
 	}
 
 	return "", nil
