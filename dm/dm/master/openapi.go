@@ -445,10 +445,15 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 	for i := range subTaskConfigList {
 		subTaskConfigPList[i] = &subTaskConfigList[i]
 	}
-	if _, err = checker.CheckSyncConfigFunc(newCtx, subTaskConfigPList,
-		common.DefaultErrorCnt, common.DefaultWarnCnt); err != nil {
+	msg, err := checker.CheckSyncConfigFunc(newCtx, subTaskConfigPList,
+		common.DefaultErrorCnt, common.DefaultWarnCnt)
+	if err != nil {
 		_ = c.Error(terror.WithClass(err, terror.ClassDMMaster))
 		return
+	}
+	if len(msg) != 0 {
+		// TODO: return warning msg with http.StatusCreated and task together
+		log.L().Warn("openapi pre-check warning before start task", zap.String("warning", msg))
 	}
 	// specify only start task on partial sources
 	var needStartSubTaskList []config.SubTaskConfig
