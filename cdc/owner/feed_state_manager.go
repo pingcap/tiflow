@@ -100,7 +100,7 @@ func (m *feedStateManager) resetErrBackoff() {
 	m.backoffInterval = m.errBackoff.NextBackOff()
 }
 
-// isChangefeedStable check if error occurred in this sliding window
+// isChangefeedStable check if there are states other than 'normal' in this sliding window.
 func (m *feedStateManager) isChangefeedStable() bool {
 	for _, val := range m.stateHistory {
 		if val != model.StateNormal {
