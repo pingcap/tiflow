@@ -1888,7 +1888,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 						// revert currentLocation to startLocation
 						currentLocation = startLocation
 					} else if op == pb.ErrorOp_Skip {
-						queryEvent, _ := ev.(*replication.QueryEvent)
+						queryEvent := ev.(*replication.QueryEvent)
 						ec := eventContext{
 							tctx:            tctx,
 							header:          e.Header,
@@ -1929,8 +1929,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				s.isReplacingOrInjectingErr = false
 				s.locations.reset(currentLocation)
 				if !s.errOperatorHolder.IsInject(startLocation) {
-					err = s.streamerController.RedirectStreamer(tctx, currentLocation)
-					if err != nil {
+					if err = s.streamerController.RedirectStreamer(tctx, currentLocation); err != nil {
 						return err
 					}
 				}

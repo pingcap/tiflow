@@ -210,7 +210,7 @@ func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, curre
 					e.GSet = endLocation.GetGTID().Origin()
 				}
 			}
-		} else {
+		} else if operator.op == pb.ErrorOp_Inject {
 			operator.events = append(operator.events, currentEvent)
 		}
 	}
