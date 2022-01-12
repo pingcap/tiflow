@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanfei1991/microcosm/client"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
@@ -114,4 +115,44 @@ func testPprof(t *testing.T, addr string) {
 		_, err = ioutil.ReadAll(resp.Body)
 		require.Nil(t, err)
 	}
+}
+
+func TestCheckLeaderAndNeedForward(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cfg := NewConfig()
+	etcdName := "test-check-leader-and-need-forward"
+	cfg.Etcd.Name = etcdName
+	s := &Server{cfg: cfg}
+	isLeader, needForward := s.isLeaderAndNeedForward(ctx)
+	require.False(t, isLeader)
+	require.False(t, needForward)
+
+	var wg sync.WaitGroup
+	cctx, cancel := context.WithCancel(ctx)
+	startTime := time.Now()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		isLeader, needForward := s.isLeaderAndNeedForward(cctx)
+		require.False(t, isLeader)
+		require.False(t, needForward)
+	}()
+	cancel()
+	wg.Wait()
+	// should not wait too long time
+	require.Less(t, time.Since(startTime), time.Second)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		isLeader, needForward := s.isLeaderAndNeedForward(ctx)
+		require.True(t, isLeader)
+		require.True(t, needForward)
+	}()
+	time.Sleep(time.Second)
+	s.leaderClient = &client.MasterClient{}
+	s.leader.Store(&Member{Name: etcdName})
+	wg.Wait()
 }

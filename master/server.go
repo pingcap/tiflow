@@ -473,7 +473,7 @@ func (s *Server) isLeaderAndNeedForward(ctx context.Context) (isLeader, needForw
 		ticker := time.NewTicker(300 * time.Millisecond)
 		defer ticker.Stop()
 
-		for exist {
+		for !exist {
 			if retry == 0 {
 				log.L().Error("leader is not found, please retry later")
 				return false, false
