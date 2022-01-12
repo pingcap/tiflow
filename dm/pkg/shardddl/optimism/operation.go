@@ -39,6 +39,9 @@ const (
 	// ConflictResolved indicates a conflict will be resolved after applied the shard DDL.
 	// in this stage, DM-worker should replay DML skipped in ConflictDetected to downstream.
 	ConflictResolved ConflictStage = "resolved"
+	// ConflictSkipWaitRedirect indicates a conflict hapend and will be skipped and redirected until all tables has no conflict
+	// in this stage, DM-worker should skip all DML and DDL for the conflict table until redirect.
+	ConflictSkipWaitRedirect ConflictStage = "skip and wait for redirect"
 )
 
 // Operation represents a shard DDL coordinate operation.

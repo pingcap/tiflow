@@ -176,6 +176,12 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, op.ConflictMsg)
 	}
 
+	// TODO: support redirect for DM worker
+	// return error to pass IT now
+	if op.ConflictStage == optimism.ConflictSkipWaitRedirect {
+		return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, "there will be conflicts if DDLs .* are applied to the downstream. old table info: .*, new table info: .*")
+	}
+
 	// updated needHandleDDLs to DDLs received from DM-master.
 	qec.needHandleDDLs = op.DDLs
 
