@@ -694,14 +694,6 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	default:
 	}
 
-	// try to rollback checkpoints, if they already flushed, no effect
-	prePos := s.checkpoint.GlobalPoint()
-	s.checkpoint.Rollback(s.schemaTracker)
-	currPos := s.checkpoint.GlobalPoint()
-	if binlog.CompareLocation(prePos, currPos, s.cfg.EnableGTID) != 0 {
-		s.tctx.L().Warn("something wrong with rollback global checkpoint", zap.Stringer("previous position", prePos), zap.Stringer("current position", currPos))
-	}
-
 	pr <- pb.ProcessResult{
 		IsCanceled: isCanceled,
 		Errors:     errs,
@@ -3163,7 +3155,8 @@ func (s *Syncer) isClosed() bool {
 	return s.closed.Load()
 }
 
-func (s *Syncer) close(closeTracker bool) {
+// Close closes syncer.
+func (s *Syncer) Close() {
 	s.Lock()
 	defer s.Unlock()
 
@@ -3174,40 +3167,32 @@ func (s *Syncer) close(closeTracker bool) {
 	s.stopSync()
 	s.closeDBs()
 
-	s.checkpoint.Close()
-
-	// when close sycner without graceful, Close will be called before s.Process exit.
-	// if we close schematracker worker will pending on `s.checkpoint.Rollback(s.schemaTracker)` forever
-	if closeTracker {
-		if err := s.schemaTracker.Close(); err != nil {
-			s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
-		}
+	// try to rollback checkpoints, if they already flushed, no effect, this operation should call before close schemaTracker
+	prePos := s.checkpoint.GlobalPoint()
+	s.checkpoint.Rollback(s.schemaTracker)
+	currPos := s.checkpoint.GlobalPoint()
+	if binlog.CompareLocation(prePos, currPos, s.cfg.EnableGTID) != 0 {
+		s.tctx.L().Warn("something wrong with rollback global checkpoint", zap.Stringer("previous position", prePos), zap.Stringer("current position", currPos))
 	}
-
+	s.checkpoint.Close()
+	if err := s.schemaTracker.Close(); err != nil {
+		s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
+	}
 	if s.sgk != nil {
 		s.sgk.Close()
 	}
-
 	s.closeOnlineDDL()
-
 	// when closing syncer by `stop-task`, remove active relay log from hub
 	s.removeActiveRelayLog()
-
 	metrics.RemoveLabelValuesWithTaskInMetrics(s.cfg.Name)
-
 	s.closed.Store(true)
-}
-
-// Close closes syncer.
-func (s *Syncer) Close() {
-	s.close(true)
 }
 
 // Kill kill syncer without graceful.
 func (s *Syncer) Kill() {
 	s.tctx.L().Warn("kill syncer without graceful")
 	s.runCancel()
-	s.close(false)
+	s.Close()
 }
 
 // stopSync stops syncing, now it used by Close and Pause
