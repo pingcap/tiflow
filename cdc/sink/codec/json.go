@@ -306,13 +306,13 @@ func sinkColumns2JsonColumns(cols []*model.Column) map[string]column {
 }
 
 func jsonColumns2SinkColumns(cols map[string]column) []*model.Column {
-	if len(cols) == 0 {
-		return nil
-	}
 	sinkCols := make([]*model.Column, 0, len(cols))
 	for name, col := range cols {
 		c := col.ToSinkColumn(name)
 		sinkCols = append(sinkCols, c)
+	}
+	if len(sinkCols) == 0 {
+		return nil
 	}
 	sort.Slice(sinkCols, func(i, j int) bool {
 		return strings.Compare(sinkCols[i].Name, sinkCols[j].Name) > 0
