@@ -340,12 +340,16 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		State: StateSuccess,
 		Extra: fmt.Sprintf("sharding %s,", c.targetTableID),
 	}
+	type in struct {
+		table    *filter.Table
+		instance string
+	}
 	log.L().Logger.Info("start to check sharding tables")
 	var (
 		stmtNode      *ast.CreateTableStmt
 		firstTable    *filter.Table
 		firstInstance string
-		inChs         = make(map[string]chan *filter.Table, len(c.tableMap))
+		inCh          = make(chan *in, maxThreadNum)
 		checkWg       sync.WaitGroup
 		reMu          sync.Mutex
 	)
@@ -389,8 +393,12 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	checkCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	checkFunc := func(instance string, db *sql.DB, p *parser.Parser) {
-		var err error
+	checkFunc := func() {
+		var (
+			instance string
+			p        *parser.Parser
+			err      error
+		)
 		defer func() {
 			checkWg.Done()
 			if err != nil {
@@ -400,15 +408,29 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 				reMu.Unlock()
 			}
 		}()
+
 		for {
 			select {
 			case <-checkCtx.Done():
 				return
-			case table, ok := <-inChs[instance]:
+			case in, ok := <-inCh:
 				if !ok {
 					return
 				}
-				statement, err2 := dbutil.GetCreateTableSQL(ctx, db, table.Schema, table.Name)
+				table := in.table
+				fmt.Printf("table: %s, instance: %s", table.String(), in.instance)
+				var err2 error
+				if instance != in.instance {
+					instance = in.instance
+					p, err2 = dbutil.GetParserForDB(ctx, c.dbs[instance])
+					if err2 != nil {
+						r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
+						err = err2
+						return
+					}
+				}
+
+				statement, err2 := dbutil.GetCreateTableSQL(ctx, c.dbs[instance], table.Schema, table.Name)
 				if err2 != nil {
 					// continue if table was deleted when checking
 					if isMySQLError(err2, mysql.ErrNoSuchTable) {
@@ -455,19 +477,31 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		}
 	}
 
-	for instance, tables := range c.tableMap {
-		maxConnections, err := utils.GetMaxConnections(ctx, c.dbs[instance])
+	concurrency := maxThreadNum
+	for instance := range c.tableMap {
+		db, ok := c.dbs[instance]
+		if !ok {
+			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
+			return r
+		}
+		maxConnections, err := utils.GetMaxConnections(ctx, db)
 		if err != nil {
 			markCheckError(r, err)
 			return r
 		}
-		concurrency := int(math.Min(maxThreadNum, float64(maxConnections/2)))
+		concurrency = int(math.Min(float64(concurrency), float64(maxConnections/2)))
+	}
 
-		inChs[instance] = make(chan *filter.Table, len(tables))
+	for i := 0; i < concurrency; i++ {
+		checkWg.Add(1)
+		go checkFunc()
+	}
+
+	for instance, tables := range c.tableMap {
 		for _, table := range tables {
 			isDone := false
 			select {
-			case inChs[instance] <- table:
+			case inCh <- &in{table, instance}:
 			case <-checkCtx.Done():
 				isDone = true
 			}
@@ -475,24 +509,8 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 				break
 			}
 		}
-		close(inChs[instance])
-
-		log.L().Logger.Info("this source have", zap.String("source", instance), zap.Int("concurrency", concurrency), zap.Int("table num", len(tables)))
-		db, ok := c.dbs[instance]
-		if !ok {
-			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
-			return r
-		}
-		p, err := dbutil.GetParserForDB(ctx, db)
-		if err != nil {
-			r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
-			return r
-		}
-		for i := 0; i < concurrency; i++ {
-			checkWg.Add(1)
-			go checkFunc(instance, db, p)
-		}
 	}
+	close(inCh)
 
 	checkWg.Wait()
 	return r
