@@ -103,12 +103,12 @@ func (m *feedStateManager) resetErrBackoff() {
 // isChangefeedStable check if error occurred in this sliding window
 func (m *feedStateManager) isChangefeedStable() bool {
 	for _, val := range m.stateHistory {
-		if val == model.StateNormal || val == model.StateFinished {
-			return true
+		if val != model.StateNormal {
+			return false
 		}
 	}
 
-	return false
+	return true
 }
 
 // shiftStateWindow shift the sliding window
