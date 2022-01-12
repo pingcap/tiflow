@@ -90,7 +90,6 @@ func (s *testCheckerSuite) TestDumpPrivilegeChecking(c *tc.C) {
 	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
 		AddRow("GRANT USAGE ON *.* TO 'haha'@'%'"))
-	err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	c.Assert(len(msg), tc.Equals, 0)
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*lack.*Select(.|\n)*")
@@ -145,34 +144,15 @@ func (s *testCheckerSuite) TestVersionChecking(c *tc.C) {
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "10.1.29-MariaDB"))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(msg, tc.Equals, CheckTaskSuccess)
+	c.Assert(msg, tc.Matches, "(.|\n)*Migrating from MariaDB is experimentally supported(.|\n)*")
 	c.Assert(err, tc.IsNil)
 
-	// TODO: now can't return warning from checker.
-	// mock = initMockDB(c)
-	// mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-	// 	AddRow("version", "5.5.26-log"))
-	// c.Assert(CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt), tc.ErrorMatches, "(.|\n)*version required at least .* but got 5.5.26(.|\n)*")
-
-	// mock = initMockDB(c)
-	// mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-	// 	AddRow("version", "10.0.0-MariaDB"))
-	// c.Assert(CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt), tc.ErrorMatches, "(.|\n)*version required at least .* but got 10.0.0(.|\n)*")
-	mock = conn.InitMockDB(c)
-
+	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.5.26-log"))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(len(msg), tc.Equals, 0)
-	c.Assert(err, tc.ErrorMatches, "(.|\n)*version required at least .* but got 5.5.26(.|\n)*")
-
-	mock = conn.InitMockDB(c)
-
-	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("version", "10.0.0-MariaDB"))
-	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(len(msg), tc.Equals, 0)
-	c.Assert(err, tc.ErrorMatches, "(.|\n)*version required at least .* but got 10.0.0(.|\n)*")
+	c.Assert(msg, tc.Matches, "(.|\n)*version suggested at least .* but got 5.5.26(.|\n)*")
+	c.Assert(err, tc.IsNil)
 }
 
 func (s *testCheckerSuite) TestServerIDChecking(c *tc.C) {
