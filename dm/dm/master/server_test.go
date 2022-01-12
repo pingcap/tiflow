@@ -996,7 +996,6 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		time.Sleep(10 * time.Microsecond)
 		// start another same task at the same time, should get err
 		verMock2 := conn.InitVersionDB(c)
 		verMock2.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -1008,9 +1007,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 			"while remove-meta is true").Error())
 	}()
 	c.Assert(err, check.IsNil)
-	if !resp.Result {
-		c.Errorf("start task failed: %s", resp.Msg)
-	}
+	c.Assert(resp.Result, check.IsTrue)
 	for _, source := range sources {
 		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
 		tcm, _, err2 := ha.GetSubTaskCfg(t.etcdTestCli, source, taskName, 0)
@@ -1089,7 +1086,6 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		time.Sleep(10 * time.Microsecond)
 		// start another same task at the same time, should get err
 		vermock2 := conn.InitVersionDB(c)
 		vermock2.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
