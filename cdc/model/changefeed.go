@@ -18,7 +18,6 @@ import (
 	"math"
 	"net/url"
 	"regexp"
-	"sort"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -93,18 +92,6 @@ func (s FeedState) IsNeeded(need string) bool {
 	return need == string(s)
 }
 
-const (
-	// ErrorHistoryThreshold represents failure upper limit in time window.
-	// Before a changefeed is initialized, check the the failure count of this
-	// changefeed, if it is less than ErrorHistoryThreshold, then initialize it.
-	ErrorHistoryThreshold = 1
-
-	// If we don't have this delta value, we will get no error after searching
-	// info.ErrHis at next tick. As a result, ErrorsReachedThreshold()
-	// will alway return false and the exponential backoff will be reset again and again.
-	deltaBackoffInterval = 30 * time.Second
-)
-
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
 	SinkURI    string            `json:"sink-uri"`
@@ -122,10 +109,9 @@ type ChangeFeedInfo struct {
 	// but can be fetched for backward compatibility
 	SortDir string `json:"sort-dir"`
 
-	Config   *config.ReplicaConfig `json:"config"`
-	State    FeedState             `json:"state"`
-	ErrorHis []int64               `json:"history"`
-	Error    *RunningError         `json:"error"`
+	Config *config.ReplicaConfig `json:"config"`
+	State  FeedState             `json:"state"`
+	Error  *RunningError         `json:"error"`
 
 	SyncPointEnabled  bool          `json:"sync-point-enabled"`
 	SyncPointInterval time.Duration `json:"sync-point-interval"`
@@ -380,28 +366,4 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 		return false
 	}
 	return cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
-}
-
-// findActiveErrors finds all errors occurring within backoffInterval
-func (info *ChangeFeedInfo) findActiveErrors(backoffInterval time.Duration) []int64 {
-	i := sort.Search(len(info.ErrorHis), func(i int) bool {
-		ts := info.ErrorHis[i]
-		// ts is a errors occurrence time, here to find all errors occurring within a time window
-		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < backoffInterval+deltaBackoffInterval
-	})
-	return info.ErrorHis[i:]
-}
-
-// ErrorsReachedThreshold checks error history of a changefeed
-// returns true if error counts reach threshold
-func (info *ChangeFeedInfo) ErrorsReachedThreshold(backoffInterval time.Duration) bool {
-	return len(info.findActiveErrors(backoffInterval)) >= ErrorHistoryThreshold
-}
-
-// CleanUpOutdatedErrorHistory cleans up the outdated error history
-// return true if the ErrorHis changed
-func (info *ChangeFeedInfo) CleanUpOutdatedErrorHistory(backoffInterval time.Duration) bool {
-	lastLenOfErrorHis := len(info.ErrorHis)
-	info.ErrorHis = info.findActiveErrors(backoffInterval)
-	return lastLenOfErrorHis != len(info.ErrorHis)
 }
