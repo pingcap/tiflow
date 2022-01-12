@@ -15,6 +15,7 @@ package checker
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -22,11 +23,13 @@ import (
 )
 
 var (
-	// ErrorMsgHeader used as the header of the error message when checking config failed.
-	ErrorMsgHeader = "fail to check synchronization configuration with type"
+	// CheckTaskMsgHeader used as the header of the error/warning message when checking config failed.
+	CheckTaskMsgHeader = "fail to check synchronization configuration with type"
+
+	CheckTaskSuccess = "check pass!!!"
 
 	// CheckSyncConfigFunc holds the CheckSyncConfig function.
-	CheckSyncConfigFunc func(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) error
+	CheckSyncConfigFunc func(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error)
 )
 
 func init() {
@@ -34,9 +37,9 @@ func init() {
 }
 
 // CheckSyncConfig checks synchronization configuration.
-func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) error {
+func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error) {
 	if len(cfgs) == 0 {
-		return nil
+		return "", nil
 	}
 
 	// all `IgnoreCheckingItems` and `Mode` of sub-task are same, so we take first one
@@ -53,25 +56,29 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 	}
 	checkingItems := config.FilterCheckingItems(ignoreCheckingItems)
 	if len(checkingItems) == 0 {
-		return nil
+		return "", nil
 	}
 
 	c := NewChecker(cfgs, checkingItems, errCnt, warnCnt)
 
 	if err := c.Init(ctx); err != nil {
-		return terror.Annotate(err, "fail to initial checker")
+		return "", terror.Annotate(err, "fail to initial checker")
 	}
 	defer c.Close()
 
 	pr := make(chan pb.ProcessResult, 1)
 	c.Process(ctx, pr)
-	for len(pr) > 0 {
+	if len(pr) > 0 {
 		r := <-pr
 		// we only want first error
 		if len(r.Errors) > 0 {
-			return terror.ErrTaskCheckSyncConfigError.Generate(ErrorMsgHeader, r.Errors[0].Message, string(r.Detail))
+			return "", terror.ErrTaskCheckSyncConfigError.Generate(CheckTaskMsgHeader, r.Errors[0].Message, string(r.Detail))
 		}
+		if len(r.Detail) == 0 {
+			return CheckTaskSuccess, nil
+		}
+		return fmt.Sprintf("%s: no errors but some warnings\n detail: %s", CheckTaskMsgHeader, string(r.Detail)), nil
 	}
 
-	return nil
+	return "", nil
 }
