@@ -152,7 +152,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 	}()
 
-	producer, err := NewKafkaSaramaProducer(ctx, topic, codec.ProtocolDefault, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
 	for i := 0; i < 100; i++ {
@@ -348,7 +348,7 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
 	topic := "topic"
 	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
-	_, err := NewKafkaSaramaProducer(ctx, topic, codec.ProtocolDefault, config, errCh)
+	_, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 }
@@ -393,7 +393,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	}()
 
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, codec.ProtocolDefault, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 		err := producer.Close()
@@ -458,7 +458,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
 
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, codec.ProtocolDefault, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)

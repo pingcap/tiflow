@@ -387,7 +387,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
-func topicPreProcess(topic string, protocol codec.Protocol, config *Config, saramaConfig *sarama.Config) error {
+func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) error {
 	// FIXME: find a way to remove this failpoint for workload the unit test
 	failpoint.Inject("SkipTopicAutoCreate", func() {
 		failpoint.Return(nil)
@@ -413,17 +413,15 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 		// make sure that topic's `max.message.bytes` is not less than given `max-message-bytes`
 		// else the producer will send message that too large to make topic reject, then changefeed would error.
 		// only the default `open protocol` and `craft protocol` use `max-message-bytes`, so check this for them.
-		if protocol == codec.ProtocolDefault || protocol == codec.ProtocolCraft {
-			topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-			}
-			if topicMaxMessageBytes < config.MaxMessageBytes {
-				return cerror.ErrKafkaInvalidConfig.GenWithStack(
-					"topic already exist, and topic's max.message.bytes(%d) less than max-message-bytes(%d)."+
-						"Please make sure `max-message-bytes` not greater than topic `max.message.bytes`",
-					topicMaxMessageBytes, config.MaxMessageBytes)
-			}
+		topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
+		if topicMaxMessageBytes < config.MaxMessageBytes {
+			return cerror.ErrKafkaInvalidConfig.GenWithStack(
+				"topic already exist, and topic's max.message.bytes(%d) less than max-message-bytes(%d)."+
+					"Please make sure `max-message-bytes` not greater than topic `max.message.bytes`",
+				topicMaxMessageBytes, config.MaxMessageBytes)
 		}
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
@@ -485,22 +483,14 @@ func topicPreProcess(topic string, protocol codec.Protocol, config *Config, sara
 var newSaramaConfigImpl = newSaramaConfig
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, topic string, protocol codec.Protocol, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
 	}
-<<<<<<< HEAD
-	if config.PartitionNum < 0 {
-		return nil, cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(config.PartitionNum)
-	}
-	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
-	if err != nil {
-=======
 
-	if err := topicPreProcess(topic, protocol, config, cfg); err != nil {
->>>>>>> 6a64873d4 (cdc/sink: adjust kafka initialization logic (#3192))
+	if err := topicPreProcess(topic, config, cfg); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -596,11 +586,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// in this broker is broken, Kafka will election a new partition leader and
 	// replication logs, this process will last from a few seconds to a few minutes.
 	// Kafka cluster will not provide a writing service in this process.
-<<<<<<< HEAD
 	// Time out in one minute.
-=======
-	// Time out in one minute(120 * 500ms).
->>>>>>> 6a64873d4 (cdc/sink: adjust kafka initialization logic (#3192))
 	config.Metadata.Retry.Max = 120
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 	// If it is not set, this means a metadata request against an unreachable
@@ -617,14 +603,11 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
-<<<<<<< HEAD
-=======
 
 	// Time out in five minutes(600 * 500ms).
 	config.Producer.Retry.Max = 600
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
 
->>>>>>> 6a64873d4 (cdc/sink: adjust kafka initialization logic (#3192))
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
 	case "none":
 		config.Producer.Compression = sarama.CompressionNone
