@@ -48,6 +48,8 @@ type GlobalVars struct {
 	TableActorSystem *system.System
 	SorterSystem     *ssystem.System
 
+	IsOwner bool
+
 	// OwnerRevision is the Etcd revision when the owner got elected.
 	OwnerRevision int64
 
