@@ -129,6 +129,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 
 		// TODO make the tick duration configurable
 		ticker := time.NewTicker(time.Second)
+		lastEmitCheckpointTime := time.Now()
 		defer ticker.Stop()
 		var lastCheckpointTs model.Ts
 		for {
@@ -143,11 +144,13 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
 					continue
 				}
-				lastCheckpointTs = checkpointTs
 				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs); err != nil {
 					ctx.Throw(errors.Trace(err))
 					return
 				}
+				lastCheckpointTs = checkpointTs
+				log.Info("EmitCheckpointTs success", zap.Duration("elapsed", time.Since(lastEmitCheckpointTime)))
+				lastEmitCheckpointTime = time.Now()
 			case ddl := <-s.ddlCh:
 				err := s.sink.EmitDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
