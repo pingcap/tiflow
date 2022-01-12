@@ -397,7 +397,7 @@ func (s *changefeedSuite) TestRemovePausedChangefeed(c *check.C) {
 		ID:   ctx.ChangefeedVars().ID,
 		Info: info,
 	})
-	testChangefeedReleaseResource(c, ctx, cancel, dir, changeFeedClosed /*expectedInitialized*/)
+	testChangefeedReleaseResource(c, ctx, cancel, dir, changeFeedClosed)
 }
 
 func testChangefeedReleaseResource(
