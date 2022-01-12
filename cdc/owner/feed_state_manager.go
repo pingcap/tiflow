@@ -27,13 +27,13 @@ import (
 
 const (
 	// When errors occurred and we need to do backoff, we start an exponential backoff
-	// with an interval from 2min to 30min (2min, 4min, 8min, 16min, 30min, 30min...).
-	// And the backoff will be stopped after 90 min (about 6 tries) because if we do another 30min backoff,
-	// the total duration (120min) will exceeds the MaxElapsedTime (100min).
+	// with an interval from 10s to 30min (10s, 20s, 40s, 80s, 160s, 320s, 640s, 1280s, 1800s).
+	// And the backoff will be stopped after 72 min (about 9 tries) because if we do another 30min backoff,
+	// the total duration (72+30=102min) will exceeds the MaxElapsedTime (90min).
 	// To avoid thunderherd, a random factor is also added.
-	defaultBackoffInitInterval        = 2 * time.Minute
+	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 30 * time.Minute
-	defaultBackoffMaxElapsedTime      = 100 * time.Minute
+	defaultBackoffMaxElapsedTime      = 90 * time.Minute
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
 )
@@ -387,6 +387,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		m.shouldBeRunning = false
 		m.patchState(model.StateError)
 	} else {
+		oldBackoffInterval := m.backoffInterval
 		m.backoffInterval = m.errBackoff.NextBackOff()
 		m.lastErrorTime = time.Unix(0, 0)
 
@@ -399,7 +400,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			m.patchState(model.StateFailed)
 		} else {
 			log.Info("changefeed restart backoff interval is changed", zap.String("changefeed", m.state.ID),
-				zap.Duration("backoffInterval", m.backoffInterval))
+				zap.Duration("oldInterval", oldBackoffInterval), zap.Duration("newInterval", m.backoffInterval))
 		}
 	}
 }
