@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -477,7 +478,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Int32("partition", partition))
 				} else if ts > resolvedTs {
-					log.Debug("update sink resolved ts",
+					log.Info("update sink resolved ts",
 						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition),
 						zap.Duration("duration", time.Since(lastResolvedTsReceived)))
