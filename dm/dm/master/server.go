@@ -191,7 +191,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		"/status": getStatusHandle(),
 		"/debug/": getDebugHandler(),
 	}
-	if s.cfg.ExperimentalFeatures.OpenAPI {
+	if s.cfg.OpenAPI {
 		if initOpenAPIErr := s.InitOpenAPIHandles(); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
@@ -427,12 +427,19 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	}
 
 	resp := &pb.StartTaskResponse{}
-	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
 		return resp, nil
 	}
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	if err != nil {
+		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		return resp, nil
+	}
+	resp.Msg = msg
+
 	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.JSON()), zap.String("request", "StartTask"))
 
 	sourceRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs))
@@ -473,7 +480,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			// use same latch for remove-meta and start-task
 			release, err3 = s.scheduler.AcquireSubtaskLatch(cfg.Name)
 			if err3 != nil {
-				resp.Msg = terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", cfg.Name).Error()
+				resp.Msg += terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", cfg.Name).Error()
 				// nolint:nilerr
 				return resp, nil
 			}
@@ -481,19 +488,19 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			latched = true
 
 			if scm := s.scheduler.GetSubTaskCfgsByTask(cfg.Name); len(scm) > 0 {
-				resp.Msg = terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
+				resp.Msg += terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
 					"while remove-meta is true").Error()
 				return resp, nil
 			}
 			err = s.removeMetaData(ctx, cfg.Name, cfg.MetaSchema, cfg.TargetDB)
 			if err != nil {
-				resp.Msg = terror.Annotate(err, "while removing metadata").Error()
+				resp.Msg += terror.Annotate(err, "while removing metadata").Error()
 				return resp, nil
 			}
 		}
 		err = s.scheduler.AddSubTasks(latched, subtaskCfgPointersToInstances(stCfgs...)...)
 		if err != nil {
-			resp.Msg = err.Error()
+			resp.Msg += err.Error()
 			// nolint:nilerr
 			return resp, nil
 		}
@@ -502,9 +509,11 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			release()
 		}
 
+		go s.scheduler.TryResolveLoadTask(sources)
+
 		resp.Result = true
 		if cfg.RemoveMeta {
-			resp.Msg = "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
+			resp.Msg += "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
 		}
 		sourceResps = s.getSourceRespsAfterOperation(ctx, cfg.Name, sources, []string{}, req)
 	}
@@ -629,14 +638,20 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		return resp2, err2
 	}
 
-	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	resp := &pb.UpdateTaskResponse{}
+	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task)
 	if err != nil {
+		resp.Msg = err.Error()
 		// nolint:nilerr
-		return &pb.UpdateTaskResponse{
-			Result: false,
-			Msg:    err.Error(),
-		}, nil
+		return resp, nil
 	}
+
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	if err != nil {
+		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		return resp, nil
+	}
+	resp.Msg = msg
 	log.L().Info("update task", zap.String("task name", cfg.Name), zap.Stringer("task", cfg))
 
 	workerRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs)+len(req.Sources))
@@ -675,10 +690,9 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		workerResps = append(workerResps, workerRespMap[worker])
 	}
 
-	return &pb.UpdateTaskResponse{
-		Result:  true,
-		Sources: workerResps,
-	}, nil
+	resp.Result = true
+	resp.Sources = workerResps
+	return resp, nil
 }
 
 type hasWokers interface {
@@ -1187,19 +1201,23 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 		return resp2, err2
 	}
 
-	_, _, err := s.generateSubTask(ctx, req.Task, req.ErrCnt, req.WarnCnt)
+	resp := &pb.CheckTaskResponse{}
+	_, stCfgs, err := s.generateSubTask(ctx, req.Task)
 	if err != nil {
+		resp.Msg = err.Error()
 		// nolint:nilerr
-		return &pb.CheckTaskResponse{
-			Result: false,
-			Msg:    err.Error(),
-		}, nil
+		return resp, nil
 	}
 
-	return &pb.CheckTaskResponse{
-		Result: true,
-		Msg:    "check pass!!!",
-	}, nil
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, req.ErrCnt, req.WarnCnt)
+	if err != nil {
+		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		return resp, nil
+	}
+	resp.Msg = msg
+	resp.Result = true
+
+	return resp, nil
 }
 
 func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*config.SourceConfig, error) {
@@ -1446,7 +1464,7 @@ func (s *Server) OperateLeader(ctx context.Context, req *pb.OperateLeaderRequest
 	}, nil
 }
 
-func (s *Server) generateSubTask(ctx context.Context, task string, errCnt, warnCnt int64) (*config.TaskConfig, []*config.SubTaskConfig, error) {
+func (s *Server) generateSubTask(ctx context.Context, task string) (*config.TaskConfig, []*config.SubTaskConfig, error) {
 	cfg := config.NewTaskConfig()
 	err := cfg.Decode(task)
 	if err != nil {
@@ -1461,11 +1479,6 @@ func (s *Server) generateSubTask(ctx context.Context, task string, errCnt, warnC
 	sourceCfgs := s.getSourceConfigs(cfg.MySQLInstances)
 
 	stCfgs, err := config.TaskConfigToSubTaskConfigs(cfg, sourceCfgs)
-	if err != nil {
-		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
-	}
-
-	err = checker.CheckSyncConfigFunc(ctx, stCfgs, errCnt, warnCnt)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
@@ -2056,14 +2069,16 @@ func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateSchemaRequest
 			workerReq := workerrpc.Request{
 				Type: workerrpc.CmdOperateSchema,
 				OperateSchema: &pb.OperateWorkerSchemaRequest{
-					Op:       req.Op,
-					Task:     req.Task,
-					Source:   source,
-					Database: req.Database,
-					Table:    req.Table,
-					Schema:   req.Schema,
-					Flush:    req.Flush,
-					Sync:     req.Sync,
+					Op:         req.Op,
+					Task:       req.Task,
+					Source:     source,
+					Database:   req.Database,
+					Table:      req.Table,
+					Schema:     req.Schema,
+					Flush:      req.Flush,
+					Sync:       req.Sync,
+					FromSource: req.FromSource,
+					FromTarget: req.FromTarget,
 				},
 			}
 
@@ -2333,7 +2348,7 @@ func (s *Server) TransferSource(ctx context.Context, req *pb.TransferSourceReque
 		return resp2, err2
 	}
 
-	err := s.scheduler.TransferSource(req.Source, req.Worker)
+	err := s.scheduler.TransferSource(ctx, req.Source, req.Worker)
 	if err != nil {
 		resp2.Msg = err.Error()
 		// nolint:nilerr

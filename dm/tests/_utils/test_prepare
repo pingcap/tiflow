@@ -59,13 +59,18 @@ function join_string() {
 
 # shortcut for start task on one DM-worker
 function dmctl_start_task_standalone() {
+    if [ $# -ge 2 ]; then
+        remove_meta=$2
+    else
+        remove_meta=""
+    fi
     if [ $# -ge 1 ]; then
         task_conf=$1
     else
         task_conf="$cur/conf/dm-task.yaml"
     fi
     run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-        "start-task $task_conf" \
+        "start-task $task_conf $remove_meta" \
         "\"result\": true" 2 \
         "\"source\": \"$SOURCE_ID1\"" 1
 }
@@ -219,7 +224,11 @@ function run_sql_tidb() {
 function run_sql_tidb_with_retry() {
     rc=0
     for ((k=1; k<11; k++)); do
+        # in retry scenario sometimes run_sql_tidb will fail because "table not exist", we should keep retrying so turn
+        # off the error option temporarily.
+        set +e
         run_sql_tidb "$1"
+        set -e
         if grep -Fq "$2" "$TEST_DIR/sql_res.$TEST_NAME.txt"; then
             rc=1
             break

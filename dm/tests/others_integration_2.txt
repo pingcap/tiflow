@@ -11,3 +11,4 @@ duplicate_event
 tracker_ignored_ddl
 extend_column
 shardddl_optimistic
+gbk
