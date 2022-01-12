@@ -125,7 +125,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 		for _, option := range opts {
 			switch option.state {
 			case StateWarning:
-				if len(r.State) == 0 {
+				if r.State != StateFailure {
 					r.State = StateWarning
 				}
 				e := NewError(tableMsg + option.errMessage)
