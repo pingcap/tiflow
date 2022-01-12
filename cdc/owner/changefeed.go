@@ -326,7 +326,7 @@ LOOP:
 	}
 
 	atomic.StoreInt32(&c.runningStatus, changeFeedRunning)
-	log.Info("changefeed runningStatus",
+	log.Info("changefeed is initialized",
 		zap.String("changefeed", c.state.ID),
 		zap.Int32("runningStatus", c.runningStatus))
 	return nil
