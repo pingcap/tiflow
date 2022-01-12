@@ -237,7 +237,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				continue
 			}
 			startTime := time.Now()
-			log.Info("EtcdWorker start tick", zap.Time("now", time.Now()))
+			log.Info("EtcdWorker start tick", zap.Time("now", time.Now()), zap.String("role", role))
 			// it is safe that a batch of updates has been applied to worker.state before worker.reactor.Tick
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			costTime := time.Since(startTime)

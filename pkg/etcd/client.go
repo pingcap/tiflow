@@ -233,7 +233,8 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			ticker.Reset(etcdRequestProgressDuration)
 		case <-ticker.C:
 			if err := c.RequestProgress(ctx); err != nil {
-				log.Warn("failed to request progress for etcd watcher", zap.Error(err))
+				log.Warn("failed to request progress for etcd watcher", zap.Error(err),
+					zap.String("role", role))
 			}
 			if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
 				// cancel the last cancel func to reset it
