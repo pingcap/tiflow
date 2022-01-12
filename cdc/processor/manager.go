@@ -85,7 +85,6 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 			continue
 		}
 
-		log.Info("changefeed is active", zap.String("changefeedID", changefeedID))
 		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 			ID:   changefeedID,
 			Info: changefeedState.Info,

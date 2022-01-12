@@ -347,7 +347,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err := p.flushRedoLogMeta(ctx); err != nil {
 		return nil, err
 	}
-	// it is no need to check the err here, because we will use
+	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
 	pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
 
@@ -1072,6 +1072,7 @@ func (p *processor) Close() error {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
+
 		log.Info("processor try to close the sinkManager",
 			zap.String("changefeed", p.changefeedID))
 		start := time.Now()

@@ -152,9 +152,6 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 	return nil
 }
 
-//1. 如果一个 changefeed，正在被 closing，或者 closed，他还会被进入 tick 么。
-//2. initialize changefeed / close changefeed, status
-
 func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	c.state = state
 	c.feedStateManager.Tick(state)
