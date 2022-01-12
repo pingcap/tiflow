@@ -14,10 +14,10 @@
 package checker
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser"
@@ -278,40 +278,40 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 	if len(lackPriv) == 0 {
 		return nil
 	}
-	var buffer bytes.Buffer
+	var b strings.Builder
 	// generate error message, for example
 	// lack of privilege1: {tableID1, tableID2, ...};lack of privilege2...
 	for p, tableMap := range lackPriv {
-		buffer.WriteString("lack of ")
-		buffer.WriteString(mysql.Priv2Str[p])
-		buffer.WriteString(" privilege")
+		b.WriteString("lack of ")
+		b.WriteString(mysql.Priv2Str[p])
+		b.WriteString(" privilege")
 		if len(tableMap) != 0 {
-			buffer.WriteString(": {")
+			b.WriteString(": {")
 		}
 		i := 0
 		for schema, tables := range tableMap {
 			if len(tables) == 0 {
-				buffer.WriteString(dbutil.ColumnName(schema))
+				b.WriteString(dbutil.ColumnName(schema))
 			}
 			j := 0
 			for table := range tables {
-				buffer.WriteString(dbutil.TableName(schema, table))
+				b.WriteString(dbutil.TableName(schema, table))
 				j++
 				if j != len(tables) {
-					buffer.WriteString(", ")
+					b.WriteString(", ")
 				}
 			}
 			i++
 			if i != len(tableMap) {
-				buffer.WriteString("; ")
+				b.WriteString("; ")
 			}
 		}
 		if len(tableMap) != 0 {
-			buffer.WriteString("}")
+			b.WriteString("}")
 		}
-		buffer.WriteString("; ")
+		b.WriteString("; ")
 	}
-	privileges := buffer.String()
+	privileges := b.String()
 	result.Instruction = "You need grant related privileges."
 	log.L().Info("lack privilege", zap.String("err msg", privileges))
 	return NewError(privileges)
