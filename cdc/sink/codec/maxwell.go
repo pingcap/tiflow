@@ -277,12 +277,8 @@ func (d *MaxwellEventBatchEncoder) Build() []*MQMessage {
 		return nil
 	}
 
-<<<<<<< HEAD
 	ret := NewMQMessage(ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeRow, nil, nil)
-=======
-	ret := NewMQMessage(config.ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeRow, nil, nil)
 	ret.SetRowsCount(d.batchSize)
->>>>>>> fc70dbde8 (metrics(cdc): fix mq sink write row count metrics. (#4192))
 	d.Reset()
 	return []*MQMessage{ret}
 }
