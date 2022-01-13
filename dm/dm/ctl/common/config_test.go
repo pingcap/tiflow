@@ -27,7 +27,7 @@ var _ = Suite(&testConfigSuite{})
 
 type testConfigSuite struct{}
 
-func (t *testConfigSuite) TestSQLReplace(c *C) {
+func (t *testConfigSuite) TestInteractiveQuotes(c *C) {
 	cases := []struct {
 		input    string
 		expected []string
