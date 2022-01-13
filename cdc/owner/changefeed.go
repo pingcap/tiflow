@@ -183,7 +183,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	}
 
 	if atomic.LoadInt32(&c.runningStatus) != changeFeedRunning {
-		log.Info("changeFeed can not continue",
+		log.Debug("changeFeed can not continue",
 			zap.String("changeFeedID", c.state.ID),
 			zap.Int32("runningStatus", atomic.LoadInt32(&c.runningStatus)))
 		return nil
@@ -198,7 +198,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
-		log.Info("barrierTs < checkpointTs",
+		log.Debug("barrierTs < checkpointTs",
 			zap.Uint64("barrierTs", barrierTs),
 			zap.Uint64("checkpointTs", checkpointTs),
 			zap.String("changeFeedID", c.state.ID))
