@@ -137,7 +137,7 @@ func (f *fileBackEnd) free() error {
 		}
 	})
 
-	log.Debug("Removing file", zap.String("file", f.fileName))
+	// log.Debug("Removing file", zap.String("file", f.fileName))
 
 	f.cleanStats()
 
