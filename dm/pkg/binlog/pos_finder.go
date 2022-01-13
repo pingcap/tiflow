@@ -44,13 +44,13 @@ type binlogPosFinder struct {
 	// fields used for local relay
 	relayDir string // should be a directory with current UUID
 
-	// fields used inside FindByTs
+	// fields used inside FindByTimestamp
 	targetBinlog        binlogSize // target binlog file the timestamp may reside
 	tsBeforeFirstBinlog bool       // whether the timestamp is before the first binlog
 	lastBinlogFile      bool       // whether targetBinlog is the last binlog file
 
 	// one binlog file can either be GTID enabled or not, cannot be mixed up
-	// we mark it useing this field to avoid parsing events.
+	// we mark it using this field to avoid parsing events.
 	everMetGTIDEvent bool
 	inTransaction    bool // whether in transaction
 }
@@ -118,24 +118,22 @@ func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *sql.DB, syncCfg replic
 func (r *binlogPosFinder) getBinlogFiles() (FileSizes, error) {
 	if r.remote {
 		return GetBinaryLogs(r.tctx.Ctx, r.db)
-	} else {
-		return GetLocalBinaryLogs(r.relayDir)
 	}
+	return GetLocalBinaryLogs(r.relayDir)
 }
 
 func (r *binlogPosFinder) startSync(position mysql.Position) (reader.Reader, error) {
 	if r.remote {
 		binlogReader := reader.NewTCPReader(r.syncCfg)
 		return binlogReader, binlogReader.StartSyncByPos(position)
-	} else {
-		binlogReader := reader.NewFileReader(&reader.FileReaderConfig{EnableRawMode: true})
-		position.Name = path.Join(r.relayDir, position.Name)
-		return binlogReader, binlogReader.StartSyncByPos(position)
 	}
+	binlogReader := reader.NewFileReader(&reader.FileReaderConfig{EnableRawMode: true})
+	position.Name = path.Join(r.relayDir, position.Name)
+	return binlogReader, binlogReader.StartSyncByPos(position)
 }
 
 func (r *binlogPosFinder) findMinTimestampOfBinlog(currBinlog binlogSize) (uint32, error) {
-	var minTs uint32
+	var minTS uint32
 	binlogReader, err := r.startSync(mysql.Position{Name: currBinlog.name, Pos: FileHeaderLen})
 	if err != nil {
 		return 0, err
@@ -148,24 +146,24 @@ func (r *binlogPosFinder) findMinTimestampOfBinlog(currBinlog binlogSize) (uint3
 		}
 		// break on first non-fake event(must be a format description event)
 		if !utils.IsFakeRotateEvent(ev.Header) {
-			minTs = ev.Header.Timestamp
+			minTS = ev.Header.Timestamp
 			break
 		}
 	}
 	binlogReader.Close()
 
-	return minTs, nil
+	return minTS, nil
 }
 
 func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
-	targetTs := uint32(ts)
-	var lastTs, minTs uint32
+	targetTS := uint32(ts)
+	var lastTS, minTS uint32
 	var lastMid int
 	binaryLogs, err := r.getBinlogFiles()
 	if err != nil {
 		return err
 	}
-	if len(binaryLogs) <= 0 {
+	if len(binaryLogs) == 0 {
 		// should not happen on a master with binlog enabled
 		return errors.New("cannot find binlog files")
 	}
@@ -175,30 +173,30 @@ func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 		mid := (begin + end) / 2
 		currBinlog := binaryLogs[mid]
 
-		minTs, err = r.findMinTimestampOfBinlog(currBinlog)
+		minTS, err = r.findMinTimestampOfBinlog(currBinlog)
 		if err != nil {
 			return err
 		}
 
-		r.tctx.L().Debug("min timestamp in binlog file", zap.Reflect("file", currBinlog), zap.Uint32("ts", minTs))
+		r.tctx.L().Debug("min timestamp in binlog file", zap.Reflect("file", currBinlog), zap.Uint32("ts", minTS))
 
-		lastTs = minTs
+		lastTS = minTS
 		lastMid = mid
 
-		if minTs >= targetTs {
+		if minTS >= targetTS {
 			end = mid - 1
 		} else {
 			// current binlog maybe the target binlog file, we'll backtrace to it later.
 			begin = mid + 1
 		}
 	}
-	if lastTs >= targetTs {
+	if lastTS >= targetTS {
 		if lastMid == 0 {
-			// timestamp of first binlog event in first binlog file >= targetTs
+			// timestamp of first binlog event in first binlog file >= targetTS
 			r.targetBinlog = binaryLogs[lastMid]
 			r.tsBeforeFirstBinlog = true
 		} else {
-			// timestamp of first event in lastMid >= targetTs, need to search from previous binlog file
+			// timestamp of first event in lastMid >= targetTS, need to search from previous binlog file
 			r.targetBinlog = binaryLogs[lastMid-1]
 		}
 	} else {
@@ -291,18 +289,18 @@ func (r *binlogPosFinder) checkTransactionBeginEvent(ev *replication.BinlogEvent
 	return transactionBeginEvent, nil
 }
 
-// FindByTs get binlog location of first event or transaction with timestamp >= ts
+// FindByTimestamp get binlog location of first event or transaction with timestamp >= ts
 // go-mysql has BinlogStreamer.GetEventWithStartTime, but it doesn't fit our need. And we need to support relay log.
 // if posType != AboveUpperBoundBinlogPos, then location is the target location we want.
 // if posType == BelowLowerBoundBinlogPos, master binlog may have purged.
-func (r *binlogPosFinder) FindByTs(ts int64) (*Location, PosType, error) {
+func (r *binlogPosFinder) FindByTimestamp(ts int64) (*Location, PosType, error) {
 	r.tctx.L().Info("target timestamp", zap.Int64("ts", ts))
 
 	if err := r.initTargetBinlogFile(ts); err != nil {
 		return nil, InvalidBinlogPos, err
 	}
 
-	targetTs := uint32(ts)
+	targetTS := uint32(ts)
 	position := mysql.Position{Name: r.targetBinlog.name, Pos: FileHeaderLen}
 	gtidSet := gtid.MinGTIDSet(r.flavor)
 
@@ -326,7 +324,7 @@ func (r *binlogPosFinder) FindByTs(ts int64) (*Location, PosType, error) {
 			return nil, InvalidBinlogPos, err
 		}
 
-		if transactionBeginEvent && ev.Header.Timestamp >= targetTs {
+		if transactionBeginEvent && ev.Header.Timestamp >= targetTS {
 			break
 		}
 		position.Pos = ev.Header.LogPos

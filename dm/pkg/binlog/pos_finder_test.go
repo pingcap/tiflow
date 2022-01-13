@@ -85,10 +85,9 @@ func (t *testPosFinderSuite) TestTransBoundary(c *C) {
 			Rows:       [][]interface{}{{int32(1)}, {int32(2)}},
 		},
 	}
-	allEvents := make([]*replication.BinlogEvent, 0)
 	var buf bytes.Buffer
-	events, data, _ := generator.GenFileHeader(beforeTime.Add(1 * time.Second).Unix())
-	allEvents = append(allEvents, events...)
+	_, data, err := generator.GenFileHeader(beforeTime.Add(1 * time.Second).Unix())
+	c.Assert(err, IsNil)
 	buf.Write(data)
 
 	// first transaction, timestamp of BEGIN = beforeTime.Add(2*time.Second)
@@ -122,10 +121,10 @@ func (t *testPosFinderSuite) TestTransBoundary(c *C) {
 	{
 		tcctx := tcontext.NewContext(context.Background(), log.L())
 		finder := NewLocalBinlogPosFinder(tcctx, false, flavor, relayDir)
-		location, posType, err := finder.FindByTs(ts)
+		location, posType, err := finder.FindByTimestamp(ts)
 		c.Assert(err, IsNil)
 		// start of second transaction
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000001", xidEvent.Header.LogPos})
+		c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000001", Pos: xidEvent.Header.LogPos})
 		c.Assert(location.GTIDSetStr(), Equals, "")
 		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
@@ -161,18 +160,18 @@ func (t *testPosFinderSuite) TestMySQL56NoGTID(c *C) {
 			targetEventStart = ev.Header.LogPos
 		}
 		finder := NewLocalBinlogPosFinder(tcctx, false, flavor, relayDir)
-		location, posType, err := finder.FindByTs(int64(targetEvent.Header.Timestamp))
+		location, posType, err := finder.FindByTimestamp(int64(targetEvent.Header.Timestamp))
 		c.Assert(err, IsNil)
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000001", targetEventStart})
+		c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000001", Pos: targetEventStart})
 		c.Assert(location.GTIDSetStr(), Equals, "")
 		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
 	{
 		targetEventStart := file2Events[len(file2Events)-1].Header.LogPos
 		finder := NewLocalBinlogPosFinder(tcctx, false, flavor, relayDir)
-		location, posType, err := finder.FindByTs(int64(file3Events[0].Header.Timestamp))
+		location, posType, err := finder.FindByTimestamp(int64(file3Events[0].Header.Timestamp))
 		c.Assert(err, IsNil)
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000002", targetEventStart})
+		c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000002", Pos: targetEventStart})
 		c.Assert(location.GTIDSetStr(), Equals, "")
 		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
@@ -187,9 +186,9 @@ func (t *testPosFinderSuite) TestMySQL56NoGTID(c *C) {
 			targetEventStart = ev.Header.LogPos
 		}
 		finder := NewLocalBinlogPosFinder(tcctx, false, flavor, relayDir)
-		location, posType, err := finder.FindByTs(int64(targetEvent.Header.Timestamp))
+		location, posType, err := finder.FindByTimestamp(int64(targetEvent.Header.Timestamp))
 		c.Assert(err, IsNil)
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000003", targetEventStart})
+		c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000003", Pos: targetEventStart})
 		c.Assert(location.GTIDSetStr(), Equals, "")
 		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
@@ -230,9 +229,9 @@ func (t *testPosFinderSuite) TestMySQL57NoGTID(c *C) {
 			targetEventStart = ev.Header.LogPos
 		}
 		finder := NewLocalBinlogPosFinder(tcctx, false, flavor, relayDir)
-		location, posType, err := finder.FindByTs(int64(targetEvent.Header.Timestamp))
+		location, posType, err := finder.FindByTimestamp(int64(targetEvent.Header.Timestamp))
 		c.Assert(err, IsNil)
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000003", targetEventStart})
+		c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000003", Pos: targetEventStart})
 		c.Assert(location.GTIDSetStr(), Equals, "")
 		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
@@ -245,12 +244,12 @@ func (t *testPosFinderSuite) TestErrorCase(c *C) {
 	tcctx := tcontext.NewContext(context.Background(), log.L())
 	{
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir+"not-exist")
-		_, _, err := finder.FindByTs(beforeTime.Add(-time.Minute).Unix())
+		_, _, err := finder.FindByTimestamp(beforeTime.Add(-time.Minute).Unix())
 		c.Assert(err.Error(), Matches, ".*no such file or directory.*")
 	}
 	{
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, c.MkDir())
-		_, _, err := finder.FindByTs(beforeTime.Add(-time.Minute).Unix())
+		_, _, err := finder.FindByTimestamp(beforeTime.Add(-time.Minute).Unix())
 		c.Assert(err.Error(), Matches, ".*cannot find binlog files.*")
 	}
 	{
@@ -258,7 +257,7 @@ func (t *testPosFinderSuite) TestErrorCase(c *C) {
 		c.Assert(err, IsNil)
 		file.Close()
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
-		_, _, err = finder.FindByTs(beforeTime.Add(-time.Minute).Unix())
+		_, _, err = finder.FindByTimestamp(beforeTime.Add(-time.Minute).Unix())
 		c.Assert(err.Error(), Matches, "EOF")
 	}
 }
@@ -285,9 +284,9 @@ func (t *testPosFinderSuite) TestMySQL57GTID(c *C) {
 
 	{
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
-		location, posType, err := finder.FindByTs(beforeTime.Add(-time.Minute).Unix())
+		location, posType, err := finder.FindByTimestamp(beforeTime.Add(-time.Minute).Unix())
 		c.Assert(err, IsNil)
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000001", 4})
+		c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000001", Pos: 4})
 		c.Assert(location.GTIDSetStr(), Equals, "ffffffff-ffff-ffff-ffff-ffffffffffff:1")
 		c.Assert(posType, Equals, BelowLowerBoundBinlogPos)
 	}
@@ -305,9 +304,9 @@ func (t *testPosFinderSuite) TestMySQL57GTID(c *C) {
 				targetEvent = ev
 
 				finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
-				location, posType, err := finder.FindByTs(int64(targetEvent.Header.Timestamp))
+				location, posType, err := finder.FindByTimestamp(int64(targetEvent.Header.Timestamp))
 				c.Assert(err, IsNil)
-				c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000001", targetEventStart})
+				c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000001", Pos: targetEventStart})
 				c.Assert(location.GTIDSetStr(), Equals, gtids[cnt])
 				c.Assert(posType, Equals, InRangeBinlogPos)
 
@@ -319,9 +318,9 @@ func (t *testPosFinderSuite) TestMySQL57GTID(c *C) {
 	{
 		targetEventStart := file2Events[len(file2Events)-1].Header.LogPos
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
-		location, posType, err := finder.FindByTs(int64(file3Events[0].Header.Timestamp))
+		location, posType, err := finder.FindByTimestamp(int64(file3Events[0].Header.Timestamp))
 		c.Assert(err, IsNil)
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000002", targetEventStart})
+		c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000002", Pos: targetEventStart})
 		c.Assert(location.GTIDSetStr(), Equals, "ffffffff-ffff-ffff-ffff-ffffffffffff:1-7")
 		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
@@ -341,15 +340,15 @@ func (t *testPosFinderSuite) TestMySQL57GTID(c *C) {
 			targetEventStart = ev.Header.LogPos
 		}
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
-		location, posType, err := finder.FindByTs(int64(targetEvent.Header.Timestamp))
+		location, posType, err := finder.FindByTimestamp(int64(targetEvent.Header.Timestamp))
 		c.Assert(err, IsNil)
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000003", targetEventStart})
+		c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000003", Pos: targetEventStart})
 		c.Assert(location.GTIDSetStr(), Equals, "ffffffff-ffff-ffff-ffff-ffffffffffff:1-9")
 		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
 	{
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
-		location, posType, err := finder.FindByTs(beforeTime.Add(+time.Minute).Unix())
+		location, posType, err := finder.FindByTimestamp(beforeTime.Add(+time.Minute).Unix())
 		c.Assert(err, IsNil)
 		c.Assert(location, IsNil)
 		c.Assert(posType, Equals, AboveUpperBoundBinlogPos)
@@ -378,9 +377,9 @@ func (t *testPosFinderSuite) TestMariadbGTID(c *C) {
 
 	{
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
-		location, posType, err := finder.FindByTs(beforeTime.Add(-time.Minute).Unix())
+		location, posType, err := finder.FindByTimestamp(beforeTime.Add(-time.Minute).Unix())
 		c.Assert(err, IsNil)
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000001", 4})
+		c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000001", Pos: 4})
 		c.Assert(location.GTIDSetStr(), Equals, "1-1-1")
 		c.Assert(posType, Equals, BelowLowerBoundBinlogPos)
 	}
@@ -400,18 +399,18 @@ func (t *testPosFinderSuite) TestMariadbGTID(c *C) {
 			targetEventStart = ev.Header.LogPos
 		}
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
-		location, posType, err := finder.FindByTs(int64(targetEvent.Header.Timestamp))
+		location, posType, err := finder.FindByTimestamp(int64(targetEvent.Header.Timestamp))
 		c.Assert(err, IsNil)
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000001", targetEventStart})
+		c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000001", Pos: targetEventStart})
 		c.Assert(location.GTIDSetStr(), Equals, "1-1-2")
 		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
 	{
 		targetEventStart := file2Events[len(file2Events)-1].Header.LogPos
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
-		location, posType, err := finder.FindByTs(int64(file3Events[0].Header.Timestamp))
+		location, posType, err := finder.FindByTimestamp(int64(file3Events[0].Header.Timestamp))
 		c.Assert(err, IsNil)
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000002", targetEventStart})
+		c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000002", Pos: targetEventStart})
 		c.Assert(location.GTIDSetStr(), Equals, "1-1-7")
 		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
@@ -431,15 +430,15 @@ func (t *testPosFinderSuite) TestMariadbGTID(c *C) {
 			targetEventStart = ev.Header.LogPos
 		}
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
-		location, posType, err := finder.FindByTs(int64(targetEvent.Header.Timestamp))
+		location, posType, err := finder.FindByTimestamp(int64(targetEvent.Header.Timestamp))
 		c.Assert(err, IsNil)
-		c.Assert(location.Position, Equals, mysql.Position{"mysql-bin.000003", targetEventStart})
+		c.Assert(location.Position, Equals, mysql.Position{Name: "mysql-bin.000003", Pos: targetEventStart})
 		c.Assert(location.GTIDSetStr(), Equals, "1-1-8")
 		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
 	{
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
-		location, posType, err := finder.FindByTs(beforeTime.Add(+time.Minute).Unix())
+		location, posType, err := finder.FindByTimestamp(beforeTime.Add(+time.Minute).Unix())
 		c.Assert(err, IsNil)
 		c.Assert(location, IsNil)
 		c.Assert(posType, Equals, AboveUpperBoundBinlogPos)

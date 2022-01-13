@@ -224,6 +224,6 @@ func (g *Generator) updateLatestPosGTID(latestPos uint32, latestGTID gtid.Set) {
 	g.LatestPos = latestPos
 	if latestGTID != nil {
 		g.LatestGTID = latestGTID
-		g.ExecutedGTIDs.Update(latestGTID.String())
+		_ = g.ExecutedGTIDs.Update(latestGTID.String())
 	}
 }

@@ -37,16 +37,10 @@ func (t *testDDLSuite) TestGenDDLEvent(c *C) {
 
 	// only some simple tests in this case and we can test parsing a binlog file including common header, DDL and DML in another case.
 
-	// test CREATE/DROP DATABASE for MySQL
-	flavor := gmysql.MySQLFlavor
-	gSetStr := "03fc0263-28c7-11e7-a653-6c0b84d59f30:123"
-	latestGTID, err := gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
-
 	// test CREATE/DROP table for MariaDB
-	flavor = gmysql.MariaDBFlavor
-	gSetStr = fmt.Sprintf("1-%d-3", serverID)
-	latestGTID, err = gtid.ParserGTID(flavor, gSetStr)
+	flavor := gmysql.MariaDBFlavor
+	gSetStr := fmt.Sprintf("1-%d-3", serverID)
+	latestGTID, err := gtid.ParserGTID(flavor, gSetStr)
 	c.Assert(err, IsNil)
 
 	// ALTER TABLE
