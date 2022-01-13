@@ -508,6 +508,7 @@ ErrSchedulerStarted,[code=46002:class=scheduler:scope=internal:level=medium], "M
 ErrSchedulerWorkerExist,[code=46003:class=scheduler:scope=internal:level=medium], "Message: dm-worker with name %s already exists"
 ErrSchedulerWorkerNotExist,[code=46004:class=scheduler:scope=internal:level=medium], "Message: dm-worker with name %s not exists"
 ErrSchedulerWorkerOnline,[code=46005:class=scheduler:scope=internal:level=medium], "Message: dm-worker with name %s is still online, Workaround: Please shut it down first."
+ErrSchedulerWorkerNotFree,[code=46033:class=scheduler:scope=internal:level=low], "Message: dm-worker with name %s not free"
 ErrSchedulerWorkerInvalidTrans,[code=46006:class=scheduler:scope=internal:level=medium], "Message: invalid stage transformation for dm-worker %s, from %s to %s"
 ErrSchedulerSourceCfgExist,[code=46007:class=scheduler:scope=internal:level=medium], "Message: source config with ID %s already exists"
 ErrSchedulerSourceCfgNotExist,[code=46008:class=scheduler:scope=internal:level=medium], "Message: source config with ID %s not exists"
