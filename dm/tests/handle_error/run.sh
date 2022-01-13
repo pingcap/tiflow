@@ -883,7 +883,8 @@ function run() {
 	DM_REPLACE_ERROR_MULTIPLE
 	DM_EXEC_ERROR_SKIP
 	DM_SKIP_INCOMPATIBLE_DDL
-	DM_REPLACE_DEFAULT_VALUE
+# FIXME: uncomment this after support replace sql for ddl locks
+#	DM_REPLACE_DEFAULT_VALUE
 
 	implement=(4202 4204 4206 4207 4209 4211 4213)
 	for i in ${implement[@]}; do
