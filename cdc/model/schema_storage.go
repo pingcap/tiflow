@@ -16,7 +16,7 @@ package model
 import (
 	"fmt"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
@@ -137,7 +137,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	ti.findHandleIndex()
 	ti.initColumnsFlag()
-	log.Debug("warpped table info", zap.Reflect("tableInfo", ti))
+	log.Debug("warpped table info", zap.Any("tableInfo", ti))
 	return ti
 }
 

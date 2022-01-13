@@ -496,7 +496,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	eventFeedGauge.Inc()
 	defer eventFeedGauge.Dec()
 
-	log.Debug("event feed started", zap.Stringer("span", s.totalSpan), zap.Uint64("ts", ts))
+	//log.Debug("event feed started", zap.Stringer("span", s.totalSpan), zap.Uint64("ts", ts))
 
 	g, ctx := errgroup.WithContext(ctx)
 
