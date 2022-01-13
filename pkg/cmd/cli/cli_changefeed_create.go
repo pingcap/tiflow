@@ -46,6 +46,7 @@ import (
 // forceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
 var forceEnableOldValueProtocols = []string{
 	"canal",
+	"canal-json",
 	"maxwell",
 }
 
@@ -180,7 +181,7 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 		return err
 	}
 
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -205,9 +206,12 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 		}
 
 		protocol := sinkURIParsed.Query().Get("protocol")
+		if protocol != "" {
+			cfg.Sink.Protocol = protocol
+		}
 		for _, fp := range forceEnableOldValueProtocols {
-			if protocol == fp {
-				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", protocol))
+			if cfg.Sink.Protocol == fp {
+				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", cfg.Sink.Protocol))
 				cfg.EnableOldValue = true
 				break
 			}
