@@ -39,6 +39,8 @@ func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 	return nil
 }
 
+var _ Sink = (*tableSink)(nil)
+
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.buffer = append(t.buffer, rows...)
 	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
@@ -132,7 +134,7 @@ func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	return nil
 }
 
-// Note once the Close is called, no more events can be written to this table sink
+// Close once the method is called, no more events can be written to this table sink
 func (t *tableSink) Close(ctx context.Context) error {
 	return t.manager.destroyTableSink(ctx, t.tableID)
 }

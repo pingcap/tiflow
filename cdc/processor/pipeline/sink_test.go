@@ -58,10 +58,6 @@ func (c *mockFlowController) GetConsumption() uint64 {
 	return 0
 }
 
-func (s *mockSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	return nil
-}
-
 func (s *mockSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		s.received = append(s.received, struct {
@@ -558,4 +554,62 @@ func (s *outputSuite) TestSplitUpdateEventWhenDisableOldValue(c *check.C) {
 	insertEventIndex := 1
 	c.Assert(node.eventBuffer[insertEventIndex].Row.Columns, check.HasLen, 2)
 	c.Assert(node.eventBuffer[insertEventIndex].Row.PreColumns, check.HasLen, 0)
+}
+
+type flushFlowController struct {
+	mockFlowController
+	releaseCounter int
+}
+
+func (c *flushFlowController) Release(resolvedTs uint64) {
+	c.releaseCounter++
+}
+
+type flushSink struct {
+	mockSink
+}
+
+// use to simulate the situation that resolvedTs return from sink manager
+// fall back
+var fallBackResolvedTs = uint64(10)
+
+func (s *flushSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {
+	if resolvedTs == fallBackResolvedTs {
+		return 0, nil
+	}
+	return resolvedTs, nil
+}
+
+// TestFlushSinkReleaseFlowController tests sinkNode.flushSink method will always
+// call flowController.Release to release the memory quota of the table to avoid
+// deadlock if there is no error occur
+func (s *outputSuite) TestFlushSinkReleaseFlowController(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.EnableOldValue = false
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID: "changefeed-id-test-flushSink",
+		Info: &model.ChangeFeedInfo{
+			StartTs: oracle.GoTimeToTS(time.Now()),
+			Config:  cfg,
+		},
+	})
+	flowController := &flushFlowController{}
+	sink := &flushSink{}
+	// sNode is a sinkNode
+	sNode := newSinkNode(1, sink, 0, 10, flowController)
+	c.Assert(sNode.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)), check.IsNil)
+	sNode.barrierTs = 10
+
+	cctx := pipeline.MockNodeContext4Test(nil, pipeline.TickMessage(), nil)
+	err := sNode.flushSink(cctx, uint64(8))
+	c.Assert(err, check.IsNil)
+	c.Assert(sNode.checkpointTs, check.Equals, uint64(8))
+	c.Assert(flowController.releaseCounter, check.Equals, 1)
+	// resolvedTs will fall back in this call
+	err = sNode.flushSink(cctx, uint64(10))
+	c.Assert(err, check.IsNil)
+	c.Assert(sNode.checkpointTs, check.Equals, uint64(8))
+	c.Assert(flowController.releaseCounter, check.Equals, 2)
 }
