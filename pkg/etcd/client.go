@@ -20,7 +20,6 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
@@ -177,16 +176,16 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 }
 
 // Watch delegates request to clientv3.Watcher.Watch
-func (c *Client) Watch(ctx cdcContext.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
+func (c *Client) Watch(ctx context.Context, key string, isOwner bool, opts ...clientv3.OpOption) clientv3.WatchChan {
 	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
-	go c.WatchWithChan(ctx, watchCh, key, opts...)
+	go c.WatchWithChan(ctx, watchCh, key, isOwner, opts...)
 	return watchCh
 }
 
 // WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
-func (c *Client) WatchWithChan(ctx cdcContext.Context, outCh chan<- clientv3.WatchResponse, key string, opts ...clientv3.OpOption) {
+func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, isOwner bool, opts ...clientv3.OpOption) {
 	role := "processor"
-	if ctx.GlobalVars().IsOwner {
+	if isOwner {
 		role = "owner"
 	}
 	defer func() {

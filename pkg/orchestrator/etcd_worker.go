@@ -134,7 +134,7 @@ func (worker *EtcdWorker) Run(ctx cdcContext.Context, session *concurrency.Sessi
 
 	watchCtx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
-	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
+	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), ctx.GlobalVars().IsOwner, clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 
 	var (
 		pendingPatches [][]DataPatch

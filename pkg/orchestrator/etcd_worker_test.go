@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
@@ -215,7 +216,7 @@ func setUpTest(c *check.C) (func() *etcd.Client, func()) {
 
 func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	stdCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	newClient, closer := setUpTest(c)
@@ -225,7 +226,7 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 	defer func() {
 		_ = cli.Unwrap().Close()
 	}()
-	_, err := cli.Put(ctx, testEtcdKeyPrefix+"/sum", "0")
+	_, err := cli.Put(stdCtx, testEtcdKeyPrefix+"/sum", "0")
 	c.Check(err, check.IsNil)
 
 	initArray := make([]int, numValuesPerGroup)
@@ -233,11 +234,12 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 	c.Check(err, check.IsNil)
 
 	for i := 0; i < numGroups; i++ {
-		_, err := cli.Put(ctx, testEtcdKeyPrefix+"/"+strconv.Itoa(i), string(jsonStr))
+		_, err := cli.Put(stdCtx, testEtcdKeyPrefix+"/"+strconv.Itoa(i), string(jsonStr))
 		c.Check(err, check.IsNil)
 	}
 
-	errg, ctx := errgroup.WithContext(ctx)
+	errg, stdCtx := errgroup.WithContext(stdCtx)
+	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{})
 	for i := 0; i < numValuesPerGroup+1; i++ {
 		finalI := i
 		errg.Go(func() error {
@@ -330,7 +332,7 @@ func (r *linearizabilityReactor) Tick(ctx context.Context, state ReactorState) (
 func (s *etcdWorkerSuite) TestLinearizability(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	stdCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	newClient, closer := setUpTest(c)
@@ -339,7 +341,7 @@ func (s *etcdWorkerSuite) TestLinearizability(c *check.C) {
 	cli0 := newClient()
 	cli := newClient()
 	for i := 0; i < 1000; i++ {
-		_, err := cli.Put(ctx, testEtcdKeyPrefix+"/lin", strconv.Itoa(i))
+		_, err := cli.Put(stdCtx, testEtcdKeyPrefix+"/lin", strconv.Itoa(i))
 		c.Assert(err, check.IsNil)
 	}
 
@@ -352,6 +354,7 @@ func (s *etcdWorkerSuite) TestLinearizability(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 	errg := &errgroup.Group{}
+	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{})
 	errg.Go(func() error {
 		return reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1")
 	})
@@ -424,7 +427,7 @@ func (r *finishedReactor) Tick(ctx context.Context, state ReactorState) (nextSta
 func (s *etcdWorkerSuite) TestFinished(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	stdCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	newClient, closer := setUpTest(c)
@@ -438,6 +441,8 @@ func (s *etcdWorkerSuite) TestFinished(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
+
+	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{})
 	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1")
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
@@ -493,7 +498,7 @@ func (r *coverReactor) Tick(ctx context.Context, state ReactorState) (nextState 
 func (s *etcdWorkerSuite) TestCover(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	stdCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	newClient, closer := setUpTest(c)
@@ -507,6 +512,8 @@ func (s *etcdWorkerSuite) TestCover(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
+
+	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{})
 	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1")
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
@@ -571,7 +578,7 @@ func (r *emptyTxnReactor) Tick(ctx context.Context, state ReactorState) (nextSta
 func (s *etcdWorkerSuite) TestEmptyTxn(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	stdCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	newClient, closer := setUpTest(c)
@@ -586,6 +593,8 @@ func (s *etcdWorkerSuite) TestEmptyTxn(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
+
+	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{})
 	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1")
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
@@ -639,7 +648,7 @@ func (r *emptyOrNilReactor) Tick(ctx context.Context, state ReactorState) (nextS
 func (s *etcdWorkerSuite) TestEmptyOrNil(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	stdCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	newClient, closer := setUpTest(c)
@@ -653,6 +662,8 @@ func (s *etcdWorkerSuite) TestEmptyOrNil(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
+
+	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{})
 	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1")
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
@@ -708,7 +719,7 @@ func (r *modifyOneReactor) Tick(ctx context.Context, state ReactorState) (nextSt
 func (s *etcdWorkerSuite) TestModifyAfterDelete(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	stdCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	newClient, closer := setUpTest(c)
@@ -717,7 +728,7 @@ func (s *etcdWorkerSuite) TestModifyAfterDelete(c *check.C) {
 	cli1 := newClient()
 	cli2 := newClient()
 
-	_, err := cli1.Put(ctx, "/test/key1", "original value")
+	_, err := cli1.Put(stdCtx, "/test/key1", "original value")
 	c.Assert(err, check.IsNil)
 
 	modifyReactor := &modifyOneReactor{
@@ -730,6 +741,7 @@ func (s *etcdWorkerSuite) TestModifyAfterDelete(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 
+	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{})
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
