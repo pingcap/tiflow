@@ -101,7 +101,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			stackSize := runtime.Stack(buf, false)
 			buf = buf[:stackSize]
 			err = cerror.ErrMySQLWorkerPanic.GenWithStack("mysql sink concurrent execute panic, stack: %v", string(buf))
-			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stack trace"))
+			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stacktrace"))
 		}
 	}()
 

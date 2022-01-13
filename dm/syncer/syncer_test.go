@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -55,7 +56,6 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tiflow/pkg/errorutil"
 	"go.uber.org/zap"
 )
 
@@ -89,6 +89,11 @@ const (
 	Write
 	Update
 	Delete
+
+	DMLQuery
+
+	Headers
+	Rotate
 )
 
 type testSyncerSuite struct {
@@ -839,9 +844,10 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		cp:           syncer.checkpoint,
 		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 
-	syncer.addJobFunc = syncer.addJobToMemory
+	syncer.handleJobFunc = syncer.addJobToMemory
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
@@ -856,7 +862,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			nil,
 		}, {
 			ddl,
-			[]string{"CREATE DATABASE IF NOT EXISTS `test_1` COLLATE = latin1_swedish_ci"},
+			[]string{"CREATE DATABASE IF NOT EXISTS `test_1`"},
 			nil,
 		}, {
 			flush,
@@ -980,6 +986,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		cp:           syncer.checkpoint,
 		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 
 	// When crossing safeModeExitPoint, will generate a flush sql
@@ -993,11 +1000,11 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		{
 			insert,
 			[]string{"INSERT INTO `test_1`.`t_2` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int32(3), "c"}},
+			[][]interface{}{{int64(3), "c"}},
 		}, {
 			del,
 			[]string{"DELETE FROM `test_1`.`t_2` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int32(3)}},
+			[][]interface{}{{int64(3)}},
 		}, {
 			flush,
 			nil,
@@ -1116,9 +1123,10 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		cp:           syncer.checkpoint,
 		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 
-	syncer.addJobFunc = syncer.addJobToMemory
+	syncer.handleJobFunc = syncer.addJobToMemory
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
@@ -1139,7 +1147,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			nil,
 		}, {
 			ddl,
-			[]string{"CREATE DATABASE IF NOT EXISTS `test_1` COLLATE = latin1_swedish_ci"},
+			[]string{"CREATE DATABASE IF NOT EXISTS `test_1`"},
 			nil,
 		}, {
 			flush,
@@ -1152,28 +1160,28 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		}, {
 			insert,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int32(1), "a"}},
+			[][]interface{}{{int64(1), "a"}},
 		}, {
 			del,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int32(1)}},
+			[][]interface{}{{int64(1)}},
 		}, {
 			update,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int32(2)}, {int32(1), "b"}},
+			[][]interface{}{{int64(2)}, {int64(1), "b"}},
 		}, {
 			// start from this event, location passes safeModeExitLocation and safe mode should exit
 			insert,
 			[]string{"INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int32(1), "a"}},
+			[][]interface{}{{int64(1), "a"}},
 		}, {
 			del,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int32(1)}},
+			[][]interface{}{{int64(1)}},
 		}, {
 			update,
 			[]string{"UPDATE `test_1`.`t_1` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int32(1), "b", int32(2)}},
+			[][]interface{}{{int64(1), "b", int64(2)}},
 		}, {
 			flush,
 			nil,
@@ -1520,8 +1528,11 @@ func (s *Syncer) setupMockCheckpoint(c *C, checkPointDBConn *sql.Conn, checkPoin
 		cp:           s.checkpoint,
 		execError:    &s.execError,
 		afterFlushFn: s.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 	c.Assert(s.checkpoint.(*RemoteCheckPoint).prepare(tcontext.Background()), IsNil)
+	// disable flush checkpoint periodically
+	s.checkpoint.(*RemoteCheckPoint).globalPointSaveTime = time.Now()
 }
 
 func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {

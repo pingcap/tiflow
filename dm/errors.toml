@@ -1096,6 +1096,12 @@ description = ""
 workaround = ""
 tags = ["internal", "low"]
 
+[error.DM-config-20052]
+message = "collation compatible %s not supported"
+description = ""
+workaround = "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
+tags = ["internal", "medium"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
@@ -2015,7 +2021,7 @@ workaround = ""
 tags = ["internal", "low"]
 
 [error.DM-sync-unit-36066]
-message = "replace event not exist, location: %s"
+message = "replace or inject event not exist, location: %s"
 description = ""
 workaround = ""
 tags = ["internal", "high"]
@@ -3125,7 +3131,7 @@ workaround = "Please use `query-status` command to see tasks."
 tags = ["internal", "medium"]
 
 [error.DM-scheduler-46019]
-message = "tasks %v on source %s should not be running"
+message = "running tasks %v to be transferred on source %s should in sync unit"
 description = ""
 workaround = "Please use `pause-task [-s source ...] task` to pause them first."
 tags = ["internal", "high"]
@@ -3200,6 +3206,12 @@ tags = ["internal", "low"]
 message = "the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now"
 description = ""
 workaround = "Please use `stop-relay` without worker name."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46032]
+message = "failed to auto pause tasks %s when transfer-source"
+description = ""
+workaround = "Please pause task by `dmctl pause-task`."
 tags = ["internal", "low"]
 
 [error.DM-dmctl-48001]

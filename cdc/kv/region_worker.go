@@ -275,13 +275,8 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 	revokeToken := !state.initialized
 	// since the context used in region worker will be cancelled after region
 	// worker exits, we must use the parent context to prevent regionErrorInfo loss.
-	err2 := w.session.onRegionFail(w.parentCtx, regionErrorInfo{
-		singleRegionInfo: state.sri,
-		err:              err,
-	}, revokeToken)
-	if err2 != nil {
-		return err2
-	}
+	errInfo := newRegionErrorInfo(state.sri, err)
+	w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
 
 	return retErr
 }
@@ -304,12 +299,11 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case rtsUpdate := <-w.rtsUpdateCh:
 			w.rtsManager.Upsert(rtsUpdate)
 		case <-advanceCheckTicker.C:
-			version, err := w.session.kvStorage.GetCachedCurrentVersion()
+			currentTimeFromPD, err := w.session.client.pdClock.CurrentTime()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
 				continue
 			}
-			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
 			expired := make([]*regionTsInfo, 0)
 			for w.rtsManager.Len() > 0 {
 				item := w.rtsManager.Pop()
@@ -345,7 +339,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 							zap.Duration("duration", sinceLastResolvedTs), zap.Duration("since last event", sinceLastResolvedTs))
 						return errReconnect
 					}
-					// Only resolve lock if the resovled-ts keeps unchanged for
+					// Only resolve lock if the resolved-ts keeps unchanged for
 					// more than resolveLockPenalty times.
 					if rts.ts.penalty < resolveLockPenalty {
 						if lastResolvedTs > rts.ts.resolvedTs {
@@ -510,7 +504,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			// Principle: events from the same region must be processed linearly.
 			//
 			// When buffered events exceed high watermark, we start to use worker
-			// pool to improve throughtput, and we need a mechanism to quit worker
+			// pool to improve throughput, and we need a mechanism to quit worker
 			// pool when buffered events are less than low watermark, which means
 			// we should have a way to know whether events sent to the worker pool
 			// are all processed.
@@ -638,7 +632,7 @@ func (w *regionWorker) handleEventEntry(
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(state.startFeedTime) > 20*time.Second {
 				log.Warn("The time cost of initializing is too much",
-					zap.Duration("timeCost", time.Since(state.startFeedTime)),
+					zap.Duration("duration", time.Since(state.startFeedTime)),
 					zap.Uint64("regionID", regionID))
 			}
 			w.metrics.metricPullEventInitializedCounter.Inc()
@@ -667,7 +661,7 @@ func (w *regionWorker) handleEventEntry(
 
 			if entry.CommitTs <= state.lastResolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
-					zap.String("Event Type", "COMMITTED"),
+					zap.String("EventType", "COMMITTED"),
 					zap.Uint64("CommitTs", entry.CommitTs),
 					zap.Uint64("resolvedTs", state.lastResolvedTs),
 					zap.Uint64("regionID", regionID))
@@ -686,7 +680,7 @@ func (w *regionWorker) handleEventEntry(
 			w.metrics.metricPullEventCommitCounter.Inc()
 			if entry.CommitTs <= state.lastResolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
-					zap.String("Event Type", "COMMIT"),
+					zap.String("EventType", "COMMIT"),
 					zap.Uint64("CommitTs", entry.CommitTs),
 					zap.Uint64("resolvedTs", state.lastResolvedTs),
 					zap.Uint64("regionID", regionID))
@@ -744,7 +738,7 @@ func (w *regionWorker) handleResolvedTs(
 
 	if resolvedTs < state.lastResolvedTs {
 		log.Warn("The resolvedTs is fallen back in kvclient",
-			zap.String("Event Type", "RESOLVED"),
+			zap.String("EventType", "RESOLVED"),
 			zap.Uint64("resolvedTs", resolvedTs),
 			zap.Uint64("lastResolvedTs", state.lastResolvedTs),
 			zap.Uint64("regionID", regionID))
@@ -771,8 +765,7 @@ func (w *regionWorker) handleResolvedTs(
 
 // evictAllRegions is used when gRPC stream meets error and re-establish, notify
 // all existing regions to re-establish
-func (w *regionWorker) evictAllRegions() error {
-	var err error
+func (w *regionWorker) evictAllRegions() {
 	for _, states := range w.statesManager.states {
 		states.Range(func(_, value interface{}) bool {
 			state := value.(*regionFeedState)
@@ -792,14 +785,11 @@ func (w *regionWorker) evictAllRegions() error {
 			// since the context used in region worker will be cancelled after
 			// region worker exits, we must use the parent context to prevent
 			// regionErrorInfo loss.
-			err = w.session.onRegionFail(w.parentCtx, regionErrorInfo{
-				singleRegionInfo: state.sri,
-				err:              cerror.ErrEventFeedAborted.FastGenByArgs(),
-			}, revokeToken)
-			return err == nil
+			errInfo := newRegionErrorInfo(state.sri, cerror.ErrEventFeedAborted.FastGenByArgs())
+			w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
+			return true
 		})
 	}
-	return err
 }
 
 func getWorkerPoolSize() (size int) {

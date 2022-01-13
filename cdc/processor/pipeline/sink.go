@@ -14,6 +14,7 @@
 package pipeline
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	"go.uber.org/zap"
@@ -77,6 +79,9 @@ type sinkNode struct {
 	rowBuffer   []*model.RowChangedEvent
 
 	flowController tableFlowController
+
+	replicaConfig    *config.ReplicaConfig
+	isTableActorMode bool
 }
 
 func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
@@ -98,25 +103,32 @@ func (n *sinkNode) CheckpointTs() model.Ts { return atomic.LoadUint64(&n.checkpo
 func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
 
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
-	// do nothing
+	n.replicaConfig = ctx.ChangefeedVars().Info.Config
+	return n.InitWithReplicaConfig(false, ctx.ChangefeedVars().Info.Config)
+}
+
+func (n *sinkNode) InitWithReplicaConfig(isTableActorMode bool, replicaConfig *config.ReplicaConfig) error {
+	n.replicaConfig = replicaConfig
+	n.isTableActorMode = isTableActorMode
 	return nil
 }
 
 // stop is called when sink receives a stop command or checkpointTs reaches targetTs.
 // In this method, the builtin table sink will be closed by calling `Close`, and
 // no more events can be sent to this sink node afterwards.
-func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
+func (n *sinkNode) stop(ctx context.Context) (err error) {
 	// table stopped status must be set after underlying sink is closed
 	defer n.status.Store(TableStatusStopped)
 	err = n.sink.Close(ctx)
 	if err != nil {
 		return
 	}
+	log.Info("sink is closed", zap.Int64("tableID", n.tableID))
 	err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	return
 }
 
-func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err error) {
+func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err error) {
 	defer func() {
 		if err != nil {
 			n.status.Store(TableStatusStopped)
@@ -142,16 +154,25 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	// we must call flowController.Release immediately after we call
+	// FlushRowChangedEvents to prevent deadlock cause by checkpointTs
+	// fall back
+	n.flowController.Release(checkpointTs)
+
+	// the checkpointTs may fall back in some situation such as:
+	//   1. This table is newly added to the processor
+	//   2. There is one table in the processor that has a smaller
+	//   checkpointTs than this one
 	if checkpointTs <= n.checkpointTs {
 		return nil
 	}
 	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
 
-	n.flowController.Release(checkpointTs)
 	return nil
 }
 
-func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
+func (n *sinkNode) emitEvent(ctx context.Context, event *model.PolymorphicEvent) error {
 	if event == nil || event.Row == nil {
 		log.Warn("skip emit nil event", zap.Any("event", event))
 		return nil
@@ -167,12 +188,10 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 		return nil
 	}
 
-	config := ctx.ChangefeedVars().Info.Config
-
 	// This indicates that it is an update event,
 	// and after enable old value internally by default(but disable in the configuration).
 	// We need to handle the update event to be compatible with the old format.
-	if !config.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
+	if !n.replicaConfig.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
 		if shouldSplitUpdateEvent(event) {
 			deleteEvent, insertEvent, err := splitUpdateEvent(event)
 			if err != nil {
@@ -284,7 +303,7 @@ func (n *sinkNode) clearBuffers() {
 	}
 }
 
-func (n *sinkNode) emitRow2Sink(ctx pipeline.NodeContext) error {
+func (n *sinkNode) emitRow2Sink(ctx context.Context) error {
 	for _, ev := range n.eventBuffer {
 		n.rowBuffer = append(n.rowBuffer, ev.Row)
 	}
@@ -303,10 +322,14 @@ func (n *sinkNode) emitRow2Sink(ctx pipeline.NodeContext) error {
 
 // Receive receives the message from the previous node
 func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
+	_, err := n.HandleMessage(ctx, ctx.Message())
+	return err
+}
+
+func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
 	if n.status == TableStatusStopped {
-		return cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+		return false, cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	}
-	msg := ctx.Message()
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
@@ -315,32 +338,34 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 				n.status.Store(TableStatusRunning)
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
-				failpoint.Return(errors.New("processor sync resolved injected error"))
+				failpoint.Return(false, errors.New("processor sync resolved injected error"))
 			})
 			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
-				return errors.Trace(err)
+				return false, errors.Trace(err)
 			}
 			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
-			return nil
+			return true, nil
 		}
 		if err := n.emitEvent(ctx, event); err != nil {
-			return errors.Trace(err)
+			return false, errors.Trace(err)
 		}
 	case pipeline.MessageTypeTick:
 		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
-			return errors.Trace(err)
+			return false, errors.Trace(err)
 		}
 	case pipeline.MessageTypeCommand:
 		if msg.Command.Tp == pipeline.CommandTypeStop {
-			return n.stop(ctx)
+			if err := n.stop(ctx); err != nil {
+				return false, errors.Trace(err)
+			}
 		}
 	case pipeline.MessageTypeBarrier:
 		n.barrierTs = msg.BarrierTs
 		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
-			return errors.Trace(err)
+			return false, errors.Trace(err)
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {

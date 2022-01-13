@@ -61,6 +61,7 @@ type TablesChecker struct {
 	db     *sql.DB
 	dbinfo *dbutil.DBConfig
 	tables map[string][]string // schema => []table; if []table is empty, query tables from db
+
 }
 
 // NewTablesChecker returns a RealChecker.
@@ -124,7 +125,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 		for _, option := range opts {
 			switch option.state {
 			case StateWarning:
-				if len(r.State) == 0 {
+				if r.State != StateFailure {
 					r.State = StateWarning
 				}
 				e := NewError(tableMsg + option.errMessage)
@@ -184,6 +185,7 @@ func (c *TablesChecker) checkAST(stmt ast.StmtNode) []*incompatibilityOption {
 	}
 
 	var options []*incompatibilityOption
+
 	// check columns
 	for _, def := range st.Cols {
 		option := c.checkColumnDef(def)
@@ -215,6 +217,8 @@ func (c *TablesChecker) checkAST(stmt ast.StmtNode) []*incompatibilityOption {
 	}
 
 	// check options
+	// TODO: in fact, this doesn't work
+	// unsupported character report an error in `ParseOneStmt`
 	for _, opt := range st.Options {
 		option := c.checkTableOption(opt)
 		if option != nil {

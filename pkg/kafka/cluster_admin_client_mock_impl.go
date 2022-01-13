@@ -26,8 +26,12 @@ const (
 	defaultMockControllerID = 1
 )
 
-// defaultMaxMessageBytes specifies the default max message bytes.
-var defaultMaxMessageBytes = "1048576"
+var (
+	// defaultMaxMessageBytes specifies the default max message bytes.
+	defaultMaxMessageBytes = "10485760"
+	// defaultMaxMessageBytes specifies the default min insync replicas for broker and default topic.
+	defaultMinInsyncReplicas = "1"
+)
 
 // ClusterAdminClientMockImpl mock implements the admin client interface.
 type ClusterAdminClientMockImpl struct {
@@ -42,15 +46,22 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	topics := make(map[string]sarama.TopicDetail)
 	configEntries := make(map[string]*string)
 	configEntries[TopicMaxMessageBytesConfigName] = &defaultMaxMessageBytes
+	configEntries[MinInsyncReplicasConfigName] = &defaultMinInsyncReplicas
 	topics[DefaultMockTopicName] = sarama.TopicDetail{
 		NumPartitions: 3,
 		ConfigEntries: configEntries,
 	}
 
-	brokerConfigs := []sarama.ConfigEntry{{
-		Name:  BrokerMessageMaxBytesConfigName,
-		Value: defaultMaxMessageBytes,
-	}}
+	brokerConfigs := []sarama.ConfigEntry{
+		{
+			Name:  BrokerMessageMaxBytesConfigName,
+			Value: defaultMaxMessageBytes,
+		},
+		{
+			Name:  MinInsyncReplicasConfigName,
+			Value: defaultMinInsyncReplicas,
+		},
+	}
 
 	return &ClusterAdminClientMockImpl{
 		topics:        topics,
@@ -70,8 +81,16 @@ func (c *ClusterAdminClientMockImpl) DescribeCluster() (brokers []*sarama.Broker
 }
 
 // DescribeConfig return brokerConfigs directly.
-func (c *ClusterAdminClientMockImpl) DescribeConfig(_ sarama.ConfigResource) ([]sarama.ConfigEntry, error) {
-	return c.brokerConfigs, nil
+func (c *ClusterAdminClientMockImpl) DescribeConfig(resource sarama.ConfigResource) ([]sarama.ConfigEntry, error) {
+	var result []sarama.ConfigEntry
+	for _, name := range resource.ConfigNames {
+		for _, config := range c.brokerConfigs {
+			if name == config.Name {
+				result = append(result, config)
+			}
+		}
+	}
+	return result, nil
 }
 
 // CreateTopic adds topic into map.
@@ -83,6 +102,17 @@ func (c *ClusterAdminClientMockImpl) CreateTopic(topic string, detail *sarama.To
 // Close do nothing.
 func (c *ClusterAdminClientMockImpl) Close() error {
 	return nil
+}
+
+// SetMinInsyncReplicas sets the MinInsyncReplicas for broker and default topic.
+func (c *ClusterAdminClientMockImpl) SetMinInsyncReplicas(minInsyncReplicas string) {
+	c.topics[DefaultMockTopicName].ConfigEntries[MinInsyncReplicasConfigName] = &minInsyncReplicas
+
+	for i, config := range c.brokerConfigs {
+		if config.Name == MinInsyncReplicasConfigName {
+			c.brokerConfigs[i].Value = minInsyncReplicas
+		}
+	}
 }
 
 // GetDefaultMockTopicName returns the default topic name

@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,15 +16,19 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -33,8 +37,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/fsutil"
 	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/tcpserver"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
+	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
@@ -53,8 +60,12 @@ const (
 )
 
 // Server is the capture server
+// TODO: we need to make Server more unit testable and add more test cases.
+// Especially we need to decouple the HTTPServer out of Server.
 type Server struct {
 	capture      *capture.Capture
+	tcpServer    tcpserver.TCPServer
+	grpcService  *p2p.ServerWrapper
 	statusServer *http.Server
 	pdClient     pd.Client
 	etcdClient   *etcd.CDCEtcdClient
@@ -66,13 +77,35 @@ type Server struct {
 func NewServer(pdEndpoints []string) (*Server, error) {
 	conf := config.GetGlobalServerConfig()
 	log.Info("creating CDC server",
-		zap.Strings("pd-addrs", pdEndpoints),
+		zap.Strings("pd", pdEndpoints),
 		zap.Stringer("config", conf),
 	)
 
+	// This is to make communication between nodes possible.
+	// In other words, the nodes have to trust each other.
+	if len(conf.Security.CertAllowedCN) != 0 {
+		err := conf.Security.AddSelfCommonName()
+		if err != nil {
+			log.Error("status server set tls config failed", zap.Error(err))
+			return nil, errors.Trace(err)
+		}
+	}
+
+	// tcpServer is the unified frontend of the CDC server that serves
+	// both RESTful APIs and gRPC APIs.
+	// Note that we pass the TLS config to the tcpServer, so there is no need to
+	// configure TLS elsewhere.
+	tcpServer, err := tcpserver.NewTCPServer(conf.Addr, conf.Security)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	s := &Server{
 		pdEndpoints: pdEndpoints,
+		grpcService: p2p.NewServerWrapper(),
+		tcpServer:   tcpServer,
 	}
+
 	return s, nil
 }
 
@@ -167,14 +200,46 @@ func (s *Server) Run(ctx context.Context) error {
 	s.kvStorage = kvStore
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
-	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
+	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcService)
 
-	err = s.startStatusHTTP()
+	err = s.startStatusHTTP(s.tcpServer.HTTP1Listener())
 	if err != nil {
 		return err
 	}
 
 	return s.run(ctx)
+}
+
+// startStatusHTTP starts the HTTP server.
+// `lis` is a listener that gives us plain-text HTTP requests.
+// TODO can we decouple the HTTP server from the capture server?
+func (s *Server) startStatusHTTP(lis net.Listener) error {
+	conf := config.GetGlobalServerConfig()
+
+	// discard gin log output
+	gin.DefaultWriter = io.Discard
+
+	router := gin.New()
+
+	router.Use(logMiddleware())
+	// request will timeout after 10 second
+	router.Use(timeoutMiddleware(time.Second * 10))
+	router.Use(errorHandleMiddleware())
+
+	// Register APIs.
+	api.RegisterRoutes(router, s.capture, registry)
+
+	// No need to configure TLS because it is already handled by `s.tcpServer`.
+	s.statusServer = &http.Server{Handler: router}
+
+	go func() {
+		log.Info("http server is running", zap.String("addr", conf.Addr))
+		err := s.statusServer.Serve(lis)
+		if err != nil && err != http.ErrServerClosed {
+			log.Error("http server error", zap.Error(cerror.WrapError(cerror.ErrServeHTTP, err)))
+		}
+	}()
+	return nil
 }
 
 func (s *Server) etcdHealthChecker(ctx context.Context) error {
@@ -241,6 +306,25 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return kv.RunWorkerPool(cctx)
 	})
 
+	wg.Go(func() error {
+		return s.tcpServer.Run(cctx)
+	})
+
+	conf := config.GetGlobalServerConfig()
+	if conf.Debug.EnableNewScheduler {
+		grpcServer := grpc.NewServer()
+		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
+
+		wg.Go(func() error {
+			return grpcServer.Serve(s.tcpServer.GrpcListener())
+		})
+		wg.Go(func() error {
+			<-cctx.Done()
+			grpcServer.Stop()
+			return nil
+		})
+	}
+
 	return wg.Wait()
 }
 
@@ -255,6 +339,13 @@ func (s *Server) Close() {
 			log.Error("close status server", zap.Error(err))
 		}
 		s.statusServer = nil
+	}
+	if s.tcpServer != nil {
+		err := s.tcpServer.Close()
+		if err != nil {
+			log.Error("close tcp server", zap.Error(err))
+		}
+		s.tcpServer = nil
 	}
 }
 

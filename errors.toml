@@ -351,9 +351,19 @@ error = '''
 bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$, the length should no more than %d", eg, "simple-changefeed-task"
 '''
 
+["CDC:ErrInvalidDDLJob"]
+error = '''
+invalid ddl job(%d)
+'''
+
 ["CDC:ErrInvalidEtcdKey"]
 error = '''
 invalid key: %s
+'''
+
+["CDC:ErrInvalidHost"]
+error = '''
+host must be a URL or a host:port pair: %q
 '''
 
 ["CDC:ErrInvalidRecordKey"]
@@ -821,6 +831,11 @@ error = '''
 resolve locks failed
 '''
 
+["CDC:ErrRewindRequestBodyError"]
+error = '''
+failed to seek to the beginning of request body
+'''
+
 ["CDC:ErrS3StorageAPI"]
 error = '''
 s3 storage api
@@ -1054,6 +1069,11 @@ write ts conflict
 ["CDC:ErrWrongTableInfo"]
 error = '''
 wrong table info in unflatten, table id %d, index table id: %d
+'''
+
+["CDC:ErrZeroLengthResponseBody"]
+error = '''
+0-length response with status code: %d
 '''
 
 ["ErrConflictingFileLocks"]
