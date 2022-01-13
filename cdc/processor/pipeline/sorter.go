@@ -105,14 +105,17 @@ func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode b
 	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
 		if sortEngine == model.SortInFile {
 			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
-				zap.String("changefeed-id", ctx.ChangefeedVars().ID), zap.String("table-name", n.tableName))
+				zap.String("changefeed", ctx.ChangefeedVars().ID), zap.String("tableName", n.tableName))
 		}
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
 			startTs := ctx.ChangefeedVars().Info.StartTs
 			actorID := ctx.GlobalVars().SorterSystem.ActorID(uint64(n.tableID))
 			router := ctx.GlobalVars().SorterSystem.Router()
-			levelSorter := leveldb.NewSorter(ctx, n.tableID, startTs, router, actorID)
+			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
+			levelSorter := leveldb.NewSorter(
+				ctx, n.tableID, startTs, router, actorID, compactScheduler,
+				config.GetGlobalServerConfig().Debug.DB)
 			n.cleanID = actorID
 			n.cleanTask = levelSorter.CleanupTask()
 			n.cleanRouter = ctx.GlobalVars().SorterSystem.CleanerRouter()

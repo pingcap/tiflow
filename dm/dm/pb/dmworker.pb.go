@@ -7,13 +7,14 @@ import (
 	context "context"
 	encoding_binary "encoding/binary"
 	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+
 	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	io "io"
-	math "math"
-	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -277,6 +278,8 @@ const (
 	ErrorOp_Skip           ErrorOp = 1
 	ErrorOp_Replace        ErrorOp = 2
 	ErrorOp_Revert         ErrorOp = 3
+	ErrorOp_Inject         ErrorOp = 4
+	ErrorOp_List           ErrorOp = 5
 )
 
 var ErrorOp_name = map[int32]string{
@@ -284,6 +287,8 @@ var ErrorOp_name = map[int32]string{
 	1: "Skip",
 	2: "Replace",
 	3: "Revert",
+	4: "Inject",
+	5: "List",
 }
 
 var ErrorOp_value = map[string]int32{
@@ -291,6 +296,8 @@ var ErrorOp_value = map[string]int32{
 	"Skip":           1,
 	"Replace":        2,
 	"Revert":         3,
+	"Inject":         4,
+	"List":           5,
 }
 
 func (x ErrorOp) String() string {
@@ -2133,14 +2140,16 @@ func (m *PurgeRelayRequest) GetSubDir() string {
 }
 
 type OperateWorkerSchemaRequest struct {
-	Op       SchemaOp `protobuf:"varint,1,opt,name=op,proto3,enum=pb.SchemaOp" json:"op,omitempty"`
-	Task     string   `protobuf:"bytes,2,opt,name=task,proto3" json:"task,omitempty"`
-	Source   string   `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
-	Database string   `protobuf:"bytes,4,opt,name=database,proto3" json:"database,omitempty"`
-	Table    string   `protobuf:"bytes,5,opt,name=table,proto3" json:"table,omitempty"`
-	Schema   string   `protobuf:"bytes,6,opt,name=schema,proto3" json:"schema,omitempty"`
-	Flush    bool     `protobuf:"varint,7,opt,name=flush,proto3" json:"flush,omitempty"`
-	Sync     bool     `protobuf:"varint,8,opt,name=sync,proto3" json:"sync,omitempty"`
+	Op         SchemaOp `protobuf:"varint,1,opt,name=op,proto3,enum=pb.SchemaOp" json:"op,omitempty"`
+	Task       string   `protobuf:"bytes,2,opt,name=task,proto3" json:"task,omitempty"`
+	Source     string   `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	Database   string   `protobuf:"bytes,4,opt,name=database,proto3" json:"database,omitempty"`
+	Table      string   `protobuf:"bytes,5,opt,name=table,proto3" json:"table,omitempty"`
+	Schema     string   `protobuf:"bytes,6,opt,name=schema,proto3" json:"schema,omitempty"`
+	Flush      bool     `protobuf:"varint,7,opt,name=flush,proto3" json:"flush,omitempty"`
+	Sync       bool     `protobuf:"varint,8,opt,name=sync,proto3" json:"sync,omitempty"`
+	FromSource bool     `protobuf:"varint,9,opt,name=fromSource,proto3" json:"fromSource,omitempty"`
+	FromTarget bool     `protobuf:"varint,10,opt,name=fromTarget,proto3" json:"fromTarget,omitempty"`
 }
 
 func (m *OperateWorkerSchemaRequest) Reset()         { *m = OperateWorkerSchemaRequest{} }
@@ -2228,6 +2237,20 @@ func (m *OperateWorkerSchemaRequest) GetFlush() bool {
 func (m *OperateWorkerSchemaRequest) GetSync() bool {
 	if m != nil {
 		return m.Sync
+	}
+	return false
+}
+
+func (m *OperateWorkerSchemaRequest) GetFromSource() bool {
+	if m != nil {
+		return m.FromSource
+	}
+	return false
+}
+
+func (m *OperateWorkerSchemaRequest) GetFromTarget() bool {
+	if m != nil {
+		return m.FromTarget
 	}
 	return false
 }
@@ -4493,6 +4516,26 @@ func (m *OperateWorkerSchemaRequest) MarshalToSizedBuffer(dAtA []byte) (int, err
 	_ = i
 	var l int
 	_ = l
+	if m.FromTarget {
+		i--
+		if m.FromTarget {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x50
+	}
+	if m.FromSource {
+		i--
+		if m.FromSource {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x48
+	}
 	if m.Sync {
 		i--
 		if m.Sync {
@@ -5542,6 +5585,12 @@ func (m *OperateWorkerSchemaRequest) Size() (n int) {
 		n += 2
 	}
 	if m.Sync {
+		n += 2
+	}
+	if m.FromSource {
+		n += 2
+	}
+	if m.FromTarget {
 		n += 2
 	}
 	return n
@@ -10039,6 +10088,46 @@ func (m *OperateWorkerSchemaRequest) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.Sync = bool(v != 0)
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FromSource", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDmworker
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.FromSource = bool(v != 0)
+		case 10:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FromTarget", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDmworker
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.FromTarget = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipDmworker(dAtA[iNdEx:])

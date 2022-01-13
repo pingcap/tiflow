@@ -32,6 +32,8 @@ type mockScheduleDispatcherCommunicator struct {
 	mock.Mock
 	addTableRecords    map[model.CaptureID][]model.TableID
 	removeTableRecords map[model.CaptureID][]model.TableID
+
+	isBenchmark bool
 }
 
 func NewMockScheduleDispatcherCommunicator() *mockScheduleDispatcherCommunicator {
@@ -55,15 +57,17 @@ func (m *mockScheduleDispatcherCommunicator) DispatchTable(
 	captureID model.CaptureID,
 	isDelete bool,
 ) (done bool, err error) {
-	log.Info("dispatch table called",
-		zap.String("changefeed-id", changeFeedID),
-		zap.Int64("table-id", tableID),
-		zap.String("capture-id", captureID),
-		zap.Bool("is-delete", isDelete))
-	if !isDelete {
-		m.addTableRecords[captureID] = append(m.addTableRecords[captureID], tableID)
-	} else {
-		m.removeTableRecords[captureID] = append(m.removeTableRecords[captureID], tableID)
+	if !m.isBenchmark {
+		log.Info("dispatch table called",
+			zap.String("changefeed", changeFeedID),
+			zap.Int64("tableID", tableID),
+			zap.String("captureID", captureID),
+			zap.Bool("isDelete", isDelete))
+		if !isDelete {
+			m.addTableRecords[captureID] = append(m.addTableRecords[captureID], tableID)
+		} else {
+			m.removeTableRecords[captureID] = append(m.removeTableRecords[captureID], tableID)
+		}
 	}
 	args := m.Called(ctx, changeFeedID, tableID, captureID, isDelete)
 	return args.Bool(0), args.Error(1)
@@ -895,4 +899,41 @@ func TestAutoRebalanceOnCaptureOnline(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
+}
+
+func BenchmarkAddTable(b *testing.B) {
+	ctx := cdcContext.NewBackendContext4Test(false)
+
+	communicator := NewMockScheduleDispatcherCommunicator()
+	communicator.isBenchmark = true
+
+	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
+	communicator.On("DispatchTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything, false).
+		Return(true, nil)
+
+	dispatcher.captures = defaultMockCaptureInfos
+	dispatcher.captureStatus["capture-1"] = &captureStatus{
+		SyncStatus:   captureSyncFinished,
+		CheckpointTs: 100,
+		ResolvedTs:   100,
+	}
+	dispatcher.captureStatus["capture-2"] = &captureStatus{
+		SyncStatus:   captureSyncFinished,
+		CheckpointTs: 100,
+		ResolvedTs:   100,
+	}
+	dispatcher.captureStatus["capture-3"] = &captureStatus{
+		SyncStatus:   captureSyncFinished,
+		CheckpointTs: 100,
+		ResolvedTs:   100,
+	}
+	// Use a no-op logger to save IO cost
+	dispatcher.logger = zap.NewNop()
+
+	for i := 0; i < b.N; i++ {
+		done, err := dispatcher.addTable(ctx, model.TableID(i))
+		if !done || err != nil {
+			b.Fatalf("addTable failed")
+		}
+	}
 }

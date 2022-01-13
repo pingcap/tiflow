@@ -158,7 +158,7 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 	# source2.table2's dml fails
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Error 1054: Unknown column 'a' in 'field list'" 1
+		"Unknown column 'a' in 'field list'" 1
 
 	# WARN: set schema of source2.table2
 	# Actually it should be tb2(a,b), dml is {a: 9, b: 'iii'}

@@ -273,4 +273,15 @@ max-backups = 1
 
 	err = StrictDecodeFile(configPath, "test", conf, "unknown")
 	c.Assert(err, check.ErrorMatches, ".*contained unknown configuration options: unknown2.*")
+
+	configContent = fmt.Sprintf(`
+data-dir = "%+v"
+[debug]
+unknown = 1
+`, dataDir)
+	err = os.WriteFile(configPath, []byte(configContent), 0o644)
+	c.Assert(err, check.IsNil)
+
+	err = StrictDecodeFile(configPath, "test", conf, "debug")
+	c.Assert(err, check.IsNil)
 }
