@@ -625,6 +625,7 @@ const (
 	codeSchedulerWorkerExist
 	codeSchedulerWorkerNotExist
 	codeSchedulerWorkerOnline
+	codeSchedulerWorkerNotFree
 	codeSchedulerWorkerInvalidTrans
 	codeSchedulerSourceCfgExist
 	codeSchedulerSourceCfgNotExist
@@ -1276,6 +1277,7 @@ var (
 	ErrSchedulerWorkerExist                  = New(codeSchedulerWorkerExist, ClassScheduler, ScopeInternal, LevelMedium, "dm-worker with name %s already exists", "")
 	ErrSchedulerWorkerNotExist               = New(codeSchedulerWorkerNotExist, ClassScheduler, ScopeInternal, LevelMedium, "dm-worker with name %s not exists", "")
 	ErrSchedulerWorkerOnline                 = New(codeSchedulerWorkerOnline, ClassScheduler, ScopeInternal, LevelMedium, "dm-worker with name %s is still online", "Please shut it down first.")
+	ErrSchedulerWorkerNotFree                = New(codeSchedulerWorkerNotFree, ClassScheduler, ScopeInternal, LevelLow, "dm-worker with name %s not free", "")
 	ErrSchedulerWorkerInvalidTrans           = New(codeSchedulerWorkerInvalidTrans, ClassScheduler, ScopeInternal, LevelMedium, "invalid stage transformation for dm-worker %s, from %s to %s", "")
 	ErrSchedulerSourceCfgExist               = New(codeSchedulerSourceCfgExist, ClassScheduler, ScopeInternal, LevelMedium, "source config with ID %s already exists", "")
 	ErrSchedulerSourceCfgNotExist            = New(codeSchedulerSourceCfgNotExist, ClassScheduler, ScopeInternal, LevelMedium, "source config with ID %s not exists", "")

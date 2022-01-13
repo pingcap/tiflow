@@ -353,6 +353,10 @@ func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName 
 		return terror.ErrSchedulerWorkerNotExist.Generate(workerName)
 	}
 
+	if w.stage != WorkerFree {
+		return terror.ErrSchedulerWorkerNotFree.Generate(workerName)
+	}
+
 	err := s.startSource(cfg)
 	if err != nil {
 		return err
