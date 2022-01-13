@@ -147,7 +147,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 						}
 					}
 					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
-					// Otherwise the pipeline would deadlock.
+					// Otherwise, the pipeline would deadlock.
 					err := n.flowController.Consume(commitTs, size, func() error {
 						if lastCRTs > lastSentResolvedTs {
 							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
