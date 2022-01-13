@@ -36,7 +36,7 @@ import (
 type Operator struct {
 	uuid      string // add a UUID, make it more friendly to be traced in log
 	op        pb.ErrorOp
-	events    []*replication.BinlogEvent // startLocation -> events
+	events    []*replication.BinlogEvent // ddls -> events
 	originReq *pb.HandleWorkerErrorRequest
 }
 

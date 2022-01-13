@@ -1947,12 +1947,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				}
 			}
 			// set endLocation.Suffix=0 of last replace or inject event
-			// also redirect stream to next event
 			if currentLocation.Suffix > 0 && e.Header.EventSize > 0 {
 				currentLocation.Suffix = 0
 				s.isReplacingOrInjectingErr = false
 				s.locations.reset(currentLocation)
 				if !s.errOperatorHolder.IsInject(startLocation) {
+					// replace operator need redirect to currentLocation
 					if err = s.streamerController.RedirectStreamer(tctx, currentLocation); err != nil {
 						return err
 					}
