@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 type opType byte
@@ -83,7 +84,9 @@ type job struct {
 	// sql example: drop table `s1`.`t1`, `s2`.`t2`.
 	sourceTbls      map[string][]*filter.Table
 	targetTable     *filter.Table
-	dml             *DML
+	dml             *sqlmodel.RowChange
+	dmlQueueKey     string
+	safeMode        bool
 	retry           bool
 	location        binlog.Location // location of last received (ROTATE / QUERY / XID) event, for global/table checkpoint
 	startLocation   binlog.Location // start location of the sql in binlog, for handle_error
@@ -112,13 +115,14 @@ func (j *job) String() string {
 	return fmt.Sprintf("tp: %s, flushSeq: %d, dml: %s, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, j.flushSeq, dmlStr, j.ddls, j.location, j.startLocation, j.currentLocation)
 }
 
-func newDMLJob(tp opType, sourceTable, targetTable *filter.Table, dml *DML, ec *eventContext) *job {
+func newDMLJob(tp opType, sourceTable, targetTable *filter.Table, dml *sqlmodel.RowChange, ec *eventContext) *job {
 	return &job{
 		tp:          tp,
 		sourceTbls:  map[string][]*filter.Table{sourceTable.Schema: {sourceTable}},
 		targetTable: targetTable,
 		dml:         dml,
 		retry:       true,
+		safeMode:    ec.safeMode,
 
 		location:        *ec.lastLocation,
 		startLocation:   *ec.startLocation,

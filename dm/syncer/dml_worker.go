@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 // DMLWorker is used to sync dml.
@@ -132,10 +133,10 @@ func (w *DMLWorker) run() {
 			j.flushWg.Wait()
 			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
 		default:
-			queueBucket := int(utils.GenHashKey(j.dml.key)) % w.workerCount
+			queueBucket := int(utils.GenHashKey(j.dmlQueueKey)) % w.workerCount
 			w.addCountFunc(false, queueBucketMapping[queueBucket], j.tp, 1, j.targetTable)
 			startTime := time.Now()
-			w.logger.Debug("queue for key", zap.Int("queue", queueBucket), zap.String("key", j.dml.key))
+			w.logger.Debug("queue for key", zap.Int("queue", queueBucket), zap.String("key", j.dmlQueueKey))
 			jobChs[queueBucket] <- j
 			metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[queueBucket], w.source).Observe(time.Since(startTime).Seconds())
 		}
@@ -199,7 +200,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		affect int
 		db     = w.toDBConns[queueID]
 		err    error
-		dmls   = make([]*DML, 0, len(jobs))
+		dmls   = make([]*sqlmodel.RowChange, 0, len(jobs))
 	)
 
 	defer func() {
@@ -227,10 +228,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		}
 	})
 
-	for _, j := range jobs {
-		dmls = append(dmls, j.dml)
-	}
-	queries, args := w.genSQLs(dmls)
+	queries, args := w.genSQLs(jobs)
 	failpoint.Inject("WaitUserCancel", func(v failpoint.Value) {
 		t := v.(int)
 		time.Sleep(time.Duration(t) * time.Second)
@@ -248,17 +246,30 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 }
 
 // genSQLs generate SQLs in single row mode or multiple rows mode.
-func (w *DMLWorker) genSQLs(dmls []*DML) ([]string, [][]interface{}) {
+func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
 	if w.multipleRows {
-		return genDMLsWithSameOp(dmls)
+		return genDMLsWithSameOp(jobs)
 	}
 
-	queries := make([]string, 0, len(dmls))
-	args := make([][]interface{}, 0, len(dmls))
-	for _, dml := range dmls {
-		query, arg := dml.genSQL()
-		queries = append(queries, query...)
-		args = append(args, arg...)
+	queries := make([]string, 0, len(jobs))
+	args := make([][]interface{}, 0, len(jobs))
+	for _, j := range jobs {
+		var query string
+		var arg []interface{}
+		switch j.dml.Type() {
+		case sqlmodel.RowChangeInsert:
+			if j.safeMode {
+				query, arg = j.dml.GenSQL(sqlmodel.DMLReplace)
+			} else {
+				query, arg = j.dml.GenSQL(sqlmodel.DMLInsert)
+			}
+		case sqlmodel.RowChangeUpdate:
+			query, arg = j.dml.GenSQL(sqlmodel.DMLUpdate)
+		case sqlmodel.RowChangeDelete:
+			query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
+		}
+		queries = append(queries, query)
+		args = append(args, arg)
 	}
 	return queries, args
 }

@@ -73,6 +73,7 @@ import (
 	sm "github.com/pingcap/tiflow/dm/syncer/safe-mode"
 	"github.com/pingcap/tiflow/dm/syncer/shardddl"
 	"github.com/pingcap/tiflow/pkg/errorutil"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 var (
@@ -2245,26 +2246,15 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	}
 
 	extRows := generateExtendColumn(originRows, s.tableRouter, sourceTable, s.cfg.SourceID)
-	rows := originRows
-	if extRows != nil {
-		rows = extRows
-	}
-
-	prunedColumns, prunedRows, err := pruneGeneratedColumnDML(tableInfo, rows)
-	if err != nil {
-		return err
-	}
 
 	var (
-		dmls    []*DML
+		dmls    []*sqlmodel.RowChange
 		jobType opType
 	)
 
 	param := &genDMLParam{
-		targetTableID:   utils.GenTableID(targetTable),
-		data:            prunedRows,
+		targetTable:     targetTable,
 		originalData:    originRows,
-		columns:         prunedColumns,
 		sourceTableInfo: tableInfo,
 		sourceTable:     sourceTable,
 		extendData:      extRows,

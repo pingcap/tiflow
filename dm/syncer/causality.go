@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb/sessionctx"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
@@ -79,7 +80,7 @@ func (c *causality) run() {
 			c.relation.gc(j.flushSeq)
 			continue
 		default:
-			keys := j.dml.identifyKeys(c.sessCtx)
+			keys := j.dml.CausalityKeys()
 
 			// detectConflict before add
 			if c.detectConflict(keys) {
@@ -87,8 +88,8 @@ func (c *causality) run() {
 				c.outCh <- newConflictJob(c.workerCount)
 				c.relation.clear()
 			}
-			j.dml.key = c.add(keys)
-			c.logger.Debug("key for keys", zap.String("key", j.dml.key), zap.Strings("keys", keys))
+			j.dmlQueueKey = c.add(keys)
+			c.logger.Debug("key for keys", zap.String("key", j.dmlQueueKey), zap.Strings("keys", keys))
 		}
 		metrics.ConflictDetectDurationHistogram.WithLabelValues(c.task, c.source).Observe(time.Since(startTime).Seconds())
 

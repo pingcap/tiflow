@@ -91,7 +91,7 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 			Length: types.UnspecifiedLength,
 		}},
 	}
-	downTi := schema.GetDownStreamTi(ti, ti)
+	downTi := schema.GetDownStreamTI(ti, ti)
 	c.Assert(downTi, NotNil)
 
 	var dml *DML
@@ -208,7 +208,7 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 			Length: types.UnspecifiedLength,
 		}},
 	}
-	downTi := schema.GetDownStreamTi(ti, ti)
+	downTi := schema.GetDownStreamTI(ti, ti)
 	c.Assert(downTi, NotNil)
 
 	testCases := []struct {

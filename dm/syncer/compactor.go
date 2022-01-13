@@ -89,17 +89,17 @@ func (c *compactor) run() {
 
 			// set safeMode when receive first job
 			if len(c.buffer) == 0 {
-				c.safeMode = j.dml.safeMode
+				c.safeMode = j.safeMode
 			}
 			// if dml has no PK/NOT NULL UK, do not compact it.
-			if j.dml.identifyColumns() == nil {
+			if !j.dml.HasNotNullUniqueIdx() {
 				c.buffer = append(c.buffer, j)
 				continue
 			}
 
 			// if update job update its identify keys, turn it into delete + insert
-			if j.dml.op == update && j.dml.updateIdentify() {
-				delDML, insertDML := updateToDelAndInsert(j.dml)
+			if j.dml.IsIdentityUpdated() {
+				delDML, insertDML := j.dml.Split()
 				delJob := j.clone()
 				delJob.tp = del
 				delJob.dml = delDML
@@ -142,7 +142,7 @@ func (c *compactor) flushBuffer() {
 		if j != nil {
 			// set safemode for all jobs by first job in buffer.
 			// or safemode for insert(delete + insert = insert with safemode)
-			j.dml.safeMode = c.safeMode || j.dml.safeMode
+			j.safeMode = c.safeMode || j.safeMode
 			c.outCh <- j
 		}
 	}
@@ -162,7 +162,7 @@ func (c *compactor) flushBuffer() {
 // DELETE + UPDATE => X			_|
 // .
 func (c *compactor) compactJob(j *job) {
-	tableName := j.dml.targetTableID
+	tableName := j.dml.TargetTableID()
 	tableKeyMap, ok := c.keyMap[tableName]
 	if !ok {
 		// do not alloc a large buffersize, otherwise if the downstream latency is low
@@ -171,7 +171,7 @@ func (c *compactor) compactJob(j *job) {
 		tableKeyMap = c.keyMap[tableName]
 	}
 
-	key := j.dml.identifyKey()
+	key := j.dml.IdentityKey()
 
 	failpoint.Inject("DownstreamIdentifyKeyCheckInCompact", func(v failpoint.Value) {
 		value, err := strconv.Atoi(key)
@@ -197,20 +197,17 @@ func (c *compactor) compactJob(j *job) {
 		if prevJob.tp == insert {
 			// INSERT + UPDATE => INSERT
 			j.tp = insert
-			j.dml.oldValues = nil
-			j.dml.originOldValues = nil
-			j.dml.op = insert
+			j.dml.Reduce(prevJob.dml)
 			// DELETE + INSERT + UPDATE => INSERT with safemode
-			j.dml.safeMode = prevJob.dml.safeMode
+			j.safeMode = prevJob.safeMode
 		} else if prevJob.tp == update {
 			// UPDATE + UPDATE => UPDATE
-			j.dml.oldValues = prevJob.dml.oldValues
-			j.dml.originOldValues = prevJob.dml.originOldValues
+			j.dml.Reduce(prevJob.dml)
 		}
 	case insert:
 		if prevJob.tp == del {
 			// DELETE + INSERT => INSERT with safemode
-			j.dml.safeMode = true
+			j.safeMode = true
 		}
 	case del:
 		// do nothing because anything + DELETE => DELETE
