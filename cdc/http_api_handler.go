@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/httputil"
 	"go.uber.org/zap"
 )
 
@@ -99,7 +98,7 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 			writeInternalServerErrorJSON(w, err)
 			return
 		}
-		if !httputil.IsFiltered(state, cfInfo.State) {
+		if !isFiltered(state, cfInfo.State) {
 			continue
 		}
 		cfStatus, _, err := s.etcdClient.GetChangeFeedStatus(req.Context(), changefeedID)
@@ -143,4 +142,22 @@ func writeErrorJSON(w http.ResponseWriter, statusCode int, cerr errors.Error) {
 	if err != nil {
 		log.Error("fail to write data", zap.Error(err))
 	}
+}
+
+// isFiltered return true if the given feedState matches the whiteList.
+func isFiltered(whiteList string, feedState model.FeedState) bool {
+	if whiteList == "all" {
+		return true
+	}
+	if whiteList == "" {
+		switch feedState {
+		case model.StateNormal:
+			return true
+		case model.StateStopped:
+			return true
+		case model.StateFailed:
+			return true
+		}
+	}
+	return whiteList == string(feedState)
 }
