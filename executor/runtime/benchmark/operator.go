@@ -22,9 +22,16 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
-type baseOp struct{}
+type baseOp struct {
+	paused bool
+}
+
+func (o *baseOp) Paused() bool {
+	return o.paused
+}
 
 func (o *baseOp) Pause() error {
+	o.paused = true
 	return nil
 }
 
@@ -264,6 +271,9 @@ func (o *opSink) Prepare(_ *runtime.TaskContext) (runtime.TaskRescUnit, error) {
 func (o *opSink) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]runtime.Chunk, bool, error) {
 	r.End = time.Now()
 	if test.GetGlobalTestFlag() {
+		if o.Paused() {
+			return nil, false, nil
+		}
 		//	log.L().Info("send record", zap.Int32("table", r.Tid), zap.Int32("pk", r.payload.(*pb.Record).Pk))
 		ctx.TestCtx.SendRecord(r)
 		return nil, false, nil
