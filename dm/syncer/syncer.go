@@ -1869,7 +1869,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		tctx.L().Debug("receive binlog event", zap.Reflect("header", e.Header))
 
-		// TODO: support all event
+		// support QueryEvent and RowsEvent
 		// we calculate startLocation and endLocation(currentLocation) for Query event here
 		// set startLocation empty for other events to avoid misuse
 		startLocation = binlog.Location{}
