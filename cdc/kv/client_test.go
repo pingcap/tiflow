@@ -305,8 +305,8 @@ func newMockServiceSpecificAddr(
 	}
 	// Some tests rely on connect timeout and ping test, so we use a smaller num
 	kasp := keepalive.ServerParameters{
-		MaxConnectionIdle:     30 * time.Second, // If a client is idle for 30 seconds, send a GOAWAY
-		MaxConnectionAge:      30 * time.Second, // If any connection is alive for more than 30 seconds, send a GOAWAY
+		MaxConnectionIdle:     10 * time.Second, // If a client is idle for 20 seconds, send a GOAWAY
+		MaxConnectionAge:      10 * time.Second, // If any connection is alive for more than 20 seconds, send a GOAWAY
 		MaxConnectionAgeGrace: 5 * time.Second,  // Allow 5 seconds for pending RPCs to complete before forcibly closing connections
 		Time:                  3 * time.Second,  // Ping the client if it is idle for 5 seconds to ensure the connection is still active
 		Timeout:               1 * time.Second,  // Wait 1 second for the ping ack before assuming the connection is dead
@@ -373,7 +373,7 @@ func (s *clientSuite) TestConnectOfflineTiKV(c *check.C) {
 	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	// Take care of the eventCh, it's used to output resolvedTs event or kv event
 	// It will stuck the normal routine
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -471,7 +471,7 @@ func (s *clientSuite) TestRecvLargeMessageSize(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -569,7 +569,7 @@ func (s *clientSuite) TestHandleError(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -726,7 +726,7 @@ func (s *clientSuite) TestCompatibilityWithSameConn(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
 	go func() {
@@ -793,7 +793,7 @@ func (s *clientSuite) TestClusterIDMismatch(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
@@ -859,7 +859,7 @@ func (s *clientSuite) testHandleFeedEvent(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1315,7 +1315,7 @@ func (s *clientSuite) TestStreamSendWithError(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1425,7 +1425,7 @@ func (s *clientSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 40)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1554,7 +1554,7 @@ func (s *clientSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1839,7 +1839,7 @@ func (s *clientSuite) TestNoPendingRegionError(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 
 	wg.Add(1)
 	go func() {
@@ -1916,7 +1916,7 @@ func (s *clientSuite) TestDropStaleRequest(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2025,7 +2025,7 @@ func (s *clientSuite) TestResolveLock(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2125,7 +2125,7 @@ func (s *clientSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Chan
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 20)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
 	go func() {
@@ -2279,7 +2279,7 @@ func (s *clientSuite) testEventAfterFeedStop(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2458,7 +2458,7 @@ func (s *clientSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2672,7 +2672,7 @@ func (s *clientSuite) TestResolveLockNoCandidate(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2766,7 +2766,7 @@ func (s *clientSuite) TestFailRegionReentrant(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2847,7 +2847,7 @@ func (s *clientSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2913,7 +2913,7 @@ func (s *clientSuite) testClientErrNoPendingRegion(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2987,7 +2987,7 @@ func (s *clientSuite) testKVClientForceReconnect(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3252,7 +3252,7 @@ func (s *clientSuite) TestEvTimeUpdate(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3373,7 +3373,7 @@ func (s *clientSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3464,7 +3464,7 @@ func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	eventCh := make(chan model.RegionFeedEvent, 50)
 	baseAllocatedID := currentRequestID()
 
 	wg.Add(1)
