@@ -625,7 +625,6 @@ const (
 	codeSchedulerWorkerExist
 	codeSchedulerWorkerNotExist
 	codeSchedulerWorkerOnline
-	codeSchedulerWorkerNotFree
 	codeSchedulerWorkerInvalidTrans
 	codeSchedulerSourceCfgExist
 	codeSchedulerSourceCfgNotExist
@@ -653,6 +652,7 @@ const (
 	codeSchedulerStartRelayOnBound
 	codeSchedulerStopRelayOnBound
 	codeSchedulerPauseTaskForTransferSource
+	codeSchedulerWorkerNotFree
 )
 
 // dmctl error code.
