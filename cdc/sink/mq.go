@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -55,12 +56,13 @@ type mqSink struct {
 	filter         *filter.Filter
 	protocol       config.Protocol
 
-	partitionNum        int32
-	partitionInput      []chan mqEvent
-	partitionResolvedTs []uint64
-	tableCheckpointTs   map[model.TableID]uint64
-	resolvedNotifier    *notify.Notifier
-	resolvedReceiver    *notify.Receiver
+	partitionNum         int32
+	partitionInput       []chan mqEvent
+	partitionResolvedTs  []uint64
+	tableCheckpointTsMap sync.Map
+	tableCheckpointTs    map[model.TableID]uint64
+	resolvedNotifier     *notify.Notifier
+	resolvedReceiver     *notify.Receiver
 
 	statistics *Statistics
 }
@@ -110,9 +112,10 @@ func newMqSink(
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
-		tableCheckpointTs:   make(map[model.TableID]uint64),
-		resolvedNotifier:    notifier,
-		resolvedReceiver:    resolvedReceiver,
+
+		tableCheckpointTs: make(map[model.TableID]uint64),
+		resolvedNotifier:  notifier,
+		resolvedReceiver:  resolvedReceiver,
 
 		statistics: NewStatistics(ctx, "MQ", opts),
 	}
@@ -154,7 +157,9 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 }
 
 func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
-	if checkpointTs, ok := k.tableCheckpointTs[tableID]; ok && resolvedTs <= checkpointTs {
+	v, ok := k.tableCheckpointTsMap.Load(tableID)
+	checkpointTs := v.(uint64)
+	if ok && resolvedTs <= checkpointTs {
 		return checkpointTs, nil
 	}
 
@@ -169,28 +174,28 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableI
 		}
 	}
 
-	// waiting for all row events are sent to mq producer
-flushLoop:
+	k.tableCheckpointTs[tableID] = resolvedTs
+	k.statistics.PrintStatus(ctx)
+	return resolvedTs, nil
+}
+
+func (k *mqSink) bgFlushTs(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return 0, ctx.Err()
+			return ctx.Err()
 		case <-k.resolvedReceiver.C:
 			for i := 0; i < int(k.partitionNum); i++ {
 				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
 					continue flushLoop
 				}
 			}
-			break flushLoop
+			err := k.mqProducer.Flush(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
-	err := k.mqProducer.Flush(ctx)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	k.tableCheckpointTs[tableID] = resolvedTs
-	k.statistics.PrintStatus(ctx)
-	return resolvedTs, nil
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
