@@ -142,12 +142,21 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	// we must call flowController.Release immediately after we call
+	// FlushRowChangedEvents to prevent deadlock cause by checkpointTs
+	// fall back
+	n.flowController.Release(checkpointTs)
+
+	// the checkpointTs may fall back in some situation such as:
+	//   1. This table is newly added to the processor
+	//   2. There is one table in the processor that has a smaller
+	//   checkpointTs than this one
 	if checkpointTs <= n.checkpointTs {
 		return nil
 	}
 	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
 
-	n.flowController.Release(checkpointTs)
 	return nil
 }
 
