@@ -2111,7 +2111,7 @@ func (s *clientSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Chan
 		logPanic = log.Panic
 	}()
 
-	// This inject will make regionWorker exit directly and trigger exection line cancel when meet error
+	// This inject will make regionWorker exit directly and trigger execution line cancel when meet error
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/kv/kvClientErrUnreachable", "return(true)")
 	c.Assert(err, check.IsNil)
 	defer func() {
