@@ -240,8 +240,8 @@ export type SubTaskStatus = {
   name: string
   source_name: string
   worker_name: string
-  stage: string
-  unit: string
+  stage: TaskStage
+  unit: TaskUnit
   unresolved_ddl_lock_id?: string
   load_status?: LoadStatus | null
   sync_status?: SyncStatus | null
@@ -257,3 +257,47 @@ export const {
   useDmapiGetSchemaListByTaskAndSourceQuery,
   useDmapiGetTableListByTaskAndSourceQuery,
 } = injectedRtkApi
+
+export enum TaskUnit {
+  InvalidUnit = 'InvalidUnit',
+  Check = 'Check',
+  Dump = 'Dump',
+  Load = 'Load',
+  Sync = 'Sync',
+  Relay = 'Relay',
+}
+
+export enum TaskStage {
+  InvalidStage = 'InvalidStage',
+  New = 'New',
+  Running = 'Running',
+  Paused = 'Paused',
+  Stopped = 'Stopped',
+  Finished = 'Finished',
+  Pausing = 'Pausing',
+  Resuming = 'Resuming',
+  Stopping = 'Stopping',
+}
+
+// https://github.com/pingcap/tiflow/blob/9261014edd93902d1b0bcb473aec911e80901721/dm/dm/ctl/master/query_status.go#L130
+export const calculateTaskStatus = (subtasks: SubTaskStatus[]) => {
+  // TODO Error status
+
+  if (subtasks.some(subtask => subtask.stage === TaskStage.Paused)) {
+    return TaskStage.Paused
+  }
+
+  if (subtasks.every(subtask => subtask.stage === TaskStage.New)) {
+    return TaskStage.New
+  }
+
+  if (subtasks.every(subtask => subtask.stage === TaskStage.Finished)) {
+    return TaskStage.Finished
+  }
+
+  if (subtasks.every(subtask => subtask.stage === TaskStage.Stopped)) {
+    return TaskStage.Stopped
+  }
+
+  return TaskStage.Running
+}

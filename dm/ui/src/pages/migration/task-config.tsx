@@ -12,6 +12,8 @@ import {
   Dropdown,
   Menu,
   Modal,
+  message,
+  TableColumnsType,
 } from '~/uikit'
 import {
   RedoOutlined,
@@ -20,18 +22,22 @@ import {
   ImportOutlined,
   DownOutlined,
   SearchOutlined,
+  PlayCircleOutlined,
 } from '~/uikit/icons'
 import i18n from '~/i18n'
 import { useDmapiGetTaskConfigListQuery } from '~/models/taskConfig'
-import { Task } from '~/models/task'
+import { Task, useDmapiStartTaskMutation } from '~/models/task'
 import { unimplemented } from '~/utils/unimplemented'
+import { useFuseSearch } from '~/utils/search'
 import CreateTaskConfig from '~/components/CreateTaskConfig'
 import BatchImportTaskConfig from '~/components/BatchImportTaskConfig'
-import { useFuseSearch } from '~/utils/search'
 
 const TaskConfig: React.FC = () => {
   const [t] = useTranslation()
-  const [isModalVisible, setIsModalVisible] = useState(false)
+  const [isImportTaskModalVisible, setIsImportTaskModalVisible] =
+    useState(false)
+  const [selected, setSelected] = useState<Task[]>([])
+
   const navigate = useNavigate()
   const loc = useLocation()
 
@@ -39,12 +45,20 @@ const TaskConfig: React.FC = () => {
     undefined,
     { skip: loc.hash === '#new' }
   )
+  const [startTask] = useDmapiStartTaskMutation()
+
+  const rowSelection = {
+    selectedRowKeys: selected.map(i => i.name),
+    onChange: (selectedRowKeys: React.Key[], selectedRows: Task[]) => {
+      setSelected(selectedRows)
+    },
+  }
 
   const dataSource = data?.data
   const { result, setKeyword } = useFuseSearch(dataSource, {
     keys: ['name'],
   })
-  const columns = [
+  const columns: TableColumnsType<Task> = [
     {
       title: t('name'),
       dataIndex: 'name',
@@ -55,17 +69,14 @@ const TaskConfig: React.FC = () => {
     },
     {
       title: t('source info'),
-      render(data: Task) {
-        const { source_config } = data
-
-        if (source_config?.source_conf?.length > 0) {
-          return t('{{val}} and other {{count}}', {
-            val: source_config.source_conf[0].source_name,
-            count: source_config.source_conf.length,
-          })
-        }
-
-        return '-'
+      dataIndex: 'source_config',
+      render(sourceConfig) {
+        return sourceConfig.source_conf?.length > 0
+          ? t('{{val}} and {{count}} others', {
+              val: `${sourceConfig.source_conf[0].source_name}`,
+              count: sourceConfig.source_conf.length,
+            })
+          : '-'
       },
     },
     {
@@ -77,17 +88,13 @@ const TaskConfig: React.FC = () => {
     {
       title: t('migrate rules'),
       render(data: Task) {
-        return t('{{count}} rules', {
-          count: data.table_migrate_rule.length,
-        })
+        return data.table_migrate_rule.length
       },
     },
     {
       title: t('event filter'),
       render(data: Task) {
-        return t('{{count}} filters', {
-          count: Object.keys(data.binlog_filter_rule || {}).length,
-        })
+        return Object.keys(data.binlog_filter_rule || {}).length
       },
     },
     {
@@ -106,6 +113,24 @@ const TaskConfig: React.FC = () => {
       },
     },
   ]
+
+  const handleStartTask = async (removeMeta: boolean) => {
+    if (selected.length === 0) {
+      Modal.error({
+        title: t('error'),
+        content: t('please select at least one task'),
+      })
+      return
+    }
+    const key = 'startTask-' + Date.now()
+    message.loading({ content: t('requesting'), key })
+    await Promise.all(
+      selected.map(task => {
+        return startTask({ task, remove_meta: removeMeta }).unwrap()
+      })
+    )
+    message.success({ content: t('request success'), key })
+  }
 
   if (loc.hash === '#new') {
     return <CreateTaskConfig />
@@ -139,9 +164,28 @@ const TaskConfig: React.FC = () => {
                 </Menu>
               }
             >
-              <Button onClick={() => setIsModalVisible(true)}>
-                <ImportOutlined />
+              <Button
+                onClick={() => setIsImportTaskModalVisible(true)}
+                icon={<ImportOutlined />}
+              >
                 {t('import')} <DownOutlined />
+              </Button>
+            </Dropdown>
+
+            <Dropdown
+              overlay={
+                <Menu>
+                  <Menu.Item onClick={() => handleStartTask(true)} key="1">
+                    {t('start task and remove meta data')}
+                  </Menu.Item>
+                </Menu>
+              }
+            >
+              <Button
+                icon={<PlayCircleOutlined />}
+                onClick={() => handleStartTask(false)}
+              >
+                {t('start task')} <DownOutlined />
               </Button>
             </Dropdown>
           </Space>
@@ -163,17 +207,21 @@ const TaskConfig: React.FC = () => {
         columns={columns}
         loading={isFetching}
         rowKey="name"
+        rowSelection={rowSelection}
         pagination={{
           total: data?.total,
+          onChange: () => {
+            setSelected([])
+          },
         }}
       />
 
       <Modal
         title={t('import task config')}
-        visible={isModalVisible}
+        visible={isImportTaskModalVisible}
         footer={null}
         destroyOnClose
-        onCancel={() => setIsModalVisible(false)}
+        onCancel={() => setIsImportTaskModalVisible(false)}
       >
         <BatchImportTaskConfig />
       </Modal>
