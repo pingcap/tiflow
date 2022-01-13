@@ -119,7 +119,7 @@ func (c *MasterClient) rpcWrap(ctx context.Context, req interface{}, respPointer
 	c.clientsLock.RLock()
 	defer c.clientsLock.RUnlock()
 	var err error
-	for _, cliH := range c.clients {
+	for addr, cliH := range c.clients {
 		params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)}
 		results := reflect.ValueOf(cliH.client).MethodByName(methodName).Call(params)
 		// result's inner types should be (*pb.XXResponse, error), which is same as pb.MasterClient.XXRPCMethod
@@ -134,7 +134,7 @@ func (c *MasterClient) rpcWrap(ctx context.Context, req interface{}, respPointer
 		if err != nil {
 			log.L().Error("rpc to server master failed",
 				zap.Any("payload", req), zap.String("method", methodName),
-				zap.Error(err),
+				zap.String("addr", addr), zap.Error(err),
 			)
 		} else {
 			return nil

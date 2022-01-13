@@ -62,7 +62,7 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 		}
 		if leader != nil {
 			log.L().Info("start to watch server master leader",
-				zap.String("leader-name", leader.Name), zap.Strings("addrs", leader.Addrs))
+				zap.String("leader-name", leader.Name), zap.String("addr", leader.AdvertiseAddr))
 			s.watchLeader(ctx, leader, rev)
 			log.L().Info("server master leader changed")
 		}
@@ -149,7 +149,7 @@ func (s *Server) watchLeader(ctx context.Context, m *Member, rev int64) {
 	m.IsServLeader = true
 	m.IsEtcdLeader = true
 	s.leader.Store(m)
-	s.createLeaderClient(ctx, m.Addrs)
+	s.createLeaderClient(ctx, []string{m.AdvertiseAddr})
 	defer s.leader.Store(&Member{})
 
 	watcher := clientv3.NewWatcher(s.etcdClient)

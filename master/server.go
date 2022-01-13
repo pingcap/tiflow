@@ -47,6 +47,7 @@ type Server struct {
 		m []*Member
 	}
 	leaderClient *client.MasterClient
+	membership   Membership
 
 	// sched scheduler
 	executorManager *ExecutorManager
@@ -108,12 +109,12 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 		defer s.members.RUnlock()
 		addrs := make([]string, 0, len(s.members.m))
 		for _, member := range s.members.m {
-			addrs = append(addrs, strings.Join(member.Addrs, ","))
+			addrs = append(addrs, member.AdvertiseAddr)
 		}
 		resp.Addrs = addrs
 		leader, exists := s.checkLeader()
 		if exists {
-			resp.Leader = strings.Join(leader.Addrs, ",")
+			resp.Leader = leader.AdvertiseAddr
 		}
 	}
 	return resp, err
@@ -370,8 +371,8 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 // member returns member information of the server
 func (s *Server) member() string {
 	m := &Member{
-		Name:  s.name(),
-		Addrs: []string{s.cfg.AdvertiseAddr},
+		Name:          s.name(),
+		AdvertiseAddr: s.cfg.AdvertiseAddr,
 	}
 	val, err := m.String()
 	if err != nil {
@@ -406,6 +407,7 @@ func (s *Server) reset(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	s.membership = &EtcdMembership{etcdCli: s.etcdClient}
 	err = s.updateServerMasterMembers(ctx)
 	if err != nil {
 		log.L().Warn("failed to update server master members", zap.Error(err))
@@ -428,10 +430,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 
 	s.leader.Store(&Member{
-		Name:         s.name(),
-		IsServLeader: true,
-		IsEtcdLeader: true,
-		Addrs:        []string{s.cfg.AdvertiseAddr},
+		Name:          s.name(),
+		IsServLeader:  true,
+		IsEtcdLeader:  true,
+		AdvertiseAddr: s.cfg.AdvertiseAddr,
 	})
 	defer func() {
 		s.leader.Store(&Member{})
@@ -560,7 +562,7 @@ func withHost(addr string) string {
 }
 
 func (s *Server) memberLoop(ctx context.Context) error {
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(defaultMemberLoopInterval)
 	defer ticker.Stop()
 	for {
 		select {

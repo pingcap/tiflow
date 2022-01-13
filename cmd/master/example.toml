@@ -1,4 +1,4 @@
-master-addr = "http://127.0.0.1:10240"
+master-addr = "127.0.0.1:10240"
 [etcd]
 name = "server-master-1"
 data-dir = "/tmp/df/master"
