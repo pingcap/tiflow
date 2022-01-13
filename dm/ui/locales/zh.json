@@ -5,6 +5,7 @@
   "add new source": "添加上游",
   "add source config": "添加上游配置",
   "address": "地址",
+  "are you sure to delete task {{name}}": "确定要删除任务 \"{{name}}\" 吗?",
   "are you sure to offline this master": "确定要下线此主节点吗？",
   "are you sure to offline this worker": "确定要下线此从节点吗？",
   "basic info": "基本信息",
@@ -116,5 +117,6 @@
   "user name": "用户名",
   "user name is required": "用户名不能为空",
   "view": "查看",
-  "{{val}} and {{count}} others_0": "{{val}} and {{count}} others"
+  "{{val}} and {{count}} others": "{{val}} 等总计 {{count}} 个",
+  "{{val}} and {{count}} others_plural": "{{val}} 等总计 {{count}} 个"
 }

@@ -5,6 +5,7 @@
   "add new source": "Add new source",
   "add source config": "Add source config",
   "address": "address",
+  "are you sure to delete task {{name}}": "Are you sure to delete task \"{{name}}\"?",
   "are you sure to offline this master": "Are you sure to offline this master",
   "are you sure to offline this worker": "Are you sure to offline this worker",
   "basic info": "Basics",
@@ -116,6 +117,6 @@
   "user name": "User",
   "user name is required": "User name is required",
   "view": "View",
-  "{{val}} and {{count}} others": "{{val}} and {{count}} others",
-  "{{val}} and {{count}} others_plural": "{{val}} and {{count}} others"
+  "{{val}} and {{count}} others": "{{val}} and {{count}} in total",
+  "{{val}} and {{count}} others_plural": "{{val}} and {{count}} in total"
 }

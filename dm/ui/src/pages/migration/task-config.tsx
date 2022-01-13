@@ -23,9 +23,13 @@ import {
   DownOutlined,
   SearchOutlined,
   PlayCircleOutlined,
+  ExclamationCircleOutlined,
 } from '~/uikit/icons'
 import i18n from '~/i18n'
-import { useDmapiGetTaskConfigListQuery } from '~/models/taskConfig'
+import {
+  useDmapiDeleteTaskConfigMutation,
+  useDmapiGetTaskConfigListQuery,
+} from '~/models/taskConfig'
 import { Task, useDmapiStartTaskMutation } from '~/models/task'
 import { unimplemented } from '~/utils/unimplemented'
 import { useFuseSearch } from '~/utils/search'
@@ -43,9 +47,23 @@ const TaskConfig: React.FC = () => {
 
   const { data, isFetching, refetch } = useDmapiGetTaskConfigListQuery(
     undefined,
-    { skip: loc.hash === '#new' }
+    { skip: loc.hash === '#new' || loc.hash === '#edit' }
   )
   const [startTask] = useDmapiStartTaskMutation()
+  const [deleteTask] = useDmapiDeleteTaskConfigMutation()
+
+  const handleDeleteTask = (taskName: string) => {
+    Modal.confirm({
+      title: t('are you sure to delete task {{name}}', { name: taskName }),
+      icon: <ExclamationCircleOutlined />,
+      onOk: async () => {
+        const key = 'deleteTask-' + Date.now()
+        message.loading({ content: t('requesting'), key })
+        await deleteTask({ taskName }).unwrap()
+        message.success({ content: t('request success'), key })
+      },
+    })
+  }
 
   const rowSelection = {
     selectedRowKeys: selected.map(i => i.name),
@@ -81,8 +99,9 @@ const TaskConfig: React.FC = () => {
     },
     {
       title: t('target info'),
-      render(data: Task) {
-        return data.target_config.host
+      dataIndex: 'target_config',
+      render(targetConfig) {
+        return `${targetConfig.host}:${targetConfig.port}`
       },
     },
     {
@@ -99,13 +118,17 @@ const TaskConfig: React.FC = () => {
     },
     {
       title: t('operations'),
-      render() {
+      render(data) {
         return (
           <Space>
-            <Button onClick={() => {}} type="link">
+            <Button onClick={() => navigate(`#edit-${data.name}`)} type="link">
               {t('edit')}
             </Button>
-            <Button onClick={() => {}} type="link" danger>
+            <Button
+              onClick={() => handleDeleteTask(data.name)}
+              type="link"
+              danger
+            >
               {t('delete')}
             </Button>
           </Space>
@@ -132,7 +155,7 @@ const TaskConfig: React.FC = () => {
     message.success({ content: t('request success'), key })
   }
 
-  if (loc.hash === '#new') {
+  if (loc.hash === '#new' || loc.hash.startsWith('#edit')) {
     return <CreateTaskConfig />
   }
 

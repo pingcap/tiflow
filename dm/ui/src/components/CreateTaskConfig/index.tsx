@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { merge } from 'lodash'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 import { Card, Form, Steps, message } from '~/uikit'
 import {
@@ -15,7 +15,10 @@ import SourceInfo from '~/components/CreateTaskConfig/SourceInfo'
 import TargetInfo from '~/components/CreateTaskConfig/TargetInfo'
 import EventFilters from '~/components/CreateTaskConfig/EventFilter'
 import MigrateRule from '~/components/CreateTaskConfig/MigrateRule'
-import { useDmapiCreateTaskConfigMutation } from '~/models/taskConfig'
+import {
+  useDmapiCreateTaskConfigMutation,
+  useDmapiGetTaskConfigQuery,
+} from '~/models/taskConfig'
 
 const { Step } = Steps
 
@@ -48,10 +51,16 @@ const stepComponents = [
 const CreateTaskConfig: React.FC = () => {
   const [t] = useTranslation()
   const navigate = useNavigate()
+  const loc = useLocation()
+  const shouldFetch = loc.hash.startsWith('#edit')
+  const [loading, setLoading] = useState(true)
   const [currentStep, setCurrentStep] = useState(0)
   const [taskData, setTaskData] = useState<TaskFormData>(defaultValue)
   const [createTaskConfig] = useDmapiCreateTaskConfigMutation()
-
+  const { data } = useDmapiGetTaskConfigQuery(
+    { taskName: loc.hash.split('-')[1] },
+    { skip: !shouldFetch }
+  )
   const goNextStep = useCallback(() => {
     setCurrentStep(c => c + 1)
   }, [])
@@ -94,8 +103,21 @@ const CreateTaskConfig: React.FC = () => {
     })
   }
 
+  useEffect(() => {
+    if (shouldFetch && data) {
+      setTaskData(
+        merge({}, defaultValue, data, {
+          binlog_filter_rule_array: Object.entries(
+            data?.binlog_filter_rule ?? {}
+          ).map(([name, value]) => ({ name, ...value })),
+        })
+      )
+      setLoading(false)
+    }
+  }, [shouldFetch, data])
+
   return (
-    <Card className="!m-4">
+    <Card className="!m-4" loading={shouldFetch && loading}>
       <Steps current={currentStep}>
         <Step title={t('basic info')} />
         <Step title={t('source info')} />
