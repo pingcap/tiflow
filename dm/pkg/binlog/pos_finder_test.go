@@ -117,7 +117,7 @@ func (t *testPosFinderSuite) TestTransBoundary(c *C) {
 	buf.Write(data)
 
 	c.Assert(dmlEvents[len(dmlEvents)-1].Header.LogPos, Equals, uint32(buf.Len()))
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000001"), buf.Bytes(), 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000001"), buf.Bytes(), 0o644)
 
 	{
 		tcctx := tcontext.NewContext(context.Background(), log.L())
@@ -141,13 +141,13 @@ func (t *testPosFinderSuite) TestMySQL56NoGTID(c *C) {
 
 	file1Events, data := genBinlogFile(generator, beforeTime, "mysql-bin.000002")
 	c.Assert(len(file1Events), Equals, 11)
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000001"), data, 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000001"), data, 0o644)
 	file2Events, data := genBinlogFile(generator, beforeTime.Add(5*time.Second), "mysql-bin.000003")
 	c.Assert(len(file2Events), Equals, 11)
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000002"), data, 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000002"), data, 0o644)
 	file3Events, data := genBinlogFile(generator, beforeTime.Add(10*time.Second), "mysql-bin.000004")
 	c.Assert(len(file3Events), Equals, 11)
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000003"), data, 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000003"), data, 0o644)
 
 	tcctx := tcontext.NewContext(context.Background(), log.L())
 	{
@@ -168,7 +168,7 @@ func (t *testPosFinderSuite) TestMySQL56NoGTID(c *C) {
 		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
 	{
-		var targetEventStart = file2Events[len(file2Events)-1].Header.LogPos
+		targetEventStart := file2Events[len(file2Events)-1].Header.LogPos
 		finder := NewLocalBinlogPosFinder(tcctx, false, flavor, relayDir)
 		location, posType, err := finder.FindByTs(int64(file3Events[0].Header.Timestamp))
 		c.Assert(err, IsNil)
@@ -205,13 +205,13 @@ func (t *testPosFinderSuite) TestMySQL57NoGTID(c *C) {
 
 	file1Events, data := genBinlogFile(generator, beforeTime, "mysql-bin.000002")
 	c.Assert(len(file1Events), Equals, 15)
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000001"), data, 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000001"), data, 0o644)
 	file2Events, data := genBinlogFile(generator, beforeTime.Add(5*time.Second), "mysql-bin.000003")
 	c.Assert(len(file2Events), Equals, 15)
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000002"), data, 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000002"), data, 0o644)
 	file3Events, data := genBinlogFile(generator, beforeTime.Add(10*time.Second), "mysql-bin.000004")
 	c.Assert(len(file3Events), Equals, 15)
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000003"), data, 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000003"), data, 0o644)
 
 	tcctx := tcontext.NewContext(context.Background(), log.L())
 	{
@@ -273,13 +273,13 @@ func (t *testPosFinderSuite) TestMySQL57GTID(c *C) {
 
 	file1Events, data := genBinlogFile(generator, beforeTime, "mysql-bin.000002")
 	c.Assert(len(file1Events), Equals, 15)
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000001"), data, 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000001"), data, 0o644)
 	file2Events, data := genBinlogFile(generator, beforeTime.Add(5*time.Second), "mysql-bin.000003")
 	c.Assert(len(file2Events), Equals, 15)
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000002"), data, 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000002"), data, 0o644)
 	file3Events, data := genBinlogFile(generator, beforeTime.Add(10*time.Second), "mysql-bin.000004")
 	c.Assert(len(file3Events), Equals, 15)
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000003"), data, 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000003"), data, 0o644)
 
 	tcctx := tcontext.NewContext(context.Background(), log.L())
 
@@ -317,7 +317,7 @@ func (t *testPosFinderSuite) TestMySQL57GTID(c *C) {
 		}
 	}
 	{
-		var targetEventStart = file2Events[len(file2Events)-1].Header.LogPos
+		targetEventStart := file2Events[len(file2Events)-1].Header.LogPos
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
 		location, posType, err := finder.FindByTs(int64(file3Events[0].Header.Timestamp))
 		c.Assert(err, IsNil)
@@ -366,13 +366,13 @@ func (t *testPosFinderSuite) TestMariadbGTID(c *C) {
 
 	file1Events, data := genBinlogFile(generator, beforeTime, "mysql-bin.000002")
 	c.Assert(len(file1Events), Equals, 15)
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000001"), data, 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000001"), data, 0o644)
 	file2Events, data := genBinlogFile(generator, beforeTime.Add(5*time.Second), "mysql-bin.000003")
 	c.Assert(len(file2Events), Equals, 15)
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000002"), data, 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000002"), data, 0o644)
 	file3Events, data := genBinlogFile(generator, beforeTime.Add(10*time.Second), "mysql-bin.000004")
 	c.Assert(len(file3Events), Equals, 15)
-	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000003"), data, 0644)
+	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000003"), data, 0o644)
 
 	tcctx := tcontext.NewContext(context.Background(), log.L())
 
@@ -407,7 +407,7 @@ func (t *testPosFinderSuite) TestMariadbGTID(c *C) {
 		c.Assert(posType, Equals, InRangeBinlogPos)
 	}
 	{
-		var targetEventStart = file2Events[len(file2Events)-1].Header.LogPos
+		targetEventStart := file2Events[len(file2Events)-1].Header.LogPos
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
 		location, posType, err := finder.FindByTs(int64(file3Events[0].Header.Timestamp))
 		c.Assert(err, IsNil)

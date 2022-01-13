@@ -102,12 +102,12 @@ func GetLocalBinaryLogs(dir string) (FileSizes, error) {
 	}
 	files := make([]binlogSize, 0, len(fileNames))
 	for _, fileName := range fileNames {
-        size, err := utils.GetFileSize(path.Join(dir, fileName))
-        if err != nil {
-            return nil, err
-        }
-        files = append(files, binlogSize{name: fileName, size: size})
-    }
+		size, err := utils.GetFileSize(path.Join(dir, fileName))
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, binlogSize{name: fileName, size: size})
+	}
 	return files, nil
 }
 
