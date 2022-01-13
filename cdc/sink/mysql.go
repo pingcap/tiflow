@@ -536,7 +536,7 @@ func isRetryableDMLError(err error) bool {
 	return true
 }
 
-func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, bucket int) error {
+func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, _ int) error {
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),
@@ -559,7 +559,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 
 			for i, query := range dmls.sqls {
 				args := dmls.values[i]
-				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+				//log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
 						log.Warn("failed to rollback txn", zap.Error(err))
@@ -586,10 +586,10 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Debug("Exec Rows succeeded",
-			zap.String("changefeed", s.params.changefeedID),
-			zap.Int("num of Rows", dmls.rowCount),
-			zap.Int("bucket", bucket))
+		//log.Debug("Exec Rows succeeded",
+		//	zap.String("changefeed", s.params.changefeedID),
+		//	zap.Int("num of Rows", dmls.rowCount),
+		//	zap.Int("bucket", bucket))
 		return nil
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDMLMaxRetryTime), retry.WithIsRetryableErr(isRetryableDMLError))
 }
@@ -715,7 +715,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
 	})
 	dmls := s.prepareDMLs(rows, replicaID, bucket)
-	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
+	//log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, bucket); err != nil {
 		log.Error("execute DMLs failed", zap.String("err", err.Error()))
 		return errors.Trace(err)
