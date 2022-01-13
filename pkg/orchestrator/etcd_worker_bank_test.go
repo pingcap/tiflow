@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
@@ -131,7 +132,8 @@ func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 	totalAccountNumber := 25
 	workerNumber := 10
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	stdCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{})
 	defer cancel()
 
 	newClient, closer := setUpTest(c)
