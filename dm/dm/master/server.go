@@ -429,7 +429,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 
 	resp := &pb.StartTaskResponse{}
 	respWithErr := func(err error) (*pb.StartTaskResponse, error) {
-		resp.Msg = err.Error()
+		resp.Msg += err.Error()
 		// nolint:nilerr
 		return resp, nil
 	}
@@ -441,10 +441,17 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 		return respWithErr(err)
 	}
 
-	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt, &cliArgs)
+	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, &cliArgs)
 	if err != nil {
 		return respWithErr(err)
 	}
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	if err != nil {
+		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		return resp, nil
+	}
+	resp.Msg = msg
+
 	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.JSON()), zap.String("request", "StartTask"))
 
 	sourceRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs))
@@ -524,7 +531,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 
 		resp.Result = true
 		if cfg.RemoveMeta {
-			resp.Msg = "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
+			resp.Msg += "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
 		}
 		sourceResps = s.getSourceRespsAfterOperation(ctx, cfg.Name, sources, []string{}, req)
 	}
@@ -637,14 +644,20 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		return resp2, err2
 	}
 
-	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt, nil)
+	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, nil)
+	resp := &pb.UpdateTaskResponse{}
 	if err != nil {
+		resp.Msg = err.Error()
 		// nolint:nilerr
-		return &pb.UpdateTaskResponse{
-			Result: false,
-			Msg:    err.Error(),
-		}, nil
+		return resp, nil
 	}
+
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	if err != nil {
+		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		return resp, nil
+	}
+	resp.Msg = msg
 	log.L().Info("update task", zap.String("task name", cfg.Name), zap.Stringer("task", cfg))
 
 	workerRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs)+len(req.Sources))
@@ -683,10 +696,9 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		workerResps = append(workerResps, workerRespMap[worker])
 	}
 
-	return &pb.UpdateTaskResponse{
-		Result:  true,
-		Sources: workerResps,
-	}, nil
+	resp.Result = true
+	resp.Sources = workerResps
+	return resp, nil
 }
 
 type hasWokers interface {
@@ -1206,19 +1218,23 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 			Msg:    err.Error(),
 		}, nil
 	}
-	_, _, err = s.generateSubTask(ctx, req.Task, req.ErrCnt, req.WarnCnt, &cliArgs)
+	resp := &pb.CheckTaskResponse{}
+	_, stCfgs, err := s.generateSubTask(ctx, req.Task, nil)
 	if err != nil {
+		resp.Msg = err.Error()
 		// nolint:nilerr
-		return &pb.CheckTaskResponse{
-			Result: false,
-			Msg:    err.Error(),
-		}, nil
+		return resp, nil
 	}
 
-	return &pb.CheckTaskResponse{
-		Result: true,
-		Msg:    "check pass!!!",
-	}, nil
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, req.ErrCnt, req.WarnCnt)
+	if err != nil {
+		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		return resp, nil
+	}
+	resp.Msg = msg
+	resp.Result = true
+
+	return resp, nil
 }
 
 func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*config.SourceConfig, error) {
@@ -1468,8 +1484,6 @@ func (s *Server) OperateLeader(ctx context.Context, req *pb.OperateLeaderRequest
 func (s *Server) generateSubTask(
 	ctx context.Context,
 	task string,
-	errCnt,
-	warnCnt int64,
 	cliArgs *config.TaskCliArgs,
 ) (*config.TaskConfig, []*config.SubTaskConfig, error) {
 	cfg := config.NewTaskConfig()
@@ -1492,11 +1506,6 @@ func (s *Server) generateSubTask(
 	sourceCfgs := s.getSourceConfigs(cfg.MySQLInstances)
 
 	stCfgs, err := config.TaskConfigToSubTaskConfigs(cfg, sourceCfgs)
-	if err != nil {
-		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
-	}
-
-	err = checker.CheckSyncConfigFunc(ctx, stCfgs, errCnt, warnCnt)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
