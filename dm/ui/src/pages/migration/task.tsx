@@ -306,7 +306,9 @@ const TaskList: React.FC = () => {
         destroyOnClose
         onCancel={() => setIsStartTaskModalVisible(false)}
       >
-        <StartTaskWithListSelection />
+        <StartTaskWithListSelection
+          onCancel={() => setIsStartTaskModalVisible(false)}
+        />
       </Modal>
     </div>
   )

@@ -9,7 +9,9 @@ import {
   useDmapiStartTaskMutation,
 } from '~/models/task'
 
-const StartTaskWithListSelection: React.FC = () => {
+const StartTaskWithListSelection: React.FC<{
+  onCancel: () => void
+}> = ({ onCancel }) => {
   const [t] = useTranslation()
   const { data: tasks, isFetching: isFetchingTask } = useDmapiGetTaskListQuery({
     withStatus: false,
@@ -98,7 +100,7 @@ const StartTaskWithListSelection: React.FC = () => {
 
       <div className="flex justify-center">
         <Space>
-          <Button>{t('cancel')}</Button>
+          <Button onClick={onCancel}>{t('cancel')}</Button>
           <Button onClick={() => handleStartTask(true)}>
             {t('start task and remove meta data')}
           </Button>

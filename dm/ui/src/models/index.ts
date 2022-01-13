@@ -13,7 +13,10 @@ const rtkQueryErrorLogger: Middleware = () => next => action => {
     console.error('RTKQ error caught: ', action)
     // insert your own error handler here
     message.error({
-      content: action.payload?.data?.error_msg ?? 'Oops, somthing went wrong',
+      content:
+        action.payload?.data?.error_msg ??
+        action.payload?.data?.error ??
+        'Oops, somthing went wrong',
     })
   }
 
