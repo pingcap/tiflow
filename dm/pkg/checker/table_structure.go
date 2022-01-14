@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
@@ -303,7 +304,54 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	if c.shardMode == config.ShardOptimistic {
+		var joined schemacmp.Table
 
+		for instance, schemas := range c.tables {
+			db, ok := c.dbs[instance]
+			if !ok {
+				markCheckError(r, errors.NotFoundf("client for instance %s", instance))
+				return r
+			}
+
+			parser2, err := dbutil.GetParserForDB(ctx, db)
+			if err != nil {
+				markCheckError(r, err)
+				r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.name)
+				return r
+			}
+
+			for schema, tables := range schemas {
+				for _, table := range tables {
+					statement, err := dbutil.GetCreateTableSQL(ctx, db, schema, table)
+					if err != nil {
+						// continue if table was deleted when checking
+						if isMySQLError(err, mysql.ErrNoSuchTable) {
+							continue
+						}
+						markCheckError(r, err)
+						r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.name)
+						return r
+					}
+
+					ti, err := dbutil.GetTableInfoBySQL(statement, parser2)
+					if err != nil {
+						markCheckError(r, err)
+						r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.name)
+						return r
+					}
+					encodeTi := schemacmp.Encode(ti)
+
+					newJoined, err2 := joined.Join(encodeTi)
+					if err2 != nil {
+						// NOTE: conflict detected.
+						markCheckError(r, err2)
+						r.Extra = fmt.Sprintf("fail to join table info %s with %s", joined, encodeTi)
+						return r
+					}
+					joined = newJoined
+				}
+			}
+		}
 	}
 
 	var (
