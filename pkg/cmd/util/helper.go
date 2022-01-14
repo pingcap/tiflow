@@ -22,6 +22,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/pingcap/tiflow/cdc/model"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -158,7 +160,7 @@ func VerifyAndGetTiCDCClusterVersion(
 		return version.TiCDCClusterVersion{}, err
 	}
 
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
 	if err != nil {
 		return version.TiCDCClusterVersion{}, err
 	}
