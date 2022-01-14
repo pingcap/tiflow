@@ -29,6 +29,8 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
 // AutoIncrementKeyChecking is an identification for auto increment key checking.
@@ -340,7 +342,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 						return r
 					}
 					encodeTi := schemacmp.Encode(ti)
-
+					log.L().Logger.Info("get schemacmp", zap.Stringer("ti", encodeTi))
 					newJoined, err2 := joined.Join(encodeTi)
 					if err2 != nil {
 						// NOTE: conflict detected.
