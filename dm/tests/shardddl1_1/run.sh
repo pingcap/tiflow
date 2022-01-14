@@ -497,8 +497,8 @@ function run() {
 	init_cluster
 	init_database
 	DM_SAME_DDL_TWICE
-	start=31
-	end=31
+	start=6
+	end=35
 	except=(024 025 029)
 	for i in $(seq -f "%03g" ${start} ${end}); do
 		if [[ ${except[@]} =~ $i ]]; then

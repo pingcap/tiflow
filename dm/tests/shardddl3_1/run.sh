@@ -532,9 +532,7 @@ function DM_117_CASE {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` INT' 1 \
-		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` INT' 1 \
-		"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
+		"because schema conflict detected" 1 \
 		"add column b that wasn't fully dropped in downstream" 1
 
 	# try to fix data
