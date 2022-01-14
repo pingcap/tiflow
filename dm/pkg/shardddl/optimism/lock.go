@@ -222,7 +222,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 			}
 			l.tables[callerSource][callerSchema][callerTable] = revertInfo
 			l.finalTables[callerSource][callerSchema][callerTable] = revertInfo
-			l.delConflictTable(callerSource, callerSchema, callerTable)
+			l.removeConflictTable(callerSource, callerSchema, callerTable)
 		}
 	}()
 
@@ -292,7 +292,7 @@ func (l *Lock) TryRemoveTable(source, schema, table string) bool {
 
 	delete(l.tables[source][schema], table)
 	delete(l.finalTables[source][schema], table)
-	l.delConflictTable(source, schema, table)
+	l.removeConflictTable(source, schema, table)
 	_, remain := l.syncStatus()
 	l.synced = remain == 0
 	delete(l.done[source][schema], table)
@@ -662,20 +662,6 @@ func (l *Lock) DeleteColumnsByOp(op Operation) error {
 	return nil
 }
 
-// TableExist check whether table exists.
-func (l *Lock) TableExist(source, schema, table string) bool {
-	if _, ok := l.tables[source]; !ok {
-		return false
-	}
-	if _, ok := l.tables[source][schema]; !ok {
-		return false
-	}
-	if _, ok := l.tables[source][schema][table]; !ok {
-		return false
-	}
-	return true
-}
-
 // AddDifferentFieldLenColumns checks whether dm adds columns with different field lengths.
 func AddDifferentFieldLenColumns(lockID, ddl string, oldJoined, newJoined schemacmp.Table) (string, error) {
 	col, err := GetColumnName(lockID, ddl, ast.AlterTableAddColumns)
@@ -689,7 +675,7 @@ func AddDifferentFieldLenColumns(lockID, ddl string, oldJoined, newJoined schema
 		newCol, ok2 := newJoinedCols[col]
 		if ok1 && ok2 && newCol.Flen != oldCol.Flen {
 			return col, terror.ErrShardDDLOptimismTrySyncFail.Generate(
-				lockID, fmt.Sprintf("add columns with different field lengths."+
+				lockID, fmt.Sprintf("add columns with different field lengths. "+
 					"ddl: %s, origLen: %d, newLen: %d", ddl, oldCol.Flen, newCol.Flen))
 		}
 	}
@@ -776,7 +762,7 @@ func (l *Lock) checkAddDropColumn(source, schema, table string, ddl string, prev
 func (l *Lock) TrySyncForOneDDL(source, schema, table string, prevTable, postTable schemacmp.Table) (schemaChanged bool, conflictStage ConflictStage) {
 	// we only support resolve one conflict DDL per table.
 	// reset conflict table
-	l.delConflictTable(source, schema, table)
+	l.removeConflictTable(source, schema, table)
 	l.finalTables[source][schema][table] = l.tables[source][schema][table]
 
 	// For idempotent DDL
@@ -830,11 +816,21 @@ func (l *Lock) TrySyncForOneDDL(source, schema, table string, prevTable, postTab
 	}
 
 	log.L().Debug("found conflict for DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+
 	// meet conflict DDL
 	// revert tables and update conflictTables and finalTables
 	l.tables[source][schema][table] = prevTable
 	l.addConflictTable(source, schema, table, postTable)
 	l.finalTables[source][schema][table] = postTable
+
+	// if more than one conflict tables and this conflict DDL has no conflict with normal tables
+	// e.g. tb1,tb2 put ddl1(rename a to b); tb1 put ddl2(rename c to d); tb2 crash and reput ddl1(rename a to b)
+	// now tb2's ddl1 is a conflict DDL but has no conflict with normal tables
+	if len(l.conflictTables) > 1 && l.noConflictWithNormalTables(source, schema, table, postTable) {
+		l.removeConflictTable(source, schema, table)
+		l.tables[source][schema][table] = postTable
+		return true, ConflictNone
+	}
 
 	// if any conflict happened between conflict DDLs, return error
 	// e.g. tb1: "ALTER TABLE RENAME a TO b", tb2: "ALTER TABLE RENAME c TO d"
@@ -901,16 +897,13 @@ func (l *Lock) joinTables(tp tableType) (schemacmp.Table, error) {
 // e.g `ALTER TABLE RENAME A TO B`, this function check whether all tables do not contain `A`.
 func (l *Lock) allTableSmaller(tp tableType) bool {
 	var (
-		joined      schemacmp.Table
-		judgeTables map[string]map[string]map[string]schemacmp.Table
-		err         error
+		joined schemacmp.Table
+		err    error
 	)
 	switch tp {
 	case conflictTables:
-		judgeTables = l.conflictTables
 		joined, err = l.joinConflictTables()
 	default:
-		judgeTables = l.finalTables
 		joined, err = l.joinFinalTables()
 	}
 
@@ -918,7 +911,7 @@ func (l *Lock) allTableSmaller(tp tableType) bool {
 		return false
 	}
 
-	for source, schemaTables := range judgeTables {
+	for source, schemaTables := range l.conflictTables {
 		for schema, tables := range schemaTables {
 			for table := range tables {
 				ti := l.tables[source][schema][table]
@@ -940,6 +933,8 @@ func (l *Lock) allTableLarger(tp tableType) bool {
 	var judgeTables map[string]map[string]map[string]schemacmp.Table
 
 	switch tp {
+	case normalTables:
+		judgeTables = l.tables
 	case conflictTables:
 		judgeTables = l.conflictTables
 	default:
@@ -952,7 +947,7 @@ func (l *Lock) allTableLarger(tp tableType) bool {
 				// for every conflict table's prev_table
 				ti := l.tables[source][schema][table]
 
-				// for every final table
+				// for every judge table
 				for _, sTables := range judgeTables {
 					for _, ts := range sTables {
 						for _, finalTi := range ts {
@@ -1001,6 +996,32 @@ func (l *Lock) allFinalTableLarger() bool {
 	return l.allTableLarger(finalTables)
 }
 
+// judge whether a conflict DDL has no conflict with all normal tables.
+func (l *Lock) noConflictWithNormalTables(source, schema, table string, postTable schemacmp.Table) bool {
+	currentConflictTables := l.conflictTables
+	currentFinalTables := l.finalTables
+	defer func() {
+		l.conflictTables = currentConflictTables
+		l.finalTables = currentFinalTables
+	}()
+
+	l.conflictTables = make(map[string]map[string]map[string]schemacmp.Table)
+	l.addConflictTable(source, schema, table, postTable)
+	l.finalTables = make(map[string]map[string]map[string]schemacmp.Table)
+	for source, schemaTables := range l.tables {
+		l.finalTables[source] = make(map[string]map[string]schemacmp.Table)
+		for schema, tables := range schemaTables {
+			l.finalTables[source][schema] = make(map[string]schemacmp.Table)
+			for table, ti := range tables {
+				l.finalTables[source][schema][table] = ti
+			}
+		}
+	}
+	l.finalTables[source][schema][table] = postTable
+
+	return l.noConflictForFinalTables()
+}
+
 // judge whether all conflict tables has no conflict.
 func (l *Lock) noConflictForConflictTables() bool {
 	if _, err := l.joinConflictTables(); err != nil {
@@ -1042,7 +1063,7 @@ func (l *Lock) addConflictTable(source, schema, table string, ti schemacmp.Table
 	l.conflictTables[source][schema][table] = ti
 }
 
-func (l *Lock) delConflictTable(source, schema, table string) {
+func (l *Lock) removeConflictTable(source, schema, table string) {
 	if _, ok := l.conflictTables[source]; !ok {
 		return
 	}
