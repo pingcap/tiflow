@@ -228,6 +228,20 @@ func (s *feedStateManagerSuite) TestHandleError(c *check.C) {
 	c.Assert(state.Info.State, check.Equals, model.StateFailed)
 	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminStop)
 	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminStop)
+
+	// admin resume must retry changefeed immediately.
+	manager.PushAdminJob(&model.AdminJob{
+		CfID: ctx.ChangefeedVars().ID,
+		Type: model.AdminResume,
+		Opts: &model.AdminJobOption{ForceRemove: false},
+	})
+	manager.Tick(state)
+	tester.MustApplyPatches()
+	c.Assert(manager.ShouldRunning(), check.IsTrue)
+	c.Assert(manager.ShouldRemoved(), check.IsFalse)
+	c.Assert(state.Info.State, check.Equals, model.StateNormal)
+	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminNone)
+	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminNone)
 }
 
 func (s *feedStateManagerSuite) TestChangefeedStatusNotExist(c *check.C) {
