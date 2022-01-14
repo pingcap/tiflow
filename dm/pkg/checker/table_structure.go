@@ -170,8 +170,6 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	for _, table := range c.tables {
-	     inCh <- table
-	}
 		isDone := false
 		select {
 		case inCh <- table:
