@@ -306,8 +306,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	if c.shardMode == config.ShardOptimistic {
-		var joined schemacmp.Table
-
+		var joined *schemacmp.Table
 		for instance, schemas := range c.tables {
 			db, ok := c.dbs[instance]
 			if !ok {
@@ -342,7 +341,11 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 						return r
 					}
 					encodeTi := schemacmp.Encode(ti)
-					log.L().Logger.Info("get schemacmp", zap.Stringer("ti", encodeTi))
+					log.L().Logger.Info("get schemacmp", zap.Stringer("ti", encodeTi), zap.Stringer("joined", joined))
+					if joined == nil {
+						joined = &encodeTi
+						continue
+					}
 					newJoined, err2 := joined.Join(encodeTi)
 					if err2 != nil {
 						// NOTE: conflict detected.
@@ -350,7 +353,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 						r.Extra = fmt.Sprintf("fail to join table info %s with %s", joined, encodeTi)
 						return r
 					}
-					joined = newJoined
+					joined = &newJoined
 				}
 			}
 		}
