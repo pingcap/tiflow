@@ -35,6 +35,14 @@ type blackHoleSink struct {
 	lastAccumulated uint64
 }
 
+func (b *blackHoleSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	err := b.EmitRowChangedEvents(ctx, rows...)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		log.Debug("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
