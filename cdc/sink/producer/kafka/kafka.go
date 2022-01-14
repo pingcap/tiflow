@@ -218,7 +218,7 @@ func (k *kafkaSaramaProducer) Close() error {
 	if err != nil {
 		log.Error("close async client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
 	} else {
-		log.Info("async client closed", zap.Duration("elapsed", time.Since(start)))
+		log.Info("async client closed", zap.Duration("duration", time.Since(start)))
 	}
 	start = time.Now()
 	err = k.syncClient.Close()
