@@ -113,7 +113,7 @@ function DM_049_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` CHANGE `a` `c`' 2 \
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `a` `c` INT' 2 \
 			"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
@@ -151,8 +151,8 @@ function DM_050_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` CHANGE `a` `c`' 1 \
-			'ALTER TABLE `shardddl`.`tb` CHANGE `a` `d`' 1 \
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `a` `c` INT' 1 \
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `a` `d` INT' 1 \
 			"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
@@ -190,8 +190,8 @@ function DM_051_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` CHANGE `a` `c`' 1 \
-			'ALTER TABLE `shardddl`.`tb` CHANGE `b` `c`' 1 \
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `a` `c` INT' 1 \
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `b` `c` INT' 1 \
 			"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
@@ -229,8 +229,8 @@ function DM_056_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` CHANGE `a` `c` INT AFTER `b`' 1 \
-			'ALTER TABLE `shardddl`.`tb` CHANGE `a` `c` INT FIRST' 1 \
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `a` `c` INT AFTER `b`' 1 \
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `a` `c` INT FIRST' 1 \
 			"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
@@ -290,7 +290,7 @@ function DM_058_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` CHANGE `id` `new_col` INT DEFAULT 2' 1 \
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `id` `new_col` INT DEFAULT 2' 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
@@ -493,7 +493,7 @@ function DM_067_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` MODIFY `id` INT DEFAULT 2' 1 \
+			'ALTER TABLE `shardddl`.`tb` MODIFY COLUMN `id` INT DEFAULT 2' 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
