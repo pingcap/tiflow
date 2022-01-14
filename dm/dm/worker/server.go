@@ -459,8 +459,8 @@ func (s *Server) doClose() {
 
 // Close close the RPC server, this function can be called multiple times.
 func (s *Server) Close() {
+	s.doClose() // we should stop current sync first, other wise master may scheduler task on new worker while we are closing
 	s.stopKeepAlive()
-	s.doClose()
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.

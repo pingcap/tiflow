@@ -157,7 +157,7 @@ type Syncer struct {
 	waitXIDJob          atomic.Int64
 	isTransactionEnd    bool
 	waitTransactionLock sync.Mutex
-	runCtx              context.Context // this ctx is injected in `s.Run` and when this ctx cancelled, syncer will exit quickly and not wait transaction end
+	runCtx              context.Context // this (background)ctx is injected in `s.Run` and when this ctx cancelled, syncer will exit quickly and not wait transaction end
 	runCancel           context.CancelFunc
 
 	tableRouter     *router.Table
@@ -3344,14 +3344,6 @@ func (s *Syncer) Close() {
 
 	s.stopSync()
 	s.closeDBs()
-
-	// try to rollback checkpoints, if they already flushed, no effect, this operation should call before close schemaTracker
-	prePos := s.checkpoint.GlobalPoint()
-	s.checkpoint.Rollback(s.schemaTracker)
-	currPos := s.checkpoint.GlobalPoint()
-	if binlog.CompareLocation(prePos, currPos, s.cfg.EnableGTID) != 0 {
-		s.tctx.L().Warn("something wrong with rollback global checkpoint", zap.Stringer("previous position", prePos), zap.Stringer("current position", currPos))
-	}
 	s.checkpoint.Close()
 	if err := s.schemaTracker.Close(); err != nil {
 		s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
@@ -3373,7 +3365,7 @@ func (s *Syncer) Kill() {
 	s.Close()
 }
 
-// stopSync stops syncing, now it used by Close and Pause
+// stopSync stops syncing and rollback checkpoint now it used by Close and Pause
 // maybe we can refine the workflow more clear.
 func (s *Syncer) stopSync() {
 	if s.done != nil {
@@ -3387,6 +3379,14 @@ func (s *Syncer) stopSync() {
 
 	if s.streamerController != nil {
 		s.streamerController.Close(s.tctx)
+	}
+
+	// try to rollback checkpoints, if they already flushed, no effect, this operation should call before close schemaTracker
+	prePos := s.checkpoint.GlobalPoint()
+	s.checkpoint.Rollback(s.schemaTracker)
+	currPos := s.checkpoint.GlobalPoint()
+	if binlog.CompareLocation(prePos, currPos, s.cfg.EnableGTID) != 0 {
+		s.tctx.L().Warn("something wrong with rollback global checkpoint", zap.Stringer("previous position", prePos), zap.Stringer("current position", currPos))
 	}
 }
 
