@@ -357,6 +357,8 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 				}
 			}
 		}
+		r.State = StateSuccess
+		return r
 	}
 
 	var (

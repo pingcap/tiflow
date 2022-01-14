@@ -31,14 +31,14 @@ block-allow-list:
     do-dbs: ["dmctl"]
     do-tables:
     -  db-name: "dmctl"
-       tbl-name: "~^tb_[\\d]+"
+       tbl-name: "~^precheck_optimistic_tb_[\\d]+"
 
 routes:
   sharding-route-rules-table:
     schema-pattern: dmctl
-    table-pattern: tb_*
+    table-pattern: precheck_optimistic_tb_*
     target-schema: dmctl
-    target-table: tb
+    target-table: precheck_optimistic_tb
 
   sharding-route-rules-schema:
     schema-pattern: dmctl

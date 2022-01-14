@@ -13,19 +13,19 @@ check-struct-only = false
 
     target-instance = "tidb0"
 
-    target-check-tables = ["dmctl.tb"]
+    target-check-tables = ["dmctl.precheck_optimistic_tb"]
 
     target-configs= ["config1"]
 
 [table-configs]
 [table-configs.config1]
-target-tables = ["dmctl.tb"]
+target-tables = ["dmctl.precheck_optimistic_tb"]
 
 [routes.rule1]
 schema-pattern = "dmctl"
-table-pattern = "tb_?*"
+table-pattern = "precheck_optimistic_tb_?*"
 target-schema = "dmctl" 
-target-table = "tb"      
+target-table = "precheck_optimistic_tb"      
 
 
 [data-sources]
