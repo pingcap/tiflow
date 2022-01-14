@@ -402,7 +402,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	} else {
 		if m.state.Info.State == model.StateNormal {
 			m.lastErrorTime = time.Unix(0, 0)
-		}	
+		}
 	}
 	m.shiftStateWindow(m.state.Info.State)
 
