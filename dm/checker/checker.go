@@ -276,59 +276,59 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		errs = append(errs, unit.NewProcessError(err))
 	} else if !result.Summary.Passed {
 		errs = append(errs, unit.NewProcessError(errors.New("check was failed, please see detail")))
-		warnLeft, errLeft := c.warnCnt, c.errCnt
+	}
+	warnLeft, errLeft := c.warnCnt, c.errCnt
 
-		// remove success result if not pass
-		results := result.Results[:0]
-		for _, r := range result.Results {
-			if r.State == checker.StateSuccess {
-				continue
-			}
+	// remove success result if not pass
+	results := result.Results[:0]
+	for _, r := range result.Results {
+		if r.State == checker.StateSuccess {
+			continue
+		}
 
-			// handle results without r.Errors
-			if len(r.Errors) == 0 {
-				switch r.State {
-				case checker.StateWarning:
-					if warnLeft == 0 {
-						continue
-					}
-					warnLeft--
-					results = append(results, r)
-				case checker.StateFailure:
-					if errLeft == 0 {
-						continue
-					}
-					errLeft--
-					results = append(results, r)
+		// handle results without r.Errors
+		if len(r.Errors) == 0 {
+			switch r.State {
+			case checker.StateWarning:
+				if warnLeft == 0 {
+					continue
 				}
-				continue
-			}
-
-			subErrors := make([]*checker.Error, 0, len(r.Errors))
-			for _, e := range r.Errors {
-				switch e.Severity {
-				case checker.StateWarning:
-					if warnLeft == 0 {
-						continue
-					}
-					warnLeft--
-					subErrors = append(subErrors, e)
-				case checker.StateFailure:
-					if errLeft == 0 {
-						continue
-					}
-					errLeft--
-					subErrors = append(subErrors, e)
+				warnLeft--
+				results = append(results, r)
+			case checker.StateFailure:
+				if errLeft == 0 {
+					continue
 				}
-			}
-			// skip display an empty Result
-			if len(subErrors) > 0 {
-				r.Errors = subErrors
+				errLeft--
 				results = append(results, r)
 			}
+			continue
 		}
-		result.Results = results
+
+		subErrors := make([]*checker.Error, 0, len(r.Errors))
+		for _, e := range r.Errors {
+			switch e.Severity {
+			case checker.StateWarning:
+				if warnLeft == 0 {
+					continue
+				}
+				warnLeft--
+				subErrors = append(subErrors, e)
+			case checker.StateFailure:
+				if errLeft == 0 {
+					continue
+				}
+				errLeft--
+				subErrors = append(subErrors, e)
+			}
+		}
+		// skip display an empty Result
+		if len(subErrors) > 0 {
+			r.Errors = subErrors
+			results = append(results, r)
+		}
 	}
+	result.Results = results
 
 	c.updateInstruction(result)
 
@@ -338,9 +338,12 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	default:
 	}
 
-	rawResult, err := json.MarshalIndent(result, "\t", "\t")
-	if err != nil {
-		rawResult = []byte(fmt.Sprintf("marshal error %v", err))
+	var rawResult []byte
+	if result.Summary.Successful != result.Summary.Total {
+		rawResult, err = json.MarshalIndent(result, "\t", "\t")
+		if err != nil {
+			rawResult = []byte(fmt.Sprintf("marshal error %v", err))
+		}
 	}
 
 	c.result.Lock()
