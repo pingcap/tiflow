@@ -14,6 +14,8 @@
 package owner
 
 import (
+	"time"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -30,8 +32,13 @@ type feedStateManagerSuite struct {
 func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
+<<<<<<< HEAD
 	manager := new(feedStateManager)
 	state := model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+=======
+	manager := newFeedStateManager4Test()
+	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+>>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
@@ -102,8 +109,13 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 func (s *feedStateManagerSuite) TestMarkFinished(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
+<<<<<<< HEAD
 	manager := new(feedStateManager)
 	state := model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+=======
+	manager := newFeedStateManager4Test()
+	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+>>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
@@ -130,8 +142,13 @@ func (s *feedStateManagerSuite) TestMarkFinished(c *check.C) {
 func (s *feedStateManagerSuite) TestCleanUpInfos(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
+<<<<<<< HEAD
 	manager := new(feedStateManager)
 	state := model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+=======
+	manager := newFeedStateManager4Test()
+	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+>>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
@@ -173,8 +190,13 @@ func (s *feedStateManagerSuite) TestCleanUpInfos(c *check.C) {
 func (s *feedStateManagerSuite) TestHandleError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
+<<<<<<< HEAD
 	manager := new(feedStateManager)
 	state := model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+=======
+	manager := newFeedStateManager4Test()
+	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+>>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
@@ -187,25 +209,22 @@ func (s *feedStateManagerSuite) TestHandleError(c *check.C) {
 	state.PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		return &model.TaskStatus{}, true, nil
 	})
-	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		return &model.TaskPosition{Error: &model.RunningError{
-			Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
-			Code:    "[CDC:ErrEtcdSessionDone]",
-			Message: "fake error for test",
-		}}, true, nil
-	})
+
 	state.PatchTaskWorkload(ctx.GlobalVars().CaptureInfo.ID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 		return model.TaskWorkload{}, true, nil
 	})
 	tester.MustApplyPatches()
 	manager.Tick(state)
 	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsTrue)
-	// error reported by processor in task position should be cleaned
-	c.Assert(state.TaskPositions[ctx.GlobalVars().CaptureInfo.ID].Error, check.IsNil)
 
-	// throw error more than history threshold to turn feed state into error
-	for i := 0; i < model.ErrorHistoryThreshold; i++ {
+	// the backoff will be stopped after 4600ms because 4600ms + 1600ms > 6000ms.
+	intervals := []time.Duration{200, 400, 800, 1600, 1600}
+	for i, d := range intervals {
+		intervals[i] = d * time.Millisecond
+	}
+
+	for _, d := range intervals {
+		c.Assert(manager.ShouldRunning(), check.IsTrue)
 		state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return &model.TaskPosition{Error: &model.RunningError{
 				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
@@ -216,18 +235,47 @@ func (s *feedStateManagerSuite) TestHandleError(c *check.C) {
 		tester.MustApplyPatches()
 		manager.Tick(state)
 		tester.MustApplyPatches()
+		c.Assert(manager.ShouldRunning(), check.IsFalse)
+		time.Sleep(d)
+		manager.Tick(state)
+		tester.MustApplyPatches()
 	}
+
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
+<<<<<<< HEAD
 	c.Assert(state.Info.State, check.Equals, model.StateError)
+=======
+	c.Assert(manager.ShouldRemoved(), check.IsFalse)
+	c.Assert(state.Info.State, check.Equals, model.StateFailed)
+>>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminStop)
 	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminStop)
+
+	// admin resume must retry changefeed immediately.
+	manager.PushAdminJob(&model.AdminJob{
+		CfID: ctx.ChangefeedVars().ID,
+		Type: model.AdminResume,
+		Opts: &model.AdminJobOption{ForceRemove: false},
+	})
+	manager.Tick(state)
+	tester.MustApplyPatches()
+	c.Assert(manager.ShouldRunning(), check.IsTrue)
+	c.Assert(manager.ShouldRemoved(), check.IsFalse)
+	c.Assert(state.Info.State, check.Equals, model.StateNormal)
+	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminNone)
+	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminNone)
 }
 
 func (s *feedStateManagerSuite) TestChangefeedStatusNotExist(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
+<<<<<<< HEAD
 	manager := new(feedStateManager)
 	state := model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+=======
+	manager := newFeedStateManager4Test()
+	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+>>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 	tester := orchestrator.NewReactorStateTester(c, state, map[string]string{
 		"/tidb/cdc/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5": `{"id":"d563bfc0-f406-4f34-bc7d-6dc2e35a44e5","address":"172.16.6.147:8300","version":"v5.0.0-master-dirty"}`,
 		"/tidb/cdc/changefeed/info/" + ctx.ChangefeedVars().ID:   `{"sink-uri":"blackhole:///","opts":{},"create-time":"2021-06-05T00:44:15.065939487+08:00","start-ts":425381670108266496,"target-ts":0,"admin-job-type":1,"sort-engine":"unified","config":{"case-sensitive":true,"enable-old-value":true,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"failed","history":[],"error":{"addr":"172.16.6.147:8300","code":"CDC:ErrSnapshotLostByGC","message":"[CDC:ErrSnapshotLostByGC]fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts 425381670108266496 is earlier than GC safepoint at 0"},"sync-point-enabled":false,"sync-point-interval":600000000000,"creator-version":"v5.0.0-master-dirty"}`,
