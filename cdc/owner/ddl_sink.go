@@ -121,11 +121,13 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 
 		start := time.Now()
 		if err := s.sinkInitHandler(ctx, s, id, info); err != nil {
-			log.Warn("ddl sink initialize failed", zap.Duration("duration", time.Since(start)))
+			log.Warn("ddl sink initialize failed",
+				zap.Duration("duration", time.Since(start)))
 			ctx.Throw(err)
 			return
 		}
-		log.Info("ddl sink initialized, start processing...", zap.Duration("duration", time.Since(start)))
+		log.Info("ddl sink initialized, start processing...",
+			zap.Duration("duration", time.Since(start)))
 
 		// TODO make the tick duration configurable
 		ticker := time.NewTicker(time.Second)
@@ -143,11 +145,11 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
 					continue
 				}
-				lastCheckpointTs = checkpointTs
 				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs); err != nil {
 					ctx.Throw(errors.Trace(err))
 					return
 				}
+				lastCheckpointTs = checkpointTs
 			case ddl := <-s.ddlCh:
 				err := s.sink.EmitDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
