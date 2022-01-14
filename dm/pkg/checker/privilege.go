@@ -237,6 +237,9 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 						if priv == mysql.GrantPriv {
 							continue
 						}
+						if _, ok := lackPriv[priv][dbName]; !ok {
+							continue
+						}
 						if _, ok := lackPriv[priv][dbName][tableName]; !ok {
 							continue
 						}
