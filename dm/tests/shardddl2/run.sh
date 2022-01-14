@@ -246,7 +246,7 @@ function restart_worker() {
 function DM_DROP_COLUMN_EXEC_ERROR_CASE() {
 	# get worker of source1
 	w="1"
-	got=$(grep "mysql-replica-01" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+	got=$(grep -a "mysql-replica-01" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 	if [[ "$got" -eq 0 ]]; then
 		w="2"
 	fi
@@ -308,7 +308,7 @@ function DM_DROP_COLUMN_EXEC_ERROR() {
 function DM_DROP_COLUMN_ALL_DONE_CASE() {
 	# get worker of source1
 	w="1"
-	got=$(grep "mysql-replica-01" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+	got=$(grep -a "mysql-replica-01" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 	if [[ "$got" -eq 0 ]]; then
 		w="2"
 	fi

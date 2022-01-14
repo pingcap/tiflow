@@ -248,7 +248,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 			if col, err2 := GetColumnName(l.ID, ddls[idx], ast.AlterTableAddColumns); err2 != nil {
 				return newDDLs, cols, err2
 			} else if len(col) > 0 && l.IsDroppedColumn(info.Source, info.UpSchema, info.UpTable, col) {
-				return newDDLs, cols, terror.ErrShardDDLOptimismTrySyncFail.Generate(
+				return newDDLs, cols, terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(
 					l.ID, fmt.Sprintf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddls[idx]))
 			}
 			newDDLs = append(newDDLs, ddls[idx])
@@ -283,7 +283,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 				if col, err2 := AddDifferentFieldLenColumns(l.ID, ddls[idx], oldJoined, newJoined); err2 != nil {
 					return ddls, cols, err2
 				} else if len(col) > 0 && l.IsDroppedColumn(info.Source, info.UpSchema, info.UpTable, col) {
-					return ddls, cols, terror.ErrShardDDLOptimismTrySyncFail.Generate(
+					return ddls, cols, terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(
 						l.ID, fmt.Sprintf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddls[idx]))
 				}
 			} else {
@@ -293,7 +293,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 					err = l.AddDroppedColumn(info, col)
 					if err != nil {
 						log.L().Error("fail to add dropped column info in etcd", zap.Error(err))
-						return ddls, cols, terror.ErrShardDDLOptimismTrySyncFail.Generate(l.ID, "fail to add dropped column info in etcd")
+						return ddls, cols, terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(l.ID, terror.Annotate(err, "fail to add dropped column info in etcd"))
 					}
 					cols = append(cols, col)
 				}
@@ -325,7 +325,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 			if col, err2 := AddDifferentFieldLenColumns(l.ID, ddls[idx], nextTable, newJoined); err2 != nil {
 				return ddls, cols, err2
 			} else if len(col) > 0 && l.IsDroppedColumn(info.Source, info.UpSchema, info.UpTable, col) {
-				return ddls, cols, terror.ErrShardDDLOptimismTrySyncFail.Generate(
+				return ddls, cols, terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(
 					l.ID, fmt.Sprintf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddls[idx]))
 			}
 			// let every table to replicate the DDL.
@@ -338,7 +338,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 				err = l.AddDroppedColumn(info, col)
 				if err != nil {
 					log.L().Error("fail to add dropped column info in etcd", zap.Error(err))
-					return ddls, cols, terror.ErrShardDDLOptimismTrySyncFail.Generate(l.ID, "fail to add dropped column info in etcd")
+					return ddls, cols, terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(l.ID, terror.Annotate(err, "fail to add dropped column info in etcd"))
 				}
 				cols = append(cols, col)
 			}
@@ -711,7 +711,7 @@ func AddDifferentFieldLenColumns(lockID, ddl string, oldJoined, newJoined schema
 		oldCol, ok1 := oldJoinedCols[col]
 		newCol, ok2 := newJoinedCols[col]
 		if ok1 && ok2 && newCol.Flen != oldCol.Flen {
-			return col, terror.ErrShardDDLOptimismTrySyncFail.Generate(
+			return col, terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(
 				lockID, fmt.Sprintf("add columns with different field lengths."+
 					"ddl: %s, origLen: %d, newLen: %d", ddl, oldCol.Flen, newCol.Flen))
 		}
@@ -722,7 +722,7 @@ func AddDifferentFieldLenColumns(lockID, ddl string, oldJoined, newJoined schema
 // GetColumnName checks whether dm adds/drops a column, and return this column's name.
 func GetColumnName(lockID, ddl string, tp ast.AlterTableType) (string, error) {
 	if stmt, err := parser.New().ParseOneStmt(ddl, "", ""); err != nil {
-		return "", terror.ErrShardDDLOptimismTrySyncFail.Delegate(
+		return "", terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Delegate(
 			err, lockID, fmt.Sprintf("fail to parse ddl %s", ddl))
 	} else if v, ok := stmt.(*ast.AlterTableStmt); ok && len(v.Specs) > 0 {
 		spec := v.Specs[0]

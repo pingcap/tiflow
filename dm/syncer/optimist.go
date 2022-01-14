@@ -178,6 +178,9 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 			s.tctx.L().Info("operation conflict detected, waiting for resolve", zap.Stringer("info", info))
 		}
 	}
+	if op.ConflictStage == optimism.ConflictWarned {
+		return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, op.ConflictMsg)
+	}
 
 	// updated needHandleDDLs to DDLs received from DM-master.
 	qec.needHandleDDLs = op.DDLs

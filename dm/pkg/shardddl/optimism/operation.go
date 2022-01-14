@@ -39,9 +39,12 @@ const (
 	// ConflictResolved indicates a conflict will be resolved after applied the shard DDL.
 	// in this stage, DM-worker should replay DML skipped in ConflictDetected to downstream.
 	ConflictResolved ConflictStage = "resolved"
-	// ConflictUnlocked indicates a conflict will be resolved after applied the shard DDL.
-	// in this stage, DM-worker should replay DML skipped in ConflictDetected to downstream.
+	// ConflictUnlocked indicates a conflict will be unlocked after applied the shard DDL.
+	// in this stage, DM-worker should directly execute/skip DDLs.
 	ConflictUnlocked ConflictStage = "unlocked"
+	// ConflictWarned indicates a warn conflict will be resolved after applied the shard DDL.
+	// in this stage, DM-worker should returns an error and wait for users to use handle error to skip.
+	ConflictWarned ConflictStage = "warned"
 )
 
 // Operation represents a shard DDL coordinate operation.
