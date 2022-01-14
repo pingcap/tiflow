@@ -76,7 +76,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		id:               id,
 		scheduler:        newScheduler(),
 		barriers:         newBarriers(),
-		feedStateManager: new(feedStateManager),
+		feedStateManager: newFeedStateManager(),
 		gcManager:        gcManager,
 
 		errCh:  make(chan error, defaultErrChSize),

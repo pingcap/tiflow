@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"math"
 	"regexp"
-	"sort"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -73,6 +72,7 @@ func (s FeedState) ToInt() int {
 	return -1
 }
 
+<<<<<<< HEAD
 const (
 	// errorHistoryGCInterval represents how long we keep error record in changefeed info
 	errorHistoryGCInterval = time.Minute * 10
@@ -85,6 +85,25 @@ const (
 	// changefeed, if it is less than ErrorHistoryThreshold, then initialize it.
 	ErrorHistoryThreshold = 3
 )
+=======
+// IsNeeded return true if the given feedState matches the listState.
+func (s FeedState) IsNeeded(need string) bool {
+	if need == "all" {
+		return true
+	}
+	if need == "" {
+		switch s {
+		case StateNormal:
+			return true
+		case StateStopped:
+			return true
+		case StateFailed:
+			return true
+		}
+	}
+	return need == string(s)
+}
+>>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
@@ -103,10 +122,9 @@ type ChangeFeedInfo struct {
 	// but can be fetched for backward compatibility
 	SortDir string `json:"sort-dir"`
 
-	Config   *config.ReplicaConfig `json:"config"`
-	State    FeedState             `json:"state"`
-	ErrorHis []int64               `json:"history"`
-	Error    *RunningError         `json:"error"`
+	Config *config.ReplicaConfig `json:"config"`
+	State  FeedState             `json:"state"`
+	Error  *RunningError         `json:"error"`
 
 	SyncPointEnabled  bool          `json:"sync-point-enabled"`
 	SyncPointInterval time.Duration `json:"sync-point-interval"`
@@ -232,6 +250,13 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	if info.Config.Scheduler == nil {
 		info.Config.Scheduler = defaultConfig.Scheduler
 	}
+<<<<<<< HEAD
+=======
+	if info.Config.Consistent == nil {
+		info.Config.Consistent = defaultConfig.Consistent
+	}
+
+>>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 	return nil
 }
 
@@ -283,6 +308,7 @@ func (info *ChangeFeedInfo) fixState() {
 	}
 }
 
+<<<<<<< HEAD
 // CheckErrorHistory checks error history of a changefeed
 // if having error record older than GC interval, set needSave to true.
 // if error counts reach threshold, set canInit to false.
@@ -303,6 +329,57 @@ func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
 	})
 	canInit = len(info.ErrorHis)-i < ErrorHistoryThreshold
 	return
+=======
+// fixSinkProtocol attempts to fix protocol incompatible.
+// We no longer support the acceptance of protocols that are not known.
+// The ones that were already accepted need to be fixed.
+func (info *ChangeFeedInfo) fixSinkProtocol() {
+	sinkURIParsed, err := url.Parse(info.SinkURI)
+	if err != nil {
+		log.Warn("parse sink URI failed", zap.Error(err))
+		// SAFETY: It is safe to ignore this unresolvable sink URI here,
+		// as it is almost impossible for this to happen.
+		// If we ignore it when fixing it after it happens,
+		// it will expose the problem when starting the changefeed,
+		// which is easier to troubleshoot than reporting the error directly in the bootstrap process.
+		return
+	}
+	rawQuery := sinkURIParsed.Query()
+	protocolStr := rawQuery.Get(config.ProtocolKey)
+
+	needsFix := func(protocolStr string) bool {
+		var protocol config.Protocol
+		err = protocol.FromString(protocolStr)
+		// There are two cases:
+		// 1. there is an error indicating that the old ticdc accepts
+		//    a protocol that is not known. It needs to be fixed as open protocol.
+		// 2. If it is default, then it needs to be fixed as open protocol.
+		return err != nil || protocolStr == config.ProtocolDefault.String()
+	}
+
+	openProtocolStr := config.ProtocolOpen.String()
+	// The sinkURI always has a higher priority.
+	if protocolStr != "" {
+		if needsFix(protocolStr) {
+			rawQuery.Set(config.ProtocolKey, openProtocolStr)
+			oldRawQuery := sinkURIParsed.RawQuery
+			newRawQuery := rawQuery.Encode()
+			sinkURIParsed.RawQuery = newRawQuery
+			fixedSinkURI := sinkURIParsed.String()
+			log.Info("handle incompatible protocol from sink URI",
+				zap.String("old URI query", oldRawQuery),
+				zap.String("fixed URI query", newRawQuery))
+			info.SinkURI = fixedSinkURI
+		}
+	} else {
+		if needsFix(info.Config.Sink.Protocol) {
+			log.Info("handle incompatible protocol from sink config",
+				zap.String("oldProtocol", info.Config.Sink.Protocol),
+				zap.String("fixedProtocol", openProtocolStr))
+			info.Config.Sink.Protocol = openProtocolStr
+		}
+	}
+>>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 }
 
 // HasFastFailError returns true if the error in changefeed is fast-fail
@@ -311,28 +388,4 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 		return false
 	}
 	return cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
-}
-
-// findActiveErrors finds all errors occurring within errorHistoryCheckInterval
-func (info *ChangeFeedInfo) findActiveErrors() []int64 {
-	i := sort.Search(len(info.ErrorHis), func(i int) bool {
-		ts := info.ErrorHis[i]
-		// ts is a errors occurrence time, here to find all errors occurring within errorHistoryCheckInterval
-		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryCheckInterval
-	})
-	return info.ErrorHis[i:]
-}
-
-// ErrorsReachedThreshold checks error history of a changefeed
-// returns true if error counts reach threshold
-func (info *ChangeFeedInfo) ErrorsReachedThreshold() bool {
-	return len(info.findActiveErrors()) >= ErrorHistoryThreshold
-}
-
-// CleanUpOutdatedErrorHistory cleans up the outdated error history
-// return true if the ErrorHis changed
-func (info *ChangeFeedInfo) CleanUpOutdatedErrorHistory() bool {
-	lastLenOfErrorHis := len(info.ErrorHis)
-	info.ErrorHis = info.findActiveErrors()
-	return lastLenOfErrorHis != len(info.ErrorHis)
 }
