@@ -367,7 +367,7 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	tableName := model.NewCIStr(table.Name)
 	ti = cloneTableInfo(ti)
 	ti.Name = tableName
-	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore, false)
+	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
 }
 
 // GetSystemVar gets a variable from schema tracker.
