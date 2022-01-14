@@ -844,9 +844,10 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		cp:           syncer.checkpoint,
 		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 
-	syncer.addJobFunc = syncer.addJobToMemory
+	syncer.handleJobFunc = syncer.addJobToMemory
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
@@ -985,6 +986,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		cp:           syncer.checkpoint,
 		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 
 	// When crossing safeModeExitPoint, will generate a flush sql
@@ -1121,9 +1123,10 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		cp:           syncer.checkpoint,
 		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 
-	syncer.addJobFunc = syncer.addJobToMemory
+	syncer.handleJobFunc = syncer.addJobToMemory
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
@@ -1525,8 +1528,11 @@ func (s *Syncer) setupMockCheckpoint(c *C, checkPointDBConn *sql.Conn, checkPoin
 		cp:           s.checkpoint,
 		execError:    &s.execError,
 		afterFlushFn: s.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 	c.Assert(s.checkpoint.(*RemoteCheckPoint).prepare(tcontext.Background()), IsNil)
+	// disable flush checkpoint periodically
+	s.checkpoint.(*RemoteCheckPoint).globalPointSaveTime = time.Now()
 }
 
 func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {

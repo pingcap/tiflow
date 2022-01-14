@@ -548,7 +548,9 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(resultTaskStatus.Data[0].Name, check.Equals, task.Name)
 	c.Assert(resultTaskStatus.Data[0].Stage, check.Equals, pb.Stage_Running.String())
 	c.Assert(resultTaskStatus.Data[0].WorkerName, check.Equals, workerName1)
-
+	c.Assert(resultTaskStatus.Data[0].DumpStatus.CompletedTables, check.Equals, float64(0))
+	c.Assert(resultTaskStatus.Data[0].DumpStatus.TotalTables, check.Equals, int64(1))
+	c.Assert(resultTaskStatus.Data[0].DumpStatus.EstimateTotalRows, check.Equals, float64(10))
 	// get task status with source name
 	taskStatusURL = fmt.Sprintf("%s/%s/status?source_name_list=%s", taskURL, task.Name, source1Name)
 	result = testutil.NewRequest().Get(taskStatusURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
@@ -857,6 +859,19 @@ func mockTaskQueryStatus(
 					},
 				},
 			},
+			{
+				Stage: pb.Stage_Running,
+				Name:  taskName,
+				Status: &pb.SubTaskStatus_Dump{
+					Dump: &pb.DumpStatus{
+						CompletedTables:   0.0,
+						EstimateTotalRows: 10.0,
+						FinishedBytes:     0.0,
+						FinishedRows:      5.0,
+						TotalTables:       1,
+					},
+				},
+			},
 		},
 	}
 	mockWorkerClient.EXPECT().QueryStatus(
@@ -865,6 +880,6 @@ func mockTaskQueryStatus(
 	).Return(queryResp, nil).MaxTimes(maxRetryNum)
 }
 
-func mockCheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) error {
-	return nil
+func mockCheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error) {
+	return "", nil
 }
