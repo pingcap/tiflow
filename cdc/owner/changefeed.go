@@ -39,11 +39,21 @@ import (
 	"go.uber.org/zap"
 )
 
+type changeFeedRunningStatus int32
+
 const (
-	changeFeedClosed  = 0
-	changeFeedRunning = 1
-	changeFeedClosing = 2
+	changeFeedClosed  changeFeedRunningStatus = iota
+	changeFeedRunning changeFeedRunningStatus = 1
+	changeFeedClosing changeFeedRunningStatus = 2
 )
+
+func loadChangeFeedStatus(addr *changeFeedRunningStatus) changeFeedRunningStatus {
+	return changeFeedRunningStatus(atomic.LoadInt32((*int32)(addr)))
+}
+
+func storeChangeFeedStatus(addr *changeFeedRunningStatus, val changeFeedRunningStatus) {
+	atomic.StoreInt32((*int32)(addr), int32(val))
+}
 
 type changefeed struct {
 	id    model.ChangeFeedID
