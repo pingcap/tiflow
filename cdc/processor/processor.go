@@ -1070,7 +1070,7 @@ func (p *processor) Close() error {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		log.Info("processor try close the sinkManager",
+		log.Info("processor try to close the sinkManager",
 			zap.String("changeFeedID", p.changefeedID))
 		start := time.Now()
 		if err := p.sinkManager.Close(ctx); err != nil {
