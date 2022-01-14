@@ -473,8 +473,10 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	log.Info("try new sink", zap.String("changefeedID", p.changefeed.ID))
 	s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
+		log.Info("try new sink faild", zap.String("changefeedID", p.changefeed.ID))
 		return errors.Trace(err)
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
