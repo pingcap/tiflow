@@ -98,7 +98,7 @@ require (
 )
 
 replace (
-	github.com/Shopify/sarama v1.27.2 => github.com/3AceShowHand/sarama v1.30.1-0.20220114123859-69ab46ad7700
+	github.com/Shopify/sarama v1.27.2 => github.com/3AceShowHand/sarama v1.30.1-0.20220114130038-eaa2aa36f813
 	// Fix CVE-2020-26160.
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt v3.2.1+incompatible
 	// cloud.google.com/go/storage will upgrade grpc to v1.40.0
