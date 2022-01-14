@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/dm/dm/config"
 )
 
 // AutoIncrementKeyChecking is an identification for auto increment key checking.
@@ -277,16 +278,18 @@ type ShardingTablesChecker struct {
 	tables                       map[string]map[string][]string // instance => {schema: [table1, table2, ...]}
 	mapping                      map[string]*column.Mapping
 	checkAutoIncrementPrimaryKey bool
+	shardMode                    string
 }
 
 // NewShardingTablesChecker returns a RealChecker.
-func NewShardingTablesChecker(name string, dbs map[string]*sql.DB, tables map[string]map[string][]string, mapping map[string]*column.Mapping, checkAutoIncrementPrimaryKey bool) RealChecker {
+func NewShardingTablesChecker(name string, dbs map[string]*sql.DB, tables map[string]map[string][]string, mapping map[string]*column.Mapping, checkAutoIncrementPrimaryKey bool, shardMode string) RealChecker {
 	return &ShardingTablesChecker{
 		name:                         name,
 		dbs:                          dbs,
 		tables:                       tables,
 		mapping:                      mapping,
 		checkAutoIncrementPrimaryKey: checkAutoIncrementPrimaryKey,
+		shardMode:                    shardMode,
 	}
 }
 
@@ -297,6 +300,10 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		Desc:  "check consistency of sharding table structures",
 		State: StateSuccess,
 		Extra: fmt.Sprintf("sharding %s", c.name),
+	}
+
+	if c.shardMode == config.ShardOptimistic {
+
 	}
 
 	var (
