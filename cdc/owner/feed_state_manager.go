@@ -396,10 +396,13 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	// TODO: this detection policy should be added into unit test.
 	if len(errs) > 0 {
 		m.lastErrorTime = time.Now()
-
 		if m.isChangefeedStable() {
 			m.resetErrBackoff()
 		}
+	} else {
+		if m.state.Info.State == model.StateNormal {
+			m.lastErrorTime = time.Unix(0, 0)
+		}	
 	}
 	m.shiftStateWindow(m.state.Info.State)
 
