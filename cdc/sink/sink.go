@@ -35,15 +35,17 @@ type Sink interface {
 	// EmitRowChangedEvents sends Row Changed Event to Sink
 	// EmitRowChangedEvents may write rows to downstream directly;
 	//
-	// EmitRowChangedEvents is thread-safe.
-	// FIXME: some sink implementation, they should be.
+	// EmitRowChangedEvents is thread-safety.
+	// FIXME: some sink implementation is not thread-safety, but they should be.
 	EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error
 
+	// TryEmitRowChangedEvents is thread-safety and non-blocking.
+	TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error)
 	// EmitDDLEvent sends DDL Event to Sink
 	// EmitDDLEvent should execute DDL to downstream synchronously
 	//
-	// EmitDDLEvent is thread-safe.
-	// FIXME: some sink implementation, they should be.
+	// EmitDDLEvent is thread-safety.
+	// FIXME: some sink implementation is not thread-safety, but they should be.
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 
 	// FlushRowChangedEvents flushes each row which of commitTs less than or
@@ -51,16 +53,16 @@ type Sink interface {
 	// TiCDC guarantees that all the Events whose commitTs is less than or
 	// equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
 	//
-	// FlushRowChangedEvents is thread-safe.
-	// FIXME: some sink implementation, they should be.
+	// FlushRowChangedEvents is thread-safety.
+	// FIXME: some sink implementation is not thread-safety, but they should be.
 	FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error)
 
 	// EmitCheckpointTs sends CheckpointTs to Sink.
 	// TiCDC guarantees that all Events **in the cluster** which of commitTs
 	// less than or equal `checkpointTs` are sent to downstream successfully.
 	//
-	// EmitCheckpointTs is thread-safe.
-	// FIXME: some sink implementation, they should be.
+	// EmitCheckpointTs is thread-safety.
+	// FIXME: some sink implementation is not thread-safety, but they should be.
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
 
 	// Close closes the Sink.
