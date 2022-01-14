@@ -55,8 +55,8 @@ function run() {
 	check_metric $WORKER1_PORT 'dm_worker_task_state{source_id="mysql-replica-01",task="test",worker="worker1"}' 10 1 3
 	check_metric $WORKER2_PORT 'dm_worker_task_state{source_id="mysql-replica-02",task="test",worker="worker2"}' 10 1 3
 
-  # check dm_syncer_binlog_file is updated timely
-  run_sql_source1 "flush logs;"
+	# check dm_syncer_binlog_file is updated timely
+	run_sql_source1 "flush logs;"
 	check_metric $WORKER1_PORT 'dm_syncer_binlog_file{node="syncer",source_id="mysql-replica-01",task="test"}' 10 1 3
 	check_metric $WORKER1_PORT 'dm_syncer_binlog_file{node="master",source_id="mysql-replica-01",task="test"}' 10 1 3
 
