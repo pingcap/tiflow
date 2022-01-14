@@ -45,6 +45,11 @@ const (
 	maxThreadNum             = 32
 )
 
+type checkItem struct {
+	table    *filter.Table
+	sourceID string
+}
+
 // hold information of incompatibility option.
 type incompatibilityOption struct {
 	state       State
@@ -72,17 +77,15 @@ func (o *incompatibilityOption) String() string {
 // In generally we need to check definitions of columns, constraints and table options.
 // Because of the early TiDB engineering design, we did not have a complete list of check items, which are all based on experience now.
 type TablesChecker struct {
-	db     *sql.DB
-	dbinfo *dbutil.DBConfig
-	tables []*filter.Table
+	dbs      map[string]*sql.DB
+	tableMap map[string][]*filter.Table
 }
 
 // NewTablesChecker returns a RealChecker.
-func NewTablesChecker(db *sql.DB, dbinfo *dbutil.DBConfig, tables []*filter.Table) RealChecker {
+func NewTablesChecker(dbs map[string]*sql.DB, tableMap map[string][]*filter.Table) RealChecker {
 	c := &TablesChecker{
-		db:     db,
-		dbinfo: dbinfo,
-		tables: tables,
+		dbs:      dbs,
+		tableMap: tableMap,
 	}
 	return c
 }
@@ -93,20 +96,27 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 		Name:  c.Name(),
 		Desc:  "check compatibility of table structure",
 		State: StateSuccess,
-		Extra: fmt.Sprintf("address of db instance - %s:%d", c.dbinfo.Host, c.dbinfo.Port),
 	}
 
 	startTime := time.Now()
 
-	maxConnections, err := utils.GetMaxConnections(ctx, c.db)
-	if err != nil {
-		markCheckError(r, err)
-		return r
+	concurrency := maxThreadNum
+	for instance := range c.tableMap {
+		db, ok := c.dbs[instance]
+		if !ok {
+			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
+			return r
+		}
+		maxConnections, err := utils.GetMaxConnections(ctx, db)
+		if err != nil {
+			markCheckError(r, err)
+			return r
+		}
+		concurrency = int(math.Min(float64(concurrency), float64(maxConnections/2)))
 	}
-	concurrency := int(math.Min(maxThreadNum, float64(maxConnections/2)))
 
 	var (
-		inCh    = make(chan *filter.Table, len(c.tables))
+		inCh    = make(chan *checkItem, maxThreadNum)
 		checkWg sync.WaitGroup
 		reMu    sync.Mutex
 	)
@@ -114,18 +124,19 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	checkCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	log.L().Logger.Info("start to check tables", zap.Int("concurrency", concurrency), zap.Int("all table num", len(c.tables)))
 	checkFunc := func() {
 		defer checkWg.Done()
 		for {
 			select {
 			case <-checkCtx.Done():
 				return
-			case table, ok := <-inCh:
+			case checkItem, ok := <-inCh:
 				if !ok {
 					return
 				}
-				statement, err := dbutil.GetCreateTableSQL(ctx, c.db, table.Schema, table.Name)
+				table := checkItem.table
+				db := c.dbs[checkItem.sourceID]
+				statement, err := dbutil.GetCreateTableSQL(ctx, db, table.Schema, table.Name)
 				if err != nil {
 					// continue if table was deleted when checking
 					if isMySQLError(err, mysql.ErrNoSuchTable) {
@@ -138,7 +149,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 					break
 				}
 
-				opts := c.checkCreateSQL(ctx, statement)
+				opts := c.checkCreateSQL(ctx, db, statement)
 				for _, opt := range opts {
 					opt.tableID = table.String()
 					tableMsg := "table " + opt.tableID + " "
@@ -169,15 +180,17 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 		go checkFunc()
 	}
 
-	for _, table := range c.tables {
-		isDone := false
-		select {
-		case inCh <- table:
-		case <-checkCtx.Done():
-			isDone = true
-		}
-		if isDone {
-			break
+	for sourceID, tables := range c.tableMap {
+		for _, table := range tables {
+			isDone := false
+			select {
+			case inCh <- &checkItem{table, sourceID}:
+			case <-checkCtx.Done():
+				isDone = true
+			}
+			if isDone {
+				break
+			}
 		}
 	}
 
@@ -192,8 +205,8 @@ func (c *TablesChecker) Name() string {
 	return "table structure compatibility check"
 }
 
-func (c *TablesChecker) checkCreateSQL(ctx context.Context, statement string) []*incompatibilityOption {
-	parser2, err := dbutil.GetParserForDB(ctx, c.db)
+func (c *TablesChecker) checkCreateSQL(ctx context.Context, db *sql.DB, statement string) []*incompatibilityOption {
+	parser2, err := dbutil.GetParserForDB(ctx, db)
 	if err != nil {
 		return []*incompatibilityOption{
 			{
@@ -340,16 +353,13 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		State: StateSuccess,
 		Extra: fmt.Sprintf("sharding %s,", c.targetTableID),
 	}
-	type in struct {
-		table    *filter.Table
-		instance string
-	}
+
 	log.L().Logger.Info("start to check sharding tables")
 	var (
 		stmtNode      *ast.CreateTableStmt
 		firstTable    *filter.Table
 		firstInstance string
-		inCh          = make(chan *in, maxThreadNum)
+		inCh          = make(chan *checkItem, maxThreadNum)
 		checkWg       sync.WaitGroup
 		reMu          sync.Mutex
 	)
@@ -413,15 +423,14 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 			select {
 			case <-checkCtx.Done():
 				return
-			case in, ok := <-inCh:
+			case checkItem, ok := <-inCh:
 				if !ok {
 					return
 				}
-				table := in.table
-				fmt.Printf("table: %s, instance: %s", table.String(), in.instance)
+				table := checkItem.table
 				var err2 error
-				if instance != in.instance {
-					instance = in.instance
+				if instance != checkItem.sourceID {
+					instance = checkItem.sourceID
 					p, err2 = dbutil.GetParserForDB(ctx, c.dbs[instance])
 					if err2 != nil {
 						r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
@@ -440,7 +449,6 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 					return
 				}
 
-				fmt.Println(statement)
 				info, err2 := dbutil.GetTableInfoBySQL(statement, p)
 				if err2 != nil {
 					err = err2
@@ -501,7 +509,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		for _, table := range tables {
 			isDone := false
 			select {
-			case inCh <- &in{table, instance}:
+			case inCh <- &checkItem{table, instance}:
 			case <-checkCtx.Done():
 				isDone = true
 			}

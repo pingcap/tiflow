@@ -120,6 +120,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	// targetTableID => source => [tables]
 	sharding := make(map[string]map[string][]*filter.Table)
 	shardingCounter := make(map[string]int)
+	// sourceID => []table
+	checkTablesMap := make(map[string][]*filter.Table)
 	dbs := make(map[string]*sql.DB)
 	columnMapping := make(map[string]*column.Mapping)
 	_, checkingShardID := c.checkingItems[config.ShardAutoIncrementIDChecking]
@@ -226,14 +228,17 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				}
 			}
 		}
+		checkTablesMap[instance.cfg.SourceID] = checkTables
 		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
 
 		if c.onlineDDL != nil {
 			c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, bw))
 		}
-		if checkSchema {
-			c.checkList = append(c.checkList, checker.NewTablesChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables))
-		}
+
+	}
+
+	if checkSchema {
+		c.checkList = append(c.checkList, checker.NewTablesChecker(dbs, checkTablesMap))
 	}
 
 	if checkingShard {

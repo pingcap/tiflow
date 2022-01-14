@@ -21,7 +21,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	tc "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -102,7 +101,7 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 
 	// 1. test a success check
 	maxConnectionsRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("max_connections", "151")
+		AddRow("max_connections", "2")
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
 	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
@@ -114,17 +113,19 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 		AddRow("sql_mode", "ANSI_QUOTES")
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
 
-	checker := NewTablesChecker(db,
-		&dbutil.DBConfig{},
-		[]*filter.Table{{Schema: "test-db", Name: "test-table-1"}})
+	checker := NewTablesChecker(
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+		}})
 	result := checker.Check(ctx)
+	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJSON(result)
 
 	// 2. check many errors
 	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("max_connections", "151")
+		AddRow("max_connections", "2")
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
 	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
@@ -144,7 +145,7 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 
 	// 3. unsupported charset
 	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("max_connections", "151")
+		AddRow("max_connections", "2")
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
 	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
@@ -157,11 +158,10 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
 
 	result = checker.Check(ctx)
-
+	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJSON(result)
 }
 
 func initShardingMock(mock sqlmock.Sqlmock) sqlmock.Sqlmock {
