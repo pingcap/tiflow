@@ -358,34 +358,6 @@ func TestChangeFeedInfoClone(t *testing.T) {
 	require.True(t, info.Config.EnableOldValue)
 }
 
-func TestCheckErrorHistory(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now()
-	info := &ChangeFeedInfo{
-		ErrorHis: []int64{},
-	}
-	for i := 0; i < 5; i++ {
-		tm := now.Add(-errorHistoryGCInterval)
-		info.ErrorHis = append(info.ErrorHis, tm.UnixNano()/1e6)
-		time.Sleep(time.Millisecond)
-	}
-	for i := 0; i < ErrorHistoryThreshold-1; i++ {
-		info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
-		time.Sleep(time.Millisecond)
-	}
-	time.Sleep(time.Millisecond)
-	needSave, canInit := info.CheckErrorHistory()
-	require.True(t, needSave)
-	require.True(t, canInit)
-	require.Equal(t, ErrorHistoryThreshold-1, len(info.ErrorHis))
-
-	info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
-	needSave, canInit = info.CheckErrorHistory()
-	require.False(t, needSave)
-	require.False(t, canInit)
-}
-
 func TestChangefeedInfoStringer(t *testing.T) {
 	t.Parallel()
 
