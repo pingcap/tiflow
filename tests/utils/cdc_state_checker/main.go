@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/log"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -42,7 +43,10 @@ func main() {
 		log.Panic("Error creating CDCMonitor", zap.Error(err))
 	}
 
-	err = cdcMonitor.run(context.TODO())
+	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{
+		IsOwner: true,
+	})
+	err = cdcMonitor.run(ctx)
 	log.Panic("cdcMonitor exited", zap.Error(err))
 }
 
