@@ -1049,6 +1049,7 @@ func (p *processor) flushRedoLogMeta(ctx context.Context) error {
 }
 
 func (p *processor) Close() error {
+	log.Info("processor closing ...", zap.String("changefeedID", p.changefeedID))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
 	}
