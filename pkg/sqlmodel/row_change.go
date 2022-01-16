@@ -31,7 +31,7 @@ import (
 
 type RowChangeType int
 
-// these consts represent types of row change.
+// these constants represent types of row change.
 const (
 	RowChangeNull RowChangeType = iota
 	RowChangeInsert
@@ -39,6 +39,7 @@ const (
 	RowChangeDelete
 )
 
+// String implements fmt.Stringer interface.
 func (t RowChangeType) String() string {
 	switch t {
 	case RowChangeInsert:
@@ -57,8 +58,8 @@ type RowChange struct {
 	sourceTable *cdcmodel.TableName
 	targetTable *cdcmodel.TableName
 
-	preValues  []interface{} // values to be updated for UPDATE and values to be deleted for DELETE
-	postValues []interface{} // values to be inserted for INSERT and values updated for UPDATE
+	preValues  []interface{}
+	postValues []interface{}
 
 	sourceTableInfo *timodel.TableInfo
 	targetTableInfo *timodel.TableInfo
@@ -70,13 +71,14 @@ type RowChange struct {
 }
 
 // NewRowChange creates a new RowChange.
+// preValues stands for values exists before this change, postValues stands for values exists after this change.
 // These parameters can be nil:
 // - targetTable: when same as sourceTable or not applicable
 // - preValues: when INSERT
 // - postValues: when DELETE
 // - targetTableInfo: when same as sourceTableInfo or not applicable
-// - tiSessionCtx: use default sessionCtx which is UTC timezone
-// The arguments must not be changed after assigned to RowChange, any modification (like convert []byte to string)
+// - tiSessionCtx: will use default sessionCtx which is UTC timezone
+// All arguments must not be changed after assigned to RowChange, any modification (like convert []byte to string)
 // should be done before NewRowChange.
 func NewRowChange(
 	sourceTable *cdcmodel.TableName,
@@ -130,6 +132,7 @@ func (r *RowChange) calculateType() {
 	}
 }
 
+// Type returns the RowChangeType of this RowChange. Caller can future decide the DMLType when generate DML from it.
 func (r *RowChange) Type() RowChangeType {
 	return r.tp
 }
@@ -145,8 +148,8 @@ func (r *RowChange) TargetTableID() string {
 	return r.targetTable.QuoteString()
 }
 
-// SetIdentifyInfo can be used to calculate and cache identityInfo in caller, to avoid every RowChange lazy initialize
-// it.
+// SetIdentifyInfo can be used when caller has calculated and cached identityInfo, to avoid every RowChange lazily
+// initialize it.
 func (r *RowChange) SetIdentifyInfo(info *schema.DownstreamTableInfo) {
 	r.identityInfo = info
 }
@@ -162,15 +165,15 @@ func (r *RowChange) lazyInitIdentityInfo() {
 func getColsAndValuesOfIdx(columns []*timodel.ColumnInfo, indexColumns *timodel.IndexInfo, data []interface{}) ([]*timodel.ColumnInfo, []interface{}) {
 	cols := make([]*timodel.ColumnInfo, 0, len(indexColumns.Columns))
 	values := make([]interface{}, 0, len(indexColumns.Columns))
-	for _, column := range indexColumns.Columns {
-		cols = append(cols, columns[column.Offset])
-		values = append(values, data[column.Offset])
+	for _, col := range indexColumns.Columns {
+		cols = append(cols, columns[col.Offset])
+		values = append(values, data[col.Offset])
 	}
 
 	return cols, values
 }
 
-// whereColumnsAndValues returns columns and values to identify the row.
+// whereColumnsAndValues returns columns and values to identify the row, to form the WHERE clause.
 func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 	r.lazyInitIdentityInfo()
 
@@ -200,7 +203,7 @@ func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 	return columnNames, values
 }
 
-// genWhere generates where clause for UPDATE and DELETE to identify the row.
+// genWhere generates WHERE clause for UPDATE and DELETE to identify the row.
 // the SQL part is written to `buf` and the args part is returned.
 func (r *RowChange) genWhere(buf *strings.Builder) []interface{} {
 	whereColumns, whereValues := r.whereColumnsAndValues()
@@ -219,6 +222,23 @@ func (r *RowChange) genWhere(buf *strings.Builder) []interface{} {
 	return whereValues
 }
 
+// valuesHolder gens values holder like (?,?,?).
+// n must be greater or equal than 1, or the function will panic.
+func valuesHolder(n int) string {
+	var builder strings.Builder
+	builder.Grow((n-1)*2 + 1)
+	builder.WriteByte('(')
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			builder.WriteString(",")
+		}
+		builder.WriteString("?")
+	}
+	builder.WriteByte(')')
+	return builder.String()
+}
+
+// GenDeleteSQL generates the DELETE SQL and its arguments.
 func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 	if len(changes) == 0 {
 		return "", nil
@@ -239,15 +259,16 @@ func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 		}
 	}
 	buf.WriteString(" IN (")
-	// can't handle iS NULL???
+	// TODO: can't handle iS NULL
 	args := make([]interface{}, 0, len(changes)*len(whereColumns))
+	holder := valuesHolder(len(whereColumns))
 	for i, change := range changes {
 		if i > 0 {
 			buf.WriteString(",")
 		}
-		writeValuesHolder(&buf, len(whereColumns))
+		buf.WriteString(holder)
+		// TODO: check the whereValues are in same length (no UK NULL causes different whereColumns)
 		_, whereValues := change.whereColumnsAndValues()
-		// whereValues will have same length because we have checked it in genDMLsWithSameCols.
 		args = append(args, whereValues...)
 	}
 	buf.WriteString(")")
@@ -281,6 +302,8 @@ func isGenerated(columns []*timodel.ColumnInfo, name timodel.CIStr) bool {
 	}
 	return false
 }
+
+// TODO: support GenUpdateSQL(changes ...*RowChange) using UPDATE SET CASE WHEN
 
 func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	if r.tp != RowChangeUpdate {
@@ -319,18 +342,7 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	return buf.String(), args
 }
 
-// writeValuesHolder gens values holder like (?,?,?).
-func writeValuesHolder(buf *strings.Builder, n int) {
-	buf.WriteByte('(')
-	for i := 0; i < n; i++ {
-		if i > 0 {
-			buf.WriteString(",")
-		}
-		buf.WriteString("?")
-	}
-	buf.WriteByte(')')
-}
-
+// GenInsertSQL generates the INSERT SQL and its arguments.
 func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 	if len(changes) == 0 {
 		return "", nil
@@ -360,11 +372,12 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 		buf.WriteString(quotes.QuoteName(col.Name.O))
 	}
 	buf.WriteString(") VALUES ")
+	holder := valuesHolder(columnNum)
 	for i := range changes {
 		if i > 0 {
 			buf.WriteString(",")
 		}
-		writeValuesHolder(&buf, columnNum)
+		buf.WriteString(holder)
 	}
 	if tp == DMLInsertOnDuplicateUpdate {
 		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
@@ -402,7 +415,7 @@ func (r *RowChange) genInsertSQL(tp DMLType) (string, []interface{}) {
 
 type DMLType int
 
-// these consts represent types of row change.
+// these constants represent types of row change.
 const (
 	DMLNull DMLType = iota
 	DMLInsert
@@ -412,6 +425,7 @@ const (
 	DMLDelete
 )
 
+// String implements fmt.Stringer interface.
 func (t DMLType) String() string {
 	switch t {
 	case DMLInsert:
@@ -429,6 +443,7 @@ func (t DMLType) String() string {
 	return ""
 }
 
+// GenSQL generated a DML SQL for this RowChange.
 func (r *RowChange) GenSQL(tp DMLType) (string, []interface{}) {
 	switch tp {
 	case DMLInsert, DMLReplace, DMLInsertOnDuplicateUpdate:
