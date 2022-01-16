@@ -24,9 +24,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
@@ -205,10 +207,10 @@ func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
 		}
 	}
 
-	err := failpoint.Enable("github.com/pingcap/ticdc/pkg/workerpool/addEventDelayPoint", "1*sleep(500)")
+	err := failpoint.Enable("github.com/pingcap/tiflow/pkg/workerpool/addEventDelayPoint", "1*sleep(500)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/workerpool/addEventDelayPoint")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/workerpool/addEventDelayPoint")
 	}()
 
 	handle.Unregister()
@@ -238,10 +240,10 @@ func (s *workerPoolSuite) TestCancelTimer(c *check.C) {
 		return pool.Run(ctx)
 	})
 
-	err := failpoint.Enable("github.com/pingcap/ticdc/pkg/workerpool/unregisterDelayPoint", "sleep(5000)")
+	err := failpoint.Enable("github.com/pingcap/tiflow/pkg/workerpool/unregisterDelayPoint", "sleep(5000)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/workerpool/unregisterDelayPoint")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/workerpool/unregisterDelayPoint")
 	}()
 
 	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
@@ -425,8 +427,40 @@ func (s *workerPoolSuite) TestCancelByAddEventContext(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
+func TestSynchronizeLog(t *testing.T) {
+	w := newWorker()
+	w.isRunning = 1
+	// Always report "synchronize is taking too long".
+	w.slowSynchronizeThreshold = time.Duration(0)
+	w.slowSynchronizeLimiter = rate.NewLimiter(rate.Every(100*time.Minute), 1)
+
+	counter := int32(0)
+	logWarn = func(msg string, fields ...zap.Field) {
+		atomic.AddInt32(&counter, 1)
+	}
+	defer func() { logWarn = log.Warn }()
+
+	doneCh := make(chan struct{})
+	go func() {
+		w.synchronize()
+		close(doneCh)
+	}()
+
+	time.Sleep(300 * time.Millisecond)
+	w.stopNotifier.Notify()
+	time.Sleep(300 * time.Millisecond)
+	w.stopNotifier.Notify()
+
+	// Close worker.
+	atomic.StoreInt32(&w.isRunning, 0)
+	w.stopNotifier.Close()
+	<-doneCh
+
+	require.EqualValues(t, 1, atomic.LoadInt32(&counter))
+}
+
 // Benchmark workerpool with ping-pong workflow.
-// go test -benchmem -run='^$' -bench '^(BenchmarkWorkerpool)$' github.com/pingcap/ticdc/pkg/workerpool
+// go test -benchmem -run='^$' -bench '^(BenchmarkWorkerpool)$' github.com/pingcap/tiflow/pkg/workerpool
 func BenchmarkWorkerpool(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -22,10 +22,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
 
@@ -48,7 +49,7 @@ const (
 	StateError    FeedState = "error"
 	StateFailed   FeedState = "failed"
 	StateStopped  FeedState = "stopped"
-	StateRemoved  FeedState = "removed" // deprecated, will be removed in the next version
+	StateRemoved  FeedState = "removed"
 	StateFinished FeedState = "finished"
 )
 
@@ -208,10 +209,10 @@ func (info *ChangeFeedInfo) Clone() (*ChangeFeedInfo, error) {
 	return cloned, err
 }
 
-// VerifyAndFix verifies changefeed info and may fillin some fields.
-// If a must field is not provided, return an error.
-// If some necessary filed is missing but can use a default value, fillin it.
-func (info *ChangeFeedInfo) VerifyAndFix() error {
+// VerifyAndComplete verifies changefeed info and may fill in some fields.
+// If a required field is not provided, return an error.
+// If some necessary filed is missing but can use a default value, fill in it.
+func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	defaultConfig := config.GetDefaultReplicaConfig()
 	if info.Engine == "" {
 		info.Engine = SortUnified
@@ -232,6 +233,54 @@ func (info *ChangeFeedInfo) VerifyAndFix() error {
 		info.Config.Scheduler = defaultConfig.Scheduler
 	}
 	return nil
+}
+
+// FixIncompatible fixes incompatible changefeed meta info.
+func (info *ChangeFeedInfo) FixIncompatible() {
+	creatorVersionGate := version.NewCreatorVersionGate(info.CreatorVersion)
+	if creatorVersionGate.ChangefeedStateFromAdminJob() {
+		log.Info("Start fixing incompatible changefeed state", zap.Any("changefeed", info))
+		info.fixState()
+		log.Info("Fix incompatibility changefeed state completed", zap.Any("changefeed", info))
+	}
+}
+
+// fixState attempts to fix state loss from upgrading the old owner to the new owner.
+func (info *ChangeFeedInfo) fixState() {
+	// Notice: In the old owner we used AdminJobType field to determine if the task was paused or not,
+	// we need to handle this field in the new owner.
+	// Otherwise, we will see that the old version of the task is paused and then upgraded,
+	// and the task is automatically resumed after the upgrade.
+	state := info.State
+	// Upgrading from an old owner, we need to deal with cases where the state is normal,
+	// but actually contains errors and does not match the admin job type.
+	if state == StateNormal {
+		switch info.AdminJobType {
+		// This corresponds to the case of failure or error.
+		case AdminNone, AdminResume:
+			if info.Error != nil {
+				if cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
+					state = StateFailed
+				} else {
+					state = StateError
+				}
+			}
+		case AdminStop:
+			state = StateStopped
+		case AdminFinish:
+			state = StateFinished
+		case AdminRemove:
+			state = StateRemoved
+		}
+	}
+
+	if state != info.State {
+		log.Info("handle old owner inconsistent state",
+			zap.String("old state", string(info.State)),
+			zap.String("admin job type", info.AdminJobType.String()),
+			zap.String("new state", string(state)))
+		info.State = state
+	}
 }
 
 // CheckErrorHistory checks error history of a changefeed
