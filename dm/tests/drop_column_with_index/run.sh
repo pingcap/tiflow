@@ -10,8 +10,8 @@ function run() {
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	# need to return error three times, first for switch to remote binlog, second for auto retry
 	inject_points=(
-		"github.com/pingcap/ticdc/dm/syncer/SyncerGetEventError=return"
-		"github.com/pingcap/ticdc/dm/syncer/GetEventError=3*return"
+		"github.com/pingcap/tiflow/dm/syncer/SyncerGetEventError=return"
+		"github.com/pingcap/tiflow/dm/syncer/GetEventError=3*return"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
@@ -55,7 +55,7 @@ function run() {
 		"\"isCanceled\": true" 1
 
 	sleep 5
-	check_log_not_contains "dispatch auto resume task" $WORK_DIR/worker1/log/dm-worker.log
+	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log "dispatch auto resume task"
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \

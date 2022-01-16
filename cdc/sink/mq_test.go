@@ -19,16 +19,16 @@ import (
 	"net/url"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type mqSinkSuite struct{}
@@ -62,6 +62,12 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	c.Assert(err, check.IsNil)
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
+
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate")
+	}()
+
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
@@ -74,10 +80,12 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 
 	// mock kafka broker processes 1 row changed event
 	leader.Returns(prodSuccess)
+	tableID := model.TableID(1)
 	row := &model.RowChangedEvent{
 		Table: &model.TableName{
-			Schema: "test",
-			Table:  "t1",
+			Schema:  "test",
+			Table:   "t1",
+			TableID: tableID,
 		},
 		StartTs:  100,
 		CommitTs: 120,
@@ -85,11 +93,11 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	}
 	err = sink.EmitRowChangedEvents(ctx, row)
 	c.Assert(err, check.IsNil)
-	checkpointTs, err := sink.FlushRowChangedEvents(ctx, uint64(120))
+	checkpointTs, err := sink.FlushRowChangedEvents(ctx, tableID, uint64(120))
 	c.Assert(err, check.IsNil)
 	c.Assert(checkpointTs, check.Equals, uint64(120))
 	// flush older resolved ts
-	checkpointTs, err = sink.FlushRowChangedEvents(ctx, uint64(110))
+	checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, uint64(110))
 	c.Assert(err, check.IsNil)
 	c.Assert(checkpointTs, check.Equals, uint64(120))
 
@@ -161,6 +169,12 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	c.Assert(err, check.IsNil)
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
+
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate")
+	}()
+
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
@@ -199,7 +213,7 @@ func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/pulsar/MockPulsar", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/pulsar/MockPulsar", "return(true)")
 	c.Assert(err, check.IsNil)
 
 	uri := "pulsar://127.0.0.1:1234/kafka-test?" +

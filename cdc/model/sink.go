@@ -19,9 +19,9 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/quotes"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/pkg/quotes"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 

@@ -14,8 +14,8 @@
 package cli
 
 import (
-	"github.com/pingcap/ticdc/pkg/cmd/context"
-	"github.com/pingcap/ticdc/pkg/cmd/factory"
+	"github.com/pingcap/tiflow/pkg/cmd/context"
+	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"

@@ -22,11 +22,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"go.uber.org/zap"
 )
 
@@ -38,7 +38,6 @@ const (
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
 type AsyncSink interface {
-	Initialize(ctx cdcContext.Context, tableInfo []*model.SimpleTableInfo) error
 	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
@@ -99,10 +98,6 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 	asyncSink.wg.Add(1)
 	go asyncSink.run(ctx)
 	return asyncSink, nil
-}
-
-func (s *asyncSinkImpl) Initialize(ctx cdcContext.Context, tableInfo []*model.SimpleTableInfo) error {
-	return s.sink.Initialize(ctx, tableInfo)
 }
 
 func (s *asyncSinkImpl) run(ctx cdcContext.Context) {

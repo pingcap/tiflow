@@ -32,22 +32,22 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
-	binlogReader "github.com/pingcap/ticdc/dm/pkg/binlog/reader"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	pkgstreamer "github.com/pingcap/ticdc/dm/pkg/streamer"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay/reader"
-	"github.com/pingcap/ticdc/dm/relay/retry"
-	"github.com/pingcap/ticdc/dm/relay/transformer"
-	"github.com/pingcap/ticdc/dm/relay/writer"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
+	binlogReader "github.com/pingcap/tiflow/dm/pkg/binlog/reader"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	pkgstreamer "github.com/pingcap/tiflow/dm/pkg/streamer"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/relay/reader"
+	"github.com/pingcap/tiflow/dm/relay/retry"
+	"github.com/pingcap/tiflow/dm/relay/transformer"
+	"github.com/pingcap/tiflow/dm/relay/writer"
 )
 
 // used to fill RelayLogInfo.
@@ -240,7 +240,7 @@ func (r *Relay) process(ctx context.Context) error {
 			}
 		} else {
 			_, metaPos := r.meta.Pos()
-			if neededBinlogName > metaPos.Name {
+			if mysql.CompareBinlogFileName(neededBinlogName, metaPos.Name) > 0 {
 				isRelayMetaOutdated = true
 			}
 		}

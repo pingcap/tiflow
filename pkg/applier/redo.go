@@ -19,13 +19,13 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo"
-	"github.com/pingcap/ticdc/cdc/redo/reader"
-	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/redo/reader"
+	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -129,6 +129,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	// lastResolvedTs records the max resolved ts we have seen from redo logs.
 	lastResolvedTs := checkpointTs
 	cachedRows := make([]*model.RowChangedEvent, 0, emitBatch)
+	tableResolvedTsMap := make(map[model.TableID]model.Ts)
 	for {
 		redoLogs, err := ra.rd.ReadNextLog(ctx, readBatch)
 		if err != nil {
@@ -139,6 +140,10 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		}
 
 		for _, redoLog := range redoLogs {
+			tableID := redoLog.Row.Table.TableID
+			if _, ok := tableResolvedTsMap[redoLog.Row.Table.TableID]; !ok {
+				tableResolvedTsMap[tableID] = lastSafeResolvedTs
+			}
 			if len(cachedRows) >= emitBatch {
 				err := s.EmitRowChangedEvents(ctx, cachedRows...)
 				if err != nil {
@@ -147,26 +152,33 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 				cachedRows = make([]*model.RowChangedEvent, 0, emitBatch)
 			}
 			cachedRows = append(cachedRows, redo.LogToRow(redoLog))
-			if redoLog.Row.CommitTs > lastResolvedTs {
-				lastSafeResolvedTs, lastResolvedTs = lastResolvedTs, redoLog.Row.CommitTs
+
+			if redoLog.Row.CommitTs > tableResolvedTsMap[tableID] {
+				tableResolvedTsMap[tableID], lastResolvedTs = lastResolvedTs, redoLog.Row.CommitTs
 			}
 		}
-		_, err = s.FlushRowChangedEvents(ctx, lastSafeResolvedTs)
-		if err != nil {
-			return err
+
+		for tableID, tableLastResolvedTs := range tableResolvedTsMap {
+			_, err = s.FlushRowChangedEvents(ctx, tableID, tableLastResolvedTs)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	err = s.EmitRowChangedEvents(ctx, cachedRows...)
 	if err != nil {
 		return err
 	}
-	_, err = s.FlushRowChangedEvents(ctx, resolvedTs)
-	if err != nil {
-		return err
-	}
-	err = s.Barrier(ctx)
-	if err != nil {
-		return err
+
+	for tableID := range tableResolvedTsMap {
+		_, err = s.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+		if err != nil {
+			return err
+		}
+		err = s.Barrier(ctx, tableID)
+		if err != nil {
+			return err
+		}
 	}
 	return errApplyFinished
 }

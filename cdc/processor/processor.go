@@ -25,22 +25,22 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/redo"
-	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/cdc/sorter/memory"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -169,6 +169,8 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err := p.lazyInit(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
+	// sink manager will return this checkpointTs to sink node if sink node resolvedTs flush failed
+	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Info.GetCheckpointTs(state.Status))
 	if err := p.handleTableOperation(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -705,7 +707,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			}
 			markTableID = tableInfo.ID
 			return nil
-		}, retry.WithBackoffMaxDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
+		}, retry.WithBackoffBaseDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

@@ -24,12 +24,12 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/dumpling"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/dumpling"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // SQLReplace works like strings.Replace but only supports one replacement.
@@ -158,7 +158,6 @@ func cleanDumpFiles(cfg *config.SubTaskConfig) {
 		var lastErr error
 		for f := range files {
 			if strings.HasSuffix(f, ".sql") {
-				// TODO: table structure files are not used now, but we plan to used them in future so not delete them
 				if strings.HasSuffix(f, "-schema-create.sql") || strings.HasSuffix(f, "-schema.sql") {
 					continue
 				}

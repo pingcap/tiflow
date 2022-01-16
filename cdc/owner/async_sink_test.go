@@ -21,13 +21,13 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 var _ = check.Suite(&asyncSinkSuite{})
@@ -36,16 +36,10 @@ type asyncSinkSuite struct{}
 
 type mockSink struct {
 	sink.Sink
-	initTableInfo []*model.SimpleTableInfo
-	checkpointTs  model.Ts
-	ddl           *model.DDLEvent
-	ddlMu         sync.Mutex
-	ddlError      error
-}
-
-func (m *mockSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	m.initTableInfo = tableInfo
-	return nil
+	checkpointTs model.Ts
+	ddl          *model.DDLEvent
+	ddlMu        sync.Mutex
+	ddlError     error
 }
 
 func (m *mockSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -65,7 +59,7 @@ func (m *mockSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockSink) Barrier(ctx context.Context) error {
+func (m *mockSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
@@ -85,17 +79,6 @@ func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, 
 	mockSink := &mockSink{}
 	sink.(*asyncSinkImpl).sink = mockSink
 	return ctx, sink, mockSink
-}
-
-func (s *asyncSinkSuite) TestInitialize(c *check.C) {
-	defer testleak.AfterTest(c)()
-	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, sink, mockSink := newAsyncSink4Test(ctx, c)
-	defer sink.Close(ctx)
-	tableInfos := []*model.SimpleTableInfo{{Schema: "test"}}
-	err := sink.Initialize(ctx, tableInfos)
-	c.Assert(err, check.IsNil)
-	c.Assert(tableInfos, check.DeepEquals, mockSink.initTableInfo)
 }
 
 func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
