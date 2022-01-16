@@ -434,9 +434,10 @@ func (s *mysqlSink) broadcastFinishTxn() {
 }
 
 func (s *mysqlSink) dispatchTableTxn(ctx context.Context, txn *model.SingleTableTxn) {
+	log.Info("dispatch single table txn", zap.Uint64("startTs", txn.RawTableTxn.StartTs), zap.Uint64("commitTs", txn.RawTableTxn.CommitTs))
 	// NOTICE: To some extend, causality dispatcher may affect other dispatcher due to the waitExec
 	workerIdx := s.txnDispatcher.Dispatch(&(txn.RawTableTxn))
-	if workerIdx > 0 {
+	if workerIdx >= 0 {
 		s.workers[workerIdx].appendTxn(ctx, txn)
 		return
 	}
