@@ -19,13 +19,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pingcap/ticdc/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/stretchr/testify/require"
 )
 
-func TestPProfRouter(t *testing.T) {
+func TestPProfPath(t *testing.T) {
 	t.Parallel()
-
 	router := newRouter(capture.NewHTTPHandler(nil))
 
 	apis := []*openAPI{

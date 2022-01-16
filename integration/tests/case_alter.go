@@ -18,7 +18,7 @@ import (
 	"math/rand"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/tiflow/integration/framework"
 )
 
 // AlterCase is base impl of test case for alter operation

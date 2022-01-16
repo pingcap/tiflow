@@ -15,26 +15,22 @@ package common
 
 import (
 	"sort"
+	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type SinkCommonSuite struct{}
+func TestSplitResolvedTxn(test *testing.T) {
+	defer testleak.AfterTestT(test)()
 
-func Test(t *testing.T) { check.TestingT(t) }
-
-var _ = check.Suite(&SinkCommonSuite{})
-
-func (s SinkCommonSuite) TestSplitResolvedTxn(c *check.C) {
-	defer testleak.AfterTest(c)()
 	testCases := [][]struct {
-		input      []*model.RowChangedEvent
-		resolvedTs model.Ts
-		expected   map[model.TableID][]*model.SingleTableTxn
+		input         []*model.RowChangedEvent
+		resolvedTsMap map[model.TableID]uint64
+		expected      map[model.TableID][]*model.SingleTableTxn
 	}{{{ // Testing basic transaction collocation, no txns with the same committs
 		input: []*model.RowChangedEvent{
 			{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
@@ -45,7 +41,10 @@ func (s SinkCommonSuite) TestSplitResolvedTxn(c *check.C) {
 			{StartTs: 1, CommitTs: 11, Table: &model.TableName{TableID: 1}},
 			{StartTs: 1, CommitTs: 12, Table: &model.TableName{TableID: 2}},
 		},
-		resolvedTs: 6,
+		resolvedTsMap: map[model.TableID]uint64{
+			1: uint64(6),
+			2: uint64(6),
+		},
 		expected: map[model.TableID][]*model.SingleTableTxn{
 			1: {{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 5, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
@@ -59,7 +58,11 @@ func (s SinkCommonSuite) TestSplitResolvedTxn(c *check.C) {
 		input: []*model.RowChangedEvent{
 			{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 3}},
 		},
-		resolvedTs: 13,
+		resolvedTsMap: map[model.TableID]uint64{
+			1: uint64(13),
+			2: uint64(13),
+			3: uint64(13),
+		},
 		expected: map[model.TableID][]*model.SingleTableTxn{
 			1: {{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 8, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
@@ -76,17 +79,24 @@ func (s SinkCommonSuite) TestSplitResolvedTxn(c *check.C) {
 			}}},
 		},
 	}}, {{ // Testing the short circuit path
-		input:      []*model.RowChangedEvent{},
-		resolvedTs: 6,
-		expected:   nil,
+		input: []*model.RowChangedEvent{},
+		resolvedTsMap: map[model.TableID]uint64{
+			1: uint64(13),
+			2: uint64(13),
+			3: uint64(13),
+		},
+		expected: nil,
 	}, {
 		input: []*model.RowChangedEvent{
 			{StartTs: 1, CommitTs: 11, Table: &model.TableName{TableID: 1}},
 			{StartTs: 1, CommitTs: 12, Table: &model.TableName{TableID: 1}},
 			{StartTs: 1, CommitTs: 13, Table: &model.TableName{TableID: 2}},
 		},
-		resolvedTs: 6,
-		expected:   map[model.TableID][]*model.SingleTableTxn{},
+		resolvedTsMap: map[model.TableID]uint64{
+			1: uint64(6),
+			2: uint64(6),
+		},
+		expected: map[model.TableID][]*model.SingleTableTxn{},
 	}}, {{ // Testing the txns with the same commitTs
 		input: []*model.RowChangedEvent{
 			{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
@@ -99,7 +109,10 @@ func (s SinkCommonSuite) TestSplitResolvedTxn(c *check.C) {
 			{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
 			{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 2}},
 		},
-		resolvedTs: 6,
+		resolvedTsMap: map[model.TableID]uint64{
+			1: uint64(6),
+			2: uint64(6),
+		},
 		expected: map[model.TableID][]*model.SingleTableTxn{
 			1: {{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 5, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
@@ -119,7 +132,10 @@ func (s SinkCommonSuite) TestSplitResolvedTxn(c *check.C) {
 			{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
 			{StartTs: 1, CommitTs: 9, Table: &model.TableName{TableID: 1}},
 		},
-		resolvedTs: 13,
+		resolvedTsMap: map[model.TableID]uint64{
+			1: uint64(13),
+			2: uint64(13),
+		},
 		expected: map[model.TableID][]*model.SingleTableTxn{
 			1: {{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 8, Rows: []*model.RowChangedEvent{
 				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
@@ -144,7 +160,11 @@ func (s SinkCommonSuite) TestSplitResolvedTxn(c *check.C) {
 		cache := NewUnresolvedTxnCache()
 		for _, t := range tc {
 			cache.Append(nil, t.input...)
-			resolved := cache.Resolved(t.resolvedTs)
+			resolvedTsMap := sync.Map{}
+			for tableID, ts := range t.resolvedTsMap {
+				resolvedTsMap.Store(tableID, ts)
+			}
+			_, resolved := cache.Resolved(&resolvedTsMap)
 			for tableID, txns := range resolved {
 				sort.Slice(txns, func(i, j int) bool {
 					if txns[i].CommitTs != txns[j].CommitTs {
@@ -154,8 +174,7 @@ func (s SinkCommonSuite) TestSplitResolvedTxn(c *check.C) {
 				})
 				resolved[tableID] = txns
 			}
-			c.Assert(resolved, check.DeepEquals, t.expected,
-				check.Commentf("%s", cmp.Diff(resolved, t.expected)))
+			require.Equal(test, t.expected, resolved, cmp.Diff(resolved, t.expected))
 		}
 	}
 }
