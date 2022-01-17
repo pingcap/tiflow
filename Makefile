@@ -370,7 +370,6 @@ dm_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	go tool cover -html "$(DM_TEST_DIR)/all_cov.out" -o "$(DM_TEST_DIR)/all_cov.html"
 	go tool cover -html "$(DM_TEST_DIR)/unit_test.out" -o "$(DM_TEST_DIR)/unit_test_cov.html"
 
-
 tools/bin/failpoint-ctl: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/failpoint-ctl github.com/pingcap/failpoint/failpoint-ctl
 
