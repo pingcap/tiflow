@@ -176,18 +176,14 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 }
 
 // Watch delegates request to clientv3.Watcher.Watch
-func (c *Client) Watch(ctx context.Context, key string, isOwner bool, opts ...clientv3.OpOption) clientv3.WatchChan {
+func (c *Client) Watch(ctx context.Context, key string, role string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
-	go c.WatchWithChan(ctx, watchCh, key, isOwner, opts...)
+	go c.WatchWithChan(ctx, watchCh, key, role, opts...)
 	return watchCh
 }
 
 // WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
-func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, isOwner bool, opts ...clientv3.OpOption) {
-	role := "processor"
-	if isOwner {
-		role = "owner"
-	}
+func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, role string, opts ...clientv3.OpOption) {
 	defer func() {
 		close(outCh)
 		log.Info("WatchWithChan exited", zap.String("role", role))
