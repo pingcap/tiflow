@@ -161,16 +161,17 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	// it could be in `changeFeedClosing`, we would not continue the changefeed.
 	if c.runningStatus == changeFeedClosing {
-		log.Debug("changeFeed can not continue",
-			zap.String("changeFeedID", c.state.ID),
-			zap.Any("runningStatus", c.runningStatus))
 		// since the sink is close in an asynchronous way,
 		// we have to check whether the sink is fully closed or not.
+		// no matter fully closed or not, just skip the tick.
 		select {
 		case <-c.sinkCloseCh:
 			c.runningStatus = changeFeedClosed
-			log.Info("changefeed fully closed", zap.String("changefeedID", c.state.ID))
+			log.Info("changefeed fully closed", zap.String("changefeed", c.state.ID))
 		default:
+			log.Debug("changeFeed is closing, cannot continue",
+				zap.String("changefeed", c.state.ID),
+				zap.Any("runningStatus", c.runningStatus))
 		}
 		return nil
 	}
@@ -370,12 +371,12 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		err := c.sink.close(canceledCtx)
 		if err != nil {
 			log.Warn("close ddl sink failed in Owner",
-				zap.String("changefeedID", id),
+				zap.String("changefeed", id),
 				zap.Error(err),
 				zap.Duration("duration", time.Since(start)))
 		} else {
 			log.Info("close ddl sink",
-				zap.String("changefeedID", id),
+				zap.String("changefeed", id),
 				zap.Duration("duration", time.Since(start)))
 		}
 
@@ -584,7 +585,7 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
 		if status == nil {
-			log.Info("status is nil", zap.String("changefeedID", c.state.ID))
+			log.Info("status is nil", zap.String("changefeed", c.state.ID))
 			return nil, changed, nil
 		}
 		if status.ResolvedTs != resolvedTs {
