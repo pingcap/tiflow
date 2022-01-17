@@ -478,7 +478,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	start := time.Now()
 	s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
-		log.Info("processor try new sink failed",
+		log.Info("processor new sink failed",
 			zap.String("changefeedID", p.changefeed.ID),
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
