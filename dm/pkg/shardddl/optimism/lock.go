@@ -49,8 +49,12 @@ const (
 type tableType int
 
 const (
+	// normalTables represents upstream table info record in checkpoint.
 	normalTables tableType = iota
+	// conflictTables represents upstream table info after execute conflict DDL.
 	conflictTables
+	// finalTables combine normalTables and conflcitTables,
+	// which represents all upstream table infos after execute all conflict DDLs.
 	finalTables
 )
 
@@ -760,8 +764,8 @@ func (l *Lock) checkAddDropColumn(source, schema, table string, ddl string, prev
 // e.g. `ALTER TABLE ADD COLUMN a, RENAME b TO c, DROP COLUMN d' will call this func three times.
 // return whether joined table is changed and whether there is a conflict.
 func (l *Lock) TrySyncForOneDDL(source, schema, table string, prevTable, postTable schemacmp.Table) (schemaChanged bool, conflictStage ConflictStage) {
-	// we only support resolve one conflict DDL per table.
-	// reset conflict table
+	// we only support resolve one conflict DDL per table,
+	// so reset conflict table after receive new table info.
 	l.removeConflictTable(source, schema, table)
 	l.finalTables[source][schema][table] = l.tables[source][schema][table]
 
@@ -894,7 +898,11 @@ func (l *Lock) joinTables(tp tableType) (schemacmp.Table, error) {
 // Compare(joined,prev_tbx) == error
 // For a conflict DDL make table become part of larger and another part of smaller,
 // this function make sure all tables that need to be judged become part of smaller.
-// e.g `ALTER TABLE RENAME A TO B`, this function check whether all tables do not contain `A`.
+// e.g. `ALTER TABLE RENAME a TO b`, this function check whether all tables do not contain `a`.
+// Prove:
+//    Compare(joined,prev_tbk) == error
+// => Joined ⊇ prev_tbk-{a}+{b} && Joined ⊅ prev_tbk
+// => a ∉ Joined.
 func (l *Lock) allTableSmaller(tp tableType) bool {
 	var (
 		joined schemacmp.Table
@@ -928,7 +936,12 @@ func (l *Lock) allTableSmaller(tp tableType) bool {
 // Compare(Join(prev_tbx,tabley),post_tbx)>=0
 // For a conflict DDL make table become part of larger and another part of smaller,
 // this function make sure all the tables that need to be judged become part of larger.
-// e.g `ALTER TABLE RENAME A TO B`, this function check whether all tables contain `B`.
+// e.g `ALTER TABLE RENAME a TO b`, this function check whether all tables contain `b`.
+// Prove:
+//    Compare(Join(prev_tbx,tabley),post_tbx)>=0
+// => Compare(Join(prev_tbk,tabley),prev_tbk-{a}+{b})>=0
+// => Join(prev_tbk,tabley) ⊇ prev_tbk-{a}+{b}
+// => b ∈ tabley.
 func (l *Lock) allTableLarger(tp tableType) bool {
 	var judgeTables map[string]map[string]map[string]schemacmp.Table
 
@@ -998,6 +1011,7 @@ func (l *Lock) allFinalTableLarger() bool {
 
 // judge whether a conflict DDL has no conflict with all normal tables.
 func (l *Lock) noConflictWithNormalTables(source, schema, table string, postTable schemacmp.Table) bool {
+	// revert conflict tables and final tables
 	currentConflictTables := l.conflictTables
 	currentFinalTables := l.finalTables
 	defer func() {
@@ -1005,8 +1019,8 @@ func (l *Lock) noConflictWithNormalTables(source, schema, table string, postTabl
 		l.finalTables = currentFinalTables
 	}()
 
+	// reset conflict tables and final tables
 	l.conflictTables = make(map[string]map[string]map[string]schemacmp.Table)
-	l.addConflictTable(source, schema, table, postTable)
 	l.finalTables = make(map[string]map[string]map[string]schemacmp.Table)
 	for source, schemaTables := range l.tables {
 		l.finalTables[source] = make(map[string]map[string]schemacmp.Table)
@@ -1017,6 +1031,8 @@ func (l *Lock) noConflictWithNormalTables(source, schema, table string, postTabl
 			}
 		}
 	}
+	// update for current conflict DDL
+	l.addConflictTable(source, schema, table, postTable)
 	l.finalTables[source][schema][table] = postTable
 
 	return l.noConflictForFinalTables()
@@ -1079,6 +1095,7 @@ func (l *Lock) removeConflictTable(source, schema, table string) {
 	}
 }
 
+// resolveTables reset conflictTables and copy tables from final tables.
 func (l *Lock) resolveTables() {
 	l.conflictTables = make(map[string]map[string]map[string]schemacmp.Table)
 	for source, schemaTables := range l.finalTables {
@@ -1090,6 +1107,7 @@ func (l *Lock) resolveTables() {
 	}
 }
 
+// redirectForConflictTables put redirect Ops for all conflict tables.
 func (l *Lock) redirectForConflictTables() error {
 	for source, schemaTables := range l.conflictTables {
 		for schema, tables := range schemaTables {
