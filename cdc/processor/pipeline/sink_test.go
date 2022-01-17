@@ -53,6 +53,11 @@ func (c *mockFlowController) GetConsumption() uint64 {
 	return 0
 }
 
+func (s *mockSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	_ = s.EmitRowChangedEvents(ctx, rows...)
+	return true, nil
+}
+
 func (s *mockSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		s.received = append(s.received, struct {

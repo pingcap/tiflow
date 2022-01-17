@@ -51,6 +51,11 @@ func NewError(description string, args ...interface{}) *Error {
 	return &Error{Severity: StateFailure, ShortErr: fmt.Sprintf(description, args...)}
 }
 
+// NewWarn creates a pointer to Error, the parameters could be used as in Sprintf.
+func NewWarn(description string, args ...interface{}) *Error {
+	return &Error{Severity: StateWarning, ShortErr: fmt.Sprintf(description, args...)}
+}
+
 // Result is result of check.
 type Result struct {
 	ID          uint64   `json:"id"`
