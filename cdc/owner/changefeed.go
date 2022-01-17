@@ -585,7 +585,6 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
 		if status == nil {
-			log.Info("status is nil", zap.String("changefeed", c.state.ID))
 			return nil, changed, nil
 		}
 		if status.ResolvedTs != resolvedTs {
