@@ -479,7 +479,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
 		log.Info("processor new sink failed",
-			zap.String("changefeedID", p.changefeed.ID),
+			zap.String("changefeed", p.changefeed.ID),
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
@@ -1072,16 +1072,16 @@ func (p *processor) Close() error {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		log.Info("processor try to close the sinkManager",
-			zap.String("changeFeedID", p.changefeedID))
+			zap.String("changeFeed", p.changefeedID))
 		start := time.Now()
 		if err := p.sinkManager.Close(ctx); err != nil {
 			log.Info("processor close sinkManager failed",
-				zap.String("changeFeedID", p.changefeedID),
+				zap.String("changeFeed", p.changefeedID),
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
 		log.Info("processor close sinkManager success",
-			zap.String("changeFeedID", p.changefeedID),
+			zap.String("changeFeed", p.changefeedID),
 			zap.Duration("duration", time.Since(start)))
 	}
 	if p.newSchedulerEnabled {

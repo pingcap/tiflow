@@ -87,16 +87,16 @@ func (m *Manager) Close(ctx context.Context) error {
 	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
 	if m.bufSink != nil {
 		log.Info("sinkManager try close bufSink",
-			zap.String("changeFeedID", m.changefeedID))
+			zap.String("changeFeed", m.changefeedID))
 		start := time.Now()
 		if err := m.bufSink.Close(ctx); err != nil {
 			log.Info("close bufSink failed",
-				zap.String("changeFeedID", m.changefeedID),
+				zap.String("changeFeed", m.changefeedID),
 				zap.Duration("duration", time.Since(start)))
 			return err
 		}
 		log.Info("close bufSink success",
-			zap.String("changeFeedID", m.changefeedID),
+			zap.String("changeFeed", m.changefeedID),
 			zap.Duration("duration", time.Since(start)))
 	}
 	return nil
