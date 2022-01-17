@@ -200,7 +200,11 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
+<<<<<<< HEAD
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, orchestrator.NewGlobalState(), processorFlushInterval)
+=======
+		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, "processor")
+>>>>>>> 25b134de8 (capture(cdc): add owner info to help debug etcd_worker, and also some in sink. (#4325))
 		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
 	go func() {
@@ -268,7 +272,23 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
 		owner := c.newOwner(c.pdClient)
 		c.setOwner(owner)
+<<<<<<< HEAD
 		err = c.runEtcdWorker(ctx, owner, orchestrator.NewGlobalState(), ownerFlushInterval)
+=======
+
+		globalState := orchestrator.NewGlobalState()
+
+		if c.enableNewScheduler {
+			globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
+				c.MessageRouter.AddPeer(captureID, addr)
+			})
+			globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
+				c.MessageRouter.RemovePeer(captureID)
+			})
+		}
+
+		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval, "owner")
+>>>>>>> 25b134de8 (capture(cdc): add owner info to help debug etcd_worker, and also some in sink. (#4325))
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -284,13 +304,19 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 	}
 }
 
-func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Reactor, reactorState orchestrator.ReactorState, timerInterval time.Duration) error {
+func (c *Capture) runEtcdWorker(
+	ctx cdcContext.Context,
+	reactor orchestrator.Reactor,
+	reactorState orchestrator.ReactorState,
+	timerInterval time.Duration,
+	role string,
+) error {
 	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, etcd.EtcdKeyBase, reactor, reactorState)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	captureAddr := c.info.AdvertiseAddr
-	if err := etcdWorker.Run(ctx, c.session, timerInterval, captureAddr); err != nil {
+	if err := etcdWorker.Run(ctx, c.session, timerInterval, captureAddr, role); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as
