@@ -190,8 +190,7 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 	}
 	defer func() {
 		close(outCh)
-		log.Info("WatchWithChan exited",
-			zap.String("role", role))
+		log.Info("WatchWithChan exited", zap.String("role", role))
 	}()
 
 	// get initial revision from opts to avoid revision fall back
