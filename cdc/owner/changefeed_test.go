@@ -405,7 +405,7 @@ func testChangefeedReleaseResource(
 	ctx cdcContext.Context,
 	cancel context.CancelFunc,
 	redoLogDir string,
-	expectedRunningStatus int32,
+	expectedRunningStatus changeFeedRunningStatus,
 ) {
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
 

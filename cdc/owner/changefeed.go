@@ -17,7 +17,6 @@ import (
 	"context"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -42,18 +41,10 @@ import (
 type changeFeedRunningStatus int32
 
 const (
-	changeFeedClosed  changeFeedRunningStatus = iota
-	changeFeedRunning changeFeedRunningStatus = 1
-	changeFeedClosing changeFeedRunningStatus = 2
+	changeFeedClosed changeFeedRunningStatus = iota
+	changeFeedRunning
+	changeFeedClosing
 )
-
-func loadChangeFeedStatus(addr *changeFeedRunningStatus) changeFeedRunningStatus {
-	return changeFeedRunningStatus(atomic.LoadInt32((*int32)(addr)))
-}
-
-func storeChangeFeedStatus(addr *changeFeedRunningStatus, val changeFeedRunningStatus) {
-	atomic.StoreInt32((*int32)(addr), int32(val))
-}
 
 type changefeed struct {
 	id    model.ChangeFeedID
@@ -65,10 +56,13 @@ type changefeed struct {
 	gcManager        gc.Manager
 	redoManager      redo.LogManager
 
-	schema        *schemaWrap4Owner
-	sink          DDLSink
+	schema *schemaWrap4Owner
+
+	sink        DDLSink
+	sinkCloseCh chan struct{}
+
 	ddlPuller     DDLPuller
-	runningStatus int32
+	runningStatus changeFeedRunningStatus
 	// isRemoved is true if the changefeed is removed
 	isRemoved bool
 
@@ -104,6 +98,8 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		barriers:         newBarriers(),
 		feedStateManager: newFeedStateManager(),
 		gcManager:        gcManager,
+
+		sinkCloseCh: make(chan struct{}, 1),
 
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
@@ -163,6 +159,22 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 }
 
 func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
+	// it could be in `changeFeedClosing`, we would not continue the changefeed.
+	if c.runningStatus == changeFeedClosing {
+		log.Debug("changeFeed can not continue",
+			zap.String("changeFeedID", c.state.ID),
+			zap.Any("runningStatus", c.runningStatus))
+		// since the sink is close in an asynchronous way,
+		// we have to check whether the sink is fully closed or not.
+		select {
+		case <-c.sinkCloseCh:
+			c.runningStatus = changeFeedClosed
+			log.Info("changefeed fully closed", zap.String("changefeedID", c.state.ID))
+		default:
+		}
+		return nil
+	}
+
 	c.state = state
 	c.feedStateManager.Tick(state)
 
@@ -190,13 +202,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	case err := <-c.errCh:
 		return errors.Trace(err)
 	default:
-	}
-
-	if atomic.LoadInt32(&c.runningStatus) != changeFeedRunning {
-		log.Debug("changeFeed can not continue",
-			zap.String("changeFeedID", c.state.ID),
-			zap.Int32("runningStatus", atomic.LoadInt32(&c.runningStatus)))
-		return nil
 	}
 
 	c.sink.emitCheckpointTs(ctx, checkpointTs)
@@ -231,7 +236,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 }
 
 func (c *changefeed) initialize(ctx cdcContext.Context) error {
-	if atomic.LoadInt32(&c.runningStatus) != changeFeedClosed {
+	if c.runningStatus != changeFeedClosed {
 		return nil
 	}
 	// clean the errCh
@@ -328,23 +333,22 @@ LOOP:
 		return errors.Trace(err)
 	}
 
-	atomic.StoreInt32(&c.runningStatus, changeFeedRunning)
+	c.runningStatus = changeFeedRunning
 	log.Info("changefeed is initialized",
-		zap.String("changefeed", c.state.ID),
-		zap.Int32("runningStatus", c.runningStatus))
+		zap.String("changefeed", c.state.ID))
 	return nil
 }
 
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
-	if atomic.LoadInt32(&c.runningStatus) == changeFeedClosed {
+	switch c.runningStatus {
+	case changeFeedClosed:
 		c.redoManagerCleanup(ctx)
 		return
-	}
-	if atomic.LoadInt32(&c.runningStatus) == changeFeedClosing {
+	case changeFeedClosing:
 		return
 	}
 
-	log.Info("close changefeed",
+	log.Info("start close changefeed",
 		zap.String("changefeed", c.state.ID),
 		zap.Any("info", c.state.Info),
 		zap.Bool("isRemoved", c.isRemoved))
@@ -353,15 +357,16 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.ddlPuller.Close()
 	c.schema = nil
 	c.redoManagerCleanup(ctx)
-	canceledCtx, cancel := context.WithCancel(context.Background())
-	cancel()
 
-	// When we try to close the Kafka sink, it could be blocked for network IO for about 1 minutes.
-	// This could happen due to bad network connection between the Kafka producer and the brokers.
+	// When we try to close the Kafka sink, it could be blocked for network IO
+	// for a period of time. This could happen due to bad network connection
+	// between the Kafka producer and the brokers. We close the sink in an
+	// asynchronous way, and the close of the sink, indicate that the changefeed is fully closed.
 	go func(id model.ChangeFeedID) {
-		start := time.Now()
 		// We don't need to wait sink Close, pass a canceled context is ok
-
+		canceledCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+		start := time.Now()
 		err := c.sink.close(canceledCtx)
 		if err != nil {
 			log.Warn("close ddl sink failed in Owner",
@@ -374,11 +379,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 				zap.Duration("duration", time.Since(start)))
 		}
 
-		if atomic.CompareAndSwapInt32(&c.runningStatus, changeFeedRunning, changeFeedClosing) {
-			log.Info("changefeed ddl sink closed", zap.String("changefeedID", id))
-		} else if atomic.CompareAndSwapInt32(&c.runningStatus, changeFeedClosing, changeFeedClosed) {
-			log.Info("changefeed fully closed", zap.String("changefeedID", id))
-		}
+		close(c.sinkCloseCh)
 	}(c.state.ID)
 
 	c.wg.Wait()
@@ -394,11 +395,8 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.metricsChangefeedResolvedTsGauge = nil
 	c.metricsChangefeedResolvedTsLagGauge = nil
 
-	if atomic.CompareAndSwapInt32(&c.runningStatus, changeFeedRunning, changeFeedClosing) {
-		log.Info("changefeed closing", zap.String("changefeedID", c.state.ID))
-	} else if atomic.CompareAndSwapInt32(&c.runningStatus, changeFeedClosing, changeFeedClosed) {
-		log.Info("changefeed fully closed", zap.String("changefeedID", c.state.ID))
-	}
+	c.runningStatus = changeFeedClosing
+	log.Info("changefeed closing", zap.String("changefeed", c.state.ID))
 }
 
 // redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
