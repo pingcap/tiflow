@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -90,9 +91,9 @@ func NewTableActor(cdcCtx cdcContext.Context,
 
 	actorID := vars.TableActorSystem.ActorID(info.ID, tableID)
 	mb := actor.NewMailbox(actorID, defaultOutputChannelSize)
-	// Cancel should be able to release all sub-goroutines in the actor.
+	// Cancel should be able to release all sub-goroutines in this actor.
 	ctx, cancel := context.WithCancel(cdcCtx)
-	// All sub-goroutines should be spawn in the wait group.
+	// All sub-goroutines should be spawn in this wait group.
 	wg, cctx := errgroup.WithContext(ctx)
 	table := &tableActor{
 		reportErr: cdcCtx.Throw,
@@ -118,6 +119,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		actorID:          actorID,
 	}
 
+	startTime := time.Now()
 	log.Info("spawn and start table actor", zap.String("tableName", tableName), zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
 		table.stop(err)
@@ -127,7 +129,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Info("spawn and start table actor done", zap.String("tableName", tableName), zap.Int64("tableID", tableID))
+	log.Info("spawn and start table actor done", zap.String("tableName", tableName), zap.Int64("tableID", tableID), zap.Duration("duration", time.Since(startTime)))
 	return table, nil
 }
 
@@ -298,7 +300,7 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 	}
 }
 
-// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
+// AsyncStop tells the table actor to stop, and returns true if this actor is already stopped.
 func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
 	msg := message.StopSinkMessage()
 	err := t.tableActorRouter.Send(t.actorID, msg)
