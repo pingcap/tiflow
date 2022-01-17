@@ -252,10 +252,7 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = c.sink.Initialize(cancelCtx, c.schema.SinkTableInfos())
-	if err != nil {
-		return errors.Trace(err)
-	}
+
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
