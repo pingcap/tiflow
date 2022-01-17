@@ -315,6 +315,7 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 			log.Warn("schedule table cleanup task failed", zap.Error(err))
 		}
 	}
+	n.flowController.Abort()
 	return n.eg.Wait()
 }
 
