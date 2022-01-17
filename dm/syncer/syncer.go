@@ -1048,12 +1048,17 @@ func (s *Syncer) addJob(job *job) error {
 
 	// Periodically create checkpoint snapshot and async flush checkpoint snapshot
 	if s.checkpoint.CheckGlobalPoint() && s.checkpoint.CheckLastSnapshotCreationTime() {
-		s.jobWg.Add(1)
-		jobSeq := s.getFlushSeq()
-		s.tctx.L().Info("Start to async flush current checkpoint to downstream based on flush interval", zap.Int64("job sequence", jobSeq))
-		j := newAsyncFlushJob(s.cfg.WorkerCount, jobSeq)
-		s.dmlJobCh <- j
-		s.flushCheckPointsAsync(j)
+		if s.cfg.Experimental.AsyncCheckpointFlush {
+			jobSeq := s.getFlushSeq()
+			s.tctx.L().Info("Start to async flush current checkpoint to downstream based on flush interval", zap.Int64("job sequence", jobSeq))
+			j := newAsyncFlushJob(s.cfg.WorkerCount, jobSeq)
+			s.jobWg.Add(1)
+			s.dmlJobCh <- j
+			s.flushCheckPointsAsync(j)
+		} else {
+			s.jobWg.Wait()
+			return s.flushCheckPoints()
+		}
 	}
 
 	return nil

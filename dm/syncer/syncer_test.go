@@ -149,6 +149,7 @@ func (s *testSyncerSuite) SetUpSuite(c *C) {
 		Flavor:           "mysql",
 		LoaderConfig:     loaderCfg,
 	}
+	s.cfg.Experimental.AsyncCheckpointFlush = true
 	s.cfg.From.Adjust()
 	s.cfg.To.Adjust()
 

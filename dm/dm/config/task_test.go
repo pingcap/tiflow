@@ -806,6 +806,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 		},
 		CleanDumpFile: stCfg1.CleanDumpFile,
 	}
+	cfg2.Experimental.AsyncCheckpointFlush = true
 
 	c.Assert(WordCount(cfg.String()), DeepEquals, WordCount(cfg2.String())) // since rules are unordered, so use WordCount to compare
 
@@ -1027,7 +1028,7 @@ func (t *testConfig) TestTaskConfigForDowngrade(c *C) {
 	// make sure all new field were added
 	cfgReflect := reflect.Indirect(reflect.ValueOf(cfg))
 	cfgForDowngradeReflect := reflect.Indirect(reflect.ValueOf(cfgForDowngrade))
-	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+3) // without flag and tidb and collation_compatible
+	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+4) // without flag, tidb, collation_compatible and experimental
 
 	// make sure all field were copied
 	cfgForClone := &TaskConfigForDowngrade{}
