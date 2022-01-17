@@ -226,22 +226,9 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
-	// See: https://kafka.apache.org/documentation/#replication
-	// When one of the brokers in a Kafka cluster is down, the partition leaders
-	// in this broker is broken, Kafka will election a new partition leader and
-	// replication logs, this process will last from a few seconds to a few minutes.
-	// Kafka cluster will not provide a writing service in this process.
-	// Time out in one minute.
+	// todo: make those retry configuration can be set by user.
 	config.Metadata.Retry.Max = 3
 	config.Metadata.Retry.Backoff = 250 * time.Millisecond
-	// If it is not set, this means a metadata request against an unreachable
-	// cluster (all brokers are unreachable or unresponsive) can take up to
-	// `Net.[Dial|Read]Timeout * BrokerCount * (Metadata.Retry.Max + 1) +
-	// Metadata.Retry.Backoff * Metadata.Retry.Max`
-	// to fail.
-	// See: https://github.com/Shopify/sarama/issues/765
-	// and https://github.com/pingcap/tiflow/issues/3352.
-	config.Metadata.Timeout = 1 * time.Minute
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
