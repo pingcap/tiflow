@@ -218,7 +218,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 
 	close(inCh)
 	checkWg.Wait()
-	log.L().Logger.Info("check table structure over", zap.Bool("check cancel", isDone), zap.String("speed time", time.Since(startTime).String()))
+	log.L().Logger.Info("check table structure over", zap.Bool("check cancel", isDone), zap.String("spend time", time.Since(startTime).String()))
 	return r
 }
 
