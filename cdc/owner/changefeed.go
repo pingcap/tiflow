@@ -342,10 +342,8 @@ LOOP:
 
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	switch c.runningStatus {
-	case changeFeedClosed:
+	case changeFeedClosed, changeFeedClosing:
 		c.redoManagerCleanup(ctx)
-		return
-	case changeFeedClosing:
 		return
 	}
 
