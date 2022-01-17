@@ -147,7 +147,7 @@ func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 	defer cancel()
 
 	go func() {
-		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+		watchCli.WatchWithChan(ctx, outCh, key, "", clientv3.WithPrefix(), clientv3.WithRev(revision))
 	}()
 	receivedRes := make([]clientv3.WatchResponse, 0)
 	// wait for WatchWithChan set up
@@ -204,7 +204,7 @@ func (s *etcdSuite) TestOutChBlocked(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
 	go func() {
-		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+		watchCli.WatchWithChan(ctx, outCh, key, "", clientv3.WithPrefix(), clientv3.WithRev(revision))
 	}()
 	receivedRes := make([]clientv3.WatchResponse, 0)
 	// wait for WatchWithChan set up
@@ -217,5 +217,29 @@ func (s *etcdSuite) TestOutChBlocked(c *check.C) {
 		receivedRes = append(receivedRes, r)
 	}
 
+<<<<<<< HEAD
 	c.Check(sentRes, check.DeepEquals, receivedRes)
+=======
+	go func() {
+		for _, r := range sentRes {
+			watchCh <- r
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
+	go func() {
+		watchCli.WatchWithChan(ctx, outCh, key, "", clientv3.WithPrefix(), clientv3.WithRev(revision))
+	}()
+	// wait for WatchWithChan set up
+	<-outCh
+	// move time forward
+	mockClock.Add(time.Second * 30)
+	// make sure watchCh has been reset since timeout
+	require.True(t, *watcher.resetCount > 1)
+	// make suer revision in WatchWitchChan does not fall back
+	// even if there has not any response been received from WatchCh
+	// while WatchCh was reset
+	require.Equal(t, *watcher.rev, revision)
+>>>>>>> 25b134de8 (capture(cdc): add owner info to help debug etcd_worker, and also some in sink. (#4325))
 }
