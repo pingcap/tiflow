@@ -133,6 +133,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 				}
 				table := checkItem.table
 				if instance != checkItem.sourceID {
+					instance = checkItem.sourceID
 					p, err = dbutil.GetParserForDB(ctx, c.dbs[instance])
 					if err != nil {
 						reMu.Lock()
@@ -230,7 +231,7 @@ func (c *TablesChecker) checkCreateSQL(ctx context.Context, p *parser.Parser, st
 		return []*incompatibilityOption{
 			{
 				state:      StateFailure,
-				errMessage: err.Error(),
+				errMessage: errors.Annotatef(err, "statement: %s", statement).Error(),
 			},
 		}
 	}
