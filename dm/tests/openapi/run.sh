@@ -35,7 +35,7 @@ function init_shard_data() {
 function clean_cluster_sources_and_tasks() {
 	openapi_source_check "delete_source_with_force_success" "mysql-01"
 	openapi_source_check "delete_source_with_force_success" "mysql-02"
-	openapi_source_check "delete_source_with_force_success" 0
+	openapi_source_check "list_source_success" 0
 	openapi_task_check "get_task_list" 0
 	run_sql_tidb "DROP DATABASE if exists openapi;"
 }
