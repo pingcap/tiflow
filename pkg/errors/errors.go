@@ -29,6 +29,7 @@ var (
 	ErrExecutorDupRegister   = errors.Normalize("executor %s has been registered", errors.RFCCodeText("DFLOW:ErrExecutorDupRegister"))
 	ErrGrpcBuildConn         = errors.Normalize("dial grpc connection to %s failed", errors.RFCCodeText("DFLOW:ErrGrpcBuildConn"))
 	ErrDecodeEtcdKeyFail     = errors.Normalize("failed to decode etcd key: %s", errors.RFCCodeText("DFLOW:ErrDecodeEtcdKeyFail"))
+	ErrDecodeEtcdValueFail   = errors.Normalize("failed to decode etcd value: %s", errors.RFCCodeText("DFLOW:ErrDecodeEtcdValueFail"))
 	ErrInvalidMetaStoreKey   = errors.Normalize("invalid metastore key %s", errors.RFCCodeText("DFLOW:ErrInvalidMetaStoreKey"))
 	ErrInvalidMetaStoreKeyTp = errors.Normalize("invalid metastore key type %s", errors.RFCCodeText("DFLOW:ErrInvalidMetaStoreKeyTp"))
 	ErrEtcdAPIError          = errors.Normalize("etcd api returns error", errors.RFCCodeText("DFLOW:ErrEtcdAPIError"))
@@ -62,6 +63,7 @@ var (
 	ErrMasterEtcdElectionCampaignFail = errors.Normalize("failed to campaign for leader", errors.RFCCodeText("DFLOW:ErrMasterEtcdElectionCampaignFail"))
 	ErrMasterNoLeader                 = errors.Normalize("server master has no leader", errors.RFCCodeText("DFLOW:ErrMasterNoLeader"))
 	ErrEtcdLeaderChanged              = errors.Normalize("etcd leader has changed", errors.RFCCodeText("DFLOW:ErrEtcdLeaderChanged"))
+	ErrDiscoveryDuplicateWatch        = errors.Normalize("service discovery can't be watched multiple times", errors.RFCCodeText("DFLOW:ErrDiscoveryDuplicateWatch"))
 
 	// executor related errors
 	ErrExecutorConfigParseFlagSet = errors.Normalize("parse config flag set failed", errors.RFCCodeText("DFLOW:ErrExecutorConfigParseFlagSet"))
