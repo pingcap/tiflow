@@ -1072,16 +1072,16 @@ func (p *processor) Close() error {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		log.Info("processor try to close the sinkManager",
-			zap.String("changeFeed", p.changefeedID))
+			zap.String("changefeed", p.changefeedID))
 		start := time.Now()
 		if err := p.sinkManager.Close(ctx); err != nil {
 			log.Info("processor close sinkManager failed",
-				zap.String("changeFeed", p.changefeedID),
+				zap.String("changefeed", p.changefeedID),
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
 		log.Info("processor close sinkManager success",
-			zap.String("changeFeed", p.changefeedID),
+			zap.String("changefeed", p.changefeedID),
 			zap.Duration("duration", time.Since(start)))
 	}
 	if p.newSchedulerEnabled {
