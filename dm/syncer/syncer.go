@@ -1127,7 +1127,7 @@ func (s *Syncer) flushCheckPoints() error {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(true)
 
 	if snapshotInfo == nil {
-		log.L().Info("checkpoint has no change, skip sync flush checkpoint")
+		s.tctx.L().Info("checkpoint has no change, skip sync flush checkpoint")
 		return nil
 	}
 
@@ -1163,7 +1163,7 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(false)
 
 	if snapshotInfo == nil {
-		log.L().Info("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
+		s.tctx.L().Info("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
 		return
 	}
 
@@ -1411,11 +1411,11 @@ func (s *Syncer) syncDML() {
 func (s *Syncer) waitTransactionEndBeforeExit(ctx context.Context) {
 	select {
 	case <-ctx.Done(): // hijack the context to wait for the transaction to end.
-		log.L().Info("received subtask's done, try graceful stop")
+		s.tctx.L().Info("received subtask's done, try graceful stop")
 		s.waitTransactionLock.Lock()
 		if s.isTransactionEnd {
 			s.waitXIDJob.Store(int64(waitComplete))
-			log.L().Info("the last job is transaction end, done directly")
+			s.tctx.L().Info("the last job is transaction end, done directly")
 			s.runCancel()
 			s.waitTransactionLock.Unlock()
 			return
@@ -1424,12 +1424,12 @@ func (s *Syncer) waitTransactionEndBeforeExit(ctx context.Context) {
 		s.waitTransactionLock.Unlock()
 		select {
 		case <-s.runCtx.Done():
-			log.L().Info("received run ctx done, exit now")
+			s.tctx.L().Info("received run ctx done, exit now")
 		case <-time.After(maxPauseOrStopWaitTime):
-			log.L().Info("wait transaction end timeout, exit now")
+			s.tctx.L().Info("wait transaction end timeout, exit now")
 		}
 	case <-s.runCtx.Done(): // when no graceful stop, run ctx will canceled first.
-		log.L().Info("received ungraceful exit ctx, exit now")
+		s.tctx.L().Info("received ungraceful exit ctx, exit now")
 	}
 }
 
@@ -1716,7 +1716,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				i++
 			}
 		}
-		log.L().Info("discard event already consumed", zap.Int("count", n),
+		s.tctx.L().Info("discard event already consumed", zap.Int("count", n),
 			zap.Any("cur_loc", currentLocation))
 		return nil
 	}
@@ -1801,7 +1801,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if err == nil {
 				continue
 			}
-			log.L().Warn("skip duplicate rows event failed", zap.Error(err))
+			s.tctx.L().Warn("skip duplicate rows event failed", zap.Error(err))
 		}
 
 		if err != nil {
@@ -1817,7 +1817,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				if err != nil {
 					return err
 				}
-				log.L().Info("reset replication binlog puller", zap.Any("pos", s.checkpoint.GlobalPoint()))
+				s.tctx.L().Info("reset replication binlog puller", zap.Any("pos", s.checkpoint.GlobalPoint()))
 				if err = maybeSkipNRowsEvent(eventIndex); err != nil {
 					return err
 				}
@@ -2465,7 +2465,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
 	if err != nil {
-		log.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
+		s.tctx.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
 	}
 
 	stmt, err := parseOneStmt(qec)
@@ -3076,7 +3076,7 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 	}
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
 	if err != nil {
-		log.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
+		s.tctx.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
 	}
 	stmt, err := parseOneStmt(qec)
 	if err != nil {

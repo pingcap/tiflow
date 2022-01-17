@@ -27,13 +27,16 @@ function check_worker_ungraceful_stop_with_retry() {
 		fi
 		all_matched=true
 		if $all_matched; then
-			echo "check_worker_ungraceful_stop_with_retry after retry: $k"
+			echo "check_worker_ungraceful_stop_with_retry success after retry: $k"
 			break
 		fi
 	done
+
 	if ! $all_matched; then
+		echo "check_worker_ungraceful_stop_with_retry failed after retry: $k"
 		exit 1
 	fi
+
 }
 
 function run() {
@@ -65,9 +68,9 @@ function run() {
 	echo "kill dm-master1"
 	kill_dm_master
 	check_master_port_offline 1
-	sleep 1 # wiat woker lost ha keepalive-ttl is 1 second
+	sleep 1 # wait worker lost keep alive ttl is 1 second
 
-	# check dm-worker2 will exit quickly without waiting for the transaction to finish
+	# check dm-worker will exit quickly without waiting for the transaction to finish
 	check_worker_ungraceful_stop_with_retry
 
 	# test data in tidb less than source
