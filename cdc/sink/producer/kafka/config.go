@@ -226,7 +226,10 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
-	// todo: make those retry configuration can be set by user.
+	// todo: make these configurations can be set by user.g
+	config.Admin.Retry.Max = 5
+	config.Admin.Retry.Backoff = 100 * time.Millisecond
+
 	config.Metadata.Retry.Max = 3
 	config.Metadata.Retry.Backoff = 250 * time.Millisecond
 
@@ -237,6 +240,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Retry.Max = 3
 	config.Producer.Retry.Backoff = 100 * time.Millisecond
+
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
 	case "none":
 		config.Producer.Compression = sarama.CompressionNone
@@ -252,11 +256,6 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		log.Warn("Unsupported compression algorithm", zap.String("compression", c.Compression))
 		config.Producer.Compression = sarama.CompressionNone
 	}
-
-	// Time out in one minute(120 * 500ms).
-	config.Admin.Retry.Max = 120
-	config.Admin.Retry.Backoff = 500 * time.Millisecond
-	config.Admin.Timeout = 1 * time.Minute
 
 	if c.Credential != nil && len(c.Credential.CAPath) != 0 {
 		config.Net.TLS.Enable = true
