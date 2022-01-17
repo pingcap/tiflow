@@ -22,11 +22,10 @@ import (
 )
 
 // MonitorCancelLatency monitors the latency from ctx being cancelled and the returned function being called
-func MonitorCancelLatency(ctx context.Context, identifier string) func() {
+func MonitorCancelLatency(ctx context.Context, identifier string) (func(), func()) {
 	finishedCh := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
+	start := func() {
+		go func() {
 			log.Debug("MonitorCancelLatency: Cancelled", zap.String("identifier", identifier))
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
@@ -43,10 +42,9 @@ func MonitorCancelLatency(ctx context.Context, identifier string) func() {
 						zap.Int("duration", elapsed), zap.Error(ctx.Err()))
 				}
 			}
-		case <-finishedCh:
-		}
-	}()
-	return func() {
+		}()
+	}
+	return start, func() {
 		close(finishedCh)
 	}
 }
