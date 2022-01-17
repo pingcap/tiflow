@@ -707,6 +707,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 			EnableANSIQuotes: true,
 		}
 	)
+	stCfg1.Experimental.AsyncCheckpointFlush = true
 
 	stCfg2, err := stCfg1.Clone()
 	c.Assert(err, IsNil)
