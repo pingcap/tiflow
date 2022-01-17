@@ -232,8 +232,8 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// replication logs, this process will last from a few seconds to a few minutes.
 	// Kafka cluster will not provide a writing service in this process.
 	// Time out in one minute.
-	config.Metadata.Retry.Max = 120
-	config.Metadata.Retry.Backoff = 500 * time.Millisecond
+	config.Metadata.Retry.Max = 3
+	config.Metadata.Retry.Backoff = 250 * time.Millisecond
 	// If it is not set, this means a metadata request against an unreachable
 	// cluster (all brokers are unreachable or unresponsive) can take up to
 	// `Net.[Dial|Read]Timeout * BrokerCount * (Metadata.Retry.Max + 1) +
@@ -248,7 +248,6 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
-	// Time out in five minutes(600 * 500ms).
 	config.Producer.Retry.Max = 600
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
@@ -267,10 +266,9 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		config.Producer.Compression = sarama.CompressionNone
 	}
 
-	// Time out in one minute(120 * 500ms).
-	config.Admin.Retry.Max = 120
-	config.Admin.Retry.Backoff = 500 * time.Millisecond
-	config.Admin.Timeout = 1 * time.Minute
+	config.Admin.Retry.Max = 5
+	config.Admin.Retry.Backoff = 100 * time.Millisecond
+	config.Admin.Timeout = 3 * time.Second
 
 	if c.Credential != nil && len(c.Credential.CAPath) != 0 {
 		config.Net.TLS.Enable = true
