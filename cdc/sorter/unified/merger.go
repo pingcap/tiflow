@@ -438,33 +438,34 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					zap.Uint64("lastResolved-ts", lastResolvedTs))
 			}
 		case task = <-in:
-		}
-		if task == nil {
-			tableID, tableName := util.TableIDFromCtx(ctx)
-			log.Debug("Merger input channel closed, exiting",
-				zap.Int64("tableID", tableID),
-				zap.String("tableName", tableName))
-			return nil
-		}
 
-		if !task.isEmpty {
-			pendingSet.Store(task, nil)
-		} // otherwise it is an empty flush
-
-		if lastResolvedArrTs[task.heapSorterID] < task.maxResolvedTs {
-			lastResolvedArrTs[task.heapSorterID] = task.maxResolvedTs
-		}
-
-		minTemp := uint64(math.MaxUint64)
-		for _, ts := range lastResolvedArrTs {
-			if minTemp > ts {
-				minTemp = ts
+			if task == nil {
+				tableID, tableName := util.TableIDFromCtx(ctx)
+				log.Debug("Merger input channel closed, exiting",
+					zap.Int64("tableID", tableID),
+					zap.String("tableName", tableName))
+				return nil
 			}
-		}
 
-		if minTemp > minResolvedTs {
-			atomic.StoreUint64(&minResolvedTs, minTemp)
-			resolvedTsNotifier.Notify()
+			if !task.isEmpty {
+				pendingSet.Store(task, nil)
+			} // otherwise it is an empty flush
+
+			if lastResolvedArrTs[task.heapSorterID] < task.maxResolvedTs {
+				lastResolvedArrTs[task.heapSorterID] = task.maxResolvedTs
+			}
+
+			minTemp := uint64(math.MaxUint64)
+			for _, ts := range lastResolvedArrTs {
+				if minTemp > ts {
+					minTemp = ts
+				}
+			}
+
+			if minTemp > minResolvedTs {
+				atomic.StoreUint64(&minResolvedTs, minTemp)
+				resolvedTsNotifier.Notify()
+			}
 		}
 	}
 }
