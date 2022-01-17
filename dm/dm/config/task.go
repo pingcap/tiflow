@@ -347,7 +347,7 @@ type TaskConfig struct {
 	// extra config when target db is TiDB
 	TiDB *TiDBExtraConfig `yaml:"tidb" toml:"tidb" json:"tidb"`
 
-	// task experimetal configs
+	// task experimental configs
 	Experimental struct {
 		AsyncCheckpointFlush bool `yaml:"async-checkpoint-flush" toml:"async-checkpoint-flush" json:"async-checkpoint-flush"`
 	} `yaml:"experimental" toml:"experimental" json:"experimental"`

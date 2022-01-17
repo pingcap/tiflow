@@ -295,7 +295,7 @@ type SubTaskConfig struct {
 
 	// which DM worker is running the subtask, this will be injected when the real worker starts running the subtask(StartSubTask).
 	WorkerName string `toml:"-" json:"-"`
-	// task experimetal configs
+	// task experimental configs
 	Experimental struct {
 		AsyncCheckpointFlush bool `yaml:"async-checkpoint-flush" toml:"async-checkpoint-flush" json:"async-checkpoint-flush"`
 	} `yaml:"experimental" toml:"experimental" json:"experimental"`
