@@ -27,6 +27,7 @@ import (
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
@@ -40,7 +41,6 @@ import (
 const (
 	// AutoIncrementKeyChecking is an identification for auto increment key checking.
 	AutoIncrementKeyChecking = "auto-increment key checking"
-	MaxOptions               = 4
 	maxThreadNum             = 32
 )
 
@@ -98,22 +98,6 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	startTime := time.Now()
-
-	concurrency := maxThreadNum
-	for instance := range c.tableMap {
-		db, ok := c.dbs[instance]
-		if !ok {
-			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
-			return r
-		}
-		maxConnections, err := utils.GetMaxConnections(ctx, db)
-		if err != nil {
-			markCheckError(r, err)
-			return r
-		}
-		concurrency = int(math.Min(float64(concurrency), float64(maxConnections/2)))
-	}
-
 	var (
 		inCh    = make(chan *checkItem, maxThreadNum)
 		checkWg sync.WaitGroup
@@ -172,6 +156,21 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 				}
 			}
 		}
+	}
+
+	concurrency := maxThreadNum
+	for instance := range c.tableMap {
+		db, ok := c.dbs[instance]
+		if !ok {
+			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
+			return r
+		}
+		maxConnections, err := utils.GetMaxConnections(ctx, db)
+		if err != nil {
+			markCheckError(r, err)
+			return r
+		}
+		concurrency = int(math.Min(float64(concurrency), float64(maxConnections/2)))
 	}
 
 	for i := 0; i < concurrency; i++ {
@@ -405,7 +404,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	checkFunc := func() {
 		var (
 			instance = firstInstance
-			p        = parser2
+			p        *parser.Parser
 			err      error
 		)
 		defer func() {
@@ -417,7 +416,10 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 				reMu.Unlock()
 			}
 		}()
-
+		p, err = dbutil.GetParserForDB(ctx, c.dbs[instance])
+		if err != nil {
+			return
+		}
 		for {
 			select {
 			case <-checkCtx.Done():
@@ -450,12 +452,12 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 
 				info, err2 := dbutil.GetTableInfoBySQL(statement, p)
 				if err2 != nil {
-					err = err2
+					err = errors.Annotatef(err2, "statement: %s", statement)
 					return
 				}
 				stmt, err2 := p.ParseOneStmt(statement, "", "")
 				if err2 != nil {
-					err = errors.Annotatef(err2, "statement %s", statement)
+					err = errors.Annotatef(err2, "statement: %s", statement)
 					return
 				}
 
