@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/sink"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -49,6 +50,7 @@ func newProcessor4Test(
 	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
 	p.createTablePipeline = createTablePipeline
 	p.schemaStorage = &mockSchemaStorage{c: c}
+	p.sinkManager = &sink.Manager{}
 	return p
 }
 
