@@ -52,6 +52,14 @@ const (
 	maxTries             = 3
 )
 
+type processorRunningStatus int
+
+const (
+	processorClosed processorRunningStatus = iota
+	processorRunning
+	processorClosing
+)
+
 type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
@@ -68,10 +76,10 @@ type processor struct {
 	redoManager   redo.LogManager
 	lastRedoFlush time.Time
 
-	initialized bool
-	errCh       chan error
-	cancel      context.CancelFunc
-	wg          sync.WaitGroup
+	runningStatus processorRunningStatus
+	errCh         chan error
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
 
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
@@ -322,6 +330,21 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
 	p.changefeed = state
+	// the processor could be in `processorClosing`, we cannot continue the changefeed.
+	if p.runningStatus == processorClosing {
+		// since the sink is close in an asynchronous way,
+		// we have to check whether the sink is fully closed or not.
+		// no matter fully closed or not, just skip the tick.
+		select {
+		case <-p.sinkCloseCh:
+			p.runningStatus = processorClosed
+			log.Info("changefeed fully closed", zap.String("changefeed", p.changefeedID))
+		default:
+			log.Debug("changeFeed is closing, cannot continue",
+				zap.String("changefeed", p.changefeedID))
+		}
+		return p.changefeed, nil
+	}
 	if !p.checkChangefeedNormal() {
 		log.Info("changefeed not normal", zap.String("changefeed", p.changefeed.ID))
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
@@ -390,7 +413,7 @@ func (p *processor) createTaskPosition() (skipThisTick bool) {
 	if _, exist := p.changefeed.TaskPositions[p.captureInfo.ID]; exist {
 		return false
 	}
-	if p.initialized {
+	if p.runningStatus == processorRunning {
 		log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
@@ -408,7 +431,7 @@ func (p *processor) createTaskPosition() (skipThisTick bool) {
 
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
-	if p.initialized {
+	if p.runningStatus != processorClosed {
 		return nil
 	}
 	ctx, cancel := cdcContext.WithCancel(ctx)
@@ -424,7 +447,8 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		// there are some other objects need errCh, such as sink and sink manager
 		// but we can't ensure that all the producer of errCh are non-blocking
 		// It's very tricky that create a goroutine to receive the local errCh
-		// TODO(leoppro): we should using `pkg/cdcContext.Context` instead of standard cdcContext and handle error by `pkg/cdcContext.Context.Throw`
+		// TODO(leoppro): we should using `pkg/cdcContext.Context` instead of
+		// standard cdcContext and handle error by `pkg/cdcContext.Context.Throw`
 		for {
 			select {
 			case <-ctx.Done():
@@ -452,7 +476,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
 	stdCtx = util.PutCaptureAddrInCtx(stdCtx, p.captureInfo.AdvertiseAddr)
 
-	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
+	p.mounter = entry.NewMounter(p.schemaStorage,
+		p.changefeed.Info.Config.Mounter.WorkerNum,
+		p.changefeed.Info.Config.EnableOldValue)
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -475,21 +501,35 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 
-	log.Info("processor try new sink", zap.String("changefeed", p.changefeed.ID))
-	start := time.Now()
-	s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
-	if err != nil {
-		log.Info("processor new sink failed",
-			zap.String("changefeed", p.changefeed.ID),
-			zap.Duration("duration", time.Since(start)))
-		return errors.Trace(err)
-	}
-	log.Info("processor try new sink success",
-		zap.Duration("duration", time.Since(start)))
-
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
-	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
+
+	// initialize the sink could be a time-consuming process in some special
+	// scenario. The user can use `cdc cli` in server `a`, which can connect
+	// to the kafka brokers easily, then the capture running the processor
+	// would be another server `b` which has a bad network connection to the
+	// kafka brokers, this would cost around 1 minute, if the sink initialization
+	// process is not asynchronous to the processor, it would block the `processorManager`
+	// for about 1 minute.
+	go func() {
+		log.Info("processor try new sink",
+			zap.String("changefeed", p.changefeed.ID))
+		start := time.Now()
+		s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI,
+			p.filter, p.changefeed.Info.Config, opts, errCh)
+		if err != nil {
+			log.Info("processor new sink failed",
+				zap.String("changefeed", p.changefeed.ID),
+				zap.Duration("duration", time.Since(start)))
+			p.sendError(errors.Trace(err))
+			return
+		}
+		log.Info("processor try new sink success",
+			zap.Duration("duration", time.Since(start)))
+		// todo: sinkManager should be used after fully initialized
+		p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
+	}()
+
 	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}
 	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
@@ -503,7 +543,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}
 	}
 
-	p.initialized = true
+	p.runningStatus = processorRunning
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil
 }

@@ -38,7 +38,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type changeFeedRunningStatus int32
+type changeFeedRunningStatus int
 
 const (
 	changeFeedClosed changeFeedRunningStatus = iota
@@ -170,8 +170,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 			log.Info("changefeed fully closed", zap.String("changefeed", c.state.ID))
 		default:
 			log.Debug("changeFeed is closing, cannot continue",
-				zap.String("changefeed", c.state.ID),
-				zap.Any("runningStatus", c.runningStatus))
+				zap.String("changefeed", c.state.ID))
 		}
 		return nil
 	}
