@@ -1102,6 +1102,18 @@ description = ""
 workaround = "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
 tags = ["internal", "medium"]
 
+[error.DM-config-20053]
+message = "loader's dir %s is invalid"
+description = ""
+workaround = "Please check the `dir` config in task configuration file."
+tags = ["internal", "high"]
+
+[error.DM-config-20054]
+message = "loader's dir %s is s3 dir, but s3 is not supported"
+description = ""
+workaround = "Please check the `dir` config in task configuration file and you can use `Lightning` by config `tidb.backend` which supports s3 instead."
+tags = ["internal", "high"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""

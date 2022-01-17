@@ -18,6 +18,7 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 )
 
 func (t *testConfig) TestSubTask(c *C) {
@@ -169,6 +170,78 @@ func (t *testConfig) TestSubTaskBlockAllowList(c *C) {
 	err = cfg.Adjust(false)
 	c.Assert(err, IsNil)
 	c.Assert(cfg.BAList, Equals, filterRules2)
+}
+
+func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
+	cfg := &SubTaskConfig{
+		Name:     "test",
+		SourceID: "source-1",
+		Mode:     ModeAll,
+		TiDB: TiDBExtraConfig{
+			Backend: lcfg.BackendLocal,
+		},
+	}
+
+	// default loader
+	cfg.LoaderConfig = DefaultLoaderConfig()
+	err := cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, defaultDir+"."+cfg.Name)
+
+	// file
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize: defaultPoolSize,
+		Dir:      "file:///tmp/storage",
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "file:///tmp/storage"+"."+cfg.Name)
+
+	// s3
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize: defaultPoolSize,
+		Dir:      "s3://bucket2/prefix",
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "s3://bucket2/prefix"+"."+cfg.Name+"."+cfg.SourceID)
+
+	// invaild dir
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize: defaultPoolSize,
+		Dir:      "1invalid:",
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir "+"1invalid:"+"."+cfg.Name+" is invalid.*")
+
+	// use loader and not s3
+	cfg.TiDB.Backend = ""
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize: defaultPoolSize,
+		Dir:      "file:///tmp/storage",
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "file:///tmp/storage"+"."+cfg.Name)
+
+	// use loader and s3
+	cfg.TiDB.Backend = ""
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize: defaultPoolSize,
+		Dir:      "s3://bucket2/prefix",
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir "+"s3://bucket2/prefix"+"."+cfg.Name+" is s3 dir, but s3 is not supported.*")
+
+	// not all or full mode
+	cfg.Mode = ModeIncrement
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize: defaultPoolSize,
+		Dir:      "1invalid:",
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "1invalid:"+"."+cfg.Name)
 }
 
 func (t *testConfig) TestDBConfigClone(c *C) {
