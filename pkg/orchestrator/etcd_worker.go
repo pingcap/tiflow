@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
@@ -120,7 +119,7 @@ func (worker *EtcdWorker) initMetrics(captureAddr string) {
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 // If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
 // And the specified etcd session is nil-safety.
-func (worker *EtcdWorker) Run(ctx cdcContext.Context, session *concurrency.Session, timerInterval time.Duration, captureAddr string) error {
+func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, captureAddr string, role string) error {
 	defer worker.cleanUp()
 	worker.initMetrics(captureAddr)
 
@@ -132,9 +131,9 @@ func (worker *EtcdWorker) Run(ctx cdcContext.Context, session *concurrency.Sessi
 	ticker := time.NewTicker(timerInterval)
 	defer ticker.Stop()
 
-	watchCtx, cancel := cdcContext.WithCancel(ctx)
+	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), ctx.GlobalVars().IsOwner, clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
+	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), role, clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 
 	var (
 		pendingPatches [][]DataPatch
@@ -146,11 +145,6 @@ func (worker *EtcdWorker) Run(ctx cdcContext.Context, session *concurrency.Sessi
 	} else {
 		// should never be closed
 		sessionDone = make(chan struct{})
-	}
-
-	role := "processor"
-	if ctx.GlobalVars().IsOwner {
-		role = "owner"
 	}
 
 	// tickRate represents the number of times EtcdWorker can tick
