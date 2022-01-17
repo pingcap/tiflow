@@ -151,6 +151,10 @@ func (s *Sorter) Run(ctx context.Context) error {
 	}
 
 	errg.Go(func() error {
+		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
+	})
+
+	errg.Go(func() error {
 		defer func() {
 			// cancelling the heapSorters from the outside
 			for _, hs := range heapSorters {
@@ -161,20 +165,6 @@ func (s *Sorter) Run(ctx context.Context) error {
 			failpoint.Inject("InjectHeapSorterExitDelay", func() {})
 		}()
 
-		select {
-		case <-subctx.Done():
-			startCancel()
-			return errors.Trace(subctx.Err())
-		case err := <-heapSorterErrCh:
-			return errors.Trace(err)
-		}
-	})
-
-	errg.Go(func() error {
-		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
-	})
-
-	errg.Go(func() error {
 		captureAddr := util.CaptureAddrFromCtx(ctx)
 		changefeedID := util.ChangefeedIDFromCtx(ctx)
 
@@ -187,7 +177,10 @@ func (s *Sorter) Run(ctx context.Context) error {
 		for {
 			select {
 			case <-subctx.Done():
-				return subctx.Err()
+				startCancel()
+				return errors.Trace(subctx.Err())
+			case err := <-heapSorterErrCh:
+				return errors.Trace(err)
 			case event := <-s.inputCh:
 				if event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved {
 					// broadcast resolved events
