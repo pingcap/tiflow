@@ -33,7 +33,7 @@ function check_worker_ungraceful_stop_with_retry() {
 	done
 
 	if ! $all_matched; then
-		echo "check_worker_ungraceful_stop_with_retry failed after retry: $k"
+		echo "check_worker_ungraceful_stop_with_retry failed after retry"
 		exit 1
 	fi
 

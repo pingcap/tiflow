@@ -14,7 +14,6 @@
 package syncer
 
 import (
-	"context"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -37,7 +36,7 @@ type DMLWorker struct {
 	chanSize     int
 	multipleRows bool
 	toDBConns    []*dbconn.DBConn
-	runCtx       context.Context
+	runTCtx      *tcontext.Context
 	logger       log.Logger
 
 	// for metrics
@@ -76,7 +75,7 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		fatalFunc:    syncer.fatalFunc,
 		lagFunc:      syncer.updateReplicationJobTS,
 		addCountFunc: syncer.addCount,
-		runCtx:       syncer.runCtx,
+		runTCtx:      syncer.runTCtx,
 		toDBConns:    syncer.toDBConns,
 		inCh:         inCh,
 		flushCh:      make(chan *job),
@@ -237,9 +236,9 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		time.Sleep(time.Duration(t) * time.Second)
 	})
 	// use background context to execute sqls as much as possible
-	ctx, cancel := context.WithTimeout(w.runCtx, maxDMLExecutionDuration)
+	ctx, cancel := w.runTCtx.WithTimeout(maxDMLExecutionDuration)
 	defer cancel()
-	affect, err = db.ExecuteSQL(tcontext.NewContext(ctx, w.logger), queries, args...)
+	affect, err = db.ExecuteSQL(ctx, queries, args...)
 	failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
 		if intVal, ok := val.(int); ok && intVal == 4 && len(jobs) > 0 {
 			w.logger.Warn("fail to exec DML", zap.String("failpoint", "SafeModeExit"))
