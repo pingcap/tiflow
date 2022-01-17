@@ -58,6 +58,7 @@ const (
 	processorClosed processorRunningStatus = iota
 	processorRunning
 	processorClosing
+	processorInitializing
 )
 
 type processor struct {
@@ -353,6 +354,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if p.createTaskPosition() {
 		return p.changefeed, nil
 	}
+	// todo: shall we also handle error if in `processorClosing` status ?
 	if err := p.handleErrorCh(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
