@@ -977,9 +977,9 @@ func (s *Syncer) checkShouldFlush() error {
 		return nil
 	}
 
-	jobSeq := s.getFlushSeq()
-	s.tctx.L().Info("Start to async flush current checkpoint to downstream based on flush interval", zap.Int64("job sequence", jobSeq))
 	if s.cfg.Experimental.AsyncCheckpointFlush {
+		jobSeq := s.getFlushSeq()
+		s.tctx.L().Info("Start to async flush current checkpoint to downstream based on flush interval", zap.Int64("job sequence", jobSeq))
 		j := newAsyncFlushJob(s.cfg.WorkerCount, jobSeq)
 		s.addJob(j)
 		s.flushCheckPointsAsync(j)
