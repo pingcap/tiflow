@@ -232,6 +232,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 
 	config.Metadata.Retry.Max = 3
 	config.Metadata.Retry.Backoff = 250 * time.Millisecond
+	config.Metadata.Timeout = 1 * time.Minute
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
