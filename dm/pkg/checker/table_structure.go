@@ -27,7 +27,6 @@ import (
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
@@ -405,8 +404,8 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 
 	checkFunc := func() {
 		var (
-			instance string
-			p        *parser.Parser
+			instance = firstInstance
+			p        = parser2
 			err      error
 		)
 		defer func() {

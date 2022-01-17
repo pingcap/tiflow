@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -41,12 +42,12 @@ var privNeedGlobal = map[mysql.PrivilegeType]struct{}{
 type SourceDumpPrivilegeChecker struct {
 	db          *sql.DB
 	dbinfo      *dbutil.DBConfig
-	checkTables map[string][]string // map schema => {table1, table2, ...}
+	checkTables []*filter.Table
 	consistency string
 }
 
 // NewSourceDumpPrivilegeChecker returns a RealChecker.
-func NewSourceDumpPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig, checkTables map[string][]string, consistency string) RealChecker {
+func NewSourceDumpPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig, checkTables []*filter.Table, consistency string) RealChecker {
 	return &SourceDumpPrivilegeChecker{
 		db:          db,
 		dbinfo:      dbinfo,
@@ -320,9 +321,8 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 	return NewError(privileges)
 }
 
-// checkTables map schema => {table1, table2, ...}.
 // lackPriv map privilege => schema => table.
-func genExpectPriv(privileges map[mysql.PrivilegeType]struct{}, checkTables map[string][]string) map[mysql.PrivilegeType]map[string]map[string]struct{} {
+func genExpectPriv(privileges map[mysql.PrivilegeType]struct{}, checkTables []*filter.Table) map[mysql.PrivilegeType]map[string]map[string]struct{} {
 	lackPriv := make(map[mysql.PrivilegeType]map[string]map[string]struct{}, len(privileges))
 	for p := range privileges {
 		if _, ok := privNeedGlobal[p]; ok {
@@ -330,13 +330,11 @@ func genExpectPriv(privileges map[mysql.PrivilegeType]struct{}, checkTables map[
 			continue
 		}
 		lackPriv[p] = make(map[string]map[string]struct{}, len(checkTables))
-		for schema, tables := range checkTables {
-			if _, ok := lackPriv[p][schema]; !ok {
-				lackPriv[p][schema] = make(map[string]struct{}, len(tables))
+		for _, table := range checkTables {
+			if _, ok := lackPriv[p][table.Schema]; !ok {
+				lackPriv[p][table.Schema] = make(map[string]struct{})
 			}
-			for _, table := range tables {
-				lackPriv[p][schema][table] = struct{}{}
-			}
+			lackPriv[p][table.Schema][table.Name] = struct{}{}
 		}
 		if p == mysql.SelectPriv {
 			if _, ok := lackPriv[p]["INFORMATION_SCHEMA"]; !ok {
@@ -353,7 +351,7 @@ func genReplicPriv(replicationPrivileges map[mysql.PrivilegeType]struct{}) map[m
 	return genExpectPriv(replicationPrivileges, nil)
 }
 
-func genDumpPriv(dumpPrivileges map[mysql.PrivilegeType]struct{}, checkTables map[string][]string) map[mysql.PrivilegeType]map[string]map[string]struct{} {
+func genDumpPriv(dumpPrivileges map[mysql.PrivilegeType]struct{}, checkTables []*filter.Table) map[mysql.PrivilegeType]map[string]map[string]struct{} {
 	// due to dump privilege checker need check db/table level privilege
 	// so we need know the check tables
 	return genExpectPriv(dumpPrivileges, checkTables)

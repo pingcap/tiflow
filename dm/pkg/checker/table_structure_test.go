@@ -178,9 +178,6 @@ PRIMARY KEY ("c")
 	maxConnecionsRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("max_connections", "2")
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnecionsRow)
-	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("sql_mode", "ANSI_QUOTES")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
 	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
 "c" int(11) NOT NULL,

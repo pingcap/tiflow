@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	tc "github.com/pingcap/check"
+	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/mysql"
 )
 
@@ -31,7 +32,7 @@ type testCheckSuite struct{}
 func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 	cases := []struct {
 		grants      []string
-		checkTables map[string][]string
+		checkTables []*filter.Table
 		dumpState   State
 		errMatch    string
 	}{
@@ -58,8 +59,8 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 				"GRANT EXECUTE ON FUNCTION db1.anomaly_score TO 'user1'@'domain-or-ip-address1'",
 			},
 			dumpState: StateFailure,
-			checkTables: map[string][]string{
-				"db1": {"anomaly_score"},
+			checkTables: []*filter.Table{
+				{Schema: "db1", Name: "anomaly_score"},
 			},
 			// `db1`.`anomaly_score`; `INFORMATION_SCHEMA`
 			// can't guarantee the order
@@ -126,8 +127,8 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 				"GRANT ALL PRIVILEGES ON `medz`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 			},
 			dumpState: StateFailure,
-			checkTables: map[string][]string{
-				"medz": {"medz"},
+			checkTables: []*filter.Table{
+				{Schema: "medz", Name: "medz"},
 			},
 			errMatch: "lack of RELOAD privilege; ",
 		},
@@ -137,8 +138,8 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 				"GRANT ALL PRIVILEGES ON `INFORMATION_SCHEMA`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 			},
 			dumpState: StateFailure,
-			checkTables: map[string][]string{
-				"medz": {"medz"},
+			checkTables: []*filter.Table{
+				{Schema: "medz", Name: "medz"},
 			},
 			errMatch: "lack of RELOAD privilege; ",
 		},
@@ -149,8 +150,8 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 				"GRANT SELECT ON `INFORMATION_SCHEMA`.* TO 'user'@'%'",
 			},
 			dumpState: StateFailure,
-			checkTables: map[string][]string{
-				"lance": {"t"},
+			checkTables: []*filter.Table{
+				{Schema: "lance", Name: "t"},
 			},
 			errMatch: "lack of Select privilege: {`lance`.`t`}; ",
 		},
@@ -162,8 +163,8 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 				"GRANT `r1`@`%`,`r2`@`%` TO `u1`@`localhost`",
 			},
 			dumpState: StateSuccess,
-			checkTables: map[string][]string{
-				"db1": {"t"},
+			checkTables: []*filter.Table{
+				{Schema: "db1", Name: "t"},
 			},
 		},
 		{
@@ -195,7 +196,7 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 func (t *testCheckSuite) TestVerifyReplicationPrivileges(c *tc.C) {
 	cases := []struct {
 		grants           []string
-		checkTables      map[string][]string
+		checkTables      []*filter.Table
 		replicationState State
 		errMatch         string
 	}{
