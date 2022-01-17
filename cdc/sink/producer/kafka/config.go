@@ -248,6 +248,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
+	// Time out in five minutes(600 * 500ms).
 	config.Producer.Retry.Max = 600
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
