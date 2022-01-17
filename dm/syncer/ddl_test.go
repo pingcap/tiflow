@@ -34,6 +34,7 @@ import (
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/regexprrouter"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 )
 
@@ -220,7 +221,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
 	c.Assert(err, IsNil)
 
-	syncer.tableRouter, err = router.NewTableRouter(false, []*router.TableRule{
+	syncer.tableRouter, err = regexprrouter.NewRegExprRouter(false, []*router.TableRule{
 		{
 			SchemaPattern: "s1",
 			TargetSchema:  "xs1",

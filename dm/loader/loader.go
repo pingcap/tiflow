@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/regexprrouter"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -430,7 +431,7 @@ type Loader struct {
 
 	fileJobQueue chan *fileJob
 
-	tableRouter   *router.Table
+	tableRouter   *regexprrouter.RegExprTable
 	baList        *filter.Filter
 	columnMapping *cm.Mapping
 
@@ -876,7 +877,7 @@ func (l *Loader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	var (
 		err              error
 		oldBaList        *filter.Filter
-		oldTableRouter   *router.Table
+		oldTableRouter   *regexprrouter.RegExprTable
 		oldColumnMapping *cm.Mapping
 	)
 
@@ -904,7 +905,7 @@ func (l *Loader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 
 	// update route, for loader, this almost useless, because schemas often have been restored
 	oldTableRouter = l.tableRouter
-	l.tableRouter, err = router.NewTableRouter(cfg.CaseSensitive, cfg.RouteRules)
+	l.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, cfg.RouteRules)
 	if err != nil {
 		return terror.ErrLoadUnitGenTableRouter.Delegate(err)
 	}
@@ -924,7 +925,7 @@ func (l *Loader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 }
 
 func (l *Loader) genRouter(rules []*router.TableRule) error {
-	l.tableRouter, _ = router.NewTableRouter(l.cfg.CaseSensitive, []*router.TableRule{})
+	l.tableRouter, _ = regexprrouter.NewRegExprRouter(l.cfg.CaseSensitive, []*router.TableRule{})
 	for _, rule := range rules {
 		err := l.tableRouter.AddRule(rule)
 		if err != nil {
@@ -1233,7 +1234,7 @@ func renameShardingSchema(query, srcSchema, dstSchema string, ansiquote bool) st
 	return SQLReplace(query, srcSchema, dstSchema, ansiquote)
 }
 
-func fetchMatchedLiteral(ctx *tcontext.Context, router *router.Table, schema, table string) (targetSchema string, targetTable string) {
+func fetchMatchedLiteral(ctx *tcontext.Context, router *regexprrouter.RegExprTable, schema, table string) (targetSchema string, targetTable string) {
 	if schema == "" {
 		// nothing change
 		return schema, table
