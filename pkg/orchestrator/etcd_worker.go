@@ -411,11 +411,7 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 		return errors.Trace(err)
 	}
 
-<<<<<<< HEAD
-	// logEtcdOps(ops, resp.Succeeded)
-=======
-	//logEtcdOps(ops, resp.Succeeded)
->>>>>>> 8a2dc0617 (comment out some debug log.)
+	logEtcdOps(ops, resp.Succeeded)
 	if resp.Succeeded {
 		worker.barrierRev = resp.Header.GetRevision()
 		return nil
