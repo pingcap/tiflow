@@ -232,6 +232,12 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 
 	config.Metadata.Retry.Max = 3
 	config.Metadata.Retry.Backoff = 250 * time.Millisecond
+	// If it is not set, this means a metadata request against an unreachable
+	// cluster (all brokers are unreachable or unresponsive) can take up to
+	// `Net.[Dial|Read]Timeout * BrokerCount * (Metadata.Retry.Max + 1) +
+	// Metadata.Retry.Backoff * Metadata.Retry.Max` to fail.
+	// See: https://github.com/Shopify/sarama/issues/765
+	// and https://github.com/pingcap/tiflow/issues/3352.
 	config.Metadata.Timeout = 1 * time.Minute
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
