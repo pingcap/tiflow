@@ -1068,7 +1068,7 @@ func (t *testReaderSuite) genBinlogEvents(c *C, latestPos uint32, latestGTID gti
 	// for these tests, generates some DDL events is enough
 	count := 5 + rand.Intn(5)
 	for i := 0; i < count; i++ {
-		evs, err := event.GenDDLEvents(gmysql.MySQLFlavor, 1, latestPos, latestGTID, fmt.Sprintf("db_%d", i), fmt.Sprintf("CREATE TABLE %d (c1 INT)", i))
+		evs, err := event.GenDDLEvents(gmysql.MySQLFlavor, 1, latestPos, latestGTID, fmt.Sprintf("db_%d", i), fmt.Sprintf("CREATE TABLE %d (c1 INT)", i), true, false, 0)
 		c.Assert(err, IsNil)
 		events = append(events, evs.Events...)
 		latestPos = evs.LatestPos
@@ -1099,7 +1099,7 @@ func (t *testReaderSuite) genEvents(c *C, eventTypes []replication.EventType, la
 	for i, eventType := range eventTypes {
 		switch eventType {
 		case replication.QUERY_EVENT:
-			evs, err := event.GenDDLEvents(gmysql.MySQLFlavor, 1, latestPos, latestGTID, fmt.Sprintf("db_%d", i), fmt.Sprintf("CREATE TABLE %d (c1 int)", i))
+			evs, err := event.GenDDLEvents(gmysql.MySQLFlavor, 1, latestPos, latestGTID, fmt.Sprintf("db_%d", i), fmt.Sprintf("CREATE TABLE %d (c1 int)", i), true, false, 0)
 			c.Assert(err, IsNil)
 			events = append(events, evs.Events...)
 			latestPos = evs.LatestPos
@@ -1119,7 +1119,7 @@ func (t *testReaderSuite) genEvents(c *C, eventTypes []replication.EventType, la
 					Rows:       [][]interface{}{{int32(1)}, {int32(2)}},
 				},
 			}
-			evs, err := event.GenDMLEvents(gmysql.MySQLFlavor, 1, latestPos, latestGTID, replication.WRITE_ROWS_EVENTv2, 10, insertDMLData)
+			evs, err := event.GenDMLEvents(gmysql.MySQLFlavor, 1, latestPos, latestGTID, replication.WRITE_ROWS_EVENTv2, 10, insertDMLData, true, false, 0)
 			c.Assert(err, IsNil)
 			events = append(events, evs.Events...)
 			latestPos = evs.LatestPos
