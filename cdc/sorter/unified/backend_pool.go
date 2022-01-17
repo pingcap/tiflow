@@ -148,7 +148,7 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 				if err != nil {
 					log.Warn("Cannot remove temporary file for sorting", zap.String("file", backEnd.fileName), zap.Error(err))
 				} else {
-					// log.Debug("Temporary file removed", zap.String("file", backEnd.fileName))
+					log.Debug("Temporary file removed", zap.String("file", backEnd.fileName))
 					freedCount += 1
 				}
 				if freedCount >= 16 {

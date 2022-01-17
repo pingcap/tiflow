@@ -84,7 +84,6 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 			m.closeProcessor(changefeedID)
 			continue
 		}
-
 		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 			ID:   changefeedID,
 			Info: changefeedState.Info,

@@ -227,7 +227,6 @@ func (k *kafkaSaramaProducer) Close() error {
 	} else {
 		log.Info("sync client closed", zap.Duration("duration", time.Since(start)))
 	}
-
 	return nil
 }
 

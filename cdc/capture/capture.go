@@ -405,7 +405,6 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		globalVars := *ctx.GlobalVars()
 		newGlobalVars := &globalVars
 		newGlobalVars.OwnerRevision = ownerRev
-		newGlobalVars.IsOwner = true
 		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
 
 		log.Info("campaign owner successfully",

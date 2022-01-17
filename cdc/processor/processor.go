@@ -323,7 +323,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
 	p.changefeed = state
 	if !p.checkChangefeedNormal() {
-		log.Info("changefeed not normal", zap.String("changefeedID", p.changefeed.ID))
+		log.Info("changefeed not normal", zap.String("changefeed", p.changefeed.ID))
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	// we should skip this tick after create a task position
