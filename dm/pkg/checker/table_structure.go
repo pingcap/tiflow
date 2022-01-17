@@ -156,7 +156,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 					break
 				}
 
-				opts := c.checkCreateSQL(ctx, p, statement)
+				opts := c.checkCreateSQL(p, statement)
 				for _, opt := range opts {
 					opt.tableID = table.String()
 					tableMsg := "table " + opt.tableID + " "
@@ -225,7 +225,7 @@ func (c *TablesChecker) Name() string {
 	return "table structure compatibility check"
 }
 
-func (c *TablesChecker) checkCreateSQL(ctx context.Context, p *parser.Parser, statement string) []*incompatibilityOption {
+func (c *TablesChecker) checkCreateSQL(p *parser.Parser, statement string) []*incompatibilityOption {
 	stmt, err := p.ParseOneStmt(statement, "", "")
 	if err != nil {
 		return []*incompatibilityOption{
