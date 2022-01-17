@@ -47,8 +47,6 @@ type GlobalVars struct {
 	PDClock          pdtime.Clock
 	TableActorSystem *system.System
 	SorterSystem     *ssystem.System
-
-	IsOwner bool
 	// OwnerRevision is the Etcd revision when the owner got elected.
 	OwnerRevision int64
 
