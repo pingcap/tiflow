@@ -112,7 +112,6 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 
 	checkCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	isDone := false
 
 	checkFunc := func() {
 		defer checkWg.Done()
@@ -127,7 +126,6 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 		for {
 			select {
 			case <-checkCtx.Done():
-				isDone = true
 				return
 			case checkItem, ok := <-inCh:
 				if !ok {
@@ -203,22 +201,21 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 		go checkFunc()
 	}
 
+outer:
 	for sourceID, tables := range c.tableMap {
 		for _, table := range tables {
 			select {
 			case inCh <- &checkItem{table, sourceID}:
 			case <-checkCtx.Done():
-				isDone = true
-			}
-			if isDone {
-				break
+				log.L().Logger.Warn("ctx canceled before input tables completely")
+				break outer
 			}
 		}
 	}
 
 	close(inCh)
 	checkWg.Wait()
-	log.L().Logger.Info("check table structure over", zap.Bool("check cancel", isDone), zap.String("spend time", time.Since(startTime).String()))
+	log.L().Logger.Info("check table structure over", zap.String("spend time", time.Since(startTime).String()))
 	return r
 }
 
@@ -366,6 +363,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		Extra: fmt.Sprintf("sharding %s,", c.targetTableID),
 	}
 
+	startTime := time.Now()
 	log.L().Logger.Info("start to check sharding tables")
 	var (
 		stmtNode      *ast.CreateTableStmt
@@ -524,22 +522,21 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		go checkFunc()
 	}
 
+outer:
 	for instance, tables := range c.tableMap {
 		for _, table := range tables {
-			isDone := false
 			select {
 			case inCh <- &checkItem{table, instance}:
 			case <-checkCtx.Done():
-				isDone = true
-			}
-			if isDone {
-				break
+				log.L().Logger.Warn("ctx canceled before input tables completely")
+				break outer
 			}
 		}
 	}
 	close(inCh)
 
 	checkWg.Wait()
+	log.L().Logger.Info("check sharding table structure over", zap.String("spend time", time.Since(startTime).String()))
 	return r
 }
 
