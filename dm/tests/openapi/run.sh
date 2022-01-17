@@ -32,6 +32,14 @@ function init_shard_data() {
 	run_sql_source2 "INSERT INTO openapi.t(i,j) VALUES (3, 4);"
 }
 
+function clean_cluster_sources_and_tasks() {
+	openapi_source_check "delete_source_with_force_success" "mysql-01"
+	openapi_source_check "delete_source_with_force_success" "mysql-02"
+	openapi_source_check "delete_source_with_force_success" 0
+	openapi_task_check "get_task_list" 0
+	run_sql_tidb "DROP DATABASE if exists openapi;"
+}
+
 function test_source() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: SOURCE"
 	prepare_database
@@ -217,10 +225,7 @@ function test_shard_task() {
 	openapi_task_check "get_task_list" 0
 
 	# delete source success
-	openapi_source_check "delete_source_success" "mysql-01"
-	openapi_source_check "delete_source_success" "mysql-02"
-	openapi_source_check "list_source_success" 0
-	run_sql_tidb "DROP DATABASE if exists openapi;"
+	clean_cluster_sources_and_tasks
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: SHARD TASK SUCCESS"
 
 }
@@ -329,11 +334,7 @@ function test_multi_tasks() {
 	openapi_task_check "get_task_list_with_status" 2 $task2 2
 
 	# delete source success and clean data for other test
-	openapi_source_check "delete_source_with_force_success" "mysql-01"
-	openapi_source_check "delete_source_with_force_success" "mysql-02"
-	openapi_source_check "list_source_success" 0
-	run_sql_tidb "DROP DATABASE if exists openapi;"
-	openapi_task_check "get_task_list" 0
+	clean_cluster_sources_and_tasks
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: MULTI TASK SUCCESS"
 
 }
@@ -378,31 +379,8 @@ function test_task_templates() {
 	diff $WORK_DIR/get_task_from_task.yaml $WORK_DIR/get_task_from_task_template.yaml || exit 1
 
 	# delete source success and clean data for other test
-	openapi_source_check "delete_source_with_force_success" "mysql-01"
-	openapi_source_check "delete_source_with_force_success" "mysql-02"
-	openapi_source_check "list_source_success" 0
-	openapi_task_check "get_task_list" 0
+	clean_cluster_sources_and_tasks
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TASK TEMPLATES"
-}
-
-function test_cluster() {
-	# list master and worker node
-	openapi_cluster_check "list_master_success" 2
-
-	openapi_cluster_check "list_worker_success" 2
-
-	# delete master node
-	openapi_cluster_check "delete_master_with_retry_success" "master2"
-	openapi_cluster_check "list_master_success" 1
-
-	# delete worker node failed because of worker is still online
-	openapi_cluster_check "delete_worker_failed" "worker1"
-	kill_dm_worker
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
-
-	openapi_cluster_check "delete_worker_with_retry_success" "worker1"
-	openapi_cluster_check "list_worker_success" 1
 }
 
 function test_noshard_task_dump_status() {
@@ -441,12 +419,28 @@ function test_noshard_task_dump_status() {
 	openapi_task_check "check_noshard_task_dump_status_success" "$task_name" 0
 
 	# delete source success and clean data for other test
-	openapi_source_check "delete_source_with_force_success" "mysql-01"
-	openapi_source_check "delete_source_with_force_success" "mysql-02"
-	openapi_source_check "list_source_success" 0
-	run_sql_tidb "DROP DATABASE if exists openapi;"
-	openapi_task_check "get_task_list" 0
+	clean_cluster_sources_and_tasks
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK DUMP STATUS SUCCESS"
+}
+
+function test_cluster() {
+	# list master and worker node
+	openapi_cluster_check "list_master_success" 2
+
+	openapi_cluster_check "list_worker_success" 2
+
+	# delete master node
+	openapi_cluster_check "delete_master_with_retry_success" "master2"
+	openapi_cluster_check "list_master_success" 1
+
+	# delete worker node failed because of worker is still online
+	openapi_cluster_check "delete_worker_failed" "worker1"
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	openapi_cluster_check "delete_worker_with_retry_success" "worker1"
+	openapi_cluster_check "list_worker_success" 1
 }
 
 function run() {
