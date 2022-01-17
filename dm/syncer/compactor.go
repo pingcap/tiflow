@@ -210,7 +210,7 @@ func (c *compactor) compactJob(j *job) {
 			j.safeMode = true
 		}
 	case del:
-		// do nothing because anything + DELETE => DELETE
+		j.dml.Reduce(prevJob.dml)
 	}
 
 	// mark previous job as compacted(nil), add new job
