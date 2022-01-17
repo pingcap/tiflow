@@ -708,6 +708,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 		}
 	)
 
+	stCfg1.Experimental.AsyncCheckpointFlush = true
 	stCfg2, err := stCfg1.Clone()
 	c.Assert(err, IsNil)
 	stCfg2.SourceID = source2
@@ -806,6 +807,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 		},
 		CleanDumpFile: stCfg1.CleanDumpFile,
 	}
+	cfg2.Experimental.AsyncCheckpointFlush = true
 
 	c.Assert(WordCount(cfg.String()), DeepEquals, WordCount(cfg2.String())) // since rules are unordered, so use WordCount to compare
 
