@@ -1049,7 +1049,7 @@ func genDMLsWithSameCols(op sqlmodel.DMLType, dmls []*sqlmodel.RowChange) ([]str
 		if i == 0 {
 			lastDML = dml
 		}
-		if !sqlmodel.SameColumns(lastDML, dml) {
+		if !sqlmodel.SameTypeTargetAndColumns(lastDML, dml) {
 			query, arg = genSQLMultipleRows(op, groupDMLs)
 			queries = append(queries, query)
 			args = append(args, arg)

@@ -226,7 +226,7 @@ func (r *RowChange) genWhere(buf *strings.Builder) []interface{} {
 // n must be greater or equal than 1, or the function will panic.
 func valuesHolder(n int) string {
 	var builder strings.Builder
-	builder.Grow((n-1)*2 + 1)
+	builder.Grow((n-1)*2 + 3)
 	builder.WriteByte('(')
 	for i := 0; i < n; i++ {
 		if i > 0 {
@@ -236,43 +236,6 @@ func valuesHolder(n int) string {
 	}
 	builder.WriteByte(')')
 	return builder.String()
-}
-
-// GenDeleteSQL generates the DELETE SQL and its arguments.
-func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
-	if len(changes) == 0 {
-		return "", nil
-	}
-
-	var buf strings.Builder
-	buf.Grow(1024)
-	buf.WriteString("DELETE FROM ")
-	buf.WriteString(changes[0].targetTable.QuoteString())
-	buf.WriteString(" WHERE (")
-
-	whereColumns, _ := changes[0].whereColumnsAndValues()
-	for i, column := range whereColumns {
-		if i != len(whereColumns)-1 {
-			buf.WriteString(quotes.QuoteName(column) + ",")
-		} else {
-			buf.WriteString(quotes.QuoteName(column) + ")")
-		}
-	}
-	buf.WriteString(" IN (")
-	// TODO: can't handle iS NULL
-	args := make([]interface{}, 0, len(changes)*len(whereColumns))
-	holder := valuesHolder(len(whereColumns))
-	for i, change := range changes {
-		if i > 0 {
-			buf.WriteString(",")
-		}
-		buf.WriteString(holder)
-		// TODO: check the whereValues are in same length (no UK NULL causes different whereColumns)
-		_, whereValues := change.whereColumnsAndValues()
-		args = append(args, whereValues...)
-	}
-	buf.WriteString(")")
-	return buf.String(), args
 }
 
 func (r *RowChange) genDeleteSQL() (string, []interface{}) {
@@ -302,8 +265,6 @@ func isGenerated(columns []*timodel.ColumnInfo, name timodel.CIStr) bool {
 	}
 	return false
 }
-
-// TODO: support GenUpdateSQL(changes ...*RowChange) using UPDATE SET CASE WHEN
 
 func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	if r.tp != RowChangeUpdate {
@@ -339,73 +300,6 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	buf.WriteString(" LIMIT 1")
 
 	args = append(args, whereArgs...)
-	return buf.String(), args
-}
-
-// GenInsertSQL generates the INSERT SQL and its arguments.
-func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
-	if len(changes) == 0 {
-		return "", nil
-	}
-
-	var buf strings.Builder
-	buf.Grow(1024)
-	if tp == DMLReplace {
-		buf.WriteString("REPLACE INTO ")
-	} else {
-		buf.WriteString("INSERT INTO ")
-	}
-	buf.WriteString(changes[0].targetTable.QuoteString())
-	buf.WriteString(" (")
-	columnNum := 0
-	var skipColIdx []int
-	for i, col := range changes[0].sourceTableInfo.Columns {
-		if isGenerated(changes[0].targetTableInfo.Columns, col.Name) {
-			skipColIdx = append(skipColIdx, i)
-			continue
-		}
-
-		if columnNum != 0 {
-			buf.WriteByte(',')
-		}
-		columnNum++
-		buf.WriteString(quotes.QuoteName(col.Name.O))
-	}
-	buf.WriteString(") VALUES ")
-	holder := valuesHolder(columnNum)
-	for i := range changes {
-		if i > 0 {
-			buf.WriteString(",")
-		}
-		buf.WriteString(holder)
-	}
-	if tp == DMLInsertOnDuplicateUpdate {
-		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
-		for j, col := range changes[0].sourceTableInfo.Columns {
-			colName := quotes.QuoteName(col.Name.O)
-			buf.WriteString(colName + "=VALUES(" + colName + ")")
-			if j != len(changes[0].sourceTableInfo.Columns)-1 {
-				buf.WriteByte(',')
-			}
-		}
-	}
-
-	// TODO: move the check earlier
-	args := make([]interface{}, 0, len(changes)*len(changes[0].sourceTableInfo.Columns))
-	for _, change := range changes {
-		i := 0 // used as index of skipColIdx
-		for j, val := range change.postValues {
-			if i >= len(skipColIdx) {
-				args = append(args, change.postValues[j:]...)
-				break
-			}
-			if skipColIdx[i] == j {
-				i++
-				continue
-			}
-			args = append(args, val)
-		}
-	}
 	return buf.String(), args
 }
 
