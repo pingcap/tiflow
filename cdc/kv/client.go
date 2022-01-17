@@ -481,6 +481,8 @@ func newEventFeedSession(
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
 	kvClientCfg := config.GetGlobalServerConfig().KVClient
+	rangeLock := regionspan.NewRegionRangeLock(
+		totalSpan.Start, totalSpan.End, startTs, client.changefeed)
 	return &eventFeedSession{
 		client:            client,
 		totalSpan:         totalSpan,
@@ -490,7 +492,7 @@ func newEventFeedSession(
 		errCh:             make(chan regionErrorInfo, defaultRegionChanSize),
 		requestRangeCh:    make(chan rangeRequestTask, defaultRegionChanSize),
 		rateLimitQueue:    make([]regionErrorInfo, 0, defaultRegionRateLimitQueueSize),
-		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
+		rangeLock:         rangeLock,
 		enableOldValue:    enableOldValue,
 		lockResolver:      lockResolver,
 		isPullerInit:      isPullerInit,
