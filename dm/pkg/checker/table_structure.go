@@ -99,25 +99,50 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 
 	startTime := time.Now()
 	var (
-		inCh    = make(chan *checkItem, maxThreadNum)
-		checkWg sync.WaitGroup
-		reMu    sync.Mutex
+		inCh          = make(chan *checkItem, maxThreadNum)
+		checkWg       sync.WaitGroup
+		reMu          sync.Mutex
+		firstInstance string
 	)
+
+	for instance := range c.tableMap {
+		firstInstance = instance
+		break
+	}
 
 	checkCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	isDone := false
 
 	checkFunc := func() {
 		defer checkWg.Done()
+		instance := firstInstance
+		p, err := dbutil.GetParserForDB(ctx, c.dbs[instance])
+		if err != nil {
+			reMu.Lock()
+			markCheckError(r, err)
+			reMu.Unlock()
+			return
+		}
 		for {
 			select {
 			case <-checkCtx.Done():
+				isDone = true
 				return
 			case checkItem, ok := <-inCh:
 				if !ok {
 					return
 				}
 				table := checkItem.table
+				if instance != checkItem.sourceID {
+					p, err = dbutil.GetParserForDB(ctx, c.dbs[instance])
+					if err != nil {
+						reMu.Lock()
+						markCheckError(r, err)
+						reMu.Unlock()
+						return
+					}
+				}
 				db := c.dbs[checkItem.sourceID]
 				statement, err := dbutil.GetCreateTableSQL(ctx, db, table.Schema, table.Name)
 				if err != nil {
@@ -132,7 +157,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 					break
 				}
 
-				opts := c.checkCreateSQL(ctx, db, statement)
+				opts := c.checkCreateSQL(ctx, p, statement)
 				for _, opt := range opts {
 					opt.tableID = table.String()
 					tableMsg := "table " + opt.tableID + " "
@@ -180,7 +205,6 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 
 	for sourceID, tables := range c.tableMap {
 		for _, table := range tables {
-			isDone := false
 			select {
 			case inCh <- &checkItem{table, sourceID}:
 			case <-checkCtx.Done():
@@ -194,7 +218,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 
 	close(inCh)
 	checkWg.Wait()
-	log.L().Logger.Info("check table structure over", zap.Time("start time", startTime), zap.String("speed time", time.Since(startTime).String()))
+	log.L().Logger.Info("check table structure over", zap.Bool("check cancel", isDone), zap.String("speed time", time.Since(startTime).String()))
 	return r
 }
 
@@ -203,18 +227,8 @@ func (c *TablesChecker) Name() string {
 	return "table structure compatibility check"
 }
 
-func (c *TablesChecker) checkCreateSQL(ctx context.Context, db *sql.DB, statement string) []*incompatibilityOption {
-	parser2, err := dbutil.GetParserForDB(ctx, db)
-	if err != nil {
-		return []*incompatibilityOption{
-			{
-				state:      StateFailure,
-				errMessage: err.Error(),
-			},
-		}
-	}
-
-	stmt, err := parser2.ParseOneStmt(statement, "", "")
+func (c *TablesChecker) checkCreateSQL(ctx context.Context, p *parser.Parser, statement string) []*incompatibilityOption {
+	stmt, err := p.ParseOneStmt(statement, "", "")
 	if err != nil {
 		return []*incompatibilityOption{
 			{
@@ -434,7 +448,9 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 					instance = checkItem.sourceID
 					p, err2 = dbutil.GetParserForDB(ctx, c.dbs[instance])
 					if err2 != nil {
+						reMu.Lock()
 						r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
+						reMu.Unlock()
 						err = err2
 						return
 					}
@@ -476,10 +492,12 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 
 				checkErr := c.checkConsistency(stmtNode, ctStmt, firstTable.String(), table.String(), firstInstance, instance)
 				if checkErr != nil {
+					reMu.Lock()
 					r.State = StateFailure
 					r.Errors = append(r.Errors, checkErr)
 					r.Extra = fmt.Sprintf("error on sharding %s", c.targetTableID)
 					r.Instruction = "please set same table structure for sharding tables"
+					reMu.Unlock()
 					return
 				}
 			}
