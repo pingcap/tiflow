@@ -40,16 +40,13 @@ func RegisterRoutes(
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Open API
-	RegisterOpoenAPIRoutes(router, capture)
+	registerOpoenAPIRoutes(router, capture)
 
 	// Owner API
-	RegisterOwnerAPIRoutes(router, capture)
+	registerOwnerAPIRoutes(router, capture)
 
 	// Status API
-	RegisterStatusAPIRoutes(router, capture)
-
-	// Log API
-	router.POST("/admin/log", gin.WrapF(handleAdminLogLevel))
+	registerStatusAPIRoutes(router, capture)
 
 	// pprof debug API
 	pprofGroup := router.Group("/debug/pprof/")
@@ -67,7 +64,7 @@ func RegisterRoutes(
 		router.Any("/debug/fail/*any", gin.WrapH(http.StripPrefix("/debug/fail", &failpoint.HttpHandler{})))
 	}
 
-	// Promtheus metrics API
+	// Prometheus metrics API
 	prometheus.DefaultGatherer = registry
 	router.Any("/metrics", gin.WrapH(promhttp.Handler()))
 }

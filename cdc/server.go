@@ -86,7 +86,7 @@ func NewServer(pdEndpoints []string) (*Server, error) {
 	if len(conf.Security.CertAllowedCN) != 0 {
 		err := conf.Security.AddSelfCommonName()
 		if err != nil {
-			log.Error("status server set tls config failed", zap.Error(err))
+			log.Error("New server set tls config failed", zap.Error(err))
 			return nil, errors.Trace(err)
 		}
 	}
@@ -222,7 +222,7 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 	router := gin.New()
 
 	router.Use(logMiddleware())
-	// request will timeout after 10 second
+	// request will time out after 10 seconds
 	router.Use(timeoutMiddleware(time.Second * 10))
 	router.Use(errorHandleMiddleware())
 

@@ -299,15 +299,24 @@ func queryProcessor(
 }
 
 func moveTable(ctx context.Context, ownerAddr string, changefeed string, target string, tableID int64) error {
-	formStr := fmt.Sprintf("cf-id=%s&target-cp-id=%s&table-id=%d", changefeed, target, tableID)
-	log.Debug("preparing HTTP API call to owner", zap.String("formStr", formStr))
-	rd := bytes.NewReader([]byte(formStr))
-	req, err := http.NewRequestWithContext(ctx, "POST", "http://"+ownerAddr+"/capture/owner/move_table", rd)
+	data := struct {
+		CaptureID string `json:"capture_id"`
+		TableID   int64  `json:"table_id"`
+	}{CaptureID: target, TableID: tableID}
+	bdata, err := json.Marshal(&data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Debug("preparing HTTP API call to owner", zap.String("formStr", string(bdata)))
+	body := bytes.NewReader(bdata)
+
+	url := fmt.Sprintf("http://%s/api/v1/changefeeds/%s/tables/move_table", ownerAddr, changefeed)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return errors.Trace(err)

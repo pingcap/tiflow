@@ -16,22 +16,18 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.uber.org/zap"
 )
 
 const (
@@ -79,13 +75,10 @@ type ownerAPI struct {
 	capture *capture.Capture
 }
 
-// RegisterOwnerAPIRoutes registers routes for owner APIs.
-func RegisterOwnerAPIRoutes(router *gin.Engine, capture *capture.Capture) {
+// registerOwnerAPIRoutes registers routes for owner APIs.
+func registerOwnerAPIRoutes(router *gin.Engine, capture *capture.Capture) {
 	ownerAPI := ownerAPI{capture: capture}
-	router.POST("/capture/owner/resign", gin.WrapF(ownerAPI.handleResignOwner))
 	router.POST("/capture/owner/admin", gin.WrapF(ownerAPI.handleChangefeedAdmin))
-	router.POST("/capture/owner/rebalance_trigger", gin.WrapF(ownerAPI.handleRebalanceTrigger))
-	router.POST("/capture/owner/move_table", gin.WrapF(ownerAPI.handleMoveTable))
 	router.POST("/capture/owner/changefeed/query", gin.WrapF(ownerAPI.handleChangefeedQuery))
 }
 
@@ -99,19 +92,6 @@ func handleOwnerResp(w http.ResponseWriter, err error) {
 		return
 	}
 	writeData(w, commonResp{Status: true})
-}
-
-func (h *ownerAPI) handleResignOwner(w http.ResponseWriter, req *http.Request) {
-	if h.capture == nil {
-		// for test only
-		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-		return
-	}
-	err := h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.AsyncStop()
-		return nil
-	})
-	handleOwnerResp(w, err)
 }
 
 func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request) {
@@ -150,74 +130,6 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 
 	err = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
 		owner.EnqueueJob(job)
-		return nil
-	})
-
-	handleOwnerResp(w, err)
-}
-
-func (h *ownerAPI) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request) {
-	if h.capture == nil {
-		// for test only
-		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-		return
-	}
-
-	err := req.ParseForm()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	changefeedID := req.Form.Get(OpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		writeError(w, http.StatusBadRequest,
-			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
-		return
-	}
-
-	err = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.TriggerRebalance(changefeedID)
-		return nil
-	})
-
-	handleOwnerResp(w, err)
-}
-
-func (h *ownerAPI) handleMoveTable(w http.ResponseWriter, req *http.Request) {
-	if h.capture == nil {
-		// for test only
-		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-		return
-	}
-
-	err := req.ParseForm()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError,
-			cerror.WrapError(cerror.ErrInternalServerError, err))
-		return
-	}
-	changefeedID := req.Form.Get(OpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		writeError(w, http.StatusBadRequest,
-			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
-		return
-	}
-	to := req.Form.Get(OpVarTargetCaptureID)
-	if err := model.ValidateChangefeedID(to); err != nil {
-		writeError(w, http.StatusBadRequest,
-			cerror.ErrAPIInvalidParam.GenWithStack("invalid target capture id: %s", to))
-		return
-	}
-	tableIDStr := req.Form.Get(OpVarTableID)
-	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest,
-			cerror.ErrAPIInvalidParam.GenWithStack("invalid tableID: %s", tableIDStr))
-		return
-	}
-
-	err = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.ManualSchedule(changefeedID, to, tableID)
 		return nil
 	})
 
@@ -267,30 +179,4 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
 	}
 	writeData(w, resp)
-}
-
-func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
-	var level string
-	data, err := io.ReadAll(r.Body)
-	r.Body.Close()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	err = json.Unmarshal(data, &level)
-	if err != nil {
-		writeError(w, http.StatusBadRequest,
-			cerror.ErrAPIInvalidParam.GenWithStack("invalid log level: %s", err))
-		return
-	}
-
-	err = logutil.SetLogLevel(level)
-	if err != nil {
-		writeError(w, http.StatusBadRequest,
-			cerror.ErrAPIInvalidParam.GenWithStack("fail to change log level: %s", err))
-		return
-	}
-	log.Warn("log level changed", zap.String("level", level))
-
-	writeData(w, struct{}{})
 }

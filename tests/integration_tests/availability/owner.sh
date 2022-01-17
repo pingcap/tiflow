@@ -184,7 +184,7 @@ function test_owner_retryable_error() {
 	# However we have injected two failpoints, the second capture owner runs
 	# with error and before it exits resign owner also failed, so the second
 	# capture will exit and the first capture campaigns to be owner again.
-	curl -X POST http://127.0.0.1:8300/capture/owner/resign
+	curl -X POST http://127.0.0.1:8300/api/v1/owner/resign
 	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep $owner_id -A1 | grep '\"is-owner\": true'"
 	ensure $MAX_RETRIES "ps -C $CDC_BINARY -o pid= | awk '{print \$1}' | wc -l | grep 1"
 

@@ -44,10 +44,7 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 
 	addr := ts.URL
 	testPprof(c, addr)
-	testReisgnOwner(c, addr)
 	testHandleChangefeedAdmin(c, addr)
-	testHandleRebalance(c, addr)
-	testHandleMoveTable(c, addr)
 	testHandleChangefeedQuery(c, addr)
 	testHandleFailpoint(c, addr)
 }
@@ -67,23 +64,8 @@ func testPprof(c *check.C, addr string) {
 	testValidPprof(fmt.Sprintf("%s/debug/pprof/heap?debug=1", addr))
 }
 
-func testReisgnOwner(c *check.C, addr string) {
-	uri := fmt.Sprintf("%s/capture/owner/resign", addr)
-	testRequestNonOwnerFailed(c, uri)
-}
-
 func testHandleChangefeedAdmin(c *check.C, addr string) {
 	uri := fmt.Sprintf("%s/capture/owner/admin", addr)
-	testRequestNonOwnerFailed(c, uri)
-}
-
-func testHandleRebalance(c *check.C, addr string) {
-	uri := fmt.Sprintf("%s/capture/owner/rebalance_trigger", addr)
-	testRequestNonOwnerFailed(c, uri)
-}
-
-func testHandleMoveTable(c *check.C, addr string) {
-	uri := fmt.Sprintf("%s/capture/owner/move_table", addr)
 	testRequestNonOwnerFailed(c, uri)
 }
 

@@ -51,8 +51,8 @@ type openAPI struct {
 	capture *capture.Capture
 }
 
-// RegisterOpoenAPIRoutes registers routes for OpenAPI
-func RegisterOpoenAPIRoutes(router *gin.Engine, capture *capture.Capture) {
+// registerOpoenAPIRoutes registers routes for OpenAPI
+func registerOpoenAPIRoutes(router *gin.Engine, capture *capture.Capture) {
 	openAPI := openAPI{capture: capture}
 
 	// common API
@@ -768,7 +768,7 @@ func SetLogLevel(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// forwardToOwner forward an request to owner
+// forwardToOwner forward a request to owner
 func (h *openAPI) forwardToOwner(c *gin.Context) {
 	ctx := c.Request.Context()
 	// every request can only forward to owner one time
