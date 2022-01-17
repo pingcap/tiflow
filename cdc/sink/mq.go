@@ -175,9 +175,12 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 
 // FlushRowChangedEvents is thread-safety
 func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
+	var checkpointTs uint64
 	v, ok := k.tableCheckpointTsMap.Load(tableID)
-	checkpointTs := v.(uint64)
-	if ok && resolvedTs <= checkpointTs {
+	if ok {
+		checkpointTs = v.(uint64)
+	}
+	if resolvedTs <= checkpointTs {
 		return checkpointTs, nil
 	}
 	select {
@@ -214,14 +217,12 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 }
 
 func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error {
+	// flush resolvedTs to all partition workers
 	for i := 0; i < int(k.partitionNum); i++ {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case k.partitionInput[i] <- struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}{resolvedTs: resolvedTs}:
+		case k.partitionInput[i] <- mqEvent{resolvedTs: resolvedTs}:
 		}
 	}
 
@@ -237,11 +238,9 @@ flushLoop:
 					continue flushLoop
 				}
 			}
-			break flushLoop
+			return nil
 		}
 	}
-
-	return nil
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
