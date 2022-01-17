@@ -40,11 +40,17 @@ import (
 
 type mqEvent struct {
 	row        *model.RowChangedEvent
-	resolvedTs uint64
+	resolvedTs model.Ts
+}
+
+type resolvedTsEvent struct {
+	tableID    model.TableID
+	resolvedTs model.Ts
 }
 
 const (
-	defaultPartitionInputChSize = 12800
+	defaultPartitionInputChSize      = 12800
+	defaultResolvedTsEventBufferSize = 12800
 	// -1 means broadcast to all partitions, it's the default for the default open protocol.
 	defaultDDLDispatchPartition = -1
 )
@@ -60,7 +66,7 @@ type mqSink struct {
 	partitionInput       []chan mqEvent
 	partitionResolvedTs  []uint64
 	tableCheckpointTsMap sync.Map
-	tableCheckpointTs    map[model.TableID]uint64
+	resolvedBuffer       chan resolvedTsEvent
 	resolvedNotifier     *notify.Notifier
 	resolvedReceiver     *notify.Receiver
 
@@ -113,9 +119,9 @@ func newMqSink(
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
 
-		tableCheckpointTs: make(map[model.TableID]uint64),
-		resolvedNotifier:  notifier,
-		resolvedReceiver:  resolvedReceiver,
+		resolvedBuffer:   make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
+		resolvedNotifier: notifier,
+		resolvedReceiver: resolvedReceiver,
 
 		statistics: NewStatistics(ctx, "MQ", opts),
 	}
@@ -167,17 +173,51 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	return nil
 }
 
+// FlushRowChangedEvents is thread-safety
 func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	v, ok := k.tableCheckpointTsMap.Load(tableID)
 	checkpointTs := v.(uint64)
 	if ok && resolvedTs <= checkpointTs {
 		return checkpointTs, nil
 	}
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case k.resolvedBuffer <- resolvedTsEvent{
+		tableID:    tableID,
+		resolvedTs: resolvedTs,
+	}:
+	}
+	k.statistics.PrintStatus(ctx)
+	return checkpointTs, nil
+}
 
+// bgFlushTs flush resolvedTs to workers and flush the mqProducer
+func (k *mqSink) bgFlushTs(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case msg := <-k.resolvedBuffer:
+			resolvedTs := msg.resolvedTs
+			err := k.flushTsToWorker(ctx, resolvedTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			err = k.mqProducer.Flush(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			k.tableCheckpointTsMap.Store(msg.tableID, resolvedTs)
+		}
+	}
+}
+
+func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error {
 	for i := 0; i < int(k.partitionNum); i++ {
 		select {
 		case <-ctx.Done():
-			return 0, ctx.Err()
+			return ctx.Err()
 		case k.partitionInput[i] <- struct {
 			row        *model.RowChangedEvent
 			resolvedTs uint64
@@ -185,12 +225,8 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableI
 		}
 	}
 
-	k.tableCheckpointTs[tableID] = resolvedTs
-	k.statistics.PrintStatus(ctx)
-	return resolvedTs, nil
-}
-
-func (k *mqSink) bgFlushTs(ctx context.Context) error {
+	// waiting for all row events are sent to mq producer
+flushLoop:
 	for {
 		select {
 		case <-ctx.Done():
@@ -201,12 +237,11 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 					continue flushLoop
 				}
 			}
-			err := k.mqProducer.Flush(ctx)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			break flushLoop
 		}
 	}
+
+	return nil
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -278,6 +313,9 @@ func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {
 func (k *mqSink) run(ctx context.Context) error {
 	defer k.resolvedReceiver.Stop()
 	wg, ctx := errgroup.WithContext(ctx)
+	wg.Go(func() error {
+		return k.bgFlushTs(ctx)
+	})
 	for i := int32(0); i < k.partitionNum; i++ {
 		partition := i
 		wg.Go(func() error {
@@ -336,6 +374,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			continue
 		case e = <-input:
 		}
+		// flush resolvedTs event
 		if e.row == nil {
 			if e.resolvedTs != 0 {
 				op, err := encoder.AppendResolvedEvent(e.resolvedTs)
