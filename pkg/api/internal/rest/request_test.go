@@ -40,7 +40,7 @@ func TestRequestParams(t *testing.T) {
 func TestRequestURI(t *testing.T) {
 	req := (&Request{}).WithParam("foo", "bar").WithPrefix("test")
 	req.WithURI("/production?foo=hello&val=1024")
-	require.Equal(t, req.pathPrefix, "/production")
+	require.Equal(t, req.pathPrefix, "test/production")
 	require.Equal(t, req.params, url.Values{"foo": []string{"hello"}, "val": []string{"1024"}})
 }
 

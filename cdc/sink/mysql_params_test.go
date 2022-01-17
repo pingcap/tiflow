@@ -27,7 +27,6 @@ import (
 )
 
 func TestSinkParamsClone(t *testing.T) {
-	defer testleak.AfterTestT(t)()
 	param1 := defaultParams.Clone()
 	param2 := param1.Clone()
 	param2.changefeedID = "123"
@@ -59,10 +58,8 @@ func TestSinkParamsClone(t *testing.T) {
 }
 
 func TestGenerateDSNByParams(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	testDefaultParams := func() {
-		db, err := mockTestDB()
+		db, err := mockTestDB(false)
 		require.Nil(t, err)
 		defer db.Close()
 
@@ -76,6 +73,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 			"readTimeout=2m",
 			"writeTimeout=2m",
 			"allow_auto_random_explicit_insert=1",
+			"transaction_isolation=%22READ-COMMITTED%22",
 		}
 		for _, param := range expectedParams {
 			require.True(t, strings.Contains(dsnStr, param))
@@ -84,7 +82,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 	}
 
 	testTimezoneParam := func() {
-		db, err := mockTestDB()
+		db, err := mockTestDB(false)
 		require.Nil(t, err)
 		defer db.Close()
 
@@ -98,7 +96,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 	}
 
 	testTimeoutParams := func() {
-		db, err := mockTestDB()
+		db, err := mockTestDB(false)
 		require.Nil(t, err)
 		defer db.Close()
 

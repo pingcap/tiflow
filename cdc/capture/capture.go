@@ -60,15 +60,16 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	pdClient     pd.Client
-	kvStorage    tidbkv.Storage
-	etcdClient   *etcd.CDCEtcdClient
+	PDClient     pd.Client
+	Storage      tidbkv.Storage
+	EtcdClient   *etcd.CDCEtcdClient
 	grpcPool     kv.GrpcPool
 	regionCache  *tikv.RegionCache
-	TimeAcquirer pdtime.TimeAcquirer
+	pdClock      *pdtime.PDClock
 	sorterSystem *ssystem.System
 
-	tableActorSystem *system.System
+	enableNewScheduler bool
+	tableActorSystem   *system.System
 
 	// MessageServer is the receiver of the messages from the other nodes.
 	// It should be recreated each time the capture is restarted.
@@ -92,13 +93,15 @@ type Capture struct {
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
+	conf := config.GetGlobalServerConfig()
 	return &Capture{
-		pdClient:    pdClient,
-		kvStorage:   kvStorage,
-		etcdClient:  etcdClient,
+		PDClient:    pdClient,
+		Storage:     kvStorage,
+		EtcdClient:  etcdClient,
 		grpcService: grpcService,
 		cancel:      func() {},
 
+		enableNewScheduler:  conf.Debug.EnableNewScheduler,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 	}
@@ -124,7 +127,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
 	}
-	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
+	sess, err := concurrency.NewSession(c.EtcdClient.Client.Unwrap(),
 		concurrency.WithTTL(conf.CaptureSessionTTL))
 	if err != nil {
 		return errors.Annotate(
@@ -134,10 +137,10 @@ func (c *Capture) reset(ctx context.Context) error {
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
 
-	if c.TimeAcquirer != nil {
-		c.TimeAcquirer.Stop()
+	if c.pdClock != nil {
+		c.pdClock.Stop()
 	}
-	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
+	c.pdClock = pdtime.NewClock(c.PDClient)
 
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
@@ -176,7 +179,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.grpcPool.Close()
 	}
 
-	if config.SchedulerV2Enabled {
+	if c.enableNewScheduler {
 		c.grpcService.Reset(nil)
 
 		if c.MessageRouter != nil {
@@ -190,20 +193,27 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.regionCache != nil {
 		c.regionCache.Close()
 	}
-	c.regionCache = tikv.NewRegionCache(c.pdClient)
+	c.regionCache = tikv.NewRegionCache(c.PDClient)
 
-	if config.SchedulerV2Enabled {
+	if c.enableNewScheduler {
 		messageServerConfig := conf.Debug.Messages.ToMessageServerConfig()
 		c.MessageServer = p2p.NewMessageServer(c.info.ID, messageServerConfig)
 		c.grpcService.Reset(c.MessageServer)
 
 		messageClientConfig := conf.Debug.Messages.ToMessageClientConfig()
+
+		// Puts the advertise-addr of the local node to the client config.
+		// This is for metrics purpose only, so that the receiver knows which
+		// node the connections are from.
+		advertiseAddr := conf.AdvertiseAddr
+		messageClientConfig.AdvertisedAddr = advertiseAddr
+
 		c.MessageRouter = p2p.NewMessageRouter(c.info.ID, conf.Security, messageClientConfig)
 	}
 
 	log.Info("init capture",
-		zap.String("capture-id", c.info.ID),
-		zap.String("capture-addr", c.info.AdvertiseAddr))
+		zap.String("captureID", c.info.ID),
+		zap.String("captureAddr", c.info.AdvertiseAddr))
 	return nil
 }
 
@@ -238,7 +248,7 @@ func (c *Capture) Run(ctx context.Context) error {
 		//   2. the parent context canceled, it means that the caller of the capture hope the capture to exit, and this loop will return in the above `select` block
 		// TODO: make sure the internal cancel should return the real error instead of context.Canceled
 		if cerror.ErrCaptureSuicide.Equal(err) || context.Canceled == errors.Cause(err) {
-			log.Info("capture recovered", zap.String("capture-id", c.info.ID))
+			log.Info("capture recovered", zap.String("captureID", c.info.ID))
 			continue
 		}
 		return errors.Trace(err)
@@ -247,13 +257,13 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		PDClient:         c.pdClient,
-		KVStorage:        c.kvStorage,
+		PDClient:         c.PDClient,
+		KVStorage:        c.Storage,
 		CaptureInfo:      c.info,
-		EtcdClient:       c.etcdClient,
+		EtcdClient:       c.EtcdClient,
 		GrpcPool:         c.grpcPool,
 		RegionCache:      c.regionCache,
-		TimeAcquirer:     c.TimeAcquirer,
+		PDClock:          c.pdClock,
 		TableActorSystem: c.tableActorSystem,
 		SorterSystem:     c.sorterSystem,
 		MessageServer:    c.MessageServer,
@@ -291,7 +301,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 
 		globalState := orchestrator.NewGlobalState()
 
-		if config.SchedulerV2Enabled {
+		if c.enableNewScheduler {
 			globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 				c.MessageRouter.AddPeer(captureID, addr)
 			})
@@ -309,14 +319,14 @@ func (c *Capture) run(stdCtx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.TimeAcquirer.Run(ctx)
+		c.pdClock.Run(ctx)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		c.grpcPool.RecycleConn(ctx)
 	}()
-	if config.SchedulerV2Enabled {
+	if c.enableNewScheduler {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -382,7 +392,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
 
-		ownerRev, err := c.etcdClient.GetOwnerRevision(ctx, c.info.ID)
+		ownerRev, err := c.EtcdClient.GetOwnerRevision(ctx, c.info.ID)
 		if err != nil {
 			if errors.Cause(err) == context.Canceled {
 				return nil
@@ -398,15 +408,15 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
 
 		log.Info("campaign owner successfully",
-			zap.String("capture-id", c.info.ID),
-			zap.Int64("owner-rev", ownerRev))
+			zap.String("captureID", c.info.ID),
+			zap.Int64("ownerRev", ownerRev))
 
-		owner := c.newOwner(c.pdClient)
+		owner := c.newOwner(c.PDClient)
 		c.setOwner(owner)
 
 		globalState := orchestrator.NewGlobalState()
 
-		if config.SchedulerV2Enabled {
+		if c.enableNewScheduler {
 			globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 				c.MessageRouter.AddPeer(captureID, addr)
 			})
@@ -539,7 +549,7 @@ func (c *Capture) AsyncClose() {
 		}
 		c.sorterSystem = nil
 	}
-	if config.SchedulerV2Enabled {
+	if c.enableNewScheduler {
 		c.grpcService.Reset(nil)
 
 		if c.MessageRouter != nil {
@@ -576,12 +586,12 @@ func (c *Capture) IsOwner() bool {
 
 // GetOwner return the owner of current TiCDC cluster
 func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
-	_, captureInfos, err := c.etcdClient.GetCaptures(ctx)
+	_, captureInfos, err := c.EtcdClient.GetCaptures(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ownerID, err := c.etcdClient.GetOwnerID(ctx, etcd.CaptureOwnerKey)
+	ownerID, err := c.EtcdClient.GetOwnerID(ctx, etcd.CaptureOwnerKey)
 	if err != nil {
 		return nil, err
 	}
@@ -592,4 +602,14 @@ func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
 		}
 	}
 	return nil, cerror.ErrOwnerNotFound.FastGenByArgs()
+}
+
+// StatusProvider returns owner's StatusProvider.
+func (c *Capture) StatusProvider() owner.StatusProvider {
+	c.ownerMu.Lock()
+	defer c.ownerMu.Unlock()
+	if c.owner == nil {
+		return nil
+	}
+	return c.owner.StatusProvider()
 }

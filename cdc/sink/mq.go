@@ -131,6 +131,17 @@ func newMqSink(
 	return s, nil
 }
 
+// TryEmitRowChangedEvents just calls EmitRowChangedEvents internally,
+// it still blocking in current implementation.
+// TODO(dongmen): We should make this method truly non-blocking after we remove buffer sink
+func (k *mqSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	err := k.EmitRowChangedEvents(ctx, rows...)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	rowsCount := 0
 	for _, row := range rows {
@@ -242,7 +253,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	k.statistics.AddDDLCount()
-	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs), zap.Int32("partition", partition))
+	log.Debug("emit ddl event", zap.String("query", ddl.Query),
+		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition))
 	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
 	return errors.Trace(err)
 }

@@ -17,20 +17,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
-	"github.com/pingcap/tidb/br/pkg/mock"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
@@ -184,8 +182,8 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	}
 
 	targetSQLs := [][]string{
-		{"CREATE DATABASE IF NOT EXISTS `xs1` COLLATE = utf8mb4_bin"},
-		{"CREATE DATABASE IF NOT EXISTS `xs1` COLLATE = utf8mb4_bin"},
+		{"CREATE DATABASE IF NOT EXISTS `xs1`"},
+		{"CREATE DATABASE IF NOT EXISTS `xs1`"},
 		{"DROP DATABASE IF EXISTS `xs1`"},
 		{"DROP DATABASE IF EXISTS `xs1`"},
 		{"DROP TABLE IF EXISTS `xs1`.`t1`"},
@@ -446,13 +444,10 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 	p := parser.New()
 
 	ec := &eventContext{tctx: tctx}
-	cluster, err := mock.NewCluster()
+	cluster, err := conn.NewCluster()
 	c.Assert(err, IsNil)
 	c.Assert(cluster.Start(), IsNil)
-	mysqlConfig, err := mysql.ParseDSN(cluster.DSN)
-	c.Assert(err, IsNil)
-	mockClusterPort, err := strconv.Atoi(strings.Split(mysqlConfig.Addr, ":")[1])
-	c.Assert(err, IsNil)
+	mockClusterPort := cluster.Port
 	dbCfg := config.GetDBConfigForTest()
 	dbCfg.Port = mockClusterPort
 	dbCfg.Password = ""
@@ -529,12 +524,10 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 	p := parser.New()
 
 	ec := eventContext{tctx: tctx}
-	cluster, err := mock.NewCluster()
+	cluster, err := conn.NewCluster()
 	c.Assert(err, IsNil)
 	c.Assert(cluster.Start(), IsNil)
-	mysqlConfig, err := mysql.ParseDSN(cluster.DSN)
-	c.Assert(err, IsNil)
-	mockClusterPort, err := strconv.Atoi(strings.Split(mysqlConfig.Addr, ":")[1])
+	mockClusterPort := cluster.Port
 	c.Assert(err, IsNil)
 	dbCfg := config.GetDBConfigForTest()
 	dbCfg.Port = mockClusterPort
@@ -672,7 +665,7 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
-	syncer := NewSyncer(&config.SubTaskConfig{}, nil, nil)
+	syncer := NewSyncer(&config.SubTaskConfig{CollationCompatible: config.StrictCollationCompatible}, nil, nil)
 	syncer.tctx = tctx
 	p := parser.New()
 	tab := &filter.Table{
@@ -746,7 +739,7 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
-	syncer := NewSyncer(&config.SubTaskConfig{}, nil, nil)
+	syncer := NewSyncer(&config.SubTaskConfig{CollationCompatible: config.StrictCollationCompatible}, nil, nil)
 	syncer.tctx = tctx
 	p := parser.New()
 	tab := &filter.Table{

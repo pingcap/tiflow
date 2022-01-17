@@ -299,12 +299,11 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case rtsUpdate := <-w.rtsUpdateCh:
 			w.rtsManager.Upsert(rtsUpdate)
 		case <-advanceCheckTicker.C:
-			version, err := w.session.kvStorage.GetCachedCurrentVersion()
+			currentTimeFromPD, err := w.session.client.pdClock.CurrentTime()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
 				continue
 			}
-			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
 			expired := make([]*regionTsInfo, 0)
 			for w.rtsManager.Len() > 0 {
 				item := w.rtsManager.Pop()
@@ -633,7 +632,7 @@ func (w *regionWorker) handleEventEntry(
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(state.startFeedTime) > 20*time.Second {
 				log.Warn("The time cost of initializing is too much",
-					zap.Duration("timeCost", time.Since(state.startFeedTime)),
+					zap.Duration("duration", time.Since(state.startFeedTime)),
 					zap.Uint64("regionID", regionID))
 			}
 			w.metrics.metricPullEventInitializedCounter.Inc()
@@ -662,7 +661,7 @@ func (w *regionWorker) handleEventEntry(
 
 			if entry.CommitTs <= state.lastResolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
-					zap.String("Event Type", "COMMITTED"),
+					zap.String("EventType", "COMMITTED"),
 					zap.Uint64("CommitTs", entry.CommitTs),
 					zap.Uint64("resolvedTs", state.lastResolvedTs),
 					zap.Uint64("regionID", regionID))
@@ -681,7 +680,7 @@ func (w *regionWorker) handleEventEntry(
 			w.metrics.metricPullEventCommitCounter.Inc()
 			if entry.CommitTs <= state.lastResolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
-					zap.String("Event Type", "COMMIT"),
+					zap.String("EventType", "COMMIT"),
 					zap.Uint64("CommitTs", entry.CommitTs),
 					zap.Uint64("resolvedTs", state.lastResolvedTs),
 					zap.Uint64("regionID", regionID))
@@ -739,7 +738,7 @@ func (w *regionWorker) handleResolvedTs(
 
 	if resolvedTs < state.lastResolvedTs {
 		log.Warn("The resolvedTs is fallen back in kvclient",
-			zap.String("Event Type", "RESOLVED"),
+			zap.String("EventType", "RESOLVED"),
 			zap.Uint64("resolvedTs", resolvedTs),
 			zap.Uint64("lastResolvedTs", state.lastResolvedTs),
 			zap.Uint64("regionID", regionID))
