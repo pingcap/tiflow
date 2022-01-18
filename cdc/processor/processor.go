@@ -79,8 +79,13 @@ type processor struct {
 
 	runningStatus processorRunningStatus
 	// todo: initialize the channel
-	sinkCh      chan sink.Sink
-	sinkCloseCh chan struct{}
+
+	// sinkRunningCh will be closed if the sink is fully initialized, which can be
+	// used to indicate that the whole processor initialization process is finished.
+	sinkRunningCh chan struct{}
+	// sinkClosedCh will be closed if the sink is fully closed, which can be used
+	// to indicate that the whole processor close process is finished.
+	sinkClosedCh chan struct{}
 
 	errCh  chan error
 	cancel context.CancelFunc
@@ -248,6 +253,9 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
 
+		sinkRunningCh: make(chan struct{}, 1),
+		sinkClosedCh:  make(chan struct{}, 1),
+
 		newSchedulerEnabled: conf.Debug.EnableNewScheduler,
 
 		metricResolvedTsGauge:           resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
@@ -335,13 +343,13 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
 	p.changefeed = state
-	// the processor could be in `processorClosing`, we cannot continue the changefeed.
+	// the processor could be in `processorClosing`, should not continue the processor
 	if p.runningStatus == processorClosing {
 		// since the sink is close in an asynchronous way,
 		// we have to check whether the sink is fully closed or not.
 		// no matter fully closed or not, just skip the tick.
 		select {
-		case <-p.sinkCloseCh:
+		case <-p.sinkClosedCh:
 			p.runningStatus = processorClosed
 			log.Info("changefeed fully closed", zap.String("changefeed", p.changefeedID))
 		default:
@@ -366,6 +374,12 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err := p.lazyInit(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	// the `sinkManager` may not fully initialize yet, should not continue.
+	if p.runningStatus != processorRunning {
+		return p.changefeed, nil
+	}
+
 	// sink manager will return this checkpointTs to sink node if sink node resolvedTs flush failed
 	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Info.GetCheckpointTs(state.Status))
 	if err := p.handleTableOperation(ctx); err != nil {
@@ -436,6 +450,26 @@ func (p *processor) createTaskPosition() (skipThisTick bool) {
 	return true
 }
 
+func (p *processor) collectOpts(ctx cdcContext.Context) (map[string]string, error) {
+	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
+	for k, v := range p.changefeed.Info.Opts {
+		opts[k] = v
+	}
+
+	// TODO(neil) find a better way to let sink know cyclic is enabled.
+	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
+		cyclicCfg, err := p.changefeed.Info.Config.Cyclic.Marshal()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		opts[mark.OptCyclicConfig] = cyclicCfg
+	}
+	opts[sink.OptChangefeedID] = p.changefeed.ID
+	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+
+	return opts, nil
+}
+
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	switch p.runningStatus {
@@ -443,10 +477,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return nil
 	case processorInitializing:
 		select {
-		case s := <-p.sinkCh:
-			checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-			captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
-			p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
+		case <-p.sinkRunningCh:
 			p.runningStatus = processorRunning
 		default:
 		}
@@ -483,9 +514,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}
 	}()
 
-	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
-	stdCtx = util.PutCaptureAddrInCtx(stdCtx, p.captureInfo.AdvertiseAddr)
-
 	var err error
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config)
 	if err != nil {
@@ -497,6 +525,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 
+	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
+	stdCtx = util.PutCaptureAddrInCtx(stdCtx, p.captureInfo.AdvertiseAddr)
+
 	p.mounter = entry.NewMounter(p.schemaStorage,
 		p.changefeed.Info.Config.Mounter.WorkerNum,
 		p.changefeed.Info.Config.EnableOldValue)
@@ -506,22 +537,10 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		p.sendError(p.mounter.Run(stdCtx))
 	}()
 
-	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
-	for k, v := range p.changefeed.Info.Opts {
-		opts[k] = v
+	opts, err := p.collectOpts(ctx)
+	if err != nil {
+		return errors.Trace(err)
 	}
-
-	// TODO(neil) find a better way to let sink know cyclic is enabled.
-	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
-		cyclicCfg, err := p.changefeed.Info.Config.Cyclic.Marshal()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		opts[mark.OptCyclicConfig] = cyclicCfg
-	}
-	opts[sink.OptChangefeedID] = p.changefeed.ID
-	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
-
 	// initialize the sink could be a time-consuming process in some special
 	// scenario. The user can use `cdc cli` in server `a`, which can connect
 	// to the kafka brokers easily, then the capture running the processor
@@ -539,12 +558,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			log.Info("processor new sink failed",
 				zap.String("changefeed", p.changefeed.ID),
 				zap.Duration("duration", time.Since(start)))
+			// todo: what would happen if this hit, shall we update the processorRunningStatus
 			p.sendError(errors.Trace(err))
 			return
 		}
+		checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+		captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+		p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
 		log.Info("processor try new sink success",
 			zap.Duration("duration", time.Since(start)))
-		p.sinkCh <- s
+		close(p.sinkRunningCh)
 	}()
 
 	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}
@@ -1126,22 +1149,26 @@ func (p *processor) Close() error {
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	if p.sinkManager != nil {
-		// pass a canceled context is ok here, since we don't need to wait Close
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
+		go func() {
+			// pass a canceled context is ok here, since we don't need to wait Close
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
 
-		log.Info("processor try to close the sinkManager",
-			zap.String("changefeed", p.changefeedID))
-		start := time.Now()
-		if err := p.sinkManager.Close(ctx); err != nil {
-			log.Info("processor close sinkManager failed",
+			log.Info("processor try to close the sinkManager",
+				zap.String("changefeed", p.changefeedID))
+			start := time.Now()
+			if err := p.sinkManager.Close(ctx); err != nil {
+				log.Info("processor close sinkManager failed",
+					zap.String("changefeed", p.changefeedID),
+					zap.Duration("duration", time.Since(start)))
+				p.sendError(errors.Trace(err))
+				return
+			}
+			log.Info("processor close sinkManager success",
 				zap.String("changefeed", p.changefeedID),
 				zap.Duration("duration", time.Since(start)))
-			return errors.Trace(err)
-		}
-		log.Info("processor close sinkManager success",
-			zap.String("changefeed", p.changefeedID),
-			zap.Duration("duration", time.Since(start)))
+			close(p.sinkClosedCh)
+		}()
 	}
 	if p.newSchedulerEnabled {
 		if p.agent == nil {
