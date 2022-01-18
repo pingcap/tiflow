@@ -22,9 +22,9 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 
-	"github.com/pingcap/ticdc/dm/openapi"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/openapi"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // TaskConfigToSubTaskConfigs generates sub task configs by TaskConfig.
@@ -50,7 +50,10 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 		cfg.EnableHeartbeat = false
 		cfg.HeartbeatUpdateInterval = c.HeartbeatUpdateInterval
 		cfg.HeartbeatReportInterval = c.HeartbeatReportInterval
+		cfg.Timezone = c.Timezone
 		cfg.Meta = inst.Meta
+		cfg.CollationCompatible = c.CollationCompatible
+		cfg.Experimental = c.Experimental
 
 		fromClone := dbCfg.Clone()
 		if fromClone == nil {
@@ -109,7 +112,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 
 // OpenAPITaskToSubTaskConfigs generates sub task configs by openapi.Task.
 func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCfgMap map[string]*SourceConfig) (
-	[]SubTaskConfig, error) {
+	[]*SubTaskConfig, error) {
 	// source name -> migrate rule list
 	tableMigrateRuleMap := make(map[string][]openapi.TaskTableMigrateRule)
 	for _, rule := range task.TableMigrateRule {
@@ -134,7 +137,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		}
 	}
 	// start to generate sub task configs
-	subTaskCfgList := make([]SubTaskConfig, len(task.SourceConfig.SourceConf))
+	subTaskCfgList := make([]*SubTaskConfig, len(task.SourceConfig.SourceConf))
 	for i, sourceCfg := range task.SourceConfig.SourceConf {
 		// precheck source config
 		_, exist := sourceCfgMap[sourceCfg.SourceName]
@@ -243,7 +246,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		if err := subTaskCfg.Adjust(true); err != nil {
 			return nil, terror.Annotatef(err, "source name %s", sourceCfg.SourceName)
 		}
-		subTaskCfgList[i] = *subTaskCfg
+		subTaskCfgList[i] = subTaskCfg
 	}
 	return subTaskCfgList, nil
 }
@@ -285,11 +288,13 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	c.EnableHeartbeat = stCfg0.EnableHeartbeat
 	c.HeartbeatUpdateInterval = stCfg0.HeartbeatUpdateInterval
 	c.HeartbeatReportInterval = stCfg0.HeartbeatReportInterval
+	c.Timezone = stCfg0.Timezone
 	c.CaseSensitive = stCfg0.CaseSensitive
 	c.TargetDB = &stCfg0.To // just ref
 	c.OnlineDDL = stCfg0.OnlineDDL
 	c.OnlineDDLScheme = stCfg0.OnlineDDLScheme
 	c.CleanDumpFile = stCfg0.CleanDumpFile
+	c.CollationCompatible = stCfg0.CollationCompatible
 	c.MySQLInstances = make([]*MySQLInstance, 0, len(stCfgs))
 	c.BAList = make(map[string]*filter.Rules)
 	c.Routes = make(map[string]*router.TableRule)
@@ -299,6 +304,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	c.Loaders = make(map[string]*LoaderConfig)
 	c.Syncers = make(map[string]*SyncerConfig)
 	c.ExprFilter = make(map[string]*ExpressionFilter)
+	c.Experimental = stCfg0.Experimental
 
 	baListMap := make(map[string]string, len(stCfgs))
 	routeMap := make(map[string]string, len(stCfgs))
@@ -370,6 +376,9 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 			SyncerConfigName:   syncName,
 			ExpressionFilters:  exprFilterNames,
 		})
+	}
+	if c.CollationCompatible == "" {
+		c.CollationCompatible = LooseCollationCompatible
 	}
 	return c
 }

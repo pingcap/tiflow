@@ -17,7 +17,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/leakutil"
+	sorter "github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,4 +41,11 @@ func TestTickMessage(t *testing.T) {
 func TestBarrierMessage(t *testing.T) {
 	msg := BarrierMessage(1)
 	require.Equal(t, TypeBarrier, msg.Tp)
+}
+
+func TestSorterMessage(t *testing.T) {
+	task := sorter.Task{UID: 1, TableID: 2}
+	msg := SorterMessage(task)
+	require.Equal(t, TypeSorterTask, msg.Tp)
+	require.Equal(t, task, msg.SorterTask)
 }

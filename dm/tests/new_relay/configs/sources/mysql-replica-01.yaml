@@ -4,7 +4,7 @@ relay-dir: relay-dir
 meta-dir: ""
 flavor: mysql
 charset: ""
-enable-relay: true
+enable-relay: false
 relay-binlog-name: ""
 relay-binlog-gtid: ""
 source-id: mysql-replica-01

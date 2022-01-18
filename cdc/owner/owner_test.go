@@ -21,14 +21,14 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/txnutil/gc"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
@@ -54,14 +54,14 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 			return safePoint, nil
 		},
 	}
-	cf := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
+	owner := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
-	}, func(ctx cdcContext.Context) (AsyncSink, error) {
-		return &mockAsyncSink{}, nil
+	}, func() DDLSink {
+		return &mockDDLSink{}
 	},
 		ctx.GlobalVars().PDClient,
 	)
-	state := orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
+	state := orchestrator.NewGlobalState()
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// set captures
@@ -72,13 +72,17 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 	captureBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	c.Assert(err, check.IsNil)
 	tester.MustUpdate(cdcKey.String(), captureBytes)
-	return cf, state, tester
+	return owner, state, tester
 }
 
 func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	owner, state, tester := createOwner4Test(ctx, c)
+
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
@@ -145,6 +149,9 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
@@ -186,10 +193,93 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	c.Assert(state.Changefeeds, check.Not(check.HasKey), changefeedID)
 }
 
+func (s *ownerSuite) TestFixChangefeedState(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(false)
+	owner, state, tester := createOwner4Test(ctx, c)
+	// We need to do bootstrap.
+	owner.bootstrapped = false
+	changefeedID := "test-changefeed"
+	// Mismatched state and admin job.
+	changefeedInfo := &model.ChangeFeedInfo{
+		State:        model.StateNormal,
+		AdminJobType: model.AdminStop,
+		StartTs:      oracle.GoTimeToTS(time.Now()),
+		Config:       config.GetDefaultReplicaConfig(),
+	}
+	changefeedStr, err := changefeedInfo.Marshal()
+	c.Assert(err, check.IsNil)
+	cdcKey := etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.bootstrapped, check.IsTrue)
+	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
+
+	// Start tick normally.
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+	// The meta information is fixed correctly.
+	c.Assert(owner.changefeeds[changefeedID].state.Info.State, check.Equals, model.StateStopped)
+}
+
+func (s *ownerSuite) TestFixChangefeedSinkProtocol(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(false)
+	owner, state, tester := createOwner4Test(ctx, c)
+	// We need to do bootstrap.
+	owner.bootstrapped = false
+	changefeedID := "test-changefeed"
+	// Unknown protocol.
+	changefeedInfo := &model.ChangeFeedInfo{
+		State:          model.StateNormal,
+		AdminJobType:   model.AdminStop,
+		StartTs:        oracle.GoTimeToTS(time.Now()),
+		CreatorVersion: "5.3.0",
+		SinkURI:        "kafka://127.0.0.1:9092/ticdc-test2?protocol=random",
+		Config: &config.ReplicaConfig{
+			Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+		},
+	}
+	changefeedStr, err := changefeedInfo.Marshal()
+	c.Assert(err, check.IsNil)
+	cdcKey := etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.bootstrapped, check.IsTrue)
+	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
+
+	// Start tick normally.
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+	// The meta information is fixed correctly.
+	c.Assert(owner.changefeeds[changefeedID].state.Info.SinkURI,
+		check.Equals,
+		"kafka://127.0.0.1:9092/ticdc-test2?protocol=open-protocol")
+}
+
 func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	tester.MustUpdate("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"v6.0.0"}`))
 
 	changefeedID := "test-changefeed"
@@ -224,6 +314,9 @@ func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 func (s *ownerSuite) TestAdminJob(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	owner, _, _ := createOwner4Test(ctx, c)
 	owner.EnqueueJob(model.AdminJob{
 		CfID: "test-changefeed1",
@@ -271,7 +364,9 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	o := NewOwner(mockPDClient)
 	o.gcManager = gc.NewManager(mockPDClient)
 	ctx := cdcContext.NewBackendContext4Test(true)
-	state := orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+	state := orchestrator.NewGlobalState()
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
@@ -361,4 +456,100 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 		c.Fatal("timeout")
 	case <-ch:
 	}
+}
+
+// make sure handleJobs works well even if there is two different
+// version of captures in the cluster
+func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+	owner, state, tester := createOwner4Test(ctx, c)
+
+	statusProvider := owner.StatusProvider()
+	// work well
+	cf1 := "test-changefeed"
+	cfInfo1 := &model.ChangeFeedInfo{
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
+	}
+	changefeedStr, err := cfInfo1.Marshal()
+	c.Assert(err, check.IsNil)
+	cdcKey := etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: cf1,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+
+	c.Assert(owner.changefeeds, check.HasKey, cf1)
+
+	// add an non-consistent version capture
+	captureInfo := &model.CaptureInfo{
+		ID:            "capture-id-owner-test",
+		AdvertiseAddr: "127.0.0.1:0000",
+		Version:       " v0.0.1-test-only",
+	}
+	cdcKey = etcd.CDCKey{
+		Tp:        etcd.CDCKeyTypeCapture,
+		CaptureID: captureInfo.ID,
+	}
+	v, err := captureInfo.Marshal()
+	c.Assert(err, check.IsNil)
+	tester.MustUpdate(cdcKey.String(), v)
+
+	// try to add another changefeed
+	cf2 := "test-changefeed1"
+	cfInfo2 := &model.ChangeFeedInfo{
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
+	}
+	changefeedStr1, err := cfInfo2.Marshal()
+	c.Assert(err, check.IsNil)
+	cdcKey = etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: cf2,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr1))
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	// make sure this changefeed add failed, which means that owner are return
+	// in clusterVersionConsistent check
+	c.Assert(owner.changefeeds[cf2], check.IsNil)
+
+	// make sure statusProvider works well
+	ctx1, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	var errIn error
+	var infos map[model.ChangeFeedID]*model.ChangeFeedInfo
+	done := make(chan struct{})
+	go func() {
+		infos, errIn = statusProvider.GetAllChangeFeedInfo(ctx1)
+		done <- struct{}{}
+	}()
+
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+WorkLoop:
+	for {
+		select {
+		case <-done:
+			break WorkLoop
+		case <-ctx1.Done():
+			c.Fatal(ctx1.Err())
+		case <-ticker.C:
+			_, err = owner.Tick(ctx, state)
+			c.Assert(err, check.IsNil)
+		}
+	}
+	c.Assert(errIn, check.IsNil)
+	c.Assert(infos[cf1], check.NotNil)
+	c.Assert(infos[cf2], check.IsNil)
 }

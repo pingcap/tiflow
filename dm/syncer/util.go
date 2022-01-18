@@ -17,19 +17,20 @@ import (
 	"fmt"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	dcontext "github.com/pingcap/tidb/dumpling/context"
+	"github.com/pingcap/tidb/br/pkg/version"
 	"github.com/pingcap/tidb/dumpling/export"
 	dlog "github.com/pingcap/tidb/dumpling/log"
 	"github.com/pingcap/tidb/parser/ast"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/relay"
 )
 
-func toBinlogType(enableRelay bool) BinlogType {
-	if enableRelay {
+func toBinlogType(relay relay.Process) BinlogType {
+	if relay != nil {
 		return LocalBinlog
 	}
 
@@ -115,6 +116,5 @@ func printServerVersion(tctx *tcontext.Context, db *conn.BaseDB, scope string) {
 		logger.Warn("fail to get version info", zap.Error(err))
 		return
 	}
-	dctx := dcontext.NewContext(tctx.Ctx, logger)
-	export.ParseServerInfo(dctx, versionInfo)
+	version.ParseServerInfo(versionInfo)
 }

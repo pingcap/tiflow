@@ -21,15 +21,15 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	pkgstreamer "github.com/pingcap/ticdc/dm/pkg/streamer"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay"
-	"github.com/pingcap/ticdc/dm/relay/purger"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	pkgstreamer "github.com/pingcap/tiflow/dm/pkg/streamer"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/relay"
 )
 
 type testRelay struct{}
@@ -45,6 +45,14 @@ type DummyRelay struct {
 	processResult pb.ProcessResult
 	errorInfo     *pb.RelayError
 	reloadErr     error
+}
+
+func (d *DummyRelay) IsActive(uuid, filename string) (bool, int64) {
+	return false, 0
+}
+
+func (d *DummyRelay) NewReader(logger log.Logger, cfg *relay.BinlogReaderConfig) *relay.BinlogReader {
+	return nil
 }
 
 func (d *DummyRelay) RegisterListener(el relay.Listener) {
@@ -139,11 +147,11 @@ func (d *DummyRelay) PurgeRelayDir() error {
 func (t *testRelay) TestRelay(c *C) {
 	originNewRelay := relay.NewRelay
 	relay.NewRelay = NewDummyRelay
-	originNewPurger := purger.NewPurger
-	purger.NewPurger = purger.NewDummyPurger
+	originNewPurger := relay.NewPurger
+	relay.NewPurger = relay.NewDummyPurger
 	defer func() {
 		relay.NewRelay = originNewRelay
-		purger.NewPurger = originNewPurger
+		relay.NewPurger = originNewPurger
 	}()
 
 	cfg := loadSourceConfigWithoutPassword(c)

@@ -13,9 +13,9 @@
 
 package pipeline
 
-import "github.com/pingcap/ticdc/pkg/context"
+import "github.com/pingcap/tiflow/pkg/context"
 
-// NodeContext adds two functions from `coutext.Context` and created by pipeline
+// NodeContext adds two functions to `context.Context` and is created by pipeline
 type NodeContext interface {
 	context.Context
 

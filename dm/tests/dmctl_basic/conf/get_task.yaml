@@ -9,6 +9,7 @@ heartbeat-update-interval: 1
 heartbeat-report-interval: 10
 timezone: ""
 case-sensitive: false
+collation_compatible: loose
 target-database:
   host: 127.0.0.1
   port: 4000
@@ -17,7 +18,6 @@ target-database:
   max-allowed-packet: null
   session:
     tidb_txn_mode: optimistic
-    time_zone: "+00:00"
   security: null
 mysql-instances:
 - source-id: mysql-replica-01
@@ -161,3 +161,5 @@ clean-dump-file: true
 ansi-quotes: false
 remove-meta: false
 tidb: null
+experimental:
+  async-checkpoint-flush: false

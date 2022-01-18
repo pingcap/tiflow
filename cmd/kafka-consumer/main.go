@@ -32,15 +32,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcfilter "github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/logutil"
-	"github.com/pingcap/ticdc/pkg/quotes"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcfilter "github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/quotes"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -89,7 +89,8 @@ func init() {
 	}
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if scheme != "kafka" {
-		log.Fatal("invalid upstream-uri scheme, the scheme of upstream-uri must be `kafka`", zap.String("upstream-uri", upstreamURIStr))
+		log.Fatal("invalid upstream-uri scheme, the scheme of upstream-uri must be `kafka`",
+			zap.String("upstreamURI", upstreamURIStr))
 	}
 	s := upstreamURI.Query().Get("version")
 	if s != "" {
@@ -117,7 +118,7 @@ func init() {
 		}
 		kafkaPartitionNum = partition
 	} else {
-		c, err := strconv.Atoi(s)
+		c, err := strconv.ParseInt(s, 10, 32)
 		if err != nil {
 			log.Fatal("invalid partition-num of upstream-uri")
 		}
@@ -290,6 +291,13 @@ func main() {
 	}
 }
 
+type partitionSink struct {
+	sink.Sink
+	resolvedTs  uint64
+	partitionNo int
+	tablesMap   sync.Map
+}
+
 // Consumer represents a Sarama consumer group consumer
 type Consumer struct {
 	ready chan bool
@@ -298,10 +306,7 @@ type Consumer struct {
 	maxDDLReceivedTs uint64
 	ddlListMu        sync.Mutex
 
-	sinks []*struct {
-		sink.Sink
-		resolvedTs uint64
-	}
+	sinks   []*partitionSink
 	sinksMu sync.Mutex
 
 	ddlSink              sink.Sink
@@ -326,10 +331,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
 	}
-	c.sinks = make([]*struct {
-		sink.Sink
-		resolvedTs uint64
-	}, kafkaPartitionNum)
+	c.sinks = make([]*partitionSink, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
 	opts := map[string]string{}
@@ -339,10 +341,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			cancel()
 			return nil, errors.Trace(err)
 		}
-		c.sinks[i] = &struct {
-			sink.Sink
-			resolvedTs uint64
-		}{Sink: s}
+		c.sinks[i] = &partitionSink{Sink: s, partitionNo: i}
 	}
 	sink, err := sink.New(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 	if err != nil {
@@ -407,7 +406,7 @@ ClaimMessages:
 			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
 			if len(message.Key)+len(message.Value) > kafkaMaxMessageBytes && counter > 1 {
 				log.Fatal("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
-					zap.Int("recevied-bytes", len(message.Key)+len(message.Value)))
+					zap.Int("receviedBytes", len(message.Key)+len(message.Value)))
 			}
 
 			switch tp {
@@ -442,6 +441,11 @@ ClaimMessages:
 				err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
+				}
+				log.Info("Emit RowChangedEvent", zap.Any("row", row))
+				lastCommitTs, ok := sink.tablesMap.Load(row.Table.TableID)
+				if !ok || lastCommitTs.(uint64) < row.CommitTs {
+					sink.tablesMap.Store(row.Table.TableID, row.CommitTs)
 				}
 			case model.MqMessageTypeResolved:
 				ts, err := batchDecoder.NextResolvedEvent()
@@ -503,10 +507,7 @@ func (c *Consumer) popDDL() *model.DDLEvent {
 	return nil
 }
 
-func (c *Consumer) forEachSink(fn func(sink *struct {
-	sink.Sink
-	resolvedTs uint64
-}) error) error {
+func (c *Consumer) forEachSink(fn func(sink *partitionSink) error) error {
 	c.sinksMu.Lock()
 	defer c.sinksMu.Unlock()
 	for _, sink := range c.sinks {
@@ -529,10 +530,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		time.Sleep(100 * time.Millisecond)
 		// handle ddl
 		globalResolvedTs := uint64(math.MaxUint64)
-		err := c.forEachSink(func(sink *struct {
-			sink.Sink
-			resolvedTs uint64
-		}) error {
+		err := c.forEachSink(func(sink *partitionSink) error {
 			resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 			if resolvedTs < globalResolvedTs {
 				globalResolvedTs = resolvedTs
@@ -545,10 +543,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		todoDDL := c.getFrontDDL()
 		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
 			// flush DMLs
-			err := c.forEachSink(func(sink *struct {
-				sink.Sink
-				resolvedTs uint64
-			}) error {
+			err := c.forEachSink(func(sink *partitionSink) error {
 				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			})
 			if err != nil {
@@ -574,10 +569,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
 		log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
 
-		err = c.forEachSink(func(sink *struct {
-			sink.Sink
-			resolvedTs uint64
-		}) error {
+		err = c.forEachSink(func(sink *partitionSink) error {
 			return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
 		})
 		if err != nil {
@@ -586,18 +578,34 @@ func (c *Consumer) Run(ctx context.Context) error {
 	}
 }
 
-func syncFlushRowChangedEvents(ctx context.Context, sink sink.Sink, resolvedTs uint64) error {
+func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolvedTs uint64) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
 		}
-		checkpointTs, err := sink.FlushRowChangedEvents(ctx, resolvedTs)
+		// tables are flushed
+		var (
+			err          error
+			checkpointTs uint64
+		)
+		flushedResolvedTs := true
+		sink.tablesMap.Range(func(key, value interface{}) bool {
+			tableID := key.(int64)
+			checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+			if err != nil {
+				return false
+			}
+			if checkpointTs < resolvedTs {
+				flushedResolvedTs = false
+			}
+			return true
+		})
 		if err != nil {
 			return err
 		}
-		if checkpointTs >= resolvedTs {
+		if flushedResolvedTs {
 			return nil
 		}
 	}

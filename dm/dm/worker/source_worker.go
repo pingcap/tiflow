@@ -16,6 +16,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -27,17 +28,17 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay/purger"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/streamer"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/relay"
 )
 
 // SourceWorker manages a source(upstream) which is mainly related to subtasks and relay.
@@ -76,7 +77,10 @@ type SourceWorker struct {
 	relayCancel  context.CancelFunc
 	relayWg      sync.WaitGroup
 	relayHolder  RelayHolder
-	relayPurger  purger.Purger
+	relayPurger  relay.Purger
+	relayDir     string
+
+	startedRelayBySourceCfg bool
 
 	taskStatusChecker TaskStatusChecker
 
@@ -87,13 +91,19 @@ type SourceWorker struct {
 
 // NewSourceWorker creates a new SourceWorker. The functionality of relay and subtask is disabled by default, need call EnableRelay
 // and EnableSubtask later.
-func NewSourceWorker(cfg *config.SourceConfig, etcdClient *clientv3.Client, name string) (w *SourceWorker, err error) {
+func NewSourceWorker(
+	cfg *config.SourceConfig,
+	etcdClient *clientv3.Client,
+	name string,
+	relayDir string,
+) (w *SourceWorker, err error) {
 	w = &SourceWorker{
 		cfg:           cfg,
 		subTaskHolder: newSubTaskHolder(),
 		l:             log.With(zap.String("component", "worker controller")),
 		etcdClient:    etcdClient,
 		name:          name,
+		relayDir:      relayDir,
 	}
 	// keep running until canceled in `Close`.
 	w.ctx, w.cancel = context.WithCancel(context.Background())
@@ -134,7 +144,7 @@ func (w *SourceWorker) Start() {
 	}
 
 	var err error
-	w.sourceDB, err = conn.DefaultDBProvider.Apply(w.cfg.DecryptPassword().From)
+	w.sourceDB, err = conn.DefaultDBProvider.Apply(&w.cfg.DecryptPassword().From)
 	if err != nil {
 		w.l.Error("can't connected to upstream", zap.Error(err))
 	}
@@ -173,7 +183,11 @@ func (w *SourceWorker) Start() {
 				}
 			}
 			if err2 := w.updateSourceStatus(w.ctx); err2 != nil {
-				w.l.Error("failed to update source status", zap.Error(err2))
+				if terror.ErrNoMasterStatus.Equal(err2) {
+					w.l.Warn("This source's bin_log is OFF, so it only supports full_mode.", zap.String("sourceID", w.cfg.SourceID), zap.Error(err2))
+				} else {
+					w.l.Error("failed to update source status", zap.Error(err2))
+				}
 				continue
 			}
 
@@ -181,6 +195,9 @@ func (w *SourceWorker) Start() {
 			if w.l.Core().Enabled(zap.DebugLevel) {
 				w.l.Debug("runtime status", zap.String("status", w.GetUnitAndSourceStatusJSON("", sourceStatus)))
 			}
+
+			// periodically print the status and update metrics
+			w.Status("", sourceStatus)
 		}
 	}
 }
@@ -230,7 +247,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	w.sourceDBMu.Lock()
 	if w.sourceDB == nil {
 		var err error
-		w.sourceDB, err = conn.DefaultDBProvider.Apply(w.cfg.DecryptPassword().From)
+		w.sourceDB, err = conn.DefaultDBProvider.Apply(&w.cfg.DecryptPassword().From)
 		if err != nil {
 			w.sourceDBMu.Unlock()
 			return err
@@ -245,11 +262,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	status.Location.Position = pos
-	if err2 := status.Location.SetGTID(gtidSet.Origin()); err2 != nil {
-		return err2
-	}
-
+	status.Location = binlog.InitLocation(pos, gtidSet)
 	ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel2()
 	binlogs, err := binlog.GetBinaryLogs(ctx2, w.sourceDB.DB)
@@ -265,7 +278,19 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 }
 
 // EnableRelay enables the functionality of start/watch/handle relay.
-func (w *SourceWorker) EnableRelay() (err error) {
+// According to relay schedule of DM-master, a source worker will enable relay in two scenarios: its bound source has
+// `enable-relay: true` in config, or it has a UpstreamRelayWorkerKeyAdapter etcd KV.
+// The paths to EnableRelay are:
+// - source config `enable-relay: true`, which is checked in enableHandleSubtasks
+//   - when DM-worker Server.Start
+//   - when DM-worker Server watches a SourceBound change, which is to turn a free source worker to bound or notify a
+//     bound worker that source config has changed
+//   - when DM-worker Server fails watching and recovers from a snapshot
+// - UpstreamRelayWorkerKeyAdapter
+//   - when DM-worker Server.Start
+//   - when DM-worker Server watches a UpstreamRelayWorkerKeyAdapter change
+//   - when DM-worker Server fails watching and recovers from a snapshot
+func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 	w.l.Info("enter EnableRelay")
 	w.Lock()
 	defer w.Unlock()
@@ -274,18 +299,22 @@ func (w *SourceWorker) EnableRelay() (err error) {
 		return nil
 	}
 
+	w.startedRelayBySourceCfg = startBySourceCfg
+
 	var sourceCfg *config.SourceConfig
 	failpoint.Inject("MockGetSourceCfgFromETCD", func(_ failpoint.Value) {
 		failpoint.Goto("bypass")
 	})
 
-	// we need update worker source config from etcd first
-	// because the configuration of the relay part of the data source may be changed via scheduler.UpdateSourceCfg
-	sourceCfg, _, err = ha.GetRelayConfig(w.etcdClient, w.name)
-	if err != nil {
-		return err
+	if !w.startedRelayBySourceCfg {
+		// we need update worker source config from etcd first
+		// because the configuration of the relay part of the data source may be changed via scheduler.UpdateSourceCfg
+		sourceCfg, _, err = ha.GetRelayConfig(w.etcdClient, w.name)
+		if err != nil {
+			return err
+		}
+		w.cfg = sourceCfg
 	}
-	w.cfg = sourceCfg
 
 	failpoint.Label("bypass")
 
@@ -301,11 +330,11 @@ func (w *SourceWorker) EnableRelay() (err error) {
 	defer dcancel()
 	minLoc, err1 := getMinLocInAllSubTasks(dctx, subTaskCfgs)
 	if err1 != nil {
-		return err1
+		w.l.Error("meet error when EnableRelay", zap.Error(err1))
 	}
 
 	if minLoc != nil {
-		log.L().Info("get min location in all subtasks", zap.Stringer("location", *minLoc))
+		w.l.Info("get min location in all subtasks", zap.Stringer("location", *minLoc))
 		w.cfg.RelayBinLogName = binlog.AdjustPosition(minLoc.Position).Name
 		w.cfg.RelayBinlogGTID = minLoc.GTIDSetStr()
 		// set UUIDSuffix when bound to a source
@@ -320,8 +349,15 @@ func (w *SourceWorker) EnableRelay() (err error) {
 	}
 
 	// 2. initial relay holder, the cfg's password need decrypt
+	// worker's relay-dir has higher priority than source's relay-dir
+	if w.relayDir != "" {
+		workerRelayDir := filepath.Join(w.relayDir, w.name)
+		log.L().Info("use worker's relay-dir", zap.String("RelayDir", workerRelayDir))
+		w.cfg.RelayDir = workerRelayDir
+	}
+
 	w.relayHolder = NewRelayHolder(w.cfg)
-	relayPurger, err := w.relayHolder.Init(w.relayCtx, []purger.PurgeInterceptor{
+	relayPurger, err := w.relayHolder.Init(w.relayCtx, []relay.PurgeInterceptor{
 		w,
 	})
 	if err != nil {
@@ -353,19 +389,28 @@ func (w *SourceWorker) EnableRelay() (err error) {
 		w.observeRelayStage(w.relayCtx, w.etcdClient, revRelay)
 	}()
 
-	w.relayHolder.RegisterListener(w.subTaskHolder)
-
 	w.relayEnabled.Store(true)
 	w.l.Info("relay enabled")
-	w.subTaskHolder.resetAllSubTasks(true)
+	w.subTaskHolder.resetAllSubTasks(w.getRelayWithoutLock())
 	return nil
 }
 
 // DisableRelay disables the functionality of start/watch/handle relay.
+// a source worker will disable relay by the reason of EnableRelay is no longer valid.
+// The paths to DisableRelay are:
+// - source config `enable-relay: true` no longer valid
+//   - when DM-worker Server watches a SourceBound change, which is to notify that source config has changed, and the
+//     worker has started relay by that bound
+//   - when the source worker is unbound and has started relay by that bound
+// - UpstreamRelayWorkerKeyAdapter no longer valid
+//   - when DM-worker Server watches a UpstreamRelayWorkerKeyAdapter change
+//   - when DM-worker Server fails watching and recovers from a snapshot
 func (w *SourceWorker) DisableRelay() {
 	w.l.Info("enter DisableRelay")
 	w.Lock()
 	defer w.Unlock()
+
+	w.startedRelayBySourceCfg = false
 	if !w.relayEnabled.CAS(true, false) {
 		w.l.Warn("already disabled relay")
 		return
@@ -382,12 +427,11 @@ func (w *SourceWorker) DisableRelay() {
 		w.l.Info("finish refreshing task checker")
 	}
 
-	w.subTaskHolder.resetAllSubTasks(false)
+	w.subTaskHolder.resetAllSubTasks(nil)
 
 	if w.relayHolder != nil {
 		r := w.relayHolder
 		w.relayHolder = nil
-		r.UnRegisterListener(w.subTaskHolder)
 		r.Close()
 	}
 	if w.relayPurger != nil {
@@ -519,12 +563,20 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage pb.St
 	}
 
 	w.l.Info("subtask created", zap.Stringer("config", cfg2))
-	st.Run(expectStage)
+	st.Run(expectStage, w.getRelayWithoutLock())
+	return nil
+}
+
+// caller should make sure w.Lock is locked before calling this method.
+func (w *SourceWorker) getRelayWithoutLock() relay.Process {
+	if w.relayHolder != nil {
+		return w.relayHolder.Relay()
+	}
 	return nil
 }
 
 // UpdateSubTask update config for a sub task.
-func (w *SourceWorker) UpdateSubTask(cfg *config.SubTaskConfig) error {
+func (w *SourceWorker) UpdateSubTask(ctx context.Context, cfg *config.SubTaskConfig) error {
 	w.Lock()
 	defer w.Unlock()
 
@@ -538,7 +590,7 @@ func (w *SourceWorker) UpdateSubTask(cfg *config.SubTaskConfig) error {
 	}
 
 	w.l.Info("update sub task", zap.String("task", cfg.Name))
-	return st.Update(cfg)
+	return st.Update(ctx, cfg)
 }
 
 // OperateSubTask stop/resume/pause  sub task.
@@ -566,10 +618,10 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		err = st.Pause()
 	case pb.TaskOp_Resume:
 		w.l.Info("resume sub task", zap.String("task", name))
-		err = st.Resume()
+		err = st.Resume(w.getRelayWithoutLock())
 	case pb.TaskOp_AutoResume:
 		w.l.Info("auto_resume sub task", zap.String("task", name))
-		err = st.Resume()
+		err = st.Resume(w.getRelayWithoutLock())
 	default:
 		err = terror.ErrWorkerUpdateTaskStage.Generatef("invalid operate %s on subtask %v", op, name)
 	}
@@ -593,6 +645,10 @@ func (w *SourceWorker) QueryStatus(ctx context.Context, name string) ([]*pb.SubT
 	)
 
 	if err := w.updateSourceStatus(ctx); err != nil {
+		if terror.ErrNoMasterStatus.Equal(err) {
+			w.l.Warn("This source's bin_log is OFF, so it only supports full_mode.", zap.String("sourceID", w.cfg.SourceID), zap.Error(err))
+			return nil, nil, nil
+		}
 		w.l.Error("failed to update source status", zap.Error(err))
 	} else {
 		sourceStatus = w.sourceStatus.Load().(*binlog.SourceStatus)
@@ -1026,18 +1082,18 @@ func (w *SourceWorker) getAllSubTaskStatus() map[string]*pb.SubTaskStatus {
 }
 
 // HandleError handle worker error.
-func (w *SourceWorker) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) error {
+func (w *SourceWorker) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (string, error) {
 	w.Lock()
 	defer w.Unlock()
 
 	if w.closed.Load() {
-		return terror.ErrWorkerAlreadyClosed.Generate()
+		return "", terror.ErrWorkerAlreadyClosed.Generate()
 	}
 
 	st := w.subTaskHolder.findSubTask(req.Task)
 	if st == nil {
-		return terror.ErrWorkerSubTaskNotFound.Generate(req.Task)
+		return "", terror.ErrWorkerSubTaskNotFound.Generate(req.Task)
 	}
 
-	return st.HandleError(ctx, req)
+	return st.HandleError(ctx, req, w.getRelayWithoutLock())
 }

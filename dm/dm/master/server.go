@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
@@ -36,24 +36,26 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/ticdc/dm/checker"
-	dmcommon "github.com/pingcap/ticdc/dm/dm/common"
-	"github.com/pingcap/ticdc/dm/dm/config"
-	ctlcommon "github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/master/metrics"
-	"github.com/pingcap/ticdc/dm/dm/master/scheduler"
-	"github.com/pingcap/ticdc/dm/dm/master/shardddl"
-	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/cputil"
-	"github.com/pingcap/ticdc/dm/pkg/election"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/checker"
+	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/master/metrics"
+	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
+	"github.com/pingcap/tiflow/dm/dm/master/shardddl"
+	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/election"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/ui"
 )
 
 const (
@@ -118,7 +120,7 @@ type Server struct {
 
 	closed atomic.Bool
 
-	echo *echo.Echo // injected in `InitOpenAPIHandles`
+	openapiHandles *gin.Engine // injected in `InitOpenAPIHandles`
 }
 
 // NewServer creates a new Server.
@@ -184,15 +186,18 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	// And curl or safari browser does trigger this problem.
 	// But I haven't figured it out.
 	// (maybe more requests are sent from chrome or its extensions).
-	initOpenAPIErr := s.InitOpenAPIHandles()
-	if initOpenAPIErr != nil {
-		return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
-	}
+
 	userHandles := map[string]http.Handler{
-		"/apis/":   apiHandler,
-		"/status":  getStatusHandle(),
-		"/debug/":  getDebugHandler(),
-		"/api/v1/": s.echo,
+		"/apis/":  apiHandler,
+		"/status": getStatusHandle(),
+		"/debug/": getDebugHandler(),
+	}
+	if s.cfg.OpenAPI {
+		if initOpenAPIErr := s.InitOpenAPIHandles(); initOpenAPIErr != nil {
+			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
+		}
+		userHandles["/api/v1/"] = s.openapiHandles
+		userHandles["/dashboard/"] = ui.InitWebUIRouter()
 	}
 
 	// gRPC API server
@@ -423,12 +428,19 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	}
 
 	resp := &pb.StartTaskResponse{}
-	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
 		return resp, nil
 	}
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	if err != nil {
+		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		return resp, nil
+	}
+	resp.Msg = msg
+
 	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.JSON()), zap.String("request", "StartTask"))
 
 	sourceRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs))
@@ -469,7 +481,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			// use same latch for remove-meta and start-task
 			release, err3 = s.scheduler.AcquireSubtaskLatch(cfg.Name)
 			if err3 != nil {
-				resp.Msg = terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", cfg.Name).Error()
+				resp.Msg += terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", cfg.Name).Error()
 				// nolint:nilerr
 				return resp, nil
 			}
@@ -477,19 +489,19 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			latched = true
 
 			if scm := s.scheduler.GetSubTaskCfgsByTask(cfg.Name); len(scm) > 0 {
-				resp.Msg = terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
+				resp.Msg += terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
 					"while remove-meta is true").Error()
 				return resp, nil
 			}
 			err = s.removeMetaData(ctx, cfg.Name, cfg.MetaSchema, cfg.TargetDB)
 			if err != nil {
-				resp.Msg = terror.Annotate(err, "while removing metadata").Error()
+				resp.Msg += terror.Annotate(err, "while removing metadata").Error()
 				return resp, nil
 			}
 		}
 		err = s.scheduler.AddSubTasks(latched, subtaskCfgPointersToInstances(stCfgs...)...)
 		if err != nil {
-			resp.Msg = err.Error()
+			resp.Msg += err.Error()
 			// nolint:nilerr
 			return resp, nil
 		}
@@ -498,9 +510,11 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			release()
 		}
 
+		go s.scheduler.TryResolveLoadTask(sources)
+
 		resp.Result = true
 		if cfg.RemoveMeta {
-			resp.Msg = "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
+			resp.Msg += "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
 		}
 		sourceResps = s.getSourceRespsAfterOperation(ctx, cfg.Name, sources, []string{}, req)
 	}
@@ -613,14 +627,20 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		return resp2, err2
 	}
 
-	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	resp := &pb.UpdateTaskResponse{}
+	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task)
 	if err != nil {
+		resp.Msg = err.Error()
 		// nolint:nilerr
-		return &pb.UpdateTaskResponse{
-			Result: false,
-			Msg:    err.Error(),
-		}, nil
+		return resp, nil
 	}
+
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	if err != nil {
+		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		return resp, nil
+	}
+	resp.Msg = msg
 	log.L().Info("update task", zap.String("task name", cfg.Name), zap.Stringer("task", cfg))
 
 	workerRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs)+len(req.Sources))
@@ -659,10 +679,9 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		workerResps = append(workerResps, workerRespMap[worker])
 	}
 
-	return &pb.UpdateTaskResponse{
-		Result:  true,
-		Sources: workerResps,
-	}, nil
+	resp.Result = true
+	resp.Sources = workerResps
+	return resp, nil
 }
 
 type hasWokers interface {
@@ -670,9 +689,7 @@ type hasWokers interface {
 	GetName() string
 }
 
-func extractSources(s *Server, req hasWokers) ([]string, error) {
-	var sources []string
-
+func extractSources(s *Server, req hasWokers) (sources []string, specifiedSource bool, err error) {
 	switch {
 	case len(req.GetSources()) > 0:
 		sources = req.GetSources()
@@ -683,20 +700,21 @@ func extractSources(s *Server, req hasWokers) ([]string, error) {
 			}
 		}
 		if len(invalidSource) > 0 {
-			return nil, errors.Errorf("sources %s haven't been added", invalidSource)
+			return nil, false, errors.Errorf("sources %s haven't been added", invalidSource)
 		}
+		specifiedSource = true
 	case len(req.GetName()) > 0:
 		// query specified task's sources
 		sources = s.getTaskResources(req.GetName())
 		if len(sources) == 0 {
-			return nil, errors.Errorf("task %s has no source or not exist", req.GetName())
+			return nil, false, errors.Errorf("task %s has no source or not exist", req.GetName())
 		}
 	default:
 		// query all sources
 		log.L().Info("get sources")
 		sources = s.scheduler.BoundSources()
 	}
-	return sources, nil
+	return
 }
 
 // QueryStatus implements MasterServer.QueryStatus.
@@ -709,8 +727,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 	if shouldRet {
 		return resp2, err2
 	}
-
-	sources, err := extractSources(s, req)
+	sources, specifiedSource, err := extractSources(s, req)
 	if err != nil {
 		// nolint:nilerr
 		return &pb.QueryStatusListResponse{
@@ -718,29 +735,29 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 			Msg:    err.Error(),
 		}, nil
 	}
-
-	queryRelayWorker := false
-	if len(req.GetSources()) > 0 {
-		// if user specified sources, query relay workers instead of task workers
-		queryRelayWorker = true
+	resps := s.getStatusFromWorkers(ctx, sources, req.Name, specifiedSource)
+	workerRespMap := make(map[string][]*pb.QueryStatusResponse, len(sources)) // sourceName -> worker QueryStatusResponse
+	inSlice := func(s []string, e string) bool {
+		for _, v := range s {
+			if v == e {
+				return true
+			}
+		}
+		return false
 	}
-
-	resps := s.getStatusFromWorkers(ctx, sources, req.Name, queryRelayWorker)
-	workerRespMap := make(map[string][]*pb.QueryStatusResponse, len(sources))
 	for _, workerResp := range resps {
 		workerRespMap[workerResp.SourceStatus.Source] = append(workerRespMap[workerResp.SourceStatus.Source], workerResp)
+		// append some offline worker responses
+		if !inSlice(sources, workerResp.SourceStatus.Source) {
+			sources = append(sources, workerResp.SourceStatus.Source)
+		}
 	}
-
-	sort.Strings(sources)
-	workerResps := make([]*pb.QueryStatusResponse, 0, len(sources))
-	for _, worker := range sources {
-		workerResps = append(workerResps, workerRespMap[worker]...)
+	workerResps := make([]*pb.QueryStatusResponse, 0)
+	sort.Strings(sources) // display status sorted by source name
+	for _, sourceName := range sources {
+		workerResps = append(workerResps, workerRespMap[sourceName]...)
 	}
-	resp := &pb.QueryStatusListResponse{
-		Result:  true,
-		Sources: workerResps,
-	}
-	return resp, nil
+	return &pb.QueryStatusListResponse{Result: true, Sources: workerResps}, nil
 }
 
 // adjust unsynced field in sync status by looking at DDL locks.
@@ -873,10 +890,28 @@ func (s *Server) PurgeWorkerRelay(ctx context.Context, req *pb.PurgeWorkerRelayR
 
 	var wg sync.WaitGroup
 	for _, source := range req.Sources {
-		workers, err := s.scheduler.GetRelayWorkers(source)
+		var (
+			workers       []*scheduler.Worker
+			workerNameSet = make(map[string]struct{})
+			err           error
+		)
+
+		workers, err = s.scheduler.GetRelayWorkers(source)
 		if err != nil {
 			return nil, err
 		}
+		// returned workers is not duplicated
+		for _, w := range workers {
+			workerNameSet[w.BaseInfo().Name] = struct{}{}
+		}
+		// subtask workers may have been found in relay workers
+		taskWorker := s.scheduler.GetWorkerBySource(source)
+		if taskWorker != nil {
+			if _, ok := workerNameSet[taskWorker.BaseInfo().Name]; !ok {
+				workers = append(workers, taskWorker)
+			}
+		}
+
 		if len(workers) == 0 {
 			setWorkerResp(errorCommonWorkerResponse(fmt.Sprintf("relay worker for source %s not found, please `start-relay` first", source), source, ""))
 			continue
@@ -970,12 +1005,12 @@ func (s *Server) getTaskResources(task string) []string {
 }
 
 // getStatusFromWorkers does RPC request to get status from dm-workers.
-func (s *Server) getStatusFromWorkers(ctx context.Context, sources []string, taskName string, relayWorker bool) []*pb.QueryStatusResponse {
+func (s *Server) getStatusFromWorkers(
+	ctx context.Context, sources []string, taskName string, specifiedSource bool) []*pb.QueryStatusResponse {
 	workerReq := &workerrpc.Request{
 		Type:        workerrpc.CmdQueryStatus,
 		QueryStatus: &pb.QueryStatusRequest{Name: taskName},
 	}
-
 	var (
 		workerResps  = make([]*pb.QueryStatusResponse, 0, len(sources))
 		workerRespMu sync.Mutex
@@ -1008,7 +1043,8 @@ func (s *Server) getStatusFromWorkers(ctx context.Context, sources []string, tas
 			workerNameSet = make(map[string]struct{})
 			err2          error
 		)
-		if relayWorker {
+		// if user specified sources, query relay workers instead of task workers
+		if specifiedSource {
 			workers, err2 = s.scheduler.GetRelayWorkers(source)
 			if err2 != nil {
 				handleErr(err2, source, "")
@@ -1021,8 +1057,7 @@ func (s *Server) getStatusFromWorkers(ctx context.Context, sources []string, tas
 		}
 
 		// subtask workers may have been found in relay workers
-		taskWorker := s.scheduler.GetWorkerBySource(source)
-		if taskWorker != nil {
+		if taskWorker := s.scheduler.GetWorkerBySource(source); taskWorker != nil {
 			if _, ok := workerNameSet[taskWorker.BaseInfo().Name]; !ok {
 				workers = append(workers, taskWorker)
 			}
@@ -1068,6 +1103,66 @@ func (s *Server) getStatusFromWorkers(ctx context.Context, sources []string, tas
 	}
 	wg.Wait()
 	s.fillUnsyncedStatus(workerResps)
+
+	// when taskName is empty we need list all task even the worker that handle this task is not running.
+	// see more here https://github.com/pingcap/tiflow/issues/3348
+	if taskName == "" {
+		// sourceName -> resp
+		fakeWorkerRespM := make(map[string]*pb.QueryStatusResponse)
+		existWorkerRespM := make(map[string]*pb.QueryStatusResponse)
+		for _, resp := range workerResps {
+			existWorkerRespM[resp.SourceStatus.Source] = resp
+		}
+
+		findNeedInResp := func(sourceName, taskName string) bool {
+			if _, ok := existWorkerRespM[sourceName]; ok {
+				// if we found the source resp, it must have the subtask of this task
+				return true
+			}
+			if fake, ok := fakeWorkerRespM[sourceName]; ok {
+				for _, status := range fake.SubTaskStatus {
+					if status.Name == taskName {
+						return true
+					}
+				}
+			}
+			return false
+		}
+
+		setOrAppendFakeResp := func(sourceName, taskName string) {
+			if _, ok := fakeWorkerRespM[sourceName]; !ok {
+				fakeWorkerRespM[sourceName] = &pb.QueryStatusResponse{
+					Result:        false,
+					SubTaskStatus: []*pb.SubTaskStatus{},
+					SourceStatus:  &pb.SourceStatus{Source: sourceName, Worker: "source not bound"},
+					Msg:           fmt.Sprintf("can't find task=%s from dm-worker for source=%s, please use dmctl list-member to check if worker is offline.", taskName, sourceName),
+				}
+			}
+			fakeWorkerRespM[sourceName].SubTaskStatus = append(fakeWorkerRespM[sourceName].SubTaskStatus, &pb.SubTaskStatus{Name: taskName})
+		}
+
+		for taskName, sourceM := range s.scheduler.GetSubTaskCfgs() {
+			// only add use specified source related to this task
+			if specifiedSource {
+				for _, needDisplayedSource := range sources {
+					if _, ok := sourceM[needDisplayedSource]; ok && !findNeedInResp(needDisplayedSource, taskName) {
+						setOrAppendFakeResp(needDisplayedSource, taskName)
+					}
+				}
+			} else {
+				// make fake response for every source related to this task
+				for sourceName := range sourceM {
+					if !findNeedInResp(sourceName, taskName) {
+						setOrAppendFakeResp(sourceName, taskName)
+					}
+				}
+			}
+		}
+
+		for _, fake := range fakeWorkerRespM {
+			setWorkerResp(fake)
+		}
+	}
 	return workerResps
 }
 
@@ -1095,19 +1190,23 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 		return resp2, err2
 	}
 
-	_, _, err := s.generateSubTask(ctx, req.Task, req.ErrCnt, req.WarnCnt)
+	resp := &pb.CheckTaskResponse{}
+	_, stCfgs, err := s.generateSubTask(ctx, req.Task)
 	if err != nil {
+		resp.Msg = err.Error()
 		// nolint:nilerr
-		return &pb.CheckTaskResponse{
-			Result: false,
-			Msg:    err.Error(),
-		}, nil
+		return resp, nil
 	}
 
-	return &pb.CheckTaskResponse{
-		Result: true,
-		Msg:    "check pass!!!",
-	}, nil
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, req.ErrCnt, req.WarnCnt)
+	if err != nil {
+		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		return resp, nil
+	}
+	resp.Msg = msg
+	resp.Result = true
+
+	return resp, nil
 }
 
 func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*config.SourceConfig, error) {
@@ -1127,7 +1226,7 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 
 func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
 	dbConfig := cfg.GenerateDBConfig()
-	fromDB, err := conn.DefaultDBProvider.Apply(*dbConfig)
+	fromDB, err := conn.DefaultDBProvider.Apply(dbConfig)
 	if err != nil {
 		return err
 	}
@@ -1163,7 +1262,7 @@ func adjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 		failpoint.Return(nil)
 	})
 
-	toDB, err := conn.DefaultDBProvider.Apply(cfg)
+	toDB, err := conn.DefaultDBProvider.Apply(&cfg)
 	if err != nil {
 		return err
 	}
@@ -1180,7 +1279,6 @@ func adjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 		config.AdjustTargetDBSessionCfg(dbConfig, version)
 	} else {
 		log.L().Warn("get tidb version", log.ShortError(err))
-		config.AdjustTargetDBTimeZone(dbConfig)
 	}
 	return nil
 }
@@ -1227,11 +1325,6 @@ func (s *Server) OperateSource(ctx context.Context, req *pb.OperateSourceRequest
 			err      error
 		)
 		for _, cfg := range cfgs {
-			// tell user he should use `start-relay` to manually specify relay workers
-			if cfg.EnableRelay {
-				resp.Msg = "Please use `start-relay` to specify which workers should pull relay log of relay-enabled sources."
-			}
-
 			err = s.scheduler.AddSourceCfg(cfg)
 			// return first error and try to revert, so user could copy-paste same start command after error
 			if err != nil {
@@ -1360,7 +1453,7 @@ func (s *Server) OperateLeader(ctx context.Context, req *pb.OperateLeaderRequest
 	}, nil
 }
 
-func (s *Server) generateSubTask(ctx context.Context, task string, errCnt, warnCnt int64) (*config.TaskConfig, []*config.SubTaskConfig, error) {
+func (s *Server) generateSubTask(ctx context.Context, task string) (*config.TaskConfig, []*config.SubTaskConfig, error) {
 	cfg := config.NewTaskConfig()
 	err := cfg.Decode(task)
 	if err != nil {
@@ -1375,11 +1468,6 @@ func (s *Server) generateSubTask(ctx context.Context, task string, errCnt, warnC
 	sourceCfgs := s.getSourceConfigs(cfg.MySQLInstances)
 
 	stCfgs, err := config.TaskConfigToSubTaskConfigs(cfg, sourceCfgs)
-	if err != nil {
-		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
-	}
-
-	err = checker.CheckSyncConfigFunc(ctx, stCfgs, errCnt, warnCnt)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
@@ -1422,6 +1510,7 @@ func withHost(addr string) string {
 
 func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string, toDBCfg *config.DBConfig) error {
 	toDBCfg.Adjust()
+
 	// clear shard meta data for pessimistic/optimist
 	err := s.pessimist.RemoveMetaData(taskName)
 	if err != nil {
@@ -1437,7 +1526,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	}
 
 	// set up db and clear meta data in downstream db
-	baseDB, err := conn.DefaultDBProvider.Apply(*toDBCfg)
+	baseDB, err := conn.DefaultDBProvider.Apply(toDBCfg)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
@@ -1459,6 +1548,8 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	// clear loader and syncer checkpoints
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
 		dbutil.TableName(metaSchema, cputil.LoaderCheckpoint(taskName))))
+	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
+		dbutil.TableName(metaSchema, cputil.LightningCheckpoint(taskName))))
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
 		dbutil.TableName(metaSchema, cputil.SyncerCheckpoint(taskName))))
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
@@ -1493,6 +1584,9 @@ func extractWorkerError(result *pb.ProcessResult) error {
 //     * stop: related task can't be found in worker's result
 // Relay:
 //   OperateRelay:
+//     * start: related relay status is running
+//     * stop: related relay status can't be found in worker's result
+//   OperateWorkerRelay:
 //     * pause: related relay status is paused
 //     * resume: related relay status is running
 // returns OK, error message of QueryStatusResponse, raw QueryStatusResponse, error that not from QueryStatusResponse.
@@ -1530,6 +1624,13 @@ func (s *Server) waitOperationOk(
 		case pb.RelayOp_PauseRelay:
 			expect = pb.Stage_Paused
 		case pb.RelayOp_StopRelay:
+			expect = pb.Stage_Stopped
+		}
+	case *pb.OperateRelayRequest:
+		switch req.Op {
+		case pb.RelayOpV2_StartRelayV2:
+			expect = pb.Stage_Running
+		case pb.RelayOpV2_StopRelayV2:
 			expect = pb.Stage_Stopped
 		}
 	default:
@@ -1616,6 +1717,9 @@ func (s *Server) waitOperationOk(
 						if expect == pb.Stage_Stopped {
 							if st, ok2 := subtaskStatus.Status.(*pb.SubTaskStatus_Msg); ok2 && st.Msg == dmcommon.NoSubTaskMsg(taskName) {
 								ok = true
+							} else {
+								// make sure there is no subtask
+								continue
 							}
 						} else if subtaskStatus.Name == taskName && (subtaskStatus.Stage == expect || subtaskStatus.Stage == finished) {
 							ok = true
@@ -1644,6 +1748,24 @@ func (s *Server) waitOperationOk(
 					}
 				} else {
 					return false, "", queryResp, terror.ErrMasterOperRespNotSuccess.Generate("relay is disabled for this source")
+				}
+			case *pb.OperateRelayRequest:
+				// including the situation that source status is nil and relay status is nil
+				relayStatus := queryResp.GetSourceStatus().GetRelayStatus()
+				if relayStatus == nil {
+					if expect == pb.Stage_Stopped {
+						return true, "", queryResp, nil
+					}
+				} else {
+					msg := ""
+					if err2 := extractWorkerError(relayStatus.Result); err2 != nil {
+						msg = err2.Error()
+					}
+					ok := relayStatus.Stage == expect
+
+					if ok || msg != "" {
+						return ok, msg, queryResp, nil
+					}
 				}
 			}
 			log.L().Info("fail to get expect operation result", zap.Int("retryNum", num), zap.String("task", taskName),
@@ -1704,9 +1826,12 @@ func (s *Server) getSourceRespsAfterOperation(ctx context.Context, taskName stri
 			defer wg.Done()
 			source1, _ := args[0].(string)
 			worker1, _ := args[1].(string)
-			workerCli := s.scheduler.GetWorkerBySource(source1)
-			if workerCli == nil && worker1 != "" {
+			var workerCli *scheduler.Worker
+			if worker1 != "" {
 				workerCli = s.scheduler.GetWorkerByName(worker1)
+			}
+			if workerCli == nil {
+				workerCli = s.scheduler.GetWorkerBySource(source1)
 			}
 			sourceResp := s.handleOperationResult(ctx, workerCli, taskName, source1, req)
 			sourceResp.Source = source1 // may return other source's ID during stop worker
@@ -1933,14 +2058,16 @@ func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateSchemaRequest
 			workerReq := workerrpc.Request{
 				Type: workerrpc.CmdOperateSchema,
 				OperateSchema: &pb.OperateWorkerSchemaRequest{
-					Op:       req.Op,
-					Task:     req.Task,
-					Source:   source,
-					Database: req.Database,
-					Table:    req.Table,
-					Schema:   req.Schema,
-					Flush:    req.Flush,
-					Sync:     req.Sync,
+					Op:         req.Op,
+					Task:       req.Task,
+					Source:     source,
+					Database:   req.Database,
+					Table:      req.Table,
+					Schema:     req.Schema,
+					Flush:      req.Flush,
+					Sync:       req.Sync,
+					FromSource: req.FromSource,
+					FromTarget: req.FromTarget,
 				},
 			}
 
@@ -2032,29 +2159,68 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 	if shouldRet {
 		return resp2, err2
 	}
-	// For the get-config command, you want to filter out fields that are not easily readable by humans,
-	// such as SSLXXBytes field in `Security` struct
+
+	formartAndSortTaskString := func(subCfgList []*config.SubTaskConfig) string {
+		sort.Slice(subCfgList, func(i, j int) bool {
+			return subCfgList[i].SourceID < subCfgList[j].SourceID
+		})
+		// For the get-config command, we want to filter out fields that are not easily readable by humans,
+		// such as SSLXXBytes field in `Security` struct
+		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
+		taskCfg.TargetDB.Password = "******"
+		if taskCfg.TargetDB.Security != nil {
+			taskCfg.TargetDB.Security.ClearSSLBytesData()
+		}
+		return taskCfg.String()
+	}
 	switch req.Type {
+	case pb.CfgType_TaskTemplateType:
+		task, err := ha.GetOpenAPITaskTemplate(s.etcdClient, req.Name)
+		if err != nil {
+			resp2.Msg = err.Error()
+			// nolint:nilerr
+			return resp2, nil
+		}
+		if task == nil {
+			resp2.Msg = "task not found"
+			// nolint:nilerr
+			return resp2, nil
+		}
+		toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
+		if adjustDBErr := adjustTargetDB(ctx, toDBCfg); adjustDBErr != nil {
+			if adjustDBErr != nil {
+				resp2.Msg = adjustDBErr.Error()
+				// nolint:nilerr
+				return resp2, nil
+			}
+		}
+		sourceCfgMap := make(map[string]*config.SourceConfig)
+		for _, cfg := range task.SourceConfig.SourceConf {
+			if sourceCfg := s.scheduler.GetSourceCfgByID(cfg.SourceName); sourceCfg != nil {
+				sourceCfgMap[cfg.SourceName] = sourceCfg
+			} else {
+				resp2.Msg = fmt.Sprintf("the source: %s of task not found", cfg.SourceName)
+				return resp2, nil
+			}
+		}
+		subTaskConfigList, err := config.OpenAPITaskToSubTaskConfigs(task, toDBCfg, sourceCfgMap)
+		if err != nil {
+			resp2.Msg = err.Error()
+			// nolint:nilerr
+			return resp2, nil
+		}
+		cfg = formartAndSortTaskString(subTaskConfigList)
 	case pb.CfgType_TaskType:
 		subCfgMap := s.scheduler.GetSubTaskCfgsByTask(req.Name)
 		if len(subCfgMap) == 0 {
 			resp2.Msg = "task not found"
 			return resp2, nil
 		}
-		subCfgList := make([]*config.SubTaskConfig, 0, len(subCfgMap))
+		subTaskConfigList := make([]*config.SubTaskConfig, 0, len(subCfgMap))
 		for _, subCfg := range subCfgMap {
-			subCfgList = append(subCfgList, subCfg)
+			subTaskConfigList = append(subTaskConfigList, subCfg)
 		}
-		sort.Slice(subCfgList, func(i, j int) bool {
-			return subCfgList[i].SourceID < subCfgList[j].SourceID
-		})
-
-		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
-		taskCfg.TargetDB.Password = "******"
-		if taskCfg.TargetDB.Security != nil {
-			taskCfg.TargetDB.Security.ClearSSLBytesData()
-		}
-		cfg = taskCfg.String()
+		cfg = formartAndSortTaskString(subTaskConfigList)
 	case pb.CfgType_MasterType:
 		if req.Name == s.cfg.Name {
 			cfg, err2 = s.cfg.Toml()
@@ -2210,7 +2376,7 @@ func (s *Server) TransferSource(ctx context.Context, req *pb.TransferSourceReque
 		return resp2, err2
 	}
 
-	err := s.scheduler.TransferSource(req.Source, req.Worker)
+	err := s.scheduler.TransferSource(ctx, req.Source, req.Worker)
 	if err != nil {
 		resp2.Msg = err.Error()
 		// nolint:nilerr
@@ -2246,6 +2412,30 @@ func (s *Server) OperateRelay(ctx context.Context, req *pb.OperateRelayRequest) 
 		return resp2, nil
 	}
 	resp2.Result = true
+	// TODO: now we make sure req.Source isn't empty and len(req.Worker)>=1 in dmctl,
+	// we need refactor the logic here if this behavior changed in the future
+	// TODO: if len(req.Worker)==0 for a quick path, we must adjust req.Worker here
+	var workerToCheck []string
+	for _, worker := range req.Worker {
+		w := s.scheduler.GetWorkerByName(worker)
+		if w != nil && w.Stage() != scheduler.WorkerOffline {
+			workerToCheck = append(workerToCheck, worker)
+		} else {
+			resp2.Sources = append(resp2.Sources, &pb.CommonWorkerResponse{
+				Result: true,
+				Msg:    "source relay is operated but the bounded worker is offline",
+				Source: req.Source,
+				Worker: worker,
+			})
+		}
+	}
+	if len(workerToCheck) > 0 {
+		sources := make([]string, len(req.Worker))
+		for i := range workerToCheck {
+			sources[i] = req.Source
+		}
+		resp2.Sources = append(resp2.Sources, s.getSourceRespsAfterOperation(ctx, "", sources, workerToCheck, req)...)
+	}
 	return resp2, nil
 }
 

@@ -41,7 +41,7 @@
 - [ ] support DM v2.0 in TiDB Operator [tidb-operator#2868](https://github.com/pingcap/tidb-operator/issues/2868)
   - What: use TiDB-Operator to manage DM 2.0
 - [ ] use [Lightning](https://github.com/pingcap/tidb-lightning/) to import full dumped data [#405](https://github.com/pingcap/dm/issues/405)
-  - What: use Lighting as the full data load unit
+  - What: use Lightning as the full data load unit
   - Why:
     - Lightning is stabler than current Loader in DM
     - Lightning support more source data formats, like CSV

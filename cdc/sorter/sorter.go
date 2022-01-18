@@ -16,13 +16,21 @@ package sorter
 import (
 	"context"
 
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // EventSorter accepts unsorted PolymorphicEvents, sort them in background and returns
 // sorted PolymorphicEvents in Output channel
 type EventSorter interface {
 	Run(ctx context.Context) error
+	// TODO add constraints to entries, e.g., order and duplication guarantees.
 	AddEntry(ctx context.Context, entry *model.PolymorphicEvent)
+	// TryAddEntry tries to add and entry to the sorter.
+	// Returns false if the entry can not be added; otherwise it returns true
+	// Returns error if the sorter is closed or context is done
+	TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) (bool, error)
+	// Output sorted events, orderd by commit ts.
+	// It may output a dummy event, a zero resolved ts event, to detect whether
+	// output is available.
 	Output() <-chan *model.PolymorphicEvent
 }

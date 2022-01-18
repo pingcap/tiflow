@@ -22,20 +22,20 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/retry"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/syncer/metrics"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/retry"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
 
 var retryTimeout = 3 * time.Second
 
 // CreateBaseDB creates a db from config.
-func CreateBaseDB(dbCfg config.DBConfig) (*conn.BaseDB, error) {
+func CreateBaseDB(dbCfg *config.DBConfig) (*conn.BaseDB, error) {
 	db, err := conn.DefaultDBProvider.Apply(dbCfg)
 	if err != nil {
 		return nil, terror.WithScope(err, terror.ScopeDownstream)
@@ -233,7 +233,7 @@ func (conn *DBConn) ExecuteSQL(tctx *tcontext.Context, queries []string, args ..
 }
 
 // CreateConns returns a opened DB from dbCfg and number of `count` connections of that DB.
-func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg config.DBConfig, count int) (*conn.BaseDB, []*DBConn, error) {
+func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg *config.DBConfig, count int) (*conn.BaseDB, []*DBConn, error) {
 	conns := make([]*DBConn, 0, count)
 	baseDB, err := CreateBaseDB(dbCfg)
 	if err != nil {

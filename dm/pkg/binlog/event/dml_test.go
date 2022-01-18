@@ -20,7 +20,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )
 
 var _ = Suite(&testDMLSuite{})
@@ -41,7 +41,7 @@ func (t *testDMLSuite) TestGenDMLEvent(c *C) {
 	c.Assert(err, IsNil)
 
 	// empty data
-	result, err := GenDMLEvents(flavor, serverID, latestPos, latestGTID, replication.WRITE_ROWS_EVENTv2, xid, nil)
+	result, err := GenDMLEvents(flavor, serverID, latestPos, latestGTID, replication.WRITE_ROWS_EVENTv2, xid, nil, true, false, 0)
 	c.Assert(err, NotNil)
 	c.Assert(result, IsNil)
 
@@ -58,7 +58,7 @@ func (t *testDMLSuite) TestGenDMLEvent(c *C) {
 		},
 	}
 	eventType := replication.WRITE_ROWS_EVENTv2
-	result, err = GenDMLEvents(flavor, serverID, latestPos, latestGTID, eventType, xid, insertDMLData)
+	result, err = GenDMLEvents(flavor, serverID, latestPos, latestGTID, eventType, xid, insertDMLData, true, false, 0)
 	c.Assert(err, IsNil)
 	c.Assert(result, NotNil)
 	c.Assert(result.Events, HasLen, 3+2*len(insertDMLData))
@@ -81,7 +81,7 @@ func (t *testDMLSuite) TestGenDMLEvent(c *C) {
 		ColumnType: []byte{gmysql.MYSQL_TYPE_LONG, gmysql.MYSQL_TYPE_STRING},
 		Rows:       insertRows2,
 	})
-	result, err = GenDMLEvents(flavor, serverID, latestPos, latestGTID, replication.WRITE_ROWS_EVENTv2, xid, insertDMLData)
+	result, err = GenDMLEvents(flavor, serverID, latestPos, latestGTID, replication.WRITE_ROWS_EVENTv2, xid, insertDMLData, true, false, 0)
 	c.Assert(err, IsNil)
 	c.Assert(result, NotNil)
 	c.Assert(result.Events, HasLen, 3+2*len(insertDMLData)) // 2 more events for insertRows2
@@ -106,7 +106,7 @@ func (t *testDMLSuite) TestGenDMLEvent(c *C) {
 		},
 	}
 	eventType = replication.UPDATE_ROWS_EVENTv2
-	result, err = GenDMLEvents(flavor, serverID, latestPos, latestGTID, eventType, xid, updateDMLData)
+	result, err = GenDMLEvents(flavor, serverID, latestPos, latestGTID, eventType, xid, updateDMLData, true, false, 0)
 	c.Assert(err, IsNil)
 	c.Assert(result, NotNil)
 	c.Assert(result.Events, HasLen, 3+2*len(updateDMLData))
@@ -136,7 +136,7 @@ func (t *testDMLSuite) TestGenDMLEvent(c *C) {
 		},
 	}
 	eventType = replication.DELETE_ROWS_EVENTv2
-	result, err = GenDMLEvents(flavor, serverID, latestPos, latestGTID, eventType, xid, deleteDMLData)
+	result, err = GenDMLEvents(flavor, serverID, latestPos, latestGTID, eventType, xid, deleteDMLData, true, false, 0)
 	c.Assert(err, IsNil)
 	c.Assert(result, NotNil)
 	c.Assert(result.Events, HasLen, 3+2*(len(deleteDMLData)))

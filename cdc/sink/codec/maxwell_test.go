@@ -15,8 +15,8 @@ package codec
 
 import (
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type maxwellbatchSuite struct {
@@ -54,6 +54,7 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 			continue
 		}
 		c.Assert(messages, check.HasLen, 1)
+		c.Assert(messages[0].GetRowsCount(), check.Equals, len(cs))
 		c.Assert(len(messages[0].Key)+len(messages[0].Value), check.Equals, size)
 	}
 

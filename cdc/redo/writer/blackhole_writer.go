@@ -18,7 +18,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
 
@@ -29,6 +29,10 @@ type blackHoleWriter struct {
 	tableRtsMu   sync.RWMutex
 	resolvedTs   uint64
 	checkpointTs uint64
+}
+
+func (bs *blackHoleWriter) DeleteAllLogs(ctx context.Context) error {
+	return nil
 }
 
 // NewBlackHoleWriter creates a blackHole writer

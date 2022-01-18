@@ -44,24 +44,25 @@ import (
 	"go.etcd.io/etcd/integration"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/ticdc/dm/checker"
-	common2 "github.com/pingcap/ticdc/dm/dm/common"
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/master/scheduler"
-	"github.com/pingcap/ticdc/dm/dm/master/shardddl"
-	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/pbmock"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/cputil"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/shardddl/optimism"
-	"github.com/pingcap/ticdc/dm/pkg/shardddl/pessimism"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/checker"
+	common2 "github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
+	"github.com/pingcap/tiflow/dm/dm/master/shardddl"
+	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/pbmock"
+	"github.com/pingcap/tiflow/dm/openapi/fixtures"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // use task config from integration test `sharding`.
@@ -573,6 +574,61 @@ func (t *testMaster) TestWaitOperationOkRightResult(c *check.C) {
 	}
 }
 
+func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
+	taskName := "test-stop-task"
+	responeses := [][]*pb.QueryStatusResponse{{
+		&pb.QueryStatusResponse{
+			SubTaskStatus: []*pb.SubTaskStatus{
+				{
+					Name: taskName,
+					Status: &pb.SubTaskStatus_Sync{Sync: &pb.SyncStatus{
+						UnresolvedGroups: []*pb.ShardingGroup{{Target: "`db`.`tbl`", Unsynced: []string{"table1"}}},
+					}},
+				},
+			},
+		},
+		&pb.QueryStatusResponse{SubTaskStatus: []*pb.SubTaskStatus{}},
+	}, {
+		&pb.QueryStatusResponse{
+			SubTaskStatus: []*pb.SubTaskStatus{
+				{
+					Name: taskName,
+					Status: &pb.SubTaskStatus_Sync{Sync: &pb.SyncStatus{
+						UnresolvedGroups: []*pb.ShardingGroup{{Target: "`db`.`tbl`", Unsynced: []string{"table1"}}},
+					}},
+				},
+			},
+		},
+		&pb.QueryStatusResponse{SubTaskStatus: []*pb.SubTaskStatus{
+			{
+				Name:   taskName,
+				Status: &pb.SubTaskStatus_Msg{Msg: common2.NoSubTaskMsg(taskName)},
+			},
+		}},
+	}}
+	req := &pb.OperateTaskRequest{
+		Op:   pb.TaskOp_Stop,
+		Name: taskName,
+	}
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+	ctx := context.Background()
+	s := &Server{cfg: &Config{RPCTimeout: time.Second}}
+
+	for _, item := range responeses {
+		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+		mockWorkerClient.EXPECT().QueryStatus(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(item[0], nil).Return(item[1], nil).MaxTimes(2)
+		mockWorker := scheduler.NewMockWorker(newMockRPCClient(mockWorkerClient))
+		ok, msg, _, err := s.waitOperationOk(ctx, mockWorker, taskName, "", req)
+		c.Assert(err, check.IsNil)
+		c.Assert(ok, check.IsTrue)
+		c.Assert(msg, check.HasLen, 0)
+	}
+}
+
 func (t *testMaster) TestFillUnsyncedStatus(c *check.C) {
 	var (
 		logger  = log.L()
@@ -856,8 +912,8 @@ func (t *testMaster) TestStartTask(c *check.C) {
 
 	// test start task, but the first step check-task fails
 	bakCheckSyncConfigFunc := checker.CheckSyncConfigFunc
-	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*config.SubTaskConfig, _, _ int64) error {
-		return errors.New(errCheckSyncConfig)
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*config.SubTaskConfig, _, _ int64) (string, error) {
+		return "", errors.New(errCheckSyncConfig)
 	}
 	defer func() {
 		checker.CheckSyncConfigFunc = bakCheckSyncConfigFunc
@@ -930,6 +986,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	mock := conn.InitMockDB(c)
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.LoaderCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.LightningCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.SyncerCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.SyncerShardMeta(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.SyncerOnlineDDL(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -1022,6 +1079,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	mock = conn.InitMockDB(c)
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.LoaderCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.LightningCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.SyncerCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.SyncerShardMeta(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.SyncerOnlineDDL(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -1712,35 +1770,30 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 
 	// 5. start workers, the unbounded sources should be bounded
 	var wg sync.WaitGroup
-	ctx1, cancel1 := context.WithCancel(ctx)
-	ctx2, cancel2 := context.WithCancel(ctx)
-	ctx3, cancel3 := context.WithCancel(ctx)
 	workerName1 := "worker1"
 	workerName2 := "worker2"
 	workerName3 := "worker3"
 	defer func() {
-		t.clearSchedulerEnv(c, cancel1, &wg)
-		t.clearSchedulerEnv(c, cancel2, &wg)
-		t.clearSchedulerEnv(c, cancel3, &wg)
+		t.clearSchedulerEnv(c, cancel, &wg)
 	}()
 	c.Assert(s1.scheduler.AddWorker(workerName1, "172.16.10.72:8262"), check.IsNil)
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
-	}(ctx1, workerName1)
+	}(ctx, workerName1)
 	c.Assert(s1.scheduler.AddWorker(workerName2, "172.16.10.72:8263"), check.IsNil)
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
-	}(ctx2, workerName2)
+	}(ctx, workerName2)
 	c.Assert(s1.scheduler.AddWorker(workerName3, "172.16.10.72:8264"), check.IsNil)
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
-	}(ctx3, workerName3)
+	}(ctx, workerName3)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		w := s1.scheduler.GetWorkerBySource(sourceID)
 		return w != nil
@@ -1979,15 +2032,28 @@ func (t *testMaster) TestGetCfg(c *check.C) {
 	c.Assert(resp1.Result, check.IsTrue)
 	c.Assert(strings.Contains(resp1.Cfg, "name: test"), check.IsTrue)
 
-	// wrong task name
+	// not exist task name
+	taskName2 := "wrong"
 	req2 := &pb.GetCfgRequest{
-		Name: "haha",
+		Name: taskName2,
 		Type: pb.CfgType_TaskType,
 	}
 	resp2, err := server.GetCfg(context.Background(), req2)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp2.Result, check.IsFalse)
 	c.Assert(resp2.Msg, check.Equals, "task not found")
+
+	// generate a template named `wrong`, test get this task template
+	openapiTask, err := fixtures.GenNoShardOpenAPITaskForTest()
+	c.Assert(err, check.IsNil)
+	openapiTask.Name = taskName2
+	c.Assert(ha.PutOpenAPITaskTemplate(t.etcdTestCli, openapiTask, true), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
+	resp2, err = server.GetCfg(context.Background(), &pb.GetCfgRequest{Name: taskName2, Type: pb.CfgType_TaskTemplateType})
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp2.Result, check.IsTrue)
+	c.Assert(strings.Contains(resp2.Cfg, fmt.Sprintf("name: %s", taskName2)), check.IsTrue)
 
 	// test restart master
 	server.scheduler.Close()
@@ -2074,12 +2140,12 @@ func (t *testMaster) subTaskStageMatch(c *check.C, s *scheduler.Scheduler, task,
 }
 
 func (t *testMaster) TestGRPCLongResponse(c *check.C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/LongRPCResponse", `return()`), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/LongRPCResponse", `return()`), check.IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/LongRPCResponse")
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/ctl/common/SkipUpdateMasterClient", `return()`), check.IsNil)
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/LongRPCResponse")
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/ctl/common/SkipUpdateMasterClient", `return()`), check.IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dm/ctl/common/SkipUpdateMasterClient")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dm/ctl/common/SkipUpdateMasterClient")
 
 	masterAddr := tempurl.Alloc()[len("http://"):]
 	lis, err := net.Listen("tcp", masterAddr)

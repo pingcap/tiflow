@@ -42,7 +42,7 @@ function insert_data() {
 }
 
 function run() {
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/pkg/streamer/SetHeartbeatInterval=return(1);github.com/pingcap/ticdc/dm/syncer/syncDMLBatchNotFull=return(true)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval=return(1);github.com/pingcap/tiflow/dm/syncer/syncDMLBatchNotFull=return(true)"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 1 row affected'
@@ -68,14 +68,6 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
-
-	# start relay
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
 
 	# check dm-workers metrics unit: relay file index must be 1.
 	check_metric $WORKER1_PORT "dm_relay_binlog_file" 3 0 2

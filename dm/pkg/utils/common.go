@@ -20,7 +20,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
@@ -32,11 +31,10 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
-	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // TrimCtrlChars returns a slice of the string s with all leading
@@ -324,47 +322,30 @@ func (se *session) GetBuiltinFunctionUsage() map[string]uint32 {
 	return se.builtinFunctionUsage
 }
 
-// UTCSession can be used as a sessionctx.Context, with UTC timezone.
-var UTCSession *session
+// NewSessionCtx return a session context with specified session variables.
+func NewSessionCtx(vars map[string]string) sessionctx.Context {
+	variables := variable.NewSessionVars()
+	for k, v := range vars {
+		_ = variables.SetSystemVar(k, v)
+		if strings.EqualFold(k, "time_zone") {
+			loc, _ := ParseTimeZone(v)
+			variables.StmtCtx.TimeZone = loc
+		}
+	}
 
-func init() {
-	UTCSession = &session{}
-	vars := variable.NewSessionVars()
-	vars.StmtCtx.TimeZone = time.UTC
-	UTCSession.vars = vars
-	UTCSession.values = make(map[fmt.Stringer]interface{}, 1)
-	UTCSession.builtinFunctionUsage = make(map[string]uint32)
+	return &session{
+		vars:                 variables,
+		values:               make(map[fmt.Stringer]interface{}, 1),
+		builtinFunctionUsage: make(map[string]uint32),
+	}
 }
 
 // AdjustBinaryProtocolForDatum converts the data in binlog to TiDB datum.
-func AdjustBinaryProtocolForDatum(data []interface{}, cols []*model.ColumnInfo) ([]types.Datum, error) {
-	log.L().Debug("AdjustBinaryProtocolForChunk",
-		zap.Any("data", data),
-		zap.Any("columns", cols))
+func AdjustBinaryProtocolForDatum(ctx sessionctx.Context, data []interface{}, cols []*model.ColumnInfo) ([]types.Datum, error) {
 	ret := make([]types.Datum, 0, len(data))
 	for i, d := range data {
-		switch v := d.(type) {
-		case int8:
-			d = int64(v)
-		case int16:
-			d = int64(v)
-		case int32:
-			d = int64(v)
-		case uint8:
-			d = uint64(v)
-		case uint16:
-			d = uint64(v)
-		case uint32:
-			d = uint64(v)
-		case uint:
-			d = uint64(v)
-		case decimal.Decimal:
-			d = v.String()
-		}
 		datum := types.NewDatum(d)
-
-		// TODO: should we use timezone of upstream?
-		castDatum, err := table.CastValue(UTCSession, datum, cols[i], false, false)
+		castDatum, err := table.CastValue(ctx, datum, cols[i], false, false)
 		if err != nil {
 			return nil, err
 		}

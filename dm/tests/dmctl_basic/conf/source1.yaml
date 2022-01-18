@@ -3,7 +3,7 @@ server-id: 123456
 enable-gtid: false
 relay-binlog-name: ''
 relay-binlog-gtid: ''
-enable-relay: true
+enable-relay: false
 from:
   host: 127.0.0.1
   user: root

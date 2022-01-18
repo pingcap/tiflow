@@ -1084,6 +1084,24 @@ description = ""
 workaround = "Please update your `shadow-table-rules` or `trash-table-rules` in the configuration file."
 tags = ["internal", "high"]
 
+[error.DM-config-20050]
+message = "the openapi task config for '%s' already exist"
+description = ""
+workaround = "If you want to override it, please use the overwrite flag."
+tags = ["internal", "low"]
+
+[error.DM-config-20051]
+message = "the openapi task config for '%s' does not exist"
+description = ""
+workaround = ""
+tags = ["internal", "low"]
+
+[error.DM-config-20052]
+message = "collation compatible %s not supported"
+description = ""
+workaround = "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
+tags = ["internal", "medium"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
@@ -2003,7 +2021,7 @@ workaround = ""
 tags = ["internal", "low"]
 
 [error.DM-sync-unit-36066]
-message = "replace event not exist, location: %s"
+message = "replace or inject event not exist, location: %s"
 description = ""
 workaround = ""
 tags = ["internal", "high"]
@@ -2197,7 +2215,7 @@ tags = ["internal", "high"]
 [error.DM-dm-master-38029]
 message = ""
 description = ""
-workaround = ""
+workaround = "Please use list-member command to see if the some workers are offline."
 tags = ["internal", "high"]
 
 [error.DM-dm-master-38030]
@@ -3113,7 +3131,7 @@ workaround = "Please use `query-status` command to see tasks."
 tags = ["internal", "medium"]
 
 [error.DM-scheduler-46019]
-message = "tasks %v on source %s should not be running"
+message = "running tasks %v to be transferred on source %s should in sync unit"
 description = ""
 workaround = "Please use `pause-task [-s source ...] task` to pause them first."
 tags = ["internal", "high"]
@@ -3165,6 +3183,36 @@ message = "require DM worker [%s] to be bound to source [%s], but it has been st
 description = ""
 workaround = "If you intend to bind the source with worker, you can stop-relay for current source."
 tags = ["internal", "medium"]
+
+[error.DM-scheduler-46028]
+message = "the source has `start-relay` with worker name for workers %v, so it can't `start-relay` without worker name now"
+description = ""
+workaround = "Please stop all relay workers first, or specify worker name for `start-relay`."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46029]
+message = "the source has `start-relay` with worker name for workers %v, so it can't `stop-relay` without worker name now"
+description = ""
+workaround = "Please specify worker names for `stop-relay`."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46030]
+message = "the source has `start-relay` automatically for bound worker, so it can't `start-relay` with worker name now"
+description = ""
+workaround = "Please stop relay by `stop-relay` without worker name first."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46031]
+message = "the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now"
+description = ""
+workaround = "Please use `stop-relay` without worker name."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46032]
+message = "failed to auto pause tasks %s when transfer-source"
+description = ""
+workaround = "Please pause task by `dmctl pause-task`."
+tags = ["internal", "low"]
 
 [error.DM-dmctl-48001]
 message = "can not create grpc connection"

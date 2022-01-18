@@ -21,11 +21,11 @@ import (
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var _ = check.Suite(&testTaskCheckerSuite{})
@@ -89,7 +89,7 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 	cfg := loadSourceConfigWithoutPassword(c)
 	cfg.RelayDir = dir
 	cfg.MetaDir = dir
-	w, err := NewSourceWorker(cfg, nil, "")
+	w, err := NewSourceWorker(cfg, nil, "", "")
 	c.Assert(err, check.IsNil)
 	w.closed.Store(false)
 
@@ -204,7 +204,7 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 	cfg := loadSourceConfigWithoutPassword(c)
 	cfg.RelayDir = dir
 	cfg.MetaDir = dir
-	w, err := NewSourceWorker(cfg, nil, "")
+	w, err := NewSourceWorker(cfg, nil, "", "")
 	c.Assert(err, check.IsNil)
 	w.closed.Store(false)
 
@@ -306,6 +306,7 @@ func (s *testTaskCheckerSuite) TestIsResumableError(c *check.C) {
 		{nil, true},
 		{errors.New("unknown error"), true},
 		{terror.ErrNotSet.Delegate(&tmysql.SQLError{Code: 1236, Message: "Could not find first log file name in binary log index file", State: tmysql.DefaultMySQLState}), false},
+		{terror.ErrNotSet.Delegate(&tmysql.SQLError{Code: 1236, Message: "The slave is connecting using CHANGE MASTER TO MASTER_AUTO_POSITION = 1, but the master has purged binary logs containing GTIDs that the slave requires", State: tmysql.DefaultMySQLState}), false},
 	}
 
 	for _, tc := range testCases {

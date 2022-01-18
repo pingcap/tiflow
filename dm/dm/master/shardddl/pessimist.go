@@ -24,13 +24,13 @@ import (
 
 	"github.com/pingcap/failpoint"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/master/metrics"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/shardddl/pessimism"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/master/metrics"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var (
@@ -645,7 +645,7 @@ func (p *Pessimist) removeLock(lock *pessimism.Lock) error {
 
 	failpoint.Inject("SleepWhenRemoveLock", func(val failpoint.Value) {
 		t := val.(int)
-		log.L().Info("wait new ddl info putted into etcd",
+		log.L().Info("wait new ddl info putted into etcd in pessimistic",
 			zap.String("failpoint", "SleepWhenRemoveLock"),
 			zap.Int("max wait second", t))
 

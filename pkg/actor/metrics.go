@@ -36,9 +36,9 @@ var (
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "actor",
-			Name:      "workers_cpu_seconds_total",
-			Help:      "Total working time spent in seconds.",
-		}, []string{"name"})
+			Name:      "worker_cpu_seconds_total",
+			Help:      "Total user and system CPU time spent by workers in seconds.",
+		}, []string{"name", "id"})
 	batchSizeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",

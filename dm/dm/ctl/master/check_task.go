@@ -20,9 +20,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/pingcap/ticdc/dm/checker"
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/checker"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/pb"
 )
 
 // NewCheckTaskCmd creates a CheckTask command.
@@ -78,7 +78,7 @@ func checkTaskFunc(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if !common.PrettyPrintResponseWithCheckTask(resp, checker.ErrorMsgHeader) {
+	if !common.PrettyPrintResponseWithCheckTask(resp, checker.CheckTaskMsgHeader) {
 		common.PrettyPrintResponse(resp)
 	}
 	return nil

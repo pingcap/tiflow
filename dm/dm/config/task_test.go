@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 
 	"github.com/coreos/go-semver/semver"
 )
@@ -659,6 +659,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 			HeartbeatUpdateInterval: heartbeatUI,
 			HeartbeatReportInterval: heartbeatRI,
 			EnableHeartbeat:         true,
+			CollationCompatible:     LooseCollationCompatible,
 			Meta: &Meta{
 				BinLogName: "mysql-bin.000123",
 				BinLogPos:  456,
@@ -707,6 +708,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 		}
 	)
 
+	stCfg1.Experimental.AsyncCheckpointFlush = true
 	stCfg2, err := stCfg1.Clone()
 	c.Assert(err, IsNil)
 	stCfg2.SourceID = source2
@@ -734,6 +736,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 		HeartbeatReportInterval: heartbeatRI,
 		CaseSensitive:           stCfg1.CaseSensitive,
 		TargetDB:                &stCfg1.To,
+		CollationCompatible:     LooseCollationCompatible,
 		MySQLInstances: []*MySQLInstance{
 			{
 				SourceID:           source1,
@@ -804,6 +807,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 		},
 		CleanDumpFile: stCfg1.CleanDumpFile,
 	}
+	cfg2.Experimental.AsyncCheckpointFlush = true
 
 	c.Assert(WordCount(cfg.String()), DeepEquals, WordCount(cfg2.String())) // since rules are unordered, so use WordCount to compare
 
@@ -910,22 +914,22 @@ func (t *testConfig) TestAdjustTargetDBConfig(c *C) {
 	}{
 		{
 			DBConfig{},
-			DBConfig{Session: map[string]string{"time_zone": "+00:00"}},
+			DBConfig{Session: map[string]string{}},
 			semver.New("0.0.0"),
 		},
 		{
 			DBConfig{Session: map[string]string{"SQL_MODE": "ANSI_QUOTES"}},
-			DBConfig{Session: map[string]string{"sql_mode": "ANSI_QUOTES", "time_zone": "+00:00"}},
+			DBConfig{Session: map[string]string{"sql_mode": "ANSI_QUOTES"}},
 			semver.New("2.0.7"),
 		},
 		{
 			DBConfig{},
-			DBConfig{Session: map[string]string{tidbTxnMode: tidbTxnOptimistic, "time_zone": "+00:00"}},
+			DBConfig{Session: map[string]string{tidbTxnMode: tidbTxnOptimistic}},
 			semver.New("3.0.1"),
 		},
 		{
 			DBConfig{Session: map[string]string{"SQL_MODE": "", tidbTxnMode: "pessimistic"}},
-			DBConfig{Session: map[string]string{"sql_mode": "", tidbTxnMode: "pessimistic", "time_zone": "+00:00"}},
+			DBConfig{Session: map[string]string{"sql_mode": "", tidbTxnMode: "pessimistic"}},
 			semver.New("4.0.0-beta.2"),
 		},
 	}
@@ -1025,7 +1029,7 @@ func (t *testConfig) TestTaskConfigForDowngrade(c *C) {
 	// make sure all new field were added
 	cfgReflect := reflect.Indirect(reflect.ValueOf(cfg))
 	cfgForDowngradeReflect := reflect.Indirect(reflect.ValueOf(cfgForDowngrade))
-	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+2) // without flag and tidb
+	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+4) // without flag, tidb, collation_compatible and experimental
 
 	// make sure all field were copied
 	cfgForClone := &TaskConfigForDowngrade{}

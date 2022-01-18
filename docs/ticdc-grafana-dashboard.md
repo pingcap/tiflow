@@ -28,7 +28,6 @@ How to obatin pictures in this document?
 
 -->
 
-
 # TiCDC 重要监控指标详解
 
 使用 TiUP 部署 TiDB 集群时，一键部署监控系统 (Prometheus & Grafana)，监控架构参见 [TiDB 监控框架概述](https://docs.pingcap.com/zh/tidb/stable/tidb-monitoring-framework)。
@@ -44,6 +43,7 @@ How to obatin pictures in this document?
 - TiKV ： TiKV 中和 TiCDC 相关的详细信息
 
 ![TiCDC Dashboard - Overview](/docs/media/dashboard/overview.png)
+
 ## Server
 
 - Uptime ： TiKV 节点和 TiCDC 节点已经运行的时间
@@ -56,6 +56,7 @@ How to obatin pictures in this document?
 - Etcd health check duration ：TiCDC 节点访问 PD 的延迟统计
 
 ![TiCDC Dashboard - Server metrics](/docs/media/dashboard/server.png)
+
 ## Changefeed
 
 - Changefeed table count ： 一个同步任务中分配到各个 TiCDC 节点同步的数据表个数
@@ -87,7 +88,6 @@ How to obatin pictures in this document?
 - MySQL sink worker load ： TiCDC 节点中写 MySQL 线程的负载情况
 
 ![TiCDC Dashboard - Changefeed metrics 4](/docs/media/dashboard/changefeed-4.png)
-
 
 ## Events
 
@@ -122,6 +122,7 @@ How to obatin pictures in this document?
 ![TiCDC Dashboard - Events metrics 4](/docs/media/dashboard/events-4.png)
 
 ## Unified Sorter
+
 - Unified Sorter intake rate: Unified Sorter 从 puller 消费消息的速率 (events / s)
 - Unified Sorter event output rate: Unified Sorter 排序后的消息的输出速率 (events / s)
 - Unified Sorter on disk data size: Unified Sorter 暂存在硬盘上的数据大小 (bytes)
@@ -133,7 +134,6 @@ How to obatin pictures in this document?
 - Unified Sorter merge size: Unified Sorter 的归并器 (merger) 的单批次中处理的消息数量 (events)
 
 ![TiCDC Dashboard - Unified Sorter metrics 2](/docs/media/dashboard/unified-sorter-2.png)
-
 
 ## TiKV
 

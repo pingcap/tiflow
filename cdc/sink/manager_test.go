@@ -24,9 +24,9 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type managerSuite struct{}
@@ -35,19 +35,29 @@ var _ = check.Suite(&managerSuite{})
 
 type checkSink struct {
 	*check.C
-	rows           []*model.RowChangedEvent
+	rows           map[model.TableID][]*model.RowChangedEvent
 	rowsMu         sync.Mutex
-	lastResolvedTs uint64
+	lastResolvedTs map[model.TableID]uint64
 }
 
-func (c *checkSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	panic("unreachable")
+func newCheckSink(c *check.C) *checkSink {
+	return &checkSink{
+		C:              c,
+		rows:           make(map[model.TableID][]*model.RowChangedEvent),
+		lastResolvedTs: make(map[model.TableID]uint64),
+	}
+}
+
+func (c *checkSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	return true, nil
 }
 
 func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
-	c.rows = append(c.rows, rows...)
+	for _, row := range rows {
+		c.rows[row.Table.TableID] = append(c.rows[row.Table.TableID], row)
+	}
 	return nil
 }
 
@@ -55,24 +65,25 @@ func (c *checkSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	panic("unreachable")
 }
 
-func (c *checkSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (c *checkSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
 	var newRows []*model.RowChangedEvent
-	for _, row := range c.rows {
-		if row.CommitTs <= c.lastResolvedTs {
-			return c.lastResolvedTs, errors.Errorf("commit-ts(%d) is not greater than lastResolvedTs(%d)", row.CommitTs, c.lastResolvedTs)
+	rows := c.rows[tableID]
+	for _, row := range rows {
+		if row.CommitTs <= c.lastResolvedTs[tableID] {
+			return c.lastResolvedTs[tableID], errors.Errorf("commit-ts(%d) is not greater than lastResolvedTs(%d)", row.CommitTs, c.lastResolvedTs)
 		}
 		if row.CommitTs > resolvedTs {
 			newRows = append(newRows, row)
 		}
 	}
 
-	c.Assert(c.lastResolvedTs, check.LessEqual, resolvedTs)
-	c.lastResolvedTs = resolvedTs
-	c.rows = newRows
+	c.Assert(c.lastResolvedTs[tableID], check.LessEqual, resolvedTs)
+	c.lastResolvedTs[tableID] = resolvedTs
+	c.rows[tableID] = newRows
 
-	return c.lastResolvedTs, nil
+	return c.lastResolvedTs[tableID], nil
 }
 
 func (c *checkSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -83,7 +94,7 @@ func (c *checkSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (c *checkSink) Barrier(ctx context.Context) error {
+func (c *checkSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
@@ -92,7 +103,7 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
 	defer manager.Close(ctx)
 	goroutineNum := 10
 	rowNum := 100
@@ -118,7 +129,7 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 			for j := 1; j < rowNum; j++ {
 				if rand.Intn(10) == 0 {
 					resolvedTs := lastResolvedTs + uint64(rand.Intn(j-int(lastResolvedTs)))
-					_, err := tableSink.FlushRowChangedEvents(ctx, resolvedTs)
+					_, err := tableSink.FlushRowChangedEvents(ctx, model.TableID(i), resolvedTs)
 					c.Assert(err, check.IsNil)
 					lastResolvedTs = resolvedTs
 				} else {
@@ -129,7 +140,7 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 					c.Assert(err, check.IsNil)
 				}
 			}
-			_, err := tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
+			_, err := tableSink.FlushRowChangedEvents(ctx, model.TableID(i), uint64(rowNum))
 			c.Assert(err, check.IsNil)
 		}()
 	}
@@ -147,7 +158,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
 	defer manager.Close(ctx)
 	goroutineNum := 200
 	var wg sync.WaitGroup
@@ -180,7 +191,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				})
 				c.Assert(err, check.IsNil)
 			}
-			_, err := sink.FlushRowChangedEvents(ctx, resolvedTs)
+			_, err := sink.FlushRowChangedEvents(ctx, sink.(*tableSink).tableID, resolvedTs)
 			if err != nil {
 				c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 			}
@@ -234,7 +245,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	defer cancel()
 
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
 	defer manager.Close(ctx)
 
 	tableID := int64(49)
@@ -244,18 +255,18 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 		CommitTs: uint64(110),
 	})
 	c.Assert(err, check.IsNil)
-	_, err = tableSink.FlushRowChangedEvents(ctx, 110)
+	_, err = tableSink.FlushRowChangedEvents(ctx, tableID, 110)
 	c.Assert(err, check.IsNil)
 	err = manager.destroyTableSink(ctx, tableID)
 	c.Assert(err, check.IsNil)
 }
 
 // Run the benchmark
-// go test -benchmem -run='^$' -bench '^(BenchmarkManagerFlushing)$' github.com/pingcap/ticdc/cdc/sink
+// go test -benchmem -run='^$' -bench '^(BenchmarkManagerFlushing)$' github.com/pingcap/tiflow/cdc/sink
 func BenchmarkManagerFlushing(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{}, errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(nil), errCh, 0, "", "")
 
 	// Init table sinks.
 	goroutineNum := 2000
@@ -295,11 +306,11 @@ func BenchmarkManagerFlushing(b *testing.B) {
 	// All tables are flushed concurrently, except table 0.
 	for i := 1; i < goroutineNum; i++ {
 		i := i
-		tableSink := tableSinks[i]
+		tblSink := tableSinks[i]
 		go func() {
 			for j := 1; j < rowNum; j++ {
 				if j%2 == 0 {
-					_, err := tableSink.FlushRowChangedEvents(context.Background(), uint64(j))
+					_, err := tblSink.FlushRowChangedEvents(context.Background(), tblSink.(*tableSink).tableID, uint64(j))
 					if err != nil {
 						b.Error(err)
 					}
@@ -310,9 +321,9 @@ func BenchmarkManagerFlushing(b *testing.B) {
 
 	b.ResetTimer()
 	// Table 0 flush.
-	tableSink := tableSinks[0]
+	tblSink := tableSinks[0]
 	for i := 0; i < b.N; i++ {
-		_, err := tableSink.FlushRowChangedEvents(context.Background(), uint64(rowNum))
+		_, err := tblSink.FlushRowChangedEvents(context.Background(), tblSink.(*tableSink).tableID, uint64(rowNum))
 		if err != nil {
 			b.Error(err)
 		}
@@ -333,8 +344,8 @@ type errorSink struct {
 	*check.C
 }
 
-func (e *errorSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	panic("unreachable")
+func (e *errorSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	return true, nil
 }
 
 func (e *errorSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -345,7 +356,7 @@ func (e *errorSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	panic("unreachable")
 }
 
-func (e *errorSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (e *errorSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	return 0, errors.New("error in flush row changed events")
 }
 
@@ -357,7 +368,7 @@ func (e *errorSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (e *errorSink) Barrier(ctx context.Context) error {
+func (e *errorSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
@@ -374,7 +385,7 @@ func (s *managerSuite) TestManagerError(c *check.C) {
 		Table:    &model.TableName{TableID: 1},
 	})
 	c.Assert(err, check.IsNil)
-	_, err = sink.FlushRowChangedEvents(ctx, 2)
+	_, err = sink.FlushRowChangedEvents(ctx, 1, 2)
 	c.Assert(err, check.IsNil)
 	err = <-errCh
 	c.Assert(err.Error(), check.Equals, "error in emit row changed events")

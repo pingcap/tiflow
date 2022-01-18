@@ -21,10 +21,10 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 const (
@@ -37,6 +37,8 @@ const (
 	posUUIDSuffixSeparator = "|"
 	// MinUUIDSuffix is same as relay.MinUUIDSuffix.
 	MinUUIDSuffix = 1
+	// FileHeaderLen is the length of binlog file header.
+	FileHeaderLen = 4
 )
 
 // MinPosition is the min binlog position.

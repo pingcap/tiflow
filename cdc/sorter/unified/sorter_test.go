@@ -26,10 +26,10 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sorter"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
@@ -59,7 +59,7 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 
 func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = c.MkDir()
@@ -87,7 +87,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = c.MkDir()
@@ -128,14 +128,14 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 }
 
 func testSorter(ctx context.Context, c *check.C, sorter sorter.EventSorter, count int) error {
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/sorterDebug", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
 	}
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied", ""), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/pkg/util/InjectCheckDataDirSatisfied", ""), check.IsNil)
 	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied"), check.IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/pkg/util/InjectCheckDataDirSatisfied"), check.IsNil)
 	}()
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -229,39 +229,9 @@ func testSorter(ctx context.Context, c *check.C, sorter sorter.EventSorter, coun
 	return errg.Wait()
 }
 
-func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
-
-	poolMu.Lock()
-	// Clean up the back-end pool if one has been created
-	pool = nil
-	poolMu.Unlock()
-
-	baseDir := c.MkDir()
-	dir := filepath.Join(baseDir, "sorter_local")
-	err := os.MkdirAll(dir, 0o755)
-	c.Assert(err, check.IsNil)
-	// We expect the local setting to override the changefeed setting
-	config.GetGlobalServerConfig().Sorter.SortDir = dir
-
-	_, err = NewUnifiedSorter(filepath.Join(baseDir, "sorter"), /* the changefeed setting */
-		"test-cf",
-		"test",
-		0,
-		"0.0.0.0:0")
-	c.Assert(err, check.IsNil)
-
-	poolMu.Lock()
-	defer poolMu.Unlock()
-
-	c.Assert(pool, check.NotNil)
-	c.Assert(pool.dir, check.Equals, dir)
-}
-
 func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	poolMu.Lock()
 	// Clean up the back-end pool if one has been created
@@ -290,7 +260,7 @@ func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
 // restarted. There should not be any problem, especially file corruptions.
 func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = c.MkDir()
@@ -309,17 +279,17 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// enable the failpoint to simulate delays
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/asyncFlushStartDelay", "sleep(100)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/asyncFlushStartDelay", "sleep(100)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/asyncFlushStartDelay")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/asyncFlushStartDelay")
 	}()
 
 	// enable the failpoint to simulate delays
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/asyncFlushInProcessDelay", "1%sleep(1)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/asyncFlushInProcessDelay", "1%sleep(1)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/asyncFlushInProcessDelay")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/asyncFlushInProcessDelay")
 	}()
 
 	for i := 0; i < 5; i++ {
@@ -334,7 +304,7 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 
 func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = c.MkDir()
@@ -358,10 +328,10 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	defer cancel()
 
 	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndAlloc", "return(true)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectErrorBackEndAlloc", "return(true)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndAlloc")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectErrorBackEndAlloc")
 	}()
 
 	finishedCh := make(chan struct{})
@@ -378,13 +348,13 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	case <-finishedCh:
 	}
 
-	UnifiedSorterCleanUp()
-	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndAlloc")
+	CleanUp()
+	_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectErrorBackEndAlloc")
 	// enable the failpoint to simulate backEnd write error (usually would happen when writing to a file)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndWrite", "return(true)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectErrorBackEndWrite", "return(true)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndWrite")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectErrorBackEndWrite")
 	}()
 
 	// recreate the sorter
@@ -408,7 +378,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 
 func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	log.SetLevel(zapcore.DebugLevel)
 	defer log.SetLevel(zapcore.InfoLevel)
@@ -435,16 +405,16 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 	defer cancel()
 
 	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectHeapSorterExitDelay", "sleep(2000)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectHeapSorterExitDelay", "sleep(2000)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectHeapSorterExitDelay")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectHeapSorterExitDelay")
 	}()
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndAlloc", "return(true)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectErrorBackEndAlloc", "return(true)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/InjectErrorBackEndAlloc")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectErrorBackEndAlloc")
 	}()
 
 	finishedCh := make(chan struct{})
@@ -464,7 +434,7 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 
 func (s *sorterSuite) TestSortClosedAddEntry(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	sorter, err := NewUnifiedSorter(c.MkDir(),
 		"test-cf",
@@ -494,7 +464,7 @@ func (s *sorterSuite) TestSortClosedAddEntry(c *check.C) {
 
 func (s *sorterSuite) TestUnifiedSorterFileLockConflict(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer UnifiedSorterCleanUp()
+	defer CleanUp()
 
 	dir := c.MkDir()
 	captureAddr := "0.0.0.0:0"

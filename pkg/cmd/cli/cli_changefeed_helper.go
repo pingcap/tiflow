@@ -21,16 +21,16 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/cmd/util"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/httputil"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -136,7 +136,7 @@ func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClien
 	}
 
 	resp, err := httpClient.PostForm(url, map[string][]string{
-		cdc.APIOpVarChangefeedID: {id},
+		api.OpVarChangefeedID: {id},
 	})
 	if err != nil {
 		return "", err
@@ -178,9 +178,9 @@ func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClie
 	}
 
 	resp, err := httpClient.PostForm(url, map[string][]string{
-		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
-		cdc.APIOpVarChangefeedID:       {job.CfID},
-		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
+		api.OpVarAdminJob:           {fmt.Sprint(int(job.Type))},
+		api.OpVarChangefeedID:       {job.CfID},
+		api.OpForceRemoveChangefeed: {forceRemoveOpt},
 	})
 	if err != nil {
 		return err

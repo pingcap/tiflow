@@ -20,8 +20,8 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // DDLDMLResult represents a binlog event result for generated DDL/DML.
@@ -36,16 +36,19 @@ type DDLDMLResult struct {
 // for MySQL:
 //   1. BinLogFileHeader, [ fe `bin` ]
 //   2. FormatDescriptionEvent
-//   3. PreviousGTIDsEvent
+//   3. PreviousGTIDsEvent, depends on genGTID
 // for MariaDB:
 //   1. BinLogFileHeader, [ fe `bin` ]
 //   2. FormatDescriptionEvent
-//   3. MariadbGTIDListEvent
+//   3. MariadbGTIDListEvent, depends on genGTID
 //   -. MariadbBinlogCheckPointEvent, not added yet
-func GenCommonFileHeader(flavor string, serverID uint32, gSet gtid.Set) ([]*replication.BinlogEvent, []byte, error) {
+func GenCommonFileHeader(flavor string, serverID uint32, gSet gtid.Set, genGTID bool, ts int64) ([]*replication.BinlogEvent, []byte, error) {
+	if ts == 0 {
+		ts = time.Now().Unix()
+	}
 	var (
 		header = &replication.EventHeader{
-			Timestamp: uint32(time.Now().Unix()),
+			Timestamp: uint32(ts),
 			ServerID:  serverID,
 			Flags:     defaultHeaderFlags,
 		}
@@ -59,16 +62,18 @@ func GenCommonFileHeader(flavor string, serverID uint32, gSet gtid.Set) ([]*repl
 	}
 	latestPos += uint32(len(formatDescEv.RawData)) // update latestPos
 
-	switch flavor {
-	case gmysql.MySQLFlavor:
-		prevGTIDsEv, err = GenPreviousGTIDsEvent(header, latestPos, gSet)
-	case gmysql.MariaDBFlavor:
-		prevGTIDsEv, err = GenMariaDBGTIDListEvent(header, latestPos, gSet)
-	default:
-		return nil, nil, terror.ErrBinlogFlavorNotSupport.Generate(flavor)
-	}
-	if err != nil {
-		return nil, nil, terror.Annotate(err, "generate PreviousGTIDsEvent/MariadbGTIDListEvent")
+	if genGTID {
+		switch flavor {
+		case gmysql.MySQLFlavor:
+			prevGTIDsEv, err = GenPreviousGTIDsEvent(header, latestPos, gSet)
+		case gmysql.MariaDBFlavor:
+			prevGTIDsEv, err = GenMariaDBGTIDListEvent(header, latestPos, gSet)
+		default:
+			return nil, nil, terror.ErrBinlogFlavorNotSupport.Generate(flavor)
+		}
+		if err != nil {
+			return nil, nil, terror.Annotate(err, "generate PreviousGTIDsEvent/MariadbGTIDListEvent")
+		}
 	}
 
 	var buf bytes.Buffer
@@ -76,29 +81,38 @@ func GenCommonFileHeader(flavor string, serverID uint32, gSet gtid.Set) ([]*repl
 	if err != nil {
 		return nil, nil, terror.ErrBinlogWriteDataToBuffer.AnnotateDelegate(err, "write binlog file header % X", replication.BinLogFileHeader)
 	}
+
+	var events []*replication.BinlogEvent
 	_, err = buf.Write(formatDescEv.RawData)
 	if err != nil {
 		return nil, nil, terror.ErrBinlogWriteDataToBuffer.AnnotateDelegate(err, "write FormatDescriptionEvent % X", formatDescEv.RawData)
 	}
-	_, err = buf.Write(prevGTIDsEv.RawData)
-	if err != nil {
-		return nil, nil, terror.ErrBinlogWriteDataToBuffer.AnnotateDelegate(err, "write PreviousGTIDsEvent/MariadbGTIDListEvent % X", prevGTIDsEv.RawData)
+	events = append(events, formatDescEv)
+
+	if genGTID {
+		_, err = buf.Write(prevGTIDsEv.RawData)
+		if err != nil {
+			return nil, nil, terror.ErrBinlogWriteDataToBuffer.AnnotateDelegate(err, "write PreviousGTIDsEvent/MariadbGTIDListEvent % X", prevGTIDsEv.RawData)
+		}
+		events = append(events, prevGTIDsEv)
 	}
 
-	events := []*replication.BinlogEvent{formatDescEv, prevGTIDsEv}
 	return events, buf.Bytes(), nil
 }
 
 // GenCommonGTIDEvent generates a common GTID event.
-func GenCommonGTIDEvent(flavor string, serverID uint32, latestPos uint32, gSet gtid.Set) (*replication.BinlogEvent, error) {
+func GenCommonGTIDEvent(flavor string, serverID uint32, latestPos uint32, gSet gtid.Set, anonymous bool, ts int64) (*replication.BinlogEvent, error) {
 	singleGTID, err := verifySingleGTID(flavor, gSet)
 	if err != nil {
 		return nil, terror.Annotate(err, "verify single GTID in set")
 	}
 
+	if ts == 0 {
+		ts = time.Now().Unix()
+	}
 	var (
 		header = &replication.EventHeader{
-			Timestamp: uint32(time.Now().Unix()),
+			Timestamp: uint32(ts),
 			ServerID:  serverID,
 			Flags:     defaultHeaderFlags,
 		}
@@ -109,7 +123,11 @@ func GenCommonGTIDEvent(flavor string, serverID uint32, latestPos uint32, gSet g
 	case gmysql.MySQLFlavor:
 		uuidSet := singleGTID.(*gmysql.UUIDSet)
 		interval := uuidSet.Intervals[0]
-		gtidEv, err = GenGTIDEvent(header, latestPos, defaultGTIDFlags, uuidSet.SID.String(), interval.Start, defaultLastCommitted, defaultSequenceNumber)
+		if anonymous {
+			gtidEv, err = GenAnonymousGTIDEvent(header, latestPos, defaultGTIDFlags, defaultLastCommitted, defaultSequenceNumber)
+		} else {
+			gtidEv, err = GenGTIDEvent(header, latestPos, defaultGTIDFlags, uuidSet.SID.String(), interval.Start, defaultLastCommitted, defaultSequenceNumber)
+		}
 	case gmysql.MariaDBFlavor:
 		mariaGTID := singleGTID.(*gmysql.MariadbGTID)
 		if mariaGTID.ServerID != header.ServerID {

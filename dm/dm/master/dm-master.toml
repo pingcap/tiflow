@@ -1,8 +1,8 @@
 # Master Configuration.
 
 # log configuration
-log-level = "info"
 log-file = "dm-master.log"
+log-level = "info"
 
 # dm-master listen address
 master-addr = ":8261"
@@ -39,5 +39,8 @@ rpc-timeout = "30s"
 # refilled at rate `rpc-rate-limit` tokens per second. Note `rpc-rate-limit`
 # is float64 type, so remember to add a decimal point and one trailing 0 if its
 # literal value happens to be an integer.
-rpc-rate-limit = 10.0
 rpc-rate-burst = 40
+rpc-rate-limit = 10.0
+
+# openapi feature
+openapi = false

@@ -42,7 +42,7 @@ function run() {
 	#
 	# now, for pessimistic shard DDL, owner and non-owner will reach a stage often not at the same time,
 	# in order to simply the check and resume flow, only enable the failpoint for one DM-worker.
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/FlushCheckpointStage=return(2)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/FlushCheckpointStage=return(2)"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
@@ -108,10 +108,9 @@ function run() {
 	run_sql_file $cur/data/db1.increment2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment2.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	cp $cur/conf/diff_config.toml $WORK_DIR/diff_config.toml
-	printf "\n[[table-config.source-tables]]\ninstance-id = \"source-1\"\nschema = \"sharding2\"\ntable  = \"~t.*\"" >>$WORK_DIR/diff_config.toml
-	printf "\n[[table-config.source-tables]]\ninstance-id = \"source-2\"\nschema = \"sharding2\"\ntable  = \"~t.*\"" >>$WORK_DIR/diff_config.toml
+	sed "s/sharding1\"#pattern1/sharding[1-2]\"/g" $WORK_DIR/diff_config.toml | sed "s/sharding1\"#pattern2/sharding[1-2]\"/g" >$WORK_DIR/diff_config_2.toml
 	echo "check sync diff for the second increment replication"
-	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml
+	check_sync_diff $WORK_DIR $WORK_DIR/diff_config_2.toml
 
 	old_checksum=$(checksum)
 
@@ -119,10 +118,10 @@ function run() {
 	run_sql_file $cur/data/db1.increment3.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment3.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	cp $cur/conf/diff_config.toml $WORK_DIR/diff_config.toml
-	printf "\n[[table-config.source-tables]]\ninstance-id = \"source-1\"\nschema = \"sharding2\"\ntable  = \"~t.*\"" >>$WORK_DIR/diff_config.toml
-	sed -i "s/^# range-placeholder/range = \"uid < 70000\"/g" $WORK_DIR/diff_config.toml
+	sed "s/sharding1\"#pattern1/sharding[1-2]\"/g" $WORK_DIR/diff_config.toml >$WORK_DIR/diff_config_2.toml
+	sed -i "s/^# range-placeholder/range = \"uid < 70000\"/g" $WORK_DIR/diff_config_2.toml
 	echo "check sync diff for the third increment replication"
-	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml
+	check_sync_diff $WORK_DIR $WORK_DIR/diff_config_2.toml
 
 	new_checksum=$(checksum)
 	echo "checksum before drop/truncate: $old_checksum, checksum after drop/truncate: $new_checksum"

@@ -25,47 +25,12 @@ var (
 		Help:      "the number of events consumed by the sorter",
 	}, []string{"capture", "changefeed", "type"})
 
-	sorterEventCount = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "ticdc",
-		Subsystem: "sorter",
-		Name:      "event_count",
-		Help:      "the number of events output by the sorter",
-	}, []string{"capture", "changefeed", "type"})
-
-	sorterResolvedTsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: "ticdc",
-		Subsystem: "sorter",
-		Name:      "resolved_ts_gauge",
-		Help:      "the resolved ts of the sorter",
-	}, []string{"capture", "changefeed"})
-
 	sorterMergerStartTsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
 		Name:      "merger_start_ts_gauge",
 		Help:      "the start TS of each merge in the sorter",
 	}, []string{"capture", "changefeed"})
-
-	sorterInMemoryDataSizeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: "ticdc",
-		Subsystem: "sorter",
-		Name:      "in_memory_data_size_gauge",
-		Help:      "the amount of pending data stored in-memory by the sorter",
-	}, []string{"capture"})
-
-	sorterOnDiskDataSizeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: "ticdc",
-		Subsystem: "sorter",
-		Name:      "on_disk_data_size_gauge",
-		Help:      "the amount of pending data stored on-disk by the sorter",
-	}, []string{"capture"})
-
-	sorterOpenFileCountGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: "ticdc",
-		Subsystem: "sorter",
-		Name:      "open_file_count_gauge",
-		Help:      "the number of open file descriptors held by the sorter",
-	}, []string{"capture"})
 
 	sorterFlushCountHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
@@ -87,12 +52,7 @@ var (
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(sorterConsumeCount)
-	registry.MustRegister(sorterEventCount)
-	registry.MustRegister(sorterResolvedTsGauge)
 	registry.MustRegister(sorterMergerStartTsGauge)
-	registry.MustRegister(sorterInMemoryDataSizeGauge)
-	registry.MustRegister(sorterOnDiskDataSizeGauge)
-	registry.MustRegister(sorterOpenFileCountGauge)
 	registry.MustRegister(sorterFlushCountHistogram)
 	registry.MustRegister(sorterMergeCountHistogram)
 }

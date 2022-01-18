@@ -15,7 +15,7 @@ function get_mysql_ssl_data_path() {
 	echo "$mysql_data_path"
 }
 
-function run_tidb_with_tls() {
+function setup_tidb_with_tls() {
 	echo "run a new tidb server with tls"
 	cat - >"$WORK_DIR/tidb-tls-config.toml" <<EOF
 
@@ -25,7 +25,7 @@ socket = "/tmp/tidb-tls.sock"
 status-port = 10090
 
 [security]
-# set the path for certificates. Empty string means disabling secure connectoins.
+# set the path for certificates. Empty string means disabling secure connections.
 ssl-ca = "$cur/conf/ca.pem"
 ssl-cert = "$cur/conf/dm.pem"
 ssl-key = "$cur/conf/dm.key"
@@ -61,7 +61,7 @@ function setup_mysql_tls() {
 	echo "mysql_ssl_setup at=$mysql_data_path"
 
 	# NOTE we can use ` mysql_ssl_rsa_setup --datadir "$mysql_data_path"` to create a new cert in datadir
-	# in ci, mysql in other contianer, so we can't use the mysql_ssl_rsa_setup
+	# in ci, mysql in other container, so we can't use the mysql_ssl_rsa_setup
 	# only mysql 8.0 support use `ALTER INSTANCE RELOAD TLS` to reload cert
 	# when use mysql 5.7 we need to restart mysql-server manually if your local server do not enable ssl
 
@@ -73,13 +73,149 @@ function setup_mysql_tls() {
 	echo "add dm_tls_test user done $mysql_data_path"
 }
 
-function test_worker_ha_when_enable_source_tls() {
-	cleanup_data tls
+function prepare_test() {
 	cleanup_process
 
+	# clean test dir
+	rm -rf $WORK_DIR
+	mkdir $WORK_DIR
+
+	# kill the old tidb with tls
+	pkill -hup tidb-server 2>/dev/null || true
+	wait_process_exit tidb-server
+
 	setup_mysql_tls
-	run_tidb_with_tls
+	setup_tidb_with_tls
 	prepare_data
+}
+
+function test_worker_handle_multi_tls_tasks() {
+	prepare_test
+
+	cp $cur/conf/dm-master1.toml $WORK_DIR/
+	cp $cur/conf/dm-master2.toml $WORK_DIR/
+	cp $cur/conf/dm-master3.toml $WORK_DIR/
+	cp $cur/conf/dm-worker1.toml $WORK_DIR/
+	cp $cur/conf/dm-worker2.toml $WORK_DIR/
+	cp $cur/conf/dm-task.yaml $WORK_DIR/
+	cp $cur/conf/dm-task-2.yaml $WORK_DIR/
+
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master1.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master2.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master3.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-worker1.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-worker2.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task.yaml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task-2.yaml
+
+	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $WORK_DIR/dm-master1.toml
+	run_dm_master $WORK_DIR/master2 $MASTER_PORT2 $WORK_DIR/dm-master2.toml
+	run_dm_master $WORK_DIR/master3 $MASTER_PORT3 $WORK_DIR/dm-master3.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT2 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT3 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+
+	# operate mysql config to worker
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"operate-source create $WORK_DIR/source1.yaml" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
+
+	echo "start task and check stage"
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta=true"
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"start-task $WORK_DIR/dm-task-2.yaml --remove-meta=true"
+
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"query-status test2" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
+
+	echo "check data"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config-2.toml
+
+	echo "============================== test_worker_handle_multi_tls_tasks success =================================="
+}
+
+function test_worker_download_certs_from_master() {
+	prepare_test
+
+	cp $cur/conf/dm-master1.toml $WORK_DIR/
+	cp $cur/conf/dm-master2.toml $WORK_DIR/
+	cp $cur/conf/dm-master3.toml $WORK_DIR/
+	cp $cur/conf/dm-worker1.toml $WORK_DIR/
+	cp $cur/conf/dm-worker2.toml $WORK_DIR/
+	cp $cur/conf/dm-task.yaml $WORK_DIR/
+
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master1.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master2.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master3.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-worker1.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-worker2.toml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task.yaml
+
+	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $WORK_DIR/dm-master1.toml
+	run_dm_master $WORK_DIR/master2 $MASTER_PORT2 $WORK_DIR/dm-master2.toml
+	run_dm_master $WORK_DIR/master3 $MASTER_PORT3 $WORK_DIR/dm-master3.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT2 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT3 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+
+	# add failpoint to make loader always fail
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/lightningAlwaysErr=return()"
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+
+	# operate mysql config to worker
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"operate-source create $WORK_DIR/source1.yaml" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
+
+	echo "start task and check stage"
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta=true"
+
+	# task should be paused.
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"stage\": \"Paused\"" 1
+
+	# change task-ca.pem name to test wheather dm-worker will dump certs from dm-master
+	mv "$cur/conf/task-ca.pem" "$cur/conf/task-ca.pem.bak"
+
+	# kill dm-worker 1 and clean the failpoint
+	export GO_FAILPOINTS=''
+	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
+
+	# dm-worker will dump task-ca.pem from dm-master and save it to dm-worker-dir/ca.pem
+	# let's try use this file to connect dm-master
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" /tmp/dm_test/tls/worker1/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
+
+	echo "check data"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	mv "$cur/conf/task-ca.pem.bak" "$cur/conf/task-ca.pem"
+	echo "============================== test_worker_download_certs_from_master success =================================="
+}
+
+function test_worker_ha_when_enable_source_tls() {
+	prepare_test
 
 	cp $cur/conf/dm-master1.toml $WORK_DIR/
 	cp $cur/conf/dm-master2.toml $WORK_DIR/
@@ -114,12 +250,13 @@ function test_worker_ha_when_enable_source_tls() {
 	#  start task
 	echo "start task and check stage"
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
-		"start-task $WORK_DIR/dm-task.yaml" \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta=true" \
 		"\"result\": true" 2
 
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
-		"\"result\": true" 2
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
 
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -155,6 +292,7 @@ function test_worker_ha_when_enable_source_tls() {
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
 		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1 \
 		"worker2" 1
 
 	# incr data
@@ -165,15 +303,11 @@ function test_worker_ha_when_enable_source_tls() {
 	# resume ca.pem
 	mv "$mysql_data_path/ca.pem.bak" "$mysql_data_path/ca.pem"
 
+	echo "============================== test_worker_ha_when_enable_source_tls success =================================="
 }
 
 function test_master_ha_when_enable_tidb_tls() {
-	cleanup_data tls
-	cleanup_process
-
-	setup_mysql_tls
-	run_tidb_with_tls
-	prepare_data
+	prepare_test
 
 	cp $cur/conf/dm-master1.toml $WORK_DIR/
 	cp $cur/conf/dm-master2.toml $WORK_DIR/
@@ -210,12 +344,13 @@ function test_master_ha_when_enable_tidb_tls() {
 
 	echo "start task and check stage"
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
-		"start-task $WORK_DIR/dm-task.yaml" \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta=true" \
 		"\"result\": true" 2
 
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
-		"\"result\": true" 2
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
 
 	echo "test http and api interface"
 	check_rpc_alive $cur/../bin/check_master_online_http 127.0.0.1:$MASTER_PORT1 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
@@ -238,9 +373,13 @@ function test_master_ha_when_enable_tidb_tls() {
 
 	# https://github.com/pingcap/dm/issues/1458
 	check_log_not_contains $WORK_DIR/master1/log/dm-master.log "remote error: tls: bad certificate"
+
+	echo "============================== test_master_ha_when_enable_tidb_tls success =================================="
 }
 
 function run() {
+	test_worker_handle_multi_tls_tasks
+	test_worker_download_certs_from_master
 	test_worker_ha_when_enable_source_tls
 	test_master_ha_when_enable_tidb_tls
 }
@@ -248,7 +387,7 @@ function run() {
 cleanup_data tls
 cleanup_process
 
-run $*
+run
 
 # kill the tidb with tls
 pkill -hup tidb-server 2>/dev/null || true

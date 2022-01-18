@@ -107,14 +107,6 @@ function run_dm_components_and_create_sources() {
 		"bound" 2
 }
 
-function start_relay() {
-	echo "-------start_relay--------"
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s mysql-replica-02 worker2" \
-		"\"result\": true" 1
-}
-
 function gen_full_data() {
 	echo "-------gen_full_data--------"
 
@@ -198,7 +190,7 @@ function clean_task() {
 		"stop-task task_pessimistic" \
 		"\result\": true" 3
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"stop-relay -s mysql-replica-02 worker2" \
+		"stop-relay -s mysql-replica-02" \
 		"\result\": true" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source stop mysql-replica-01" \
@@ -222,7 +214,6 @@ function test_relay() {
 	setup_replica
 	gen_full_data
 	run_dm_components_and_create_sources
-	start_relay
 	start_task
 	gen_incr_data
 	verify_result
@@ -257,7 +248,7 @@ function test_binlog_filename_change_when_enable_gtid() {
 	# mysql8 new master's binlog file still is mysql-bin.000001
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status task_pessimistic " \
-		"mysql-bin.000001" 4 # source-1 have match 2, source-2 match 2
+		"mysql-bin.000001" 5 # source-1 have match 2, source-2 match 3 (relay 2 + task's masterBinlog 1)
 
 	docker-compose -f $CUR/docker-compose.yml unpause mysql8_master
 	clean_task
@@ -271,7 +262,6 @@ function test_binlog_filename_change_when_enable_relay_and_gtid() {
 	setup_replica
 	gen_full_data
 	run_dm_components_and_create_sources
-	start_relay
 	start_task
 
 	# flush mysql8 master binlog files -> mysql-bin.000004

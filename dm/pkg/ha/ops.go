@@ -17,9 +17,28 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 )
+
+// PutRelayStageSourceBound puts the following data in one txn.
+// - relay stage.
+// - source bound relationship.
+func PutRelayStageSourceBound(cli *clientv3.Client, stage Stage, bound SourceBound) (int64, error) {
+	ops1, err := putRelayStageOp(stage)
+	if err != nil {
+		return 0, err
+	}
+	op2, err := putSourceBoundOp(bound)
+	if err != nil {
+		return 0, err
+	}
+	ops := make([]clientv3.Op, 0, len(ops1)+len(op2))
+	ops = append(ops, ops1...)
+	ops = append(ops, op2...)
+	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	return rev, err
+}
 
 // PutRelayStageRelayConfigSourceBound puts the following data in one txn.
 // - relay stage.

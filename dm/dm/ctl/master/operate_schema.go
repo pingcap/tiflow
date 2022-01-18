@@ -20,8 +20,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/pb"
 )
 
 // NewOperateSchemaCmd creates a OperateSchema command.
@@ -118,11 +118,22 @@ func operateSchemaCmd(cmd *cobra.Command, _ []string) error {
 	if sync && op != pb.SchemaOp_SetSchema {
 		return errors.New("--sync flag is only used to set schema")
 	}
-	return sendOperateSchemaRequest(op, taskName, sources, database, table, string(schemaContent), flush, sync)
+	request := &pb.OperateSchemaRequest{
+		Op:         op,
+		Task:       taskName,
+		Sources:    sources,
+		Database:   database,
+		Table:      table,
+		Schema:     string(schemaContent),
+		Flush:      flush,
+		Sync:       sync,
+		FromSource: false,
+		FromTarget: false,
+	}
+	return sendOperateSchemaRequest(request)
 }
 
-func sendOperateSchemaRequest(op pb.SchemaOp, taskName string, sources []string,
-	database, table, schemaContent string, flush, sync bool) error {
+func sendOperateSchemaRequest(request *pb.OperateSchemaRequest) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -130,16 +141,7 @@ func sendOperateSchemaRequest(op pb.SchemaOp, taskName string, sources []string,
 	err := common.SendRequest(
 		ctx,
 		"OperateSchema",
-		&pb.OperateSchemaRequest{
-			Op:       op,
-			Task:     taskName,
-			Sources:  sources,
-			Database: database,
-			Table:    table,
-			Schema:   schemaContent,
-			Flush:    flush,
-			Sync:     sync,
-		},
+		request,
 		&resp,
 	)
 	if err != nil {

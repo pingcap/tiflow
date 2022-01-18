@@ -31,9 +31,9 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // Online DDL Scheme.
@@ -50,14 +50,21 @@ const (
 	tidbTxnOptimistic = "optimistic"
 )
 
+// collation_compatible.
+const (
+	LooseCollationCompatible  = "loose"
+	StrictCollationCompatible = "strict"
+)
+
 // default config item values.
 var (
 	// TaskConfig.
-	defaultMetaSchema      = "dm_meta"
-	defaultEnableHeartbeat = false
-	defaultIsSharding      = false
-	defaultUpdateInterval  = 1
-	defaultReportInterval  = 10
+	defaultMetaSchema          = "dm_meta"
+	defaultEnableHeartbeat     = false
+	defaultIsSharding          = false
+	defaultUpdateInterval      = 1
+	defaultReportInterval      = 10
+	defaultCollationCompatible = "loose"
 	// MydumperConfig.
 	defaultMydumperPath  = "./bin/mydumper"
 	defaultThreads       = 4
@@ -71,8 +78,6 @@ var (
 	defaultBatch                   = 100
 	defaultQueueSize               = 1024 // do not give too large default value to avoid OOM
 	defaultCheckpointFlushInterval = 30   // in seconds
-	// force use UTC time_zone.
-	defaultTimeZone = "+00:00"
 
 	// TargetDBConfig.
 	defaultSessionCfg = []struct {
@@ -296,13 +301,16 @@ type TaskConfig struct {
 	// deprecated
 	HeartbeatUpdateInterval int `yaml:"heartbeat-update-interval" toml:"heartbeat-update-interval" json:"heartbeat-update-interval"`
 	// deprecated
-	HeartbeatReportInterval int `yaml:"heartbeat-report-interval" toml:"heartbeat-report-interval" json:"heartbeat-report-interval"`
-	// deprecated
-	Timezone string `yaml:"timezone" toml:"timezone" json:"timezone"`
+	HeartbeatReportInterval int    `yaml:"heartbeat-report-interval" toml:"heartbeat-report-interval" json:"heartbeat-report-interval"`
+	Timezone                string `yaml:"timezone" toml:"timezone" json:"timezone"`
 
 	// handle schema/table name mode, and only for schema/table name
 	// if case insensitive, we would convert schema/table name to lower case
 	CaseSensitive bool `yaml:"case-sensitive" toml:"case-sensitive" json:"case-sensitive"`
+
+	// default "loose" handle create sql by original sql, will not add default collation as upstream
+	// "strict" will add default collation as upstream, and downstream will occur error when downstream don't support
+	CollationCompatible string `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
 
 	TargetDB *DBConfig `yaml:"target-database" toml:"target-database" json:"target-database"`
 
@@ -338,6 +346,11 @@ type TaskConfig struct {
 
 	// extra config when target db is TiDB
 	TiDB *TiDBExtraConfig `yaml:"tidb" toml:"tidb" json:"tidb"`
+
+	// task experimental configs
+	Experimental struct {
+		AsyncCheckpointFlush bool `yaml:"async-checkpoint-flush" toml:"async-checkpoint-flush" json:"async-checkpoint-flush"`
+	} `yaml:"experimental" toml:"experimental" json:"experimental"`
 }
 
 // NewTaskConfig creates a TaskConfig.
@@ -360,6 +373,7 @@ func NewTaskConfig() *TaskConfig {
 		Loaders:                 make(map[string]*LoaderConfig),
 		Syncers:                 make(map[string]*SyncerConfig),
 		CleanDumpFile:           true,
+		CollationCompatible:     defaultCollationCompatible,
 	}
 	cfg.FlagSet = flag.NewFlagSet("task", flag.ContinueOnError)
 	return cfg
@@ -440,6 +454,12 @@ func (c *TaskConfig) adjust() error {
 		return terror.ErrConfigShardModeNotSupport.Generate(c.ShardMode)
 	} else if c.ShardMode == "" && c.IsSharding {
 		c.ShardMode = ShardPessimistic // use the pessimistic mode as default for back compatible.
+	}
+
+	if c.CollationCompatible != "" && c.CollationCompatible != LooseCollationCompatible && c.CollationCompatible != StrictCollationCompatible {
+		return terror.ErrConfigCollationCompatibleNotSupport.Generate(c.CollationCompatible)
+	} else if c.CollationCompatible == "" {
+		c.CollationCompatible = LooseCollationCompatible
 	}
 
 	for _, item := range c.IgnoreCheckingItems {
@@ -696,9 +716,11 @@ func (c *TaskConfig) adjust() error {
 		sort.Strings(unusedConfigs)
 		return terror.ErrConfigGlobalConfigsUnused.Generate(unusedConfigs)
 	}
+	// we postpone default time_zone init in each unit so we won't change the config value in task/sub_task config
 	if c.Timezone != "" {
-		log.L().Warn("`timezone` is deprecated and useless anymore, please remove it.")
-		c.Timezone = ""
+		if _, err := utils.ParseTimeZone(c.Timezone); err != nil {
+			return err
+		}
 	}
 	if c.RemoveMeta {
 		log.L().Warn("`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead")
@@ -760,29 +782,25 @@ func AdjustTargetDBSessionCfg(dbConfig *DBConfig, version *semver.Version) {
 			lowerMap[cfg.key] = cfg.val
 		}
 	}
-	// force set time zone to UTC
-	if tz, ok := lowerMap["time_zone"]; ok {
-		log.L().Warn("session variable 'time_zone' is overwritten with UTC timezone.",
-			zap.String("time_zone", tz))
-	}
-	lowerMap["time_zone"] = defaultTimeZone
 	dbConfig.Session = lowerMap
 }
 
-// AdjustTargetDBTimeZone force adjust session `time_zone` to UTC.
-func AdjustTargetDBTimeZone(config *DBConfig) {
-	for k := range config.Session {
+// AdjustDBTimeZone force adjust session `time_zone`.
+func AdjustDBTimeZone(config *DBConfig, timeZone string) {
+	for k, v := range config.Session {
 		if strings.ToLower(k) == "time_zone" {
-			log.L().Warn("session variable 'time_zone' is overwritten by default UTC timezone.",
-				zap.String("time_zone", config.Session[k]))
-			config.Session[k] = defaultTimeZone
+			if v != timeZone {
+				log.L().Warn("session variable 'time_zone' is overwritten by task config's timezone",
+					zap.String("time_zone", config.Session[k]))
+				config.Session[k] = timeZone
+			}
 			return
 		}
 	}
 	if config.Session == nil {
 		config.Session = make(map[string]string, 1)
 	}
-	config.Session["time_zone"] = defaultTimeZone
+	config.Session["time_zone"] = timeZone
 }
 
 var defaultParser = parser.New()
@@ -979,11 +997,6 @@ func NewTaskConfigForDowngrade(taskConfig *TaskConfig) *TaskConfigForDowngrade {
 // If any default value for new config item is not empty(0 or false or nil),
 // we should change it to empty.
 func (c *TaskConfigForDowngrade) omitDefaultVals() {
-	if len(c.TargetDB.Session) > 0 {
-		if timeZone, ok := c.TargetDB.Session["time_zone"]; ok && timeZone == defaultTimeZone {
-			delete(c.TargetDB.Session, "time_zone")
-		}
-	}
 	if len(c.ShadowTableRules) == 1 && c.ShadowTableRules[0] == DefaultShadowTableRules {
 		c.ShadowTableRules = nil
 	}

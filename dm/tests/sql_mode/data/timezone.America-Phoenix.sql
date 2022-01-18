@@ -6,9 +6,9 @@ set @@session.time_zone = "America/Phoenix";
 insert into
     `sql_mode`.`timezone`(`id`, `a`)
 values
-    (5, '1990-04-15 02:30:12');
+    (5, '2001-04-15 02:30:12');
 
 insert into
     `sql_mode`.`timezone`(`id`, `a`)
 values
-    (6, '1990-04-15 03:30:12');
+    (6, '2001-04-15 03:30:12');

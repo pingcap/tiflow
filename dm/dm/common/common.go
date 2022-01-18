@@ -19,7 +19,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var (
@@ -88,17 +88,29 @@ var (
 	// tb2:                       +a +b +c
 	// tb3:          +a +b +c
 	ShardDDLOptimismDroppedColumnsKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/shardddl-optimism/dropped-columns/")
+
+	// OpenAPITaskTemplateKeyAdapter is used to store the openapi task-config-template (openapi.Task), now it's only used for WebUI.
+	// openapi.Task is a struct that can be converted to config.StubTaskConfig so if any field of openapi.Task updated
+	// user should use ha.PutOpenAPITaskTemplate(key, openapi.Task,overwrite) to force update the content in etcd.
+	// k/v: Encode(task-name) -> openapi.Task.
+	// task config template is used to generate task config before user create a real task by openapi. user can modify eg:
+	// import from running tasks/create/update/delete the template and those changes will not affect the running tasks.
+	OpenAPITaskTemplateKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/openapi-task-template/")
+	// TaskCliArgsKeyAdapter is used to store the command line arguments of task. They are different from the task
+	// config because the command line arguments may be expected to take effect only once when failover.
+	// kv: Encode(task-name, source-id) -> TaskCliArgs.
+	TaskCliArgsKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/task-cli-args/")
 )
 
 func keyAdapterKeysLen(s KeyAdapter) int {
 	switch s {
 	case WorkerRegisterKeyAdapter, UpstreamConfigKeyAdapter, UpstreamBoundWorkerKeyAdapter,
 		WorkerKeepAliveKeyAdapter, StageRelayKeyAdapter,
-		UpstreamLastBoundWorkerKeyAdapter, UpstreamRelayWorkerKeyAdapter:
+		UpstreamLastBoundWorkerKeyAdapter, UpstreamRelayWorkerKeyAdapter, OpenAPITaskTemplateKeyAdapter:
 		return 1
 	case UpstreamSubTaskKeyAdapter, StageSubTaskKeyAdapter,
 		ShardDDLPessimismInfoKeyAdapter, ShardDDLPessimismOperationKeyAdapter,
-		ShardDDLOptimismSourceTablesKeyAdapter, LoadTaskKeyAdapter:
+		ShardDDLOptimismSourceTablesKeyAdapter, LoadTaskKeyAdapter, TaskCliArgsKeyAdapter:
 		return 2
 	case ShardDDLOptimismInitSchemaKeyAdapter:
 		return 3
@@ -192,10 +204,10 @@ func (s keyHexEncoderDecoder) Path() string {
 
 // used in upgrade.
 var (
-	// UpstreamConfigKeyAdapter stores all config of which MySQL-task has not stopped.
+	// UpstreamConfigKeyAdapterV1 stores all config of which MySQL-task has not stopped.
 	// k/v: Encode(source-id) -> config.
 	UpstreamConfigKeyAdapterV1 KeyAdapter = keyEncoderDecoder("/dm-master/upstream/config/")
-	// StageRelayKeyAdapter is used to store the running stage of the relay.
+	// StageRelayKeyAdapterV1 is used to store the running stage of the relay.
 	// k/v: Encode(source-id) -> the running stage of the relay.
 	StageRelayKeyAdapterV1 KeyAdapter = keyEncoderDecoder("/dm-master/stage/relay/")
 )

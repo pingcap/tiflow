@@ -65,7 +65,7 @@ function test_session_config() {
 
 function test_query_timeout() {
 	echo "[$(date)] <<<<<< start test_query_timeout >>>>>>"
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/BlockSyncStatus=return(\"5s\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/BlockSyncStatus=return(\"5s\")"
 
 	cp $cur/conf/dm-master.toml $WORK_DIR/dm-master.toml
 	sed -i 's/rpc-timeout = "30s"/rpc-timeout = "3s"/g' $WORK_DIR/dm-master.toml
@@ -86,6 +86,7 @@ function test_query_timeout() {
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+	sed -i "s/enable-relay: true/enable-relay: false/g" $WORK_DIR/source1.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -160,7 +161,7 @@ function test_stop_task_before_checkpoint() {
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	check_metric $MASTER_PORT 'start_leader_counter' 3 0 2
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/loader/WaitLoaderStopAfterInitCheckpoint=return(5)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/WaitLoaderStopAfterInitCheckpoint=return(5)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -187,7 +188,7 @@ function test_stop_task_before_checkpoint() {
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/loader/WaitLoaderStopBeforeLoadCheckpoint=return(5)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/WaitLoaderStopBeforeLoadCheckpoint=return(5)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
@@ -234,10 +235,10 @@ function test_fail_job_between_event() {
 
 	# worker1 will be bound to source1 and fail when see the second row change in an event
 	inject_points=(
-		"github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
-		"github.com/pingcap/ticdc/dm/syncer/countJobFromOneEvent=return()"
-		"github.com/pingcap/ticdc/dm/syncer/flushFirstJob=return()"
-		"github.com/pingcap/ticdc/dm/syncer/failSecondJob=return()"
+		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/syncer/countJobFromOneEvent=return()"
+		"github.com/pingcap/tiflow/dm/syncer/flushFirstJob=return()"
+		"github.com/pingcap/tiflow/dm/syncer/failSecondJob=return()"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -246,10 +247,10 @@ function test_fail_job_between_event() {
 
 	# worker2 will be bound to source2 and fail when see the second event in a GTID
 	inject_points=(
-		"github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
-		"github.com/pingcap/ticdc/dm/syncer/countJobFromOneGTID=return()"
-		"github.com/pingcap/ticdc/dm/syncer/flushFirstJob=return()"
-		"github.com/pingcap/ticdc/dm/syncer/failSecondJob=return()"
+		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/syncer/countJobFromOneGTID=return()"
+		"github.com/pingcap/tiflow/dm/syncer/flushFirstJob=return()"
+		"github.com/pingcap/tiflow/dm/syncer/failSecondJob=return()"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -330,10 +331,16 @@ function run() {
 	test_stop_task_before_checkpoint
 
 	inject_points=(
-		"github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
-		"github.com/pingcap/ticdc/dm/relay/NewUpstreamServer=return(true)"
+		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/relay/NewUpstreamServer=return(true)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
+
+	# manually create target table with two extra field
+	run_sql_tidb "drop database if exists all_mode;"
+	run_sql_tidb "create database all_mode;"
+	run_sql_tidb "drop table if exists all_mode.no_diff;"
+	run_sql_tidb "create table all_mode.no_diff(id int NOT NULL PRIMARY KEY, dt datetime NOT NULL DEFAULT CURRENT_TIMESTAMP, ts timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP);"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
@@ -355,10 +362,6 @@ function run() {
 	# make sure source1 is bound to worker1
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
-
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
@@ -374,9 +377,33 @@ function run() {
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	# check create view(should be skipped by func `skipSQLByPattern`) will not stop sync task
+	run_sql_source1 "create view all_mode.t1_v as select * from all_mode.t1 where id=0;"
+	sleep 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s $SOURCE_ID1" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1 \
+		"\"stage\": \"Running\"" 2
+
+	run_sql_source1 "SHOW SLAVE HOSTS;"
+	check_contains 'Slave_UUID'
+
+	run_sql_tidb "set time_zone = '+04:00';SELECT count(*) from all_mode.no_diff where dt = ts;"
+	check_contains "count(*): 3"
+
 	# check default session config
 	check_log_contain_with_retry '\\"tidb_txn_mode\\":\\"optimistic\\"' $WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry '\\"tidb_txn_mode\\":\\"optimistic\\"' $WORK_DIR/worker2/log/dm-worker.log
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"pause-task $ILLEGAL_CHAR_NAME" \
+		"\"result\": true" 3
+	echo 'create table all_mode.no_diff(id int NOT NULL PRIMARY KEY);' >${WORK_DIR}/schema.sql
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-schema set -s mysql-replica-01 $ILLEGAL_CHAR_NAME -d all_mode -t no_diff ${WORK_DIR}/schema.sql" \
+		"\"result\": true" 2
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" "resume-task $ILLEGAL_CHAR_NAME" "\"result\": true" 3
 
 	# restart dm-worker1
 	pkill -hup -f dm-worker1.toml 2>/dev/null || true
@@ -427,6 +454,10 @@ function run() {
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	# check compatibility after incremental sync
+	run_sql_tidb "set time_zone = '+04:00';SELECT count(*) from all_mode.no_diff where dt = ts;"
+	check_contains "count(*): 4"
+
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-relay -s mysql-replica-01" \
 		"\"result\": true" 2
@@ -473,7 +504,6 @@ function run() {
 	check_log_not_contains $WORK_DIR/worker2/log/dm-worker.log "Error .* Table .* doesn't exist"
 
 	# test Db not exists should be reported
-
 	run_sql_tidb "drop database all_mode"
 	run_sql_source1 "create table all_mode.db_error (c int primary key);"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

@@ -22,17 +22,17 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
-	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
-	"github.com/pingcap/ticdc/cdc/sink/producer"
-	"github.com/pingcap/ticdc/cdc/sink/producer/kafka"
-	"github.com/pingcap/ticdc/cdc/sink/producer/pulsar"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/notify"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sink/producer"
+	"github.com/pingcap/tiflow/cdc/sink/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sink/producer/pulsar"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/notify"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -42,37 +42,38 @@ type mqEvent struct {
 	resolvedTs uint64
 }
 
-const defaultPartitionInputChSize = 12800
+const (
+	defaultPartitionInputChSize = 12800
+	// -1 means broadcast to all partitions, it's the default for the default open protocol.
+	defaultDDLDispatchPartition = -1
+)
 
 type mqSink struct {
 	mqProducer     producer.Producer
 	dispatcher     dispatcher.Dispatcher
 	encoderBuilder codec.EncoderBuilder
 	filter         *filter.Filter
-	protocol       codec.Protocol
+	protocol       config.Protocol
 
 	partitionNum        int32
 	partitionInput      []chan mqEvent
 	partitionResolvedTs []uint64
-
-	checkpointTs     uint64
-	resolvedNotifier *notify.Notifier
-	resolvedReceiver *notify.Receiver
+	tableCheckpointTs   map[model.TableID]uint64
+	resolvedNotifier    *notify.Notifier
+	resolvedReceiver    *notify.Receiver
 
 	statistics *Statistics
 }
 
 func newMqSink(
 	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
-	filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error,
+	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error,
 ) (*mqSink, error) {
-	var protocol codec.Protocol
-	protocol.FromString(config.Sink.Protocol)
-	if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
-		log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
+	var protocol config.Protocol
+	err := protocol.FromString(replicaConfig.Sink.Protocol)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-
 	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(protocol, credential, opts)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
@@ -83,7 +84,7 @@ func newMqSink(
 	}
 
 	partitionNum := mqProducer.GetPartitionNum()
-	d, err := dispatcher.NewDispatcher(config, partitionNum)
+	d, err := dispatcher.NewDispatcher(replicaConfig, partitionNum)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -109,6 +110,7 @@ func newMqSink(
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
+		tableCheckpointTs:   make(map[model.TableID]uint64),
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    resolvedReceiver,
 
@@ -127,6 +129,17 @@ func newMqSink(
 		}
 	}()
 	return s, nil
+}
+
+// TryEmitRowChangedEvents just calls EmitRowChangedEvents internally,
+// it still blocking in current implementation.
+// TODO(dongmen): We should make this method truly non-blocking after we remove buffer sink
+func (k *mqSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	err := k.EmitRowChangedEvents(ctx, rows...)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -151,9 +164,9 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	return nil
 }
 
-func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
-	if resolvedTs <= k.checkpointTs {
-		return k.checkpointTs, nil
+func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
+	if checkpointTs, ok := k.tableCheckpointTs[tableID]; ok && resolvedTs <= checkpointTs {
+		return checkpointTs, nil
 	}
 
 	for i := 0; i < int(k.partitionNum); i++ {
@@ -186,9 +199,9 @@ flushLoop:
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	k.checkpointTs = resolvedTs
+	k.tableCheckpointTs[tableID] = resolvedTs
 	k.statistics.PrintStatus(ctx)
-	return k.checkpointTs, nil
+	return resolvedTs, nil
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -230,16 +243,20 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	}
 
-	k.statistics.AddDDLCount()
-	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
-	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
-	return errors.Trace(err)
-}
+	var partition int32 = defaultDDLDispatchPartition
+	// for Canal-JSON / Canal-PB, send to partition 0.
+	if _, ok := encoder.(*codec.CanalFlatEventBatchEncoder); ok {
+		partition = 0
+	}
+	if _, ok := encoder.(*codec.CanalEventBatchEncoder); ok {
+		partition = 0
+	}
 
-// Initialize registers Avro schemas for all tables
-func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	// No longer need it for now
-	return nil
+	k.statistics.AddDDLCount()
+	log.Debug("emit ddl event", zap.String("query", ddl.Query),
+		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition))
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
+	return errors.Trace(err)
 }
 
 func (k *mqSink) Close(ctx context.Context) error {
@@ -247,7 +264,7 @@ func (k *mqSink) Close(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
-func (k *mqSink) Barrier(cxt context.Context) error {
+func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {
 	// Barrier does nothing because FlushRowChangedEvents in mq sink has flushed
 	// all buffered events by force.
 	return nil
@@ -279,8 +296,8 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	flushToProducer := func(op codec.EncoderResult) error {
 		return k.statistics.RecordBatchExecution(func() (int, error) {
 			messages := encoder.Build()
-			thisBatchSize := len(messages)
-			if thisBatchSize == 0 {
+			thisBatchSize := 0
+			if len(messages) == 0 {
 				return 0, nil
 			}
 
@@ -289,6 +306,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 				if err != nil {
 					return 0, err
 				}
+				thisBatchSize += msg.GetRowsCount()
 			}
 
 			if op == codec.EncoderNeedSyncWrite {
@@ -372,24 +390,28 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	scheme := strings.ToLower(sinkURI.Scheme)
-	if scheme != "kafka" && scheme != "kafka+ssl" {
-		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("can't create MQ sink with unsupported scheme: %s", scheme)
-	}
-
-	config := kafka.NewConfig()
-	if err := config.Initialize(sinkURI, replicaConfig, opts); err != nil {
+	producerConfig := kafka.NewConfig()
+	if err := kafka.CompleteConfigsAndOpts(sinkURI, producerConfig, replicaConfig, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+	// NOTICE: Please check after the completion, as we may get the configuration from the sinkURI.
+	err := replicaConfig.Validate()
+	if err != nil {
+		return nil, err
 	}
 
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
+	if topic == "" {
+		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
+	}
+
+	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := newMqSink(ctx, config.Credential, producer, filter, replicaConfig, opts, errCh)
+	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -401,7 +423,7 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	s := sinkURI.Query().Get("protocol")
+	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
 	}
@@ -415,8 +437,12 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	if s != "" {
 		opts["max-batch-size"] = s
 	}
-	// For now, it's a place holder. Avro format have to make connection to Schema Registery,
-	// and it may needs credential.
+	err = replicaConfig.Validate()
+	if err != nil {
+		return nil, err
+	}
+	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
+	// and it may need credential.
 	credential := &security.Credential{}
 	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {

@@ -17,12 +17,12 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/cdc/model"
-	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
-	"github.com/pingcap/ticdc/pkg/cmd/factory"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/model"
+	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
+	"github.com/pingcap/tiflow/pkg/cmd/factory"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
 )
@@ -79,7 +79,7 @@ func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Conte
 		return err
 	}
 
-	info := &cdc.ChangefeedResp{}
+	info := &api.ChangefeedResp{}
 	err = json.Unmarshal([]byte(resp), info)
 	if err != nil {
 		return err

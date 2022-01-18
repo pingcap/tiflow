@@ -22,9 +22,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // GRPCClient stores raw grpc connection and worker client.
@@ -49,8 +49,7 @@ func NewGRPCClient(addr string, securityCfg config.Security) (*GRPCClient, error
 		return nil, terror.ErrMasterGRPCCreateConn.Delegate(err)
 	}
 
-	//nolint:staticcheck
-	conn, err := grpc.Dial(addr, tls.ToGRPCDialOption(), grpc.WithBackoffMaxDelay(3*time.Second),
+	conn, err := grpc.Dial(addr, tls.ToGRPCDialOption(),
 		grpc.WithConnectParams(grpc.ConnectParams{
 			Backoff: backoff.Config{
 				BaseDelay:  100 * time.Millisecond,

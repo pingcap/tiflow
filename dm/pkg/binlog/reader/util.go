@@ -15,21 +15,19 @@ package reader
 
 import (
 	"context"
-	"fmt"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay/common"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/parser"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // GetGTIDsForPosFromStreamer tries to get GTID sets for the specified binlog position (for the corresponding txn) from a Streamer.
@@ -56,7 +54,7 @@ func GetGTIDsForPosFromStreamer(ctx context.Context, r Streamer, endPos gmysql.P
 				log.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err2))
 			}
 
-			isDDL := common.CheckIsDDL(string(ev.Query), parser2)
+			isDDL := parser.CheckIsDDL(string(ev.Query), parser2)
 			if isDDL {
 				if latestGSet == nil {
 					// GTID not enabled, can't get GTIDs for the position.
@@ -82,16 +80,18 @@ func GetGTIDsForPosFromStreamer(ctx context.Context, r Streamer, endPos gmysql.P
 			if latestGSet == nil {
 				return nil, errors.Errorf("should have a PreviousGTIDsEvent before the GTIDEvent %+v", e.Header)
 			}
-			// learn from: https://github.com/go-mysql-org/go-mysql/blob/c6ab05a85eb86dc51a27ceed6d2f366a32874a24/replication/binlogsyncer.go#L736
-			u, _ := uuid.FromBytes(ev.SID)
-			nextGTIDStr = fmt.Sprintf("%s:%d", u.String(), ev.GNO)
+			nextGTIDStr, err = event.GetGTIDStr(e)
+			if err != nil {
+				return nil, err
+			}
 		case *replication.MariadbGTIDEvent:
 			if latestGSet == nil {
 				return nil, errors.Errorf("should have a MariadbGTIDListEvent before the MariadbGTIDEvent %+v", e.Header)
 			}
-			// learn from: https://github.com/go-mysql-org/go-mysql/blob/c6ab05a85eb86dc51a27ceed6d2f366a32874a24/replication/binlogsyncer.go#L745
-			GTID := ev.GTID
-			nextGTIDStr = fmt.Sprintf("%d-%d-%d", GTID.DomainID, GTID.ServerID, GTID.SequenceNumber)
+			nextGTIDStr, err = event.GetGTIDStr(e)
+			if err != nil {
+				return nil, err
+			}
 		case *replication.PreviousGTIDsEvent:
 			// if GTID enabled, we can get a PreviousGTIDEvent after the FormatDescriptionEvent
 			// ref: https://github.com/mysql/mysql-server/blob/8cc757da3d87bf4a1f07dcfb2d3c96fed3806870/sql/binlog.cc#L4549

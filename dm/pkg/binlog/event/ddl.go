@@ -15,60 +15,37 @@ package event
 
 import (
 	"bytes"
-	"fmt"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
-
-// GenCreateDatabaseEvents generates binlog events for `CREATE DATABASE`.
-// events: [GTIDEvent, QueryEvent]
-func GenCreateDatabaseEvents(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, schema string) (*DDLDMLResult, error) {
-	query := fmt.Sprintf("CREATE DATABASE `%s`", schema)
-	return GenDDLEvents(flavor, serverID, latestPos, latestGTID, schema, query)
-}
-
-// GenDropDatabaseEvents generates binlog events for `DROP DATABASE`.
-// events: [GTIDEvent, QueryEvent]
-func GenDropDatabaseEvents(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, schema string) (*DDLDMLResult, error) {
-	query := fmt.Sprintf("DROP DATABASE `%s`", schema)
-	return GenDDLEvents(flavor, serverID, latestPos, latestGTID, schema, query)
-}
-
-// GenCreateTableEvents generates binlog events for `CREATE TABLE`.
-// events: [GTIDEvent, QueryEvent]
-// NOTE: we do not support all `column type` and `column meta` for DML now, so the caller should restrict the `query` statement.
-func GenCreateTableEvents(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, schema string, query string) (*DDLDMLResult, error) {
-	return GenDDLEvents(flavor, serverID, latestPos, latestGTID, schema, query)
-}
-
-// GenDropTableEvents generates binlog events for `DROP TABLE`.
-// events: [GTIDEvent, QueryEvent]
-func GenDropTableEvents(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, schema string, table string) (*DDLDMLResult, error) {
-	query := fmt.Sprintf("DROP TABLE `%s`.`%s`", schema, table)
-	return GenDDLEvents(flavor, serverID, latestPos, latestGTID, schema, query)
-}
 
 // GenDDLEvents generates binlog events for DDL statements.
 // events: [GTIDEvent, QueryEvent]
-func GenDDLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, schema string, query string) (*DDLDMLResult, error) {
+func GenDDLEvents(flavor string, serverID, latestPos uint32, latestGTID gtid.Set, schema, query string, genGTID, anonymousGTID bool, ts int64) (*DDLDMLResult, error) {
+	if ts == 0 {
+		ts = time.Now().Unix()
+	}
 	// GTIDEvent, increase GTID first
 	latestGTID, err := GTIDIncrease(flavor, latestGTID)
 	if err != nil {
 		return nil, terror.Annotatef(err, "increase GTID %s", latestGTID)
 	}
-	gtidEv, err := GenCommonGTIDEvent(flavor, serverID, latestPos, latestGTID)
-	if err != nil {
-		return nil, terror.Annotate(err, "generate GTIDEvent")
+	var gtidEv *replication.BinlogEvent
+	if genGTID {
+		gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, latestGTID, anonymousGTID, ts)
+		if err != nil {
+			return nil, terror.Annotate(err, "generate GTIDEvent")
+		}
+		latestPos = gtidEv.Header.LogPos
 	}
-	latestPos = gtidEv.Header.LogPos
 
 	// QueryEvent
 	header := &replication.EventHeader{
-		Timestamp: uint32(time.Now().Unix()),
+		Timestamp: uint32(ts),
 		ServerID:  serverID,
 		Flags:     defaultHeaderFlags,
 	}
@@ -79,17 +56,22 @@ func GenDDLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID g
 	latestPos = queryEv.Header.LogPos
 
 	var buf bytes.Buffer
-	_, err = buf.Write(gtidEv.RawData)
-	if err != nil {
-		return nil, terror.ErrBinlogWriteDataToBuffer.AnnotateDelegate(err, "write GTIDEvent data % X", gtidEv.RawData)
+	var events []*replication.BinlogEvent
+	if genGTID {
+		_, err = buf.Write(gtidEv.RawData)
+		if err != nil {
+			return nil, terror.ErrBinlogWriteDataToBuffer.AnnotateDelegate(err, "write GTIDEvent data % X", gtidEv.RawData)
+		}
+		events = append(events, gtidEv)
 	}
 	_, err = buf.Write(queryEv.RawData)
 	if err != nil {
 		return nil, terror.ErrBinlogWriteDataToBuffer.AnnotateDelegate(err, "write QueryEvent data % X", queryEv.RawData)
 	}
+	events = append(events, queryEv)
 
 	return &DDLDMLResult{
-		Events:     []*replication.BinlogEvent{gtidEv, queryEv},
+		Events:     events,
 		Data:       buf.Bytes(),
 		LatestPos:  latestPos,
 		LatestGTID: latestGTID,

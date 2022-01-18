@@ -25,11 +25,11 @@ import (
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var (
@@ -52,8 +52,28 @@ func NewConfigCmd() *cobra.Command {
 		newConfigWorkerCmd(),
 		newExportCfgsCmd(),
 		newImportCfgsCmd(),
+		newConfigTaskTemplateCmd(),
 	)
 	cmd.PersistentFlags().StringP("path", "p", "", "specify the file path to export/import`")
+	return cmd
+}
+
+func newConfigTaskTemplateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "task-template [task-name]",
+		Short: "show task template which is created by WebUI with task config format",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 || len(args) > 1 {
+				return cmd.Help()
+			}
+			name := args[0]
+			output, err := cmd.Flags().GetString("path")
+			if err != nil {
+				return err
+			}
+			return sendGetConfigRequest(pb.CfgType_TaskTemplateType, name, output)
+		},
+	}
 	return cmd
 }
 
@@ -335,12 +355,12 @@ func getAllCfgs(cli *clientv3.Client) (map[string]*config.SourceConfig, map[stri
 
 func createDirectory(dir string) (string, string, error) {
 	taskDir := path.Join(dir, taskDirname)
-	if err := os.MkdirAll(taskDir, 0o755); err != nil {
+	if err := os.MkdirAll(taskDir, 0o700); err != nil {
 		common.PrintLinesf("can not create directory of task configs `%s`", taskDir)
 		return "", "", err
 	}
 	sourceDir := path.Join(dir, sourceDirname)
-	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+	if err := os.MkdirAll(sourceDir, 0o700); err != nil {
 		common.PrintLinesf("can not create directory of source configs `%s`", sourceDir)
 		return "", "", err
 	}
@@ -356,7 +376,7 @@ func writeSourceCfgs(sourceDir string, sourceCfgsMap map[string]*config.SourceCo
 			common.PrintLinesf("fail to marshal source config of `%s`", source)
 			return err
 		}
-		err = os.WriteFile(sourceFile, []byte(fileContent), 0o644)
+		err = os.WriteFile(sourceFile, []byte(fileContent), 0o600)
 		if err != nil {
 			common.PrintLinesf("fail to write source config to file `%s`", sourceFile)
 			return err
@@ -387,7 +407,7 @@ func writeTaskCfgs(taskDir string, subTaskCfgsMap map[string]map[string]config.S
 		if err != nil {
 			common.PrintLinesf("fail to marshal source config of `%s`", task)
 		}
-		if err := os.WriteFile(taskFile, []byte(taskContent), 0o644); err != nil {
+		if err := os.WriteFile(taskFile, []byte(taskContent), 0o600); err != nil {
 			common.PrintLinesf("can not write task config to file `%s`", taskFile)
 			return err
 		}
@@ -417,7 +437,7 @@ func writeRelayWorkers(relayWorkersFile string, relayWorkersSet map[string]map[s
 		return err
 	}
 
-	err = os.WriteFile(relayWorkersFile, content, 0o644)
+	err = os.WriteFile(relayWorkersFile, content, 0o600)
 	if err != nil {
 		common.PrintLinesf("can not write relay workers to file `%s`", relayWorkersFile)
 		return err

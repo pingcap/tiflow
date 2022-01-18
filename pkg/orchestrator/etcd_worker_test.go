@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -25,10 +26,10 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/orchestrator/util"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator/util"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
@@ -81,7 +82,8 @@ func (s *simpleReactor) Tick(_ context.Context, state ReactorState) (nextState R
 			}
 		}
 		if sum != expectedSum {
-			log.Panic("state is inconsistent", zap.Int("expected-sum", sum), zap.Int("actual-sum", s.state.sum))
+			log.Panic("state is inconsistent",
+				zap.Int("expectedSum", sum), zap.Int("actualSum", s.state.sum))
 		}
 
 		s.state.SetSum(sum)
@@ -223,7 +225,6 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 	defer func() {
 		_ = cli.Unwrap().Close()
 	}()
-
 	_, err := cli.Put(ctx, testEtcdKeyPrefix+"/sum", "0")
 	c.Check(err, check.IsNil)
 
@@ -267,12 +268,14 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 				return errors.Trace(err)
 			}
 
-			return errors.Trace(etcdWorker.Run(ctx, nil, 10*time.Millisecond))
+			return errors.Trace(etcdWorker.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", ""))
 		})
 	}
 
 	err = errg.Wait()
-	if err != nil && (errors.Cause(err) == context.DeadlineExceeded || errors.Cause(err) == context.Canceled) {
+	if err != nil && (errors.Cause(err) == context.DeadlineExceeded ||
+		errors.Cause(err) == context.Canceled ||
+		strings.Contains(err.Error(), "etcdserver: request timeout")) {
 		return
 	}
 	c.Check(err, check.IsNil)
@@ -281,6 +284,7 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 type intReactorState struct {
 	val       int
 	isUpdated bool
+	lastVal   int
 }
 
 func (s *intReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
@@ -289,6 +293,12 @@ func (s *intReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 	if err != nil {
 		log.Panic("intReactorState", zap.Error(err))
 	}
+	// As long as we can ensure that val is monotonically increasing,
+	// we can ensure that the linearizability of state changes
+	if s.lastVal > s.val {
+		log.Panic("linearizability check failed, lastVal must less than current val", zap.Int("lastVal", s.lastVal), zap.Int("val", s.val))
+	}
+	s.lastVal = s.val
 	s.isUpdated = !isInit
 	return nil
 }
@@ -298,17 +308,17 @@ func (s *intReactorState) GetPatches() [][]DataPatch {
 }
 
 type linearizabilityReactor struct {
-	state    *intReactorState
-	expected int
+	state     *intReactorState
+	tickCount int
 }
 
 func (r *linearizabilityReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
 	r.state = state.(*intReactorState)
 	if r.state.isUpdated {
-		if r.state.val != r.expected {
-			log.Panic("linearizability check failed", zap.Int("expected", r.expected), zap.Int("actual", r.state.val))
+		if r.state.val < r.tickCount {
+			log.Panic("linearizability check failed, val must larger than tickCount", zap.Int("expected", r.tickCount), zap.Int("actual", r.state.val))
 		}
-		r.expected++
+		r.tickCount++
 	}
 	if r.state.val == 1999 {
 		return r.state, cerrors.ErrReactorFinished
@@ -334,8 +344,8 @@ func (s *etcdWorkerSuite) TestLinearizability(c *check.C) {
 	}
 
 	reactor, err := NewEtcdWorker(cli0, testEtcdKeyPrefix+"/lin", &linearizabilityReactor{
-		state:    nil,
-		expected: 999,
+		state:     nil,
+		tickCount: 999,
 	}, &intReactorState{
 		val:       0,
 		isUpdated: false,
@@ -343,7 +353,7 @@ func (s *etcdWorkerSuite) TestLinearizability(c *check.C) {
 	c.Assert(err, check.IsNil)
 	errg := &errgroup.Group{}
 	errg.Go(func() error {
-		return reactor.Run(ctx, nil, 10*time.Millisecond)
+		return reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
 	})
 
 	time.Sleep(500 * time.Millisecond)
@@ -428,7 +438,8 @@ func (s *etcdWorkerSuite) TestFinished(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond)
+
+	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	c.Assert(err, check.IsNil)
@@ -497,7 +508,8 @@ func (s *etcdWorkerSuite) TestCover(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond)
+
+	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	c.Assert(err, check.IsNil)
@@ -576,7 +588,8 @@ func (s *etcdWorkerSuite) TestEmptyTxn(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond)
+
+	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	c.Assert(err, check.IsNil)
@@ -643,7 +656,8 @@ func (s *etcdWorkerSuite) TestEmptyOrNil(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond)
+
+	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	c.Assert(err, check.IsNil)
@@ -724,7 +738,7 @@ func (s *etcdWorkerSuite) TestModifyAfterDelete(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := worker1.Run(ctx, nil, time.Millisecond*100)
+		err := worker1.Run(ctx, nil, time.Millisecond*100, "127.0.0.1", "")
 		c.Assert(err, check.IsNil)
 	}()
 
@@ -739,7 +753,7 @@ func (s *etcdWorkerSuite) TestModifyAfterDelete(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 
-	err = worker2.Run(ctx, nil, time.Millisecond*100)
+	err = worker2.Run(ctx, nil, time.Millisecond*100, "127.0.0.1", "")
 	c.Assert(err, check.IsNil)
 
 	modifyReactor.waitOnCh <- struct{}{}

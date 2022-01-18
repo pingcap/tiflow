@@ -22,7 +22,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )
 
 var _ = Suite(&testGeneratorSuite{})
@@ -135,7 +135,7 @@ func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, 
 	allEventTypes := make([]replication.EventType, 0, 50)
 
 	// file header
-	currentEvents, data, err := g.GenFileHeader()
+	currentEvents, data, err := g.GenFileHeader(0)
 	c.Assert(err, IsNil)
 	_, err = f.Write(data)
 	c.Assert(err, IsNil)
@@ -178,7 +178,7 @@ func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, 
 		},
 	}
 	eventType := replication.WRITE_ROWS_EVENTv2
-	currentEvents, data, err = g.GenDMLEvents(eventType, dmlData)
+	currentEvents, data, err = g.GenDMLEvents(eventType, dmlData, 0)
 	c.Assert(err, IsNil)
 	_, err = f.Write(data)
 	c.Assert(err, IsNil)
@@ -207,7 +207,7 @@ func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, 
 			Rows:       insertRows2,
 		},
 	}
-	currentEvents, data, err = g.GenDMLEvents(eventType, dmlData)
+	currentEvents, data, err = g.GenDMLEvents(eventType, dmlData, 0)
 	c.Assert(err, IsNil)
 	_, err = f.Write(data)
 	c.Assert(err, IsNil)
@@ -237,7 +237,7 @@ func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, 
 		},
 	}
 	eventType = replication.UPDATE_ROWS_EVENTv2
-	currentEvents, data, err = g.GenDMLEvents(eventType, dmlData)
+	currentEvents, data, err = g.GenDMLEvents(eventType, dmlData, 0)
 	c.Assert(err, IsNil)
 	_, err = f.Write(data)
 	c.Assert(err, IsNil)
@@ -257,7 +257,7 @@ func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, 
 		},
 	}
 	eventType = replication.DELETE_ROWS_EVENTv2
-	currentEvents, data, err = g.GenDMLEvents(eventType, dmlData)
+	currentEvents, data, err = g.GenDMLEvents(eventType, dmlData, 0)
 	c.Assert(err, IsNil)
 	_, err = f.Write(data)
 	c.Assert(err, IsNil)
@@ -266,7 +266,7 @@ func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, 
 
 	// ALTER TABLE
 	query = fmt.Sprintf("ALTER TABLE `%s`.`%s` ADD COLUMN c3 INT", schema, table)
-	currentEvents, data, err = g.GenDDLEvents(schema, query)
+	currentEvents, data, err = g.GenDDLEvents(schema, query, 0)
 	c.Assert(err, IsNil)
 	_, err = f.Write(data)
 	c.Assert(err, IsNil)

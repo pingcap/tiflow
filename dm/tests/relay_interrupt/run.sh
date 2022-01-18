@@ -23,8 +23,8 @@ function prepare_data2() {
 function run() {
 	failpoints=(
 		# 1152 is ErrAbortingConnection
-		"github.com/pingcap/ticdc/dm/pkg/utils/GetGlobalVariableFailed=return(\"server_uuid,1152\")"
-		"github.com/pingcap/ticdc/dm/pkg/utils/GetSessionVariableFailed=return(\"sql_mode,1152\")"
+		"github.com/pingcap/tiflow/dm/pkg/utils/GetGlobalVariableFailed=return(\"server_uuid,1152\")"
+		"github.com/pingcap/tiflow/dm/pkg/utils/GetSessionVariableFailed=return(\"sql_mode,1152\")"
 	)
 
 	for ((i = 0; i < ${#failpoints[@]}; i++)); do
@@ -46,10 +46,6 @@ function run() {
 		cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
 		sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
 		dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
-
-		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-			"start-relay -s $SOURCE_ID1 worker1" \
-			"\"result\": true" 1
 
 		echo "query status, relay log failed"
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -103,7 +99,7 @@ function run() {
 
 		echo "read binlog from relay log failed, and will use remote binlog"
 		kill_dm_worker
-		export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/pkg/streamer/GetEventFromLocalFailed=return()"
+		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/GetEventFromLocalFailed=return()"
 		run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 		check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 		prepare_data2 $i

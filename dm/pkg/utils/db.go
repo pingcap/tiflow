@@ -34,9 +34,9 @@ import (
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 const (
@@ -103,6 +103,7 @@ func GetRandomServerID(ctx context.Context, db *sql.DB) (uint32, error) {
 
 // GetSlaveServerID gets all slave server id.
 func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, error) {
+	// need REPLICATION SLAVE privilege
 	rows, err := db.QueryContext(ctx, `SHOW SLAVE HOSTS`)
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
@@ -176,6 +177,7 @@ func GetMasterStatus(ctx context.Context, db *sql.DB, flavor string) (gmysql.Pos
 		gs        gtid.Set
 	)
 
+	// need REPLICATION SLAVE privilege
 	rows, err := db.QueryContext(ctx, `SHOW MASTER STATUS`)
 	if err != nil {
 		return binlogPos, gs, terror.DBErrorAdapt(err, terror.ErrDBDriverError)

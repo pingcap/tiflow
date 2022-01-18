@@ -15,23 +15,29 @@ package scheduler
 
 import (
 	"context"
-	"errors"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"go.etcd.io/etcd/clientv3"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/master/metrics"
-	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/master/metrics"
+	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+)
+
+const (
+	maxQueryWorkerRetryNum = 10
 )
 
 // Scheduler schedules tasks for DM-worker instances, including:
@@ -59,12 +65,31 @@ import (
 //   - remove source request from user.
 // TODO: try to handle the return `err` of etcd operations,
 //   because may put into etcd, but the response to the etcd client interrupted.
+// Relay scheduling:
+// - scheduled by source
+//   DM-worker will enable relay according to its bound source, in current implementation, it will read `enable-relay`
+//   of source config and decide whether to enable relay.
+//   turn on `enable-relay`:
+//   - use `enable-relay: true` when create source
+//   - `start-relay -s source` to dynamically change `enable-relay`
+//   turn off `enable-relay`:
+//   - use `enable-relay: false` when create source
+//   - `stop-relay -s source` to dynamically change `enable-relay`
+//   - found conflict schedule type with (source, worker) when scheduler bootstrap
+// - scheduled by (source, worker)
+//   DM-worker will check if relay is assigned to it no matter it's bound or not. In current implementation, it will
+//   read UpstreamRelayWorkerKeyAdapter in etcd.
+//   add UpstreamRelayWorkerKeyAdapter:
+//   - use `start-relay -s source -w worker`
+//   remove UpstreamRelayWorkerKeyAdapter:
+//   - use `stop-relay -s source -w worker`
+//   - remove worker by `offline-member`
 type Scheduler struct {
 	mu sync.RWMutex
 
 	logger log.Logger
 
-	started bool // whether the scheduler already started for work.
+	started atomic.Bool // whether the scheduler already started for work.
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
 
@@ -101,9 +126,9 @@ type Scheduler struct {
 
 	// all bound relationship, source ID -> worker.
 	// add:
-	// - when bounding a source to a worker.
+	// - when bind a source to a worker, in updateStatusToBound
 	// delete:
-	// - when unbounding a source from a worker.
+	// - when unbind a source from a worker, in updateStatusToUnbound
 	// see `Cases trigger a source-to-worker bound try` above.
 	bounds map[string]*Worker
 
@@ -112,18 +137,19 @@ type Scheduler struct {
 	// add:
 	// - add source by user request (calling `AddSourceCfg`).
 	// - recover from etcd (calling `recoverWorkersBounds`).
-	// - when the bounding worker become offline.
+	// - when the bounding worker become offline, in updateStatusToUnbound.
 	// delete:
 	// - remove source by user request (calling `RemoveSourceCfg`).
-	// - when bounded the source to a worker.
+	// - when bounded the source to a worker, in updateStatusToBound.
 	unbounds map[string]struct{}
 
 	// a mirror of bounds whose element is not deleted when worker unbound. worker -> SourceBound
 	lastBound map[string]ha.SourceBound
 
+	// TODO: seems this memory status is useless.
 	// expectant relay stages for sources, source ID -> stage.
 	// add:
-	// - bound the source to a worker (at first time). // TODO: change this to add a relay-enabled source
+	// - bound the source to a worker (at first time).
 	// - recover from etcd (calling `recoverSources`).
 	// update:
 	// - update stage by user request (calling `UpdateExpectRelayStage`).
@@ -186,7 +212,7 @@ func (s *Scheduler) Start(pCtx context.Context, etcdCli *clientv3.Client) (err e
 		s.mu.Unlock()
 	}()
 
-	if s.started {
+	if s.started.Load() {
 		return terror.ErrSchedulerStarted.Generate()
 	}
 
@@ -252,7 +278,7 @@ func (s *Scheduler) Start(pCtx context.Context, etcdCli *clientv3.Client) (err e
 		s.observeLoadTask(ctx, etcdCli, rev1)
 	}(loadTaskRev)
 
-	s.started = true // started now
+	s.started.Store(true) // started now
 	s.cancel = cancel
 	s.logger.Info("the scheduler has started")
 	return nil
@@ -262,7 +288,7 @@ func (s *Scheduler) Start(pCtx context.Context, etcdCli *clientv3.Client) (err e
 func (s *Scheduler) Close() {
 	s.mu.Lock()
 
-	if !s.started {
+	if !s.started.Load() {
 		s.mu.Unlock()
 		return
 	}
@@ -280,7 +306,7 @@ func (s *Scheduler) Close() {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.started = false // closed now.
+	s.started.Store(false) // closed now.
 	s.logger.Info("the scheduler has closed")
 }
 
@@ -297,7 +323,7 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -314,16 +340,11 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 
 	// 3. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg
+	s.unbounds[cfg.SourceID] = struct{}{}
 
 	// 4. try to bound it to a Free worker.
-	bounded, err := s.tryBoundForSource(cfg.SourceID)
-	if err != nil {
-		return err
-	} else if !bounded {
-		// 5. record the source as unbounded.
-		s.unbounds[cfg.SourceID] = struct{}{}
-	}
-	return nil
+	_, err = s.tryBoundForSource(cfg.SourceID)
+	return err
 }
 
 // UpdateSourceCfg update the upstream source config to the cluster.
@@ -332,7 +353,7 @@ func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -376,7 +397,7 @@ func (s *Scheduler) RemoveSourceCfg(source string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -429,7 +450,7 @@ func (s *Scheduler) RemoveSourceCfg(source string) error {
 	delete(s.expectRelayStages, source)
 
 	// 6. unbound for the source.
-	s.updateStatusForUnbound(source)
+	s.updateStatusToUnbound(source)
 
 	// 7. remove it from unbounds.
 	delete(s.unbounds, source)
@@ -499,30 +520,6 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 		ok           bool
 	)
 
-	updateBound := func(source string, worker *Worker, bound ha.SourceBound) {
-		if err := s.updateStatusForBound(worker, bound); err == nil {
-			delete(s.unbounds, source)
-		}
-		// TODO: if we failed here, etcd has been modified!! we should try this memory check then modify persistent data
-		// and revert if failed
-	}
-
-	updateUnbound := func(source string) {
-		s.updateStatusForUnbound(source)
-		s.unbounds[source] = struct{}{}
-	}
-
-	boundForSource := func(source string) error {
-		bounded, err := s.tryBoundForSource(source)
-		if err != nil {
-			return err
-		}
-		if bounded {
-			delete(s.unbounds, source)
-		}
-		return nil
-	}
-
 	s.logger.Info("transfer source and worker", zap.String("left worker", lworker), zap.String("left source", lsource), zap.String("right worker", rworker), zap.String("right source", rsource))
 
 	inputWorkers[0], inputWorkers[1] = lworker, rworker
@@ -573,7 +570,7 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	// update unbound sources
 	for _, sourceID := range inputSources {
 		if sourceID != "" {
-			updateUnbound(sourceID)
+			s.updateStatusToUnbound(sourceID)
 		}
 	}
 
@@ -595,7 +592,12 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	for i := range inputWorkers {
 		another := i ^ 1 // make use of XOR to flip 0 and 1
 		if inputWorkers[i] != "" && inputSources[another] != "" {
-			updateBound(inputSources[another], workers[i], bounds[i])
+			err := s.updateStatusToBound(workers[i], bounds[i])
+			// TODO: if we failed here, etcd has been modified!! we should try this memory check then modify persistent data
+			// and revert if failed
+			if err != nil {
+				s.logger.DPanic("failed to update status to bound, but has written etcd", zap.Error(err))
+			}
 		}
 	}
 
@@ -612,7 +614,7 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	for i := range inputSources {
 		another := i ^ 1 // make use of XOR to flip 0 and 1
 		if inputSources[i] != "" && inputWorkers[another] == "" {
-			if err := boundForSource(inputSources[i]); err != nil {
+			if _, err := s.tryBoundForSource(inputSources[i]); err != nil {
 				return err
 			}
 		}
@@ -623,39 +625,37 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 
 // TransferSource unbinds the `source` and binds it to a free or same-source-relay `worker`.
 // If fails halfway, the old worker should try recover.
-func (s *Scheduler) TransferSource(source, worker string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if !s.started {
+func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) error {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
-
+	s.mu.RLock()
 	// 1. check existence or no need
 	if _, ok := s.sourceCfgs[source]; !ok {
+		s.mu.RUnlock()
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
 	w, ok := s.workers[worker]
 	if !ok {
+		s.mu.RUnlock()
 		return terror.ErrSchedulerWorkerNotExist.Generate(worker)
 	}
 	oldWorker, hasOldWorker := s.bounds[source]
 	if hasOldWorker && oldWorker.BaseInfo().Name == worker {
+		s.mu.RUnlock()
 		return nil
 	}
+	s.mu.RUnlock()
 
 	// 2. check new worker is free and not started relay for another source
 	switch w.Stage() {
-	case WorkerOffline:
+	case WorkerOffline, WorkerBound:
 		return terror.ErrSchedulerWorkerInvalidTrans.Generate(worker, w.Stage(), WorkerBound)
 	case WorkerFree:
 	case WorkerRelay:
 		if relaySource := w.RelaySourceID(); relaySource != source {
 			return terror.ErrSchedulerBoundDiffWithStartedRelay.Generate(worker, source, relaySource)
 		}
-	case WorkerBound:
-		s.logger.DPanic("worker should not be bound because we have checked it")
-		return terror.ErrSchedulerWorkerInvalidTrans.Generate(worker, w.Stage(), WorkerBound)
 	}
 
 	// 3. if no old worker, bound it directly
@@ -663,14 +663,10 @@ func (s *Scheduler) TransferSource(source, worker string) error {
 		s.logger.Warn("in transfer source, found a free worker and not bound source, which should not happened",
 			zap.String("source", source),
 			zap.String("worker", worker))
-		err := s.boundSourceToWorker(source, w)
-		if err == nil {
-			delete(s.unbounds, source)
-		}
-		return err
+		return s.boundSourceToWorker(source, w)
 	}
 
-	// 4. if there's old worker, make sure it's not running
+	// 4. check if old worker has running tasks
 	var runningTasks []string
 	s.expectSubTaskStages.Range(func(k, v interface{}) bool {
 		task := k.(string)
@@ -684,32 +680,117 @@ func (s *Scheduler) TransferSource(source, worker string) error {
 		}
 		return true
 	})
-
 	if len(runningTasks) > 0 {
-		return terror.ErrSchedulerRequireNotRunning.Generate(runningTasks, source)
+		// we only allow automatically transfer-source if all subtasks are in the sync phase.
+		resp, err := oldWorker.queryStatus(ctx)
+		if err != nil {
+			return terror.Annotatef(err, "failed to query worker: %s status err", oldWorker.baseInfo.Name)
+		}
+		for _, status := range resp.QueryStatus.GetSubTaskStatus() {
+			if status.GetUnit() != pb.UnitType_Sync {
+				return terror.ErrSchedulerRequireRunningTaskInSyncUnit.Generate(runningTasks, source)
+			}
+		}
+		// pause running tasks
+		if batchPauseErr := s.batchOperateTaskOnWorker(ctx, oldWorker, runningTasks, source, pb.Stage_Paused, true); batchPauseErr != nil {
+			return batchPauseErr
+		}
+		// we need resume tasks that we just paused, we use another goroutine to do this because if error happens
+		// just logging this message and let user handle it manually
+		defer func() {
+			go func() {
+				if err := s.batchOperateTaskOnWorker(context.Background(), w, runningTasks, source, pb.Stage_Running, false); err != nil {
+					s.logger.Warn(
+						"auto resume task failed", zap.Any("tasks", runningTasks),
+						zap.String("source", source), zap.String("worker", worker), zap.Error(err))
+				}
+			}()
+		}()
 	}
 
 	// 5. replace the source bound
 	failpoint.Inject("failToReplaceSourceBound", func(_ failpoint.Value) {
 		failpoint.Return(errors.New("failToPutSourceBound"))
 	})
+	s.mu.Lock()
 	_, err := ha.ReplaceSourceBound(s.etcdCli, source, oldWorker.BaseInfo().Name, worker)
 	if err != nil {
+		s.mu.Unlock()
 		return err
 	}
 	if err2 := oldWorker.Unbound(); err2 != nil {
 		s.logger.DPanic("the oldWorker is get from s.bound, so there should not be an error", zap.Error(err2))
 	}
-	if err2 := s.updateStatusForBound(w, ha.NewSourceBound(source, worker)); err2 != nil {
+	if err2 := s.updateStatusToBound(w, ha.NewSourceBound(source, worker)); err2 != nil {
 		s.logger.DPanic("we have checked w.stage is free, so there should not be an error", zap.Error(err2))
 	}
-
-	// 6. try bound the old worker
+	// 6. now this old worker is free, try bound source to it
 	_, err = s.tryBoundForWorker(oldWorker)
 	if err != nil {
 		s.logger.Warn("in transfer source, error when try bound the old worker", zap.Error(err))
 	}
+	s.mu.Unlock()
 	return nil
+}
+
+// batchOperateTaskOnWorker batch operate tasks in one worker and use query-status to make sure all tasks are in expected stage if needWait=true.
+func (s *Scheduler) batchOperateTaskOnWorker(
+	ctx context.Context, worker *Worker, tasks []string, source string, stage pb.Stage, needWait bool) error {
+	for _, taskName := range tasks {
+		if err := s.UpdateExpectSubTaskStage(stage, taskName, source); err != nil {
+			return err
+		}
+	}
+	if !needWait {
+		return nil
+	}
+	// wait all tasks are in expected stage before actually starting scheduling
+WaitLoop:
+	for retry := 0; retry < maxQueryWorkerRetryNum; retry++ {
+		resp, err := worker.queryStatus(ctx)
+		if err != nil {
+			return terror.Annotatef(err, "failed to query worker: %s status", worker.baseInfo.Name)
+		}
+
+		failpoint.Inject("batchOperateTaskOnWorkerMustRetry", func(v failpoint.Value) {
+			if retry < v.(int) {
+				resp.QueryStatus.SubTaskStatus[0].Stage = pb.Stage_InvalidStage
+				log.L().Info("batchOperateTaskOnWorkerMustRetry failpoint triggered", zap.Int("retry", retry))
+			} else {
+				log.L().Info("batchOperateTaskOnWorkerMustRetry passed", zap.Int("retry", retry))
+			}
+		})
+
+		for _, status := range resp.QueryStatus.GetSubTaskStatus() {
+			if status == nil {
+				// this should not happen when rpc logic in server side not changed
+				return errors.Errorf("expect a query-status with subtask status but got a nil, resp %v", resp)
+			}
+			if status.Stage != stage {
+				// NOTE: the defaultRPCTimeout is 10m, use 1s * retry times to increase the waiting time
+				sleepTime := time.Second * time.Duration(maxQueryWorkerRetryNum-retry)
+				s.logger.Info(
+					"waiting task",
+					zap.String("task", status.Name),
+					zap.Int("retry times", retry),
+					zap.Duration("sleep time", sleepTime),
+					zap.String("want stage", stage.String()),
+					zap.String("current stage", status.Stage.String()),
+				)
+				failpoint.Inject("skipBatchOperateTaskOnWorkerSleep", func(_ failpoint.Value) {
+					failpoint.Continue("WaitLoop")
+				})
+				select {
+				case <-ctx.Done():
+					return terror.Annotatef(err, "failed to wait task on worker: %s because context is canceled", worker.baseInfo.Name)
+				case <-time.After(sleepTime):
+					continue WaitLoop
+				}
+			}
+		}
+		return nil // all task are in expected stage
+	}
+	return terror.ErrSchedulerPauseTaskForTransferSource.Generate(tasks) // failed to pause tasks, need user to handle it manually
 }
 
 // AcquireSubtaskLatch tries acquiring a latch for subtask name.
@@ -724,7 +805,7 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -821,7 +902,7 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 
 // RemoveSubTasks removes the information of one or more subtasks for one task.
 func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -922,6 +1003,7 @@ func (s *Scheduler) GetSubTaskCfgsByTask(task string) map[string]*config.SubTask
 
 // GetSubTaskCfgs gets all subconfig, return nil when error happens.
 func (s *Scheduler) GetSubTaskCfgs() map[string]map[string]config.SubTaskConfig {
+	// taskName -> sourceName -> SubTaskConfig
 	clone := make(map[string]map[string]config.SubTaskConfig)
 	s.subTaskCfgs.Range(func(k, v interface{}) bool {
 		task := k.(string)
@@ -963,7 +1045,7 @@ func (s *Scheduler) AddWorker(name, addr string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -997,7 +1079,7 @@ func (s *Scheduler) RemoveWorker(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1022,7 +1104,7 @@ func (s *Scheduler) GetAllWorkers() ([]*Worker, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return nil, terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1077,15 +1159,42 @@ func (s *Scheduler) StartRelay(source string, workers []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
 	// 1. precheck
-	if _, ok := s.sourceCfgs[source]; !ok {
+	sourceCfg, ok := s.sourceCfgs[source]
+	if !ok {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
 	startedWorkers := s.relayWorkers[source]
+
+	// quick path for `start-relay` without worker name
+	if len(workers) == 0 {
+		if len(startedWorkers) != 0 {
+			return terror.ErrSchedulerStartRelayOnSpecified.Generate(utils.SetToSlice(startedWorkers))
+		}
+		// update enable-relay in source config
+		sourceCfg.EnableRelay = true
+		_, err := ha.PutSourceCfg(s.etcdCli, sourceCfg)
+		if err != nil {
+			return err
+		}
+		s.sourceCfgs[source] = sourceCfg
+		// notify bound worker
+		w, ok2 := s.bounds[source]
+		if !ok2 {
+			return nil
+		}
+		stage := ha.NewRelayStage(pb.Stage_Running, source)
+		_, err = ha.PutRelayStageSourceBound(s.etcdCli, stage, w.Bound())
+		return err
+	} else if sourceCfg.EnableRelay {
+		// error when `enable-relay` and `start-relay` with worker name
+		return terror.ErrSchedulerStartRelayOnBound.Generate()
+	}
+
 	if startedWorkers == nil {
 		startedWorkers = map[string]struct{}{}
 		s.relayWorkers[source] = startedWorkers
@@ -1164,14 +1273,42 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
 	// 1. precheck
-	if _, ok := s.sourceCfgs[source]; !ok {
+	sourceCfg, ok := s.sourceCfgs[source]
+	if !ok {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
+
+	// quick path for `stop-relay` without worker name
+	if len(workers) == 0 {
+		startedWorker := s.relayWorkers[source]
+		if len(startedWorker) != 0 {
+			return terror.ErrSchedulerStopRelayOnSpecified.Generate(utils.SetToSlice(startedWorker))
+		}
+		// update enable-relay in source config
+		sourceCfg.EnableRelay = false
+		_, err := ha.PutSourceCfg(s.etcdCli, sourceCfg)
+		if err != nil {
+			return err
+		}
+		s.sourceCfgs[source] = sourceCfg
+		// notify bound worker
+		w, ok2 := s.bounds[source]
+		if !ok2 {
+			return nil
+		}
+		// TODO: remove orphan relay stage
+		_, err = ha.PutSourceBound(s.etcdCli, w.Bound())
+		return err
+	} else if sourceCfg.EnableRelay {
+		// error when `enable-relay` and `stop-relay` with worker name
+		return terror.ErrSchedulerStopRelayOnBound.Generate()
+	}
+
 	var (
 		notExistWorkers                    []string
 		unmatchedWorkers, unmatchedSources []string
@@ -1234,7 +1371,7 @@ func (s *Scheduler) GetRelayWorkers(source string) ([]*Worker, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return nil, terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1266,7 +1403,7 @@ func (s *Scheduler) UpdateExpectRelayStage(newStage pb.Stage, sources ...string)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1345,7 +1482,7 @@ func (s *Scheduler) GetExpectRelayStage(source string) ha.Stage {
 // because some user may want to update `{Running, Paused, ...}` to `{Running, Running, ...}`.
 // so, this should be also supported in DM-worker.
 func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, task string, sources ...string) error {
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
@@ -1437,9 +1574,7 @@ func (s *Scheduler) GetExpectSubTaskStage(task, source string) ha.Stage {
 
 // Started returns if the scheduler is started.
 func (s *Scheduler) Started() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.started
+	return s.started.Load()
 }
 
 // recoverSourceCfgs recovers history source configs and expectant relay stages from etcd.
@@ -1499,11 +1634,31 @@ func (s *Scheduler) recoverSubTasks(cli *clientv3.Client) error {
 }
 
 // recoverRelayConfigs recovers history relay configs for each worker from etcd.
+// This function also removes conflicting relay schedule types, which means if a source has both `enable-relay` and
+// (source, worker) relay config, we remove the latter.
+// should be called after recoverSources.
 func (s *Scheduler) recoverRelayConfigs(cli *clientv3.Client) error {
 	relayWorkers, _, err := ha.GetAllRelayConfig(cli)
 	if err != nil {
 		return err
 	}
+
+	for source, workers := range relayWorkers {
+		sourceCfg, ok := s.sourceCfgs[source]
+		if !ok {
+			s.logger.Warn("found a not existing source by relay config", zap.String("source", source))
+			continue
+		}
+		if sourceCfg.EnableRelay {
+			// current etcd max-txn-op is 2048
+			_, err2 := ha.DeleteRelayConfig(cli, utils.SetToSlice(workers)...)
+			if err2 != nil {
+				return err2
+			}
+			delete(relayWorkers, source)
+		}
+	}
+
 	s.relayWorkers = relayWorkers
 	return nil
 }
@@ -1584,7 +1739,7 @@ func (s *Scheduler) recoverWorkersBounds(cli *clientv3.Client) (int64, error) {
 			if bound, ok := sbm[name]; ok {
 				// source bounds without source configuration should be deleted later
 				if _, ok := scm[bound.Source]; ok {
-					err2 = s.updateStatusForBound(w, bound)
+					err2 = s.updateStatusToBound(w, bound)
 					if err2 != nil {
 						// if etcd has saved KV that worker1 started relay for source1, but bound to source2,
 						// we remove the bound to avoid DM master leader failed to bootstrap
@@ -1783,6 +1938,16 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 
 	// 3. change the stage (from Offline) to Free or Relay.
 	lastRelaySource := w.RelaySourceID()
+	if lastRelaySource == "" {
+		// when worker is removed (for example lost keepalive when master scheduler boots up), w.RelaySourceID() is
+		// of course nothing, so we find the relay source from a better place
+		for source, workerM := range s.relayWorkers {
+			if _, ok2 := workerM[w.BaseInfo().Name]; ok2 {
+				lastRelaySource = source
+				break
+			}
+		}
+	}
 	w.ToFree()
 	// TODO: rename ToFree to Online and move below logic inside it
 	if lastRelaySource != "" {
@@ -1830,7 +1995,7 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 	}
 
 	// 5. unbound for the source.
-	s.updateStatusForUnbound(bound.Source)
+	s.updateStatusToUnbound(bound.Source)
 
 	// 6. change the stage (from Free) to Offline.
 	w.ToOffline()
@@ -1838,15 +2003,8 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 	s.logger.Info("unbound the worker for source", zap.Stringer("bound", bound), zap.Stringer("event", ev))
 
 	// 7. try to bound the source to a Free worker again.
-	bounded, err := s.tryBoundForSource(bound.Source)
-	if err != nil {
-		return err
-	} else if !bounded {
-		// 8. record the source as unbounded.
-		s.unbounds[bound.Source] = struct{}{}
-	}
-
-	return nil
+	_, err = s.tryBoundForSource(bound.Source)
+	return err
 }
 
 // tryBoundForWorker tries to bind a source to the given worker. The order of picking source is
@@ -1921,17 +2079,7 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 		return false, nil
 	}
 
-	// 2. pop a source to bound, priority supported if needed later.
-	// DO NOT forget to push it back if fail to bound.
-	delete(s.unbounds, source)
-	defer func() {
-		if err != nil {
-			// push the source back.
-			s.unbounds[source] = struct{}{}
-		}
-	}()
-
-	// 3. try to bound them.
+	// 2. try to bound them.
 	err = s.boundSourceToWorker(source, w)
 	if err != nil {
 		return false, err
@@ -2051,13 +2199,19 @@ func (s *Scheduler) boundSourceToWorker(source string, w *Worker) error {
 	// 1. put the bound relationship into etcd.
 	var err error
 	bound := ha.NewSourceBound(source, w.BaseInfo().Name)
-	_, err = ha.PutSourceBound(s.etcdCli, bound)
+	sourceCfg, ok := s.sourceCfgs[source]
+	if ok && sourceCfg.EnableRelay {
+		stage := ha.NewRelayStage(pb.Stage_Running, source)
+		_, err = ha.PutRelayStageSourceBound(s.etcdCli, stage, bound)
+	} else {
+		_, err = ha.PutSourceBound(s.etcdCli, bound)
+	}
 	if err != nil {
 		return err
 	}
 
 	// 2. update the bound relationship in the scheduler.
-	err = s.updateStatusForBound(w, bound)
+	err = s.updateStatusToBound(w, bound)
 	if err != nil {
 		return err
 	}
@@ -2094,31 +2248,34 @@ func (s *Scheduler) deleteWorker(name string) {
 	metrics.RemoveWorkerState(w.baseInfo.Name)
 }
 
-// updateStatusForBound updates the in-memory status for bound, including:
+// updateStatusToBound updates the in-memory status for bound, including:
 // - update the stage of worker to `Bound`.
 // - record the bound relationship and last bound relationship in the scheduler.
+// - remove the unbound relationship in the scheduler.
 // this func is called after the bound relationship existed in etcd.
-// TODO: we could only let updateStatusForBound and updateStatusForUnbound to update s.unbounds/bounds/lastBound.
-func (s *Scheduler) updateStatusForBound(w *Worker, b ha.SourceBound) error {
+func (s *Scheduler) updateStatusToBound(w *Worker, b ha.SourceBound) error {
 	if err := w.ToBound(b); err != nil {
 		return err
 	}
 	s.bounds[b.Source] = w
 	s.lastBound[b.Worker] = b
+	delete(s.unbounds, b.Source)
 	return nil
 }
 
-// updateStatusForUnbound updates the in-memory status for unbound, including:
+// updateStatusToUnbound updates the in-memory status for unbound, including:
 // - update the stage of worker to `Free` or `Relay`.
 // - remove the bound relationship in the scheduler.
+// - record the unbound relationship in the scheduler.
 // this func is called after the bound relationship removed from etcd.
-func (s *Scheduler) updateStatusForUnbound(source string) {
+func (s *Scheduler) updateStatusToUnbound(source string) {
+	s.unbounds[source] = struct{}{}
 	w, ok := s.bounds[source]
 	if !ok {
 		return
 	}
 	if err := w.Unbound(); err != nil {
-		s.logger.DPanic("cannot updateStatusForUnbound", zap.Error(err))
+		s.logger.DPanic("cannot updateStatusToUnbound", zap.Error(err))
 	}
 	delete(s.bounds, source)
 }
@@ -2205,7 +2362,7 @@ func (s *Scheduler) RemoveLoadTask(task string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 	_, _, err := ha.DelLoadTaskByTask(s.etcdCli, task)
@@ -2262,14 +2419,54 @@ func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, stri
 	return "", ""
 }
 
-// hasLoadTaskByWorkerAndSource check whether there is a load subtask for the worker and source.
+// hasLoadTaskByWorkerAndSource check whether there is an existing load subtask for the worker and source.
 func (s *Scheduler) hasLoadTaskByWorkerAndSource(worker, source string) bool {
-	for _, sourceWorkerMap := range s.loadTasks {
-		if workerName, ok := sourceWorkerMap[source]; ok && workerName == worker {
+	for taskName, sourceWorkerMap := range s.loadTasks {
+		// don't consider removed subtask
+		subtasksV, ok := s.subTaskCfgs.Load(taskName)
+		if !ok {
+			continue
+		}
+		subtasks := subtasksV.(map[string]config.SubTaskConfig)
+		if _, ok2 := subtasks[source]; !ok2 {
+			continue
+		}
+
+		if workerName, ok2 := sourceWorkerMap[source]; ok2 && workerName == worker {
 			return true
 		}
 	}
 	return false
+}
+
+// TryResolveLoadTask checks if there are sources whose load task has local files and not bound to the worker which is
+// accessible to the local files. If so, trigger a transfer source.
+func (s *Scheduler) TryResolveLoadTask(sources []string) {
+	for _, source := range sources {
+		s.mu.Lock()
+		worker, ok := s.bounds[source]
+		if !ok {
+			s.mu.Unlock()
+			continue
+		}
+		if err := s.tryResolveLoadTask(worker.baseInfo.Name, source); err != nil {
+			s.logger.Error("tryResolveLoadTask failed", zap.Error(err))
+		}
+		s.mu.Unlock()
+	}
+}
+
+func (s *Scheduler) tryResolveLoadTask(originWorker, originSource string) error {
+	if s.hasLoadTaskByWorkerAndSource(originWorker, originSource) {
+		return nil
+	}
+
+	worker, source := s.getNextLoadTaskTransfer(originWorker, originSource)
+	if worker == "" && source == "" {
+		return nil
+	}
+
+	return s.transferWorkerAndSource(originWorker, originSource, worker, source)
 }
 
 func (s *Scheduler) handleLoadTaskDel(loadTask ha.LoadTask) error {
@@ -2289,16 +2486,7 @@ func (s *Scheduler) handleLoadTaskDel(loadTask ha.LoadTask) error {
 		delete(s.loadTasks, loadTask.Task)
 	}
 
-	if s.hasLoadTaskByWorkerAndSource(originWorker, loadTask.Source) {
-		return nil
-	}
-
-	worker, source := s.getNextLoadTaskTransfer(originWorker, loadTask.Source)
-	if worker == "" && source == "" {
-		return nil
-	}
-
-	return s.transferWorkerAndSource(originWorker, loadTask.Source, worker, source)
+	return s.tryResolveLoadTask(originWorker, loadTask.Source)
 }
 
 func (s *Scheduler) handleLoadTaskPut(loadTask ha.LoadTask) {

@@ -29,10 +29,10 @@ import (
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/dumpling"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/pkg/dumpling"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // task modes.
@@ -127,11 +127,16 @@ func (db *DBConfig) Decode(data string) error {
 
 // Adjust adjusts the config.
 func (db *DBConfig) Adjust() {
-	// force set session time zone to UTC here.
-	AdjustTargetDBTimeZone(db)
 	if len(db.Password) > 0 {
 		db.Password = utils.DecryptOrPlaintext(db.Password)
 	}
+}
+
+func (db *DBConfig) AdjustWithTimeZone(timeZone string) {
+	if timeZone != "" {
+		AdjustDBTimeZone(db, timeZone)
+	}
+	db.Adjust()
 }
 
 // Clone returns a deep copy of DBConfig. This function only fixes data race when adjusting Session.
@@ -224,6 +229,10 @@ type SubTaskConfig struct {
 	// if case insensitive, we would convert schema/table name/pattern to lower case
 	CaseSensitive bool `toml:"case-sensitive" json:"case-sensitive"`
 
+	// default "loose" handle create sql by original sql, will not add default collation as upstream
+	// "strict" will add default collation as upstream, and downstream will occur error when downstream don't support
+	CollationCompatible string `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
+
 	Name string `toml:"name" json:"name"`
 	Mode string `toml:"mode" json:"mode"`
 	//  treat it as hidden configuration
@@ -238,9 +247,8 @@ type SubTaskConfig struct {
 	// deprecated
 	HeartbeatReportInterval int `toml:"heartbeat-report-interval" json:"heartbeat-report-interval"`
 	// deprecated
-	EnableHeartbeat bool `toml:"enable-heartbeat" json:"enable-heartbeat"`
-	// deprecated
-	Timezone string `toml:"timezone" json:"timezone"`
+	EnableHeartbeat bool   `toml:"enable-heartbeat" json:"enable-heartbeat"`
+	Timezone        string `toml:"timezone" json:"timezone"`
 
 	Meta *Meta `toml:"meta" json:"meta"`
 
@@ -287,6 +295,10 @@ type SubTaskConfig struct {
 
 	// which DM worker is running the subtask, this will be injected when the real worker starts running the subtask(StartSubTask).
 	WorkerName string `toml:"-" json:"-"`
+	// task experimental configs
+	Experimental struct {
+		AsyncCheckpointFlush bool `yaml:"async-checkpoint-flush" toml:"async-checkpoint-flush" json:"async-checkpoint-flush"`
+	} `yaml:"experimental" toml:"experimental" json:"experimental"`
 }
 
 // NewSubTaskConfig creates a new SubTaskConfig.
@@ -415,11 +427,6 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		c.MetaSchema = defaultMetaSchema
 	}
 
-	if c.Timezone != "" {
-		log.L().Warn("'timezone' is deprecated, please remove this field.")
-		c.Timezone = ""
-	}
-
 	dirSuffix := "." + c.Name
 	if !strings.HasSuffix(c.LoaderConfig.Dir, dirSuffix) { // check to support multiple times calling
 		// if not ends with the task name, we append the task name to the tail
@@ -433,8 +440,8 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		c.SyncerConfig.CheckpointFlushInterval = defaultCheckpointFlushInterval
 	}
 
-	c.From.Adjust()
-	c.To.Adjust()
+	c.From.AdjustWithTimeZone(c.Timezone)
+	c.To.AdjustWithTimeZone(c.Timezone)
 
 	if verifyDecryptPassword {
 		_, err1 := c.DecryptPassword()
@@ -547,4 +554,9 @@ func (c *SubTaskConfig) Clone() (*SubTaskConfig, error) {
 	}
 
 	return clone, nil
+}
+
+// NeedUseLightning returns whether need to use lightning loader.
+func (c *SubTaskConfig) NeedUseLightning() bool {
+	return (c.Mode == ModeAll || c.Mode == ModeFull) && c.TiDB.Backend != ""
 }

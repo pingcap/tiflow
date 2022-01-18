@@ -19,9 +19,9 @@ import (
 
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
 func (s *testSyncerSuite) TestHandleError(c *C) {
@@ -30,46 +30,69 @@ func (s *testSyncerSuite) TestHandleError(c *C) {
 		task   = "test"
 		ctx    = context.Background()
 		cases  = []struct {
-			req    pb.HandleWorkerErrorRequest
+			req    *pb.HandleWorkerErrorRequest
 			errMsg string
 		}{
 			{
-				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "", Sqls: []string{""}},
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "", Sqls: []string{""}},
 				errMsg: fmt.Sprintf("source '%s' has no error", syncer.cfg.SourceID),
 			},
 			{
-				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "wrong_binlog_pos", Sqls: []string{""}},
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "wrong_binlog_pos", Sqls: []string{""}},
 				errMsg: ".*invalid --binlog-pos .* in handle-error operation.*",
 			},
 			{
-				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"wrong_sql"}},
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"wrong_sql"}},
 				errMsg: ".* sql wrong_sql: .*",
 			},
 			{
-				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"alter table tb add column a int;"}},
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"alter table tb add column a int;"}},
 				errMsg: ".*without schema name not valid.*",
 			},
 			{
-				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"insert into db.tb values(1,2);"}},
-				errMsg: ".*only support replace with DDL currently.*",
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"insert into db.tb values(1,2);"}},
+				errMsg: ".*only support replace or inject with DDL currently.*",
 			},
 			{
-				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"alter table db.tb add column a int;"}},
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"alter table db.tb add column a int;"}},
 				errMsg: "",
 			},
 			{
-				req:    pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Skip, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{}},
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Inject, Task: task, BinlogPos: "", Sqls: []string{""}},
+				errMsg: fmt.Sprintf("source '%s' has no error", syncer.cfg.SourceID),
+			},
+			{
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Inject, Task: task, BinlogPos: "wrong_binlog_pos", Sqls: []string{""}},
+				errMsg: ".*invalid --binlog-pos .* in handle-error operation.*",
+			},
+			{
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Inject, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"wrong_sql"}},
+				errMsg: ".* sql wrong_sql: .*",
+			},
+			{
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Inject, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"alter table db.tb add column a int;"}},
+				errMsg: "",
+			},
+			{
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Skip, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{}},
+				errMsg: "",
+			},
+			{
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_List, Task: task, BinlogPos: "mysql-bin.000001:2344", Sqls: []string{}},
 				errMsg: "",
 			},
 		}
 	)
 	mockDB := conn.InitMockDB(c)
 	var err error
-	syncer.fromDB, err = dbconn.NewUpStreamConn(s.cfg.From) // used to get parser
+	syncer.fromDB, err = dbconn.NewUpStreamConn(&s.cfg.From) // used to get parser
 	c.Assert(err, IsNil)
 
 	for _, cs := range cases {
-		err := syncer.HandleError(ctx, &cs.req)
+		commandsJSON, err := syncer.HandleError(ctx, cs.req)
+		if cs.req.Op == pb.ErrorOp_List {
+			c.Assert(commandsJSON, Equals, "[{\"op\":1,\"task\":\"test\",\"binlogPos\":\"(mysql-bin.000001, 2345)\"}]")
+		}
 		if len(cs.errMsg) == 0 {
 			c.Assert(err, IsNil)
 		} else {

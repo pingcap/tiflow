@@ -25,10 +25,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/notify"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sorter"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/notify"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -39,11 +40,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
-	metricSorterEventCount := sorterEventCount.MustCurryWith(map[string]string{
+	metricSorterEventCount := sorter.EventCount.MustCurryWith(map[string]string{
 		"capture":    captureAddr,
 		"changefeed": changefeedID,
 	})
-	metricSorterResolvedTsGauge := sorterResolvedTsGauge.WithLabelValues(captureAddr, changefeedID)
+	metricSorterResolvedTsGauge := sorter.ResolvedTsGauge.WithLabelValues(captureAddr, changefeedID)
 	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(captureAddr, changefeedID)
 	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(captureAddr, changefeedID)
 
@@ -63,7 +64,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			default:
 				// The task has not finished, so we give up.
 				// It does not matter because:
-				// 1) if the async workerpool has exited, it means the CDC process is exiting, UnifiedSorterCleanUp will
+				// 1) if the async workerpool has exited, it means the CDC process is exiting, CleanUp will
 				// take care of the temp files,
 				// 2) if the async workerpool is not exiting, the unfinished tasks will eventually be executed,
 				// and by that time, since the `onExit` have canceled them, they will not do any IO and clean up themselves.
@@ -258,8 +259,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if sortHeap.Len() > 0 {
 				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter: start merging",
-					zap.Int64("table-id", tableID),
-					zap.String("table-name", tableName),
+					zap.Int64("tableID", tableID),
+					zap.String("tableName", tableName),
 					zap.Uint64("minResolvedTs", minResolvedTs))
 			}
 		})
@@ -273,7 +274,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			event := item.entry
 
 			if event.CRTs < task.lastTs {
-				log.Panic("unified sorter: ts regressed in one backEnd, bug?", zap.Uint64("cur-ts", event.CRTs), zap.Uint64("last-ts", task.lastTs))
+				log.Panic("unified sorter: ts regressed in one backEnd, bug?", zap.Uint64("curTs", event.CRTs), zap.Uint64("lastTs", task.lastTs))
 			}
 			task.lastTs = event.CRTs
 
@@ -283,22 +284,22 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 						item := heap.Pop(sortHeap).(*sortItem)
 						task := item.data.(*flushTask)
 						event := item.entry
-						log.Debug("dump", zap.Reflect("event", event), zap.Int("heap-id", task.heapSorterID))
+						log.Debug("dump", zap.Reflect("event", event), zap.Int("heapID", task.heapSorterID))
 					}
 					log.Panic("unified sorter: output ts regressed, bug?",
 						zap.Int("counter", counter),
 						zap.Uint64("minResolvedTs", minResolvedTs),
-						zap.Int("cur-heap-id", task.heapSorterID),
-						zap.Int("cur-task-id", task.taskID),
-						zap.Uint64("cur-task-resolved", task.maxResolvedTs),
-						zap.Reflect("cur-event", event),
-						zap.Uint64("cur-ts", event.CRTs),
-						zap.Int("last-heap-id", lastTask.heapSorterID),
-						zap.Int("last-task-id", lastTask.taskID),
-						zap.Uint64("last-task-resolved", task.maxResolvedTs),
-						zap.Reflect("last-event", lastEvent),
-						zap.Uint64("last-ts", lastOutputTs),
-						zap.Int("sort-heap-len", sortHeap.Len()))
+						zap.Int("curHeapID", task.heapSorterID),
+						zap.Int("curTaskID", task.taskID),
+						zap.Uint64("curTaskResolved", task.maxResolvedTs),
+						zap.Reflect("curEvent", event),
+						zap.Uint64("curTs", event.CRTs),
+						zap.Int("lastHeapID", lastTask.heapSorterID),
+						zap.Int("lastTaskID", lastTask.taskID),
+						zap.Uint64("lastTask-resolved", task.maxResolvedTs),
+						zap.Reflect("lastEvent", lastEvent),
+						zap.Uint64("lastTs", lastOutputTs),
+						zap.Int("sortHeapLen", sortHeap.Len()))
 				}
 
 				if event.CRTs <= lastOutputResolvedTs {
@@ -366,8 +367,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				if counter%10 == 0 {
 					tableID, tableName := util.TableIDFromCtx(ctx)
 					log.Debug("Merging progress",
-						zap.Int64("table-id", tableID),
-						zap.String("table-name", tableName),
+						zap.Int64("tableID", tableID),
+						zap.String("tableName", tableName),
 						zap.Int("counter", counter))
 				}
 			})
@@ -386,8 +387,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if counter > 0 {
 				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter: merging ended",
-					zap.Int64("table-id", tableID),
-					zap.String("table-name", tableName),
+					zap.Int64("tableID", tableID),
+					zap.String("tableName", tableName),
 					zap.Uint64("resolvedTs", minResolvedTs), zap.Int("count", counter))
 			}
 		})
@@ -420,8 +421,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if task == nil {
 				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Merger input channel closed, exiting",
-					zap.Int64("table-id", tableID),
-					zap.String("table-name", tableName))
+					zap.Int64("tableID", tableID),
+					zap.String("tableName", tableName))
 				return nil
 			}
 
@@ -474,8 +475,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					}
 				} else if curResolvedTs < lastResolvedTs {
 					log.Panic("resolved-ts regressed in sorter",
-						zap.Uint64("cur-resolved-ts", curResolvedTs),
-						zap.Uint64("last-resolved-ts", lastResolvedTs))
+						zap.Uint64("curResolved-ts", curResolvedTs),
+						zap.Uint64("lastResolved-ts", lastResolvedTs))
 				}
 			}
 		}

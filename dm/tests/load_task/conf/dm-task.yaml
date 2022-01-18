@@ -3,7 +3,6 @@ name: load_task1
 task-mode: all
 is-sharding: false
 meta-schema: "dm_meta"
-# enable-heartbeat: true
 heartbeat-update-interval: 1
 heartbeat-report-interval: 1
 

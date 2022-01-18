@@ -22,11 +22,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"go.uber.org/zap"
 )
 
@@ -51,26 +51,19 @@ type Manager struct {
 	commandQueue chan *command
 
 	newProcessor func(cdcContext.Context) *processor
+
+	enableNewScheduler bool
 }
 
 // NewManager creates a new processor manager
 func NewManager() *Manager {
+	conf := config.GetGlobalServerConfig()
 	return &Manager{
-		processors:   make(map[model.ChangeFeedID]*processor),
-		commandQueue: make(chan *command, 4),
-		newProcessor: newProcessor,
+		processors:         make(map[model.ChangeFeedID]*processor),
+		commandQueue:       make(chan *command, 4),
+		newProcessor:       newProcessor,
+		enableNewScheduler: conf.Debug.EnableNewScheduler,
 	}
-}
-
-// NewManager4Test creates a new processor manager for test
-func NewManager4Test(
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
-) *Manager {
-	m := NewManager()
-	m.newProcessor = func(ctx cdcContext.Context) *processor {
-		return newProcessor4Test(ctx, createTablePipeline)
-	}
-	return m
 }
 
 // Tick implements the `orchestrator.State` interface
@@ -82,6 +75,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}
+
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
@@ -96,17 +90,23 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		})
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState() {
-				continue
+			if m.enableNewScheduler {
+				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
+				processor = m.newProcessor(ctx)
+				m.processors[changefeedID] = processor
+			} else {
+				if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState() {
+					continue
+				}
+				// the processor should start after at least one table has been added to this capture
+				taskStatus := changefeedState.TaskStatuses[captureID]
+				if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
+					continue
+				}
+				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
+				processor = m.newProcessor(ctx)
+				m.processors[changefeedID] = processor
 			}
-			// the processor should start after at least one table has been added to this capture
-			taskStatus := changefeedState.TaskStatuses[captureID]
-			if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
-				continue
-			}
-			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = m.newProcessor(ctx)
-			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {
 			m.closeProcessor(changefeedID)
@@ -131,7 +131,9 @@ func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
 	if processor, exist := m.processors[changefeedID]; exist {
 		err := processor.Close()
 		if err != nil {
-			log.Warn("failed to close processor", zap.Error(err))
+			log.Warn("failed to close processor",
+				zap.String("changefeed", changefeedID),
+				zap.Error(err))
 		}
 		delete(m.processors, changefeedID)
 	}

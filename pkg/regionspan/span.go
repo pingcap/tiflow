@@ -19,14 +19,14 @@ import (
 	"fmt"
 
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
-// Span represents a arbitrary kv range
+// Span represents an arbitrary kv range
 type Span struct {
 	Start []byte
 	End   []byte
@@ -40,7 +40,7 @@ func (s Span) String() string {
 // UpperBoundKey represents the maximum value.
 var UpperBoundKey = []byte{255, 255, 255, 255, 255}
 
-// ComparableSpan represents a arbitrary kv range which is comparable
+// ComparableSpan represents an arbitrary kv range which is comparable
 type ComparableSpan Span
 
 // String returns a string that encodes ComparableSpan in hex format.
@@ -209,7 +209,7 @@ func Intersect(lhs ComparableSpan, rhs ComparableSpan) (span ComparableSpan, err
 // IsSubSpan returns true if the sub span is parents spans
 func IsSubSpan(sub ComparableSpan, parents ...ComparableSpan) bool {
 	if bytes.Compare(sub.Start, sub.End) >= 0 {
-		log.Panic("the sub span is invalid", zap.Reflect("sub span", sub))
+		log.Panic("the sub span is invalid", zap.Reflect("subSpan", sub))
 	}
 	for _, parent := range parents {
 		if StartCompare(parent.Start, sub.Start) <= 0 &&

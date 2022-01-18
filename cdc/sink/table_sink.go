@@ -16,25 +16,30 @@ package sink
 import (
 	"context"
 	"sort"
-	"sync/atomic"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo"
+	"go.uber.org/zap"
 )
 
 type tableSink struct {
-	tableID model.TableID
-	manager *Manager
-	buffer  []*model.RowChangedEvent
-	// emittedTs means all of events which of commitTs less than or equal to emittedTs is sent to backendSink
-	emittedTs   model.Ts
+	tableID     model.TableID
+	manager     *Manager
+	buffer      []*model.RowChangedEvent
 	redoManager redo.LogManager
 }
 
-func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	// do nothing
-	return nil
+var _ Sink = (*tableSink)(nil)
+
+func (t *tableSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	t.buffer = append(t.buffer, rows...)
+	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
+	if t.redoManager.Enabled() {
+		return t.redoManager.TryEmitRowChangedEvents(ctx, t.tableID, rows...)
+	}
+	return true, nil
 }
 
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -54,55 +59,49 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 // FlushRowChangedEvents flushes sorted rows to sink manager, note the resolvedTs
 // is required to be no more than global resolvedTs, table barrierTs and table
 // redo log watermarkTs.
-func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
+	if tableID != t.tableID {
+		log.Panic("inconsistent table sink",
+			zap.Int64("tableID", tableID), zap.Int64("sinkTableID", t.tableID))
+	}
 	i := sort.Search(len(t.buffer), func(i int) bool {
 		return t.buffer[i].CommitTs > resolvedTs
 	})
 	if i == 0 {
-		atomic.StoreUint64(&t.emittedTs, resolvedTs)
-		ckpt, err := t.flushRedoLogs(ctx, resolvedTs)
-		if err != nil {
-			return ckpt, err
-		}
-		return t.manager.flushBackendSink(ctx)
+		return t.flushResolvedTs(ctx, resolvedTs)
 	}
 	resolvedRows := t.buffer[:i]
 	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
 
-	err := t.manager.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
+	err := t.manager.bufSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
-		return t.manager.getCheckpointTs(), errors.Trace(err)
+		return t.manager.getCheckpointTs(tableID), errors.Trace(err)
 	}
-	atomic.StoreUint64(&t.emittedTs, resolvedTs)
-	ckpt, err := t.flushRedoLogs(ctx, resolvedTs)
-	if err != nil {
-		return ckpt, err
-	}
-	return t.manager.flushBackendSink(ctx)
+	return t.flushResolvedTs(ctx, resolvedTs)
 }
 
+func (t *tableSink) flushResolvedTs(ctx context.Context, resolvedTs uint64) (uint64, error) {
+	redoTs, err := t.flushRedoLogs(ctx, resolvedTs)
+	if err != nil {
+		return t.manager.getCheckpointTs(t.tableID), err
+	}
+	if redoTs < resolvedTs {
+		resolvedTs = redoTs
+	}
+	return t.manager.flushBackendSink(ctx, t.tableID, resolvedTs)
+}
+
+// flushRedoLogs flush redo logs and returns redo log resolved ts which means
+// all events before the ts have been persisted to redo log storage.
 func (t *tableSink) flushRedoLogs(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	if t.redoManager.Enabled() {
 		err := t.redoManager.FlushLog(ctx, t.tableID, resolvedTs)
 		if err != nil {
-			return t.manager.getCheckpointTs(), err
+			return 0, err
 		}
+		return t.redoManager.GetMinResolvedTs(), nil
 	}
-	return 0, nil
-}
-
-// getResolvedTs returns resolved ts, which means all events before resolved ts
-// have been sent to sink manager, if redo log is enabled, it also means all events
-// before resolved ts have been persisted to redo log storage.
-func (t *tableSink) getResolvedTs() uint64 {
-	ts := atomic.LoadUint64(&t.emittedTs)
-	if t.redoManager.Enabled() {
-		redoResolvedTs := t.redoManager.GetMinResolvedTs()
-		if redoResolvedTs < ts {
-			ts = redoResolvedTs
-		}
-	}
-	return ts
+	return resolvedTs, nil
 }
 
 func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -110,12 +109,12 @@ func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	return nil
 }
 
-// Note once the Close is called, no more events can be written to this table sink
+// Close once the method is called, no more events can be written to this table sink
 func (t *tableSink) Close(ctx context.Context) error {
 	return t.manager.destroyTableSink(ctx, t.tableID)
 }
 
 // Barrier is not used in table sink
-func (t *tableSink) Barrier(ctx context.Context) error {
+func (t *tableSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
