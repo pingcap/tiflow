@@ -78,9 +78,13 @@ type processor struct {
 	lastRedoFlush time.Time
 
 	runningStatus processorRunningStatus
-	errCh         chan error
-	cancel        context.CancelFunc
-	wg            sync.WaitGroup
+	// todo: initialize the channel
+	sinkCh      chan sink.Sink
+	sinkCloseCh chan struct{}
+
+	errCh  chan error
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
@@ -346,6 +350,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		}
 		return p.changefeed, nil
 	}
+
 	if !p.checkChangefeedNormal() {
 		log.Info("changefeed not normal", zap.String("changefeed", p.changefeed.ID))
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
@@ -433,9 +438,24 @@ func (p *processor) createTaskPosition() (skipThisTick bool) {
 
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
-	if p.runningStatus != processorClosed {
+	switch p.runningStatus {
+	case processorRunning:
 		return nil
+	case processorInitializing:
+		select {
+		case s := <-p.sinkCh:
+			checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+			captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+			p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
+			p.runningStatus = processorRunning
+		default:
+		}
+		return nil
+	case processorClosing:
+		return nil
+	default:
 	}
+
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	p.cancel = cancel
 
@@ -503,9 +523,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 
-	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
-
 	// initialize the sink could be a time-consuming process in some special
 	// scenario. The user can use `cdc cli` in server `a`, which can connect
 	// to the kafka brokers easily, then the capture running the processor
@@ -528,8 +545,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}
 		log.Info("processor try new sink success",
 			zap.Duration("duration", time.Since(start)))
-		// todo: sinkManager should be used after fully initialized
-		p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
+		p.sinkCh <- s
 	}()
 
 	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}
@@ -545,7 +561,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}
 	}
 
-	p.runningStatus = processorRunning
+	p.runningStatus = processorInitializing
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil
 }
