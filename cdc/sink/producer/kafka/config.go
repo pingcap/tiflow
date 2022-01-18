@@ -226,14 +226,14 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
-	// set `Admin.Retry` and `Metadata.Retry`, and `Producer.Retry`
-	// related configuration identical to the sarama's default value.
-	// TODO: make these configurations can be set by user
 
-	// sarama producer fetch metadata from brokers periodically, if metadata
-	// cannot be fetched, this would indicate bad network connection between
-	// the capture server and kafka broker. default setting should be enough
-	// to handle a healthy kafka cluster.
+	// TODO: make these configurations can be customized by user
+	// Producer fetch metadata from brokers periodically, if metadata cannot be
+	// refreshed, this would indicate bad network connection between the capture
+	// server and kafka broker. default setting should be enough to work with a
+	// healthy kafka cluster.
+	// For kafka cluster with a bad network condition, errors can be quickly
+	// obtained and then handle the changefeed by cdc runtime.
 	// In the scenario that the network connection `producer -> kafka` is ok,
 	// this would cost at most around 750ms.
 	config.Metadata.Retry.Max = 3
@@ -245,7 +245,8 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// See: https://github.com/Shopify/sarama/issues/765
 	// and https://github.com/pingcap/tiflow/issues/3352.
 	// In the scenario that the network connection `producer -> kafka` is ok,
-	// but the producer cannot get response from kafka, this is the upperbound.
+	// but the producer cannot get response from kafka, this is the upperbound
+	// time cost if cannot fetch metadata.
 	config.Metadata.Timeout = 1 * time.Minute
 
 	// Admin.Retry take effect on `ClusterAdmin` related operations,
@@ -253,6 +254,9 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Admin.Retry.Max = 5
 	config.Admin.Retry.Backoff = 100 * time.Millisecond
 
+	// Producer.Retry take effect when the producer try to send message to kafka
+	// brokers. If kafka cluster is healthy, just the default value should be enough.
+	// For kafka cluster with a bad network condition,
 	config.Producer.Retry.Max = 3
 	config.Producer.Retry.Backoff = 100 * time.Millisecond
 
