@@ -37,6 +37,7 @@ const (
 	defaultKeepAliveInterval  = "500ms"
 	defaultRPCTimeout         = "3s"
 	defaultMemberLoopInterval = 10 * time.Second
+	defaultCampaignTimeout    = 5 * time.Second
 
 	defaultPeerUrls            = "http://127.0.0.1:8291"
 	defaultInitialClusterState = embed.ClusterStateFlagNew

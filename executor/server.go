@@ -9,6 +9,7 @@ import (
 	"github.com/hanfei1991/microcosm/executor/runtime"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/config"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/test"
@@ -241,10 +242,11 @@ func (s *Server) keepalive(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   strings.Split(resp.GetAddress(), ","),
-		Context:     ctx,
-		LogConfig:   &logConfig,
-		DialTimeout: 5 * time.Second,
+		Endpoints:        strings.Split(resp.GetAddress(), ","),
+		Context:          ctx,
+		LogConfig:        &logConfig,
+		DialTimeout:      config.ServerMasterEtcdDialTimeout,
+		AutoSyncInterval: config.ServerMasterEtcdSyncInterval,
 		DialOptions: []grpc.DialOption{
 			grpc.WithInsecure(),
 			grpc.WithBlock(),

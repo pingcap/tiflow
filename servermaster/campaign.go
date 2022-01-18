@@ -71,7 +71,7 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 			time.Sleep(retryInterval)
 			continue
 		}
-		err = s.campaign(ctx, time.Second*5)
+		err = s.campaign(ctx, defaultCampaignTimeout)
 		if err != nil {
 			continue
 		}
