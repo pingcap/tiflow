@@ -80,7 +80,10 @@ func (lk *LockKeeper) getDownstreamMeta(task string) (*DownstreamMeta, error) {
 
 // RemoveDownstreamMeta removes downstream mate by task.
 func (lk *LockKeeper) RemoveDownstreamMeta(task string) {
-	delete(lk.downstreamMetaMap, task)
+	if downstreamMeta, ok := lk.downstreamMetaMap[task]; ok {
+		downstreamMeta.db.Close()
+		delete(lk.downstreamMetaMap, task)
+	}
 }
 
 // TrySync tries to sync the lock.

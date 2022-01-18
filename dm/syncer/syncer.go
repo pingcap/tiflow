@@ -1490,22 +1490,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				cleanDumpFile = false
 			}
 		}
-		tbls := s.optimist.Tables()
-		sourceTables := make([]*filter.Table, 0, len(tbls))
-		tableInfos := make([]*model.TableInfo, 0, len(tbls))
-		for _, tbl := range tbls {
-			sourceTable := tbl[0]
-			targetTable := tbl[1]
-			tableInfo, err2 := s.getTableInfo(tctx, &sourceTable, &targetTable)
-			if err2 != nil {
-				return err2
-			}
-			sourceTables = append(sourceTables, &sourceTable)
-			tableInfos = append(tableInfos, tableInfo)
-		}
-		err = s.checkpoint.FlushPointsWithTableInfos(tctx, sourceTables, tableInfos)
-		if err != nil {
-			tctx.L().Error("failed to flush table points with table infos", log.ShortError(err))
+		if s.cfg.ShardMode == config.ShardOptimistic {
+			s.flushOptimisticTableInfos(tctx)
 		}
 	}
 
@@ -3770,4 +3756,24 @@ func calculateChanSize(queueSize, workerCount int, compact bool) int {
 		chanSize /= 2
 	}
 	return chanSize
+}
+
+func (s *Syncer) flushOptimisticTableInfos(tctx *tcontext.Context) {
+	tbls := s.optimist.Tables()
+	sourceTables := make([]*filter.Table, 0, len(tbls))
+	tableInfos := make([]*model.TableInfo, 0, len(tbls))
+	for _, tbl := range tbls {
+		sourceTable := tbl[0]
+		targetTable := tbl[1]
+		tableInfo, err := s.getTableInfo(tctx, &sourceTable, &targetTable)
+		if err != nil {
+			tctx.L().Error("failed to get table  infos", log.ShortError(err))
+			continue
+		}
+		sourceTables = append(sourceTables, &sourceTable)
+		tableInfos = append(tableInfos, tableInfo)
+	}
+	if err := s.checkpoint.FlushPointsWithTableInfos(tctx, sourceTables, tableInfos); err != nil {
+		tctx.L().Error("failed to flush table points with table infos", log.ShortError(err))
+	}
 }
