@@ -200,3 +200,29 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 		c.Assert(p.Dispatch(tc.row), check.Equals, tc.exceptPartition)
 	}
 }
+
+func (s DefaultDispatcherSuite) TestDefaultDispatcherWithOldValue(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	row := &model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema: "test",
+			Table:  "t3",
+		},
+		Columns: []*model.Column{
+			{
+				Name:  "id",
+				Value: 2,
+				Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+			}, {
+				Name:  "a",
+				Value: 3,
+				Flag:  model.UniqueKeyFlag,
+			},
+		},
+		IndexColumns: [][]int{{0}, {1}},
+	}
+
+	p := newDefaultDispatcher(16, true)
+	c.Assert(p.Dispatch(row), check.Equals, int32(3))
+}
