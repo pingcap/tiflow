@@ -497,7 +497,7 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(resultTaskList.Data[0].Name, check.Equals, task.Name)
 
 	// test batch import task config
-	taskBatchImportURL := "/api/v1/task/templates/import"
+	taskBatchImportURL := "/api/v1/tasks/templates/import"
 	req := openapi.TaskTemplateRequest{Overwrite: false}
 	result = testutil.NewRequest().Post(taskBatchImportURL).WithJsonBody(req).GoWithHTTPHandler(t.testT, s.openapiHandles)
 	c.Assert(result.Code(), check.Equals, http.StatusAccepted)
@@ -707,7 +707,7 @@ func (t *openAPISuite) TestTaskTemplatesAPI(c *check.C) {
 	c.Assert(result.Code(), check.Equals, http.StatusCreated)
 
 	// create task config template
-	url := "/api/v1/task/templates"
+	url := "/api/v1/tasks/templates"
 
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
@@ -880,6 +880,6 @@ func mockTaskQueryStatus(
 	).Return(queryResp, nil).MaxTimes(maxRetryNum)
 }
 
-func mockCheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) error {
-	return nil
+func mockCheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error) {
+	return "", nil
 }

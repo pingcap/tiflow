@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/checker"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -42,6 +43,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/pingcap/tidb/dumpling/export"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -190,15 +192,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if _, ok := c.checkingItems[config.BinlogRowImageChecking]; ok {
 			c.checkList = append(c.checkList, checker.NewMySQLBinlogRowImageChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
-		if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
-			c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-		}
 		if _, ok := c.checkingItems[config.ReplicationPrivilegeChecking]; ok {
 			c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-		}
-
-		if !checkingShard && !checkSchema {
-			continue
 		}
 
 		mapping, err := utils.FetchTargetDoTables(ctx, instance.sourceDB.DB, bw, r)
@@ -211,6 +206,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 
+		// checkTables map schema => {table1, table2, ...}
 		checkTables := make(map[string][]string)
 		checkSchemas := make(map[string]struct{}, len(mapping))
 		for name, tables := range mapping {
@@ -234,7 +230,14 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 		}
 		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
-
+		if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
+			exportCfg := export.DefaultConfig()
+			err := dumpling.ParseExtraArgs(&c.tctx.Logger, exportCfg, strings.Fields(instance.cfg.ExtraArgs))
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables, exportCfg.Consistency))
+		}
 		if c.onlineDDL != nil {
 			c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, bw))
 		}
@@ -283,59 +286,59 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		errs = append(errs, unit.NewProcessError(err))
 	} else if !result.Summary.Passed {
 		errs = append(errs, unit.NewProcessError(errors.New("check was failed, please see detail")))
-		warnLeft, errLeft := c.warnCnt, c.errCnt
+	}
+	warnLeft, errLeft := c.warnCnt, c.errCnt
 
-		// remove success result if not pass
-		results := result.Results[:0]
-		for _, r := range result.Results {
-			if r.State == checker.StateSuccess {
-				continue
-			}
+	// remove success result if not pass
+	results := result.Results[:0]
+	for _, r := range result.Results {
+		if r.State == checker.StateSuccess {
+			continue
+		}
 
-			// handle results without r.Errors
-			if len(r.Errors) == 0 {
-				switch r.State {
-				case checker.StateWarning:
-					if warnLeft == 0 {
-						continue
-					}
-					warnLeft--
-					results = append(results, r)
-				case checker.StateFailure:
-					if errLeft == 0 {
-						continue
-					}
-					errLeft--
-					results = append(results, r)
+		// handle results without r.Errors
+		if len(r.Errors) == 0 {
+			switch r.State {
+			case checker.StateWarning:
+				if warnLeft == 0 {
+					continue
 				}
-				continue
-			}
-
-			subErrors := make([]*checker.Error, 0, len(r.Errors))
-			for _, e := range r.Errors {
-				switch e.Severity {
-				case checker.StateWarning:
-					if warnLeft == 0 {
-						continue
-					}
-					warnLeft--
-					subErrors = append(subErrors, e)
-				case checker.StateFailure:
-					if errLeft == 0 {
-						continue
-					}
-					errLeft--
-					subErrors = append(subErrors, e)
+				warnLeft--
+				results = append(results, r)
+			case checker.StateFailure:
+				if errLeft == 0 {
+					continue
 				}
-			}
-			// skip display an empty Result
-			if len(subErrors) > 0 {
-				r.Errors = subErrors
+				errLeft--
 				results = append(results, r)
 			}
+			continue
 		}
-		result.Results = results
+
+		subErrors := make([]*checker.Error, 0, len(r.Errors))
+		for _, e := range r.Errors {
+			switch e.Severity {
+			case checker.StateWarning:
+				if warnLeft == 0 {
+					continue
+				}
+				warnLeft--
+				subErrors = append(subErrors, e)
+			case checker.StateFailure:
+				if errLeft == 0 {
+					continue
+				}
+				errLeft--
+				subErrors = append(subErrors, e)
+			}
+		}
+		// skip display an empty Result
+		if len(subErrors) > 0 {
+			r.Errors = subErrors
+			results = append(results, r)
+		}
 	}
+	result.Results = results
 
 	c.updateInstruction(result)
 
@@ -345,9 +348,12 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	default:
 	}
 
-	rawResult, err := json.MarshalIndent(result, "\t", "\t")
-	if err != nil {
-		rawResult = []byte(fmt.Sprintf("marshal error %v", err))
+	var rawResult []byte
+	if result.Summary.Successful != result.Summary.Total {
+		rawResult, err = json.MarshalIndent(result, "\t", "\t")
+		if err != nil {
+			rawResult = []byte(fmt.Sprintf("marshal error %v", err))
+		}
 	}
 
 	c.result.Lock()
