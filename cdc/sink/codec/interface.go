@@ -63,7 +63,7 @@ type MQMessage struct {
 	Schema    *string             // schema
 	Table     *string             // table
 	Type      model.MqMessageType // type
-	Protocol  config.Protocol     // protocol
+	Protocol  Protocol            // protocol
 	rowsCount int                 // rows in one MQ Message
 }
 
