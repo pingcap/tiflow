@@ -25,10 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/tiflow/pkg/version"
->>>>>>> 342afe7fa8f2b6bbfd752f5040a759b3916595b0
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
