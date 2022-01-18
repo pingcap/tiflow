@@ -102,6 +102,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 		c.Assert(res, check.HasLen, 1)
 		c.Assert(res[0].Key, check.IsNil)
 		c.Assert(len(res[0].Value), check.Equals, size)
+		c.Assert(res[0].GetRowsCount(), check.Equals, len(cs))
 
 		packet := &canal.Packet{}
 		err := proto.Unmarshal(res[0].Value, packet)
