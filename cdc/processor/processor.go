@@ -439,7 +439,7 @@ func (p *processor) createTaskPosition() (skipThisTick bool) {
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	switch p.runningStatus {
-	case processorRunning:
+	case processorRunning, processorClosing:
 		return nil
 	case processorInitializing:
 		select {
@@ -451,9 +451,8 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		default:
 		}
 		return nil
-	case processorClosing:
-		return nil
 	default:
+		// processor is closed
 	}
 
 	ctx, cancel := cdcContext.WithCancel(ctx)
@@ -484,6 +483,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}
 	}()
 
+	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
+	stdCtx = util.PutCaptureAddrInCtx(stdCtx, p.captureInfo.AdvertiseAddr)
+
 	var err error
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config)
 	if err != nil {
@@ -494,9 +496,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
-	stdCtx = util.PutCaptureAddrInCtx(stdCtx, p.captureInfo.AdvertiseAddr)
 
 	p.mounter = entry.NewMounter(p.schemaStorage,
 		p.changefeed.Info.Config.Mounter.WorkerNum,
