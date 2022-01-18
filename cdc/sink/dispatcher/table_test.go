@@ -21,6 +21,8 @@ import (
 )
 
 func TestTableDispatcher(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		row             *model.RowChangedEvent
 		exceptPartition int32
