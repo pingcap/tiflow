@@ -226,10 +226,16 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
+	// set `Admin.Retry` and `Metadata.Retry`, and `Producer.Retry`
+	// related configuration identical to the sarama's default value.
 	// TODO: make these configurations can be set by user
-	config.Admin.Retry.Max = 5
-	config.Admin.Retry.Backoff = 100 * time.Millisecond
 
+	// sarama producer fetch metadata from brokers periodically, if metadata
+	// cannot be fetched, this would indicate bad network connection between
+	// the capture server and kafka broker. default setting should be enough
+	// to handle a healthy kafka cluster.
+	// In the scenario that the network connection `producer -> kafka` is ok,
+	// this would cost at most around 750ms.
 	config.Metadata.Retry.Max = 3
 	config.Metadata.Retry.Backoff = 250 * time.Millisecond
 	// If it is not set, this means a metadata request against an unreachable
@@ -238,15 +244,22 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// Metadata.Retry.Backoff * Metadata.Retry.Max` to fail.
 	// See: https://github.com/Shopify/sarama/issues/765
 	// and https://github.com/pingcap/tiflow/issues/3352.
+	// In the scenario that the network connection `producer -> kafka` is ok,
+	// but the producer cannot get response from kafka, this is the upperbound.
 	config.Metadata.Timeout = 1 * time.Minute
+
+	// Admin.
+	config.Admin.Retry.Max = 5
+	config.Admin.Retry.Backoff = 100 * time.Millisecond
+
+	config.Producer.Retry.Max = 3
+	config.Producer.Retry.Backoff = 100 * time.Millisecond
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
-	config.Producer.Retry.Max = 3
-	config.Producer.Retry.Backoff = 100 * time.Millisecond
 
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
 	case "none":
