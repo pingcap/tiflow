@@ -295,6 +295,145 @@ def stop_task_success(task_name):
     print("stop_task_success")
 
 
+def create_task_template_success(task_name, target_table_name=""):
+    url = API_ENDPOINT + "/templates"
+    task = {
+        "name": task_name,
+        "task_mode": "all",
+        "shard_mode": "pessimistic",
+        "meta_schema": "dm-meta",
+        "enhance_online_schema_change": True,
+        "on_duplicate": "error",
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": SOURCE1_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": target_table_name},
+            },
+            {
+                "source": {
+                    "source_name": SOURCE2_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": target_table_name},
+            },
+        ],
+        "source_config": {
+            "source_conf": [
+                {"source_name": SOURCE1_NAME},
+                {"source_name": SOURCE2_NAME},
+            ],
+        },
+    }
+    resp = requests.post(url=url, json=task)
+    print("create_task_template_success resp=", resp.json())
+    assert resp.status_code == 201
+
+
+def create_task_template_failed():
+    url = API_ENDPOINT + "/templates"
+    task = {
+        "name": "test",
+        "task_mode": "all",
+        "shard_mode": "pessimistic_xxd",  # pessimistic_xxd is not a valid shard mode
+        "meta_schema": "dm-meta",
+        "enhance_online_schema_change": True,
+        "on_duplicate": "error",
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": SOURCE1_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": "t"},
+            },
+            {
+                "source": {
+                    "source_name": SOURCE2_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": "t"},
+            },
+        ],
+        "source_config": {
+            "source_conf": [
+                {"source_name": SOURCE1_NAME},
+                {"source_name": SOURCE2_NAME},
+            ],
+        },
+    }
+    resp = requests.post(url=url, json=task)
+    print("create_task_template_failed resp=", resp.json())
+    assert resp.status_code == 400
+
+
+def list_task_template(count):
+    url = API_ENDPOINT + "/templates"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("list_task_template resp=", data)
+    assert data["total"] == int(count)
+
+
+def import_task_template(success_count, failed_count):
+    url = API_ENDPOINT + "/templates/import"
+    resp = requests.post(url=url)
+    data = resp.json()
+    print("import_task_template resp=", data)
+    assert resp.status_code == 202
+    assert len(data["success_task_list"]) == int(success_count)
+    assert len(data["failed_task_list"]) == int(failed_count)
+
+
+def get_task_template(name):
+    url = API_ENDPOINT + "/templates/" + name
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("get_task_template resp=", data)
+    assert data["name"] == name
+
+
+def update_task_template_success(name, task_mode):
+    url = API_ENDPOINT + "/templates/" + name
+
+    # get task template first
+    task = requests.get(url=url).json()
+    task["task_mode"] = task_mode
+    resp = requests.put(url=url, json=task)
+    print("update_task_template_success resp=", resp.json())
+    assert resp.status_code == 200
+
+    # update task template success
+    assert requests.get(url=url).json()["task_mode"] == task_mode
+
+
+def delete_task_template(name):
+    url = API_ENDPOINT + "/templates/" + name
+    resp = requests.delete(url=url)
+    assert resp.status_code == 204
+    print("delete_task_template")
+
+
 def check_noshard_task_dump_status_success(task_name, total):
     url = API_ENDPOINT + "/" + task_name + "/status"
     resp = requests.get(url=url)
@@ -319,6 +458,13 @@ if __name__ == "__main__":
         "get_illegal_char_task_status_failed": get_illegal_char_task_status_failed,
         "get_task_status_success": get_task_status_success,
         "operate_schema_and_table_success": operate_schema_and_table_success,
+        "create_task_template_success": create_task_template_success,
+        "create_task_template_failed": create_task_template_failed,
+        "list_task_template": list_task_template,
+        "import_task_template": import_task_template,
+        "get_task_template": get_task_template,
+        "update_task_template_success": update_task_template_success,
+        "delete_task_template": delete_task_template,
         "check_noshard_task_dump_status_success": check_noshard_task_dump_status_success,
     }
 
