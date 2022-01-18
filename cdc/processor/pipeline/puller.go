@@ -31,16 +31,20 @@ type pullerNode struct {
 
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo
+	changefeed  string
 	cancel      context.CancelFunc
 	wg          *errgroup.Group
 }
 
 func newPullerNode(
-	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) pipeline.Node {
+	tableID model.TableID, replicaInfo *model.TableReplicaInfo,
+	tableName, changefeed string,
+) pipeline.Node {
 	return &pullerNode{
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
 		tableName:   tableName,
+		changefeed:  changefeed,
 	}
 }
 
@@ -75,6 +79,7 @@ func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Gr
 		ctx.GlobalVars().RegionCache,
 		ctx.GlobalVars().KVStorage,
 		ctx.GlobalVars().PDClock,
+		n.changefeed,
 		n.replicaInfo.StartTs, n.tableSpan(ctx), true)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
