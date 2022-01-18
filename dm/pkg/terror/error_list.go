@@ -247,6 +247,8 @@ const (
 	codeConfigOpenAPITaskConfigExist
 	codeConfigOpenAPITaskConfigNotExist
 	codeCollationCompatibleNotSupport
+	codeConfigValidationMode
+	codeContinuousValidatorCfgNotFound
 )
 
 // Binlog operation error code list.
@@ -904,6 +906,8 @@ var (
 	ErrOpenAPITaskConfigExist              = New(codeConfigOpenAPITaskConfigExist, ClassConfig, ScopeInternal, LevelLow, "the openapi task config for '%s' already exist", "If you want to override it, please use the overwrite flag.")
 	ErrOpenAPITaskConfigNotExist           = New(codeConfigOpenAPITaskConfigNotExist, ClassConfig, ScopeInternal, LevelLow, "the openapi task config for '%s' does not exist", "")
 	ErrConfigCollationCompatibleNotSupport = New(codeCollationCompatibleNotSupport, ClassConfig, ScopeInternal, LevelMedium, "collation compatible %s not supported", "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`.")
+	ErrConfigValidationMode                = New(codeConfigValidationMode, ClassConfig, ScopeInternal, LevelHigh, "invalid validation mode", "Please check `validation-mode` config in task configuration file.")
+	ErrContinuousValidatorCfgNotFound      = New(codeContinuousValidatorCfgNotFound, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%d)'s continuous validator config %s not exist", "Please check the `continuous-validator-config-name` config in task configuration file.")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")
