@@ -51,6 +51,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/election"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -2170,29 +2171,68 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 	if shouldRet {
 		return resp2, err2
 	}
-	// For the get-config command, you want to filter out fields that are not easily readable by humans,
-	// such as SSLXXBytes field in `Security` struct
+
+	formartAndSortTaskString := func(subCfgList []*config.SubTaskConfig) string {
+		sort.Slice(subCfgList, func(i, j int) bool {
+			return subCfgList[i].SourceID < subCfgList[j].SourceID
+		})
+		// For the get-config command, we want to filter out fields that are not easily readable by humans,
+		// such as SSLXXBytes field in `Security` struct
+		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
+		taskCfg.TargetDB.Password = "******"
+		if taskCfg.TargetDB.Security != nil {
+			taskCfg.TargetDB.Security.ClearSSLBytesData()
+		}
+		return taskCfg.String()
+	}
 	switch req.Type {
+	case pb.CfgType_TaskTemplateType:
+		task, err := ha.GetOpenAPITaskTemplate(s.etcdClient, req.Name)
+		if err != nil {
+			resp2.Msg = err.Error()
+			// nolint:nilerr
+			return resp2, nil
+		}
+		if task == nil {
+			resp2.Msg = "task not found"
+			// nolint:nilerr
+			return resp2, nil
+		}
+		toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
+		if adjustDBErr := adjustTargetDB(ctx, toDBCfg); adjustDBErr != nil {
+			if adjustDBErr != nil {
+				resp2.Msg = adjustDBErr.Error()
+				// nolint:nilerr
+				return resp2, nil
+			}
+		}
+		sourceCfgMap := make(map[string]*config.SourceConfig)
+		for _, cfg := range task.SourceConfig.SourceConf {
+			if sourceCfg := s.scheduler.GetSourceCfgByID(cfg.SourceName); sourceCfg != nil {
+				sourceCfgMap[cfg.SourceName] = sourceCfg
+			} else {
+				resp2.Msg = fmt.Sprintf("the source: %s of task not found", cfg.SourceName)
+				return resp2, nil
+			}
+		}
+		subTaskConfigList, err := config.OpenAPITaskToSubTaskConfigs(task, toDBCfg, sourceCfgMap)
+		if err != nil {
+			resp2.Msg = err.Error()
+			// nolint:nilerr
+			return resp2, nil
+		}
+		cfg = formartAndSortTaskString(subTaskConfigList)
 	case pb.CfgType_TaskType:
 		subCfgMap := s.scheduler.GetSubTaskCfgsByTask(req.Name)
 		if len(subCfgMap) == 0 {
 			resp2.Msg = "task not found"
 			return resp2, nil
 		}
-		subCfgList := make([]*config.SubTaskConfig, 0, len(subCfgMap))
+		subTaskConfigList := make([]*config.SubTaskConfig, 0, len(subCfgMap))
 		for _, subCfg := range subCfgMap {
-			subCfgList = append(subCfgList, subCfg)
+			subTaskConfigList = append(subTaskConfigList, subCfg)
 		}
-		sort.Slice(subCfgList, func(i, j int) bool {
-			return subCfgList[i].SourceID < subCfgList[j].SourceID
-		})
-
-		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
-		taskCfg.TargetDB.Password = "******"
-		if taskCfg.TargetDB.Security != nil {
-			taskCfg.TargetDB.Security.ClearSSLBytesData()
-		}
-		cfg = taskCfg.String()
+		cfg = formartAndSortTaskString(subTaskConfigList)
 	case pb.CfgType_MasterType:
 		if req.Name == s.cfg.Name {
 			cfg, err2 = s.cfg.Toml()

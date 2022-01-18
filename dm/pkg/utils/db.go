@@ -103,6 +103,7 @@ func GetRandomServerID(ctx context.Context, db *sql.DB) (uint32, error) {
 
 // GetSlaveServerID gets all slave server id.
 func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, error) {
+	// need REPLICATION SLAVE privilege
 	rows, err := db.QueryContext(ctx, `SHOW SLAVE HOSTS`)
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
@@ -176,6 +177,7 @@ func GetMasterStatus(ctx context.Context, db *sql.DB, flavor string) (gmysql.Pos
 		gs        gtid.Set
 	)
 
+	// need REPLICATION SLAVE privilege
 	rows, err := db.QueryContext(ctx, `SHOW MASTER STATUS`)
 	if err != nil {
 		return binlogPos, gs, terror.DBErrorAdapt(err, terror.ErrDBDriverError)

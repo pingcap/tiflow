@@ -167,6 +167,14 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 	return true, nil
 }
 
+func (b *bufferSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	err := b.EmitRowChangedEvents(ctx, rows...)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	select {
 	case <-ctx.Done():
