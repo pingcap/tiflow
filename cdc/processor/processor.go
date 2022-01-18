@@ -479,6 +479,8 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		select {
 		case <-p.sinkRunningCh:
 			p.runningStatus = processorRunning
+			log.Info("processor is running",
+				zap.String("changefeed", p.changefeedID))
 		default:
 		}
 		return nil
@@ -584,7 +586,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 
 	p.runningStatus = processorInitializing
-	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
+	log.Info("start initialize processor ...",
+		cdcContext.ZapFieldCapture(ctx),
+		cdcContext.ZapFieldChangefeed(ctx))
 	return nil
 }
 
@@ -1180,6 +1184,9 @@ func (p *processor) Close() error {
 		p.agent = nil
 	}
 
+	p.runningStatus = processorClosing
+	log.Info("processor is closing",
+		zap.String("changefeed", p.changefeedID))
 	return nil
 }
 
