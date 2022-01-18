@@ -65,7 +65,19 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	kvStorage := ctx.GlobalVars().KVStorage
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
+<<<<<<< HEAD
 		plr = puller.NewPuller(ctx, pdCli, ctx.GlobalVars().GrpcPool, kvStorage, startTs,
+=======
+		plr = puller.NewPuller(
+			ctx, pdCli,
+			ctx.GlobalVars().GrpcPool,
+			ctx.GlobalVars().RegionCache,
+			kvStorage,
+			ctx.GlobalVars().PDClock,
+			// Add "_ddl_puller" to make it different from table pullers.
+			ctx.ChangefeedVars().ID+"_ddl_puller",
+			startTs,
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false)
 	}
 

@@ -462,6 +462,11 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
+<<<<<<< HEAD
+=======
+		ctx.GlobalVars().PDClock,
+		ctx.ChangefeedVars().ID,
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 		checkpointTs, ddlspans, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {

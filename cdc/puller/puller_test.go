@@ -63,6 +63,12 @@ func newMockCDCKVClient(
 	pd pd.Client,
 	kvStorage tikv.Storage,
 	grpcPool kv.GrpcPool,
+<<<<<<< HEAD
+=======
+	regionCache *tikv.RegionCache,
+	pdClock pdtime.Clock,
+	changefeed string,
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 ) kv.CDCKVClient {
 	return &mockCDCKVClient{
 		expectations: make(chan model.RegionFeedEvent, 1024),
@@ -125,7 +131,15 @@ func (s *pullerSuite) newPullerForTest(
 	pdCli := &mockPdClientForPullerTest{clusterID: uint64(1)}
 	grpcPool := kv.NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	plr := NewPuller(ctx, pdCli, grpcPool, store, checkpointTs, spans, enableOldValue)
+=======
+	regionCache := tikv.NewRegionCache(pdCli)
+	defer regionCache.Close()
+	plr := NewPuller(
+		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(), "",
+		checkpointTs, spans, enableOldValue)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

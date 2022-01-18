@@ -90,8 +90,13 @@ func unlockRange(l *RegionRangeLock, startKey, endKey string, regionID, version 
 func (s *regionRangeLockSuite) TestRegionRangeLock(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.TODO()
+<<<<<<< HEAD
 	l := NewRegionRangeLock([]byte("a"), []byte("h"), math.MaxUint64)
 	mustLockRangeSuccess(ctx, c, l, "a", "e", 1, 1, math.MaxUint64)
+=======
+	l := NewRegionRangeLock([]byte("a"), []byte("h"), math.MaxUint64, "")
+	mustLockRangeSuccess(ctx, t, l, "a", "e", 1, 1, math.MaxUint64)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	unlockRange(l, "a", "e", 1, 1, 100)
 
 	mustLockRangeSuccess(ctx, c, l, "a", "e", 1, 2, 100)
@@ -104,9 +109,16 @@ func (s *regionRangeLockSuite) TestRegionRangeLock(c *check.C) {
 	unlockRange(l, "a", "h", 1, 3, 120)
 }
 
+<<<<<<< HEAD
 func (s *regionRangeLockSuite) TestRegionRangeLockStale(c *check.C) {
 	defer testleak.AfterTest(c)()
 	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64)
+=======
+func TestRegionRangeLockStale(t *testing.T) {
+	t.Parallel()
+
+	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64, "")
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	ctx := context.TODO()
 	mustLockRangeSuccess(ctx, c, l, "c", "g", 1, 10, math.MaxUint64)
 	mustLockRangeSuccess(ctx, c, l, "j", "n", 2, 8, math.MaxUint64)
@@ -128,8 +140,13 @@ func (s *regionRangeLockSuite) TestRegionRangeLockStale(c *check.C) {
 func (s *regionRangeLockSuite) TestRegionRangeLockLockingRegionID(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.TODO()
+<<<<<<< HEAD
 	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64)
 	mustLockRangeSuccess(ctx, c, l, "c", "d", 1, 10, math.MaxUint64)
+=======
+	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64, "")
+	mustLockRangeSuccess(ctx, t, l, "c", "d", 1, 10, math.MaxUint64)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 
 	mustLockRangeStale(ctx, c, l, "e", "f", 1, 5, "e", "f")
 	mustLockRangeStale(ctx, c, l, "e", "f", 1, 10, "e", "f")
@@ -163,9 +180,15 @@ func (s *regionRangeLockSuite) TestRegionRangeLockLockingRegionID(c *check.C) {
 func (s *regionRangeLockSuite) TestRegionRangeLockCanBeCancelled(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
+<<<<<<< HEAD
 	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64)
 	mustLockRangeSuccess(ctx, c, l, "g", "h", 1, 10, math.MaxUint64)
 	wait := mustLockRangeWait(ctx, c, l, "g", "h", 1, 12)
+=======
+	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64, "")
+	mustLockRangeSuccess(ctx, t, l, "g", "h", 1, 10, math.MaxUint64)
+	wait := mustLockRangeWait(ctx, t, l, "g", "h", 1, 12)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	cancel()
 	lockResult := wait()
 	c.Assert(lockResult.Status, check.Equals, LockRangeStatusCancel)
