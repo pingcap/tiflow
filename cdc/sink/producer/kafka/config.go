@@ -248,7 +248,8 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// but the producer cannot get response from kafka, this is the upperbound.
 	config.Metadata.Timeout = 1 * time.Minute
 
-	// Admin.
+	// Admin.Retry take effect on `ClusterAdmin` related operations,
+	// only `CreateTopic` for cdc now. Just use default values.
 	config.Admin.Retry.Max = 5
 	config.Admin.Retry.Backoff = 100 * time.Millisecond
 
