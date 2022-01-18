@@ -95,7 +95,7 @@ func operateSourceFunc(cmd *cobra.Command, _ []string) error {
 		}
 		if specifyWorker != "" {
 			if len(cmd.Flags().Args()) > 2 {
-				common.PrintLinesf("operate-source create can't use multi config when specify worker")
+				common.PrintLinesf("operate-source create can't create multiple sources when specify worker")
 			}
 		}
 
