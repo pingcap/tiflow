@@ -98,7 +98,6 @@ func operateSourceFunc(cmd *cobra.Command, _ []string) error {
 				common.PrintLinesf("operate-source create can't create multiple sources when specify worker")
 			}
 		}
-
 	}
 
 	contents := make([]string, 0, len(cmd.Flags().Args())-1)
