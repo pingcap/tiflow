@@ -121,7 +121,7 @@ func (r *RowChange) Reduce(preRowChange *RowChange) {
 func (r *RowChange) Split() (*RowChange, *RowChange) {
 	if r.tp != RowChangeUpdate {
 		log.L().DPanic("Split should only be called on RowChangeUpdate",
-			zap.Stringer("row change", r))
+			zap.Stringer("rowChange", r))
 		return nil, nil
 	}
 

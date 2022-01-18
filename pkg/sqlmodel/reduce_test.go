@@ -78,27 +78,39 @@ func TestReduce(t *testing.T) {
 	}{
 		// INSERT + UPDATE
 		{
-			nil, []interface{}{1, 2},
-			[]interface{}{1, 2}, []interface{}{3, 4},
-			nil, []interface{}{3, 4},
+			nil,
+			[]interface{}{1, 2},
+			[]interface{}{1, 2},
+			[]interface{}{3, 4},
+			nil,
+			[]interface{}{3, 4},
 		},
 		// INSERT + DELETE
 		{
-			nil, []interface{}{1, 2},
-			[]interface{}{1, 2}, nil,
-			[]interface{}{1, 2}, nil,
+			nil,
+			[]interface{}{1, 2},
+			[]interface{}{1, 2},
+			nil,
+			[]interface{}{1, 2},
+			nil,
 		},
 		// UPDATE + UPDATE
 		{
-			[]interface{}{1, 2}, []interface{}{1, 3},
-			[]interface{}{1, 3}, []interface{}{1, 4},
-			[]interface{}{1, 2}, []interface{}{1, 4},
+			[]interface{}{1, 2},
+			[]interface{}{1, 3},
+			[]interface{}{1, 3},
+			[]interface{}{1, 4},
+			[]interface{}{1, 2},
+			[]interface{}{1, 4},
 		},
 		// UPDATE + DELETE
 		{
-			[]interface{}{1, 2}, []interface{}{1, 3},
-			[]interface{}{1, 3}, nil,
-			[]interface{}{1, 2}, nil,
+			[]interface{}{1, 2},
+			[]interface{}{1, 3},
+			[]interface{}{1, 3},
+			nil,
+			[]interface{}{1, 2},
+			nil,
 		},
 	}
 

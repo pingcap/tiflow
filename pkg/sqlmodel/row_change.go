@@ -98,15 +98,15 @@ func NewRowChange(
 
 	if preValues != nil && len(preValues) != len(sourceTableInfo.Columns) {
 		log.L().DPanic("preValues length not equal to sourceTableInfo columns",
-			zap.Int("preValues length", len(preValues)),
-			zap.Int("sourceTableInfo length", len(sourceTableInfo.Columns)),
-			zap.Stringer("source table", sourceTable))
+			zap.Int("preValues", len(preValues)),
+			zap.Int("sourceTableInfo", len(sourceTableInfo.Columns)),
+			zap.Stringer("sourceTable", sourceTable))
 	}
 	if postValues != nil && len(postValues) != len(sourceTableInfo.Columns) {
 		log.L().DPanic("postValues length not equal to sourceTableInfo columns",
-			zap.Int("postValues length", len(postValues)),
-			zap.Int("sourceTableInfo length", len(sourceTableInfo.Columns)),
-			zap.Stringer("source table", sourceTable))
+			zap.Int("postValues", len(postValues)),
+			zap.Int("sourceTableInfo", len(sourceTableInfo.Columns)),
+			zap.Stringer("sourceTable", sourceTable))
 	}
 
 	if targetTable != nil {
@@ -254,8 +254,8 @@ func valuesHolder(n int) string {
 func (r *RowChange) genDeleteSQL() (string, []interface{}) {
 	if r.tp != RowChangeDelete && r.tp != RowChangeUpdate {
 		log.L().DPanic("illegal type for genDeleteSQL",
-			zap.String("source table", r.sourceTable.String()),
-			zap.Stringer("change type", r.tp))
+			zap.String("sourceTable", r.sourceTable.String()),
+			zap.Stringer("changeType", r.tp))
 		return "", nil
 	}
 
@@ -282,8 +282,8 @@ func isGenerated(columns []*timodel.ColumnInfo, name timodel.CIStr) bool {
 func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	if r.tp != RowChangeUpdate {
 		log.L().DPanic("illegal type for genUpdateSQL",
-			zap.String("source table", r.sourceTable.String()),
-			zap.Stringer("change type", r.tp))
+			zap.String("sourceTable", r.sourceTable.String()),
+			zap.Stringer("changeType", r.tp))
 		return "", nil
 	}
 
@@ -361,7 +361,7 @@ func (r *RowChange) GenSQL(tp DMLType) (string, []interface{}) {
 		return r.genDeleteSQL()
 	}
 	log.L().DPanic("illegal type for GenSQL",
-		zap.String("source table", r.sourceTable.String()),
-		zap.Stringer("DML type", tp))
+		zap.String("sourceTable", r.sourceTable.String()),
+		zap.Stringer("DMLType", tp))
 	return "", nil
 }

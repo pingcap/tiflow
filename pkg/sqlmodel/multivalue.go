@@ -104,7 +104,7 @@ func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 				zap.Int("len(whereValues)", len(whereValues)),
 				zap.Int("len(whereColumns)", len(whereColumns)),
 				zap.Any("whereValues", whereValues),
-				zap.Stringer("source table", change.sourceTable))
+				zap.Stringer("sourceTable", change.sourceTable))
 			return "", nil
 		}
 		args = append(args, whereValues...)

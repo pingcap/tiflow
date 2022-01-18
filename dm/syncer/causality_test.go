@@ -83,7 +83,7 @@ func (s *testSyncerSuite) TestCasuality(c *C) {
 			Length: types.UnspecifiedLength,
 		}},
 	}
-	downTi := schema.GetDownStreamTi(ti, ti)
+	downTi := schema.GetDownStreamTI(ti, ti)
 	c.Assert(downTi, NotNil)
 
 	jobCh := make(chan *job, 10)
@@ -152,7 +152,7 @@ func (s *testSyncerSuite) TestCasualityWithPrefixIndex(c *C) {
 	schemaStr := "create table t (c1 text, c2 int unique, unique key c1(c1(3)));"
 	ti, err := createTableInfo(p, se, int64(0), schemaStr)
 	c.Assert(err, IsNil)
-	downTi := schema.GetDownStreamTi(ti, ti)
+	downTi := schema.GetDownStreamTI(ti, ti)
 	c.Assert(downTi, NotNil)
 	c.Assert(len(downTi.AvailableUKIndexList) == 2, IsTrue)
 	tiIndex := downTi.AvailableUKIndexList[0]
