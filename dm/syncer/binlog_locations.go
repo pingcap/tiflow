@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
@@ -117,10 +118,23 @@ func (l *locationRecorder) updateCurStartGTID() {
 }
 
 func (l *locationRecorder) setCurEndGTID(e *replication.BinlogEvent) {
-	gtidStr, _ := event.GetGTIDStr(e)
-	err := l.curEndLocation.GetGTID().Update(gtidStr)
+	gtidStr, err := event.GetGTIDStr(e)
 	if err != nil {
-		log.L().DPanic("failed to set GTID set",
+		log.L().DPanic("failed to get GTID from event",
+			zap.Any("event", e),
+			zap.Error(err))
+		return
+	}
+
+	if l.curEndLocation.GetGTID() == nil {
+		gset, _ := gtid.ParserGTID("", gtidStr)
+		_ = l.curEndLocation.SetGTID(gset.Origin())
+		return
+	}
+
+	err = l.curEndLocation.GetGTID().Update(gtidStr)
+	if err != nil {
+		log.L().DPanic("failed to update GTID set",
 			zap.Any("GTID", gtidStr),
 			zap.Error(err))
 	}
