@@ -96,6 +96,19 @@ func NewRowChange(
 		sourceTableInfo: sourceTableInfo,
 	}
 
+	if preValues != nil && len(preValues) != len(sourceTableInfo.Columns) {
+		log.L().DPanic("preValues length not equal to sourceTableInfo columns",
+			zap.Int("preValues length", len(preValues)),
+			zap.Int("sourceTableInfo length", len(sourceTableInfo.Columns)),
+			zap.Stringer("source table", sourceTable))
+	}
+	if postValues != nil && len(postValues) != len(sourceTableInfo.Columns) {
+		log.L().DPanic("postValues length not equal to sourceTableInfo columns",
+			zap.Int("postValues length", len(postValues)),
+			zap.Int("sourceTableInfo length", len(sourceTableInfo.Columns)),
+			zap.Stringer("source table", sourceTable))
+	}
+
 	if targetTable != nil {
 		ret.targetTable = targetTable
 	} else {

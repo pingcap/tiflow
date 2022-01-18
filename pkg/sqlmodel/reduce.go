@@ -31,7 +31,7 @@ func (r *RowChange) HasNotNullUniqueIdx() bool {
 
 // IdentityValues returns the two group of values that can be used to identify the row. That is to say, if two row
 // changes has same IdentityValues, they are changes of the same row. We can use this property to only replicate latest
-// changes.
+// changes of one row.
 // We always use same index for same table structure to get IdentityValues.
 // two groups returned are from preValues and postValues.
 func (r *RowChange) IdentityValues() ([]interface{}, []interface{}) {
