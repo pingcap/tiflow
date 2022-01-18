@@ -33,6 +33,7 @@ var (
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"
+	defaultDiscoverTicker    = 3 * time.Second
 )
 
 // NewConfig creates a new base config for worker.

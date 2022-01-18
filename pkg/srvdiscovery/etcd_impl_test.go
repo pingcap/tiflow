@@ -102,7 +102,7 @@ func TestEtcdDiscoveryAPI(t *testing.T) {
 	}
 	tickDur := 50 * time.Millisecond
 	d := NewEtcdSrvDiscovery(client, keyAdapter, tickDur)
-	snapshot, err := d.Snapshot(ctx, true /*updateCache*/)
+	snapshot, err := d.Snapshot(ctx)
 	require.Nil(t, err)
 	require.Equal(t, 3, len(snapshot))
 	require.Contains(t, snapshot, "uuid-1")
@@ -124,12 +124,12 @@ func TestEtcdDiscoveryAPI(t *testing.T) {
 	ch := d.Watch(ctx)
 	select {
 	case wresp := <-ch:
-		require.Nil(t, wresp.err)
-		require.Equal(t, 2, len(wresp.addSet))
-		require.Contains(t, wresp.addSet, "uuid-4")
-		require.Contains(t, wresp.addSet, "uuid-5")
-		require.Equal(t, 1, len(wresp.delSet))
-		require.Contains(t, wresp.delSet, "uuid-1")
+		require.Nil(t, wresp.Err)
+		require.Equal(t, 2, len(wresp.AddSet))
+		require.Contains(t, wresp.AddSet, "uuid-4")
+		require.Contains(t, wresp.AddSet, "uuid-5")
+		require.Equal(t, 1, len(wresp.DelSet))
+		require.Contains(t, wresp.DelSet, "uuid-1")
 	case <-time.After(time.Second):
 		require.Fail(t, "watch from service discovery timeout")
 	}
@@ -145,10 +145,10 @@ func TestEtcdDiscoveryAPI(t *testing.T) {
 	// test cancel will trigger watch to return an error
 	cancel()
 	wresp := <-ch
-	require.Error(t, wresp.err, context.Canceled.Error())
+	require.Error(t, wresp.Err, context.Canceled.Error())
 
 	// test duplicate watch from service discovery
 	ch = d.Watch(ctx)
 	wresp = <-ch
-	require.Error(t, wresp.err, errors.ErrDiscoveryDuplicateWatch.GetMsg())
+	require.Error(t, wresp.Err, errors.ErrDiscoveryDuplicateWatch.GetMsg())
 }

@@ -31,19 +31,17 @@ func NewEtcdSrvDiscovery(etcdCli *clientv3.Client, ka adapter.KeyAdapter, watchT
 		etcdCli:      etcdCli,
 		watchTickDur: watchTickDur,
 		watched:      atomic.NewBool(false),
+		snapshot:     make(map[UUID]ServiceResource),
 	}
 }
 
 // Snapshot implements Discovery.Snapshot
-func (d *EtcdSrvDiscovery) Snapshot(ctx context.Context, updateCache bool) (map[UUID]ServiceResource, error) {
+func (d *EtcdSrvDiscovery) Snapshot(ctx context.Context) (map[UUID]ServiceResource, error) {
 	snapshot, revision, err := d.getSnapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if updateCache {
-		d.snapshot = snapshot
-		d.snapshotRev = revision
-	}
+	d.CopySnapshot(snapshot, revision)
 	return snapshot, nil
 }
 
@@ -53,12 +51,27 @@ func (d *EtcdSrvDiscovery) Watch(ctx context.Context) <-chan WatchResp {
 	notWatched := d.watched.CAS(false, true)
 	if !notWatched {
 		ch := make(chan WatchResp, 1)
-		ch <- WatchResp{err: errors.ErrDiscoveryDuplicateWatch.GenWithStackByArgs()}
+		ch <- WatchResp{Err: errors.ErrDiscoveryDuplicateWatch.GenWithStackByArgs()}
 		return ch
 	}
 	ch := make(chan WatchResp, defaultWatchChanSize)
 	go d.tickedWatch(ctx, ch)
 	return ch
+}
+
+// SnapshotClone implements Discovery.SnapshotClone
+func (d *EtcdSrvDiscovery) SnapshotClone() (map[UUID]ServiceResource, Revision) {
+	snapshot := make(map[UUID]ServiceResource, len(d.snapshot))
+	for k, v := range d.snapshot {
+		snapshot[k] = v
+	}
+	return snapshot, d.snapshotRev
+}
+
+// CopySnapshot implements Discovery.CopySnapshot
+func (d *EtcdSrvDiscovery) CopySnapshot(snapshot map[UUID]ServiceResource, revision Revision) {
+	d.snapshot = snapshot
+	d.snapshotRev = revision
 }
 
 func (d *EtcdSrvDiscovery) tickedWatch(ctx context.Context, ch chan<- WatchResp) {
@@ -67,18 +80,18 @@ func (d *EtcdSrvDiscovery) tickedWatch(ctx context.Context, ch chan<- WatchResp)
 	for {
 		select {
 		case <-ctx.Done():
-			ch <- WatchResp{err: ctx.Err()}
+			ch <- WatchResp{Err: ctx.Err()}
 			return
 		case <-ticker.C:
 			addSet, delSet, err := d.delta(ctx)
 			if err != nil {
-				ch <- WatchResp{err: err}
+				ch <- WatchResp{Err: err}
 				return
 			}
 			if len(addSet) > 0 || len(delSet) > 0 {
 				ch <- WatchResp{
-					addSet: addSet,
-					delSet: delSet,
+					AddSet: addSet,
+					DelSet: delSet,
 				}
 			}
 		}
