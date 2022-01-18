@@ -327,7 +327,7 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
-	err := s.startSource(cfg)
+	err := s.addSource(cfg)
 	if err != nil {
 		return err
 	}
@@ -357,7 +357,7 @@ func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName 
 		return terror.ErrSchedulerWorkerNotFree.Generate(workerName)
 	}
 
-	err := s.startSource(cfg)
+	err := s.addSource(cfg)
 	if err != nil {
 		return err
 	}
@@ -367,7 +367,7 @@ func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName 
 }
 
 // startSource add the upstream source config to the cluster.
-func (s *Scheduler) startSource(cfg *config.SourceConfig) error {
+func (s *Scheduler) addSource(cfg *config.SourceConfig) error {
 	// 1. check whether exists.
 	if _, ok := s.sourceCfgs[cfg.SourceID]; ok {
 		return terror.ErrSchedulerSourceCfgExist.Generate(cfg.SourceID)
