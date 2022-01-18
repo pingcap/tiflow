@@ -191,7 +191,7 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 
 	qec.shardingDDLInfo = trackInfos[0]
 	job := newDDLJob(qec)
-	err = s.handleJobFunc(job)
+	_, err = s.handleJobFunc(job)
 	if err != nil {
 		return err
 	}
