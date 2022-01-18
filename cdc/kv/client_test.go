@@ -91,9 +91,16 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 
 	grpcPool := NewGrpcPoolImpl(context.Background(), &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cli := NewCDCClient(context.Background(), pdClient, nil, grpcPool)
 	err = cli.Close()
 	c.Assert(err, check.IsNil)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cli := NewCDCClient(context.Background(), pdClient, nil, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	c.Assert(cli, check.NotNil)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 }
 
 func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
@@ -363,9 +370,18 @@ func (s *clientSuite) TestConnectOfflineTiKV(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage, grpcPool)
 	defer cdcClient.Close() //nolint:errcheck
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	// Take care of the eventCh, it's used to output resolvedTs event or kv event
+	// It will stuck the normal routine
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -462,8 +478,15 @@ func (s *clientSuite) TestRecvLargeMessageSize(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -560,8 +583,15 @@ func (s *clientSuite) TestHandleError(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -717,8 +747,15 @@ func (s *clientSuite) TestCompatibilityWithSameConn(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
 	go func() {
@@ -785,9 +822,16 @@ func (s *clientSuite) TestClusterIDMismatch(c *check.C) {
 
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
@@ -852,8 +896,15 @@ func (s *clientSuite) testHandleFeedEvent(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1301,8 +1352,15 @@ func (s *clientSuite) TestStreamSendWithError(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1411,8 +1469,15 @@ func (s *clientSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 40)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1540,8 +1605,15 @@ func (s *clientSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1749,7 +1821,13 @@ func (s *clientSuite) TestIncompatibleTiKV(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	// NOTICE: eventCh may block the main logic of EventFeed
 	eventCh := make(chan model.RegionFeedEvent, 128)
 	wg.Add(1)
@@ -1825,8 +1903,15 @@ func (s *clientSuite) TestNoPendingRegionError(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 
 	wg.Add(1)
 	go func() {
@@ -1902,8 +1987,15 @@ func (s *clientSuite) TestDropStaleRequest(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2011,8 +2103,15 @@ func (s *clientSuite) TestResolveLock(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2110,8 +2209,15 @@ func (s *clientSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Chan
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
 	go func() {
@@ -2257,8 +2363,15 @@ func (s *clientSuite) testEventAfterFeedStop(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2436,8 +2549,15 @@ func (s *clientSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2650,8 +2770,15 @@ func (s *clientSuite) TestResolveLockNoCandidate(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2744,8 +2871,15 @@ func (s *clientSuite) TestFailRegionReentrant(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2825,8 +2959,15 @@ func (s *clientSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2891,8 +3032,15 @@ func (s *clientSuite) testClientErrNoPendingRegion(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2968,8 +3116,15 @@ func (s *clientSuite) testKVClientForceReconnect(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3118,7 +3273,13 @@ func (s *clientSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	eventCh := make(chan model.RegionFeedEvent, 100)
 	wg.Add(1)
 	go func() {
@@ -3233,8 +3394,15 @@ func (s *clientSuite) TestEvTimeUpdate(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3352,8 +3520,15 @@ func (s *clientSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3443,8 +3618,15 @@ func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
 	lockResolver := txnutil.NewLockerResolver(kvStorage)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	baseAllocatedID := currentRequestID()
 
 	wg.Add(1)
