@@ -508,11 +508,18 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 		return s.requestRegionToStore(ctx, g)
 	})
 
+	tableID, tableName := util.TableIDFromCtx(ctx)
+	cfID := util.ChangefeedIDFromCtx(ctx)
 	g.Go(func() error {
+		timer := time.NewTimer(defaultCheckRegionRateLimitInterval)
+		defer timer.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
+			case <-timer.C:
+				s.handleRateLimit(ctx)
+				timer.Reset(defaultCheckRegionRateLimitInterval)
 			case task := <-s.requestRangeCh:
 				s.rangeChSizeGauge.Dec()
 				// divideAndSendEventFeedToRegions could be block for some time,
@@ -526,22 +533,6 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				g.Go(func() error {
 					return s.divideAndSendEventFeedToRegions(ctx, task.span, task.ts)
 				})
-			}
-		}
-	})
-
-	tableID, tableName := util.TableIDFromCtx(ctx)
-	cfID := util.ChangefeedIDFromCtx(ctx)
-	g.Go(func() error {
-		timer := time.NewTimer(defaultCheckRegionRateLimitInterval)
-		defer timer.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-timer.C:
-				s.handleRateLimit(ctx)
-				timer.Reset(defaultCheckRegionRateLimitInterval)
 			case errInfo := <-s.errCh:
 				s.errChSizeGauge.Dec()
 				allowed := s.checkRateLimit(errInfo.singleRegionInfo.verID.GetID())
