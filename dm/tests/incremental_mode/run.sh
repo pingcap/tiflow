@@ -76,8 +76,7 @@ function run() {
 	sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
 	dmctl_start_task $WORK_DIR/dm-task.yaml
 
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	dmctl_stop_task $TASK_NAME
 
@@ -266,8 +265,7 @@ function run() {
 		"resume-task test" \
 		"\"result\": true" 3
 
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	# test rotate binlog, after rotate and ddl, master binlog should be equal to sync binlog
 	run_sql "flush logs;" $MYSQL_PORT1 $MYSQL_PASSWORD1
