@@ -22,11 +22,6 @@ import (
 	"regexp"
 	"strings"
 
-<<<<<<< HEAD
-	"github.com/pingcap/tiflow/cdc/model"
-
-=======
->>>>>>> 342afe7fa8f2b6bbfd752f5040a759b3916595b0
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"

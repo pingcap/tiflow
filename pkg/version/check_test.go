@@ -24,10 +24,6 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
-<<<<<<< HEAD
-	"github.com/pingcap/tiflow/cdc/model"
-=======
->>>>>>> 342afe7fa8f2b6bbfd752f5040a759b3916595b0
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	pd "github.com/tikv/pd/client"
 	"github.com/tikv/pd/pkg/tempurl"

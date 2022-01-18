@@ -26,10 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/kv"
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/tiflow/cdc/model"
->>>>>>> 342afe7fa8f2b6bbfd752f5040a759b3916595b0
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/version"
