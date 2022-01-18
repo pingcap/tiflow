@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go v1.35.3
 	github.com/benbjohnson/clock v1.1.0
 	github.com/bradleyjkemp/grpc-tools v0.2.5
-	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/cenkalti/backoff/v4 v4.0.2
 	github.com/chaos-mesh/go-sqlsmith v0.0.0-20211025024535-03ae33408684
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/cockroachdb/pebble v0.0.0-20210719141320-8c3bd06debb5
@@ -62,7 +62,6 @@ require (
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
-	github.com/rakyll/statik v0.1.7
 	github.com/shopspring/decimal v1.3.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.2.1
@@ -78,7 +77,6 @@ require (
 	github.com/tikv/pd v1.1.0-beta.0.20211118054146-02848d2660ee
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
-	github.com/unrolled/render v1.0.1
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20210512015243-d19fbe541bf9

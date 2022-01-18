@@ -52,7 +52,7 @@ function fail_acquire_global_lock() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Paused\"" 3 \
+		"\"stage\": \"Paused\"" 2 \
 		"you need (at least one of) the RELOAD privilege(s) for this operation" 2
 
 	cleanup_data full_mode
@@ -130,6 +130,7 @@ function empty_data() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
 
+	sleep 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Finished\"" 2 \
