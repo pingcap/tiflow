@@ -361,7 +361,7 @@ function test_regexpr_router() {
 	dmctl_start_task "$WORK_DIR/regexpr-task.yaml" "--remove-meta"
 
 	check_sync_diff $WORK_DIR $cur/conf/regexpr_diff_config.toml
-	
+
 	cleanup_data test3gd8917777
 	cleanup_data test4s_2022
 	cleanup_data_upstream test3gd8917777
