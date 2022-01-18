@@ -550,12 +550,6 @@ type DMAPIStopRelayJSONBody StopRelayRequest
 // DMAPITransferSourceJSONBody defines parameters for DMAPITransferSource.
 type DMAPITransferSourceJSONBody WorkerNameRequest
 
-// DMAPICreateTaskTemplateJSONBody defines parameters for DMAPICreateTaskTemplate.
-type DMAPICreateTaskTemplateJSONBody Task
-
-// DMAPIImportTaskTemplateJSONBody defines parameters for DMAPIImportTaskTemplate.
-type DMAPIImportTaskTemplateJSONBody TaskTemplateRequest
-
 // DMAPIGetTaskListParams defines parameters for DMAPIGetTaskList.
 type DMAPIGetTaskListParams struct {
 	// get task with status
@@ -564,6 +558,12 @@ type DMAPIGetTaskListParams struct {
 
 // DMAPIStartTaskJSONBody defines parameters for DMAPIStartTask.
 type DMAPIStartTaskJSONBody CreateTaskRequest
+
+// DMAPICreateTaskTemplateJSONBody defines parameters for DMAPICreateTaskTemplate.
+type DMAPICreateTaskTemplateJSONBody Task
+
+// DMAPIImportTaskTemplateJSONBody defines parameters for DMAPIImportTaskTemplate.
+type DMAPIImportTaskTemplateJSONBody TaskTemplateRequest
 
 // DMAPIDeleteTaskParams defines parameters for DMAPIDeleteTask.
 type DMAPIDeleteTaskParams struct {
@@ -598,14 +598,14 @@ type DMAPIStopRelayJSONRequestBody DMAPIStopRelayJSONBody
 // DMAPITransferSourceJSONRequestBody defines body for DMAPITransferSource for application/json ContentType.
 type DMAPITransferSourceJSONRequestBody DMAPITransferSourceJSONBody
 
+// DMAPIStartTaskJSONRequestBody defines body for DMAPIStartTask for application/json ContentType.
+type DMAPIStartTaskJSONRequestBody DMAPIStartTaskJSONBody
+
 // DMAPICreateTaskTemplateJSONRequestBody defines body for DMAPICreateTaskTemplate for application/json ContentType.
 type DMAPICreateTaskTemplateJSONRequestBody DMAPICreateTaskTemplateJSONBody
 
 // DMAPIImportTaskTemplateJSONRequestBody defines body for DMAPIImportTaskTemplate for application/json ContentType.
 type DMAPIImportTaskTemplateJSONRequestBody DMAPIImportTaskTemplateJSONBody
-
-// DMAPIStartTaskJSONRequestBody defines body for DMAPIStartTask for application/json ContentType.
-type DMAPIStartTaskJSONRequestBody DMAPIStartTaskJSONBody
 
 // DMAPIPauseTaskJSONRequestBody defines body for DMAPIPauseTask for application/json ContentType.
 type DMAPIPauseTaskJSONRequestBody DMAPIPauseTaskJSONBody
