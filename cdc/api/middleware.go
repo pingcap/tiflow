@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package api
 
 import (
 	"context"
@@ -21,7 +21,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
@@ -91,7 +90,7 @@ func errorHandleMiddleware() gin.HandlerFunc {
 		if lastError != nil {
 			err := lastError.Err
 			// put the error into response
-			if api.IsHTTPBadRequestError(err) {
+			if IsHTTPBadRequestError(err) {
 				c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
 			} else {
 				c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))

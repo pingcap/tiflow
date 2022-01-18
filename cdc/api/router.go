@@ -16,6 +16,7 @@ package api
 import (
 	"net/http"
 	"net/http/pprof"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/failpoint"
@@ -30,6 +31,16 @@ import (
 	_ "github.com/pingcap/tiflow/docs/swagger"
 )
 
+func NewRouter() *gin.Engine {
+	router := gin.New()
+
+	router.Use(logMiddleware())
+	// request will timeout after 10 second
+	router.Use(timeoutMiddleware(time.Second * 10))
+	router.Use(errorHandleMiddleware())
+	return router
+}
+
 // RegisterRoutes create a router for OpenAPI
 func RegisterRoutes(
 	router *gin.Engine,
@@ -40,13 +51,13 @@ func RegisterRoutes(
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Open API
-	RegisterOpoenAPIRoutes(router, capture)
+	registerOpoenAPIRoutes(router, newOpenAPI(capture))
 
 	// Owner API
-	RegisterOwnerAPIRoutes(router, capture)
+	registerOwnerAPIRoutes(router, capture)
 
 	// Status API
-	RegisterStatusAPIRoutes(router, capture)
+	registerStatusAPIRoutes(router, capture)
 
 	// Log API
 	router.POST("/admin/log", gin.WrapF(handleAdminLogLevel))

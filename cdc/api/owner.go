@@ -79,8 +79,8 @@ type ownerAPI struct {
 	capture *capture.Capture
 }
 
-// RegisterOwnerAPIRoutes registers routes for owner APIs.
-func RegisterOwnerAPIRoutes(router *gin.Engine, capture *capture.Capture) {
+// registerOwnerAPIRoutes registers routes for owner APIs.
+func registerOwnerAPIRoutes(router *gin.Engine, capture *capture.Capture) {
 	ownerAPI := ownerAPI{capture: capture}
 	router.POST("/capture/owner/resign", gin.WrapF(ownerAPI.handleResignOwner))
 	router.POST("/capture/owner/admin", gin.WrapF(ownerAPI.handleChangefeedAdmin))

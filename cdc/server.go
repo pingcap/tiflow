@@ -218,14 +218,7 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 
 	// discard gin log output
 	gin.DefaultWriter = io.Discard
-
-	router := gin.New()
-
-	router.Use(logMiddleware())
-	// request will timeout after 10 second
-	router.Use(timeoutMiddleware(time.Second * 10))
-	router.Use(errorHandleMiddleware())
-
+	router := api.NewRouter()
 	// Register APIs.
 	api.RegisterRoutes(router, s.capture, registry)
 

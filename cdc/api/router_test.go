@@ -19,6 +19,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/capture"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +29,7 @@ func TestPProfPath(t *testing.T) {
 	t.Parallel()
 
 	router := gin.New()
-	RegisterRoutes(router, nil, nil)
+	RegisterRoutes(router, capture.NewCapture4Test(false), nil)
 
 	apis := []*testCase{
 		{"/debug/pprof/", http.MethodGet},

@@ -37,7 +37,7 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	defer testleak.AfterTest(c)()
 
 	router := gin.New()
-	RegisterRoutes(router, capture.NewCapture4Test(), nil)
+	RegisterRoutes(router, capture.NewCapture4Test(false), nil)
 
 	ts := httptest.NewServer(router)
 	defer ts.Close()
