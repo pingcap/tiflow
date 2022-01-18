@@ -168,8 +168,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			// ProgressNotify implies no new events.
 			if response.IsProgressNotify() {
 				log.Debug("Etcd progress notification",
-					zap.Int64("revision", response.Header.GetRevision()),
-					zap.String("role", role))
+					zap.Int64("revision", response.Header.GetRevision()))
 				// Note that we don't need to update the revision here, and we
 				// should not do so, because the revision of the progress notification
 				// may not satisfy the strict monotonicity we have expected.
