@@ -14,25 +14,23 @@
 package dispatcher
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type SwitcherSuite struct{}
+func TestSwitcher(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&SwitcherSuite{})
-
-func (s SwitcherSuite) TestSwitcher(c *check.C) {
-	defer testleak.AfterTest(c)()
 	d, err := NewDispatcher(config.GetDefaultReplicaConfig(), 4)
-	c.Assert(err, check.IsNil)
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	require.Nil(t, err)
+	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test", Table: "test",
 		},
-	}), check.FitsTypeOf, &defaultDispatcher{})
+	}))
 
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
@@ -46,40 +44,40 @@ func (s SwitcherSuite) TestSwitcher(c *check.C) {
 			},
 		},
 	}, 4)
-	c.Assert(err, check.IsNil)
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	require.Nil(t, err)
+	require.IsType(t, &indexValueDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test", Table: "table1",
 		},
-	}), check.FitsTypeOf, &indexValueDispatcher{})
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	}))
+	require.IsType(t, &tsDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "sbs", Table: "table2",
 		},
-	}), check.FitsTypeOf, &tsDispatcher{})
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	}))
+	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "sbs", Table: "test",
 		},
-	}), check.FitsTypeOf, &defaultDispatcher{})
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	}))
+	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test_default1", Table: "test",
 		},
-	}), check.FitsTypeOf, &defaultDispatcher{})
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	}))
+	require.IsType(t, &defaultDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test_default2", Table: "test",
 		},
-	}), check.FitsTypeOf, &defaultDispatcher{})
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	}))
+	require.IsType(t, &tableDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test_table", Table: "test",
 		},
-	}), check.FitsTypeOf, &tableDispatcher{})
-	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+	}))
+	require.IsType(t, &indexValueDispatcher{}, d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test_index_value", Table: "test",
 		},
-	}), check.FitsTypeOf, &indexValueDispatcher{})
+	}))
 }

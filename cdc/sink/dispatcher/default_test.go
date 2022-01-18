@@ -14,17 +14,15 @@
 package dispatcher
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type DefaultDispatcherSuite struct{}
+func TestDefaultDispatcher(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&DefaultDispatcherSuite{})
-
-func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
-	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		row             *model.RowChangedEvent
 		exceptPartition int32
@@ -197,12 +195,12 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 	}
 	p := newDefaultDispatcher(16, false)
 	for _, tc := range testCases {
-		c.Assert(p.Dispatch(tc.row), check.Equals, tc.exceptPartition)
+		require.Equal(t, tc.exceptPartition, p.Dispatch(tc.row))
 	}
 }
 
-func (s DefaultDispatcherSuite) TestDefaultDispatcherWithOldValue(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestDefaultDispatcherWithOldValue(t *testing.T) {
+	t.Parallel()
 
 	row := &model.RowChangedEvent{
 		Table: &model.TableName{
@@ -224,5 +222,5 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcherWithOldValue(c *check.C) {
 	}
 
 	p := newDefaultDispatcher(16, true)
-	c.Assert(p.Dispatch(row), check.Equals, int32(3))
+	require.Equal(t, int32(3), p.Dispatch(row))
 }
