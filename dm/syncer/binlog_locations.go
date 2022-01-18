@@ -18,11 +18,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
@@ -33,7 +33,8 @@ type locationRecorder struct {
 	//       |                       |
 	// curStartLocation        curEndLocation
 	// there may be more events between curStartLocation and curEndLocation due to the limitation of binlog or
-	// implementation of DM, but those events should always belong to one transaction.
+	// implementation of DM, but in such scenario, those events should always belong to one transaction.
+	// When curStartLocation is equal to curEndLocation, it means current event is not a data change.
 	//
 	// curStartLocation is used when
 	// - display a meaningful location
@@ -44,7 +45,7 @@ type locationRecorder struct {
 	curStartLocation binlog.Location
 	curEndLocation   binlog.Location
 
-	// txnEndLocation is the end location of last transaction. If current event is the last event of a txn,
+	// txnEndLocation is the end location of last seen transaction. If current event is the last event of a txn,
 	// txnEndLocation will be assigned from curEndLocation
 	// it is used when
 	// - reset binlog replication for a finer granularity
@@ -54,6 +55,9 @@ type locationRecorder struct {
 	// DML will also generate a query event if user set session binlog_format='statement', we use this field to
 	// distinguish DML query event.
 	inDML bool
+
+	// we assign startGTID := endGTID when COMMIT, but DDL doesn't have commit event, so we do this in next event.
+	needUpdateStartGTID bool
 
 	mu sync.Mutex // guard curEndLocation because Syncer.printStatus is reading it from another goroutine.
 }
@@ -102,11 +106,22 @@ func shouldUpdatePos(e *replication.BinlogEvent) bool {
 	return true
 }
 
-func (l *locationRecorder) setCurrentGTID(gset mysql.GTIDSet) {
-	err := l.curEndLocation.SetGTID(gset)
+func (l *locationRecorder) updateCurStartGTID() {
+	gset := l.curEndLocation.GetGTID().Origin()
+	err := l.curStartLocation.SetGTID(gset)
 	if err != nil {
 		log.L().DPanic("failed to set GTID set",
 			zap.Any("GTID set", gset),
+			zap.Error(err))
+	}
+}
+
+func (l *locationRecorder) setCurEndGTID(e *replication.BinlogEvent) {
+	gtidStr, _ := event.GetGTIDStr(e)
+	err := l.curEndLocation.GetGTID().Update(gtidStr)
+	if err != nil {
+		log.L().DPanic("failed to set GTID set",
+			zap.Any("GTID", gtidStr),
 			zap.Error(err))
 	}
 }
@@ -119,7 +134,13 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.curStartLocation = l.curEndLocation
+	// GTID part is maintained separately
+	l.curStartLocation.Position = l.curEndLocation.Position
+
+	if l.needUpdateStartGTID {
+		l.updateCurStartGTID()
+		l.needUpdateStartGTID = false
+	}
 
 	if !shouldUpdatePos(e) {
 		return
@@ -138,9 +159,16 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 	l.curEndLocation.Position.Pos = e.Header.LogPos
 
 	switch ev := e.Event.(type) {
+	case *replication.GTIDEvent:
+		l.setCurEndGTID(e)
+	case *replication.MariadbGTIDEvent:
+		l.setCurEndGTID(e)
+		if !ev.IsDDL() {
+			l.inDML = true
+		}
 	case *replication.XIDEvent:
 		// for transactional engines like InnoDB, COMMIT is xid event
-		l.setCurrentGTID(ev.GSet)
+		l.updateCurStartGTID()
 		l.saveTxnEndLocation()
 		l.inDML = false
 	case *replication.QueryEvent:
@@ -156,16 +184,12 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 			l.inDML = false
 		}
 
+		l.needUpdateStartGTID = true
 		if l.inDML {
 			return
 		}
 
-		l.setCurrentGTID(ev.GSet)
 		l.saveTxnEndLocation()
-	case *replication.MariadbGTIDEvent:
-		if !ev.IsDDL() {
-			l.inDML = true
-		}
 	}
 }
 
