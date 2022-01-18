@@ -85,7 +85,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
    	"list-member --name worker1" \
    	"\"stage\": \"bound\"" 1 \
-   	"\"source\": \"mysql-replica-01\"" 1 
+   	"\"source\": \"mysql-replica-01\"" 1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	# check wrong do-tables
