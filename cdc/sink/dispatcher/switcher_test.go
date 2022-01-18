@@ -37,7 +37,8 @@ func (s SwitcherSuite) TestSwitcher(c *check.C) {
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_default.*"}, Dispatcher: "default"},
+				{Matcher: []string{"test_default1.*"}, Dispatcher: "default"},
+				{Matcher: []string{"test_default2.*"}, Dispatcher: "unknown-dispatcher"},
 				{Matcher: []string{"test_table.*"}, Dispatcher: "table"},
 				{Matcher: []string{"test_index_value.*"}, Dispatcher: "index-value"},
 				{Matcher: []string{"test.*"}, Dispatcher: "rowid"},
@@ -63,7 +64,12 @@ func (s SwitcherSuite) TestSwitcher(c *check.C) {
 	}), check.FitsTypeOf, &defaultDispatcher{})
 	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
-			Schema: "test_default", Table: "test",
+			Schema: "test_default1", Table: "test",
+		},
+	}), check.FitsTypeOf, &defaultDispatcher{})
+	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema: "test_default2", Table: "test",
 		},
 	}), check.FitsTypeOf, &defaultDispatcher{})
 	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
