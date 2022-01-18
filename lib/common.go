@@ -14,7 +14,9 @@ type (
 	WorkerStatusCode int32
 	WorkerType       int64
 
-	Epoch         = int64
+	Epoch        = int64
+	WorkerConfig = interface{}
+
 	monotonicTime = time.Duration
 )
 

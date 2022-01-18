@@ -24,7 +24,31 @@ type clientHolder struct {
 	client pb.MasterClient
 }
 
-type MasterClient struct {
+type MasterClient interface {
+	UpdateClients(ctx context.Context, urls []string)
+	Endpoints() []string
+	Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, timeout time.Duration) (resp *pb.HeartbeatResponse, err error)
+	RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, timeout time.Duration) (resp *pb.RegisterExecutorResponse, err error)
+	ReportExecutorWorkload(
+		ctx context.Context,
+		req *pb.ExecWorkloadRequest,
+	) (resp *pb.ExecWorkloadResponse, err error)
+	SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp *pb.SubmitJobResponse, err error)
+	PauseJob(ctx context.Context, req *pb.PauseJobRequest) (resp *pb.PauseJobResponse, err error)
+	CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error)
+	QueryMetaStore(
+		ctx context.Context, req *pb.QueryMetaStoreRequest, timeout time.Duration,
+	) (resp *pb.QueryMetaStoreResponse, err error)
+	ScheduleTask(
+		ctx context.Context,
+		req *pb.TaskSchedulerRequest,
+		timeout time.Duration,
+	) (resp *pb.TaskSchedulerResponse, err error)
+	Close() (err error)
+	GetLeaderClient() pb.MasterClient
+}
+
+type MasterClientImpl struct {
 	urls        []string
 	leader      string
 	clientsLock sync.RWMutex
@@ -60,7 +84,7 @@ var mockDialImpl = func(ctx context.Context, addr string) (*clientHolder, error)
 
 // UpdateClients receives a list of server master addresses, dials to server
 // master that is not maintained in current MasterClient.
-func (c *MasterClient) UpdateClients(ctx context.Context, urls []string) {
+func (c *MasterClientImpl) UpdateClients(ctx context.Context, urls []string) {
 	c.clientsLock.Lock()
 	defer c.clientsLock.Unlock()
 	for _, addr := range urls {
@@ -79,7 +103,7 @@ func (c *MasterClient) UpdateClients(ctx context.Context, urls []string) {
 	}
 }
 
-func (c *MasterClient) init(ctx context.Context, urls []string) error {
+func (c *MasterClientImpl) init(ctx context.Context, urls []string) error {
 	c.UpdateClients(ctx, urls)
 	if len(c.clients) == 0 {
 		return errors.ErrGrpcBuildConn.GenWithStack("failed to dial to master, urls: %v", c.urls)
@@ -87,8 +111,8 @@ func (c *MasterClient) init(ctx context.Context, urls []string) error {
 	return nil
 }
 
-func NewMasterClient(ctx context.Context, join []string) (*MasterClient, error) {
-	client := &MasterClient{
+func NewMasterClient(ctx context.Context, join []string) (*MasterClientImpl, error) {
+	client := &MasterClientImpl{
 		clients: make(map[string]*clientHolder),
 		dialer:  dialImpl,
 	}
@@ -105,13 +129,13 @@ func NewMasterClient(ctx context.Context, join []string) (*MasterClient, error) 
 }
 
 // Endpoints returns current server master addresses
-func (c *MasterClient) Endpoints() []string {
+func (c *MasterClientImpl) Endpoints() []string {
 	return c.urls
 }
 
 // rpcWrap calls rpc to server master via pb.MasterClient in clients one by one,
 // until one client returns successfully.
-func (c *MasterClient) rpcWrap(ctx context.Context, req interface{}, respPointer interface{}) error {
+func (c *MasterClientImpl) rpcWrap(ctx context.Context, req interface{}, respPointer interface{}) error {
 	pc, _, _, _ := runtime.Caller(1)
 	fullMethodName := runtime.FuncForPC(pc).Name()
 	methodName := fullMethodName[strings.LastIndexByte(fullMethodName, '.')+1:]
@@ -145,7 +169,7 @@ func (c *MasterClient) rpcWrap(ctx context.Context, req interface{}, respPointer
 }
 
 // Heartbeat wraps Heartbeat rpc to master-server.
-func (c *MasterClient) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, timeout time.Duration) (resp *pb.HeartbeatResponse, err error) {
+func (c *MasterClientImpl) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, timeout time.Duration) (resp *pb.HeartbeatResponse, err error) {
 	ctx1, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	err = c.rpcWrap(ctx1, req, &resp)
@@ -153,29 +177,29 @@ func (c *MasterClient) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, 
 }
 
 // RegisterExecutor to master-server.
-func (c *MasterClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, timeout time.Duration) (resp *pb.RegisterExecutorResponse, err error) {
+func (c *MasterClientImpl) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, timeout time.Duration) (resp *pb.RegisterExecutorResponse, err error) {
 	ctx1, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	err = c.rpcWrap(ctx1, req, &resp)
 	return
 }
 
-func (c *MasterClient) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp *pb.SubmitJobResponse, err error) {
+func (c *MasterClientImpl) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp *pb.SubmitJobResponse, err error) {
 	err = c.rpcWrap(ctx, req, &resp)
 	return
 }
 
-func (c *MasterClient) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (resp *pb.PauseJobResponse, err error) {
+func (c *MasterClientImpl) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (resp *pb.PauseJobResponse, err error) {
 	err = c.rpcWrap(ctx, req, &resp)
 	return
 }
 
-func (c *MasterClient) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error) {
+func (c *MasterClientImpl) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error) {
 	err = c.rpcWrap(ctx, req, &resp)
 	return
 }
 
-func (c *MasterClient) QueryMetaStore(
+func (c *MasterClientImpl) QueryMetaStore(
 	ctx context.Context, req *pb.QueryMetaStoreRequest, timeout time.Duration,
 ) (resp *pb.QueryMetaStoreResponse, err error) {
 	ctx1, cancel := context.WithTimeout(ctx, timeout)
@@ -186,7 +210,7 @@ func (c *MasterClient) QueryMetaStore(
 
 // ScheduleTask sends TaskSchedulerRequest to server master and master
 // will ask resource manager for resource and allocates executors to given tasks
-func (c *MasterClient) ScheduleTask(
+func (c *MasterClientImpl) ScheduleTask(
 	ctx context.Context,
 	req *pb.TaskSchedulerRequest,
 	timeout time.Duration,
@@ -197,7 +221,7 @@ func (c *MasterClient) ScheduleTask(
 	return
 }
 
-func (c *MasterClient) ReportExecutorWorkload(
+func (c *MasterClientImpl) ReportExecutorWorkload(
 	ctx context.Context,
 	req *pb.ExecWorkloadRequest,
 ) (resp *pb.ExecWorkloadResponse, err error) {
@@ -206,7 +230,7 @@ func (c *MasterClient) ReportExecutorWorkload(
 }
 
 // Close closes underlying resources
-func (c *MasterClient) Close() (err error) {
+func (c *MasterClientImpl) Close() (err error) {
 	c.clientsLock.Lock()
 	defer c.clientsLock.Unlock()
 	for _, cliH := range c.clients {
@@ -220,7 +244,7 @@ func (c *MasterClient) Close() (err error) {
 
 // GetLeaderClient exposes pb.MasterClient, note this can be used when c.leader
 // is up to date.
-func (c *MasterClient) GetLeaderClient() pb.MasterClient {
+func (c *MasterClientImpl) GetLeaderClient() pb.MasterClient {
 	c.clientsLock.RLock()
 	defer c.clientsLock.RUnlock()
 	leader, ok := c.clients[c.leader]

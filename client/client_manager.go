@@ -9,6 +9,10 @@ import (
 	"go.uber.org/zap"
 )
 
+type ExecutorClientManager interface {
+	ExecutorClient(id model.ExecutorID) ExecutorClient
+}
+
 func NewClientManager() *Manager {
 	return &Manager{
 		executors: make(map[model.ExecutorID]ExecutorClient),
@@ -19,11 +23,11 @@ func NewClientManager() *Manager {
 type Manager struct {
 	mu sync.RWMutex
 
-	master    *MasterClient
+	master    *MasterClientImpl
 	executors map[model.ExecutorID]ExecutorClient
 }
 
-func (c *Manager) MasterClient() *MasterClient {
+func (c *Manager) MasterClient() *MasterClientImpl {
 	return c.master
 }
 
@@ -55,6 +59,14 @@ func (c *Manager) AddExecutor(id model.ExecutorID, addr string) error {
 	if err != nil {
 		return err
 	}
+	c.executors[id] = client
+	return nil
+}
+
+func (c *Manager) AddExecutorClient(id model.ExecutorID, client ExecutorClient) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.executors[id] = client
 	return nil
 }

@@ -46,7 +46,7 @@ type Server struct {
 		sync.RWMutex
 		m []*Member
 	}
-	leaderClient *client.MasterClient
+	leaderClient *client.MasterClientImpl
 	membership   Membership
 
 	// sched scheduler

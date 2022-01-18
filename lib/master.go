@@ -2,6 +2,7 @@ package lib
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -33,6 +34,9 @@ type MasterImpl interface {
 	// Tick is called on a fixed interval.
 	Tick(ctx context.Context) error
 
+	// OnMasterRecovered is called when the master has recovered from an error.
+	OnMasterRecovered(ctx context.Context) error
+
 	// OnWorkerDispatched is called when a request to launch a worker is finished.
 	OnWorkerDispatched(worker WorkerHandle, result error) error
 
@@ -50,42 +54,45 @@ type MasterImpl interface {
 }
 
 type BaseMaster struct {
-	impl MasterImpl
+	Impl MasterImpl
 
+	// dependencies
 	messageHandlerManager p2p.MessageHandlerManager
-	messageRouter         p2p.MessageRouter
+	messageRouter         p2p.MessageSender
 	metaKVClient          metadata.MetaKV
-	executorClientManager *client.Manager
-	serverMasterClient    *client.MasterClient
+	executorClientManager client.ExecutorClientManager
+	serverMasterClient    client.MasterClient
 	workers               *workerManager
 	pool                  workerpool.AsyncPool
 
-	// read-only fields
 	currentEpoch atomic.Int64
-	id           MasterID
-
-	// TODO put these two fields somewhere else.
-	advertiseAddr string
-	nodeID        p2p.NodeID
 
 	wg    sync.WaitGroup
 	errCh chan error
 
+	// closeCh is closed when the BaseMaster is exiting
+	closeCh chan struct{}
+
 	offlinedWorkerQueueMu sync.Mutex
 	offlinedWorkerQueue   deque.Deque
+
+	// read-only fields
+	id            MasterID
+	advertiseAddr string
+	nodeID        p2p.NodeID
 }
 
 func NewBaseMaster(
 	impl MasterImpl,
 	id MasterID,
 	messageHandlerManager p2p.MessageHandlerManager,
-	messageRouter p2p.MessageRouter,
+	messageRouter p2p.MessageSender,
 	metaKVClient metadata.MetaKV,
-	executorClientManager *client.Manager,
-	serverMasterClient *client.MasterClient,
+	executorClientManager client.ExecutorClientManager,
+	serverMasterClient client.MasterClient,
 ) *BaseMaster {
 	return &BaseMaster{
-		impl:                  impl,
+		Impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
 		messageRouter:         messageRouter,
 		metaKVClient:          metaKVClient,
@@ -93,6 +100,11 @@ func NewBaseMaster(
 		serverMasterClient:    serverMasterClient,
 		pool:                  workerpool.NewDefaultAsyncPool(4),
 		id:                    id,
+
+		errCh:   make(chan error, 1),
+		closeCh: make(chan struct{}),
+
+		offlinedWorkerQueue: deque.NewDeque(),
 	}
 }
 
@@ -101,8 +113,7 @@ func (m *BaseMaster) MetaKVClient() metadata.MetaKV {
 }
 
 func (m *BaseMaster) Init(ctx context.Context) error {
-	// TODO think about what ctx to use to call startBackgroundTasks.
-	m.startBackgroundTasks(ctx)
+	m.startBackgroundTasks()
 
 	if err := m.initMessageHandlers(ctx); err != nil {
 		return errors.Trace(err)
@@ -114,8 +125,14 @@ func (m *BaseMaster) Init(ctx context.Context) error {
 	}
 	m.currentEpoch.Store(epoch)
 	m.workers = newWorkerManager(m.id, !isInit, epoch)
-	if err := m.impl.InitImpl(ctx); err != nil {
-		return errors.Trace(err)
+	if isInit {
+		if err := m.Impl.InitImpl(ctx); err != nil {
+			return errors.Trace(err)
+		}
+	} else {
+		if err := m.Impl.OnMasterRecovered(ctx); err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	if err := m.markInitializedInMetadata(ctx); err != nil {
@@ -130,6 +147,8 @@ func (m *BaseMaster) Poll(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+	case <-m.closeCh:
+		return derror.ErrMasterClosed.GenWithStackByArgs()
 	default:
 	}
 
@@ -140,18 +159,19 @@ func (m *BaseMaster) Poll(ctx context.Context) error {
 	for {
 		m.offlinedWorkerQueueMu.Lock()
 		if m.offlinedWorkerQueue.Empty() {
+			m.offlinedWorkerQueueMu.Unlock()
 			break
 		}
 		handle := m.offlinedWorkerQueue.PopFront().(*tombstoneWorkerHandleImpl)
 		m.offlinedWorkerQueueMu.Unlock()
 
 		offlineErr := derror.ErrWorkerTimedOut.GenWithStackByArgs(handle.ID())
-		if err := m.impl.OnWorkerOffline(handle, offlineErr); err != nil {
+		if err := m.Impl.OnWorkerOffline(handle, offlineErr); err != nil {
 			return errors.Trace(err)
 		}
 	}
 
-	if err := m.impl.Tick(ctx); err != nil {
+	if err := m.Impl.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -163,19 +183,31 @@ func (m *BaseMaster) ID() MasterID {
 }
 
 func (m *BaseMaster) Close(ctx context.Context) error {
-	if err := m.impl.CloseImpl(ctx); err != nil {
+	if err := m.Impl.CloseImpl(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
+	close(m.closeCh)
 	m.wg.Wait()
+	if err := m.messageHandlerManager.Clean(ctx); err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 
-func (m *BaseMaster) startBackgroundTasks(ctx context.Context) {
+func (m *BaseMaster) startBackgroundTasks() {
+	cctx, cancel := context.WithCancel(context.Background())
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
-		if err := m.pool.Run(ctx); err != nil {
+		<-m.closeCh
+		cancel()
+	}()
+
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		if err := m.pool.Run(cctx); err != nil {
 			m.OnError(err)
 		}
 	}()
@@ -183,7 +215,7 @@ func (m *BaseMaster) startBackgroundTasks(ctx context.Context) {
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
-		if err := m.runWorkerCheck(ctx); err != nil {
+		if err := m.runWorkerCheck(cctx); err != nil {
 			m.OnError(err)
 		}
 	}()
@@ -215,6 +247,11 @@ func (m *BaseMaster) runWorkerCheck(ctx context.Context) error {
 }
 
 func (m *BaseMaster) OnError(err error) {
+	if errors.Cause(err) == context.Canceled {
+		// TODO think about how to gracefully handle cancellation here.
+		log.L().Warn("BaseMaster is being canceled", zap.Error(err))
+		return
+	}
 	select {
 	case m.errCh <- err:
 	default:
@@ -235,7 +272,7 @@ func (m *BaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch
 		return false, 0, errors.Trace(err)
 	}
 
-	isInit = masterMeta.Initialized
+	isInit = !masterMeta.Initialized
 
 	// We should update the master data to reflect our current information
 	masterMeta.Addr = m.advertiseAddr
@@ -327,8 +364,13 @@ func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, config []byte) error {
-	err := m.pool.Go(ctx, func() {
+func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, config WorkerConfig) error {
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = m.pool.Go(ctx, func() {
 		// This following API should be refined.
 		resp, err := m.serverMasterClient.ScheduleTask(ctx, &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
 			Task: &pb.TaskRequest{
@@ -340,7 +382,7 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)
 		if err != nil {
-			err1 := m.impl.OnWorkerDispatched(nil, errors.Trace(err))
+			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
@@ -357,11 +399,11 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 			Cmd: client.CmdDispatchTask,
 			Req: &pb.DispatchTaskRequest{
 				TaskTypeId: int64(workerType),
-				TaskConfig: config,
+				TaskConfig: configBytes,
 			},
 		})
 		if err != nil {
-			err1 := m.impl.OnWorkerDispatched(nil, errors.Trace(err))
+			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
@@ -370,7 +412,7 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 		dispatchTaskResp := executorResp.Resp.(*pb.DispatchTaskResponse)
 		errCode := dispatchTaskResp.GetErrorCode()
 		if errCode != pb.DispatchTaskErrorCode_OK {
-			err1 := m.impl.OnWorkerDispatched(
+			err1 := m.Impl.OnWorkerDispatched(
 				nil, errors.Errorf("dispatch worker failed with error code: %d", errCode))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
@@ -378,13 +420,15 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 			return
 		}
 
+		// workerID is expected to be generated by the executor, ideally a UUID.
+		// This workerID is expected to be unique globally to ease management.
 		workerID := WorkerID(dispatchTaskResp.GetWorkerId())
 		if err := m.workers.OnWorkerCreated(workerID, executorID); err != nil {
 			m.OnError(errors.Trace(err))
 		}
 		handle := m.workers.getWorkerHandle(workerID)
 
-		if err := m.impl.OnWorkerDispatched(handle, nil); err != nil {
+		if err := m.Impl.OnWorkerDispatched(handle, nil); err != nil {
 			m.OnError(errors.Trace(err))
 		}
 	})

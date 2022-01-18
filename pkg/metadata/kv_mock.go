@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 
+	"go.etcd.io/etcd/etcdserver/etcdserverpb"
+
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 )
@@ -44,7 +46,8 @@ func (t *Txn) Commit() (*clientv3.TxnResponse, error) {
 
 type MetaMock struct {
 	sync.Mutex
-	store map[string]string
+	store    map[string]string
+	revision int64
 }
 
 func NewMetaMock() *MetaMock {
@@ -57,6 +60,7 @@ func (m *MetaMock) Delete(ctx context.Context, key string, opts ...interface{}) 
 	m.Lock()
 	defer m.Unlock()
 	delete(m.store, key)
+	m.revision++
 	return nil, nil
 }
 
@@ -68,13 +72,18 @@ func (m *MetaMock) Put(ctx context.Context, key, value string, opts ...interface
 	m.Lock()
 	defer m.Unlock()
 	m.store[key] = value
+	m.revision++
 	return nil, nil
 }
 
 func (m *MetaMock) Get(ctx context.Context, key string, opts ...interface{}) (interface{}, error) {
 	m.Lock()
 	defer m.Unlock()
-	ret := &clientv3.GetResponse{}
+	ret := &clientv3.GetResponse{
+		Header: &etcdserverpb.ResponseHeader{
+			Revision: m.revision,
+		},
+	}
 	for k, v := range m.store {
 		if !strings.HasPrefix(k, key) {
 			continue
@@ -84,6 +93,7 @@ func (m *MetaMock) Get(ctx context.Context, key string, opts ...interface{}) (in
 			Value: []byte(v),
 		})
 	}
+	m.revision++
 	return ret, nil
 }
 

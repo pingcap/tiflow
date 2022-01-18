@@ -24,6 +24,11 @@ func (m *Master) Tick(ctx context.Context) error {
 	return nil
 }
 
+func (m *Master) OnMasterRecovered(ctx context.Context) error {
+	log.L().Info("FakeMaster: OnMasterRecovered")
+	return nil
+}
+
 func (m *Master) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
 	log.L().Info("FakeMaster: OnWorkerDispatched",
 		zap.String("worker-id", string(worker.ID())),

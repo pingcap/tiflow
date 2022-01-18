@@ -8,10 +8,9 @@ import (
 
 	"github.com/hanfei1991/microcosm/model"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/p2p"
 	"go.uber.org/zap"
 )
 
@@ -56,7 +55,7 @@ func (m *workerManager) Initialized(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) (timedOutWorkers []*WorkerInfo) {
+func (m *workerManager) Tick(ctx context.Context, sender p2p.MessageSender) (timedOutWorkers []*WorkerInfo) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -81,18 +80,13 @@ func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) (tim
 			zap.String("worker-node-id", workerNodeID),
 			zap.Any("message", reply))
 
-		msgClient := router.GetClient(workerNodeID)
-		if msgClient == nil {
-			// Retry on the next tick
-			continue
+		ok, err := sender.SendToNode(ctx, workerNodeID, HeartbeatPongTopic(m.masterID), reply)
+		if err != nil {
+			log.L().Error("Failed to send heartbeat", zap.Error(err))
 		}
-		_, err := msgClient.TrySendMessage(ctx, HeartbeatPongTopic(m.masterID), reply)
-		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
-			log.L().Warn("Sending heartbeat response to worker failed: message client congested",
-				zap.String("worker-id", string(workerInfo.ID)),
-				zap.String("worker-node-id", workerNodeID),
+		if !ok {
+			log.L().Info("Sending heartbeat would block, will try again",
 				zap.Any("message", reply))
-			// Retry on the next tick
 			continue
 		}
 		workerInfo.hasPendingHeartbeat = false

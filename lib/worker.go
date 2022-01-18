@@ -48,7 +48,7 @@ type BaseWorker struct {
 	impl WorkerImpl
 
 	messageHandlerManager p2p.MessageHandlerManager
-	messageRouter         p2p.MessageRouter
+	messageRouter         p2p.MessageSender
 	metaKVClient          metadata.MetaKV
 
 	masterClient *masterClient
@@ -62,16 +62,16 @@ type BaseWorker struct {
 func NewBaseWorker(
 	impl WorkerImpl,
 	messageHandlerManager p2p.MessageHandlerManager,
-	messageRouter p2p.MessageRouter,
+	messageSender p2p.MessageSender,
 	metaKVClient metadata.MetaKV,
 	workerID WorkerID,
 	masterID MasterID,
 ) *BaseWorker {
-	masterManager := newMasterManager(masterID, workerID, messageRouter)
+	masterManager := newMasterManager(masterID, workerID, messageSender)
 	return &BaseWorker{
 		impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
-		messageRouter:         messageRouter,
+		messageRouter:         messageSender,
 		metaKVClient:          metaKVClient,
 		masterClient:          masterManager,
 		id:                    workerID,
@@ -251,16 +251,16 @@ type masterClient struct {
 
 	workerID WorkerID
 
-	messageRouter           p2p.MessageRouter
+	messageSender           p2p.MessageSender
 	metaKVClient            metadata.MetaKV
 	lastMasterAckedPingTime monotonicTime
 }
 
-func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.MessageRouter) *masterClient {
+func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.MessageSender) *masterClient {
 	return &masterClient{
 		masterID:      masterID,
 		workerID:      workerID,
-		messageRouter: messageRouter,
+		messageSender: messageRouter,
 	}
 }
 
@@ -325,13 +325,6 @@ func (m *masterClient) SendHeartBeat(ctx context.Context) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	client := m.messageRouter.GetClient(m.masterNode)
-	if client == nil {
-		log.L().Warn("master node not found", zap.String("node-id", m.masterNode))
-		// TODO think whether it is appropriate to return nil here.
-		return nil
-	}
-
 	heartbeatMsg := &HeartbeatPingMessage{
 		// We use `monotime` because we would like to serialize a local timestamp.
 		// The timestamp will be returned in a PONG for time-out check, so we need
@@ -341,13 +334,13 @@ func (m *masterClient) SendHeartBeat(ctx context.Context) error {
 		FromWorkerID: m.workerID,
 		Epoch:        m.masterEpoch,
 	}
-	_, err := client.TrySendMessage(ctx, HeartbeatPingTopic(m.masterID), heartbeatMsg)
+
+	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, HeartbeatPingTopic(m.masterID), heartbeatMsg)
 	if err != nil {
-		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
-			log.L().Warn("sending heartbeat ping encountered ErrPeerMessageSendTryAgain")
-			return nil
-		}
 		return errors.Trace(err)
+	}
+	if !ok {
+		log.L().Warn("sending heartbeat ping encountered ErrPeerMessageSendTryAgain")
 	}
 	return nil
 }
@@ -356,37 +349,34 @@ func (m *masterClient) SendStatus(ctx context.Context, status WorkerStatus, work
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	client := m.messageRouter.GetClient(m.masterNode)
-	if client == nil {
-		log.L().Warn("master node not found", zap.String("node-id", m.masterNode))
-		// TODO think whether it is appropriate to return nil here.
-		return nil
-	}
-
 	statusUpdateMessage := &StatusUpdateMessage{
 		WorkerID: m.workerID,
 		Status:   status,
 	}
-	_, err := client.TrySendMessage(ctx, StatusUpdateTopic(m.masterID), statusUpdateMessage)
+	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, StatusUpdateTopic(m.masterID), statusUpdateMessage)
 	if err != nil {
+		return errors.Trace(err)
+	}
+	if !ok {
 		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
 			log.L().Warn("sending status update encountered ErrPeerMessageSendTryAgain")
 			return nil
 		}
-		return errors.Trace(err)
 	}
 
 	workloadReportMessage := &WorkloadReportMessage{
 		WorkerID: m.workerID,
 		Workload: workload,
 	}
-	_, err = client.TrySendMessage(ctx, WorkloadReportTopic(m.masterID), workloadReportMessage)
+	ok, err = m.messageSender.SendToNode(ctx, m.masterNode, WorkloadReportTopic(m.masterID), workloadReportMessage)
 	if err != nil {
+		return errors.Trace(err)
+	}
+	if !ok {
 		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
-			log.L().Warn("sending workload encountered ErrPeerMessageSendTryAgain")
+			log.L().Warn("sending status update encountered ErrPeerMessageSendTryAgain")
 			return nil
 		}
-		return errors.Trace(err)
 	}
 
 	return nil

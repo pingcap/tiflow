@@ -85,8 +85,8 @@ func (c *Context) L() log.Logger {
 
 type RuntimeDependencies struct {
 	MessageHandlerManager p2p.MessageHandlerManager
-	MessageRouter         p2p.MessageRouter
+	MessageRouter         p2p.MessageSender
 	MetaKVClient          metadata.MetaKV
 	ExecutorClientManager *client.Manager
-	ServerMasterClient    *client.MasterClient
+	ServerMasterClient    *client.MasterClientImpl
 }
