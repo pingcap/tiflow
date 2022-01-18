@@ -59,6 +59,9 @@ dumped_data/*
 *-coverage.xml
 *-junit-report.xml
 dm/ui/dist
+dm/ui/src/routes.tsx
+dm/ui/src/mock.ts
+dm/ui/stats.html
 
 # npm dependencies
 node_modules
