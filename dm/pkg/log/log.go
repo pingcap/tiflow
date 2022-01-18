@@ -104,6 +104,7 @@ var (
 
 // InitLogger initializes DM's and also the TiDB library's loggers.
 func InitLogger(cfg *Config) error {
+	inDev := strings.ToLower(cfg.Level) == "debug"
 	// init DM logger
 	logger, props, err := pclog.InitLogger(&pclog.Config{
 		Level:  cfg.Level,
@@ -114,6 +115,7 @@ func InitLogger(cfg *Config) error {
 			MaxDays:    cfg.FileMaxDays,
 			MaxBackups: cfg.FileMaxBackups,
 		},
+		Development: inDev,
 	})
 	if err != nil {
 		return terror.ErrInitLoggerFail.Delegate(err)
