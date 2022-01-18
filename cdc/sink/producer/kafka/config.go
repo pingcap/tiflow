@@ -226,7 +226,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
-	// todo: make these configurations can be set by user.g
+	// TODO: make these configurations can be set by user
 	config.Admin.Retry.Max = 5
 	config.Admin.Retry.Backoff = 100 * time.Millisecond
 
