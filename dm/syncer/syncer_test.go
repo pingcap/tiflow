@@ -153,6 +153,7 @@ func (s *testSyncerSuite) SetUpSuite(c *C) {
 		Flavor:           "mysql",
 		LoaderConfig:     loaderCfg,
 	}
+	s.cfg.Experimental.AsyncCheckpointFlush = true
 	s.cfg.From.Adjust()
 	s.cfg.To.Adjust()
 
@@ -183,7 +184,7 @@ func (s *testSyncerSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) []
 			events = append(events, evs...)
 
 		case DDL:
-			evs, _, err := s.eventsGenerator.GenDDLEvents(e.args[0].(string), e.args[1].(string))
+			evs, _, err := s.eventsGenerator.GenDDLEvents(e.args[0].(string), e.args[1].(string), 0)
 			c.Assert(err, IsNil)
 			events = append(events, evs...)
 
@@ -208,7 +209,7 @@ func (s *testSyncerSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) []
 			default:
 				c.Fatal(fmt.Sprintf("mock event generator don't support event type: %d", e.typ))
 			}
-			evs, _, err := s.eventsGenerator.GenDMLEvents(eventType, dmlData)
+			evs, _, err := s.eventsGenerator.GenDMLEvents(eventType, dmlData, 0)
 			c.Assert(err, IsNil)
 			events = append(events, evs...)
 		}
