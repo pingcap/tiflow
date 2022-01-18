@@ -20,10 +20,7 @@ function run() {
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/syncer/BlockDDLJob=return(1)"
 		"github.com/pingcap/tiflow/dm/syncer/ShowLagInLog=return(1)" # test lag metric >= 1 beacuse we inject BlockDDLJob(ddl) to sleep(1)
-<<<<<<< HEAD
-=======
 		"github.com/pingcap/tiflow/dm/dm/worker/PrintStatusCheckSeconds=return(1)"
->>>>>>> b1b8182771865456f90a9399f504c114494c4189
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
