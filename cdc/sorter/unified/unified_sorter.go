@@ -154,7 +154,7 @@ func (s *Sorter) Run(ctx context.Context) error {
 		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
 	})
 
-	errg.Go(func() error {
+	err := func() error {
 		defer func() {
 			// cancelling the heapSorters from the outside
 			for _, hs := range heapSorters {
@@ -224,8 +224,10 @@ func (s *Sorter) Run(ctx context.Context) error {
 				}
 			}
 		}
-	})
-
+	}()
+	if err != nil {
+		return printError(err)
+	}
 	return printError(errg.Wait())
 }
 

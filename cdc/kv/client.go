@@ -498,6 +498,8 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 
 	log.Debug("event feed started", zap.Stringer("span", s.totalSpan), zap.Uint64("ts", ts))
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
@@ -564,13 +566,12 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 		}
 	})
 
-	g.Go(func() error {
-		return s.regionRouter.Run(ctx)
-	})
-
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
 	s.rangeChSizeGauge.Inc()
-
+	err := s.regionRouter.Run(ctx)
+	if err != nil {
+		return err
+	}
 	return g.Wait()
 }
 
