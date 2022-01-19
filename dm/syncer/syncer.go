@@ -125,10 +125,10 @@ type Syncer struct {
 
 	tctx *tcontext.Context // this ctx only used for logger.
 
-	// this ctx is a background ctx and was initialized in s.Run, it is used for some background tasks in S.Run
+	// this ctx is a background ctx and was initialized in s.Run, it is used for some background tasks in s.Run
 	// when this ctx cancelled, syncer will shuts down all background running jobs and not wait transaction end
 	runCtx context.Context
-	// this is used for some background tasks S.Run that need logger it share same lifecycle with runCtx.
+	// this is used for some background tasks s.Run that need logger it share same lifecycle with runCtx.
 	runTCtx   *tcontext.Context // this ctx only used for logger.
 	runCancel context.CancelFunc
 
@@ -196,8 +196,6 @@ type Syncer struct {
 	filteredUpdate atomic.Int64
 	filteredDelete atomic.Int64
 
-	done chan struct{}
-
 	checkpoint            CheckPoint
 	checkpointFlushWorker *checkpointFlushWorker
 	onlineDDL             onlineddl.OnlinePlugin
@@ -261,7 +259,6 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.binlogSizeCount.Store(0)
 	syncer.lastCount.Store(0)
 	syncer.count.Store(0)
-	syncer.done = nil
 	syncer.handleJobFunc = syncer.handleJob
 	syncer.cli = etcdClient
 
@@ -303,7 +300,7 @@ func (s *Syncer) closeJobChans() {
 	}
 	close(s.dmlJobCh)
 	close(s.ddlJobCh)
-	close(s.checkpointFlushWorker.input)
+	s.checkpointFlushWorker.Close()
 	s.jobsClosed.Store(true)
 }
 
@@ -643,7 +640,6 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		s.Unlock()
 		return
 	}
-	s.done = make(chan struct{})
 	s.Unlock()
 
 	runFatalChan := make(chan *pb.ProcessError, s.cfg.WorkerCount+1)
@@ -1414,27 +1410,29 @@ func (s *Syncer) syncDML() {
 }
 
 func (s *Syncer) waitTransactionEndBeforeExit(ctx context.Context) {
-	defer s.runCancel()
 	select {
 	case <-ctx.Done(): // hijack the root context from s.Run to wait for the transaction to end.
 		s.tctx.L().Info("received subtask's done, try graceful stop")
 		s.waitTransactionLock.Lock()
 		if s.isTransactionEnd {
 			s.waitXIDJob.Store(int64(waitComplete))
-			s.tctx.L().Info("the last job is transaction end, done directly")
 			s.waitTransactionLock.Unlock()
+			s.tctx.L().Info("the last job is transaction end, done directly")
+			s.runCancel()
 			return
 		}
 		s.waitXIDJob.Store(int64(waiting))
 		s.waitTransactionLock.Unlock()
 		select {
 		case <-s.runCtx.Done():
-			s.tctx.L().Info("received run ctx done, exit now")
+			s.tctx.L().Info("run ctx done by waitComplete")
 		case <-time.After(maxPauseOrStopWaitTime):
 			s.tctx.L().Info("wait transaction end timeout, exit now")
+			s.runCancel()
 		}
 	case <-s.runCtx.Done(): // when no graceful stop, run ctx will canceled first.
 		s.tctx.L().Info("received ungraceful exit ctx, exit now")
+		s.runCancel()
 	}
 }
 
@@ -1484,20 +1482,11 @@ func (s *Syncer) updateTSOffset(ctx context.Context) error {
 func (s *Syncer) Run(ctx context.Context) (err error) {
 	runCtx, runCancel := context.WithCancel(context.Background())
 	runTCtx := tcontext.NewContext(runCtx, s.tctx.L())
-	defer runCancel()
 	s.Lock()
 	s.runCtx = runCtx
 	s.runTCtx = runTCtx
 	s.runCancel = runCancel
 	s.Unlock()
-
-	defer func() {
-		if s.done != nil {
-			close(s.done)
-		}
-	}()
-
-	go s.waitTransactionEndBeforeExit(ctx)
 
 	// some initialization that can't be put in Syncer.Init
 	fresh, err := s.IsFreshTask(ctx)
@@ -1510,13 +1499,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			return err
 		}
 	}
-
-	// start flush checkpoints worker.
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		s.checkpointFlushWorker.Run(runTCtx)
-	}()
 
 	var (
 		flushCheckpoint bool
@@ -1538,6 +1520,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	} else {
 		cleanDumpFile = false
 	}
+	// start flush checkpoints worker. this worker mast start before s.flushCheckPoints()
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.checkpointFlushWorker.Run(s.runTCtx)
+	}()
 
 	if flushCheckpoint {
 		if err = s.flushCheckPoints(); err != nil {
@@ -1567,9 +1555,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if utErr := s.updateTSOffset(ctx); utErr != nil {
 		return utErr
 	}
-	// start background task to get/update current ts offset between dm and upstream
-	s.wg.Add(1)
-	go s.updateTSOffsetCronJob(s.runCtx)
 
 	// startLocation is the start location for current received event
 	// currentLocation is the end location for current received event (End_log_pos in `show binlog events` for mysql)
@@ -1588,11 +1573,18 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	if s.streamerController.IsClosed() {
 		s.locations.reset(lastLocation)
-		err = s.streamerController.Start(runTCtx, lastLocation)
+		err = s.streamerController.Start(s.runTCtx, lastLocation)
 		if err != nil {
 			return terror.Annotate(err, "fail to restart streamer controller")
 		}
 	}
+
+	// 只有这个能 hook 最外层的 ctx， 通过这个函数来控制 s.Run 的退出
+	go s.waitTransactionEndBeforeExit(ctx)
+
+	// all pre check passed, we can start all background jobs, they all use s.runCancel to cancel
+	s.wg.Add(1)
+	go s.updateTSOffsetCronJob(s.runCtx)
 
 	s.wg.Add(1)
 	go s.syncDML()
@@ -1600,7 +1592,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	s.wg.Add(1)
 	go s.syncDDL(s.runTCtx, adminQueueName, s.ddlDBConn, s.ddlJobCh)
 
-	// start background task to update replication lag metric
 	s.wg.Add(1)
 	go s.updateLagCronJob(s.runCtx)
 
@@ -1773,7 +1764,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		var e *replication.BinlogEvent
 
 		startTime := time.Now()
-		e, err = s.getEvent(s.tctx, currentLocation)
+		e, err = s.getEvent(s.runTCtx, currentLocation)
 		s.tctx.L().Debug("location refactor",
 			zap.Stringer("current", currentLocation),
 			zap.Stringer("start", startLocation),
@@ -2078,6 +2069,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		}
 		if waitXIDStatus(s.waitXIDJob.Load()) == waitComplete {
+			// already wait until XID event, we can stop sync now
+			s.runCancel()
 			return nil
 		}
 	}
@@ -3355,6 +3348,11 @@ func (s *Syncer) Close() {
 		return
 	}
 
+	// wait for s.Run() to finish
+	if s.runCtx != nil {
+		<-s.runCtx.Done()
+	}
+
 	s.stopSync()
 	s.closeDBs()
 	s.checkpoint.Close()
@@ -3381,9 +3379,6 @@ func (s *Syncer) Kill() {
 // stopSync stops syncing and rollback checkpoint now it used by Close,kILL and Pause
 // maybe we can refine the workflow more clear.
 func (s *Syncer) stopSync() {
-	if s.done != nil {
-		<-s.done // wait Run to return
-	}
 	s.closeJobChans()
 	s.wg.Wait() // wait job workers to return
 
