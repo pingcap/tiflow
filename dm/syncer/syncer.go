@@ -131,6 +131,7 @@ type Syncer struct {
 	// this is used for some background tasks s.Run that need logger it share same lifecycle with runCtx.
 	runTCtx   *tcontext.Context // this ctx only used for logger.
 	runCancel context.CancelFunc
+	rundone   chan struct{} // this will be closed when syncer.Run exit
 
 	cfg     *config.SubTaskConfig
 	syncCfg replication.BinlogSyncerConfig
@@ -280,6 +281,8 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
 	syncer.locations = &locationRecorder{}
+
+	syncer.rundone = nil
 	return syncer
 }
 
@@ -956,7 +959,7 @@ func (s *Syncer) addJob(job *job) {
 		s.dmlJobCh <- job
 		failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
 			s.tctx.L().Info("receive dml job", zap.Any("dml job", job))
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 		})
 	case gc:
 		s.dmlJobCh <- job
@@ -1491,6 +1494,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	s.runCtx = runCtx
 	s.runTCtx = runTCtx
 	s.runCancel = runCancel
+	s.rundone = make(chan struct{})
 	s.Unlock()
 
 	// some initialization that can't be put in Syncer.Init
@@ -1584,9 +1588,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 	}
 
-	// 只有这个能 hook 最外层的 ctx， 通过这个函数来控制 s.Run 的退出
-	go s.waitTransactionEndBeforeExit(ctx)
-
 	// all pre check passed, we can start all background jobs, they all use s.runCancel to cancel
 	s.wg.Add(1)
 	go s.updateTSOffsetCronJob(s.runCtx)
@@ -1617,7 +1618,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		traceSource             = fmt.Sprintf("%s.syncer.%s", s.cfg.SourceID, s.cfg.Name)
 	)
 
+	go s.waitTransactionEndBeforeExit(ctx)
 	defer func() {
+		// before
 		if err1 := recover(); err1 != nil {
 			failpoint.Inject("ExitAfterSaveOnlineDDL", func() {
 				s.tctx.L().Info("force panic")
@@ -1649,6 +1652,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				s.tctx.L().Warn("failed to flush safe mode checkpoints when exit task", zap.Error(err2))
 			}
 		}
+		close(s.rundone)
 	}()
 
 	now := time.Now()
@@ -3353,8 +3357,8 @@ func (s *Syncer) Close() {
 	}
 
 	// wait for s.Run() to finish
-	if s.runCtx != nil {
-		<-s.runCtx.Done()
+	if s.rundone != nil {
+		<-s.rundone
 	}
 
 	s.stopSync()
