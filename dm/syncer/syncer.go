@@ -973,16 +973,21 @@ func (s *Syncer) addJob(job *job) {
 }
 
 // checkShouldFlush checks whether syncer should flush now because last flushing is outdated.
-func (s *Syncer) checkShouldFlush() {
+func (s *Syncer) checkShouldFlush() error {
 	if !s.checkpoint.CheckGlobalPoint() || !s.checkpoint.CheckLastSnapshotCreationTime() {
-		return
+		return nil
 	}
 
-	jobSeq := s.getFlushSeq()
-	s.tctx.L().Info("Start to async flush current checkpoint to downstream based on flush interval", zap.Int64("job sequence", jobSeq))
-	j := newAsyncFlushJob(s.cfg.WorkerCount, jobSeq)
-	s.addJob(j)
-	s.flushCheckPointsAsync(j)
+	if s.cfg.Experimental.AsyncCheckpointFlush {
+		jobSeq := s.getFlushSeq()
+		s.tctx.L().Info("Start to async flush current checkpoint to downstream based on flush interval", zap.Int64("job sequence", jobSeq))
+		j := newAsyncFlushJob(s.cfg.WorkerCount, jobSeq)
+		s.addJob(j)
+		s.flushCheckPointsAsync(j)
+		return nil
+	}
+	s.jobWg.Wait()
+	return s.flushCheckPoints()
 }
 
 // TODO: move to syncer/job.go
@@ -991,7 +996,7 @@ func (s *Syncer) handleJob(job *job) (err error) {
 	skipCheckFlush := false
 	defer func() {
 		if !skipCheckFlush && err == nil {
-			s.checkShouldFlush()
+			err = s.checkShouldFlush()
 		}
 	}()
 
@@ -2348,8 +2353,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		}
 	})
 
-	s.checkShouldFlush()
-	return nil
+	return s.checkShouldFlush()
 }
 
 type queryEventContext struct {

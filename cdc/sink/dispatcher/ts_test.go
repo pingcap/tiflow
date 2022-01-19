@@ -16,19 +16,13 @@ package dispatcher
 import (
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-func Test(t *testing.T) { check.TestingT(t) }
+func TestTsDispatcher(t *testing.T) {
+	t.Parallel()
 
-type TsDispatcherSuite struct{}
-
-var _ = check.Suite(&TsDispatcherSuite{})
-
-func (s TsDispatcherSuite) TestTsDispatcher(c *check.C) {
-	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		row             *model.RowChangedEvent
 		exceptPartition int32
@@ -78,6 +72,6 @@ func (s TsDispatcherSuite) TestTsDispatcher(c *check.C) {
 	}
 	p := &tsDispatcher{partitionNum: 16}
 	for _, tc := range testCases {
-		c.Assert(p.Dispatch(tc.row), check.Equals, tc.exceptPartition)
+		require.Equal(t, tc.exceptPartition, p.Dispatch(tc.row))
 	}
 }
