@@ -25,7 +25,7 @@ import (
 	_ "github.com/go-sql-driver/mysql" // MySQL driver
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )

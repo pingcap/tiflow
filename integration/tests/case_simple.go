@@ -15,7 +15,7 @@ package tests
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/tiflow/integration/framework"
 )
 
 // SimpleCase is base impl of simple test case

@@ -22,14 +22,14 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -150,7 +150,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage tikv.Storage, kvStor
 	defer cancel()
 
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
-	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool)
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, "")
 	defer cli.Close()
 
 	startTS := mustGetTimestamp(t, storage)
@@ -240,7 +240,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage tikv.Storage, 
 	defer cancel()
 
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
-	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool)
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, "")
 	defer cli.Close()
 
 	startTS := mustGetTimestamp(t, storage)
