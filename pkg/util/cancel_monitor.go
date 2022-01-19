@@ -23,7 +23,8 @@ import (
 
 // MonitorCancelLatency monitors the latency from ctx being cancelled
 // the first returned function should be called when the cancellation is done
-// the second returned function should be called to mark the cancellation is started
+// the second returned function should be called to mark the cancellation is started, it will start a
+// background go routine to monitor the latency util finish is called or cancellation is done
 func MonitorCancelLatency(ctx context.Context, identifier string) (func(), func()) {
 	finishedCh := make(chan struct{})
 	start := func() {
