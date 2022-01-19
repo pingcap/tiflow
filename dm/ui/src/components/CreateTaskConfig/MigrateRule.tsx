@@ -27,7 +27,7 @@ const createPattern = (name: string[]) =>
 const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
   const [t] = useTranslation()
   const [currentSource, setCurrentSource] = useState('')
-  const [cascaderValue, setCascaderValue] = useState<string[]>([])
+  const [cascaderValue, setCascaderValue] = useState<string[][]>([])
   const [form] = Form.useForm()
   const { data } = useDmapiGetSourceListQuery({ withStatus: false })
   const [getSourceTable] = useDmapiGetSourceTableListMutation()
@@ -58,6 +58,28 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
       isLeaf: true,
     }))
     setCascaderOptions([...cascaderOptions])
+  }
+
+  const handelSchemaSelectInCascader = (value: string[][], field: any) => {
+    setCascaderValue(value)
+    const dbPattern = createPattern([
+      ...new Set(value.map((item: string[]) => item[0])),
+    ] as string[])
+    const tablePattern = createPattern([
+      ...new Set(value.map((item: string[]) => item[1]).filter(Boolean)),
+    ] as string[])
+    const newData = [...form.getFieldValue('table_migrate_rule')]
+    newData[field.key] = {
+      ...newData[field.key],
+      source: {
+        ...newData[field.key].source,
+        schema: dbPattern,
+        table: tablePattern,
+      },
+    }
+    form.setFieldsValue({
+      table_migrate_rule: newData,
+    })
   }
 
   useEffect(() => {
@@ -125,35 +147,9 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                               multiple
                               maxTagCount="responsive"
                               value={cascaderValue}
-                              onChange={(value: any) => {
-                                setCascaderValue(value)
-                                const dbPattern = createPattern([
-                                  ...new Set(
-                                    value.map((item: string[]) => item[0])
-                                  ),
-                                ] as string[])
-                                const tablePattern = createPattern([
-                                  ...new Set(
-                                    value
-                                      .map((item: string[]) => item[1])
-                                      .filter(Boolean)
-                                  ),
-                                ] as string[])
-                                const newData = [
-                                  ...form.getFieldValue('table_migrate_rule'),
-                                ]
-                                newData[field.key] = {
-                                  ...newData[field.key],
-                                  source: {
-                                    ...newData[field.key].source,
-                                    schema: dbPattern,
-                                    table: tablePattern,
-                                  },
-                                }
-                                form.setFieldsValue({
-                                  table_migrate_rule: newData,
-                                })
-                              }}
+                              onChange={(val: any) =>
+                                handelSchemaSelectInCascader(val, field)
+                              }
                             >
                               {isFetching ? (
                                 <LoadingOutlined />
