@@ -68,20 +68,13 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	ctxC = util.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
 	// NOTICE: always pull the old value internally
-<<<<<<< HEAD
-	// See also: TODO(hi-rustin): add issue link here.
-	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, ctx.GlobalVars().GrpcPool, ctx.GlobalVars().KVStorage,
-=======
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	plr := puller.NewPuller(
 		ctxC,
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
-		ctx.GlobalVars().RegionCache,
 		ctx.GlobalVars().KVStorage,
-		ctx.GlobalVars().PDClock,
 		n.changefeed,
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 		n.replicaInfo.StartTs, n.tableSpan(ctx), true)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))

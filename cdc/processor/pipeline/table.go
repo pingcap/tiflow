@@ -182,11 +182,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 	sink sink.Sink,
 	targetTs model.Ts) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)
-<<<<<<< HEAD
-=======
 	changefeed := ctx.ChangefeedVars().ID
-	replConfig := ctx.ChangefeedVars().Info.Config
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	tablePipeline := &tablePipelineImpl{
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,
