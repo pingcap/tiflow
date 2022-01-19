@@ -643,12 +643,8 @@ func (w *regionWorker) handleEventEntry(
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(state.startFeedTime) > 20*time.Second {
 				log.Warn("The time cost of initializing is too much",
-<<<<<<< HEAD
-					zap.Duration("timeCost", time.Since(state.startFeedTime)),
-=======
 					zap.String("changefeed", w.session.client.changefeed),
 					zap.Duration("duration", time.Since(state.startFeedTime)),
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 					zap.Uint64("regionID", regionID))
 			}
 			w.metrics.metricPullEventInitializedCounter.Inc()
@@ -754,12 +750,8 @@ func (w *regionWorker) handleResolvedTs(
 
 	if resolvedTs < state.lastResolvedTs {
 		log.Warn("The resolvedTs is fallen back in kvclient",
-<<<<<<< HEAD
-			zap.String("Event Type", "RESOLVED"),
-=======
 			zap.String("changefeed", w.session.client.changefeed),
 			zap.String("EventType", "RESOLVED"),
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 			zap.Uint64("resolvedTs", resolvedTs),
 			zap.Uint64("lastResolvedTs", state.lastResolvedTs),
 			zap.Uint64("regionID", regionID))

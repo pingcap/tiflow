@@ -322,6 +322,7 @@ var NewCDCKVClient func(
 	pd pd.Client,
 	kvStorage tikv.Storage,
 	grpcPool GrpcPool,
+	changefeed string,
 ) CDCKVClient = NewCDCClient
 
 // CDCClient to get events from TiKV
@@ -334,29 +335,19 @@ type CDCClient struct {
 
 	regionCache *tikv.RegionCache
 	kvStorage   tikv.Storage
-<<<<<<< HEAD
-=======
-	pdClock     pdtime.Clock
 	changefeed  string
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 
 	regionLimiters *regionEventFeedLimiters
 }
 
 // NewCDCClient creates a CDCClient instance
-<<<<<<< HEAD
-func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grpcPool GrpcPool) (c CDCKVClient) {
-=======
 func NewCDCClient(
 	ctx context.Context,
 	pd pd.Client,
 	kvStorage tikv.Storage,
 	grpcPool GrpcPool,
-	regionCache *tikv.RegionCache,
-	pdClock pdtime.Clock,
 	changefeed string,
 ) (c CDCKVClient) {
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	clusterID := pd.GetClusterID(ctx)
 
 	c = &CDCClient{
@@ -364,13 +355,8 @@ func NewCDCClient(
 		pd:             pd,
 		kvStorage:      kvStorage,
 		grpcPool:       grpcPool,
-<<<<<<< HEAD
 		regionCache:    tikv.NewRegionCache(pd),
-=======
-		regionCache:    regionCache,
-		pdClock:        pdClock,
 		changefeed:     changefeed,
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 		regionLimiters: defaultRegionEventFeedLimiters,
 	}
 	return
@@ -404,17 +390,13 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		}
 		err = version.CheckStoreVersion(ctx, c.pd, storeID)
 		if err != nil {
-<<<<<<< HEAD
 			// TODO: we don't close gPRC conn here, let it goes into TransientFailure
 			// state. If the store recovers, the gPRC conn can be reused. But if
 			// store goes away forever, the conn will be leaked, we need a better
 			// connection pool.
-			log.Error("check tikv version failed", zap.Error(err), zap.Uint64("storeID", storeID))
-=======
 			log.Error("check tikv version failed",
 				zap.Error(err), zap.Uint64("storeID", storeID),
 				zap.String("changefeed", c.changefeed))
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 			return
 		}
 		client := cdcpb.NewChangeDataClient(conn.ClientConn)
@@ -1127,22 +1109,10 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 			return errUnreachable
 		} else if compatibility := innerErr.GetCompatibility(); compatibility != nil {
 			log.Error("tikv reported compatibility error, which is not expected",
-<<<<<<< HEAD
+				zap.String("changefeed", s.client.changefeed),
 				zap.Uint64("storeID", errInfo.rpcCtx.GetStoreID()),
 				zap.Stringer("error", compatibility))
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(compatibility)
-=======
-				zap.String("changefeed", s.client.changefeed),
-				zap.String("rpcCtx", errInfo.rpcCtx.String()),
-				zap.Stringer("error", compatibility))
-			return cerror.ErrVersionIncompatible.GenWithStackByArgs(compatibility)
-		} else if mismatch := innerErr.GetClusterIdMismatch(); mismatch != nil {
-			log.Error("tikv reported the request cluster ID mismatch error, which is not expected",
-				zap.String("changefeed", s.client.changefeed),
-				zap.Uint64("tikvCurrentClusterID", mismatch.Current),
-				zap.Uint64("requestClusterID", mismatch.Request))
-			return cerror.ErrClusterIDMismatch.GenWithStackByArgs(mismatch.Current, mismatch.Request)
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 		} else {
 			metricFeedUnknownErrorCounter.Inc()
 			log.Warn("receive empty or unknown error msg",
@@ -1287,12 +1257,8 @@ func (s *eventFeedSession) receiveFromStream(
 				regionCount = len(cevent.ResolvedTs.Regions)
 			}
 			log.Warn("change data event size too large",
-<<<<<<< HEAD
-				zap.Int("size", size), zap.Int("event length", len(cevent.Events)),
-=======
 				zap.String("changefeed", s.client.changefeed),
 				zap.Int("size", size), zap.Int("eventLen", len(cevent.Events)),
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 				zap.Int("resolved region count", regionCount))
 		}
 
