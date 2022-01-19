@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	oldrouter "github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 type (
@@ -46,13 +47,6 @@ type FilterWrapper struct {
 type RegExprTable struct {
 	filters       []*FilterWrapper
 	caseSensitive bool
-}
-
-type displayRule struct {
-	SchemaPattern string
-	TablePattern  string
-	TargetSchema  string
-	TargetTable   string
 }
 
 func NewRegExprRouter(caseSensitive bool, rules []*TableRule) (*RegExprTable, error) {
@@ -114,13 +108,9 @@ func (r *RegExprTable) AddRule(rule *TableRule) error {
 }
 
 func (r *RegExprTable) Route(schema, table string) (string, string, error) {
-	schemaL, tableL := schema, table
-	if !r.caseSensitive {
-		schemaL, tableL = strings.ToLower(schema), strings.ToLower(table)
-	}
 	curTable := &Table{
-		Schema: schemaL,
-		Name:   tableL,
+		Schema: schema,
+		Name:   table,
 	}
 	tblRules := make([]*FilterWrapper, 0)
 	schmRules := make([]*FilterWrapper, 0)
@@ -141,14 +131,14 @@ func (r *RegExprTable) Route(schema, table string) (string, string, error) {
 		// 1. no need to match table or
 		// 2. match no table
 		if len(schmRules) > 1 {
-			return "", "", errors.NotSupportedf("`%s`.`%s` matches %d schema route rules which is more than one.\n", schema, table, len(schmRules))
+			return "", "", terror.ErrWorkerRouteTableDupMatch.Generate(schema, table)
 		}
 		if len(schmRules) == 1 {
 			targetSchema, targetTable = schmRules[0].Target.Schema, schmRules[0].Target.Name
 		}
 	} else {
 		if len(tblRules) > 1 {
-			return "", "", errors.NotSupportedf("`%s`.`%s` matches %d table route rules which is more than one.\n", schema, table, len(tblRules))
+			return "", "", terror.ErrWorkerRouteTableDupMatch.Generate(schema, table)
 		}
 		targetSchema, targetTable = tblRules[0].Target.Schema, tblRules[0].Target.Name
 	}
@@ -161,38 +151,19 @@ func (r *RegExprTable) Route(schema, table string) (string, string, error) {
 	return targetSchema, targetTable, nil
 }
 
-func (r *RegExprTable) AllRules() (map[string][]interface{}, map[string]map[string][]interface{}) {
-	schemaRouteRules := make(map[string][]interface{})
-	tableRouteRules := make(map[string]map[string][]interface{})
+func (r *RegExprTable) AllRules() ([]TableRule, []TableRule) {
+	var (
+		schmRouteRules  []TableRule
+		tableRouteRules []TableRule
+	)
 	for _, filter := range r.filters {
-		curRule := displayRule{
-			SchemaPattern: filter.rawRule.SchemaPattern,
-			TablePattern:  filter.rawRule.TablePattern,
-			TargetSchema:  filter.rawRule.TargetSchema,
-			TargetTable:   filter.rawRule.TargetTable,
-		}
-		if filter.Type == SchmFilter {
-			if _, ok := schemaRouteRules[curRule.SchemaPattern]; !ok {
-				schemaRouteRules[curRule.SchemaPattern] = []interface{}{}
-			}
-			schemaRouteRules[curRule.SchemaPattern] = append(
-				schemaRouteRules[curRule.SchemaPattern],
-				curRule,
-			)
+		if len(filter.rawRule.TablePattern) == 0 {
+			schmRouteRules = append(schmRouteRules, *filter.rawRule)
 		} else {
-			if _, ok := tableRouteRules[curRule.TablePattern]; !ok {
-				tableRouteRules[curRule.TablePattern] = make(map[string][]interface{})
-			}
-			if _, ok := tableRouteRules[curRule.TablePattern][curRule.SchemaPattern]; !ok {
-				tableRouteRules[curRule.TablePattern][curRule.SchemaPattern] = []interface{}{}
-			}
-			tableRouteRules[curRule.TablePattern][curRule.SchemaPattern] = append(
-				tableRouteRules[curRule.TablePattern][curRule.SchemaPattern],
-				curRule,
-			)
+			tableRouteRules = append(tableRouteRules, *filter.rawRule)
 		}
 	}
-	return schemaRouteRules, tableRouteRules
+	return schmRouteRules, tableRouteRules
 }
 
 func (r *RegExprTable) FetchExtendColumn(schema, table, source string) ([]string, []string) {
