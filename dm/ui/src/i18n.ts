@@ -18,7 +18,7 @@ const resources = Object.keys(translations).reduce(
 )
 
 const i18nextOptions = {
-  lng: JSON.parse(localStorage.getItem('lang') ?? '') || 'en',
+  lng: JSON.parse(localStorage.getItem('lang') ?? 'null') || 'en',
   fallbackLng: 'en',
   interpolation: {
     escapeValue: false,

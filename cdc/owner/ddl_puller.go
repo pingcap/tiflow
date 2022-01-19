@@ -80,6 +80,8 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 			ctx.GlobalVars().RegionCache,
 			kvStorage,
 			ctx.GlobalVars().PDClock,
+			// Add "_ddl_puller" to make it different from table pullers.
+			ctx.ChangefeedVars().ID+"_ddl_puller",
 			startTs,
 			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false)
 	}
