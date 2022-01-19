@@ -285,10 +285,10 @@ func (s *ChangefeedReactorState) CheckCaptureAlive(captureID model.CaptureID) {
 	s.pendingPatches = append(s.pendingPatches, patch)
 }
 
-// CheckChangefeedNormal checks if the changefeed state is runable,
+// CheckChangefeedRunnable checks if the changefeed state is runnable,
 // if the changefeed status is not runable, the etcd worker will skip all patch of this tick
-// the processor should call this function every tick to make sure the changefeed is runable
-func (s *ChangefeedReactorState) CheckChangefeedNormal() {
+// the processor should call this function every tick to make sure the changefeed is runnable
+func (s *ChangefeedReactorState) CheckChangefeedRunnable() {
 	s.skipPatchesInThisTick = false
 	s.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		if info == nil || info.AdminJobType.IsStopState() {

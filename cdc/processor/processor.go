@@ -359,8 +359,8 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		return p.changefeed, nil
 	}
 
-	if !p.checkChangefeedNormal() {
-		log.Info("changefeed not normal", zap.String("changefeed", p.changefeed.ID))
+	if !p.checkChangefeedRunnable() {
+		log.Info("changefeed not runnable", zap.String("changefeed", p.changefeed.ID))
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	// we should skip this tick after create a task position
@@ -417,14 +417,14 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	return p.changefeed, nil
 }
 
-// checkChangefeedNormal checks if the changefeed is runnable.
-func (p *processor) checkChangefeedNormal() bool {
+// checkChangefeedRunnable checks if the changefeed is runnable.
+func (p *processor) checkChangefeedRunnable() bool {
 	// check the state in this tick, make sure that the admin job type of the changefeed is not stopped
 	if p.changefeed.Info.AdminJobType.IsStopState() || p.changefeed.Status.AdminJobType.IsStopState() {
 		return false
 	}
 	// add a patch to check the changefeed is runnable when applying the patches in the etcd worker.
-	p.changefeed.CheckChangefeedNormal()
+	p.changefeed.CheckChangefeedRunnable()
 	return true
 }
 
@@ -536,6 +536,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
+		// todo (Ling Jin): mounter should run after the processor is fully initialized.
 		p.sendError(p.mounter.Run(stdCtx))
 	}()
 
