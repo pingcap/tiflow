@@ -21,7 +21,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// MonitorCancelLatency monitors the latency from ctx being cancelled and the returned function being called
+// MonitorCancelLatency monitors the latency from ctx being cancelled
+// the first returned function should be called when the cancellation is done
+// the second returned function should be called to mark the cancellation is started
 func MonitorCancelLatency(ctx context.Context, identifier string) (func(), func()) {
 	finishedCh := make(chan struct{})
 	start := func() {
@@ -44,7 +46,7 @@ func MonitorCancelLatency(ctx context.Context, identifier string) (func(), func(
 			}
 		}()
 	}
-	return start, func() {
+	return func() {
 		close(finishedCh)
-	}
+	}, start
 }

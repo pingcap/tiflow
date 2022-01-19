@@ -307,6 +307,9 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 			log.Warn("schedule table cleanup task failed", zap.Error(err))
 		}
 	}
+	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
+	// the flowController will be blocked in a background goroutine,
+	// We need to abort the flowController manually in the nodeRunner
 	n.flowController.Abort()
 	return n.eg.Wait()
 }

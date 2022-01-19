@@ -114,7 +114,7 @@ func (s *Sorter) Run(ctx context.Context) error {
 
 	defer close(s.closeCh)
 
-	startCancel, finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
+	finish, startCancel := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
 
 	ctx = context.WithValue(ctx, ctxKey{}, s)
