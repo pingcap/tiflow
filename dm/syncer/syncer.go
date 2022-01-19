@@ -959,7 +959,7 @@ func (s *Syncer) addJob(job *job) {
 		s.dmlJobCh <- job
 		failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
 			s.tctx.L().Info("receive dml job", zap.Any("dml job", job))
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 		})
 	case gc:
 		s.dmlJobCh <- job
@@ -1418,6 +1418,11 @@ func (s *Syncer) syncDML() {
 }
 
 func (s *Syncer) waitTransactionEndBeforeExit(ctx context.Context) {
+	failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
+		s.tctx.L().Info("incr maxPauseOrStopWaitTime time ")
+		maxPauseOrStopWaitTime = time.Minute * 10
+	})
+
 	select {
 	case <-ctx.Done(): // hijack the root context from s.Run to wait for the transaction to end.
 		s.tctx.L().Info("received subtask's done, try graceful stop")

@@ -77,7 +77,12 @@ function run() {
 	dataCountSource=$(mysql -uroot -h$MYSQL_HOST1 -P$MYSQL_PORT1 -p$MYSQL_PASSWORD1 -se "select count(1) from checkpoint_transaction.t1")
 	dataCountInTiDB=$(mysql -uroot -h127.0.0.1 -P4000 -se "select count(1) from checkpoint_transaction.t1")
 	echo "after ungraceful exit data in source count: $dataCountSource data in tidb count: $dataCountInTiDB"
-	[[ $dataCountInTiDB -lt $dataCountSource ]]
+	if [ "$dataCountInTiDB" -lt "$dataCountSource" ]; then
+		echo "ungraceful stop test success"
+	else
+		echo "ungraceful stop test failed"
+		exit 1
+	fi
 
 	# start dm-master again task will be resume, and data will be synced
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
@@ -96,8 +101,13 @@ function run() {
 		"\"stage\": \"Paused\"" 1
 	# check the point is the middle of checkpoint
 	num=$(grep "not receive xid job yet" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
-	[[ $num -gt 0 ]]
-	sed -e '/not receive xid job yet/d' $WORK_DIR/worker1/log/dm-worker.log >$WORK_DIR/worker1/log/dm-worker.log
+
+	if [ "$num" -gt 0 ]; then
+		echo "graceful pause test success"
+	else
+		echo "graceful pause test failed"
+		exit 1
+	fi
 
 	echo "start check pause diff"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -120,7 +130,12 @@ function run() {
 		"\"result\": true" 2
 	# check the point is the middle of checkpoint
 	num=$(grep "not receive xid job yet" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
-	[[ $num -gt 0 ]]
+	if [ "$num" -gt 0 ]; then
+		echo "graceful stop test success"
+	else
+		echo "graceful stop test failed"
+		exit 1
+	fi
 
 	echo "start check stop diff"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
