@@ -2036,10 +2036,6 @@ func (t *testLock) TestFetchTableInfo(c *C) {
 		query = fmt.Sprintf("SELECT table_info FROM `%s`.`%s` WHERE id = \\? AND cp_schema = \\? AND cp_table = \\?", meta, cputil.SyncerCheckpoint(task))
 	)
 
-	mock := conn.InitMockDB(c)
-	baseDB, err := conn.DefaultDBProvider.Apply(&config.DBConfig{})
-	c.Assert(err, IsNil)
-
 	// nil downstream meta
 	l := NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 	ti, err := l.FetchTableInfos(task, source, schema, tbls[0])
@@ -2047,14 +2043,18 @@ func (t *testLock) TestFetchTableInfo(c *C) {
 	c.Assert(ti, IsNil)
 
 	// table info not exist
-	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, &DownstreamMeta{db: baseDB, meta: meta})
+	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, &DownstreamMeta{dbConfig: &config.DBConfig{}, meta: meta})
+	conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	mock := conn.InitMockDB(c)
 	mock.ExpectQuery(query).WithArgs(source, schema, tbls[0]).WillReturnRows(sqlmock.NewRows([]string{"table_info"}))
 	ti, err = l.FetchTableInfos(task, source, schema, tbls[0])
 	c.Assert(terror.ErrDBExecuteFailed.Equal(err), IsTrue)
 	c.Assert(ti, IsNil)
 
 	// null table info
-	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, &DownstreamMeta{db: baseDB, meta: meta})
+	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, &DownstreamMeta{dbConfig: &config.DBConfig{}, meta: meta})
+	conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	mock = conn.InitMockDB(c)
 	mock.ExpectQuery(query).WithArgs(source, schema, tbls[0]).WillReturnRows(sqlmock.NewRows([]string{"table_info"}).AddRow("null"))
 	ti, err = l.FetchTableInfos(task, source, schema, tbls[0])
 	c.Assert(terror.ErrMasterOptimisticDownstreamMetaNotFound.Equal(err), IsTrue)
@@ -2063,6 +2063,8 @@ func (t *testLock) TestFetchTableInfo(c *C) {
 	// succeed
 	tiBytes, err := json.Marshal(ti0)
 	c.Assert(err, IsNil)
+	conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	mock = conn.InitMockDB(c)
 	mock.ExpectQuery(query).WithArgs(source, schema, tbls[0]).WillReturnRows(sqlmock.NewRows([]string{"table_info"}).AddRow(tiBytes))
 	ti, err = l.FetchTableInfos(task, source, schema, tbls[0])
 	c.Assert(err, IsNil)

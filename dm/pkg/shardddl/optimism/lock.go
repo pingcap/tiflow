@@ -29,6 +29,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/pingcap/tiflow/dm/dm/master/metrics"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -114,7 +115,12 @@ func (l *Lock) FetchTableInfos(task, source, schema, table string) (*model.Table
 		return nil, terror.ErrMasterOptimisticDownstreamMetaNotFound.Generate(task)
 	}
 
-	db := l.downstreamMeta.db
+	db, err := conn.DefaultDBProvider.Apply(l.downstreamMeta.dbConfig)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
 	ctx, cancel := context.WithTimeout(context.Background(), dbutil.DefaultTimeout)
 	defer cancel()
 
