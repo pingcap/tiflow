@@ -40,7 +40,7 @@ import (
 
 const (
 	// The buffer size of input channel of each mounter worker.
-	// 16 is larger enough, because a channel exclusively belongs to a worker.
+	// 16 is large enough, because a channel exclusively belongs to a worker.
 	defaultInputChanSize = 16
 )
 
