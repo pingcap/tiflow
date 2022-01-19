@@ -261,10 +261,6 @@ type RowChangedEvent struct {
 	Columns      []*Column `json:"columns" msg:"-"`
 	PreColumns   []*Column `json:"pre-columns" msg:"-"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
-
-	// ApproximateDataSize is the approximate size of protobuf binary
-	// representation of this event.
-	ApproximateDataSize int64 `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event
