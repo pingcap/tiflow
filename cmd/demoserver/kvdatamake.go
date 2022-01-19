@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	FILENUM     = 50
-	RECORDERNUM = 100000
-	FLUSHLEN    = 200
+	FILENUM     = 5
+	RECORDERNUM = 100
+	FLUSHLEN    = 10
 	PORT        = "127.0.0.1:1234"
 )
 
@@ -143,9 +143,8 @@ func (*DataRWServer) ListFiles(ctx context.Context, folder *pb.ListFilesReq) (*p
 
 	files := []string{}
 	for _, _file := range _dir {
-		fileName := fd + "/" + _file.Name()
 		if !_file.IsDir() {
-			files = append(files, fileName)
+			files = append(files, _file.Name())
 		}
 	}
 	return &pb.ListFilesResponse{FileNames: files}, nil
@@ -154,17 +153,18 @@ func (*DataRWServer) ListFiles(ctx context.Context, folder *pb.ListFilesReq) (*p
 func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWService_ReadLinesServer) error {
 	fileName := req.FileName
 	reader, exist := s.fileReaderMap[fileName]
+	fmt.Printf("receive the readline request %v \n", fileName)
 	if !exist {
 		file, err := os.OpenFile(fileName, os.O_RDONLY, 0o666)
 		if err != nil {
-			fmt.Printf("make sure the file % s exist, the error is %v ", fileName, err)
+			fmt.Printf("make sure the file % s exist, the error is %v \n", fileName, err)
 			return err
 		}
 		defer file.Close()
 		reader = bufio.NewReader(file)
 
 		s.fileReaderMap[fileName] = reader
-		fmt.Println("read line ")
+		fmt.Printf("create the reader for %v \n", fileName)
 	} else {
 		fmt.Println("the read already exist ")
 	}
@@ -174,7 +174,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 		reply, err := reader.ReadString('\n')
 		if err == io.EOF {
 			delete(s.fileReaderMap, fileName)
-			fmt.Printf("the end of the file %v", fileName)
+			fmt.Printf("the end of the file %v\n", fileName)
 			break
 		}
 		reply = strings.TrimSpace(reply)
@@ -184,7 +184,6 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 			continue
 		}
 		err = stream.Send(&pb.ReadLinesResponse{Linestr: reply})
-
 		if err != nil {
 			return err
 		}
@@ -205,8 +204,10 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 			fileName := res.FileName
 			writer, exist := s.fileWriterMap[fileName]
 			if !exist {
-				index := strings.LastIndex(fileName, " /")
-				if index == 0 {
+				fmt.Printf("create the writer %v\n", fileName)
+				index := strings.LastIndex(fileName, "/")
+				if index <= 1 {
+					fmt.Printf("bad file name ,index  %v\n", index)
 					return &ErrorInfo{info: " bad file name :" + fileName}
 				}
 				folder := fileName[0 : index-1]
@@ -221,6 +222,7 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 					if err != nil {
 						return &ErrorInfo{info: "create the folder " + folder + " failed"}
 					}
+					fmt.Printf("create the folder  %v\n", folder)
 				}
 				// create the file
 				file, err1 := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0o666)

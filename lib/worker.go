@@ -45,7 +45,7 @@ type WorkerImpl interface {
 }
 
 type BaseWorker struct {
-	impl WorkerImpl
+	Impl WorkerImpl
 
 	messageHandlerManager p2p.MessageHandlerManager
 	messageRouter         p2p.MessageSender
@@ -69,7 +69,7 @@ func NewBaseWorker(
 ) *BaseWorker {
 	masterManager := newMasterManager(masterID, workerID, messageSender)
 	return &BaseWorker{
-		impl:                  impl,
+		Impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
 		messageRouter:         messageSender,
 		metaKVClient:          metaKVClient,
@@ -88,7 +88,7 @@ func (w *BaseWorker) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := w.impl.InitImpl(ctx); err != nil {
+	if err := w.Impl.InitImpl(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -109,14 +109,14 @@ func (w *BaseWorker) Poll(ctx context.Context) error {
 	default:
 	}
 
-	if err := w.impl.Tick(ctx); err != nil {
+	if err := w.Impl.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
 func (w *BaseWorker) Close() {
-	w.impl.CloseImpl()
+	w.Impl.CloseImpl()
 
 	closeCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
@@ -180,11 +180,11 @@ func (w *BaseWorker) runStatusWorker(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		status, err := w.impl.Status()
+		status, err := w.Impl.Status()
 		if err != nil {
 			return errors.Trace(err)
 		}
-		workload, err := w.impl.Workload()
+		workload, err := w.Impl.Workload()
 		if err != nil {
 			return errors.Trace(err)
 		}

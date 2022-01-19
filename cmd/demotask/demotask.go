@@ -15,7 +15,7 @@ import (
 
 const (
 	ADDRESS    = "127.0.0.1:1234"
-	BUFFERSIZE = 1024
+	BUFFERSIZE = 2
 )
 
 type kv struct {
@@ -62,8 +62,14 @@ func (c *democlient) Receive(ctx context.Context, sources string) error {
 		fmt.Printf("receive funct failed %v", err)
 		return err
 	}
-	fmt.Printf("the files name are %v", sources)
+	fmt.Printf("the files name are %v\n", sources)
 	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+
+		}
 		linestr, err := reader.Recv()
 		if err != nil {
 			if err == io.EOF {
@@ -91,6 +97,8 @@ func (c *democlient) Send(ctx context.Context, dest string) error {
 	}
 	for {
 		select {
+		case <-ctx.Done():
+			return nil
 		case kv := <-c.buffer:
 			if err := writer.Send(&pb.WriteLinesRequest{FileName: dest, Key: kv.key, Value: kv.value}); err != nil {
 				log.Fatal(err)
@@ -125,21 +133,33 @@ func main() {
 		return
 	}
 	firstfile := strings.Split(files[0], "/")
-	fileName := destFolder + firstfile[len(firstfile)-1]
+	fileName := destFolder + "/" + firstfile[len(firstfile)-1]
+	fmt.Printf("write the file  %v\n", fileName)
 	go func() {
 		err = client.Receive(ctx, files[0])
 		if err != nil {
-			cancel()
+			fmt.Printf("error happened when receive data from upstream %v", err)
 		}
 	}()
 	go func() {
 		err = client.Send(ctx, fileName)
 		if err != nil {
-			cancel()
+			fmt.Printf("error happened when send  data to downstream  %v", err)
 		}
 	}()
 	for {
-		fmt.Printf("the size of chan %v\n", len(client.buffer))
-		time.Sleep(time.Second)
+		var cmd string
+		fmt.Scan(&cmd)
+		switch cmd {
+		case "q":
+			cancel()
+			return
+		default:
+			fmt.Printf("the size of chan %v\n", len(client.buffer))
+			time.Sleep(time.Second)
+			continue
+
+		}
+
 	}
 }
