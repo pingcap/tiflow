@@ -867,12 +867,21 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	c.Assert(p.tables[2].(*mockTablePipeline).canceled, check.IsTrue)
 }
 
-func (s *processorSuite) TestInitializeProcessor(c *check.C) {
+func (s *processorSuite) TestProcessorLifeTime(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(true)
+	p, tester := initProcessor4Test(ctx, c)
+	p.lazyInit = func(ctx cdcContext.Context) error {
+		p.runningStatus = processorInitializing
+		return nil
+	}
 
-}
-
-func (s *processorSuite) TestCloseProcessor(c *check.C) {
-
+	var err error
+	// init tick
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	c.Assert(p.runningStatus, check.Equals, processorInitializing)
+	tester.MustApplyPatches()
 }
 
 func (s *processorSuite) TestPositionDeleted(c *check.C) {
