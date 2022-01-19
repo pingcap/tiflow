@@ -32,6 +32,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
+
+	_ "github.com/pingcap/tidb/parser/test_driver"
 )
 
 type changefeed struct {
