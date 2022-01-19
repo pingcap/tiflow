@@ -136,7 +136,7 @@ func (m *feedStateManager) Tick(state *model.ChangefeedReactorState) {
 		return
 	}
 	errs := m.errorsReportedByProcessors()
-	m.HandleError(errs...)
+	m.handleError(errs...)
 }
 
 func (m *feedStateManager) ShouldRunning() bool {
@@ -222,14 +222,10 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		jobsPending = true
 		m.patchState(model.StateNormal)
 		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-<<<<<<< HEAD
-			if info.Error != nil || len(info.ErrorHis) != 0 {
-=======
 			if info == nil {
 				return nil, false, nil
 			}
 			if info.Error != nil {
->>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 				info.Error = nil
 				return info, true, nil
 			}
@@ -349,9 +345,6 @@ func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
 	return result
 }
 
-<<<<<<< HEAD
-func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
-=======
 func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	// if there are a fastFail error in errs, we can just fastFail the changefeed
 	// and no need to patch other error to the changefeed info
@@ -370,29 +363,10 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		}
 	}
 
->>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		for _, err := range errs {
 			info.Error = err
 		}
-<<<<<<< HEAD
-		needSave := info.CleanUpOutdatedErrorHistory()
-		return info, needSave || len(errs) > 0, nil
-	})
-	var err *model.RunningError
-	if len(errs) > 0 {
-		err = errs[len(errs)-1]
-	}
-	// if one of the error stored by changefeed state(error in the last tick) or the error specified by this function(error in the this tick)
-	// is a fast-fail error, the changefeed should be failed
-	if m.state.Info.HasFastFailError() || (err != nil && cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code))) {
-		m.shouldBeRunning = false
-		m.patchState(model.StateFailed)
-		return
-	}
-	// if the number of errors has reached the error threshold, stop the changefeed
-	if m.state.Info.ErrorsReachedThreshold() {
-=======
 		return info, len(errs) > 0, nil
 	})
 
@@ -418,7 +392,6 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	}
 
 	if time.Since(m.lastErrorTime) < m.backoffInterval {
->>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 		m.shouldBeRunning = false
 		m.patchState(model.StateError)
 	} else {
