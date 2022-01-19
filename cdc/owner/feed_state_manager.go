@@ -263,30 +263,7 @@ func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
 	return result
 }
 
-<<<<<<< HEAD
 func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
-=======
-func (m *feedStateManager) handleError(errs ...*model.RunningError) {
-	// if there are a fastFail error in errs, we can just fastFail the changefeed
-	// and no need to patch other error to the changefeed info
-	for _, err := range errs {
-		if cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code)) {
-			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-				if info == nil {
-					return nil, false, nil
-				}
-				info.Error = err
-				info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
-				info.CleanUpOutdatedErrorHistory()
-				return info, true, nil
-			})
-			m.shouldBeRunning = false
-			m.patchState(model.StateFailed)
-			return
-		}
-	}
-
->>>>>>> bc59d59ee (owner(ticdc): Fix a nil pointer access bug when appending DataPatches (#4085))
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		if info == nil {
 			return nil, false, nil

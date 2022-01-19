@@ -238,32 +238,7 @@ func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
 	}
 }
 
-<<<<<<< HEAD
 func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
-=======
-// Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
-func (o *Owner) Bootstrap(state *orchestrator.GlobalReactorState) {
-	log.Info("Start bootstrapping")
-	fixChangefeedInfos(state)
-}
-
-// fixChangefeedInfos attempts to fix incompatible or incorrect meta information in changefeed state.
-func fixChangefeedInfos(state *orchestrator.GlobalReactorState) {
-	for _, changefeedState := range state.Changefeeds {
-		if changefeedState != nil {
-			changefeedState.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-				if info == nil {
-					return nil, false, nil
-				}
-				info.FixIncompatible()
-				return info, true, nil
-			})
-		}
-	}
-}
-
-func (o *Owner) updateMetrics(state *orchestrator.GlobalReactorState) {
->>>>>>> bc59d59ee (owner(ticdc): Fix a nil pointer access bug when appending DataPatches (#4085))
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
 	now := time.Now()
