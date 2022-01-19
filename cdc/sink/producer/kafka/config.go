@@ -255,7 +255,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// waster too much time on sending a message, get response no matter success
 	// or fail as soon as possible is preferred.
 	config.Producer.Retry.Max = 3
-	config.Producer.Retry.Backoff = 250 * time.Millisecond
+	config.Producer.Retry.Backoff = 100 * time.Millisecond
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
