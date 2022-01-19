@@ -33,6 +33,15 @@ type tableSink struct {
 
 var _ Sink = (*tableSink)(nil)
 
+func (t *tableSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	t.buffer = append(t.buffer, rows...)
+	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
+	if t.redoManager.Enabled() {
+		return t.redoManager.TryEmitRowChangedEvents(ctx, t.tableID, rows...)
+	}
+	return true, nil
+}
+
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.buffer = append(t.buffer, rows...)
 	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))

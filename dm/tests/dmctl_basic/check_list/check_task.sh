@@ -16,7 +16,7 @@ function check_task_pass() {
 	task_conf=$1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $task_conf" \
-		"\"msg\": \"check pass!!!\"" 1 \
+		"\"passed\": true" 1 \
 		"\"result\": true" 1
 }
 

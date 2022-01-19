@@ -4,7 +4,6 @@ import {
   isRejectedWithValue,
 } from '@reduxjs/toolkit'
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux'
-import { createLogger } from 'redux-logger'
 
 import { api } from '~/models/api'
 import { message } from '~/uikit'
@@ -31,14 +30,6 @@ export const store = configureStore({
     })
 
     middlewares.push(api.middleware, rtkQueryErrorLogger)
-
-    if (import.meta.env.DEV) {
-      const logger = createLogger({
-        duration: true,
-        collapsed: true,
-      })
-      middlewares.push(logger)
-    }
 
     return middlewares
   },

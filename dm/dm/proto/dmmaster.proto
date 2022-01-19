@@ -411,6 +411,7 @@ enum CfgType {
     MasterType = 2;
     WorkerType = 3;
     SourceType = 4;
+    TaskTemplateType = 5;
 }
 
 message GetCfgRequest {

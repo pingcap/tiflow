@@ -99,7 +99,8 @@ type LogManager interface {
 	// Enabled returns whether the log manager is enabled
 	Enabled() bool
 
-	// The following 5 APIs are called from processor only
+	// The following 6 APIs are called from processor only
+	TryEmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) (bool, error)
 	EmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) error
 	FlushLog(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
 	AddTable(tableID model.TableID, startTs uint64)
@@ -221,6 +222,32 @@ func NewDisabledManager() *ManagerImpl {
 // Enabled returns whether this log manager is enabled
 func (m *ManagerImpl) Enabled() bool {
 	return m.enabled
+}
+
+// TryEmitRowChangedEvents sends row changed events to a log buffer, the log buffer
+// will be consumed by a background goroutine, which converts row changed events
+// to redo logs and sends to log writer. Note this function is non-blocking
+func (m *ManagerImpl) TryEmitRowChangedEvents(
+	ctx context.Context,
+	tableID model.TableID,
+	rows ...*model.RowChangedEvent,
+) (bool, error) {
+	timer := time.NewTimer(logBufferTimeout)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case m.logBuffer <- cacheRows{
+		tableID: tableID,
+		// Because the pipeline sink doesn't hold slice memory after calling
+		// EmitRowChangedEvents, we copy to a new slice to manage memory
+		// in redo manager itself, which is the same behavior as sink manager.
+		rows: append(make([]*model.RowChangedEvent, 0, len(rows)), rows...),
+	}:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 // EmitRowChangedEvents sends row changed events to a log buffer, the log buffer
