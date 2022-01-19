@@ -450,9 +450,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	})
 
 	errg.Go(func() error {
-		resolvedTsReceiver := time.NewTimer(time.Second * 1)
+		resolvedTsTicker := time.NewTicker(time.Second * 1)
 
-		defer resolvedTsReceiver.Stop()
+		defer resolvedTsTicker.Stop()
 
 		var lastResolvedTs uint64
 		resolvedTsTickFunc := func() error {
@@ -474,7 +474,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-resolvedTsReceiver.C:
+			case <-resolvedTsTicker.C:
 				if err := resolvedTsTickFunc(); err != nil {
 					return err
 				}
