@@ -40,7 +40,7 @@ import (
 
 const (
 	// The buffer size of input channel of each mounter worker.
-	// 16 is larger enough, because a channel exclusivly belongs to a worker.
+	// 16 is larger enough, because a channel exclusively belongs to a worker.
 	defaultInputChanSize = 16
 )
 
@@ -69,7 +69,7 @@ type rowKVEntry struct {
 // Mounter is used to parse SQL events from KV events
 type Mounter interface {
 	Run(ctx context.Context) error
-	// AddEntry accpets `model.PolymorphicEvent` with `RawKVEntry` filled and
+	// AddEntry accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
 	// decodes `RawKVEntry` into `RowChangedEvent`.
 	// It also close `model.PolymorphicEvent.finished` channel to notify callers
 	// that decoding is done.
