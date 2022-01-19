@@ -71,6 +71,7 @@ func NewPuller(
 	pdCli pd.Client,
 	grpcPool kv.GrpcPool,
 	kvStorage tidbkv.Storage,
+	changefeed string,
 	checkpointTs uint64,
 	spans []regionspan.Span,
 	enableOldValue bool,
@@ -87,7 +88,7 @@ func NewPuller(
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
-	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool)
+	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool, changefeed)
 	p := &pullerImpl{
 		pdCli:          pdCli,
 		kvCli:          kvCli,
