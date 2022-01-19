@@ -464,8 +464,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				}
 			} else if curResolvedTs < lastResolvedTs {
 				log.Panic("resolved-ts regressed in sorter",
-					zap.Uint64("curResolved-ts", curResolvedTs),
-					zap.Uint64("lastResolved-ts", lastResolvedTs))
+					zap.Uint64("curResolvedTs", curResolvedTs),
+					zap.Uint64("lastResolvedTs", lastResolvedTs))
 			}
 			return nil
 		}
