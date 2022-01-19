@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -163,7 +163,7 @@ func TestFillV1(t *testing.T) {
 	}, cfg)
 }
 
-func TestVerifyAndFix(t *testing.T) {
+func TestVerifyAndComplete(t *testing.T) {
 	t.Parallel()
 
 	info := &ChangeFeedInfo{
@@ -177,7 +177,7 @@ func TestVerifyAndFix(t *testing.T) {
 		},
 	}
 
-	err := info.VerifyAndFix()
+	err := info.VerifyAndComplete()
 	require.Nil(t, err)
 	require.Equal(t, SortUnified, info.Engine)
 
@@ -187,6 +187,150 @@ func TestVerifyAndFix(t *testing.T) {
 	marshalConfig2, err := defaultConfig.Marshal()
 	require.Nil(t, err)
 	require.Equal(t, marshalConfig2, marshalConfig1)
+}
+
+func TestFixIncompatible(t *testing.T) {
+	// Test to fix incompatible states.
+	testCases := []struct {
+		info          *ChangeFeedInfo
+		expectedState FeedState
+	}{
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateNormal,
+				Error:          nil,
+				CreatorVersion: "",
+			},
+			expectedState: StateStopped,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateNormal,
+				Error:          nil,
+				CreatorVersion: "4.0.14",
+			},
+			expectedState: StateStopped,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateNormal,
+				Error:          nil,
+				CreatorVersion: "5.0.5",
+			},
+			expectedState: StateStopped,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.info.FixIncompatible()
+		require.Equal(t, tc.expectedState, tc.info.State)
+	}
+}
+
+func TestFixState(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		info          *ChangeFeedInfo
+		expectedState FeedState
+	}{
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminNone,
+				State:        StateNormal,
+				Error:        nil,
+			},
+			expectedState: StateNormal,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminResume,
+				State:        StateNormal,
+				Error:        nil,
+			},
+			expectedState: StateNormal,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminNone,
+				State:        StateNormal,
+				Error: &RunningError{
+					Code: string(cerror.ErrGCTTLExceeded.RFCCode()),
+				},
+			},
+			expectedState: StateFailed,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminResume,
+				State:        StateNormal,
+				Error: &RunningError{
+					Code: string(cerror.ErrGCTTLExceeded.RFCCode()),
+				},
+			},
+			expectedState: StateFailed,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminNone,
+				State:        StateNormal,
+				Error: &RunningError{
+					Code: string(cerror.ErrClusterIDMismatch.RFCCode()),
+				},
+			},
+			expectedState: StateError,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminResume,
+				State:        StateNormal,
+				Error: &RunningError{
+					Code: string(cerror.ErrClusterIDMismatch.RFCCode()),
+				},
+			},
+			expectedState: StateError,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminStop,
+				State:        StateNormal,
+				Error:        nil,
+			},
+			expectedState: StateStopped,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminFinish,
+				State:        StateNormal,
+				Error:        nil,
+			},
+			expectedState: StateFinished,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminRemove,
+				State:        StateNormal,
+				Error:        nil,
+			},
+			expectedState: StateRemoved,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminRemove,
+				State:        StateNormal,
+				Error:        nil,
+			},
+			expectedState: StateRemoved,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.info.fixState()
+		require.Equal(t, tc.expectedState, tc.info.State)
+	}
 }
 
 func TestChangeFeedInfoClone(t *testing.T) {

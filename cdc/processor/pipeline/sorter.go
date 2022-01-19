@@ -21,13 +21,13 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sorter"
-	"github.com/pingcap/ticdc/cdc/sorter/memory"
-	"github.com/pingcap/ticdc/cdc/sorter/unified"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/pipeline"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/cdc/sorter/unified"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pipeline"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -147,7 +147,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 						}
 					}
 					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
-					// Otherwise the pipeline would deadlock.
+					// Otherwise, the pipeline would deadlock.
 					err := n.flowController.Consume(commitTs, size, func() error {
 						if lastCRTs > lastSentResolvedTs {
 							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.

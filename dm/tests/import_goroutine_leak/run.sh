@@ -27,11 +27,11 @@ function run() {
 
 	echo "dm-worker panic, doJob of import unit workers don't exit"
 	# send to closed `runFatalChan`
-	inject_points=("github.com/pingcap/ticdc/dm/loader/LoadDataSlowDown=sleep(1000)"
-		"github.com/pingcap/ticdc/dm/loader/dispatchError=return(1)"
-		"github.com/pingcap/ticdc/dm/loader/executeSQLError=return(1)"
-		"github.com/pingcap/ticdc/dm/loader/returnDoJobError=return(1)"
-		"github.com/pingcap/ticdc/dm/loader/workerCantClose=return(1)"
+	inject_points=("github.com/pingcap/tiflow/dm/loader/LoadDataSlowDown=sleep(1000)"
+		"github.com/pingcap/tiflow/dm/loader/dispatchError=return(1)"
+		"github.com/pingcap/tiflow/dm/loader/executeSQLError=return(1)"
+		"github.com/pingcap/tiflow/dm/loader/returnDoJobError=return(1)"
+		"github.com/pingcap/tiflow/dm/loader/workerCantClose=return(1)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
@@ -59,11 +59,11 @@ function run() {
 
 	echo "dm-worker panic again, workers of import unit don't exit"
 	# send to closed `runFatalChan`
-	inject_points=("github.com/pingcap/ticdc/dm/loader/LoadDataSlowDown=sleep(1000)"
-		"github.com/pingcap/ticdc/dm/loader/dispatchError=return(1)"
-		"github.com/pingcap/ticdc/dm/loader/executeSQLError=return(1)"
-		"github.com/pingcap/ticdc/dm/loader/returnDoJobError=return(1)"
-		"github.com/pingcap/ticdc/dm/loader/dontWaitWorkerExit=return(1)"
+	inject_points=("github.com/pingcap/tiflow/dm/loader/LoadDataSlowDown=sleep(1000)"
+		"github.com/pingcap/tiflow/dm/loader/dispatchError=return(1)"
+		"github.com/pingcap/tiflow/dm/loader/executeSQLError=return(1)"
+		"github.com/pingcap/tiflow/dm/loader/returnDoJobError=return(1)"
+		"github.com/pingcap/tiflow/dm/loader/dontWaitWorkerExit=return(1)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -81,10 +81,10 @@ function run() {
 
 	echo "restart dm-workers with errros to pause"
 	# paused with injected error
-	inject_points=("github.com/pingcap/ticdc/dm/loader/LoadDataSlowDown=sleep(1000)"
-		"github.com/pingcap/ticdc/dm/loader/dispatchError=return(1)"
-		"github.com/pingcap/ticdc/dm/loader/executeSQLError=return(1)"
-		"github.com/pingcap/ticdc/dm/loader/returnDoJobError=return(1)"
+	inject_points=("github.com/pingcap/tiflow/dm/loader/LoadDataSlowDown=sleep(1000)"
+		"github.com/pingcap/tiflow/dm/loader/dispatchError=return(1)"
+		"github.com/pingcap/tiflow/dm/loader/executeSQLError=return(1)"
+		"github.com/pingcap/tiflow/dm/loader/returnDoJobError=return(1)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -99,10 +99,10 @@ function run() {
 	check_port_offline $WORKER1_PORT 20
 
 	# use a small job chan size to block the sender
-	inject_points=("github.com/pingcap/ticdc/dm/loader/LoadDataSlowDown=sleep(1000)"
-		"github.com/pingcap/ticdc/dm/loader/executeSQLError=return(1)"
-		"github.com/pingcap/ticdc/dm/loader/returnDoJobError=return(1)"
-		"github.com/pingcap/ticdc/dm/loader/workerChanSize=return(10)"
+	inject_points=("github.com/pingcap/tiflow/dm/loader/LoadDataSlowDown=sleep(1000)"
+		"github.com/pingcap/tiflow/dm/loader/executeSQLError=return(1)"
+		"github.com/pingcap/tiflow/dm/loader/returnDoJobError=return(1)"
+		"github.com/pingcap/tiflow/dm/loader/workerChanSize=return(10)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml

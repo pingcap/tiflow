@@ -1,3 +1,5 @@
+drop_column_with_index
+downstream_diff_index
 full_mode
 dm_syncer
 sequence_sharding_optimistic
@@ -8,3 +10,5 @@ only_dml
 adjust_gtid
 checkpoint_transaction
 lightning_mode
+downstream_diff_index
+

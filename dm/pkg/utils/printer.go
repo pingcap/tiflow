@@ -16,7 +16,7 @@ package utils
 import (
 	"fmt"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

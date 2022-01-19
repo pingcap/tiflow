@@ -25,9 +25,9 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/redo/common"
-	"github.com/pingcap/ticdc/pkg/leakutil"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
+	"github.com/pingcap/tiflow/cdc/redo/common"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/atomic"
 )
@@ -197,8 +197,17 @@ func TestWriterGC(t *testing.T) {
 	require.Nil(t, err, files[0].Name())
 	require.EqualValues(t, 3, ts)
 	require.Equal(t, common.DefaultRowLogFileType, fileType)
-
 	time.Sleep(time.Duration(100) * time.Millisecond)
+
+	w1 := &Writer{
+		cfg:       cfg,
+		uint64buf: make([]byte, 8),
+		storage:   mockStorage,
+	}
+	w1.cfg.Dir += "not-exist"
+	w1.running.Store(true)
+	err = w1.GC(111)
+	require.Nil(t, err)
 }
 
 func TestAdvanceTs(t *testing.T) {

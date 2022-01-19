@@ -22,8 +22,8 @@ import (
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/spf13/pflag"
 
-	dutils "github.com/pingcap/ticdc/dm/pkg/dumpling"
-	"github.com/pingcap/ticdc/dm/pkg/log"
+	dutils "github.com/pingcap/tiflow/dm/pkg/dumpling"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 // ParseArgLikeBash parses list arguments like bash, which helps us to run

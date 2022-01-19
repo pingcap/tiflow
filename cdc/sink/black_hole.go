@@ -18,7 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
 
@@ -31,7 +31,6 @@ func newBlackHoleSink(ctx context.Context, opts map[string]string) *blackHoleSin
 
 type blackHoleSink struct {
 	statistics      *Statistics
-	checkpointTs    uint64
 	accumulated     uint64
 	lastAccumulated uint64
 }
@@ -46,7 +45,7 @@ func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model
 	return nil
 }
 
-func (b *blackHoleSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (b *blackHoleSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {
 	log.Debug("BlockHoleSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolvedTs))
 	err := b.statistics.RecordBatchExecution(func() (int, error) {
 		// TODO: add some random replication latency
@@ -56,7 +55,6 @@ func (b *blackHoleSink) FlushRowChangedEvents(ctx context.Context, resolvedTs ui
 		return int(batchSize), nil
 	})
 	b.statistics.PrintStatus(ctx)
-	atomic.StoreUint64(&b.checkpointTs, resolvedTs)
 	return resolvedTs, err
 }
 
@@ -70,15 +68,10 @@ func (b *blackHoleSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) e
 	return nil
 }
 
-// Initialize is no-op for blackhole
-func (b *blackHoleSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	return nil
-}
-
 func (b *blackHoleSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (b *blackHoleSink) Barrier(ctx context.Context) error {
+func (b *blackHoleSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }

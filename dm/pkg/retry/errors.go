@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // some error reference: https://docs.pingcap.com/tidb/stable/tidb-limitations#limitations-on-a-single-table
@@ -28,6 +28,7 @@ var (
 	// UnsupportedDDLMsgs list the error messages of some unsupported DDL in TiDB.
 	UnsupportedDDLMsgs = []string{
 		"can't drop column with index",
+		"with tidb_enable_change_multi_schema is disable", // https://github.com/pingcap/tidb/pull/29526
 		"unsupported add column",
 		"unsupported modify column",
 		"unsupported modify charset",
