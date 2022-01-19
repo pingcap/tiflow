@@ -380,6 +380,7 @@ func (s *Scheduler) addSource(cfg *config.SourceConfig) error {
 
 	// 3. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg
+	s.unbounds[cfg.SourceID] = struct{}{}
 	return nil
 }
 
