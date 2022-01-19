@@ -612,7 +612,7 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 	defer clearOptimistTestSourceInfoOperation(c)
 
 	var (
-		watchTimeout       = 2 * time.Second
+		watchTimeout       = 5 * time.Second
 		logger             = log.L()
 		o                  = NewOptimist(&logger, getDownstreamMeta)
 		task               = "task-test-optimist"
@@ -653,15 +653,20 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 	// wait operation for i1 become available.
 	opCh := make(chan optimism.Operation, 10)
 	errCh := make(chan error, 10)
-	ctx2, cancel2 := context.WithTimeout(ctx, watchTimeout)
-	optimism.WatchOperationPut(ctx2, etcdTestCli, i1.Task, i1.Source, i1.UpSchema, i1.UpTable, rev1, opCh, errCh)
+	ctx2, cancel2 := context.WithCancel(ctx)
+	go optimism.WatchOperationPut(ctx2, etcdTestCli, i1.Task, i1.Source, i1.UpSchema, i1.UpTable, rev1, opCh, errCh)
+	select {
+	case <-time.After(watchTimeout):
+		c.Fatal("timeout")
+	case op1 := <-opCh:
+		c.Assert(op1.DDLs, DeepEquals, DDLs1)
+		c.Assert(op1.ConflictStage, Equals, optimism.ConflictNone)
+	}
+
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 1)
-	op1 := <-opCh
-	c.Assert(op1.DDLs, DeepEquals, DDLs1)
-	c.Assert(op1.ConflictStage, Equals, optimism.ConflictNone)
+	c.Assert(len(opCh), Equals, 0)
 	c.Assert(len(errCh), Equals, 0)
 
 	// PUT i2, conflict will be detected.
@@ -670,15 +675,21 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 	// wait operation for i2 become available.
 	opCh = make(chan optimism.Operation, 10)
 	errCh = make(chan error, 10)
-	ctx2, cancel2 = context.WithTimeout(ctx, watchTimeout)
-	optimism.WatchOperationPut(ctx2, etcdTestCli, i2.Task, i2.Source, i2.UpSchema, i2.UpTable, rev2, opCh, errCh)
+
+	ctx2, cancel2 = context.WithCancel(ctx)
+	go optimism.WatchOperationPut(ctx2, etcdTestCli, i2.Task, i2.Source, i2.UpSchema, i2.UpTable, rev2, opCh, errCh)
+	select {
+	case <-time.After(watchTimeout):
+		c.Fatal("timeout")
+	case op2 := <-opCh:
+		c.Assert(op2.DDLs, DeepEquals, []string{})
+		c.Assert(op2.ConflictStage, Equals, optimism.ConflictDetected)
+	}
+
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 1)
-	op2 := <-opCh
-	c.Assert(op2.DDLs, DeepEquals, []string{})
-	c.Assert(op2.ConflictStage, Equals, optimism.ConflictDetected)
+	c.Assert(len(opCh), Equals, 0)
 	c.Assert(len(errCh), Equals, 0)
 
 	// PUT i3, no conflict now.
@@ -688,15 +699,19 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 	// wait operation for i3 become available.
 	opCh = make(chan optimism.Operation, 10)
 	errCh = make(chan error, 10)
-	ctx2, cancel2 = context.WithTimeout(ctx, watchTimeout)
-	optimism.WatchOperationPut(ctx2, etcdTestCli, i3.Task, i3.Source, i3.UpSchema, i3.UpTable, rev3, opCh, errCh)
+	ctx2, cancel2 = context.WithCancel(ctx)
+	go optimism.WatchOperationPut(ctx2, etcdTestCli, i3.Task, i3.Source, i3.UpSchema, i3.UpTable, rev3, opCh, errCh)
+	select {
+	case <-time.After(watchTimeout):
+		c.Fatal("timeout")
+	case op3 := <-opCh:
+		c.Assert(op3.DDLs, DeepEquals, []string{})
+		c.Assert(op3.ConflictStage, Equals, optimism.ConflictNone)
+	}
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 1)
-	op3 := <-opCh
-	c.Assert(op3.DDLs, DeepEquals, []string{})
-	c.Assert(op3.ConflictStage, Equals, optimism.ConflictNone)
+	c.Assert(len(opCh), Equals, 0)
 	c.Assert(len(errCh), Equals, 0)
 }
 
@@ -706,7 +721,7 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	var (
 		backOff            = 30
 		waitTime           = 100 * time.Millisecond
-		watchTimeout       = 2 * time.Second
+		watchTimeout       = 5 * time.Second
 		logger             = log.L()
 		o                  = NewOptimist(&logger, getDownstreamMeta)
 		task               = "test-optimist-lock-multiple-target"
@@ -820,15 +835,20 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	// wait operation for i12 become available.
 	opCh := make(chan optimism.Operation, 10)
 	errCh := make(chan error, 10)
-	ctx2, cancel2 := context.WithTimeout(ctx, watchTimeout)
-	optimism.WatchOperationPut(ctx2, etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
+	var op12 optimism.Operation
+	ctx2, cancel2 := context.WithCancel(ctx)
+	go optimism.WatchOperationPut(ctx2, etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
+	select {
+	case <-time.After(watchTimeout):
+		c.Fatal("timeout")
+	case op12 = <-opCh:
+		c.Assert(op12.DDLs, DeepEquals, DDLs)
+		c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
+	}
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 1)
-	op12 := <-opCh
-	c.Assert(op12.DDLs, DeepEquals, DDLs)
-	c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
+	c.Assert(len(opCh), Equals, 0)
 	c.Assert(len(errCh), Equals, 0)
 
 	// mark op11 and op12 as done, the lock should be resolved.
@@ -854,15 +874,20 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	// wait operation for i22 become available.
 	opCh = make(chan optimism.Operation, 10)
 	errCh = make(chan error, 10)
-	ctx2, cancel2 = context.WithTimeout(ctx, watchTimeout)
-	optimism.WatchOperationPut(ctx2, etcdTestCli, i22.Task, i22.Source, i22.UpSchema, i22.UpTable, rev2, opCh, errCh)
+	var op22 optimism.Operation
+	ctx2, cancel2 = context.WithCancel(ctx)
+	go optimism.WatchOperationPut(ctx2, etcdTestCli, i22.Task, i22.Source, i22.UpSchema, i22.UpTable, rev2, opCh, errCh)
+	select {
+	case <-time.After(watchTimeout):
+		c.Fatal("timeout")
+	case op22 = <-opCh:
+		c.Assert(op22.DDLs, DeepEquals, DDLs)
+		c.Assert(op22.ConflictStage, Equals, optimism.ConflictNone)
+	}
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 1)
-	op22 := <-opCh
-	c.Assert(op22.DDLs, DeepEquals, DDLs)
-	c.Assert(op22.ConflictStage, Equals, optimism.ConflictNone)
+	c.Assert(len(opCh), Equals, 0)
 	c.Assert(len(errCh), Equals, 0)
 
 	// mark op21 and op22 as done, the lock should be resolved.
@@ -891,7 +916,7 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	var (
 		backOff      = 30
 		waitTime     = 100 * time.Millisecond
-		watchTimeout = 2 * time.Second
+		watchTimeout = 5 * time.Second
 		logger       = log.L()
 		o            = NewOptimist(&logger, getDownstreamMeta)
 		task         = "test-optimist-init-schema"
@@ -943,15 +968,20 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	// wait operation for i12 become available.
 	opCh := make(chan optimism.Operation, 10)
 	errCh := make(chan error, 10)
-	ctx2, cancel2 := context.WithTimeout(ctx, watchTimeout)
-	optimism.WatchOperationPut(ctx2, etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
+	var op12 optimism.Operation
+	ctx2, cancel2 := context.WithCancel(ctx)
+	go optimism.WatchOperationPut(ctx2, etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
+	select {
+	case <-time.After(watchTimeout):
+		c.Fatal("timeout")
+	case op12 = <-opCh:
+		c.Assert(op12.DDLs, DeepEquals, DDLs1)
+		c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
+	}
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 1)
-	op12 := <-opCh
-	c.Assert(op12.DDLs, DeepEquals, DDLs1)
-	c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
+	c.Assert(len(opCh), Equals, 0)
 	c.Assert(len(errCh), Equals, 0)
 
 	// mark op11 and op12 as done, the lock should be resolved.

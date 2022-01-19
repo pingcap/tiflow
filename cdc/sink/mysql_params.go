@@ -46,6 +46,7 @@ const (
 	defaultWriteTimeout        = "2m"
 	defaultDialTimeout         = "2m"
 	defaultSafeMode            = true
+	defaultTxnIsolationRC      = "READ-COMMITTED"
 )
 
 var defaultParams = &sinkParams{
@@ -227,6 +228,8 @@ func generateDSNByParams(
 	dsnCfg.Params["readTimeout"] = params.readTimeout
 	dsnCfg.Params["writeTimeout"] = params.writeTimeout
 	dsnCfg.Params["timeout"] = params.dialTimeout
+	// Since we don't need select, just set default isolation level to read-committed
+	dsnCfg.Params["transaction_isolation"] = fmt.Sprintf(`"%s"`, defaultTxnIsolationRC)
 
 	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
 	if err != nil {

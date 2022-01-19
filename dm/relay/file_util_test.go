@@ -195,7 +195,7 @@ func (t *testFileUtilSuite) TestCheckIsDuplicateEvent(c *check.C) {
 	g, err := event.NewGenerator(flavor, serverID, latestPos, latestGTID, previousGTIDSet, latestXID)
 	c.Assert(err, check.IsNil)
 	// file header with FormatDescriptionEvent and PreviousGTIDsEvent
-	events, data, err := g.GenFileHeader()
+	events, data, err := g.GenFileHeader(0)
 	c.Assert(err, check.IsNil)
 	allEvents = append(allEvents, events...)
 	allData.Write(data)
@@ -206,7 +206,7 @@ func (t *testFileUtilSuite) TestCheckIsDuplicateEvent(c *check.C) {
 		"CREATE TABLE `db`.`tbl2` (c1 INT)",
 	}
 	for _, query := range queries {
-		events, data, err = g.GenDDLEvents("db", query)
+		events, data, err = g.GenDDLEvents("db", query, 0)
 		c.Assert(err, check.IsNil)
 		allEvents = append(allEvents, events...)
 		allData.Write(data)
@@ -224,7 +224,7 @@ func (t *testFileUtilSuite) TestCheckIsDuplicateEvent(c *check.C) {
 	}
 
 	// event not in the file, because its start pos > file size
-	events, _, err = g.GenDDLEvents("", "BEGIN")
+	events, _, err = g.GenDDLEvents("", "BEGIN", 0)
 	c.Assert(err, check.IsNil)
 	duplicate, err := checkIsDuplicateEvent(filename, events[0])
 	c.Assert(err, check.IsNil)
@@ -346,7 +346,7 @@ func (t *testFileUtilSuite) testGetTxnPosGTIDs(c *check.C, filename, flavor, pre
 			Rows:       updateRows,
 		},
 	}
-	extraEvents, extraData, err := g.GenDMLEvents(eventType, dmlData)
+	extraEvents, extraData, err := g.GenDMLEvents(eventType, dmlData, 0)
 	c.Assert(err, check.IsNil)
 	c.Assert(extraEvents, check.HasLen, 5) // [GTID, BEGIN, TableMap, UPDATE, XID]
 

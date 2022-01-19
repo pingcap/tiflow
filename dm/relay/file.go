@@ -16,7 +16,6 @@ package relay
 import (
 	"os"
 	"path/filepath"
-	"sort"
 
 	"go.uber.org/zap"
 
@@ -49,7 +48,7 @@ func CollectAllBinlogFiles(dir string) ([]string, error) {
 	if dir == "" {
 		return nil, terror.ErrEmptyRelayDir.Generate()
 	}
-	return readSortedBinlogFromDir(dir)
+	return binlog.ReadSortedBinlogFromDir(dir)
 }
 
 // CollectBinlogFilesCmp collects valid binlog files with a compare condition.
@@ -109,7 +108,7 @@ func CollectBinlogFilesCmp(dir, baseFile string, cmp FileCmp) ([]string, error) 
 // getFirstBinlogName gets the first binlog file in relay sub directory.
 func getFirstBinlogName(baseDir, uuid string) (string, error) {
 	subDir := filepath.Join(baseDir, uuid)
-	files, err := readSortedBinlogFromDir(subDir)
+	files, err := binlog.ReadSortedBinlogFromDir(subDir)
 	if err != nil {
 		return "", terror.Annotatef(err, "get binlog file for dir %s", subDir)
 	}
@@ -118,57 +117,6 @@ func getFirstBinlogName(baseDir, uuid string) (string, error) {
 		return "", terror.ErrBinlogFilesNotFound.Generate(subDir)
 	}
 	return files[0], nil
-}
-
-// readSortedBinlogFromDir reads and returns all binlog files (sorted ascending by binlog filename and sequence number).
-func readSortedBinlogFromDir(dirpath string) ([]string, error) {
-	dir, err := os.Open(dirpath)
-	if err != nil {
-		return nil, terror.ErrReadDir.Delegate(err, dirpath)
-	}
-	defer dir.Close()
-
-	names, err := dir.Readdirnames(-1)
-	if err != nil {
-		return nil, terror.ErrReadDir.Delegate(err, dirpath)
-	}
-	if len(names) == 0 {
-		return nil, nil
-	}
-
-	// sorting bin.100000, ..., bin.1000000, ..., bin.999999
-	type tuple struct {
-		filename string
-		parsed   binlog.Filename
-	}
-	tmp := make([]tuple, 0, len(names)-1)
-
-	for _, f := range names {
-		p, err2 := binlog.ParseFilename(f)
-		if err2 != nil {
-			// may contain some file that can't be parsed, like relay meta. ignore them
-			log.L().Info("collecting binlog file, ignore invalid file", zap.String("file", f))
-			continue
-		}
-		tmp = append(tmp, tuple{
-			filename: f,
-			parsed:   p,
-		})
-	}
-
-	sort.Slice(tmp, func(i, j int) bool {
-		if tmp[i].parsed.BaseName != tmp[j].parsed.BaseName {
-			return tmp[i].parsed.BaseName < tmp[j].parsed.BaseName
-		}
-		return tmp[i].parsed.LessThan(tmp[j].parsed)
-	})
-
-	ret := make([]string, len(tmp))
-	for i := range tmp {
-		ret[i] = tmp[i].filename
-	}
-
-	return ret, nil
 }
 
 // fileSizeUpdated checks whether the file's size has updated

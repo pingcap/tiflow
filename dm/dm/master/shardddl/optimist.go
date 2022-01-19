@@ -209,11 +209,9 @@ func (o *Optimist) RemoveMetaDataWithTaskAndSources(task string, sources ...stri
 	locks := o.lk.FindLocksByTask(task)
 	for _, lock := range locks {
 		// remove table by sources for related lock
-		if lock != nil {
-			cols := lock.TryRemoveTableBySources(sources)
-			dropColumns[lock.ID] = cols
-			o.logger.Debug("the tables removed from the lock", zap.String("task", task), zap.Strings("sources", sources))
-		}
+		cols := lock.TryRemoveTableBySources(sources)
+		dropColumns[lock.ID] = cols
+		o.logger.Debug("the tables removed from the lock", zap.String("task", task), zap.Strings("sources", sources))
 		if !lock.HasTables() {
 			o.lk.RemoveLock(lock.ID)
 		}

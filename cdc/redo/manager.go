@@ -54,9 +54,13 @@ const (
 )
 
 const (
-	// supposing to replicate 10k tables, each table has one cached changce averagely.
+	// supposing to replicate 10k tables, each table has one cached change averagely.
+	// approximate 156.25KB
 	logBufferChanSize = 10000
-	logBufferTimeout  = time.Minute * 10
+	// supposing to replicate 10k tables, each table has one resolvedTs change averagely.
+	// approximate 156.25KB
+	flushBufferChanSize = 10000
+	logBufferTimeout    = time.Minute * 10
 )
 
 // IsValidConsistentLevel checks whether a give consistent level is valid
@@ -95,7 +99,8 @@ type LogManager interface {
 	// Enabled returns whether the log manager is enabled
 	Enabled() bool
 
-	// The following 5 APIs are called from processor only
+	// The following 6 APIs are called from processor only
+	TryEmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) (bool, error)
 	EmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) error
 	FlushLog(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
 	AddTable(tableID model.TableID, startTs uint64)
@@ -122,6 +127,12 @@ type cacheRows struct {
 	rows    []*model.RowChangedEvent
 }
 
+// resolvedEvent represents a resolvedTs event
+type resolvedEvent struct {
+	tableID    model.TableID
+	resolvedTs model.Ts
+}
+
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
 // redo log resolved ts. It implements LogManager interface.
 type ManagerImpl struct {
@@ -129,8 +140,9 @@ type ManagerImpl struct {
 	level       ConsistentLevelType
 	storageType consistentStorage
 
-	logBuffer chan cacheRows
-	writer    writer.RedoLogWriter
+	flushBuffer chan resolvedEvent
+	logBuffer   chan cacheRows
+	writer      writer.RedoLogWriter
 
 	minResolvedTs uint64
 	tableIDs      []model.TableID
@@ -156,7 +168,8 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		level:       ConsistentLevelType(cfg.Level),
 		storageType: consistentStorage(uri.Scheme),
 		rtsMap:      make(map[model.TableID]uint64),
-		logBuffer:   make(chan cacheRows, logBufferChanSize),
+		logBuffer:   make(chan cacheRows, logBufferChanSize),       /* approximate 0.228MB */
+		flushBuffer: make(chan resolvedEvent, flushBufferChanSize), /* approximate 0.152MB */
 	}
 
 	switch m.storageType {
@@ -195,6 +208,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 
 	if opts.EnableBgRunner {
 		go m.bgUpdateResolvedTs(ctx, opts.ErrCh)
+		go m.bgFlushLog(ctx, opts.ErrCh)
 		go m.bgWriteLog(ctx, opts.ErrCh)
 	}
 	return m, nil
@@ -208,6 +222,32 @@ func NewDisabledManager() *ManagerImpl {
 // Enabled returns whether this log manager is enabled
 func (m *ManagerImpl) Enabled() bool {
 	return m.enabled
+}
+
+// TryEmitRowChangedEvents sends row changed events to a log buffer, the log buffer
+// will be consumed by a background goroutine, which converts row changed events
+// to redo logs and sends to log writer. Note this function is non-blocking
+func (m *ManagerImpl) TryEmitRowChangedEvents(
+	ctx context.Context,
+	tableID model.TableID,
+	rows ...*model.RowChangedEvent,
+) (bool, error) {
+	timer := time.NewTimer(logBufferTimeout)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case m.logBuffer <- cacheRows{
+		tableID: tableID,
+		// Because the pipeline sink doesn't hold slice memory after calling
+		// EmitRowChangedEvents, we copy to a new slice to manage memory
+		// in redo manager itself, which is the same behavior as sink manager.
+		rows: append(make([]*model.RowChangedEvent, 0, len(rows)), rows...),
+	}:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 // EmitRowChangedEvents sends row changed events to a log buffer, the log buffer
@@ -251,7 +291,16 @@ func (m *ManagerImpl) FlushLog(
 		return nil
 	}
 	defer atomic.StoreInt64(&m.flushing, 0)
-	return m.writer.FlushLog(ctx, tableID, resolvedTs)
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case m.flushBuffer <- resolvedEvent{
+		tableID:    tableID,
+		resolvedTs: resolvedTs,
+	}:
+		return nil
+	}
 }
 
 // EmitDDLEvent sends DDL event to redo log writer
@@ -348,7 +397,7 @@ func (m *ManagerImpl) bgUpdateResolvedTs(ctx context.Context, errCh chan<- error
 				select {
 				case errCh <- err:
 				default:
-					log.Error("err channel is full", zap.Error(err))
+					log.Error("redo log manager err channel is full", zap.Error(err))
 				}
 				return
 			}
@@ -371,10 +420,30 @@ func (m *ManagerImpl) bgWriteLog(ctx context.Context, errCh chan<- error) {
 				select {
 				case errCh <- err:
 				default:
-					log.Error("err channel is full", zap.Error(err))
+					log.Error("redo log manager err channel is full", zap.Error(err))
 				}
 				return
 			}
+		}
+	}
+}
+
+func (m *ManagerImpl) bgFlushLog(ctx context.Context, errCh chan<- error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-m.flushBuffer:
+			err := m.writer.FlushLog(ctx, event.tableID, event.resolvedTs)
+			if err != nil {
+				select {
+				case errCh <- err:
+				default:
+					log.Error("redo log manager err channel is full", zap.Error(err))
+				}
+				return
+			}
+
 		}
 	}
 }

@@ -21,7 +21,6 @@ import (
 	"go.etcd.io/etcd/clientv3"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -29,8 +28,8 @@ import (
 
 // DownstreamMeta used to fetch table info from downstream.
 type DownstreamMeta struct {
-	db   *conn.BaseDB
-	meta string
+	dbConfig *config.DBConfig
+	meta     string
 }
 
 // LockKeeper used to keep and handle DDL lock conveniently.
@@ -69,11 +68,7 @@ func (lk *LockKeeper) getDownstreamMeta(task string) (*DownstreamMeta, error) {
 	if dbConfig == nil {
 		return nil, terror.ErrMasterOptimisticDownstreamMetaNotFound.Generate(task)
 	}
-	db, err := conn.DefaultDBProvider.Apply(dbConfig)
-	if err != nil {
-		return nil, err
-	}
-	downstreamMeta := &DownstreamMeta{db: db, meta: meta}
+	downstreamMeta := &DownstreamMeta{dbConfig: dbConfig, meta: meta}
 	lk.downstreamMetaMap[task] = downstreamMeta
 	return downstreamMeta, nil
 }
