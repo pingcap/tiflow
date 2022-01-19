@@ -48,14 +48,7 @@ require (
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
-<<<<<<< HEAD
 	github.com/spf13/cobra v1.0.0
-=======
-	github.com/rakyll/statik v0.1.7
-	github.com/shopspring/decimal v1.3.0
-	github.com/soheilhy/cmux v0.1.5
-	github.com/spf13/cobra v1.2.1
->>>>>>> 5e218c74d (ticdc/server: output the cdc server cmd error to stderr (#3520))
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
 	github.com/tikv/pd v1.1.0-beta.0.20210323121136-78679e5e209d
