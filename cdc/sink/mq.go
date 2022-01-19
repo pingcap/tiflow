@@ -131,6 +131,17 @@ func newMqSink(
 	return s, nil
 }
 
+// TryEmitRowChangedEvents just calls EmitRowChangedEvents internally,
+// it still blocking in current implementation.
+// TODO(dongmen): We should make this method truly non-blocking after we remove buffer sink
+func (k *mqSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	err := k.EmitRowChangedEvents(ctx, rows...)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	rowsCount := 0
 	for _, row := range rows {
