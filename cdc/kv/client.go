@@ -307,6 +307,7 @@ var NewCDCKVClient func(
 	pd pd.Client,
 	kvStorage tikv.Storage,
 	grpcPool GrpcPool,
+	changefeed string,
 ) CDCKVClient = NewCDCClient
 
 // CDCClient to get events from TiKV
@@ -318,31 +319,20 @@ type CDCClient struct {
 	grpcPool GrpcPool
 
 	regionCache *tikv.RegionCache
-<<<<<<< HEAD
 	kvStorage   TiKVStorage
-=======
-	kvStorage   tikv.Storage
-	pdClock     pdtime.Clock
 	changefeed  string
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 
 	regionLimiters *regionEventFeedLimiters
 }
 
 // NewCDCClient creates a CDCClient instance
-<<<<<<< HEAD
-func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grpcPool GrpcPool) (c CDCKVClient) {
-=======
 func NewCDCClient(
 	ctx context.Context,
 	pd pd.Client,
 	kvStorage tikv.Storage,
 	grpcPool GrpcPool,
-	regionCache *tikv.RegionCache,
-	pdClock pdtime.Clock,
 	changefeed string,
 ) (c CDCKVClient) {
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 	clusterID := pd.GetClusterID(ctx)
 
 	var store TiKVStorage
@@ -360,13 +350,8 @@ func NewCDCClient(
 		pd:             pd,
 		kvStorage:      store,
 		grpcPool:       grpcPool,
-<<<<<<< HEAD
 		regionCache:    tikv.NewRegionCache(pd),
-=======
-		regionCache:    regionCache,
-		pdClock:        pdClock,
 		changefeed:     changefeed,
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 		regionLimiters: defaultRegionEventFeedLimiters,
 	}
 	return
@@ -1114,15 +1099,6 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 				zap.String("rpcCtx", errInfo.rpcCtx.String()),
 				zap.Stringer("error", compatibility))
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(compatibility)
-<<<<<<< HEAD
-=======
-		} else if mismatch := innerErr.GetClusterIdMismatch(); mismatch != nil {
-			log.Error("tikv reported the request cluster ID mismatch error, which is not expected",
-				zap.String("changefeed", s.client.changefeed),
-				zap.Uint64("tikvCurrentClusterID", mismatch.Current),
-				zap.Uint64("requestClusterID", mismatch.Request))
-			return cerror.ErrClusterIDMismatch.GenWithStackByArgs(mismatch.Current, mismatch.Request)
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 		} else {
 			metricFeedUnknownErrorCounter.Inc()
 			log.Warn("receive empty or unknown error msg",
@@ -1272,12 +1248,8 @@ func (s *eventFeedSession) receiveFromStream(
 				regionCount = len(cevent.ResolvedTs.Regions)
 			}
 			log.Warn("change data event size too large",
-<<<<<<< HEAD
-				zap.Int("size", size), zap.Int("event length", len(cevent.Events)),
-=======
 				zap.String("changefeed", s.client.changefeed),
 				zap.Int("size", size), zap.Int("eventLen", len(cevent.Events)),
->>>>>>> 0538d371e (kv,puller(ticdc): add changefeed ID to kv client (#4373))
 				zap.Int("resolved region count", regionCount))
 		}
 
