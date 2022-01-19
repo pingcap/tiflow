@@ -3,20 +3,14 @@ package srvdiscovery
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/etcdutils"
-	"github.com/phayes/freeport"
+	"github.com/hanfei1991/microcosm/test"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
 )
 
 func init() {
@@ -27,51 +21,12 @@ func init() {
 	}
 }
 
-func allocTempURL(t *testing.T) string {
-	port, err := freeport.GetFreePort()
-	require.Nil(t, err)
-	return fmt.Sprintf("127.0.0.1:%d", port)
-}
-
-func prepareEtcd(t *testing.T, name string) (*embed.Etcd, *clientv3.Client, func() /* cleanup function */) {
-	dir, err := ioutil.TempDir("", name)
-	require.Nil(t, err)
-
-	masterAddr := allocTempURL(t)
-	advertiseAddr := masterAddr
-	cfgCluster := &etcdutils.ConfigParams{}
-	cfgCluster.Name = name
-	cfgCluster.DataDir = dir
-	cfgCluster.PeerUrls = "http://" + allocTempURL(t)
-	cfgCluster.Adjust("", embed.ClusterStateFlagNew)
-
-	cfgClusterEtcd := etcdutils.GenEmbedEtcdConfigWithLogger("info")
-	cfgClusterEtcd, err = etcdutils.GenEmbedEtcdConfig(cfgClusterEtcd, masterAddr, advertiseAddr, cfgCluster)
-	require.Nil(t, err)
-
-	etcd, err := etcdutils.StartEtcd(cfgClusterEtcd, nil, nil, time.Minute)
-	require.Nil(t, err)
-
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{advertiseAddr},
-		DialTimeout: 3 * time.Second,
-	})
-	require.Nil(t, err)
-
-	cleanFn := func() {
-		os.RemoveAll(dir)
-		etcd.Close()
-	}
-
-	return etcd, client, cleanFn
-}
-
 func TestEtcdDiscoveryAPI(t *testing.T) {
 	t.Parallel()
 
 	keyAdapter := adapter.ExecutorInfoKeyAdapter
 	ctx, cancel := context.WithCancel(context.Background())
-	_, client, cleanFn := prepareEtcd(t, "test1")
+	_, _, client, cleanFn := test.PrepareEtcd(t, "discovery-test1")
 	defer cleanFn()
 
 	initSrvs := []struct {
@@ -151,4 +106,26 @@ func TestEtcdDiscoveryAPI(t *testing.T) {
 	ch = d.Watch(ctx)
 	wresp = <-ch
 	require.Error(t, wresp.Err, errors.ErrDiscoveryDuplicateWatch.GetMsg())
+}
+
+func TestSnapshotClone(t *testing.T) {
+	t.Parallel()
+	snapshot := map[UUID]ServiceResource{
+		"uuid-1": {Addr: "127.0.0.1:10001"},
+		"uuid-2": {Addr: "127.0.0.1:10002"},
+	}
+	discovery := EtcdSrvDiscovery{
+		snapshot:    snapshot,
+		snapshotRev: 100,
+	}
+	cloned, rev := discovery.SnapshotClone()
+	require.Equal(t, int64(100), rev)
+	require.Equal(t, snapshot, cloned)
+	for k := range snapshot {
+		delete(snapshot, k)
+	}
+	require.Equal(t, map[UUID]ServiceResource{
+		"uuid-1": {Addr: "127.0.0.1:10001"},
+		"uuid-2": {Addr: "127.0.0.1:10002"},
+	}, cloned)
 }
