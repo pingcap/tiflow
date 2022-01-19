@@ -483,17 +483,15 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	rebuildScheduler(ctx)
 
 	// CASE 4.7.1: add source2 with specify worker1
-	// source2 not exist, worker2 should be free
+	// source2 not exist, worker1 is bound
 	t.sourceCfgNotExist(c, s, sourceID2)
-	t.workerFree(c, s, workerName2)
+	t.workerBound(c, s, ha.NewSourceBound(sourceID1, workerName1))
 	c.Assert(terror.ErrSchedulerWorkerNotFree.Equal(s.AddSourceCfgWithWorker(&sourceCfg2, workerName1)), IsTrue)
 	// source2 is not created because expected worker1 is already bound
 	t.sourceCfgNotExist(c, s, sourceID2)
 	rebuildScheduler(ctx)
 
 	// CASE 4.7.2: add source2 with specify worker2
-	// remove source2
-	c.Assert(s.RemoveSourceCfg(sourceID2), IsNil)
 	// source2 not exist, worker2 should be free
 	t.sourceCfgNotExist(c, s, sourceID2)
 	t.workerFree(c, s, workerName2)
