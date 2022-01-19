@@ -10,6 +10,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 type mockMasterImpl struct {
@@ -19,7 +20,8 @@ type mockMasterImpl struct {
 	*BaseMaster
 	id MasterID
 
-	tickCount atomic.Int64
+	tickCount         atomic.Int64
+	onlineWorkerCount atomic.Int64
 
 	dispatchedWorkers chan WorkerHandle
 
@@ -114,6 +116,9 @@ func (m *mockMasterImpl) OnWorkerOnline(worker WorkerHandle) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	log.L().Info("OnWorkerOnline", zap.String("worker-id", string(worker.ID())))
+	m.onlineWorkerCount.Add(1)
+
 	args := m.Called(worker)
 	return args.Error(0)
 }
@@ -121,6 +126,8 @@ func (m *mockMasterImpl) OnWorkerOnline(worker WorkerHandle) error {
 func (m *mockMasterImpl) OnWorkerOffline(worker WorkerHandle, reason error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	m.onlineWorkerCount.Sub(1)
 
 	args := m.Called(worker, reason)
 	return args.Error(0)

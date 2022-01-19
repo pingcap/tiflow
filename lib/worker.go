@@ -53,7 +53,8 @@ type BaseWorker struct {
 
 	masterClient *masterClient
 
-	id WorkerID
+	id            WorkerID
+	timeoutConfig TimeoutConfig
 
 	wg    sync.WaitGroup
 	errCh chan error
@@ -74,8 +75,11 @@ func NewBaseWorker(
 		messageRouter:         messageSender,
 		metaKVClient:          metaKVClient,
 		masterClient:          masterManager,
-		id:                    workerID,
-		errCh:                 make(chan error, 1),
+
+		id:            workerID,
+		timeoutConfig: defaultTimeoutConfig,
+
+		errCh: make(chan error, 1),
 	}
 }
 
@@ -158,7 +162,7 @@ func (w *BaseWorker) startBackgroundTasks(ctx context.Context) {
 }
 
 func (w *BaseWorker) runHeartbeatWorker(ctx context.Context) error {
-	ticker := time.NewTicker(workerHeartbeatInterval)
+	ticker := time.NewTicker(w.timeoutConfig.workerHeartbeatInterval)
 	for {
 		select {
 		case <-ctx.Done():
@@ -172,7 +176,7 @@ func (w *BaseWorker) runHeartbeatWorker(ctx context.Context) error {
 }
 
 func (w *BaseWorker) runStatusWorker(ctx context.Context) error {
-	ticker := time.NewTicker(workerReportStatusInterval)
+	ticker := time.NewTicker(w.timeoutConfig.workerReportStatusInterval)
 	for {
 		select {
 		case <-ctx.Done():
@@ -195,7 +199,7 @@ func (w *BaseWorker) runStatusWorker(ctx context.Context) error {
 }
 
 func (w *BaseWorker) runWatchDog(ctx context.Context) error {
-	ticker := time.NewTicker(workerTimeoutGracefulDuration / 2)
+	ticker := time.NewTicker(w.timeoutConfig.workerTimeoutGracefulDuration / 2)
 	for {
 		select {
 		case <-ctx.Done():
@@ -254,6 +258,8 @@ type masterClient struct {
 	messageSender           p2p.MessageSender
 	metaKVClient            metadata.MetaKV
 	lastMasterAckedPingTime monotonicTime
+
+	timeoutConfig TimeoutConfig
 }
 
 func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.MessageSender) *masterClient {
@@ -261,6 +267,8 @@ func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.Me
 		masterID:      masterID,
 		workerID:      workerID,
 		messageSender: messageRouter,
+
+		timeoutConfig: defaultTimeoutConfig,
 	}
 }
 
@@ -307,11 +315,13 @@ func (m *masterClient) CheckMasterTimeout(ctx context.Context) (ok bool, err err
 	lastMasterAckedPingTime := m.lastMasterAckedPingTime
 	m.mu.RUnlock()
 
-	if lastMasterAckedPingTime <= 2*workerHeartbeatInterval {
+	if lastMasterAckedPingTime <= 2*m.timeoutConfig.workerHeartbeatInterval {
 		return true, nil
 	}
 
-	if lastMasterAckedPingTime > 2*workerHeartbeatInterval && lastMasterAckedPingTime < workerTimeoutDuration {
+	if lastMasterAckedPingTime > 2*m.timeoutConfig.workerHeartbeatInterval &&
+		lastMasterAckedPingTime < m.timeoutConfig.workerTimeoutDuration {
+
 		if err := m.refreshMasterInfo(ctx); err != nil {
 			return false, errors.Trace(err)
 		}

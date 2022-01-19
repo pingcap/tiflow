@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gavv/monotime"
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -20,9 +21,13 @@ import (
 const (
 	masterName            = "my-master"
 	masterNodeName        = "node-1"
-	executorNodeName      = "node-2"
+	executorNodeID1       = "node-exec-1"
+	executorNodeID2       = "node-exec-2"
+	executorNodeID3       = "node-exec-3"
 	workerTypePlaceholder = 999
-	workerID1             = "worker-1"
+	workerID1             = WorkerID("worker-1")
+	workerID2             = WorkerID("worker-2")
+	workerID3             = WorkerID("worker-3")
 )
 
 type dummyConfig struct {
@@ -42,6 +47,8 @@ func prepareMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV) 
 }
 
 func TestMasterInit(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -84,6 +91,8 @@ func TestMasterInit(t *testing.T) {
 }
 
 func TestMasterPollAndClose(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -122,10 +131,13 @@ func TestMasterPollAndClose(t *testing.T) {
 }
 
 func TestMasterCreateWorker(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
 	master := newMockMasterImpl("my-master")
+	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	prepareMeta(ctx, t, master.metaKVClient)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
@@ -146,13 +158,13 @@ func TestMasterCreateWorker(t *testing.T) {
 		&pb.TaskSchedulerResponse{
 			Schedule: map[int64]*pb.ScheduleResult{
 				0: {
-					ExecutorId: executorNodeName,
+					ExecutorId: executorNodeID1,
 				},
 			},
 		}, nil)
 
 	mockExecutorClient := &client.MockExecutorClient{}
-	err = master.executorClientManager.AddExecutorClient(executorNodeName, mockExecutorClient)
+	err = master.executorClientManager.AddExecutorClient(executorNodeID1, mockExecutorClient)
 	require.NoError(t, err)
 
 	configBytes, err := json.Marshal(&dummyConfig{param: 1})
@@ -168,7 +180,7 @@ func TestMasterCreateWorker(t *testing.T) {
 			},
 		}).Return(&client.ExecutorResponse{Resp: &pb.DispatchTaskResponse{
 		ErrorCode: 1,
-		WorkerId:  workerID1,
+		WorkerId:  string(workerID1),
 	}}, nil)
 
 	err = master.CreateWorker(ctx, workerTypePlaceholder, &dummyConfig{param: 1})
@@ -176,4 +188,25 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	master.On("OnWorkerDispatched", mock.AnythingOfType("*lib.workerHandleImpl"), nil).Return(nil)
 	<-master.dispatchedWorkers
+
+	master.On("OnWorkerOnline", mock.AnythingOfType("*lib.workerHandleImpl")).Return(nil)
+
+	err = master.messageHandlerManager.InvokeHandler(t, HeartbeatPingTopic(masterName), executorNodeID1, &HeartbeatPingMessage{
+		SendTime:     monotime.Now(),
+		FromWorkerID: workerID1,
+		Epoch:        master.BaseMaster.currentEpoch.Load(),
+	})
+	require.NoError(t, err)
+
+	master.On("Tick", mock.Anything).Return(nil)
+	err = master.Poll(ctx)
+	require.NoError(t, err)
+
+	require.Eventuallyf(t, func() bool {
+		return master.onlineWorkerCount.Load() == 1
+	}, time.Second*1, time.Millisecond*10, "final worker count %d", master.onlineWorkerCount.Load())
+
+	workerList := master.GetWorkers()
+	require.Len(t, workerList, 1)
+	require.Contains(t, workerList, workerID1)
 }

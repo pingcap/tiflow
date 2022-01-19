@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/BurntSushi/toml v0.4.1
+	github.com/benbjohnson/clock v1.1.0 // indirect
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/gogo/protobuf v1.3.2

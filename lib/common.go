@@ -31,25 +31,21 @@ const (
 	WorkerStatusFinished
 )
 
-const (
-	// If no heartbeat response is received for workerTimeoutDuration,
-	// a worker will commit suicide.
-	workerTimeoutDuration = time.Second * 15
+type TimeoutConfig struct {
+	workerTimeoutDuration            time.Duration
+	workerTimeoutGracefulDuration    time.Duration
+	workerHeartbeatInterval          time.Duration
+	workerReportStatusInterval       time.Duration
+	masterHeartbeatCheckLoopInterval time.Duration
+}
 
-	// If no heartbeat is received for workerTimeoutDuration + workerTimeoutGracefulDuration,
-	// the master will consider a worker dead.
-	workerTimeoutGracefulDuration = time.Second * 5
-
-	// workerHeartbeatInterval is the interval between the working trying to send hearbeats.
-	workerHeartbeatInterval = time.Second * 3
-
-	// workerReportStatusInterval is the interval between the working trying to report statuses.
-	// TODO think of a way to implement sending statuses on demand by the business logic.
-	workerReportStatusInterval = time.Second * 3
-
-	// masterHeartbeatCheckLoopInterval is the interval between the master checking for heartbeat timeouts.
-	masterHeartbeatCheckLoopInterval = time.Second * 1
-)
+var defaultTimeoutConfig TimeoutConfig = TimeoutConfig{
+	workerTimeoutDuration:            time.Second * 15,
+	workerTimeoutGracefulDuration:    time.Second * 5,
+	workerHeartbeatInterval:          time.Second * 3,
+	workerReportStatusInterval:       time.Second * 3,
+	masterHeartbeatCheckLoopInterval: time.Second * 1,
+}
 
 type WorkerStatus struct {
 	Code         WorkerStatusCode `json:"code"`
@@ -75,14 +71,15 @@ func StatusUpdateTopic(masterID MasterID) p2p.Topic {
 
 type HeartbeatPingMessage struct {
 	SendTime     monotonicTime `json:"send-time"`
-	FromWorkerID WorkerID      `json:"from-id"`
+	FromWorkerID WorkerID      `json:"from-worker-id"`
 	Epoch        Epoch         `json:"epoch"`
 }
 
 type HeartbeatPongMessage struct {
-	SendTime  monotonicTime `json:"send-time"`
-	ReplyTime time.Time     `json:"reply-time"`
-	Epoch     Epoch         `json:"epoch"`
+	SendTime   monotonicTime `json:"send-time"`
+	ReplyTime  time.Time     `json:"reply-time"`
+	ToWorkerID WorkerID      `json:"to-worker-id"`
+	Epoch      Epoch         `json:"epoch"`
 }
 
 type StatusUpdateMessage struct {
