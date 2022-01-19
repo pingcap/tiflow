@@ -689,7 +689,7 @@ func (s *stateSuite) TestCheckChangefeedNormal(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
 	stateTester := NewReactorStateTester(c, state, nil)
-	state.CheckChangefeedNormal()
+	state.CheckChangefeedRunnable()
 	stateTester.MustApplyPatches()
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return &model.ChangeFeedInfo{SinkURI: "123", AdminJobType: model.AdminNone, Config: &config.ReplicaConfig{}}, true, nil
@@ -697,7 +697,7 @@ func (s *stateSuite) TestCheckChangefeedNormal(c *check.C) {
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return &model.ChangeFeedStatus{ResolvedTs: 1, AdminJobType: model.AdminNone}, true, nil
 	})
-	state.CheckChangefeedNormal()
+	state.CheckChangefeedRunnable()
 	stateTester.MustApplyPatches()
 	c.Assert(state.Status.ResolvedTs, check.Equals, uint64(1))
 
@@ -709,7 +709,7 @@ func (s *stateSuite) TestCheckChangefeedNormal(c *check.C) {
 		status.ResolvedTs = 2
 		return status, true, nil
 	})
-	state.CheckChangefeedNormal()
+	state.CheckChangefeedRunnable()
 	stateTester.MustApplyPatches()
 	c.Assert(state.Status.ResolvedTs, check.Equals, uint64(1))
 
@@ -717,7 +717,7 @@ func (s *stateSuite) TestCheckChangefeedNormal(c *check.C) {
 		status.ResolvedTs = 2
 		return status, true, nil
 	})
-	state.CheckChangefeedNormal()
+	state.CheckChangefeedRunnable()
 	stateTester.MustApplyPatches()
 	c.Assert(state.Status.ResolvedTs, check.Equals, uint64(2))
 }

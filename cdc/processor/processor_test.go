@@ -239,13 +239,15 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
 
-	// add table, in processing
-	// in current implementation of owner, the startTs and BoundaryTs of add table operation should be always equaled.
+	// Add table, in processing. In current implementation of owner,
+	// the startTs and BoundaryTs of add table operation should be always equaled.
 	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		status.AddTable(66, &model.TableReplicaInfo{StartTs: 60}, 60)
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
+	// TablePipeline can only be added when the processor is in `processorRunning`.
+	p.runningStatus = processorRunning
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
@@ -383,6 +385,8 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
+	// TablePipeline can only be added when the processor is in `processorRunning`.
+	p.runningStatus = processorRunning
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
@@ -578,6 +582,7 @@ func (s *processorSuite) TestTableExecutor(c *check.C) {
 
 	c.Assert(p.tables, check.HasLen, 4)
 
+	p.runningStatus = processorRunning
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
@@ -695,11 +700,18 @@ func (s *processorSuite) TestInitTable(c *check.C) {
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
+	// Initialize TablePipeline should after the processor is in `processorRunning`
+	p.runningStatus = processorRunning
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
 	c.Assert(p.tables[1], check.Not(check.IsNil))
+	c.Assert(p.tables[1].CheckpointTs(), check.Equals, model.Ts(20))
+	c.Assert(p.tables[1].ResolvedTs(), check.Equals, model.Ts(20))
+
 	c.Assert(p.tables[2], check.Not(check.IsNil))
+	c.Assert(p.tables[2].CheckpointTs(), check.Equals, model.Ts(30))
+	c.Assert(p.tables[2].ResolvedTs(), check.Equals, model.Ts(30))
 }
 
 func (s *processorSuite) TestProcessorError(c *check.C) {
@@ -785,6 +797,8 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 		status.Tables[2] = &model.TableReplicaInfo{StartTs: 30}
 		return status, true, nil
 	})
+	// Initialize TablePipeline should after the processor is in `processorRunning`
+	p.runningStatus = processorRunning
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
@@ -848,8 +862,17 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 		Code:    "CDC:ErrSinkURIInvalid",
 		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
 	})
+	// todo: fix this.
 	c.Assert(p.tables[1].(*mockTablePipeline).canceled, check.IsTrue)
 	c.Assert(p.tables[2].(*mockTablePipeline).canceled, check.IsTrue)
+}
+
+func (s *processorSuite) TestInitializeProcessor(c *check.C) {
+
+}
+
+func (s *processorSuite) TestCloseProcessor(c *check.C) {
+
 }
 
 func (s *processorSuite) TestPositionDeleted(c *check.C) {
@@ -866,8 +889,13 @@ func (s *processorSuite) TestPositionDeleted(c *check.C) {
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
+	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
+		Tables: map[int64]*model.TableReplicaInfo{1: {StartTs: 30}, 2: {StartTs: 40}},
+	})
 
 	// cal position
+	// `TaskPosition` should be updated when the processor is in `processorRunning`.
+	p.runningStatus = processorRunning
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
@@ -917,6 +945,7 @@ func (s *processorSuite) TestSchemaGC(c *check.C) {
 	tester.MustApplyPatches()
 
 	updateChangeFeedPosition(c, tester, "changefeed-id-test", 50, 50)
+	p.runningStatus = processorRunning
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
@@ -994,13 +1023,32 @@ func (s *processorSuite) TestUpdateBarrierTs(c *check.C) {
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
 
 	// init tick, add table OperDispatched.
+	// Initialize TablePipeline should after the processor is in `processorRunning`
+	p.runningStatus = processorRunning
 	_, err := p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
+	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
+		Tables: map[int64]*model.TableReplicaInfo{
+			1: {StartTs: 5},
+		},
+		Operation: map[int64]*model.TableOperation{
+			1: {BoundaryTs: 5, Status: model.OperDispatched},
+		},
+	})
+
 	// tick again, add table OperProcessed.
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
+	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
+		Tables: map[int64]*model.TableReplicaInfo{
+			1: {StartTs: 5},
+		},
+		Operation: map[int64]*model.TableOperation{
+			1: {BoundaryTs: 5, Status: model.OperProcessed},
+		},
+	})
 
 	// Global resolved ts has advanced while schema storage stalls.
 	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
