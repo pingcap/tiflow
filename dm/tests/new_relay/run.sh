@@ -13,6 +13,7 @@ API_VERSION="v1alpha1"
 function test_restart_relay_status() {
 	cleanup_process
 	cleanup_data $TEST_NAME
+	export GO_FAILPOINTS=""
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -95,6 +96,7 @@ function test_restart_relay_status() {
 function test_cant_dail_upstream() {
 	cleanup_process
 	cleanup_data $TEST_NAME
+	export GO_FAILPOINTS=""
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -122,15 +124,13 @@ function test_cant_dail_upstream() {
 		"query-status -s $SOURCE_ID1" \
 		"injected error" 1
 
-	export GO_FAILPOINTS=""
-	cleanup_data $TEST_NAME
-	cleanup_process
 	echo "》》》》》》》》》》》》》》》》》test test_cant_dail_upstream passed"
 }
 
 function test_cant_dail_downstream() {
 	cleanup_process
 	cleanup_data $TEST_NAME
+	export GO_FAILPOINTS=""
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -155,8 +155,6 @@ function test_cant_dail_downstream() {
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 
-	# make sure DM-worker doesn't exit
-	sleep 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID1" \
 		"\"relayCatchUpMaster\": true" 1 \
@@ -166,8 +164,6 @@ function test_cant_dail_downstream() {
 	run_tidb_server 4000 $TIDB_PASSWORD
 	sleep 2
 
-	cleanup_data $TEST_NAME
-	cleanup_process
 	echo "》》》》》》》》》》》》》》》》》test test_cant_dail_downstream passed"
 }
 
@@ -205,18 +201,12 @@ function test_kill_dump_connection() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID1" \
 		"\"relayCatchUpMaster\": true" 1
-	cleanup_data $TEST_NAME
-	cleanup_process
 	echo "》》》》》》》》》》》》》》》》》test test_kill_dump_connection passed"
-
 }
 
-function run() {
-	test_restart_relay_status
-	test_cant_dail_downstream
-	test_cant_dail_upstream
-	test_kill_dump_connection
-
+function test_relay_operations() {
+	cleanup_process
+	cleanup_data $TEST_NAME
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/ReportRelayLogSpaceInBackground=return(1)"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -248,7 +238,7 @@ function run() {
 		"\"worker\": \"worker1\"" 1 \
 		"\"worker\": \"worker2\"" 1
 
-	# worker1 and worker2 has one realy job and worker3 have none.
+	# worker1 and worker2 has one relay job and worker3 have none.
 	check_metric $WORKER1_PORT "dm_relay_binlog_file{node=\"relay\"}" 3 0 2
 	check_metric $WORKER1_PORT "dm_relay_exit_with_error_count" 3 -1 1
 	check_metric $WORKER2_PORT "dm_relay_binlog_file{node=\"relay\"}" 3 0 2
@@ -260,7 +250,7 @@ function run() {
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
-	# relay task tranfer to worker1 with no error.
+	# relay task transfer to worker1 with no error.
 	check_metric $WORKER1_PORT "dm_relay_data_corruption" 3 -1 1
 	check_metric $WORKER1_PORT "dm_relay_read_error_count" 3 -1 1
 	check_metric $WORKER1_PORT "dm_relay_write_error_count" 3 -1 1
@@ -311,11 +301,11 @@ function run() {
 	[ "$new_relay_log_count_1" -eq 1 ]
 	[ "$new_relay_log_count_2" -eq 1 ]
 
-	echo "kill dm-worker2"
+	echo "kill dm-worker1"
 	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER1_PORT 20
 	echo "kill dm-worker2"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER1_PORT 20
 	# if all relay workers are offline, relay-not-enabled worker should continue to sync
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -338,8 +328,7 @@ function run() {
 
 	# destroy cluster
 	cleanup_process $*
-	rm -rf $WORK_DIR
-	mkdir $WORK_DIR
+	cleanup_data $TEST_NAME
 
 	# insert new data
 	run_sql_file $cur/data/db1.increment5.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -368,7 +357,15 @@ function run() {
 		"\"result\": true" 2
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	echo "》》》》》》》》》》》》》》》》》test test_relay_operations passed"
+}
 
+function run() {
+	test_relay_operations
+	test_cant_dail_upstream
+	test_restart_relay_status
+	test_cant_dail_downstream
+	test_kill_dump_connection
 }
 
 cleanup_data $TEST_NAME

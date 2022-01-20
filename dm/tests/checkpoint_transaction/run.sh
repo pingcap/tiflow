@@ -17,7 +17,7 @@ function check_worker_ungraceful_stop_with_retry() {
 		if [ $num -lt 1 ]; then
 			continue
 		fi
-		num=$(grep "kill without graceful" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+		num=$(grep "kill syncer without graceful" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 		if [ $num -lt 1 ]; then
 			continue
 		fi

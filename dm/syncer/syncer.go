@@ -281,8 +281,6 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
 	syncer.locations = &locationRecorder{}
-
-	syncer.rundone = nil
 	return syncer
 }
 
@@ -1504,6 +1502,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	defer func() {
 		// close rundone to notify other goroutine that syncer.Run is exited
 		close(s.rundone)
+		runCancel()
 	}()
 
 	// some initialization that can't be put in Syncer.Init
@@ -1517,6 +1516,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			return err
 		}
 	}
+	// we should start this goroutine as soon as possible, because it's the only goroutine that cancel syncer.Run
+	go s.waitTransactionEndBeforeExit(ctx)
 
 	var (
 		flushCheckpoint bool
@@ -1627,7 +1628,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		traceSource             = fmt.Sprintf("%s.syncer.%s", s.cfg.SourceID, s.cfg.Name)
 	)
 
-	go s.waitTransactionEndBeforeExit(ctx)
 	defer func() {
 		if err1 := recover(); err1 != nil {
 			failpoint.Inject("ExitAfterSaveOnlineDDL", func() {
@@ -1847,7 +1847,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			// try to re-sync in gtid mode
 			if tryReSync && s.cfg.EnableGTID && utils.IsErrBinlogPurged(err) && s.cfg.AutoFixGTID {
 				time.Sleep(retryTimeout)
-				err = s.reSyncBinlog(*s.tctx, lastLocation)
+				err = s.reSyncBinlog(*s.runTCtx, lastLocation)
 				if err != nil {
 					return err
 				}
@@ -1993,7 +1993,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				if err = s.checkpoint.FlushSafeModeExitPoint(s.runTCtx); err != nil {
 					return err
 				}
-				if err = s.safeMode.Add(s.tctx, -1); err != nil {
+				if err = s.safeMode.Add(s.runTCtx, -1); err != nil {
 					return err
 				}
 			}

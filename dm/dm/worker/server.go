@@ -448,10 +448,10 @@ func (s *Server) doClose() {
 		return
 	}
 	// stop worker and wait for return
-	s.cancel()
 	if w := s.getWorker(false); w != nil {
 		w.Stop(true)
 	}
+	s.cancel()
 	s.wg.Wait()
 	s.closed.Store(true)
 }
@@ -460,6 +460,7 @@ func (s *Server) doClose() {
 func (s *Server) Close() {
 	s.doClose() // we should stop current sync first, other wise master may scheduler task on new worker while we are closing
 	s.stopKeepAlive()
+	s.etcdClient.Close()
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.
