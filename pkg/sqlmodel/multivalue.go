@@ -31,10 +31,12 @@ func SameTypeTargetAndColumns(lhs *RowChange, rhs *RowChange) bool {
 	if lhs.sourceTable.Schema == rhs.sourceTable.Schema && lhs.sourceTable.Table == rhs.sourceTable.Table {
 		return true
 	}
-	if lhs.targetTable.Schema != rhs.targetTable.Schema || lhs.targetTable.Table == rhs.targetTable.Table {
+	if lhs.targetTable.Schema != rhs.targetTable.Schema || lhs.targetTable.Table != rhs.targetTable.Table {
 		return false
 	}
 
+	// when the targets are the same and the sources are not the same (same group of shard tables), this piece of code
+	// is run.
 	var lhsCols, rhsCols []string
 	switch lhs.tp {
 	case RowChangeDelete:

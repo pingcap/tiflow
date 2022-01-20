@@ -85,7 +85,7 @@ func TestNewRowChange(t *testing.T) {
 
 	expected.targetTable = expected.sourceTable
 	expected.targetTableInfo = expected.sourceTableInfo
-	expected.tiSessionCtx = utils.NewSessionCtx(nil)
+	expected.tiSessionCtx = utils.ZeroSessionCtx
 	expected.identityInfo = nil
 	actual = NewRowChange(source, nil, []interface{}{1, 2}, []interface{}{1, 3}, sourceTI, nil, nil)
 	require.Equal(t, expected, actual)

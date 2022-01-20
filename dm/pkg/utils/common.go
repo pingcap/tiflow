@@ -37,6 +37,10 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
+func init() {
+	ZeroSessionCtx = NewSessionCtx(nil)
+}
+
 // TrimCtrlChars returns a slice of the string s with all leading
 // and trailing control characters removed.
 func TrimCtrlChars(s string) string {
@@ -322,11 +326,12 @@ func (se *session) GetBuiltinFunctionUsage() map[string]uint32 {
 	return se.builtinFunctionUsage
 }
 
+// ZeroSessionCtx is used when the session variables is not important.
+var ZeroSessionCtx sessionctx.Context
+
 // NewSessionCtx return a session context with specified session variables.
 func NewSessionCtx(vars map[string]string) sessionctx.Context {
 	variables := variable.NewSessionVars()
-	variables.Rng.SetSeed1(0)
-	variables.Rng.SetSeed2(0)
 	for k, v := range vars {
 		_ = variables.SetSystemVar(k, v)
 		if strings.EqualFold(k, "time_zone") {

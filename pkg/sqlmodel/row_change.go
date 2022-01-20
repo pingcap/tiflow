@@ -124,7 +124,7 @@ func NewRowChange(
 	if tiCtx != nil {
 		ret.tiSessionCtx = tiCtx
 	} else {
-		ret.tiSessionCtx = utils.NewSessionCtx(nil)
+		ret.tiSessionCtx = utils.ZeroSessionCtx
 	}
 
 	ret.calculateType()
