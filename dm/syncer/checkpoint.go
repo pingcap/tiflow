@@ -732,7 +732,7 @@ func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, ta
 			}
 			// create new point
 			if point == nil {
-				cp.saveTablePoint(table, cp.globalPoint.MySQLLocation(), nil)
+				cp.saveTablePoint(table, cp.globalPoint.MySQLLocation(), ti)
 				point = cp.points[sourceSchema][sourceTable]
 			}
 			tiBytes, err := json.Marshal(ti)
@@ -753,11 +753,7 @@ func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, ta
 			return err
 		}
 
-		for idx, point := range points {
-			err = point.save(point.savedPoint.location, tis[i+idx])
-			if err != nil {
-				return err
-			}
+		for _, point := range points {
 			point.flush()
 		}
 	}
