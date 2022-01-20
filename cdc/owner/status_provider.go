@@ -23,6 +23,7 @@ import (
 )
 
 // StatusProvider provide some func to get meta-information from owner
+// The interface is thread-safe.
 type StatusProvider interface {
 	// GetAllChangeFeedStatuses returns all changefeeds' runtime status.
 	GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error)

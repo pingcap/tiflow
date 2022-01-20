@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/coreos/go-semver/semver"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -135,6 +136,7 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 
 	ver, err := semver.NewVersion(removeVAndHash(pdVer.Version))
 	if err != nil {
+		err = errors.Annotate(err, "invalid PD version")
 		return cerror.WrapError(cerror.ErrNewSemVersion, err)
 	}
 
@@ -171,6 +173,7 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 	for _, s := range stores {
 		ver, err := semver.NewVersion(removeVAndHash(s.Version))
 		if err != nil {
+			err = errors.Annotate(err, "invalid TiKV version")
 			return cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
 		minOrd := ver.Compare(*MinTiKVVersion)
@@ -246,6 +249,7 @@ func GetTiCDCClusterVersion(captureVersion []string) (TiCDCClusterVersion, error
 			ver = defaultTiCDCVersion
 		}
 		if err != nil {
+			err = errors.Annotate(err, "invalid CDC cluster version")
 			return TiCDCClusterVersionUnknown, cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
 		if minVer == nil || ver.Compare(*minVer) < 0 {

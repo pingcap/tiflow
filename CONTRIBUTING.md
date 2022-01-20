@@ -30,6 +30,11 @@ See [tests/integration_tests/README.md](./tests/integration_tests/README.md) for
 
 For more information on how to trigger these tests, please see the [command help](./docs/ci/command.md).
 
+### Debug with [delve](https://github.com/go-delve/delve)
+```shell
+dlv debug --build-flags="-ldflags='-X github.com/pingcap/tiflow/pkg/version.ReleaseVersion=$(git describe --tags)'" ./cmd/cdc -- server
+```
+
 ### Updating dependencies
 
 TiDB-CDC uses [Go Modules](https://github.com/golang/go/wiki/Modules) to manage dependencies. To add or update a

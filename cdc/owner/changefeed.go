@@ -84,7 +84,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
-		feedStateManager: new(feedStateManager),
+		feedStateManager: newFeedStateManager(),
 		gcManager:        gcManager,
 
 		errCh:  make(chan error, defaultErrChSize),
@@ -115,7 +115,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	})
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	if err := c.tick(ctx, state, captures); err != nil {
-		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
+		log.Error("an error occurred in Owner", zap.String("changefeed", c.state.ID), zap.Error(err))
 		var code string
 		if rfcCode, ok := cerror.RFCCode(err); ok {
 			code = string(rfcCode)
@@ -192,7 +192,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
 	if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
-		pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
 		currentTs := oracle.GetPhysical(pdTime)
 		if newResolvedTs > barrierTs {
 			newResolvedTs = barrierTs
@@ -323,7 +323,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
 	if err := c.sink.close(canceledCtx); err != nil {
-		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
+		log.Warn("Closing sink failed in Owner", zap.String("changefeed", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
@@ -472,7 +472,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		}
 		c.feedStateManager.MarkFinished()
 	default:
-		log.Panic("Unknown barrier type", zap.Int("barrier type", int(barrierTp)))
+		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
 	}
 	return barrierTs, nil
 }

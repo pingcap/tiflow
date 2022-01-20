@@ -6,12 +6,11 @@ require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Shopify/sarama v1.27.2
-	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/apache/pulsar-client-go v0.6.0
 	github.com/aws/aws-sdk-go v1.35.3
 	github.com/benbjohnson/clock v1.1.0
 	github.com/bradleyjkemp/grpc-tools v0.2.5
-	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/cenkalti/backoff/v4 v4.0.2
 	github.com/chaos-mesh/go-sqlsmith v0.0.0-20211025024535-03ae33408684
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/cockroachdb/pebble v0.0.0-20210719141320-8c3bd06debb5
@@ -22,6 +21,7 @@ require (
 	github.com/docker/go-units v0.4.0
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
+	github.com/facebookgo/subset v0.0.0-20200203212716-c811ad88dec4
 	github.com/fatih/color v1.10.0
 	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/getkin/kin-openapi v0.80.0
@@ -52,17 +52,16 @@ require (
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
-	github.com/pingcap/errors v0.11.5-0.20211009033009-93128226aaa3
+	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
-	github.com/pingcap/kvproto v0.0.0-20211202065422-a412f7a319c3
+	github.com/pingcap/kvproto v0.0.0-20211207042851-78a55fb8e69c
 	github.com/pingcap/log v0.0.0-20211207084639-71a2e5860834
-	github.com/pingcap/tidb v1.1.0-beta.0.20211229105350-1e7f0dcc63b9
+	github.com/pingcap/tidb v1.1.0-beta.0.20220112050342-d088e3d6fc6c
 	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20211229105350-1e7f0dcc63b9
+	github.com/pingcap/tidb/parser v0.0.0-20220112091742-82a75542e83f
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
-	github.com/rakyll/statik v0.1.7
 	github.com/shopspring/decimal v1.3.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.2.1
@@ -74,11 +73,10 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tidwall/gjson v1.9.1
 	github.com/tidwall/sjson v1.2.2
-	github.com/tikv/client-go/v2 v2.0.0-rc.0.20211223062159-300275dee63e
+	github.com/tikv/client-go/v2 v2.0.0-rc.0.20211229051614-62d6b4a2e8f7
 	github.com/tikv/pd v1.1.0-beta.0.20211118054146-02848d2660ee
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
-	github.com/unrolled/render v1.0.1
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20210512015243-d19fbe541bf9

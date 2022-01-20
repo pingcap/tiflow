@@ -84,10 +84,15 @@ func handleErrorFunc(cmd *cobra.Command, _ []string) error {
 		common.PrintLinesf("invalid operation '%s', please use `skip`, `replace` or `revert`", operation)
 		return errors.New("please check output to see error")
 	}
-	return sendHandleErrorRequest(cmd, op, taskName, sqls)
+	request := &pb.HandleErrorRequest{
+		Op:   op,
+		Task: taskName,
+		Sqls: sqls,
+	}
+	return sendHandleErrorRequest(cmd, request)
 }
 
-func sendHandleErrorRequest(cmd *cobra.Command, op pb.ErrorOp, taskName string, sqls []string) error {
+func sendHandleErrorRequest(cmd *cobra.Command, request *pb.HandleErrorRequest) error {
 	binlogPos, err := cmd.Flags().GetString("binlog-pos")
 	if err != nil {
 		return err
@@ -107,17 +112,14 @@ func sendHandleErrorRequest(cmd *cobra.Command, op pb.ErrorOp, taskName string, 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	request.BinlogPos = binlogPos
+	request.Sources = sources
+
 	resp := &pb.HandleErrorResponse{}
 	err = common.SendRequest(
 		ctx,
 		"HandleError",
-		&pb.HandleErrorRequest{
-			Op:        op,
-			Task:      taskName,
-			BinlogPos: binlogPos,
-			Sqls:      sqls,
-			Sources:   sources,
-		},
+		request,
 		&resp,
 	)
 

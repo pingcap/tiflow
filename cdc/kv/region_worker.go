@@ -241,6 +241,7 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 	}
 	regionID := state.sri.verID.GetID()
 	log.Info("single region event feed disconnected",
+		zap.String("changefeed", w.session.client.changefeed),
 		zap.Uint64("regionID", regionID),
 		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", state.sri.span),
@@ -299,12 +300,12 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case rtsUpdate := <-w.rtsUpdateCh:
 			w.rtsManager.Upsert(rtsUpdate)
 		case <-advanceCheckTicker.C:
-			version, err := w.session.kvStorage.GetCachedCurrentVersion()
+			currentTimeFromPD, err := w.session.client.pdClock.CurrentTime()
 			if err != nil {
-				log.Warn("failed to get current version from PD", zap.Error(err))
+				log.Warn("failed to get current version from PD",
+					zap.Error(err), zap.String("changefeed", w.session.client.changefeed))
 				continue
 			}
-			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
 			expired := make([]*regionTsInfo, 0)
 			for w.rtsManager.Len() > 0 {
 				item := w.rtsManager.Pop()
@@ -336,7 +337,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				if sinceLastResolvedTs >= resolveLockInterval {
 					sinceLastEvent := time.Since(rts.ts.eventTime)
 					if sinceLastResolvedTs > reconnectInterval && sinceLastEvent > reconnectInterval {
-						log.Warn("kv client reconnect triggered",
+						log.Warn("kv client reconnect triggered", zap.String("changefeed", w.session.client.changefeed),
 							zap.Duration("duration", sinceLastResolvedTs), zap.Duration("since last event", sinceLastResolvedTs))
 						return errReconnect
 					}
@@ -352,6 +353,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						continue
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
+						zap.String("changefeed", w.session.client.changefeed),
 						zap.Uint64("regionID", rts.regionID),
 						zap.Stringer("span", state.getRegionSpan()),
 						zap.Duration("duration", sinceLastResolvedTs),
@@ -360,7 +362,9 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					)
 					err = w.session.lockResolver.Resolve(ctx, rts.regionID, maxVersion)
 					if err != nil {
-						log.Warn("failed to resolve lock", zap.Uint64("regionID", rts.regionID), zap.Error(err))
+						log.Warn("failed to resolve lock",
+							zap.Uint64("regionID", rts.regionID), zap.Error(err),
+							zap.String("changefeed", w.session.client.changefeed))
 						continue
 					}
 					rts.ts.penalty = 0
@@ -388,7 +392,9 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 				err = w.handleSingleRegionError(err, event.state)
 			}
 		case *cdcpb.Event_Admin_:
-			log.Info("receive admin event", zap.Stringer("event", event.changeEvent))
+			log.Info("receive admin event",
+				zap.Stringer("event", event.changeEvent),
+				zap.String("changefeed", w.session.client.changefeed))
 		case *cdcpb.Event_Error:
 			err = w.handleSingleRegionError(
 				cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error}),
@@ -439,7 +445,8 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		// event == nil means the region worker should exit and re-establish
 		// all existing regions.
 		if !ok || event == nil {
-			log.Info("region worker closed by error")
+			log.Info("region worker closed by error",
+				zap.String("changefeed", w.session.client.changefeed))
 			exitEventHandler = true
 			return
 		}
@@ -580,7 +587,9 @@ func (w *regionWorker) cancelStream(delay time.Duration) {
 		// to avoid too frequent region rebuilt.
 		time.Sleep(delay)
 	} else {
-		log.Warn("gRPC stream cancel func not found", zap.String("addr", w.storeAddr))
+		log.Warn("gRPC stream cancel func not found",
+			zap.String("addr", w.storeAddr),
+			zap.String("changefeed", w.session.client.changefeed))
 	}
 }
 
@@ -633,7 +642,8 @@ func (w *regionWorker) handleEventEntry(
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(state.startFeedTime) > 20*time.Second {
 				log.Warn("The time cost of initializing is too much",
-					zap.Duration("timeCost", time.Since(state.startFeedTime)),
+					zap.String("changefeed", w.session.client.changefeed),
+					zap.Duration("duration", time.Since(state.startFeedTime)),
 					zap.Uint64("regionID", regionID))
 			}
 			w.metrics.metricPullEventInitializedCounter.Inc()
@@ -662,7 +672,7 @@ func (w *regionWorker) handleEventEntry(
 
 			if entry.CommitTs <= state.lastResolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
-					zap.String("Event Type", "COMMITTED"),
+					zap.String("EventType", "COMMITTED"),
 					zap.Uint64("CommitTs", entry.CommitTs),
 					zap.Uint64("resolvedTs", state.lastResolvedTs),
 					zap.Uint64("regionID", regionID))
@@ -681,7 +691,7 @@ func (w *regionWorker) handleEventEntry(
 			w.metrics.metricPullEventCommitCounter.Inc()
 			if entry.CommitTs <= state.lastResolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
-					zap.String("Event Type", "COMMIT"),
+					zap.String("EventType", "COMMIT"),
 					zap.Uint64("CommitTs", entry.CommitTs),
 					zap.Uint64("resolvedTs", state.lastResolvedTs),
 					zap.Uint64("regionID", regionID))
@@ -739,7 +749,8 @@ func (w *regionWorker) handleResolvedTs(
 
 	if resolvedTs < state.lastResolvedTs {
 		log.Warn("The resolvedTs is fallen back in kvclient",
-			zap.String("Event Type", "RESOLVED"),
+			zap.String("changefeed", w.session.client.changefeed),
+			zap.String("EventType", "RESOLVED"),
 			zap.Uint64("resolvedTs", resolvedTs),
 			zap.Uint64("lastResolvedTs", state.lastResolvedTs),
 			zap.Uint64("regionID", regionID))

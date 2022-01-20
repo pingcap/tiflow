@@ -57,7 +57,8 @@ func isDropColumnWithIndexError(err error) bool {
 	return (mysqlErr.Number == errno.ErrUnsupportedDDLOperation || mysqlErr.Number == tmysql.ErrUnknown) &&
 		strings.Contains(mysqlErr.Message, "drop column") &&
 		(strings.Contains(mysqlErr.Message, "with index") ||
-			strings.Contains(mysqlErr.Message, "with composite index"))
+			strings.Contains(mysqlErr.Message, "with composite index") ||
+			strings.Contains(mysqlErr.Message, "with tidb_enable_change_multi_schema is disable"))
 }
 
 // handleSpecialDDLError handles special errors for DDL execution.

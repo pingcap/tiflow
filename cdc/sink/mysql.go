@@ -209,6 +209,12 @@ func newMySQLSink(
 	return sink, nil
 }
 
+// TryEmitRowChangedEvents just calls EmitRowChangedEvents internally.
+func (s *mysqlSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	_ = s.EmitRowChangedEvents(ctx, rows...)
+	return true, nil
+}
+
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	count := s.txnCache.Append(s.filter, rows...)
 	s.statistics.AddRowsCount(count)
@@ -472,13 +478,13 @@ func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
 			maxResolvedTs, ok := s.tableMaxResolvedTs.Load(tableID)
 			log.Warn("Barrier doesn't return in time, may be stuck",
 				zap.Int64("tableID", tableID),
-				zap.Bool("has resolvedTs", ok),
+				zap.Bool("hasResolvedTs", ok),
 				zap.Any("resolvedTs", maxResolvedTs),
 				zap.Uint64("checkpointTs", s.getTableCheckpointTs(tableID)))
 		default:
 			v, ok := s.tableMaxResolvedTs.Load(tableID)
 			if !ok {
-				log.Info("No table resolvedTs is found", zap.Int64("table-id", tableID))
+				log.Info("No table resolvedTs is found", zap.Int64("tableID", tableID))
 				return nil
 			}
 			maxResolvedTs := v.(uint64)
@@ -601,6 +607,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	values := make([][]interface{}, 0, len(rows))
 	replaces := make(map[string][][]interface{})
 	rowCount := 0
+	// translateToInsert control the update and insert behavior
 	translateToInsert := s.params.enableOldValue && !s.params.safeMode
 
 	// flush cached batch replace or insert, to keep the sequence of DMLs

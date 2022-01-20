@@ -282,6 +282,15 @@ function run() {
 	check_task_not_pass $cur/conf/dm-task2.yaml
 	check_task_error_count $cur/conf/dm-task3.yaml
 
+	echo "check_task_only_warning"
+	check_task_only_warning $cur/conf/only_warning.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $cur/conf/only_warning.yaml" \
+		"\"state\": \"warn\"" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task $cur/conf/only_warning.yaml" \
+		"\"result\": true" 2
+
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task-error-database-config.yaml
 	sed -i "s/password: \"\"/password: \"wrond password\"/g" $WORK_DIR/dm-task-error-database-config.yaml
 	check_task_error_database_config $WORK_DIR/dm-task-error-database-config.yaml

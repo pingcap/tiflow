@@ -28,7 +28,9 @@ function usage_and_arg_test() {
 
 	binlog_empty_arg
 	binlog_invalid_binlogpos
-	binlog_invalid_sqls
+	binlog_invalid_sqls_by_replace
+	binlog_invalid_sqls_by_inject
+	binlog_invalid_list_op
 	binlog_invalid_op
 
 	source_table_schema_empty_arg

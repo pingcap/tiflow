@@ -78,7 +78,7 @@ func checkTaskFunc(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if !common.PrettyPrintResponseWithCheckTask(resp, checker.ErrorMsgHeader) {
+	if !common.PrettyPrintResponseWithCheckTask(resp, checker.CheckTaskMsgHeader) {
 		common.PrettyPrintResponse(resp)
 	}
 	return nil

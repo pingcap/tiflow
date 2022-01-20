@@ -377,6 +377,15 @@ function run() {
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	# check create view(should be skipped by func `skipSQLByPattern`) will not stop sync task
+	run_sql_source1 "create view all_mode.t1_v as select * from all_mode.t1 where id=0;"
+	sleep 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s $SOURCE_ID1" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1 \
+		"\"stage\": \"Running\"" 2
+
 	run_sql_source1 "SHOW SLAVE HOSTS;"
 	check_contains 'Slave_UUID'
 
@@ -495,7 +504,6 @@ function run() {
 	check_log_not_contains $WORK_DIR/worker2/log/dm-worker.log "Error .* Table .* doesn't exist"
 
 	# test Db not exists should be reported
-
 	run_sql_tidb "drop database all_mode"
 	run_sql_source1 "create table all_mode.db_error (c int primary key);"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

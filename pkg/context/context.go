@@ -44,7 +44,7 @@ type GlobalVars struct {
 	EtcdClient       *etcd.CDCEtcdClient
 	GrpcPool         kv.GrpcPool
 	RegionCache      *tikv.RegionCache
-	TimeAcquirer     pdtime.TimeAcquirer
+	PDClock          pdtime.Clock
 	TableActorSystem *system.System
 	SorterSystem     *ssystem.System
 
@@ -201,7 +201,7 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
-		TimeAcquirer: pdtime.NewTimeAcquirer4Test(),
+		PDClock: pdtime.NewClock4Test(),
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{

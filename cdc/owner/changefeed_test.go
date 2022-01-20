@@ -224,7 +224,7 @@ func TestExecDDL(t *testing.T) {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
-		TimeAcquirer: pdtime.NewTimeAcquirer4Test(),
+		PDClock: pdtime.NewClock4Test(),
 	})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test",
