@@ -54,10 +54,11 @@ var (
 	ErrDuplicateWorkerID              = errors.Normalize("duplicate worker ID encountered: %s, report a bug", errors.RFCCodeText("DFLOW:ErrDuplicateWorkerID"))
 	ErrMasterClosed                   = errors.Normalize("master has been closed explicitly: master ID %s", errors.RFCCodeText("DFLOW:ErrMasterClosed"))
 
-	ErrWorkerNotFound = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
-	ErrWorkerOffline  = errors.Normalize("worker is offline: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerOffline"))
-	ErrWorkerTimedOut = errors.Normalize("worker heartbeat timed out: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerTimedOut"))
-	ErrWorkerSuicide  = errors.Normalize("worker has committed suicide due to master having timed out", errors.RFCCodeText("DFLOW:ErrWorkerSuicide"))
+	ErrWorkerTypeNotFound = errors.Normalize("worker type is not found: type %d", errors.RFCCodeText("DFLOW:ErrWorkerTypeNotFound"))
+	ErrWorkerNotFound     = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
+	ErrWorkerOffline      = errors.Normalize("worker is offline: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerOffline"))
+	ErrWorkerTimedOut     = errors.Normalize("worker heartbeat timed out: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerTimedOut"))
+	ErrWorkerSuicide      = errors.Normalize("worker has committed suicide due to master having timed out", errors.RFCCodeText("DFLOW:ErrWorkerSuicide"))
 
 	// master etcd related errors
 	ErrMasterEtcdCreateSessionFail    = errors.Normalize("failed to create Etcd session", errors.RFCCodeText("DFLOW:ErrMasterEtcdCreateSessionFail"))

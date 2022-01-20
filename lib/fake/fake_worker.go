@@ -10,15 +10,20 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 )
 
-var _ lib.WorkerImpl = &dummyWorkerImpl{}
+var _ lib.Worker = (*dummyWorker)(nil)
 
-type dummyWorkerImpl struct {
-	init   bool
-	closed int32
-	tick   int64
-}
+type (
+	Worker      = dummyWorker
+	dummyWorker struct {
+		*lib.BaseWorker
 
-func (d *dummyWorkerImpl) InitImpl(ctx context.Context) error {
+		init   bool
+		closed int32
+		tick   int64
+	}
+)
+
+func (d *dummyWorker) InitImpl(ctx context.Context) error {
 	if !d.init {
 		d.init = true
 		return nil
@@ -26,7 +31,7 @@ func (d *dummyWorkerImpl) InitImpl(ctx context.Context) error {
 	return errors.New("repeated init")
 }
 
-func (d *dummyWorkerImpl) Tick(ctx context.Context) error {
+func (d *dummyWorker) Tick(ctx context.Context) error {
 	if !d.init {
 		return errors.New("not yet init")
 	}
@@ -38,25 +43,35 @@ func (d *dummyWorkerImpl) Tick(ctx context.Context) error {
 	return nil
 }
 
-func (d *dummyWorkerImpl) Status() (lib.WorkerStatus, error) {
+func (d *dummyWorker) Status() (lib.WorkerStatus, error) {
 	if d.init {
 		return lib.WorkerStatus{Code: lib.WorkerStatusNormal, Ext: d.tick}, nil
 	}
 	return lib.WorkerStatus{Code: lib.WorkerStatusCreated}, nil
 }
 
-func (d *dummyWorkerImpl) Workload() (model.RescUnit, error) {
-	return model.RescUnit(10), nil
+func (d *dummyWorker) Workload() model.RescUnit {
+	return model.RescUnit(10)
 }
 
-func (d *dummyWorkerImpl) OnMasterFailover(_ lib.MasterFailoverReason) error {
+func (d *dummyWorker) OnMasterFailover(_ lib.MasterFailoverReason) error {
 	return nil
 }
 
-func (d *dummyWorkerImpl) CloseImpl() {
+func (d *dummyWorker) CloseImpl() {
 	atomic.StoreInt32(&d.closed, 1)
 }
 
-func NewDummyWorkerImpl(ctx dcontext.Context) lib.WorkerImpl {
-	return &dummyWorkerImpl{}
+func NewDummyWorker(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID) lib.Worker {
+	ret := &dummyWorker{}
+	dependencies := ctx.Dependencies
+	ret.BaseWorker = lib.NewBaseWorker(
+		ret,
+		dependencies.MessageHandlerManager,
+		dependencies.MessageRouter,
+		dependencies.MetaKVClient,
+		id,
+		masterID)
+
+	return ret
 }

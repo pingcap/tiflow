@@ -88,5 +88,5 @@ type RuntimeDependencies struct {
 	MessageRouter         p2p.MessageSender
 	MetaKVClient          metadata.MetaKV
 	ExecutorClientManager *client.Manager
-	ServerMasterClient    *client.MasterClientImpl
+	ServerMasterClient    client.MasterClient
 }

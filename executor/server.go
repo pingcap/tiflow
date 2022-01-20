@@ -5,11 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanfei1991/microcosm/lib/registry"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/runtime"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/lib/fake"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -142,8 +143,25 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
 	log.L().Info("dispatch task", zap.String("req", req.String()))
 	workerID := s.idAllocator.AllocID()
-	worker := lib.NewBaseWorker(fake.NewDummyWorkerImpl(dcontext.Context{Ctx: ctx}), s.msgServer.MakeHandlerManager(), p2p.NewMessageSender(p2p.NewMessageRouter(string(s.info.ID), s.cfg.AdvertiseAddr)), s.metastore, lib.WorkerID(workerID), lib.MasterID(req.MasterId))
-	s.workerRtm.AddWorker(worker)
+
+	// TODO better dependency management
+	dctx := dcontext.Background()
+	dctx.Dependencies = dcontext.RuntimeDependencies{
+		MessageHandlerManager: s.msgServer.MakeHandlerManager(),
+		MessageRouter:         p2p.NewMessageSender(p2p.NewMessageRouter(string(s.info.ID), s.cfg.AdvertiseAddr)),
+		MetaKVClient:          s.metastore,
+		ExecutorClientManager: client.NewClientManager(),
+		ServerMasterClient:    s.cli,
+	}
+
+	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
+		dctx, lib.WorkerType(req.TaskTypeId), lib.WorkerID(workerID), lib.MasterID(req.MasterId))
+	if err != nil {
+		// TODO better error handling
+		return nil, err
+	}
+
+	s.workerRtm.AddWorker(newWorker)
 	return &pb.DispatchTaskResponse{
 		ErrorCode: pb.DispatchTaskErrorCode_OK,
 		WorkerId:  workerID,

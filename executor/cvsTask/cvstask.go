@@ -71,8 +71,8 @@ func (task *cvsTask) Status() (lib.WorkerStatus, error) {
 }
 
 // Workload returns the current workload of the worker.
-func (task *cvsTask) Workload() (model.RescUnit, error) {
-	return 1, nil
+func (task *cvsTask) Workload() model.RescUnit {
+	return 1
 }
 
 // OnMasterFailover is called when the master is failed over.

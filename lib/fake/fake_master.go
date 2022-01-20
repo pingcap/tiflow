@@ -10,6 +10,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var _ lib.Master = (*Master)(nil)
+
 type Master struct {
 	*lib.BaseMaster
 }
@@ -61,7 +63,7 @@ func (m *Master) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-func NewFakeMaster(ctx dcontext.Context, masterID lib.MasterID) lib.Master {
+func NewFakeMaster(ctx *dcontext.Context, masterID lib.MasterID) lib.Master {
 	ret := &Master{}
 	deps := ctx.Dependencies
 	base := lib.NewBaseMaster(

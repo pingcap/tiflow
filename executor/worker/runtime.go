@@ -88,7 +88,7 @@ func (r *Runtime) onWorkerFinish(worker lib.Worker, err error) {
 func (r *Runtime) closeWorker() {
 	for worker := range r.closingWorker {
 		worker.Close()
-		r.workerList.Delete(worker.ID())
+		r.workerList.Delete(worker.WorkerID())
 	}
 }
 
@@ -109,7 +109,7 @@ func (r *Runtime) Start(conn int) {
 }
 
 func (r *Runtime) AddWorker(worker lib.Worker) {
-	r.workerList.Store(worker.ID(), worker)
+	r.workerList.Store(worker.WorkerID(), worker)
 	r.initingWorker <- worker
 }
 
@@ -117,7 +117,8 @@ func (r *Runtime) Workload() model.RescUnit {
 	ret := model.RescUnit(0)
 	r.workerList.Range(func(_, value interface{}) bool {
 		worker := value.(lib.Worker)
-		ret += worker.Workload()
+		workload := worker.Workload()
+		ret += workload
 		return true
 	})
 	return ret

@@ -8,9 +8,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/lib/fake"
 	"github.com/hanfei1991/microcosm/model"
-	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 )
 
 func TestBasicFunc(t *testing.T) {
@@ -18,13 +16,12 @@ func TestBasicFunc(t *testing.T) {
 	rt := worker.NewRuntime(ctx)
 	rt.Start(10)
 	workerNum := 1000
+
 	for i := 0; i < workerNum; i++ {
-		workerImpl := fake.NewDummyWorkerImpl(dcontext.Context{})
-		worker := &dummyWorker{
-			id:   lib.WorkerID("executor" + strconv.Itoa(i)),
-			impl: workerImpl,
-		}
-		rt.AddWorker(worker)
+		id := lib.WorkerID("executor" + strconv.Itoa(i))
+		rt.AddWorker(&dummyWorker{
+			id: id,
+		})
 	}
 	time.Sleep(time.Second)
 	if rtwl := rt.Workload(); int(rtwl) != workerNum {
@@ -34,19 +31,18 @@ func TestBasicFunc(t *testing.T) {
 }
 
 type dummyWorker struct {
-	id   lib.WorkerID
-	impl lib.WorkerImpl
+	id lib.WorkerID
 }
 
 func (d *dummyWorker) Init(ctx context.Context) error {
-	return d.impl.InitImpl(ctx)
+	return nil
 }
 
 func (d *dummyWorker) Poll(ctx context.Context) error {
-	return d.impl.Tick(ctx)
+	return nil
 }
 
-func (d *dummyWorker) ID() lib.WorkerID {
+func (d *dummyWorker) WorkerID() lib.WorkerID {
 	return d.id
 }
 
@@ -55,5 +51,4 @@ func (d *dummyWorker) Workload() model.RescUnit {
 }
 
 func (d *dummyWorker) Close() {
-	d.impl.CloseImpl()
 }

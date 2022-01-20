@@ -19,7 +19,7 @@ import (
 type Worker interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
-	ID() WorkerID
+	WorkerID() WorkerID
 	Workload() model.RescUnit
 	Close()
 }
@@ -35,7 +35,7 @@ type WorkerImpl interface {
 	Status() (WorkerStatus, error)
 
 	// Workload returns the current workload of the worker.
-	Workload() (model.RescUnit, error)
+	Workload() model.RescUnit
 
 	// OnMasterFailover is called when the master is failed over.
 	OnMasterFailover(reason MasterFailoverReason) error
@@ -68,7 +68,7 @@ func NewBaseWorker(
 	workerID WorkerID,
 	masterID MasterID,
 ) *BaseWorker {
-	masterManager := newMasterManager(masterID, workerID, messageSender)
+	masterManager := newMasterManager(masterID, workerID, messageSender, metaKVClient)
 	return &BaseWorker{
 		Impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
@@ -88,11 +88,7 @@ func (w *BaseWorker) ID() WorkerID {
 }
 
 func (w *BaseWorker) Workload() model.RescUnit {
-	wl, err := w.Impl.Workload()
-	if err != nil {
-		log.L().Panic("workload meet error: " + err.Error())
-	}
-	return wl
+	return w.Impl.Workload()
 }
 
 func (w *BaseWorker) Init(ctx context.Context) error {
@@ -141,6 +137,10 @@ func (w *BaseWorker) Close() {
 		log.L().Warn("cleaning message handlers failed",
 			zap.Error(err))
 	}
+}
+
+func (w *BaseWorker) WorkerID() WorkerID {
+	return w.id
 }
 
 func (w *BaseWorker) MetaKVClient() metadata.MetaKV {
@@ -200,7 +200,7 @@ func (w *BaseWorker) runStatusWorker(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		workload, err := w.Impl.Workload()
+		workload := w.Impl.Workload()
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -274,11 +274,12 @@ type masterClient struct {
 	timeoutConfig TimeoutConfig
 }
 
-func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.MessageSender) *masterClient {
+func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.MessageSender, metaKV metadata.MetaKV) *masterClient {
 	return &masterClient{
 		masterID:      masterID,
 		workerID:      workerID,
 		messageSender: messageRouter,
+		metaKVClient:  metaKV,
 
 		timeoutConfig: defaultTimeoutConfig,
 	}
