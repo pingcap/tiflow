@@ -1,4 +1,4 @@
-# TiCDC Design Documents
+# TiCDC supports multi-topic dispatch
 
 - Author(s): [hi-rustin](https://github.com/hi-rustin)
 - Tracking Issue: TODO: ADD IT BEFORE MERGE
