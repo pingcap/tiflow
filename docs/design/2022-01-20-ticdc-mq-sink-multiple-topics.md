@@ -104,8 +104,8 @@ Coverage should be more than 75% in new added code.
 
 #### Integration test
 
-Can pass all existing integration tests when changefeed without topic dispatch configuration. In addition, we will be
-integrating [Flink] into our integration tests to verify multi-topic functionality.
+Can pass all existing integration tests when changefeed without topic dispatch configuration. In addition, we will 
+integrate [Flink] into our integration tests to verify multi-topic functionality.
 
 ### Scenario Tests
 
