@@ -6,7 +6,6 @@ FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
 PACKAGE_LIST := go list ./... | grep -vE 'proto|pb'
 PACKAGES := $$($(PACKAGE_LIST))
 GOFILES := $$(find . -name '*.go' -type f | grep -vE 'proto|pb\.go')
-MICROCOSM_PKG := github.com/hanfei1991/microcosm
 
 all: df-proto df-master df-executor df-master-client df-demotask df-demoserver
 
@@ -30,8 +29,7 @@ df-demotask:
 
 unit_test:
 	mkdir -p "$(TEST_DIR)"
-	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov_raw.unit.out" $(PACKAGES)
-	grep -vE ".*.pb.go|$(MICROCOSM_PKG)/pkg/etcdutils/testing.go|$(MICROCOSM_PKG)/test" $(TEST_DIR)/cov_raw.unit.out > $(TEST_DIR)/cov.unit.out
+	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES)
 
 tools_setup:
 	@echo "setup build and check tools"
