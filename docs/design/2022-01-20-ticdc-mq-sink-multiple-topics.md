@@ -58,10 +58,10 @@ prefix.
 
 Two keywords:
 
-| Keyword  | Description            | Required ｜ |
-| -------- | ---------------------- | ----------- |
-| {schema} | the name of the schema | no          |
-| {table}  | the name of the table  | no          |
+| Keyword  | Description            | Required |
+| -------- | ---------------------- | -------- |
+| {schema} | the name of the schema | no       |
+| {table}  | the name of the table  | no       |
 
 > When neither keyword is filled in, it is equivalent to sending the data to a fixed topic.
 
