@@ -10,86 +10,9 @@ SQL_RESULT_FILE="$TEST_DIR/sql_res.$TEST_NAME.txt"
 
 API_VERSION="v1alpha1"
 
-function test_cant_dail_upstream() {
-	cleanup_data $TEST_NAME
-	cleanup_process
-
-	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
-	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-
-	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 2
-
-	echo "kill dm-worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER1_PORT 20
-
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/pkg/conn/failDBPing=return()"
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-
-	# make sure DM-worker doesn't exit
-	sleep 2
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status -s $SOURCE_ID1" \
-		"injected error" 1
-
-	export GO_FAILPOINTS=""
-	cleanup_process
-	cleanup_data $TEST_NAME
-}
-
-function test_cant_dail_downstream() {
-	cleanup_data $TEST_NAME
-	cleanup_process
-
-	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
-	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-
-	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 2
-	dmctl_start_task_standalone $cur/conf/dm-task.yaml "--remove-meta"
-
-	echo "kill dm-worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER1_PORT 20
-	# kill tidb
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
-
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-
-	# make sure DM-worker doesn't exit
-	sleep 2
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status -s $SOURCE_ID1" \
-		"\"relayCatchUpMaster\": true" 1 \
-		"dial tcp 127.0.0.1:4000: connect: connection refused" 1
-
-	# restart tidb
-	run_tidb_server 4000 $TIDB_PASSWORD
-	sleep 2
-
-	cleanup_process
-	cleanup_data $TEST_NAME
-}
-
 function test_restart_relay_status() {
-	cleanup_data $TEST_NAME
 	cleanup_process
+	cleanup_data $TEST_NAME
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -165,11 +88,92 @@ function test_restart_relay_status() {
 		"list-member --worker" \
 		"relay" 1 \
 		"bound" 2
+
+	echo "》》》》》》》》》》》》》》》》》test test_restart_relay_status passed"
+}
+
+function test_cant_dail_upstream() {
+	cleanup_process
+	cleanup_data $TEST_NAME
+
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-relay -s $SOURCE_ID1 worker1" \
+		"\"result\": true" 2
+
+	echo "kill dm-worker1"
+	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/pkg/conn/failDBPing=return()"
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	# make sure DM-worker doesn't exit
+	sleep 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s $SOURCE_ID1" \
+		"injected error" 1
+
+	export GO_FAILPOINTS=""
+	cleanup_data $TEST_NAME
+	cleanup_process
+	echo "》》》》》》》》》》》》》》》》》test test_cant_dail_upstream passed"
+}
+
+function test_cant_dail_downstream() {
+	cleanup_process
+	cleanup_data $TEST_NAME
+
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-relay -s $SOURCE_ID1 worker1" \
+		"\"result\": true" 2
+	dmctl_start_task_standalone $cur/conf/dm-task.yaml "--remove-meta"
+
+	echo "kill dm-worker1"
+	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	# kill tidb
+	pkill -hup tidb-server 2>/dev/null || true
+	wait_process_exit tidb-server
+
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	# make sure DM-worker doesn't exit
+	sleep 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s $SOURCE_ID1" \
+		"\"relayCatchUpMaster\": true" 1 \
+		"dial tcp 127.0.0.1:4000: connect: connection refused" 1
+
+	# restart tidb
+	run_tidb_server 4000 $TIDB_PASSWORD
+	sleep 2
+
+	cleanup_data $TEST_NAME
+	cleanup_process
+	echo "》》》》》》》》》》》》》》》》》test test_cant_dail_downstream passed"
 }
 
 function test_kill_dump_connection() {
-	cleanup_data $TEST_NAME
 	cleanup_process
+	cleanup_data $TEST_NAME
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
@@ -201,15 +205,17 @@ function test_kill_dump_connection() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID1" \
 		"\"relayCatchUpMaster\": true" 1
-
-	cleanup_process
 	cleanup_data $TEST_NAME
+	cleanup_process
+	echo "》》》》》》》》》》》》》》》》》test test_kill_dump_connection passed"
+
 }
 
 function run() {
 	test_restart_relay_status
 	test_cant_dail_downstream
 	test_cant_dail_upstream
+	test_kill_dump_connection
 
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/ReportRelayLogSpaceInBackground=return(1)"
 
@@ -363,7 +369,6 @@ function run() {
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	test_kill_dump_connection
 }
 
 cleanup_data $TEST_NAME
