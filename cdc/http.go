@@ -11,15 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package cdc
 
 import (
 	"net/http"
 	"net/http/pprof"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -31,16 +31,6 @@ import (
 	_ "github.com/pingcap/tiflow/docs/swagger"
 )
 
-func NewRouter() *gin.Engine {
-	router := gin.New()
-
-	router.Use(logMiddleware())
-	// request will timeout after 10 second
-	router.Use(timeoutMiddleware(time.Second * 10))
-	router.Use(errorHandleMiddleware())
-	return router
-}
-
 // RegisterRoutes create a router for OpenAPI
 func RegisterRoutes(
 	router *gin.Engine,
@@ -51,16 +41,16 @@ func RegisterRoutes(
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Open API
-	registerOpoenAPIRoutes(router, newOpenAPI(capture))
+	api.RegisterOpoenAPIRoutes(router, api.NewOpenAPI(capture))
 
 	// Owner API
-	registerOwnerAPIRoutes(router, capture)
+	api.RegisterOwnerAPIRoutes(router, capture)
 
 	// Status API
-	registerStatusAPIRoutes(router, capture)
+	api.RegisterStatusAPIRoutes(router, capture)
 
 	// Log API
-	router.POST("/admin/log", gin.WrapF(handleAdminLogLevel))
+	router.POST("/admin/log", gin.WrapF(api.HandleAdminLogLevel))
 
 	// pprof debug API
 	pprofGroup := router.Group("/debug/pprof/")

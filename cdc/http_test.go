@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package cdc
 
 import (
 	"fmt"
@@ -19,9 +19,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/capture"
-
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/stretchr/testify/require"
 )
 

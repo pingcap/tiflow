@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
@@ -53,12 +54,12 @@ type openAPI struct {
 	testStatusProvider owner.StatusProvider
 }
 
-func newOpenAPI(c *capture.Capture) openAPI {
+func NewOpenAPI(c *capture.Capture) openAPI {
 	return openAPI{capture: c}
 }
 
-// newOpenAPI4Test return a openAPI for test
-func newOpenAPI4Test(c *capture.Capture, p owner.StatusProvider) openAPI {
+// NewOpenAPI4Test return a openAPI for test
+func NewOpenAPI4Test(c *capture.Capture, p owner.StatusProvider) openAPI {
 	return openAPI{capture: c, testStatusProvider: p}
 }
 
@@ -69,15 +70,22 @@ func (h *openAPI) statusProvider() owner.StatusProvider {
 	return h.capture.StatusProvider()
 }
 
-// registerOpoenAPIRoutes registers routes for OpenAPI
-func registerOpoenAPIRoutes(router *gin.Engine, api openAPI) {
+// RegisterOpoenAPIRoutes registers routes for OpenAPI
+func RegisterOpoenAPIRoutes(router *gin.Engine, api openAPI) {
+	v1 := router.Group("/api/v1")
+
+	v1.Use(logMiddleware())
+	// request will time out after 10 second
+	v1.Use(timeoutMiddleware(time.Second * 10))
+	v1.Use(errorHandleMiddleware())
+
 	// common API
-	router.GET("/api/v1/status", api.ServerStatus)
-	router.GET("/api/v1/health", api.Health)
-	router.POST("/api/v1/log", SetLogLevel)
+	v1.GET("/status", api.ServerStatus)
+	v1.GET("/health", api.Health)
+	v1.POST("/log", SetLogLevel)
 
 	// changefeed API
-	changefeedGroup := router.Group("/api/v1/changefeeds")
+	changefeedGroup := v1.Group("/changefeeds")
 	changefeedGroup.GET("", api.ListChangefeed)
 	changefeedGroup.GET("/:changefeed_id", api.GetChangefeed)
 	changefeedGroup.POST("", api.CreateChangefeed)
@@ -89,16 +97,16 @@ func registerOpoenAPIRoutes(router *gin.Engine, api openAPI) {
 	changefeedGroup.POST("/:changefeed_id/tables/move_table", api.MoveTable)
 
 	// owner API
-	ownerGroup := router.Group("/api/v1/owner")
+	ownerGroup := v1.Group("/owner")
 	ownerGroup.POST("/resign", api.ResignOwner)
 
 	// processor API
-	processorGroup := router.Group("/api/v1/processors")
+	processorGroup := v1.Group("/processors")
 	processorGroup.GET("", api.ListProcessor)
 	processorGroup.GET("/:changefeed_id/:capture_id", api.GetProcessor)
 
 	// capture API
-	captureGroup := router.Group("/api/v1/captures")
+	captureGroup := v1.Group("/captures")
 	captureGroup.GET("", api.ListCapture)
 }
 

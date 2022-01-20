@@ -40,8 +40,8 @@ type statusAPI struct {
 	capture *capture.Capture
 }
 
-// registerStatusAPIRoutes registers routes for status.
-func registerStatusAPIRoutes(router *gin.Engine, capture *capture.Capture) {
+// RegisterStatusAPIRoutes registers routes for status.
+func RegisterStatusAPIRoutes(router *gin.Engine, capture *capture.Capture) {
 	statusAPI := statusAPI{capture: capture}
 	router.GET("/status", gin.WrapF(statusAPI.handleStatus))
 	router.GET("/debug/info", gin.WrapF(statusAPI.handleDebugInfo))

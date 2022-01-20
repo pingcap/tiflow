@@ -42,6 +42,11 @@ type mockStatusProvider struct {
 	mock.Mock
 }
 
+type testCase struct {
+	url    string
+	method string
+}
+
 func (p *mockStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
 	args := p.Called(ctx)
 	return args.Get(0).(map[model.ChangeFeedID]*model.ChangeFeedStatus), args.Error(1)
@@ -85,8 +90,8 @@ func (p *mockStatusProvider) GetCaptures(ctx context.Context) ([]*model.CaptureI
 
 func newRouter(p *mockStatusProvider) *gin.Engine {
 	c := capture.NewCapture4Test(true)
-	router := NewRouter()
-	registerOpoenAPIRoutes(router, newOpenAPI4Test(c, p))
+	router := gin.New()
+	RegisterOpoenAPIRoutes(router, NewOpenAPI4Test(c, p))
 	return router
 }
 
@@ -392,7 +397,7 @@ func TestServerStatus(t *testing.T) {
 	// capture is not owner
 	c := capture.NewCapture4Test(false)
 	r := gin.New()
-	registerOpoenAPIRoutes(r, newOpenAPI4Test(c, nil))
+	RegisterOpoenAPIRoutes(r, NewOpenAPI4Test(c, nil))
 	api = testCase{url: "/api/v1/status", method: "GET"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)

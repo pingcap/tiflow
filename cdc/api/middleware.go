@@ -16,7 +16,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -64,10 +63,7 @@ func logMiddleware() gin.HandlerFunc {
 		if err != nil {
 			stdErr = err.Err
 		}
-		// Do not log metrics related requests when there is no error
-		if strings.Contains(path, "/metrics") && err == nil {
-			return
-		}
+
 		log.Info(path,
 			zap.Int("status", c.Writer.Status()),
 			zap.String("method", c.Request.Method),
