@@ -58,10 +58,6 @@ func (c *mockFlowController) GetConsumption() uint64 {
 	return 0
 }
 
-func (s *mockSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	return nil
-}
-
 func (s *mockSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		s.received = append(s.received, struct {
