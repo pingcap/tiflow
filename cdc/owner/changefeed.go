@@ -75,7 +75,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		id:               id,
 		scheduler:        newScheduler(),
 		barriers:         newBarriers(),
-		feedStateManager: new(feedStateManager),
+		feedStateManager: newFeedStateManager(),
 		gcManager:        gcManager,
 
 		errCh:  make(chan error, defaultErrChSize),
@@ -112,7 +112,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		} else {
 			code = string(cerror.ErrOwnerUnknown.RFCCode())
 		}
-		c.feedStateManager.HandleError(&model.RunningError{
+		c.feedStateManager.handleError(&model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
 			Code:    code,
 			Message: err.Error(),

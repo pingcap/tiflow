@@ -18,7 +18,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/pingcap/errors"
 )
 
