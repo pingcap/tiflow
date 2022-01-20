@@ -19,11 +19,20 @@ import (
 	"go.uber.org/zap"
 )
 
+// JobManager defines manager of job master
+// TODO: this will be refactored after new master-worker model is applied
+type JobManager interface {
+	Start(ctx context.Context, metaKV metadata.MetaKV) error
+	SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse
+	CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse
+	PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse
+}
+
 // JobMasterID is special and has no use.
 const JobMasterID model.ID = -1
 
-// JobManager is a special job master that manages all the job masters, and notify the offline executor to them.
-type JobManager struct {
+// JobManagerImpl is a special job master that manages all the job masters, and notify the offline executor to them.
+type JobManagerImpl struct {
 	*system.Master
 
 	mu          sync.Mutex
@@ -33,7 +42,7 @@ type JobManager struct {
 	masterAddrs []string
 }
 
-func (j *JobManager) recover(ctx context.Context) error {
+func (j *JobManagerImpl) recover(ctx context.Context) error {
 	resp, err := j.MetaKV.Get(ctx, adapter.JobKeyAdapter.Path())
 	if err != nil {
 		return err
@@ -59,12 +68,12 @@ func (j *JobManager) recover(ctx context.Context) error {
 	return nil
 }
 
-func (j *JobManager) persistJobInfo(ctx context.Context, jobID model.ID, jobBytes []byte) error {
+func (j *JobManagerImpl) persistJobInfo(ctx context.Context, jobID model.ID, jobBytes []byte) error {
 	_, err := j.MetaKV.Put(ctx, adapter.JobKeyAdapter.Encode(strconv.Itoa(int(jobID))), string(jobBytes))
 	return err
 }
 
-func (j *JobManager) Start(ctx context.Context, metaKV metadata.MetaKV) error {
+func (j *JobManagerImpl) Start(ctx context.Context, metaKV metadata.MetaKV) error {
 	j.MetaKV = metaKV
 	err := j.clients.AddMasterClient(ctx, j.masterAddrs)
 	if err != nil {
@@ -78,7 +87,7 @@ func (j *JobManager) Start(ctx context.Context, metaKV metadata.MetaKV) error {
 	return nil
 }
 
-func (j *JobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
+func (j *JobManagerImpl) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	task, ok := j.jobMasters[model.ID(req.JobId)]
@@ -92,7 +101,7 @@ func (j *JobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.
 	return &pb.PauseJobResponse{}
 }
 
-func (j *JobManager) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
+func (j *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	task, ok := j.jobMasters[model.ID(req.JobId)]
@@ -108,7 +117,7 @@ func (j *JobManager) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *p
 }
 
 // SubmitJob processes "SubmitJobRequest".
-func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
+func (j *JobManagerImpl) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
 	var jobTask *model.Task
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
@@ -154,11 +163,12 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 	return resp
 }
 
-func NewJobManager(
+// NewJobManagerImpl creates a new JobManagerImpl instance
+func NewJobManagerImpl(
 	masterAddrs []string,
-) *JobManager {
+) *JobManagerImpl {
 	clients := client.NewClientManager()
-	return &JobManager{
+	return &JobManagerImpl{
 		Master:      system.New(JobMasterID, clients),
 		jobMasters:  make(map[model.ID]*model.Task),
 		idAllocator: autoid.NewJobIDAllocator(),

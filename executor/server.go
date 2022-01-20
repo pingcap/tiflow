@@ -254,12 +254,12 @@ func (s *Server) Run(ctx context.Context) error {
 	s.workerRtm = worker.NewRuntime(ctx)
 	s.workerRtm.Start(pollCon)
 
-	err = s.startMsgService(ctx, wg)
+	err = s.selfRegister(ctx)
 	if err != nil {
 		return err
 	}
 
-	err = s.selfRegister(ctx)
+	err = s.startMsgService(ctx, wg)
 	if err != nil {
 		return err
 	}

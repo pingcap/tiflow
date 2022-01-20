@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -50,8 +49,8 @@ type Server struct {
 	membership   Membership
 
 	// sched scheduler
-	executorManager *ExecutorManager
-	jobManager      *JobManager
+	executorManager ExecutorManager
+	jobManager      JobManager
 	//
 	cfg *Config
 
@@ -65,8 +64,7 @@ type Server struct {
 
 // NewServer creates a new master-server.
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
-	executorNotifier := make(chan model.ExecutorID, 100)
-	executorManager := NewExecutorManager(executorNotifier, cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
+	executorManager := NewExecutorManagerImpl(cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
 
 	urls, err := parseURLs(cfg.MasterAddr)
 	if err != nil {
@@ -76,7 +74,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	for _, u := range urls {
 		masterAddrs = append(masterAddrs, u.Host)
 	}
-	jobManager := NewJobManager(masterAddrs)
+	jobManager := NewJobManagerImpl(masterAddrs)
 
 	// messageServer := p2p.NewMessageServer(cfg.)
 

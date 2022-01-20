@@ -16,8 +16,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// ExecutorManager holds all the executors info, including liveness, status, resource usage.
-type ExecutorManager struct {
+// ExecutorManager defines an interface to manager all executors
+type ExecutorManager interface {
+	HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error)
+	Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse)
+	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.ExecutorInfo, error)
+	RegisterExec(info *model.ExecutorInfo)
+	Start(ctx context.Context)
+}
+
+// ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
+type ExecutorManagerImpl struct {
 	testContext *test.Context
 
 	mu          sync.Mutex
@@ -34,19 +43,20 @@ type ExecutorManager struct {
 	rescMgr resource.RescMgr
 }
 
-func NewExecutorManager(offExec chan model.ExecutorID, initHeartbeatTTL, keepAliveInterval time.Duration, ctx *test.Context) *ExecutorManager {
-	return &ExecutorManager{
+func NewExecutorManagerImpl(initHeartbeatTTL, keepAliveInterval time.Duration, ctx *test.Context) *ExecutorManagerImpl {
+	offlineCh := make(chan model.ExecutorID, 100)
+	return &ExecutorManagerImpl{
 		testContext:       ctx,
 		executors:         make(map[model.ExecutorID]*Executor),
 		idAllocator:       autoid.NewUUIDAllocator(),
-		offExecutor:       offExec,
+		offExecutor:       offlineCh,
 		initHeartbeatTTL:  initHeartbeatTTL,
 		keepAliveInterval: keepAliveInterval,
 		rescMgr:           resource.NewCapRescMgr(),
 	}
 }
 
-func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
+func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	log.L().Logger.Info("begin to remove executor", zap.String("id", string(id)))
@@ -73,7 +83,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 }
 
 // HandleHeartbeat implements pb interface,
-func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
+func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	log.L().Logger.Info("handle heart beat", zap.Stringer("req", req))
 	e.mu.Lock()
 	exec, ok := e.executors[model.ExecutorID(req.ExecutorId)]
@@ -106,7 +116,7 @@ func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Heartbe
 }
 
 // RegisterExec registers executor to both executor manager and resource manager
-func (e *ExecutorManager) RegisterExec(info *model.ExecutorInfo) {
+func (e *ExecutorManagerImpl) RegisterExec(info *model.ExecutorInfo) {
 	log.L().Info("register executor", zap.Any("info", info))
 	exec := &Executor{
 		ExecutorInfo:   *info,
@@ -122,7 +132,7 @@ func (e *ExecutorManager) RegisterExec(info *model.ExecutorInfo) {
 
 // AllocateNewExec allocates new executor info to a give RegisterExecutorRequest
 // and then registers the executor.
-func (e *ExecutorManager) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.ExecutorInfo, error) {
+func (e *ExecutorManagerImpl) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.ExecutorInfo, error) {
 	log.L().Logger.Info("allocate new executor", zap.Stringer("req", req))
 
 	e.mu.Lock()
@@ -141,7 +151,7 @@ func (e *ExecutorManager) AllocateNewExec(req *pb.RegisterExecutorRequest) (*mod
 	return info, nil
 }
 
-func (e *ExecutorManager) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
+func (e *ExecutorManagerImpl) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
 	return e.rescMgr.Allocate(tasks)
 }
 
@@ -172,12 +182,12 @@ func (e *Executor) checkAlive() bool {
 }
 
 // Start check alive goroutine.
-func (e *ExecutorManager) Start(ctx context.Context) {
+func (e *ExecutorManagerImpl) Start(ctx context.Context) {
 	go e.checkAlive(ctx)
 }
 
 // checkAlive goroutine checks whether all the executors are alive periodically.
-func (e *ExecutorManager) checkAlive(ctx context.Context) {
+func (e *ExecutorManagerImpl) checkAlive(ctx context.Context) {
 	tick := time.NewTicker(1 * time.Second)
 	defer func() { log.L().Logger.Info("check alive finished") }()
 	for {
@@ -192,7 +202,7 @@ func (e *ExecutorManager) checkAlive(ctx context.Context) {
 	}
 }
 
-func (e *ExecutorManager) checkAliveImpl() error {
+func (e *ExecutorManagerImpl) checkAliveImpl() error {
 	e.mu.Lock()
 	for id, exec := range e.executors {
 		if !exec.checkAlive() {
