@@ -19,48 +19,44 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
 	_ "github.com/pingcap/tidb/types/parser_driver" // for parser driver
+	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
-var (
-	dumpPrivileges = map[mysql.PrivilegeType]struct{}{
-		mysql.ReloadPriv: {},
-		mysql.SelectPriv: {},
-	}
-	replicationPrivileges = map[mysql.PrivilegeType]struct{}{
-		mysql.ReplicationClientPriv: {},
-		mysql.ReplicationSlavePriv:  {},
-	}
-
-	// some privileges are only effective on global level. in other words, GRANT ALL ON test.* is not enough for them
-	// https://dev.mysql.com/doc/refman/5.7/en/grant.html#grant-global-privileges
-	privNeedGlobal = map[mysql.PrivilegeType]struct{}{
-		mysql.ReloadPriv:            {},
-		mysql.ReplicationClientPriv: {},
-		mysql.ReplicationSlavePriv:  {},
-	}
-)
-
-/*****************************************************/
+// some privileges are only effective on global level. in other words, GRANT ALL ON test.* is not enough for them
+// https://dev.mysql.com/doc/refman/5.7/en/grant.html#grant-global-privileges
+var privNeedGlobal = map[mysql.PrivilegeType]struct{}{
+	mysql.ReloadPriv:            {},
+	mysql.ReplicationClientPriv: {},
+	mysql.ReplicationSlavePriv:  {},
+}
 
 // SourceDumpPrivilegeChecker checks dump privileges of source DB.
 type SourceDumpPrivilegeChecker struct {
-	db     *sql.DB
-	dbinfo *dbutil.DBConfig
+	db          *sql.DB
+	dbinfo      *dbutil.DBConfig
+	checkTables map[string][]string // map schema => {table1, table2, ...}
+	consistency string
 }
 
 // NewSourceDumpPrivilegeChecker returns a RealChecker.
-func NewSourceDumpPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
-	return &SourceDumpPrivilegeChecker{db: db, dbinfo: dbinfo}
+func NewSourceDumpPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig, checkTables map[string][]string, consistency string) RealChecker {
+	return &SourceDumpPrivilegeChecker{
+		db:          db,
+		dbinfo:      dbinfo,
+		checkTables: checkTables,
+		consistency: consistency,
+	}
 }
 
 // Check implements the RealChecker interface.
-// We only check RELOAD, SELECT privileges.
+// We check RELOAD, SELECT, LOCK TABLES privileges according to consistency.
 func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
@@ -75,7 +71,24 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 		return result
 	}
 
-	verifyPrivileges(result, grants, dumpPrivileges)
+	dumpPrivileges := map[mysql.PrivilegeType]struct{}{
+		mysql.SelectPriv: {},
+	}
+
+	switch pc.consistency {
+	case "auto", "flush":
+		dumpPrivileges[mysql.ReloadPriv] = struct{}{}
+	case "lock":
+		dumpPrivileges[mysql.LockTablesPriv] = struct{}{}
+	}
+
+	lackPriv := genDumpPriv(dumpPrivileges, pc.checkTables)
+	err2 := verifyPrivileges(result, grants, lackPriv)
+	if err2 != nil {
+		result.Errors = append(result.Errors, err2)
+	} else {
+		result.State = StateSuccess
+	}
 	return result
 }
 
@@ -103,7 +116,7 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check replication privileges of source DB",
-		State: StateFailure,
+		State: StateSuccess,
 		Extra: fmt.Sprintf("address of db instance - %s:%d", pc.dbinfo.Host, pc.dbinfo.Port),
 	}
 
@@ -112,8 +125,16 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 		markCheckError(result, err)
 		return result
 	}
-
-	verifyPrivileges(result, grants, replicationPrivileges)
+	replicationPrivileges := map[mysql.PrivilegeType]struct{}{
+		mysql.ReplicationClientPriv: {},
+		mysql.ReplicationSlavePriv:  {},
+	}
+	lackPriv := genReplicPriv(replicationPrivileges)
+	err2 := verifyPrivileges(result, grants, lackPriv)
+	if err2 != nil {
+		result.Errors = append(result.Errors, err2)
+		result.State = StateFailure
+	}
 	return result
 }
 
@@ -122,28 +143,19 @@ func (pc *SourceReplicatePrivilegeChecker) Name() string {
 	return "source db replication privilege checker"
 }
 
-// TODO: if we add more privilege in future, we might add special checks (globally granted?) for that new privilege.
-func verifyPrivileges(result *Result, grants []string, expectedGrants map[mysql.PrivilegeType]struct{}) {
-	result.State = StateFailure
+func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.PrivilegeType]map[string]map[string]struct{}) *Error {
 	if len(grants) == 0 {
-		result.Errors = append(result.Errors, NewError("there is no such grant defined for current user on host '%%'"))
-		return
+		return NewError("there is no such grant defined for current user on host '%%'")
 	}
 
-	var (
-		user       string
-		lackGrants = make(map[mysql.PrivilegeType]struct{}, len(expectedGrants))
-	)
-	for k := range expectedGrants {
-		lackGrants[k] = struct{}{}
-	}
-
-	for i, grant := range grants {
-		// get username and hostname
-		node, err := parser.New().ParseOneStmt(grant, "", "")
+	p := parser.New()
+	for _, grant := range grants {
+		if len(lackPriv) == 0 {
+			break
+		}
+		node, err := p.ParseOneStmt(grant, "", "")
 		if err != nil {
-			result.Errors = append(result.Errors, NewError(errors.Annotatef(err, "grant %s, grant after replace %s", grants[i], grant).Error()))
-			return
+			return NewError(err.Error())
 		}
 		grantStmt, ok := node.(*ast.GrantStmt)
 		if !ok {
@@ -151,60 +163,198 @@ func verifyPrivileges(result *Result, grants []string, expectedGrants map[mysql.
 			case *ast.GrantProxyStmt, *ast.GrantRoleStmt:
 				continue
 			default:
-				result.Errors = append(result.Errors, NewError("%s is not grant statement", grants[i]))
-				return
+				return NewError("%s is not grant statement", grant)
 			}
 		}
 
 		if len(grantStmt.Users) == 0 {
-			result.Errors = append(result.Errors, NewError("grant has no user %s", grantStmt.Text()))
-			return
-		} else if user == "" {
-			// show grants will only output grants for requested user
-			user = grantStmt.Users[0].User.Username
+			return NewError("grant has no user %s", grant)
 		}
 
-		for _, privElem := range grantStmt.Privs {
-			if privElem.Priv == mysql.AllPriv {
-				if grantStmt.Level.Level == ast.GrantLevelGlobal {
-					result.State = StateSuccess
-					return
+		dbName := grantStmt.Level.DBName
+		tableName := grantStmt.Level.TableName
+		switch grantStmt.Level.Level {
+		case ast.GrantLevelGlobal:
+			for _, privElem := range grantStmt.Privs {
+				// all privileges available at a given privilege level (except GRANT OPTION)
+				// from https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_all
+				if privElem.Priv == mysql.AllPriv {
+					if _, ok := lackPriv[mysql.GrantPriv]; ok {
+						lackPriv = make(map[mysql.PrivilegeType]map[string]map[string]struct{})
+						lackPriv[mysql.GrantPriv] = make(map[string]map[string]struct{})
+						continue
+					}
+					return nil
 				}
-				// REPLICATION CLIENT, REPLICATION SLAVE, RELOAD should be global privileges,
-				// thus a non-global GRANT ALL is not enough
-				for expectedGrant := range lackGrants {
-					if _, ok := privNeedGlobal[expectedGrant]; !ok {
-						delete(lackGrants, expectedGrant)
-					}
+				// mysql> show master status;
+				// ERROR 1227 (42000): Access denied; you need (at least one of) the SUPER, REPLICATION CLIENT privilege(s) for this operation
+				if privElem.Priv == mysql.SuperPriv {
+					delete(lackPriv, mysql.ReplicationClientPriv)
 				}
-			} else if _, ok := lackGrants[privElem.Priv]; ok {
-				// check every privilege and remove it from expectedGrants
-				if _, ok := privNeedGlobal[privElem.Priv]; ok {
-					if grantStmt.Level.Level == ast.GrantLevelGlobal {
-						delete(lackGrants, privElem.Priv)
+				delete(lackPriv, privElem.Priv)
+			}
+		case ast.GrantLevelDB:
+			for _, privElem := range grantStmt.Privs {
+				// all privileges available at a given privilege level (except GRANT OPTION)
+				// from https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_all
+				if privElem.Priv == mysql.AllPriv {
+					for priv := range lackPriv {
+						if priv == mysql.GrantPriv {
+							continue
+						}
+						if _, ok := lackPriv[priv][dbName]; !ok {
+							continue
+						}
+						delete(lackPriv[priv], dbName)
+						if len(lackPriv[priv]) == 0 {
+							delete(lackPriv, priv)
+						}
 					}
-				} else {
-					// currently, only SELECT privilege goes here. we didn't require SELECT to be granted globally,
-					// dumpling could report error if an allow-list table is lack of privilege.
-					// we only check that SELECT is granted on all columns, otherwise we can't SHOW CREATE TABLE
-					if len(privElem.Cols) == 0 {
-						delete(lackGrants, privElem.Priv)
+					continue
+				}
+				if _, ok := lackPriv[privElem.Priv]; !ok {
+					continue
+				}
+				if _, ok := lackPriv[privElem.Priv][dbName]; !ok {
+					continue
+				}
+				// dumpling could report error if an allow-list table is lack of privilege.
+				// we only check that SELECT is granted on all columns, otherwise we can't SHOW CREATE TABLE
+				if privElem.Priv == mysql.SelectPriv && len(privElem.Cols) != 0 {
+					continue
+				}
+				delete(lackPriv[privElem.Priv], dbName)
+				if len(lackPriv[privElem.Priv]) == 0 {
+					delete(lackPriv, privElem.Priv)
+				}
+			}
+		case ast.GrantLevelTable:
+			for _, privElem := range grantStmt.Privs {
+				// all privileges available at a given privilege level (except GRANT OPTION)
+				// from https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_all
+				if privElem.Priv == mysql.AllPriv {
+					for priv := range lackPriv {
+						if priv == mysql.GrantPriv {
+							continue
+						}
+						if _, ok := lackPriv[priv][dbName]; !ok {
+							continue
+						}
+						if _, ok := lackPriv[priv][dbName][tableName]; !ok {
+							continue
+						}
+						delete(lackPriv[priv][dbName], tableName)
+						if len(lackPriv[priv][dbName]) == 0 {
+							delete(lackPriv[priv], dbName)
+						}
+						if len(lackPriv[priv]) == 0 {
+							delete(lackPriv, priv)
+						}
 					}
+					continue
+				}
+				if _, ok := lackPriv[privElem.Priv]; !ok {
+					continue
+				}
+				if _, ok := lackPriv[privElem.Priv][dbName]; !ok {
+					continue
+				}
+				if _, ok := lackPriv[privElem.Priv][dbName][tableName]; !ok {
+					continue
+				}
+				// dumpling could report error if an allow-list table is lack of privilege.
+				// we only check that SELECT is granted on all columns, otherwise we can't SHOW CREATE TABLE
+				if privElem.Priv == mysql.SelectPriv && len(privElem.Cols) != 0 {
+					continue
+				}
+				delete(lackPriv[privElem.Priv][dbName], tableName)
+				if len(lackPriv[privElem.Priv][dbName]) == 0 {
+					delete(lackPriv[privElem.Priv], dbName)
+				}
+				if len(lackPriv[privElem.Priv]) == 0 {
+					delete(lackPriv, privElem.Priv)
 				}
 			}
 		}
 	}
 
-	if len(lackGrants) != 0 {
-		lackGrantsStr := make([]string, 0, len(lackGrants))
-		for g := range lackGrants {
-			lackGrantsStr = append(lackGrantsStr, mysql.Priv2Str[g])
-		}
-		privileges := strings.Join(lackGrantsStr, ",")
-		result.Errors = append(result.Errors, NewError("lack of %s privilege", privileges))
-		result.Instruction = fmt.Sprintf("GRANT %s ON *.* TO '%s'@'%s';", privileges, user, "%")
-		return
+	if len(lackPriv) == 0 {
+		return nil
 	}
+	var b strings.Builder
+	// generate error message, for example
+	// lack of privilege1: {tableID1, tableID2, ...};lack of privilege2...
+	for p, tableMap := range lackPriv {
+		b.WriteString("lack of ")
+		b.WriteString(mysql.Priv2Str[p])
+		b.WriteString(" privilege")
+		if len(tableMap) != 0 {
+			b.WriteString(": {")
+		}
+		i := 0
+		for schema, tables := range tableMap {
+			if len(tables) == 0 {
+				b.WriteString(dbutil.ColumnName(schema))
+			}
+			j := 0
+			for table := range tables {
+				b.WriteString(dbutil.TableName(schema, table))
+				j++
+				if j != len(tables) {
+					b.WriteString(", ")
+				}
+			}
+			i++
+			if i != len(tableMap) {
+				b.WriteString("; ")
+			}
+		}
+		if len(tableMap) != 0 {
+			b.WriteString("}")
+		}
+		b.WriteString("; ")
+	}
+	privileges := b.String()
+	result.Instruction = "You need grant related privileges."
+	log.L().Info("lack privilege", zap.String("err msg", privileges))
+	return NewError(privileges)
+}
 
-	result.State = StateSuccess
+// checkTables map schema => {table1, table2, ...}.
+// lackPriv map privilege => schema => table.
+func genExpectPriv(privileges map[mysql.PrivilegeType]struct{}, checkTables map[string][]string) map[mysql.PrivilegeType]map[string]map[string]struct{} {
+	lackPriv := make(map[mysql.PrivilegeType]map[string]map[string]struct{}, len(privileges))
+	for p := range privileges {
+		if _, ok := privNeedGlobal[p]; ok {
+			lackPriv[p] = make(map[string]map[string]struct{})
+			continue
+		}
+		lackPriv[p] = make(map[string]map[string]struct{}, len(checkTables))
+		for schema, tables := range checkTables {
+			if _, ok := lackPriv[p][schema]; !ok {
+				lackPriv[p][schema] = make(map[string]struct{}, len(tables))
+			}
+			for _, table := range tables {
+				lackPriv[p][schema][table] = struct{}{}
+			}
+		}
+		if p == mysql.SelectPriv {
+			if _, ok := lackPriv[p]["INFORMATION_SCHEMA"]; !ok {
+				lackPriv[p]["INFORMATION_SCHEMA"] = make(map[string]struct{})
+			}
+		}
+	}
+	return lackPriv
+}
+
+func genReplicPriv(replicationPrivileges map[mysql.PrivilegeType]struct{}) map[mysql.PrivilegeType]map[string]map[string]struct{} {
+	// replication privilege only check replication client and replication slave which are global level privilege
+	// so don't need check tables
+	return genExpectPriv(replicationPrivileges, nil)
+}
+
+func genDumpPriv(dumpPrivileges map[mysql.PrivilegeType]struct{}, checkTables map[string][]string) map[mysql.PrivilegeType]map[string]map[string]struct{} {
+	// due to dump privilege checker need check db/table level privilege
+	// so we need know the check tables
+	return genExpectPriv(dumpPrivileges, checkTables)
 }
