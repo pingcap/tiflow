@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ func RegisterRoutes(
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Open API
-	api.RegisterOpoenAPIRoutes(router, api.NewOpenAPI(capture))
+	api.RegisterOpenAPIRoutes(router, api.NewOpenAPI(capture))
 
 	// Owner API
 	api.RegisterOwnerAPIRoutes(router, capture)

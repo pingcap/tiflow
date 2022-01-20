@@ -38,15 +38,13 @@ import (
 	security2 "github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
 )
 
-type serverSuite struct {
-	suite.Suite
+type testServer struct {
 	server    *Server
 	e         *embed.Etcd
 	clientURL *url.URL
@@ -55,23 +53,20 @@ type serverSuite struct {
 	errg      *errgroup.Group
 }
 
-func TestServerSuite(t *testing.T) {
-	suite.Run(t, new(serverSuite))
-}
-
-func (s *serverSuite) SetupTest() {
+func newServer(t *testing.T) *testServer {
 	var err error
-	dir := s.T().TempDir()
+	dir := t.TempDir()
+	s := &testServer{}
 	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
-	require.Nil(s.T(), err)
+	require.Nil(t, err)
 
 	pdEndpoints := []string{
 		"http://" + s.clientURL.Host,
 		"http://invalid-pd-host:2379",
 	}
 	server, err := NewServer(pdEndpoints)
-	require.Nil(s.T(), err)
-	require.NotNil(s.T(), server)
+	require.Nil(t, err)
+	require.NotNil(t, server)
 	s.server = server
 
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -80,25 +75,33 @@ func (s *serverSuite) SetupTest() {
 		Context:     s.ctx,
 		DialTimeout: 5 * time.Second,
 	})
-	require.Nil(s.T(), err)
+	require.Nil(t, err)
 	etcdClient := etcd.NewCDCEtcdClient(s.ctx, client)
 	s.server.etcdClient = &etcdClient
 
-	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { s.T().Log(e) })
+	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { t.Log(e) })
+	return s
 }
 
-func (s *serverSuite) TearDownTest() {
+func (s *testServer) close(t *testing.T) {
 	s.server.Close()
 	s.e.Close()
 	s.cancel()
 	err := s.errg.Wait()
 	if err != nil {
-		s.T().Errorf("Error group error: %s", err)
+		t.Errorf("Error group error: %s", err)
 	}
 }
 
-func (s *serverSuite) TestEtcdHealthChecker() {
-	t := s.Suite.T()
+func TestServerBasic(t *testing.T) {
+	t.Parallel()
+	s := newServer(t)
+	defer s.close(t)
+	testEtcdHealthChecker(t, s)
+	testSetUpDataDir(t, s)
+}
+
+func testEtcdHealthChecker(t *testing.T, s *testServer) {
 	s.errg.Go(func() error {
 		err := s.server.etcdHealthChecker(s.ctx)
 		require.Equal(t, context.Canceled, err)
@@ -106,11 +109,9 @@ func (s *serverSuite) TestEtcdHealthChecker() {
 	})
 	// longer than one check tick 3s
 	time.Sleep(time.Second * 4)
-	s.cancel()
 }
 
-func (s *serverSuite) TestSetUpDataDir() {
-	t := s.Suite.T()
+func testSetUpDataDir(t *testing.T, s *testServer) {
 	conf := config.GetGlobalServerConfig()
 	// DataDir is not set, and no changefeed exist, use the default
 	conf.DataDir = ""
@@ -140,8 +141,6 @@ func (s *serverSuite) TestSetUpDataDir() {
 	require.Nil(t, err)
 	require.NotEqual(t, "", conf.DataDir)
 	require.Equal(t, filepath.Join(conf.DataDir, config.DefaultSortDir), conf.Sorter.SortDir)
-
-	s.cancel()
 }
 
 func TestCheckDir(t *testing.T) {

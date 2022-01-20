@@ -70,8 +70,8 @@ func (h *openAPI) statusProvider() owner.StatusProvider {
 	return h.capture.StatusProvider()
 }
 
-// RegisterOpoenAPIRoutes registers routes for OpenAPI
-func RegisterOpoenAPIRoutes(router *gin.Engine, api openAPI) {
+// RegisterOpenAPIRoutes registers routes for OpenAPI
+func RegisterOpenAPIRoutes(router *gin.Engine, api openAPI) {
 	v1 := router.Group("/api/v1")
 
 	v1.Use(logMiddleware())
