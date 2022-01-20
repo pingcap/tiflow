@@ -1625,7 +1625,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	go s.waitTransactionEndBeforeExit(ctx)
 	defer func() {
-		// before
 		if err1 := recover(); err1 != nil {
 			failpoint.Inject("ExitAfterSaveOnlineDDL", func() {
 				s.tctx.L().Info("force panic")
