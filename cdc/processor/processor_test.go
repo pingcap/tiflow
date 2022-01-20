@@ -1071,7 +1071,7 @@ func (s *processorSuite) TestUpdateBarrierTs(c *check.C) {
 	c.Assert(tb.barrierTs, check.Equals, uint64(15))
 }
 
-func (s *processorSuite) TestProcessorLifeTime(c *check.C) {
+func (s *processorSuite) TestProcessorLifeCycle(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, c)
@@ -1095,8 +1095,7 @@ func (s *processorSuite) TestProcessorLifeTime(c *check.C) {
 		return nil
 	}
 
-	// `processorClosed` -> `processorInitializing` -> `processorRunning` ->
-	// `processorClosing` -> `processorClosed`
+	// `Closed` -> `Initializing` -> `Running` -> `Closing` -> `Closed`
 	var err error
 	// init tick
 	_, err = p.Tick(ctx, p.changefeed)
@@ -1104,36 +1103,35 @@ func (s *processorSuite) TestProcessorLifeTime(c *check.C) {
 	tester.MustApplyPatches()
 	c.Assert(p.changefeed.TaskPositions, check.NotNil)
 
-	// `processorClosed` -> `processorInitializing`
+	// `Closed` -> `Initializing`
 	_, err = p.tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorInitializing)
 	tester.MustApplyPatches()
 
-	// once sink is initialized successfully,
-	// `processorInitializing` -> `processorRunning`
+	// once sink is initialized successfully, `Initializing` -> `Running`
 	close(p.sinkRunningCh)
 	_, err = p.tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorRunning)
 	tester.MustApplyPatches()
 
-	// `processorRunning` -> `processorClosing`
+	// `Running` -> `Closing`
 	// set `sinkManager` to nil to avoid `sinkCloseCh` to be double closed,
 	// just close it explicit manually to make test easier and more stable.
 	p.sinkManager = nil
 	c.Assert(p.Close(), check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorClosing)
 
-	// `processorClosing` -> `processorClosed`
+	// `Closing` -> `Closed`
 	close(p.sinkClosedCh)
 	_, err = p.tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorClosed)
 	tester.MustApplyPatches()
 
-	// `processorClosed` -> `processorInitializing` -> `processorClosed`
-	// since errors may happen when initialize the sink.
+	// `Closed` -> `Initializing` -> `Closing` -> `Closed`
+	// errors may happen when initialize the sink.
 	_, err = p.tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorInitializing)
@@ -1144,34 +1142,29 @@ func (s *processorSuite) TestProcessorLifeTime(c *check.C) {
 	_, err = p.Tick(ctx, p.changefeed)
 	tester.MustApplyPatches()
 	c.Assert(cerror.ErrReactorFinished.Equal(errors.Cause(err)), check.IsTrue)
-	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID], check.DeepEquals, &model.TaskPosition{
-		Error: &model.RunningError{
-			Addr:    "127.0.0.1:0000",
-			Code:    "CDC:ErrSinkURIInvalid",
-			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
-		},
+	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID].Error, check.DeepEquals, &model.RunningError{
+		Addr:    "127.0.0.1:0000",
+		Code:    "CDC:ErrSinkURIInvalid",
+		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
 	})
+
+	// since error is not nil now, we can call `processor.Close()`
+	p.sinkManager = nil
+	c.Assert(p.Close(), check.IsNil)
+	c.Assert(p.runningStatus, check.Equals, processorClosing)
+
+	// `processorClosing` -> `processorClosed`
+	p.sinkClosedCh = make(chan struct{}, 1)
+	close(p.sinkClosedCh)
+	_, err = p.tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorClosed)
+	tester.MustApplyPatches()
 
-	//p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-	//	status.Tables[1] = &model.TableReplicaInfo{StartTs: 20}
-	//	status.Tables[2] = &model.TableReplicaInfo{StartTs: 30}
-	//	return status, true, nil
-	//})
-	//tester.MustApplyPatches()
-	//// Initialize TablePipeline should after the processor is in `processorRunning`
-	//p.runningStatus = processorRunning
-	//_, err = p.Tick(ctx, p.changefeed)
-	//c.Assert(err, check.IsNil)
-	//tester.MustApplyPatches()
-	//c.Assert(p.tables[1], check.NotNil)
-	//c.Assert(p.tables[1].CheckpointTs(), check.Equals, model.Ts(20))
-	//c.Assert(p.tables[1].ResolvedTs(), check.Equals, model.Ts(20))
-	//
-	//c.Assert(p.tables[2], check.NotNil)
-	//c.Assert(p.tables[2].CheckpointTs(), check.Equals, model.Ts(30))
-	//c.Assert(p.tables[2].ResolvedTs(), check.Equals, model.Ts(30))
-	//
-
-	//c.Assert(p.runningStatus, check.Equals, processorInitializing)
+	// `Closing` -> `Closed` cause by meet error when closing the sink.
+	p.runningStatus = processorClosing
+	p.sendError(cerror.ErrMySQLConnectionError)
+	_, err = p.Tick(ctx, p.changefeed)
+	tester.MustApplyPatches()
+	c.Assert(cerror.ErrReactorFinished.Equal(errors.Cause(err)), check.IsTrue)
 }

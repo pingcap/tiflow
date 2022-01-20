@@ -344,13 +344,21 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	p.changefeed = state
 	// the processor could be in `processorClosing`, should not continue the processor
 	if p.runningStatus == processorClosing {
+		if err := p.handleErrorCh(ctx); err != nil {
+			p.runningStatus = processorClosed
+			log.Info("processor not fully closed",
+				zap.String("changefeed", p.changefeedID),
+				zap.Error(err))
+			return nil, errors.Trace(err)
+		}
 		// since the sink is close in an asynchronous way,
 		// we have to check whether the sink is fully closed or not.
 		// no matter fully closed or not, just skip the tick.
 		select {
 		case <-p.sinkClosedCh:
 			p.runningStatus = processorClosed
-			log.Info("changefeed fully closed", zap.String("changefeed", p.changefeedID))
+			log.Info("changefeed fully closed",
+				zap.String("changefeed", p.changefeedID))
 		default:
 			log.Debug("changeFeed is closing, cannot continue",
 				zap.String("changefeed", p.changefeedID))
@@ -366,7 +374,6 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if p.createTaskPosition() {
 		return p.changefeed, nil
 	}
-	// todo: shall we also handle error if in `processorClosing` status ?
 	if err := p.handleErrorCh(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
