@@ -39,8 +39,8 @@ const (
 	// etcdTxnTimeoutDuration represents the timeout duration for committing a
 	// transaction to Etcd
 	etcdTxnTimeoutDuration = 30 * time.Second
-	// etcdWorkerLogsWarnDuration when EtcdWorker commits a txn to etcd or ticks
-	// it reactor takes more than etcdWorkerLogsWarnDuration, it will print a log
+	// When EtcdWorker commits a txn to etcd or ticks its reactor
+	// takes more than etcdWorkerLogsWarnDuration, it will print a log
 	etcdWorkerLogsWarnDuration = 1 * time.Second
 	deletionCounterKey         = "/meta/ticdc-delete-etcd-key-count"
 )
