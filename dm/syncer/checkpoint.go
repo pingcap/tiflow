@@ -688,7 +688,9 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 
 	if snapshotCp.globalPoint != nil {
 		cp.globalPoint.flushBy(*snapshotCp.globalPoint)
+		cp.Lock()
 		cp.globalPointSaveTime = snapshotCp.globalPointSaveTime
+		cp.Unlock()
 	}
 
 	for _, point := range points {
