@@ -162,6 +162,7 @@ func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
 	return atomic.LoadUint64(&m.changeFeedCheckpointTs)
 }
 
+// UpdateChangeFeedCheckpointTs updates changefeed and backend sink checkpoint ts.
 func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
 	atomic.StoreUint64(&m.changeFeedCheckpointTs, checkpointTs)
 	if m.backendSink != nil {
@@ -233,10 +234,6 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	}
 	logAbnormalCheckpoint(ckpt)
 	return ckpt, err
-}
-
-func (t *tableSink) getEmittedTs() uint64 {
-	return atomic.LoadUint64(&t.emittedTs)
 }
 
 func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {

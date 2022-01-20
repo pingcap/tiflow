@@ -22,7 +22,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// newBlackHoleSink creates a block hole sink
+// newBlackHoleSink creates a black hole sink
 func newBlackHoleSink(ctx context.Context, opts map[string]string) *blackHoleSink {
 	return &blackHoleSink{
 		statistics: NewStatistics(ctx, "blackhole", opts),
@@ -65,11 +65,6 @@ func (b *blackHoleSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 
 func (b *blackHoleSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	log.Debug("BlockHoleSink: DDL Event", zap.Any("ddl", ddl))
-	return nil
-}
-
-// Initialize is no-op for blackhole
-func (b *blackHoleSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	return nil
 }
 
