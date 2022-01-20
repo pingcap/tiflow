@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"go.uber.org/zap"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -705,11 +706,11 @@ func (s *processorSuite) TestInitTable(c *check.C) {
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
-	c.Assert(p.tables[1], check.Not(check.IsNil))
+	c.Assert(p.tables[1], check.NotNil)
 	c.Assert(p.tables[1].CheckpointTs(), check.Equals, model.Ts(20))
 	c.Assert(p.tables[1].ResolvedTs(), check.Equals, model.Ts(20))
 
-	c.Assert(p.tables[2], check.Not(check.IsNil))
+	c.Assert(p.tables[2], check.NotNil)
 	c.Assert(p.tables[2].CheckpointTs(), check.Equals, model.Ts(30))
 	c.Assert(p.tables[2].ResolvedTs(), check.Equals, model.Ts(30))
 }
@@ -803,6 +804,13 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
+	c.Assert(p.tables[1], check.NotNil)
+	c.Assert(p.tables[1].CheckpointTs(), check.Equals, model.Ts(20))
+	c.Assert(p.tables[1].ResolvedTs(), check.Equals, model.Ts(20))
+
+	c.Assert(p.tables[2], check.NotNil)
+	c.Assert(p.tables[2].CheckpointTs(), check.Equals, model.Ts(30))
+	c.Assert(p.tables[2].ResolvedTs(), check.Equals, model.Ts(30))
 
 	// push the resolvedTs and checkpointTs
 	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -844,6 +852,8 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 		status.Tables[2] = &model.TableReplicaInfo{StartTs: 30}
 		return status, true, nil
 	})
+	// Initialize TablePipeline should after the processor is in `processorRunning`
+	p.runningStatus = processorRunning
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
@@ -862,26 +872,8 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 		Code:    "CDC:ErrSinkURIInvalid",
 		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
 	})
-	// todo: fix this.
 	c.Assert(p.tables[1].(*mockTablePipeline).canceled, check.IsTrue)
 	c.Assert(p.tables[2].(*mockTablePipeline).canceled, check.IsTrue)
-}
-
-func (s *processorSuite) TestProcessorLifeTime(c *check.C) {
-	defer testleak.AfterTest(c)()
-	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, c)
-	p.lazyInit = func(ctx cdcContext.Context) error {
-		p.runningStatus = processorInitializing
-		return nil
-	}
-
-	var err error
-	// init tick
-	_, err = p.Tick(ctx, p.changefeed)
-	c.Assert(err, check.IsNil)
-	c.Assert(p.runningStatus, check.Equals, processorInitializing)
-	tester.MustApplyPatches()
 }
 
 func (s *processorSuite) TestPositionDeleted(c *check.C) {
@@ -1077,4 +1069,82 @@ func (s *processorSuite) TestUpdateBarrierTs(c *check.C) {
 	tester.MustApplyPatches()
 	tb = p.tables[model.TableID(1)].(*mockTablePipeline)
 	c.Assert(tb.barrierTs, check.Equals, uint64(15))
+}
+
+func (s *processorSuite) TestProcessorLifeTime(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(true)
+	p, tester := initProcessor4Test(ctx, c)
+	p.lazyInit = func(ctx cdcContext.Context) error {
+		switch p.runningStatus {
+		case processorRunning, processorClosing:
+			return nil
+		case processorInitializing:
+			select {
+			case <-p.sinkRunningCh:
+				p.runningStatus = processorRunning
+				log.Info("processor is running",
+					zap.String("changefeed", p.changefeedID))
+			default:
+			}
+			return nil
+		default:
+			// processor is closed
+		}
+		p.runningStatus = processorInitializing
+		return nil
+	}
+
+	var err error
+	// init tick
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	tester.MustApplyPatches()
+	c.Assert(p.changefeed.TaskPositions, check.NotNil)
+
+	// `processorClosed` -> `processorInitializing`
+	_, err = p.tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	c.Assert(p.runningStatus, check.Equals, processorInitializing)
+	tester.MustApplyPatches()
+
+	// once sink is initialized successfully,
+	// `processorInitializing` -> `processorRunning`
+	close(p.sinkRunningCh)
+	_, err = p.tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	c.Assert(p.runningStatus, check.Equals, processorRunning)
+	tester.MustApplyPatches()
+
+	// `processorRunning` -> `processorClosing`
+	c.Assert(p.Close(), check.IsNil)
+	c.Assert(p.runningStatus, check.Equals, processorClosing)
+
+	// `processorClosing` -> `processorClosed`
+	_, err = p.tick(ctx, p.changefeed)
+	close(p.sinkClosedCh)
+	c.Assert(err, check.IsNil)
+	c.Assert(p.runningStatus, check.Equals, processorClosed)
+
+	//p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+	//	status.Tables[1] = &model.TableReplicaInfo{StartTs: 20}
+	//	status.Tables[2] = &model.TableReplicaInfo{StartTs: 30}
+	//	return status, true, nil
+	//})
+	//tester.MustApplyPatches()
+	//// Initialize TablePipeline should after the processor is in `processorRunning`
+	//p.runningStatus = processorRunning
+	//_, err = p.Tick(ctx, p.changefeed)
+	//c.Assert(err, check.IsNil)
+	//tester.MustApplyPatches()
+	//c.Assert(p.tables[1], check.NotNil)
+	//c.Assert(p.tables[1].CheckpointTs(), check.Equals, model.Ts(20))
+	//c.Assert(p.tables[1].ResolvedTs(), check.Equals, model.Ts(20))
+	//
+	//c.Assert(p.tables[2], check.NotNil)
+	//c.Assert(p.tables[2].CheckpointTs(), check.Equals, model.Ts(30))
+	//c.Assert(p.tables[2].ResolvedTs(), check.Equals, model.Ts(30))
+	//
+
+	//c.Assert(p.runningStatus, check.Equals, processorInitializing)
 }

@@ -78,7 +78,6 @@ type processor struct {
 	lastRedoFlush time.Time
 
 	runningStatus processorRunningStatus
-	// todo: initialize the channel
 
 	// sinkRunningCh will be closed if the sink is fully initialized, which can be
 	// used to indicate that the whole processor initialization process is finished.
