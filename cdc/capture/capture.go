@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -191,13 +192,8 @@ func (c *Capture) run(stdCtx context.Context) error {
 		processorFlushInterval := time.Duration(conf.ProcessorFlushInterval)
 		// when the etcd worker of processor returns an error, it means that the the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
-<<<<<<< HEAD
 		// so we should also stop the owner and let capture restart or exit
-		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
-=======
-		// so we should also stop the processor and let capture restart or exit
-		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, "processor")
->>>>>>> 25b134de8 (capture(cdc): add owner info to help debug etcd_worker, and also some in sink. (#4325))
+		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval, "processor")
 		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
 	go func() {
@@ -265,9 +261,6 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
 		owner := c.newOwner(c.pdClient)
 		c.setOwner(owner)
-<<<<<<< HEAD
-		err = c.runEtcdWorker(ctx, owner, model.NewGlobalState(), ownerFlushInterval)
-=======
 
 		globalState := orchestrator.NewGlobalState()
 
@@ -281,7 +274,6 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		}
 
 		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval, "owner")
->>>>>>> 25b134de8 (capture(cdc): add owner info to help debug etcd_worker, and also some in sink. (#4325))
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -297,10 +289,6 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 	}
 }
 
-<<<<<<< HEAD
-func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Reactor, reactorState orchestrator.ReactorState, timerInterval time.Duration) error {
-	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, kv.EtcdKeyBase, reactor, reactorState)
-=======
 func (c *Capture) runEtcdWorker(
 	ctx cdcContext.Context,
 	reactor orchestrator.Reactor,
@@ -309,7 +297,6 @@ func (c *Capture) runEtcdWorker(
 	role string,
 ) error {
 	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, etcd.EtcdKeyBase, reactor, reactorState)
->>>>>>> 25b134de8 (capture(cdc): add owner info to help debug etcd_worker, and also some in sink. (#4325))
 	if err != nil {
 		return errors.Trace(err)
 	}
