@@ -484,13 +484,9 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	}()
 
 	errCh := make(chan error, 1)
-<<<<<<< HEAD
-	producer, err := NewKafkaSaramaProducer(ctx, leader.Addr(), topic, config, errCh)
-=======
 	opts := make(map[string]string)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	c.Assert(opts, check.HasKey, "max-message-bytes")
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
@@ -551,13 +547,9 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	config.TopicPreProcess = false
 
 	errCh := make(chan error, 1)
-<<<<<<< HEAD
-	producer, err := NewKafkaSaramaProducer(ctx, leader.Addr(), topic, config, errCh)
-=======
 	opts := make(map[string]string)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	c.Assert(opts, check.HasKey, "max-message-bytes")
->>>>>>> f097a1294 (codec(cdc): fix encoder `max-message-bytes` (#4074))
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
