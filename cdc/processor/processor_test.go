@@ -1095,6 +1095,8 @@ func (s *processorSuite) TestProcessorLifeTime(c *check.C) {
 		return nil
 	}
 
+	// `processorClosed` -> `processorInitializing` -> `processorRunning` ->
+	// `processorClosing` -> `processorClosed`
 	var err error
 	// init tick
 	_, err = p.Tick(ctx, p.changefeed)
@@ -1117,13 +1119,38 @@ func (s *processorSuite) TestProcessorLifeTime(c *check.C) {
 	tester.MustApplyPatches()
 
 	// `processorRunning` -> `processorClosing`
+	// set `sinkManager` to nil to avoid `sinkCloseCh` to be double closed,
+	// just close it explicit manually to make test easier and more stable.
+	p.sinkManager = nil
 	c.Assert(p.Close(), check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorClosing)
 
 	// `processorClosing` -> `processorClosed`
+	close(p.sinkClosedCh)
 	_, err = p.tick(ctx, p.changefeed)
-	//close(p.sinkClosedCh)
 	c.Assert(err, check.IsNil)
+	c.Assert(p.runningStatus, check.Equals, processorClosed)
+	tester.MustApplyPatches()
+
+	// `processorClosed` -> `processorInitializing` -> `processorClosed`
+	// since errors may happen when initialize the sink.
+	_, err = p.tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	c.Assert(p.runningStatus, check.Equals, processorInitializing)
+	tester.MustApplyPatches()
+
+	// send a abnormal error
+	p.sendError(cerror.ErrSinkURIInvalid)
+	_, err = p.Tick(ctx, p.changefeed)
+	tester.MustApplyPatches()
+	c.Assert(cerror.ErrReactorFinished.Equal(errors.Cause(err)), check.IsTrue)
+	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID], check.DeepEquals, &model.TaskPosition{
+		Error: &model.RunningError{
+			Addr:    "127.0.0.1:0000",
+			Code:    "CDC:ErrSinkURIInvalid",
+			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
+		},
+	})
 	c.Assert(p.runningStatus, check.Equals, processorClosed)
 
 	//p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
