@@ -125,7 +125,7 @@ upgrade.
 
 #### Downgrade compatibility
 
-The new configuration is not recognized by the old TiCDC, so you need to downgrade after remove the changefeed.
+The new configuration is not recognized by the old TiCDC, so you need to remove the changefeed before downgrading.
 
 ### Benchmark Tests
 
