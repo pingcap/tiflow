@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -113,10 +112,6 @@ func (m *mockDDLSink) close(ctx context.Context) error {
 func (m *mockDDLSink) Barrier(ctx context.Context) error {
 	return nil
 }
-
-var _ = check.Suite(&changefeedSuite{})
-
-type changefeedSuite struct{}
 
 func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (*changefeed, *orchestrator.ChangefeedReactorState,
 	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester) {
