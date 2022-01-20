@@ -1104,14 +1104,14 @@ func (s *processorSuite) TestProcessorLifeCycle(c *check.C) {
 	c.Assert(p.changefeed.TaskPositions, check.NotNil)
 
 	// `Closed` -> `Initializing`
-	_, err = p.tick(ctx, p.changefeed)
+	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorInitializing)
 	tester.MustApplyPatches()
 
 	// once sink is initialized successfully, `Initializing` -> `Running`
 	close(p.sinkRunningCh)
-	_, err = p.tick(ctx, p.changefeed)
+	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorRunning)
 	tester.MustApplyPatches()
@@ -1125,14 +1125,14 @@ func (s *processorSuite) TestProcessorLifeCycle(c *check.C) {
 
 	// `Closing` -> `Closed`
 	close(p.sinkClosedCh)
-	_, err = p.tick(ctx, p.changefeed)
+	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorClosed)
 	tester.MustApplyPatches()
 
 	// `Closed` -> `Initializing` -> `Closing` -> `Closed`
 	// errors may happen when initialize the sink.
-	_, err = p.tick(ctx, p.changefeed)
+	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorInitializing)
 	tester.MustApplyPatches()
@@ -1156,7 +1156,7 @@ func (s *processorSuite) TestProcessorLifeCycle(c *check.C) {
 	// `processorClosing` -> `processorClosed`
 	p.sinkClosedCh = make(chan struct{}, 1)
 	close(p.sinkClosedCh)
-	_, err = p.tick(ctx, p.changefeed)
+	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorClosed)
 	tester.MustApplyPatches()

@@ -306,7 +306,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		ID:   state.ID,
 		Info: state.Info,
 	})
-	_, err := p.tick(ctx, state)
+	err := p.tick(ctx, state)
 	if err == nil {
 		return state, nil
 	}
@@ -340,7 +340,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 }
 
-func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
+func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) error {
 	p.changefeed = state
 	// the processor could be in `processorClosing`, should not continue the processor
 	if p.runningStatus == processorClosing {
@@ -349,7 +349,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 			log.Info("processor not fully closed",
 				zap.String("changefeed", p.changefeedID),
 				zap.Error(err))
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
 		// since the sink is close in an asynchronous way,
 		// we have to check whether the sink is fully closed or not.
@@ -363,39 +363,39 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 			log.Debug("changeFeed is closing, cannot continue",
 				zap.String("changefeed", p.changefeedID))
 		}
-		return p.changefeed, nil
+		return nil
 	}
 
 	if !p.checkChangefeedRunnable() {
 		log.Info("changefeed not runnable", zap.String("changefeed", p.changefeed.ID))
-		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
+		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	// we should skip this tick after create a task position
 	if p.createTaskPosition() {
-		return p.changefeed, nil
+		return nil
 	}
 	if err := p.handleErrorCh(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	if err := p.lazyInit(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 
 	// the `sinkManager` may not fully initialize yet, should not continue.
 	if p.runningStatus != processorRunning {
-		return p.changefeed, nil
+		return nil
 	}
 
 	// sink manager will return this checkpointTs to sink node if sink node resolvedTs flush failed
 	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Info.GetCheckpointTs(state.Status))
 	if err := p.handleTableOperation(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	if err := p.checkTablesNum(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	if err := p.flushRedoLogMeta(ctx); err != nil {
-		return nil, err
+		return err
 	}
 	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
@@ -417,10 +417,10 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	if p.newSchedulerEnabled {
 		if err := p.agent.Tick(ctx); err != nil {
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
 	}
-	return p.changefeed, nil
+	return nil
 }
 
 // checkChangefeedRunnable checks if the changefeed is runnable.
