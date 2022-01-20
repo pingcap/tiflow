@@ -50,7 +50,7 @@ const (
 // openAPI provides capture APIs.
 type openAPI struct {
 	capture *capture.Capture
-	// usr for unit test only
+	// use for unit test only
 	testStatusProvider owner.StatusProvider
 }
 

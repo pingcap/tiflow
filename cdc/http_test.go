@@ -14,15 +14,27 @@
 package cdc
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/pingcap/failpoint"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/stretchr/testify/require"
 )
+
+type testCase struct {
+	url    string
+	method string
+}
+
+func (a *testCase) String() string {
+	return fmt.Sprintf("%s:%s", a.method, a.url)
+}
 
 func TestPProfPath(t *testing.T) {
 	t.Parallel()
@@ -51,11 +63,36 @@ func TestPProfPath(t *testing.T) {
 	}
 }
 
-type testCase struct {
-	url    string
-	method string
-}
+func TestHandleFailpoint(t *testing.T) {
+	t.Parallel()
 
-func (a *testCase) String() string {
-	return fmt.Sprintf("%s:%s", a.method, a.url)
+	router := gin.New()
+	RegisterRoutes(router, capture.NewCapture4Test(false), nil)
+
+	fp := "github.com/pingcap/tiflow/cdc/TestHandleFailpoint"
+	uri := fmt.Sprintf("/debug/fail/%s", fp)
+	body := bytes.NewReader([]byte("return(true)"))
+	req, err := http.NewRequest("PUT", uri, body)
+	require.Nil(t, err)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.True(t, w.Code >= 200 && w.Code <= 300)
+
+	failpointHit := false
+	failpoint.Inject("TestHandleFailpoint", func() {
+		failpointHit = true
+	})
+	require.True(t, failpointHit)
+
+	req, err = http.NewRequest("DELETE", uri, body)
+	require.Nil(t, err)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.True(t, w.Code >= 200 && w.Code <= 300)
+
+	failpointHit = false
+	failpoint.Inject("TestHandleFailpoint", func() {
+		failpointHit = true
+	})
+	require.False(t, failpointHit)
 }

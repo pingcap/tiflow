@@ -14,7 +14,6 @@
 package api
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,15 +22,14 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
 func TestHTTPStatus(t *testing.T) {
+	t.Parallel()
 	router := gin.New()
 	RegisterOwnerAPIRoutes(router, nil)
-
 	ts := httptest.NewServer(router)
 	defer ts.Close()
 
@@ -41,7 +39,6 @@ func TestHTTPStatus(t *testing.T) {
 	testHandleRebalance(t, addr)
 	testHandleMoveTable(t, addr)
 	testHandleChangefeedQuery(t, addr)
-	testHandleFailpoint(t, addr)
 }
 
 func testReisgnOwner(t *testing.T, addr string) {
@@ -77,38 +74,4 @@ func testRequestNonOwnerFailed(t *testing.T, uri string) {
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	require.Equal(t, concurrency.ErrElectionNotLeader.Error(), string(data))
-}
-
-func testHandleFailpoint(t *testing.T, addr string) {
-	fp := "github.com/pingcap/tiflow/cdc/TestHandleFailpoint"
-	uri := fmt.Sprintf("%s/debug/fail/%s", addr, fp)
-	body := bytes.NewReader([]byte("return(true)"))
-	req, err := http.NewRequest("PUT", uri, body)
-	require.Nil(t, err)
-
-	resp, err := http.DefaultClient.Do(req)
-	require.Nil(t, err)
-	defer resp.Body.Close()
-	require.GreaterOrEqual(t, resp.StatusCode, 200)
-	require.Less(t, resp.StatusCode, 300)
-
-	failpointHit := false
-	failpoint.Inject("TestHandleFailpoint", func() {
-		failpointHit = true
-	})
-	require.True(t, failpointHit)
-
-	req, err = http.NewRequest("DELETE", uri, body)
-	require.Nil(t, err)
-	resp, err = http.DefaultClient.Do(req)
-	require.Nil(t, err)
-	defer resp.Body.Close()
-	require.GreaterOrEqual(t, resp.StatusCode, 200)
-	require.Less(t, resp.StatusCode, 300)
-
-	failpointHit = false
-	failpoint.Inject("TestHandleFailpoint", func() {
-		failpointHit = true
-	})
-	require.False(t, failpointHit)
 }
