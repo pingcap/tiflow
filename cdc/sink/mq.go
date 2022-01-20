@@ -49,8 +49,12 @@ type resolvedTsEvent struct {
 }
 
 const (
-	defaultPartitionInputChSize      = 12800
-	defaultResolvedTsEventBufferSize = 12800
+	// Depend on this size, every `partitionInputCh` will take
+	// approximately 16.3 KiB memory.
+	defaultPartitionInputChSize = 1024
+	// Depend on this size, `resolvedBuffer` will take
+	// approximately 2 KiB memory.
+	defaultResolvedTsEventBufferSize = 128
 	// -1 means broadcast to all partitions, it's the default for the default open protocol.
 	defaultDDLDispatchPartition = -1
 )
@@ -200,7 +204,7 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.Trace(ctx.Err())
 		case msg := <-k.resolvedBuffer:
 			resolvedTs := msg.resolvedTs
 			err := k.flushTsToWorker(ctx, resolvedTs)
@@ -221,7 +225,7 @@ func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error
 	for i := 0; i < int(k.partitionNum); i++ {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.Trace(ctx.Err())
 		case k.partitionInput[i] <- mqEvent{resolvedTs: resolvedTs}:
 		}
 	}
@@ -231,7 +235,7 @@ flushLoop:
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.Trace(ctx.Err())
 		case <-k.resolvedReceiver.C:
 			for i := 0; i < int(k.partitionNum); i++ {
 				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
