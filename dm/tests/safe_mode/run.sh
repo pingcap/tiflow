@@ -188,8 +188,8 @@ function safe_mode_recover() {
 }
 
 function run() {
-	# consistency_none
-	# safe_mode_recover
+	consistency_none
+	safe_mode_recover
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'

@@ -1501,6 +1501,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	s.runCancel = runCancel
 	s.rundone = make(chan struct{})
 	s.Unlock()
+	defer func() {
+		// close rundone to notify other goroutine that syncer.Run is exited
+		close(s.rundone)
+	}()
 
 	// some initialization that can't be put in Syncer.Init
 	fresh, err := s.IsFreshTask(ctx)
@@ -1656,7 +1660,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				s.tctx.L().Warn("failed to flush safe mode checkpoints when exit task", zap.Error(err2))
 			}
 		}
-		close(s.rundone)
 	}()
 
 	now := time.Now()
@@ -3398,7 +3401,7 @@ func (s *Syncer) stopSync() {
 	// when resuming, re-create s.syncer
 
 	if s.streamerController != nil {
-		s.streamerController.Close(s.tctx)
+		s.streamerController.Close(s.runTCtx)
 	}
 
 	// try to rollback checkpoints, if they already flushed, no effect, this operation should call before close schemaTracker

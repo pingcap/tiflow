@@ -381,6 +381,7 @@ func (st *SubTask) closeUnits() {
 		u := st.units[i]
 		st.l.Info("closing unit process", zap.Stringer("unit", cu.Type()))
 		u.Close()
+		st.l.Info("closing unit done", zap.Stringer("unit", cu.Type()))
 	}
 }
 

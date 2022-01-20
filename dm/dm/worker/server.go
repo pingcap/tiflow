@@ -441,19 +441,18 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 }
 
 func (s *Server) doClose() {
-	s.cancel()
-	// close server in advance, stop receiving source bound and relay bound
-	s.wg.Wait()
-
 	s.Lock()
 	defer s.Unlock()
+
 	if s.closed.Load() {
 		return
 	}
 	// stop worker and wait for return
+	s.cancel()
 	if w := s.getWorker(false); w != nil {
 		w.Stop(true)
 	}
+	s.wg.Wait()
 	s.closed.Store(true)
 }
 
