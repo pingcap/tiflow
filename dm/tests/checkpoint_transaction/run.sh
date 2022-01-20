@@ -13,11 +13,11 @@ function check_worker_ungraceful_stop_with_retry() {
 		sleep 1
 		echo "start check_worker_ungraceful_stop_with_retry times: $k"
 
-		num=$(grep "kill syncer unit" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+		num=$(grep "kill unit" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 		if [ $num -lt 1 ]; then
 			continue
 		fi
-		num=$(grep "kill syncer without graceful" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+		num=$(grep "kill without graceful" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 		if [ $num -lt 1 ]; then
 			continue
 		fi
