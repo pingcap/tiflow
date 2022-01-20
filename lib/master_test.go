@@ -177,6 +177,7 @@ func TestMasterCreateWorker(t *testing.T) {
 			Req: &pb.DispatchTaskRequest{
 				TaskTypeId: int64(workerTypePlaceholder),
 				TaskConfig: configBytes,
+				MasterId:   "my-master",
 			},
 		}).Return(&client.ExecutorResponse{Resp: &pb.DispatchTaskResponse{
 		ErrorCode: 1,

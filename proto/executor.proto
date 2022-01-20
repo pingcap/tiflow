@@ -16,6 +16,7 @@ service Executor {
 message DispatchTaskRequest {
     int64 task_type_id = 1;
     bytes task_config = 2;
+    string master_id = 3;
 }
 
 message DispatchTaskResponse {

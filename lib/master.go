@@ -381,6 +381,7 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 			Req: &pb.DispatchTaskRequest{
 				TaskTypeId: int64(workerType),
 				TaskConfig: configBytes,
+				MasterId:   string(m.id),
 			},
 		})
 		if err != nil {
