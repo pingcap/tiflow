@@ -62,7 +62,7 @@ func (d *dummyWorker) CloseImpl() {
 	atomic.StoreInt32(&d.closed, 1)
 }
 
-func NewDummyWorker(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID) lib.Worker {
+func NewDummyWorker(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, _ lib.WorkerConfig) lib.Worker {
 	ret := &dummyWorker{}
 	dependencies := ctx.Dependencies
 	ret.BaseWorker = lib.NewBaseWorker(

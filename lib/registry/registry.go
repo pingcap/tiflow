@@ -11,10 +11,18 @@ import (
 	"go.uber.org/zap"
 )
 
+type WorkerConfig = lib.WorkerConfig
+
 type Registry interface {
 	MustRegisterWorkerType(tp lib.WorkerType, factory WorkerFactory)
 	RegisterWorkerType(tp lib.WorkerType, factory WorkerFactory) (ok bool)
-	CreateWorker(ctx *dcontext.Context, tp lib.WorkerType, workerID lib.WorkerID, masterID lib.MasterID) (lib.Worker, error)
+	CreateWorker(
+		ctx *dcontext.Context,
+		tp lib.WorkerType,
+		workerID lib.WorkerID,
+		masterID lib.MasterID,
+		config []byte,
+	) (lib.Worker, error)
 }
 
 type registryImpl struct {
@@ -50,13 +58,19 @@ func (r *registryImpl) CreateWorker(
 	tp lib.WorkerType,
 	workerID lib.WorkerID,
 	masterID lib.MasterID,
+	configBytes []byte,
 ) (lib.Worker, error) {
 	factory, ok := r.getWorkerFactory(tp)
 	if !ok {
 		return nil, derror.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
 	}
 
-	worker, err := factory.NewWorker(ctx, workerID, masterID)
+	config, err := factory.DeserializeConfig(configBytes)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	worker, err := factory.NewWorker(ctx, workerID, masterID, config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

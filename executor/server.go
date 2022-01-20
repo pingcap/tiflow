@@ -155,7 +155,11 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	}
 
 	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
-		dctx, lib.WorkerType(req.TaskTypeId), lib.WorkerID(workerID), lib.MasterID(req.MasterId))
+		dctx,
+		lib.WorkerType(req.GetTaskTypeId()),
+		lib.WorkerID(workerID),
+		lib.MasterID(req.GetMasterId()),
+		req.GetTaskConfig())
 	if err != nil {
 		// TODO better error handling
 		return nil, err

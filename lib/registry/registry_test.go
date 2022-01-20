@@ -9,15 +9,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var fakeWorkerFactory WorkerFactory = ConstructorFuncFactory(fake.NewDummyWorker)
+var (
+	_                 WorkerFactory = (*SimpleWorkerFactory)(nil)
+	fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker, &dummyConfig{})
+)
 
-const fakeWorkerType = lib.WorkerType(100)
+const (
+	fakeWorkerType = lib.WorkerType(100)
+)
+
+type dummyConfig struct {
+	Val int
+}
 
 func TestGlobalRegistry(t *testing.T) {
 	GlobalWorkerRegistry().MustRegisterWorkerType(fakeWorkerType, fakeWorkerFactory)
 
 	ctx := dcontext.Background()
-	worker, err := GlobalWorkerRegistry().CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1")
+	worker, err := GlobalWorkerRegistry().CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1", []byte(`{"Val":0}`))
 	require.NoError(t, err)
 	require.IsType(t, &fake.Worker{}, worker)
 	require.Equal(t, lib.WorkerID("worker-1"), worker.WorkerID())
@@ -39,6 +48,6 @@ func TestRegistryDuplicateType(t *testing.T) {
 func TestRegistryWorkerTypeNotFound(t *testing.T) {
 	registry := NewRegistry()
 	ctx := dcontext.Background()
-	_, err := registry.CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1")
+	_, err := registry.CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1", []byte(`{"Val"":0}`))
 	require.Error(t, err)
 }
