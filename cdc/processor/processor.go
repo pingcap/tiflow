@@ -672,6 +672,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ctx.GlobalVars().RegionCache,
 		ctx.GlobalVars().KVStorage,
 		ctx.GlobalVars().PDClock,
+		ctx.ChangefeedVars().ID,
 		checkpointTs, ddlspans, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {

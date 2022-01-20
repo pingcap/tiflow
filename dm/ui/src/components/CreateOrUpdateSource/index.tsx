@@ -91,7 +91,7 @@ const CreateOrUpdateSource: React.FC<{
             <Form.Item
               name="password"
               label={t('password')}
-              rules={[{ required: true, message: t('passowrd is required') }]}
+              rules={[{ required: true, message: t('password is required') }]}
             >
               <Input type="password" />
             </Form.Item>
