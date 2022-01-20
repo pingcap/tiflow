@@ -223,7 +223,7 @@ func TestHandleError(t *testing.T) {
 	require.Equal(t, state.Info.State, model.StateFailed)
 	require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 	require.Equal(t, state.Status.AdminJobType, model.AdminStop)
-	
+
 	// admin resume must retry changefeed immediately.
 	manager.PushAdminJob(&model.AdminJob{
 		CfID: ctx.ChangefeedVars().ID,
