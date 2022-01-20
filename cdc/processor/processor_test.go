@@ -1122,7 +1122,7 @@ func (s *processorSuite) TestProcessorLifeTime(c *check.C) {
 
 	// `processorClosing` -> `processorClosed`
 	_, err = p.tick(ctx, p.changefeed)
-	close(p.sinkClosedCh)
+	//close(p.sinkClosedCh)
 	c.Assert(err, check.IsNil)
 	c.Assert(p.runningStatus, check.Equals, processorClosed)
 
