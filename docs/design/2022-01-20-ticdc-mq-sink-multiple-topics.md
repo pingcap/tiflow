@@ -83,7 +83,7 @@ dispatchers = [
 - matcher = ['test3.*', 'test4.*'], topic = "flink\_{schema}"
   - Send the data from all tables in `test3` and `test4` to `flink_test3` and `flink_test4` topics, respectively
 - matcher = ['test1.*', 'test5.*'], topic = "test-cdc"
-  - Send the data of all the tables in `test1` and `test5` to the `test-cdc` topic
+  - Send the data of all the tables in `test1` (except `test1.table1`) and `test5` to the `test-cdc` topic
   - The `table1` in `test1` is sent to the `test1_table1` topic, because for tables matching multiple matcher rules, the
     topic expression corresponding to the top matcher prevails
 
