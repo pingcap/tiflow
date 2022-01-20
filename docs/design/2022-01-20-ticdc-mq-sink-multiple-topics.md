@@ -56,7 +56,7 @@ A new topic field has been added to dispatchers that will specify the topic disp
 The expression format looks like `flink_{schema}{table}`. This expression consists of two keywords and the `flink_`
 prefix.
 
-Two keywords:
+Two keywords(case-insensitive):
 
 | Keyword  | Description            | Required |
 | -------- | ---------------------- | -------- |
@@ -73,7 +73,7 @@ Some examples:
 [sink]
 dispatchers = [
   { matcher = ['test1.table1', 'test2.table1'], topic = "{schema}_{table}" },
-  { matcher = ['test3.*', 'test4.*'], topic = "flink_{schema}" },
+  { matcher = ['test3.*', 'test4.*'], topic = "flink{schema}" },
   { matcher = ['test1.*', 'test5.*'], topic = "test-cdc" },
 ]
 ```
@@ -81,7 +81,7 @@ dispatchers = [
 - matcher = ['test1.*', 'test2.*'], topic = "{schema}\_{table}"
   - Send the data from `test1.table1` and `test2.table1` to the `test1_table1` and `test2_table1` topics, respectively
 - matcher = ['test3.*', 'test4.*'], topic = "flink\_{schema}"
-  - Send the data from all tables in `test3` and `test4` to `flink_test3` and `flink_test4` topics, respectively
+  - Send the data from all tables in `test3` and `test4` to `flinktest3` and `flinktest4` topics, respectively
 - matcher = ['test1.*', 'test5.*'], topic = "test-cdc"
   - Send the data of all the tables in `test1` (except `test1.table1`) and `test5` to the `test-cdc` topic
   - The `table1` in `test1` is sent to the `test1_table1` topic, because for tables matching multiple matcher rules, the
@@ -104,7 +104,7 @@ Coverage should be more than 75% in new added code.
 
 #### Integration test
 
-Can pass all existing integration tests when changefeed without topic dispatch configuration. In addition, we will 
+Can pass all existing integration tests when changefeed without topic dispatch configuration. In addition, we will
 integrate [Flink] into our integration tests to verify multi-topic functionality.
 
 ### Scenario Tests
@@ -120,7 +120,7 @@ default topic in the sinkURI and there is no topic expression configuration, it 
 
 #### Upgrade compatibility
 
-When not configured, it works use a single topic, so just add the configuration and create a new changefeed after the
+When not configured, it works as a single topic, so just add the configuration and create a new changefeed after the
 upgrade.
 
 #### Downgrade compatibility
@@ -137,7 +137,7 @@ N/A
 
 ## Investigation & Alternatives
 
-N/A
+TODO: Investigate whether the style of the theme scheduling configuration is uniform and adaptable with other products.
 
 ## Unresolved Questions
 
