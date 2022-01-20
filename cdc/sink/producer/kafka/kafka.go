@@ -37,11 +37,14 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultPartitionNum = 4
+const defaultPartitionNum = 3
 
 // Config stores the Kafka configuration
 type Config struct {
-	PartitionNum      int32
+	BrokerEndpoints []string
+	PartitionNum    int32
+
+	// User should make sure that `replication-factor` not greater than the number of kafka brokers.
 	ReplicationFactor int16
 
 	Version         string
@@ -51,7 +54,7 @@ type Config struct {
 	Credential      *security.Credential
 	SaslScram       *security.SaslScram
 	// control whether to create topic and verify partition number
-	TopicPreProcess bool
+	AutoCreate bool
 }
 
 // NewConfig returns a default Kafka configuration
@@ -64,19 +67,24 @@ func NewConfig() *Config {
 		Compression:       "none",
 		Credential:        &security.Credential{},
 		SaslScram:         &security.SaslScram{},
-		TopicPreProcess:   true,
+		AutoCreate:        true,
 	}
 }
 
 // Initialize the kafka configuration
 func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
-	s := sinkURI.Query().Get("partition-num")
+	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
+	params := sinkURI.Query()
+	s := params.Get("partition-num")
 	if s != "" {
 		a, err := strconv.Atoi(s)
 		if err != nil {
 			return err
 		}
 		c.PartitionNum = int32(a)
+		if c.PartitionNum <= 0 {
+			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
+		}
 	}
 
 	s = sinkURI.Query().Get("replication-factor")
@@ -156,7 +164,7 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 		if err != nil {
 			return err
 		}
-		c.TopicPreProcess = autoCreate
+		c.AutoCreate = autoCreate
 	}
 
 	return nil
@@ -379,54 +387,99 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
-// kafkaTopicPreProcess gets partition number from existing topic, if topic doesn't
-// exit, creates it automatically.
-func kafkaTopicPreProcess(topic, address string, config *Config, cfg *sarama.Config) (int32, error) {
-	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
+func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) error {
+	// FIXME: find a way to remove this failpoint for workload the unit test
+	failpoint.Inject("SkipTopicAutoCreate", func() {
+		failpoint.Return(nil)
+	})
+	admin, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
 	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	defer func() {
-		err := admin.Close()
-		if err != nil {
-			log.Warn("close admin client failed", zap.Error(err))
+		if err := admin.Close(); err != nil {
+			log.Warn("close kafka cluster admin failed", zap.Error(err))
 		}
 	}()
+
 	topics, err := admin.ListTopics()
 	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-	partitionNum := config.PartitionNum
-	topicDetail, exist := topics[topic]
-	if exist {
-		log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
-		if partitionNum == 0 {
-			partitionNum = topicDetail.NumPartitions
-		} else if partitionNum < topicDetail.NumPartitions {
-			log.Warn("partition number assigned in sink-uri is less than that of topic", zap.Int32("topic partition num", topicDetail.NumPartitions))
-		} else if partitionNum > topicDetail.NumPartitions {
-			return 0, cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
-				"partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, topicDetail.NumPartitions)
-		}
-	} else {
-		if partitionNum == 0 {
-			partitionNum = defaultPartitionNum
-			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
-		}
-		log.Info("create a topic", zap.String("topic", topic),
-			zap.Int32("partition_num", partitionNum),
-			zap.Int16("replication_factor", config.ReplicationFactor))
-		err := admin.CreateTopic(topic, &sarama.TopicDetail{
-			NumPartitions:     partitionNum,
-			ReplicationFactor: config.ReplicationFactor,
-		}, false)
-		// TODO idenfity the cause of "Topic with this name already exists"
-		if err != nil && !strings.Contains(err.Error(), "already exists") {
-			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-		}
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	return partitionNum, nil
+	info, created := topics[topic]
+	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
+	if created {
+		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
+		topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
+
+		if topicMaxMessageBytes < config.MaxMessageBytes {
+			log.Warn("topic's `max.message.bytes` less than the user set `max-message-bytes`,"+
+				"use topic's `max.message.bytes` to initialize the Kafka producer",
+				zap.Int("max.message.bytes", topicMaxMessageBytes),
+				zap.Int("max-message-bytes", config.MaxMessageBytes))
+			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
+		}
+
+		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
+		if config.AutoCreate {
+			log.Warn("topic already exist, TiCDC will not create the topic",
+				zap.String("topic", topic), zap.Any("detail", info))
+		}
+
+		if err := config.adjustPartitionNum(info.NumPartitions); err != nil {
+			return errors.Trace(err)
+		}
+
+		return nil
+	}
+
+	if !config.AutoCreate {
+		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
+	}
+
+	brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
+	if err != nil {
+		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
+		return errors.Trace(err)
+	}
+
+	// when create the topic, `max.message.bytes` is decided by the broker,
+	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
+	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
+	// broker's `message.max.bytes`.
+	if brokerMessageMaxBytes < config.MaxMessageBytes {
+		log.Warn("broker's `message.max.bytes` less than the user set `max-message-bytes`,"+
+			"use broker's `message.max.bytes` to initialize the Kafka producer",
+			zap.Int("message.max.bytes", brokerMessageMaxBytes),
+			zap.Int("max-message-bytes", config.MaxMessageBytes))
+		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
+	}
+
+	// topic not created yet, and user does not specify the `partition-num` in the sink uri.
+	if config.PartitionNum == 0 {
+		config.PartitionNum = defaultPartitionNum
+		log.Warn("partition-num is not set, use the default partition count",
+			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
+	}
+
+	err = admin.CreateTopic(topic, &sarama.TopicDetail{
+		NumPartitions:     config.PartitionNum,
+		ReplicationFactor: config.ReplicationFactor,
+	}, false)
+	// TODO identify the cause of "Topic with this name already exists"
+	if err != nil && !strings.Contains(err.Error(), "already exists") {
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	log.Info("TiCDC create the topic",
+		zap.Int32("partition-num", config.PartitionNum),
+		zap.Int16("replication-factor", config.ReplicationFactor))
+
+	return nil
 }
 
 var newSaramaConfigImpl = newSaramaConfig
@@ -438,24 +491,19 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 	if err != nil {
 		return nil, err
 	}
-	if config.PartitionNum < 0 {
-		return nil, cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(config.PartitionNum)
-	}
-	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-	syncClient, err := sarama.NewSyncProducer(strings.Split(address, ","), cfg)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
 
-	partitionNum := config.PartitionNum
-	if config.TopicPreProcess {
-		partitionNum, err = kafkaTopicPreProcess(topic, address, config, cfg)
-		if err != nil {
-			return nil, err
-		}
+	if err := topicPreProcess(topic, config, cfg); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+	opts["max-message-bytes"] = strconv.Itoa(cfg.Producer.MaxMessageBytes)
+
+	asyncClient, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+	syncClient, err := sarama.NewSyncProducer(config.BrokerEndpoints, cfg)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
 	notifier := new(notify.Notifier)
@@ -467,11 +515,11 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		asyncClient:  asyncClient,
 		syncClient:   syncClient,
 		topic:        topic,
-		partitionNum: partitionNum,
+		partitionNum: config.PartitionNum,
 		partitionOffset: make([]struct {
 			flushed uint64
 			sent    uint64
-		}, partitionNum),
+		}, config.PartitionNum),
 		flushedNotifier: notifier,
 		flushedReceiver: flushedReceiver,
 		closeCh:         make(chan struct{}),
@@ -605,4 +653,73 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	}
 
 	return config, err
+}
+
+func getBrokerMessageMaxBytes(admin sarama.ClusterAdmin) (int, error) {
+	target := "message.max.bytes"
+	_, controllerID, err := admin.DescribeCluster()
+	if err != nil {
+		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
+		Type:        sarama.BrokerResource,
+		Name:        strconv.Itoa(int(controllerID)),
+		ConfigNames: []string{target},
+	})
+	if err != nil {
+		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	if len(configEntries) == 0 || configEntries[0].Name != target {
+		return 0, cerror.ErrKafkaNewSaramaProducer.GenWithStack(
+			"since cannot find the `message.max.bytes` from the broker's configuration, " +
+				"ticdc decline to create the topic and changefeed to prevent potential error")
+	}
+
+	result, err := strconv.Atoi(configEntries[0].Value)
+	if err != nil {
+		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	return result, nil
+}
+
+func getTopicMaxMessageBytes(admin sarama.ClusterAdmin, info sarama.TopicDetail) (int, error) {
+	if a, ok := info.ConfigEntries["max.message.bytes"]; ok {
+		result, err := strconv.Atoi(*a)
+		if err != nil {
+			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
+		return result, nil
+	}
+
+	return getBrokerMessageMaxBytes(admin)
+}
+
+// adjust the partition-num by the topic's partition count
+func (c *Config) adjustPartitionNum(realPartitionCount int32) error {
+	// user does not specify the `partition-num` in the sink-uri
+	if c.PartitionNum == 0 {
+		c.PartitionNum = realPartitionCount
+		return nil
+	}
+
+	if c.PartitionNum < realPartitionCount {
+		log.Warn("number of partition specified in sink-uri is less than that of the actual topic. "+
+			"Some partitions will not have messages dispatched to",
+			zap.Int32("sink-uri partitions", c.PartitionNum),
+			zap.Int32("topic partitions", realPartitionCount))
+		return nil
+	}
+
+	// Make sure that the user-specified `partition-num` is not greater than
+	// the real partition count, since messages would be dispatched to different
+	// partitions, this could prevent potential correctness problems.
+	if c.PartitionNum > realPartitionCount {
+		return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
+			"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)",
+			c.PartitionNum, realPartitionCount)
+	}
+	return nil
 }
