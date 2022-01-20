@@ -63,6 +63,8 @@ type changefeed struct {
 
 	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
+	metricsChangefeedResolvedTsGauge      prometheus.Gauge
+	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
@@ -250,10 +252,7 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = c.sink.Initialize(cancelCtx, c.schema.SinkTableInfos())
-	if err != nil {
-		return errors.Trace(err)
-	}
+
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
@@ -268,6 +267,9 @@ LOOP:
 	// init metrics
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
+	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.WithLabelValues(c.id)
+	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.WithLabelValues(c.id)
+
 	c.initialized = true
 	return nil
 }
@@ -289,10 +291,17 @@ func (c *changefeed) releaseResources() {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
+
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsGauge = nil
 	c.metricsChangefeedCheckpointTsLagGauge = nil
+
+	changefeedResolvedTsGauge.DeleteLabelValues(c.id)
+	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id)
+	c.metricsChangefeedResolvedTsGauge = nil
+	c.metricsChangefeedResolvedTsLagGauge = nil
+
 	c.initialized = false
 }
 
@@ -471,10 +480,13 @@ func (c *changefeed) updateStatus(currentTs int64, barrierTs model.Ts) {
 		}
 		return status, changed, nil
 	})
-	phyTs := oracle.ExtractPhysical(checkpointTs)
+	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
+	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
+	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyCkpTs) / 1e3)
 
-	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
-	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyTs) / 1e3)
+	phyRTs := oracle.ExtractPhysical(resolvedTs)
+	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
+	c.metricsChangefeedResolvedTsLagGauge.Set(float64(currentTs-phyRTs) / 1e3)
 }
 
 func (c *changefeed) Close() {

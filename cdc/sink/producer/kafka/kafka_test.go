@@ -151,10 +151,11 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 		newSaramaConfigImpl = newSaramaConfigImplBak
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 	}()
-
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	opts := make(map[string]string)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
+	c.Assert(opts, check.HasKey, "max-message-bytes")
 	for i := 0; i < 100; i++ {
 		err = producer.SendMessage(ctx, &codec.MQMessage{
 			Key:   []byte("test-key-1"),
@@ -349,7 +350,7 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
 	topic := "topic"
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
-	_, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	_, err := NewKafkaSaramaProducer(ctx, topic, config, map[string]string{}, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 
 	_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate")
@@ -395,7 +396,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	}()
 
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, map[string]string{}, errCh)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 		err := producer.Close()
@@ -460,7 +461,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
 
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, map[string]string{}, errCh)
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
