@@ -26,7 +26,9 @@ function test_cant_dail_upstream() {
 		"start-relay -s $SOURCE_ID1 worker1" \
 		"\"result\": true" 2
 
-	kill_dm_worker
+	echo "kill dm-worker1"
+	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
 
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/pkg/conn/failDBPing=return()"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -254,8 +256,9 @@ function run() {
 	check_metric $WORKER1_PORT 'dm_relay_space{type="available"}' 5 0 9223372036854775807
 
 	# subtask is preferred to scheduled to another relay worker
-	pkill -hup -f dm-worker1.toml 2>/dev/null || true
-	wait_pattern_exit dm-worker1.toml
+	echo "kill dm-worker1"
+	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
 	# worker1 is down, worker2 has running relay and sync unit
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID1" \
@@ -296,11 +299,12 @@ function run() {
 	[ "$new_relay_log_count_1" -eq 1 ]
 	[ "$new_relay_log_count_2" -eq 1 ]
 
-	pkill -hup -f dm-worker1.toml 2>/dev/null || true
-	wait_pattern_exit dm-worker1.toml
-	pkill -hup -f dm-worker2.toml 2>/dev/null || true
-	wait_pattern_exit dm-worker2.toml
-
+	echo "kill dm-worker2"
+	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	echo "kill dm-worker2"
+	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
 	# if all relay workers are offline, relay-not-enabled worker should continue to sync
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID1" \
