@@ -1997,7 +1997,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		ec := eventContext{
-			tctx:                s.tctx,
+			tctx:                s.runTCtx,
 			header:              e.Header,
 			startLocation:       &startLocation,
 			currentLocation:     &currentLocation,
