@@ -17,7 +17,6 @@ import (
 	"bufio"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
@@ -76,7 +75,6 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api openAPI) {
 
 	v1.Use(logMiddleware())
 	// request will time out after 10 second
-	v1.Use(timeoutMiddleware(time.Second * 10))
 	v1.Use(errorHandleMiddleware())
 
 	// common API

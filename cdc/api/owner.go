@@ -86,7 +86,6 @@ func RegisterOwnerAPIRoutes(router *gin.Engine, capture *capture.Capture) {
 
 	owner.Use(errorHandleMiddleware())
 	owner.Use(logMiddleware())
-	owner.Use(timeoutMiddleware(10))
 
 	owner.POST("/resign", gin.WrapF(ownerAPI.handleResignOwner))
 	owner.POST("/admin", gin.WrapF(ownerAPI.handleChangefeedAdmin))

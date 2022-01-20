@@ -91,7 +91,7 @@ func (p *mockStatusProvider) GetCaptures(ctx context.Context) ([]*model.CaptureI
 func newRouter(p *mockStatusProvider) *gin.Engine {
 	c := capture.NewCapture4Test(true)
 	router := gin.New()
-	RegisterOpoenAPIRoutes(router, NewOpenAPI4Test(c, p))
+	RegisterOpenAPIRoutes(router, NewOpenAPI4Test(c, p))
 	return router
 }
 
@@ -397,7 +397,7 @@ func TestServerStatus(t *testing.T) {
 	// capture is not owner
 	c := capture.NewCapture4Test(false)
 	r := gin.New()
-	RegisterOpoenAPIRoutes(r, NewOpenAPI4Test(c, nil))
+	RegisterOpenAPIRoutes(r, NewOpenAPI4Test(c, nil))
 	api = testCase{url: "/api/v1/status", method: "GET"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
