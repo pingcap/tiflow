@@ -22,8 +22,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 )
 
-// SameTypeTargetAndColumns check whether two row changes have same type, target and columns, so they can be merged to a
-// multi-value DML.
+// SameTypeTargetAndColumns check whether two row changes have same type, target
+// and columns, so they can be merged to a multi-value DML.
 func SameTypeTargetAndColumns(lhs *RowChange, rhs *RowChange) bool {
 	if lhs.tp != rhs.tp {
 		return false
@@ -35,8 +35,8 @@ func SameTypeTargetAndColumns(lhs *RowChange, rhs *RowChange) bool {
 		return false
 	}
 
-	// when the targets are the same and the sources are not the same (same group of shard tables), this piece of code
-	// is run.
+	// when the targets are the same and the sources are not the same (same
+	// group of shard tables), this piece of code is run.
 	var lhsCols, rhsCols []string
 	switch lhs.tp {
 	case RowChangeDelete:
@@ -66,8 +66,8 @@ func SameTypeTargetAndColumns(lhs *RowChange, rhs *RowChange) bool {
 }
 
 // GenDeleteSQL generates the DELETE SQL and its arguments.
-// Input `changes` should have same target table and same columns for WHERE (typically same PK/NOT NULL UK), otherwise
-// the behaviour is undefined.
+// Input `changes` should have same target table and same columns for WHERE
+// (typically same PK/NOT NULL UK), otherwise the behaviour is undefined.
 func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 	if len(changes) == 0 {
 		log.L().DPanic("row changes is empty")
@@ -118,7 +118,8 @@ func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 // TODO: support GenUpdateSQL(changes ...*RowChange) using UPDATE SET CASE WHEN
 
 // GenInsertSQL generates the INSERT SQL and its arguments.
-// Input `changes` should have same target table and same modifiable columns, otherwise the behaviour is undefined.
+// Input `changes` should have same target table and same modifiable columns,
+// otherwise the behaviour is undefined.
 func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 	if len(changes) == 0 {
 		log.L().DPanic("row changes is empty")

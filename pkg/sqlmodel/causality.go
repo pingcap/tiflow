@@ -27,8 +27,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
-// CausalityKeys returns all string representation of causality keys. If two row changes has the same causality keys,
-// they must be replicated sequentially.
+// CausalityKeys returns all string representation of causality keys. If two row
+// changes has the same causality keys, they must be replicated sequentially.
 func (r *RowChange) CausalityKeys() []string {
 	r.lazyInitIdentityInfo()
 
@@ -86,11 +86,17 @@ func columnValue2String(value interface{}) string {
 	return data
 }
 
-func genKeyString(table string, columns []*timodel.ColumnInfo, values []interface{}) string {
+func genKeyString(
+	table string,
+	columns []*timodel.ColumnInfo,
+	values []interface{},
+) string {
 	var buf strings.Builder
 	for i, data := range values {
 		if data == nil {
-			log.L().Debug("ignore null value", zap.String("column", columns[i].Name.O), zap.String("table", table))
+			log.L().Debug("ignore null value",
+				zap.String("column", columns[i].Name.O),
+				zap.String("table", table))
 			continue // ignore `null` value.
 		}
 		// one column key looks like:`column_val.column_name.`
@@ -100,7 +106,8 @@ func genKeyString(table string, columns []*timodel.ColumnInfo, values []interfac
 		buf.WriteString(".")
 	}
 	if buf.Len() == 0 {
-		log.L().Debug("all value are nil, no key generated", zap.String("table", table))
+		log.L().Debug("all value are nil, no key generated",
+			zap.String("table", table))
 		return "" // all values are `null`.
 	}
 	buf.WriteString(table)
@@ -150,7 +157,8 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 	}
 
 	if len(ret) == 0 {
-		// the table has no PK/UK, or all UK are NULL. all values of the row consists the causality key
+		// the table has no PK/UK, or all UK are NULL. all values of the row
+		// consists the causality key
 		return []string{genKeyString(r.sourceTable.String(), r.sourceTableInfo.Columns, values)}
 	}
 

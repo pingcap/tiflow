@@ -67,19 +67,20 @@ type RowChange struct {
 	tiSessionCtx sessionctx.Context
 
 	tp           RowChangeType
-	identityInfo *schema.DownstreamTableInfo // this field can be set from outside or lazy initialized
+	identityInfo *schema.DownstreamTableInfo
 }
 
 // NewRowChange creates a new RowChange.
-// preValues stands for values exists before this change, postValues stands for values exists after this change.
+// preValues stands for values exists before this change, postValues stands for
+// values exists after this change.
 // These parameters can be nil:
 // - targetTable: when same as sourceTable or not applicable
 // - preValues: when INSERT
 // - postValues: when DELETE
 // - targetTableInfo: when same as sourceTableInfo or not applicable
 // - tiSessionCtx: will use default sessionCtx which is UTC timezone
-// All arguments must not be changed after assigned to RowChange, any modification (like convert []byte to string)
-// should be done before NewRowChange.
+// All arguments must not be changed after assigned to RowChange, any
+// modification (like convert []byte to string) should be done before NewRowChange.
 func NewRowChange(
 	sourceTable *cdcmodel.TableName,
 	targetTable *cdcmodel.TableName,
@@ -145,7 +146,8 @@ func (r *RowChange) calculateType() {
 	}
 }
 
-// Type returns the RowChangeType of this RowChange. Caller can future decide the DMLType when generate DML from it.
+// Type returns the RowChangeType of this RowChange. Caller can future decide
+// the DMLType when generate DML from it.
 func (r *RowChange) Type() RowChangeType {
 	return r.tp
 }
@@ -161,8 +163,8 @@ func (r *RowChange) TargetTableID() string {
 	return r.targetTable.QuoteString()
 }
 
-// SetIdentifyInfo can be used when caller has calculated and cached identityInfo, to avoid every RowChange lazily
-// initialize it.
+// SetIdentifyInfo can be used when caller has calculated and cached
+// identityInfo, to avoid every RowChange lazily initialize it.
 func (r *RowChange) SetIdentifyInfo(info *schema.DownstreamTableInfo) {
 	r.identityInfo = info
 }
@@ -186,7 +188,8 @@ func getColsAndValuesOfIdx(columns []*timodel.ColumnInfo, indexColumns *timodel.
 	return cols, values
 }
 
-// whereColumnsAndValues returns columns and values to identify the row, to form the WHERE clause.
+// whereColumnsAndValues returns columns and values to identify the row, to form
+// the WHERE clause.
 func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 	r.lazyInitIdentityInfo()
 
