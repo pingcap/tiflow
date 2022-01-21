@@ -39,9 +39,10 @@ RUN yum install -y \
 RUN wget http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 RUN yum install -y epel-release-latest-7.noarch.rpm
 RUN yum --enablerepo=epel install -y s3cmd
-RUN wget -i -c http://dev.mysql.com/get/mysql57-community-release-el7-10.noarch.rpm
-RUN yum install -y mysql57-community-release-el7-10.noarch.rpm
-RUN yum install -y mysql-server
+# Install mysql client.
+RUN rpm -ivh https://repo.mysql.com//mysql57-community-release-el7-11.noarch.rpm
+RUN curl -i https://repo.mysql.com/RPM-GPG-KEY-mysql-2022 > /etc/pki/rpm-gpg/RPM-GPG-KEY-mysql
+RUN yum install mysql-community-client.x86_64 -y
 
 # Copy go form downloader.
 COPY --from=downloader /usr/local/go /usr/local/go
