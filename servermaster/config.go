@@ -97,7 +97,8 @@ type Config struct {
 	// NOTE: more items will be add when adding leader election
 	Etcd *etcdutils.ConfigParams `toml:"etcd" json:"etcd"`
 
-	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
+	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
+	// time interval string to check executor aliveness
 	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`
 	RPCTimeoutStr        string `toml:"rpc-timeout" json:"rpc-timeout"`
 

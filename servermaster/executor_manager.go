@@ -29,9 +29,8 @@ type ExecutorManager interface {
 type ExecutorManagerImpl struct {
 	testContext *test.Context
 
-	mu          sync.Mutex
-	executors   map[model.ExecutorID]*Executor
-	offExecutor chan model.ExecutorID
+	mu        sync.Mutex
+	executors map[model.ExecutorID]*Executor
 
 	idAllocator       *autoid.UUIDAllocator
 	initHeartbeatTTL  time.Duration
@@ -44,12 +43,10 @@ type ExecutorManagerImpl struct {
 }
 
 func NewExecutorManagerImpl(initHeartbeatTTL, keepAliveInterval time.Duration, ctx *test.Context) *ExecutorManagerImpl {
-	offlineCh := make(chan model.ExecutorID, 100)
 	return &ExecutorManagerImpl{
 		testContext:       ctx,
 		executors:         make(map[model.ExecutorID]*Executor),
 		idAllocator:       autoid.NewUUIDAllocator(),
-		offExecutor:       offlineCh,
 		initHeartbeatTTL:  initHeartbeatTTL,
 		keepAliveInterval: keepAliveInterval,
 		rescMgr:           resource.NewCapRescMgr(),
@@ -71,7 +68,6 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 	//if err != nil {
 	//	return err
 	//}
-	e.offExecutor <- id
 	log.L().Logger.Info("notify to offline exec")
 	if test.GetGlobalTestFlag() {
 		e.testContext.NotifyExecutorChange(&test.ExecutorChangeEvent{
@@ -188,11 +184,14 @@ func (e *ExecutorManagerImpl) Start(ctx context.Context) {
 
 // checkAlive goroutine checks whether all the executors are alive periodically.
 func (e *ExecutorManagerImpl) checkAlive(ctx context.Context) {
-	tick := time.NewTicker(1 * time.Second)
-	defer func() { log.L().Logger.Info("check alive finished") }()
+	ticker := time.NewTicker(e.keepAliveInterval)
+	defer func() {
+		ticker.Stop()
+		log.L().Logger.Info("check alive finished")
+	}()
 	for {
 		select {
-		case <-tick.C:
+		case <-ticker.C:
 			err := e.checkAliveImpl()
 			if err != nil {
 				log.L().Logger.Info("check alive meet error", zap.Error(err))
