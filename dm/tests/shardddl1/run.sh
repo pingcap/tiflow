@@ -790,12 +790,15 @@ function DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA() {
 function DM_DML_EXECUTE_ERROR_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values(1,1)"
 	run_sql_source1 "update ${shardddl1}.${tb1} set b=b+1 where a=1"
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	read v1
+
+	check_log_contain_with_retry "length of queries not equals length of jobs" $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"RawCause\": \"ErrorOnLastDML\"" 1 \
+		"Paused" 1
 }
 
 function DM_DML_EXECUTE_ERROR() {
-	# mock downstream has a high latency and upstream has a high workload
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
@@ -814,6 +817,18 @@ function run() {
 	init_cluster
 	init_database
 
+	DM_COMPACT
+	DM_COMPACT_USE_DOWNSTREAM_SCHEMA
+	DM_MULTIPLE_ROWS
+	DM_CAUSALITY
+	DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA
+	DM_UpdateBARule
+	DM_RENAME_TABLE
+	DM_RENAME_COLUMN_OPTIMISTIC
+	DM_RemoveLock
+	DM_RestartMaster
+	DM_ADD_DROP_COLUMNS
+	DM_COLUMN_INDEX
 	DM_DML_EXECUTE_ERROR
 	start=1
 	end=5
