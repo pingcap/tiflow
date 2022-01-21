@@ -32,7 +32,7 @@ import (
 // NewOperateSourceCmd creates a OperateSource command.
 func NewOperateSourceCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "operate-source <operate-type> [config-file ...] <-w worker> [--print-sample-config]",
+		Use:   "operate-source <operate-type> [config-file ...] [-w worker] [--print-sample-config]",
 		Short: "`create`/`update`/`stop`/`show` upstream MySQL/MariaDB source",
 		RunE:  operateSourceFunc,
 	}
