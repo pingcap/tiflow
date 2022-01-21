@@ -554,6 +554,10 @@ func (o *Optimist) recoverLocks(
 							o.logger.Error("fail to update lock columns", zap.Error(err))
 							continue
 						}
+						// should remove resolved lock or it will be kept until next DDL
+						if lock.IsResolved() {
+							o.removeLockOptional(op, lock)
+						}
 					}
 				}
 			}
@@ -749,19 +753,22 @@ func (o *Optimist) handleOperationPut(ctx context.Context, opCh <-chan optimism.
 				o.mu.Unlock()
 				continue
 			}
-
-			// the lock has done, remove the lock.
-			o.logger.Info("the lock for the shard DDL lock operation has been resolved", zap.Stringer("operation", op))
-			deleted, err := o.removeLock(lock)
-			if err != nil {
-				o.logger.Error("fail to delete the shard DDL infos and lock operations", zap.String("lock", lock.ID), log.ShortError(err))
-				metrics.ReportDDLError(op.Task, metrics.OpErrRemoveLock)
-			}
-			if deleted {
-				o.logger.Info("the shard DDL infos and lock operations have been cleared", zap.Stringer("operation", op))
-			}
+			o.removeLockOptional(op, lock)
 			o.mu.Unlock()
 		}
+	}
+}
+
+func (o *Optimist) removeLockOptional(op optimism.Operation, lock *optimism.Lock) {
+	// the lock has done, remove the lock.
+	o.logger.Info("the lock for the shard DDL lock operation has been resolved", zap.Stringer("operation", op))
+	deleted, err := o.removeLock(lock)
+	if err != nil {
+		o.logger.Error("fail to delete the shard DDL infos and lock operations", zap.String("lock", lock.ID), log.ShortError(err))
+		metrics.ReportDDLError(op.Task, metrics.OpErrRemoveLock)
+	}
+	if deleted {
+		o.logger.Info("the shard DDL infos and lock operations have been cleared", zap.Stringer("operation", op))
 	}
 }
 

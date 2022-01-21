@@ -126,7 +126,7 @@ function DM_040_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `col1` CHARACTER SET UTF8MB4 COLLATE UTF8MB4_BIN' 1 \
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `col1` VARCHAR(10) CHARACTER SET UTF8MB4' 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
@@ -175,7 +175,7 @@ function DM_043_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` INT AS (id+2)' \
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` INT GENERATED ALWAYS AS (id+2)' \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }

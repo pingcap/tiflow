@@ -236,7 +236,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 		// special case: check whether DDLs making the schema become part of larger and another part of smaller.
 		if _, err = prevTable.Compare(nextTable); err != nil {
 			return emptyDDLs, emptyCols, terror.ErrShardDDLOptimismTrySyncFail.Delegate(
-				err, l.ID, fmt.Sprintf("there will be conflicts if DDLs %s are applied to the downstream. old table info: %s, new table info: %s", ddls, prevTable, nextTable))
+				err, l.ID, fmt.Sprintf("there will be conflicts if DDLs are applied to the downstream. old table info: %s, new table info: %s", prevTable, nextTable))
 		}
 
 		// special case: if the DDL does not affect the schema at all, assume it is
