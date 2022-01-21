@@ -219,7 +219,7 @@ type Syncer struct {
 		isQueryEvent  bool
 	}
 
-	handleJobFunc func(*job) error
+	handleJobFunc func(*job) (bool, error)
 	flushSeq      int64
 
 	// `lower_case_table_names` setting of upstream db
@@ -991,7 +991,7 @@ func (s *Syncer) checkShouldFlush() error {
 
 // TODO: move to syncer/job.go
 // handleJob will do many actions based on job type.
-func (s *Syncer) handleJob(job *job) (err error) {
+func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 	skipCheckFlush := false
 	defer func() {
 		if !skipCheckFlush && err == nil {
@@ -1012,7 +1012,7 @@ func (s *Syncer) handleJob(job *job) (err error) {
 
 	if waitXIDStatus(s.waitXIDJob.Load()) == waitComplete && job.tp != flush {
 		s.tctx.L().Info("All jobs is completed before syncer close, the coming job will be reject", zap.Any("job", job))
-		return nil
+		return
 	}
 
 	switch job.tp {
@@ -1020,15 +1020,16 @@ func (s *Syncer) handleJob(job *job) (err error) {
 		s.waitXIDJob.CAS(int64(waiting), int64(waitComplete))
 		s.saveGlobalPoint(job.location)
 		s.isTransactionEnd = true
-		return nil
+		return
 	case skip:
 		s.updateReplicationJobTS(job, skipJobIdx)
-		return nil
+		return
 	}
 
 	// 2. send the job to queue
 
 	s.addJob(job)
+	added2Queue = true
 
 	// 3. after job is sent to queue
 
@@ -1038,14 +1039,14 @@ func (s *Syncer) handleJob(job *job) (err error) {
 		// caller
 		s.isTransactionEnd = false
 		skipCheckFlush = true
-		return nil
+		return
 	case ddl:
 		s.jobWg.Wait()
 
 		// skip rest logic when downstream error
 		if s.execError.Load() != nil {
 			// nolint:nilerr
-			return nil
+			return
 		}
 
 		s.updateReplicationJobTS(job, ddlJobIdx)
@@ -1058,7 +1059,7 @@ func (s *Syncer) handleJob(job *job) (err error) {
 		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
 			err = handleFlushCheckpointStage(3, val.(int), "before save checkpoint")
 			if err != nil {
-				failpoint.Return(err)
+				failpoint.Return()
 			}
 		})
 		// save global checkpoint for DDL
@@ -1078,19 +1079,22 @@ func (s *Syncer) handleJob(job *job) (err error) {
 		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
 			err = handleFlushCheckpointStage(4, val.(int), "before flush checkpoint")
 			if err != nil {
-				failpoint.Return(err)
+				failpoint.Return()
 			}
 		})
 		skipCheckFlush = true
-		return s.flushCheckPoints()
+		err = s.flushCheckPoints()
+		return
 	case flush:
 		s.jobWg.Wait()
 		skipCheckFlush = true
-		return s.flushCheckPoints()
+		err = s.flushCheckPoints()
+		return
 	case asyncFlush:
 		skipCheckFlush = true
 	}
-	return err
+	// nolint:nakedret
+	return
 }
 
 func (s *Syncer) saveGlobalPoint(globalLocation binlog.Location) {
@@ -2053,7 +2057,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			job := newXIDJob(currentLocation, startLocation, currentLocation)
-			err2 = s.handleJobFunc(job)
+			_, err2 = s.handleJobFunc(job)
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
@@ -2325,9 +2329,9 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	startTime := time.Now()
 	for i := range dmls {
 		job := newDMLJob(jobType, sourceTable, targetTable, dmls[i], &ec)
-		err = s.handleJobFunc(job)
-		if err != nil {
-			return err
+		added2Queue, err2 := s.handleJobFunc(job)
+		if err2 != nil || !added2Queue {
+			return err2
 		}
 	}
 	metrics.DispatchBinlogDurationHistogram.WithLabelValues(jobType.String(), s.cfg.Name, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
@@ -2692,7 +2696,7 @@ func (s *Syncer) handleQueryEventNoSharding(qec *queryEventContext) error {
 	})
 
 	job := newDDLJob(qec)
-	err := s.handleJobFunc(job)
+	_, err := s.handleJobFunc(job)
 	if err != nil {
 		return err
 	}
@@ -2914,7 +2918,7 @@ func (s *Syncer) handleQueryEventPessimistic(qec *queryEventContext) error {
 	})
 
 	job := newDDLJob(qec)
-	err = s.handleJobFunc(job)
+	_, err = s.handleJobFunc(job)
 	if err != nil {
 		return err
 	}
@@ -3299,7 +3303,8 @@ func (s *Syncer) closeDBs() {
 // make newJob's sql argument empty to distinguish normal sql and skips sql.
 func (s *Syncer) recordSkipSQLsLocation(ec *eventContext) error {
 	job := newSkipJob(ec)
-	return s.handleJobFunc(job)
+	_, err := s.handleJobFunc(job)
+	return err
 }
 
 // flushJobs add a flush job and wait for all jobs finished.
@@ -3308,7 +3313,8 @@ func (s *Syncer) flushJobs() error {
 	flushJobSeq := s.getFlushSeq()
 	s.tctx.L().Info("flush all jobs", zap.Stringer("global checkpoint", s.checkpoint), zap.Int64("flush job seq", flushJobSeq))
 	job := newFlushJob(s.cfg.WorkerCount, flushJobSeq)
-	return s.handleJobFunc(job)
+	_, err := s.handleJobFunc(job)
+	return err
 }
 
 func (s *Syncer) reSyncBinlog(tctx tcontext.Context, location binlog.Location) error {
