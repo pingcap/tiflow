@@ -75,7 +75,7 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		fatalFunc:    syncer.fatalFunc,
 		lagFunc:      syncer.updateReplicationJobTS,
 		addCountFunc: syncer.addCount,
-		runTCtx:      syncer.runTCtx,
+		runTCtx:      syncer.runSyncTCtx,
 		toDBConns:    syncer.toDBConns,
 		inCh:         inCh,
 		flushCh:      make(chan *job),

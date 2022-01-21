@@ -126,12 +126,14 @@ type Syncer struct {
 	tctx *tcontext.Context // this ctx only used for logger.
 
 	// this ctx is a background ctx and was initialized in s.Run, it is used for some background tasks in s.Run
-	// when this ctx cancelled, syncer will shuts down all background running jobs and not wait transaction end
+	// when this ctx cancelled, syncer will shutdown all background running jobs and not wait transaction end
 	runCtx context.Context
 	// this is used for some background tasks s.Run that need logger it share same lifecycle with runCtx.
-	runTCtx   *tcontext.Context // this ctx only used for logger.
-	runCancel context.CancelFunc
-	runWg     sync.WaitGroup // control all goroutines in S.Run
+	runTCtx       *tcontext.Context
+	runCancel     context.CancelFunc
+	runSyncTCtx   *tcontext.Context // this ctx only used for syncDML and syncDDL and only cancelled when ungraceful stop
+	runSyncCancel context.CancelFunc
+	runWg         sync.WaitGroup // control all goroutines started in S.Run
 
 	cfg     *config.SubTaskConfig
 	syncCfg replication.BinlogSyncerConfig
@@ -1284,9 +1286,9 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		if !ignore {
 			var affected int
-			affected, err = db.ExecuteSQLWithIgnore(s.runTCtx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
+			affected, err = db.ExecuteSQLWithIgnore(s.runSyncTCtx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			if err != nil {
-				err = s.handleSpecialDDLError(s.runTCtx, err, ddlJob.ddls, affected, db)
+				err = s.handleSpecialDDLError(s.runSyncTCtx, err, ddlJob.ddls, affected, db)
 				err = terror.WithScope(err, terror.ScopeDownstream)
 			}
 		}
@@ -1435,7 +1437,6 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		}
 	case <-s.runCtx.Done(): // when no graceful stop, run ctx will canceled first.
 		s.tctx.L().Info("received ungraceful exit ctx, exit now")
-		s.runCancel()
 	}
 }
 
@@ -1486,6 +1487,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	s.Lock()
 	s.runCtx, s.runCancel = context.WithCancel(context.Background())
 	s.runTCtx = tcontext.NewContext(s.runCtx, s.tctx.L())
+	syncCtx, syncCancel := context.WithCancel(context.Background())
+	s.runSyncTCtx, s.runSyncCancel = tcontext.NewContext(syncCtx, s.tctx.L()), syncCancel
 	s.checkpointFlushWorker = &checkpointFlushWorker{
 		input:        make(chan *checkpointFlushTask, 16),
 		cp:           s.checkpoint,
@@ -1495,12 +1498,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 	s.Unlock()
 	defer func() {
-		s.tctx.L().Info("in .... syncer run exit...........................................")
 		s.runCancel()
 		s.closeJobChans()
 		s.checkpointFlushWorker.Close()
-		s.runWg.Wait() // wait for all syncer.Run goroutine exit
-		s.tctx.L().Info("syncer run exit...........................................")
+		s.runWg.Wait()
 	}()
 
 	// we should start this goroutine as soon as possible, because it's the only goroutine that cancel syncer.Run
@@ -3382,6 +3383,7 @@ func (s *Syncer) Close() {
 func (s *Syncer) Kill() {
 	s.tctx.L().Warn("kill syncer without graceful")
 	s.runCancel()
+	s.runSyncCancel()
 	s.Close()
 }
 
