@@ -241,8 +241,9 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 	})
 
 	failpoint.Inject("ErrorOnLastDML", func(_ failpoint.Value) {
-		if len(dmls) > len(jobs) {
-			affect, err = len(dmls), terror.ErrDBExecuteFailed.Delegate(errors.New("ErrorOnLastDML"), "mock")
+		if len(queries) > len(jobs) {
+			w.logger.Error("error on last queries", zap.Int("queries", len(queries)), zap.Int("jobs", len(jobs)))
+			affect, err = len(queries)-1, terror.ErrDBExecuteFailed.Delegate(errors.New("ErrorOnLastDML"), "mock")
 		}
 	})
 }
