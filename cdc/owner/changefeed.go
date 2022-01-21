@@ -132,13 +132,18 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 			Message: err.Error(),
 		})
 		c.releaseResources(ctx)
+	} else {
+		// c.initialize(ctx)
+		costTime := time.Since(startTime)
+		if costTime > changefeedLogsWarnDuration {
+			log.Warn("changefeed tick took too long", zap.String("changefeed", c.id), zap.Duration("duration", costTime))
+		}
+		// TODO: fix TestStopChangefeed nil poniter bug
+		if c.metricChangefeedTickDuration == nil {
+			c.metricChangefeedTickDuration = changefeedTickDuration.WithLabelValues(c.id)
+		}
+		c.metricChangefeedTickDuration.Observe(costTime.Seconds())
 	}
-
-	costTime := time.Since(startTime)
-	if costTime > changefeedLogsWarnDuration {
-		log.Warn("changefeed tick took too long", zap.String("changefeed", c.id), zap.Duration("duration", costTime))
-	}
-	c.metricChangefeedTickDuration.Observe(costTime.Seconds())
 }
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
