@@ -121,11 +121,13 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 
 		start := time.Now()
 		if err := s.sinkInitHandler(ctx, s, id, info); err != nil {
-			log.Warn("ddl sink initialize failed", zap.Duration("duration", time.Since(start)))
+			log.Warn("ddl sink initialize failed",
+				zap.Duration("duration", time.Since(start)))
 			ctx.Throw(err)
 			return
 		}
-		log.Info("ddl sink initialized, start processing...", zap.Duration("duration", time.Since(start)))
+		log.Info("ddl sink initialized, start processing...",
+			zap.Duration("duration", time.Since(start)))
 
 		// TODO make the tick duration configurable
 		ticker := time.NewTicker(time.Second)
