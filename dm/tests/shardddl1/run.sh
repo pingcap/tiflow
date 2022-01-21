@@ -784,9 +784,10 @@ function DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA() {
 }
 
 function DM_DML_EXECUTE_ERROR_CASE() {
-	run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b,c) values(1,1,1)"
-	run_sql_source1 "update ${shardddl1}.${tb1} set a=a+1, b=b+1, c=c+1 where a=1"
+	run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values(1,1)"
+	run_sql_source1 "update ${shardddl1}.${tb1} set b=b+1 where a=1"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	read v1
 }
 
 function DM_DML_EXECUTE_ERROR() {
@@ -801,14 +802,13 @@ function DM_DML_EXECUTE_ERROR() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
 	run_case DML_EXECUTE_ERROR "single-source-no-sharding" \
-		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique, c int);\"" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"" \
 		"clean_table" ""
 }
 
 function run() {
 	init_cluster
 	init_database
-
 
 	DM_DML_EXECUTE_ERROR
 	start=1
