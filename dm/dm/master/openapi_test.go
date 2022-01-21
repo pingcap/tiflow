@@ -847,7 +847,6 @@ func mockRelayQueryStatus(
 
 func mockTaskQueryStatus(
 	mockWorkerClient *pbmock.MockWorkerClient, taskName, sourceName, workerName string, needError bool) {
-
 	var queryResp *pb.QueryStatusResponse
 	if needError {
 		queryResp = &pb.QueryStatusResponse{
