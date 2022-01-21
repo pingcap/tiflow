@@ -205,8 +205,12 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 			if len(queries) == len(jobs) {
 				w.fatalFunc(jobs[affect], err)
 			} else {
-				w.logger.Warn("length of queries not equals length of jobs, cannot determine which job failed, use first one instead", zap.Int("queries", len(queries)), zap.Int("jobs", len(jobs)))
-				w.fatalFunc(jobs[0], err)
+				w.logger.Warn("length of queries not equals length of jobs, cannot determine which job failed", zap.Int("queries", len(queries)), zap.Int("jobs", len(jobs)))
+				newJob := job{
+					startLocation:   jobs[0].startLocation,
+					currentLocation: jobs[len(jobs)-1].currentLocation,
+				}
+				w.fatalFunc(&newJob, err)
 			}
 		}
 	}()
