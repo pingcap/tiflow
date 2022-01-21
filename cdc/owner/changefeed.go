@@ -99,8 +99,6 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		feedStateManager: newFeedStateManager(),
 		gcManager:        gcManager,
 
-		sinkCloseCh: make(chan struct{}, 1),
-
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
 
@@ -360,7 +358,8 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	// for a period of time. This could happen due to bad network connection
 	// between the Kafka producer and the brokers. We close the sink in an
 	// asynchronous way, and the close of the sink, indicate that the changefeed is fully closed.
-	go func(id model.ChangeFeedID) {
+	c.sinkCloseCh = make(chan struct{}, 1)
+	go func() {
 		// We don't need to wait sink Close, pass a canceled context is ok
 		canceledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -368,17 +367,17 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		err := c.sink.close(canceledCtx)
 		if err != nil {
 			log.Warn("close ddl sink failed in Owner",
-				zap.String("changefeed", id),
+				zap.String("changefeed", c.state.ID),
 				zap.Error(err),
 				zap.Duration("duration", time.Since(start)))
 		} else {
 			log.Info("close ddl sink",
-				zap.String("changefeed", id),
+				zap.String("changefeed", c.state.ID),
 				zap.Duration("duration", time.Since(start)))
 		}
 
 		close(c.sinkCloseCh)
-	}(c.state.ID)
+	}()
 
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
