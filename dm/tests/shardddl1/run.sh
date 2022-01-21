@@ -783,6 +783,28 @@ function DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA() {
 		"clean_table" ""
 }
 
+function DM_DML_EXECUTE_ERROR_CASE() {
+	run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b,c) values(1,1,1)"
+	run_sql_source1 "update ${shardddl1}.${tb1} set a=a+1, b=b+1, c=c+1 where a=1"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+}
+
+function DM_DML_EXECUTE_ERROR() {
+	# mock downstream has a high latency and upstream has a high workload
+	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ErrorOnLastDML'
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	run_case COMPACT "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique, c int);\"" \
+		"clean_table" ""
+}
+
 function run() {
 	init_cluster
 	init_database
@@ -799,6 +821,7 @@ function run() {
 	DM_RestartMaster
 	DM_ADD_DROP_COLUMNS
 	DM_COLUMN_INDEX
+	DM_DML_EXECUTE_ERROR
 	start=1
 	end=5
 	for i in $(seq -f "%03g" ${start} ${end}); do
