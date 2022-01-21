@@ -1506,7 +1506,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}()
 
 	// some initialization that can't be put in Syncer.Init
-	fresh, err := s.IsFreshTask(ctx)
+	fresh, err := s.IsFreshTask(s.runCtx)
 	if err != nil {
 		return err
 	} else if fresh {
@@ -1543,7 +1543,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		s.checkpointFlushWorker.Run(s.runTCtx)
+		s.checkpointFlushWorker.Run(s.tctx)
 	}()
 
 	if flushCheckpoint {
@@ -2085,8 +2085,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		}
 		if waitXIDStatus(s.waitXIDJob.Load()) == waitComplete {
-			// already wait until XID event, we can stop sync now
-			s.runCancel()
+			// already wait until XID event, we can stop sync now, s.runcancel will be called in defer func
 			return nil
 		}
 	}
@@ -3362,12 +3361,6 @@ func (s *Syncer) Close() {
 	if s.isClosed() {
 		return
 	}
-
-	// wait for s.Run() to finish
-	if s.rundone != nil {
-		<-s.rundone
-	}
-
 	s.stopSync()
 	s.closeDBs()
 	s.checkpoint.Close()
@@ -3394,6 +3387,10 @@ func (s *Syncer) Kill() {
 // stopSync stops syncing and rollback checkpoint now it used by Close,kILL and Pause
 // maybe we can refine the workflow more clear.
 func (s *Syncer) stopSync() {
+	// wait for s.Run() to finish
+	if s.rundone != nil {
+		<-s.rundone
+	}
 	s.closeJobChans()
 	s.wg.Wait() // wait job workers to return
 
