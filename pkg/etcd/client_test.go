@@ -278,4 +278,3 @@ func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
 	// while WatchCh was reset
 	c.Assert(*watcher.rev, check.Equals, revision)
 }
-
