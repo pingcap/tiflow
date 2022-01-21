@@ -300,7 +300,7 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 					}
 					rev = rev1
 					if relaySource == nil {
-						if w := s.getWorker(true); w != nil && w.startedRelayBySourceCfg {
+						if w := s.getSourceWorker(true); w != nil && w.startedRelayBySourceCfg {
 							break
 						}
 						log.L().Info("didn't found relay config after etcd retryable error. Will stop relay now")
@@ -314,7 +314,7 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 							s.Lock()
 							defer s.Unlock()
 
-							if w := s.getWorker(false); w != nil && w.cfg.SourceID == relaySource.SourceID {
+							if w := s.getSourceWorker(false); w != nil && w.cfg.SourceID == relaySource.SourceID {
 								// we may face both relay config and subtask bound changed in a compaction error, so here
 								// we check if observeSourceBound has started a worker
 								// TODO: add a test for this situation
@@ -325,7 +325,7 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 								}
 								return nil
 							}
-							err = s.stopWorker("", false, true)
+							err = s.stopSourceWorker("", false, true)
 							if err != nil {
 								log.L().Error("fail to stop worker", zap.Error(err))
 								return err // return if failed to stop the worker.
@@ -403,7 +403,7 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 							s.Lock()
 							defer s.Unlock()
 
-							if w := s.getWorker(false); w != nil && w.cfg.SourceID == bound.Source {
+							if w := s.getSourceWorker(false); w != nil && w.cfg.SourceID == bound.Source {
 								// we may face both relay config and subtask bound changed in a compaction error, so here
 								// we check if observeRelayConfig has started a worker
 								// TODO: add a test for this situation
@@ -414,7 +414,7 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 								}
 								return nil
 							}
-							err = s.stopWorker("", false, true)
+							err = s.stopSourceWorker("", false, true)
 							if err != nil {
 								log.L().Error("fail to stop worker", zap.Error(err))
 								return err // return if failed to stop the worker.
@@ -447,8 +447,8 @@ func (s *Server) doClose() {
 	if s.closed.Load() {
 		return
 	}
-	// stop worker and wait for return
-	if w := s.getWorker(false); w != nil {
+	// stop worker and wait for return(we already lock the whole Sever, so no need use lock to get source worker)
+	if w := s.getSourceWorker(false); w != nil {
 		w.Stop(true)
 	}
 	s.cancel()
@@ -464,7 +464,7 @@ func (s *Server) Close() {
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.
-func (s *Server) getWorker(needLock bool) *SourceWorker {
+func (s *Server) getSourceWorker(needLock bool) *SourceWorker {
 	if needLock {
 		s.Lock()
 		defer s.Unlock()
@@ -497,7 +497,7 @@ func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 		defer s.Unlock()
 	}
 	// now setSourceStatus will be concurrently called. skip setting a source status if worker has been closed
-	if s.getWorker(false) == nil && source != "" {
+	if s.getSourceWorker(false) == nil && source != "" {
 		return
 	}
 	s.sourceStatus = pb.SourceStatus{
@@ -515,23 +515,23 @@ func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 
 // if sourceID is set to "", worker will be closed directly
 // if sourceID is not "", we will check sourceID with w.cfg.SourceID.
-func (s *Server) stopWorker(sourceID string, needLock, graceful bool) error {
+func (s *Server) stopSourceWorker(sourceID string, needLock, graceful bool) error {
 	if needLock {
 		s.Lock()
 		defer s.Unlock()
 	}
-	w := s.getWorker(false)
-	if w == nil {
+	sw := s.getSourceWorker(false)
+	if sw == nil {
 		log.L().Warn("worker has not been started, no need to stop", zap.String("source", sourceID))
 		return nil // no need to stop because not started yet
 	}
-	if sourceID != "" && w.cfg.SourceID != sourceID {
+	if sourceID != "" && sw.cfg.SourceID != sourceID {
 		return terror.ErrWorkerSourceNotMatch
 	}
 	s.UpdateKeepAliveTTL(s.cfg.KeepAliveTTL)
 	s.setWorker(nil, false)
 	s.setSourceStatus("", nil, false)
-	w.Stop(graceful)
+	sw.Stop(graceful)
 	return nil
 }
 
@@ -659,7 +659,7 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 func (s *Server) disableHandleSubtasks(source string) error {
 	s.Lock()
 	defer s.Unlock()
-	w := s.getWorker(false)
+	w := s.getSourceWorker(false)
 	if w == nil {
 		log.L().Warn("worker has already stopped before DisableHandleSubtasks", zap.String("source", source))
 		return nil
@@ -676,7 +676,7 @@ func (s *Server) disableHandleSubtasks(source string) error {
 	var err error
 	if !w.relayEnabled.Load() {
 		log.L().Info("relay is not enabled after disabling subtask, so stop worker")
-		err = s.stopWorker(source, false, true)
+		err = s.stopSourceWorker(source, false, true)
 	}
 	return err
 }
@@ -721,7 +721,7 @@ func (s *Server) enableRelay(sourceCfg *config.SourceConfig, needLock bool) erro
 func (s *Server) disableRelay(source string) error {
 	s.Lock()
 	defer s.Unlock()
-	w := s.getWorker(false)
+	w := s.getSourceWorker(false)
 	if w == nil {
 		log.L().Warn("worker has already stopped before DisableRelay", zap.Any("relaySource", source))
 		return nil
@@ -731,7 +731,7 @@ func (s *Server) disableRelay(source string) error {
 	var err error
 	if !w.subTaskEnabled.Load() {
 		log.L().Info("subtask is not enabled after disabling relay, so stop worker")
-		err = s.stopWorker(source, false, true)
+		err = s.stopSourceWorker(source, false, true)
 	}
 	return err
 }
@@ -747,7 +747,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 		SourceStatus: &sourceStatus,
 	}
 
-	w := s.getWorker(true)
+	w := s.getSourceWorker(true)
 	if w == nil {
 		log.L().Warn("fail to call QueryStatus, because no mysql source is being handled in the worker")
 		resp.Result = false
@@ -769,7 +769,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 // PurgeRelay implements WorkerServer.PurgeRelay.
 func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb.CommonWorkerResponse, error) {
 	log.L().Info("", zap.String("request", "PurgeRelay"), zap.Stringer("payload", req))
-	w := s.getWorker(true)
+	w := s.getSourceWorker(true)
 	if w == nil {
 		log.L().Warn("fail to call StartSubTask, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
@@ -786,7 +786,7 @@ func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb
 func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (*pb.CommonWorkerResponse, error) {
 	log.L().Info("", zap.String("request", "OperateSchema"), zap.Stringer("payload", req))
 
-	w := s.getWorker(true)
+	w := s.getSourceWorker(true)
 	if w == nil {
 		log.L().Warn("fail to call OperateSchema, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
@@ -813,7 +813,7 @@ func (s *Server) getOrStartWorker(cfg *config.SourceConfig, needLock bool) (*Sou
 		defer s.Unlock()
 	}
 
-	if w := s.getWorker(false); w != nil {
+	if w := s.getSourceWorker(false); w != nil {
 		if w.cfg.SourceID == cfg.SourceID {
 			log.L().Info("mysql source is being handled", zap.String("sourceID", s.worker.cfg.SourceID))
 			return w, nil
@@ -904,7 +904,7 @@ func getMinLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) (
 func (s *Server) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (*pb.CommonWorkerResponse, error) {
 	log.L().Info("", zap.String("request", "HandleError"), zap.Stringer("payload", req))
 
-	w := s.getWorker(true)
+	w := s.getSourceWorker(true)
 	if w == nil {
 		log.L().Warn("fail to call HandleError, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil

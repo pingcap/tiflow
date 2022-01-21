@@ -131,7 +131,7 @@ type Syncer struct {
 	// this is used for some background tasks s.Run that need logger it share same lifecycle with runCtx.
 	runTCtx   *tcontext.Context // this ctx only used for logger.
 	runCancel context.CancelFunc
-	rundone   chan struct{} // this will be closed when syncer.Run exit
+	runWg     sync.WaitGroup // control all goroutines in S.Run
 
 	cfg     *config.SubTaskConfig
 	syncCfg replication.BinlogSyncerConfig
@@ -144,7 +144,6 @@ type Syncer struct {
 	binlogType         BinlogType
 	streamerController *StreamerController
 
-	wg    sync.WaitGroup // counts goroutines
 	jobWg sync.WaitGroup // counts ddl/flush/asyncFlush job in-flight in s.dmlJobCh and s.ddlJobCh
 
 	schemaTracker *schema.Tracker
@@ -285,11 +284,9 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 }
 
 func (s *Syncer) newJobChans() {
-	s.closeJobChans()
 	chanSize := calculateChanSize(s.cfg.QueueSize, s.cfg.WorkerCount, s.cfg.Compact)
 	s.dmlJobCh = make(chan *job, chanSize)
 	s.ddlJobCh = make(chan *job, s.cfg.QueueSize)
-	s.checkpointFlushWorker.input = make(chan *checkpointFlushTask, 16)
 	s.jobsClosed.Store(false)
 }
 
@@ -301,7 +298,6 @@ func (s *Syncer) closeJobChans() {
 	}
 	close(s.dmlJobCh)
 	close(s.ddlJobCh)
-	s.checkpointFlushWorker.Close()
 	s.jobsClosed.Store(true)
 }
 
@@ -435,13 +431,6 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 				return err
 			}
 		}
-	}
-	s.checkpointFlushWorker = &checkpointFlushWorker{
-		input:        nil, // will be created in s.reset()
-		cp:           s.checkpoint,
-		execError:    &s.execError,
-		afterFlushFn: s.afterFlushCheckpoint,
-		addCountFunc: s.addCount,
 	}
 
 	// when Init syncer, set active relay log info
@@ -679,8 +668,6 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		// cancel goroutines created in s.Run
 		cancel()
 	}
-	s.closeJobChans()   // Run returned, all jobs sent, we can close s.jobs
-	s.wg.Wait()         // wait for sync goroutine to return
 	close(runFatalChan) // Run returned, all potential fatal sent to s.runFatalChan
 	wg.Wait()           // wait for receive all fatal from s.runFatalChan
 
@@ -1251,8 +1238,8 @@ func (s *Syncer) logAndClearFilteredStatistics() {
 }
 
 // DDL synced one by one, so we only need to process one DDL at a time.
-func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.DBConn, ddlJobChan chan *job) {
-	defer s.wg.Done()
+func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan *job) {
+	defer s.runWg.Done()
 
 	var err error
 	for {
@@ -1276,12 +1263,12 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.
 			shardPessimistOp = s.pessimist.PendingOperation()
 			if shardPessimistOp != nil && !shardPessimistOp.Exec {
 				ignore = true
-				tctx.L().Info("ignore shard DDLs in pessimistic shard mode", zap.Strings("ddls", ddlJob.ddls))
+				s.tctx.L().Info("ignore shard DDLs in pessimistic shard mode", zap.Strings("ddls", ddlJob.ddls))
 			}
 		case config.ShardOptimistic:
 			if len(ddlJob.ddls) == 0 {
 				ignore = true
-				tctx.L().Info("ignore shard DDLs in optimistic mode", zap.Stringer("info", s.optimist.PendingInfo()))
+				s.tctx.L().Info("ignore shard DDLs in optimistic mode", zap.Stringer("info", s.optimist.PendingInfo()))
 			}
 		}
 
@@ -1293,9 +1280,9 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.
 
 		if !ignore {
 			var affected int
-			affected, err = db.ExecuteSQLWithIgnore(tctx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
+			affected, err = db.ExecuteSQLWithIgnore(s.runTCtx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			if err != nil {
-				err = s.handleSpecialDDLError(tctx, err, ddlJob.ddls, affected, db)
+				err = s.handleSpecialDDLError(s.runTCtx, err, ddlJob.ddls, affected, db)
 				err = terror.WithScope(err, terror.ScopeDownstream)
 			}
 		}
@@ -1329,7 +1316,7 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.
 			switch {
 			case shardInfo == nil:
 				// no need to do the shard DDL handle for `CREATE DATABASE/TABLE` now.
-				tctx.L().Warn("skip shard DDL handle in pessimistic shard mode", zap.Strings("ddl", ddlJob.ddls))
+				s.tctx.L().Warn("skip shard DDL handle in pessimistic shard mode", zap.Strings("ddl", ddlJob.ddls))
 			case shardPessimistOp == nil:
 				err = terror.ErrWorkerDDLLockOpNotFound.Generate(shardInfo)
 			default:
@@ -1342,7 +1329,7 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.
 				// no need to do the shard DDL handle for `DROP DATABASE/TABLE` now.
 				// but for `CREATE DATABASE` and `ALTER DATABASE` we execute it to the downstream directly without `shardInfo`.
 				if ignore { // actually ignored.
-					tctx.L().Warn("skip shard DDL handle in optimistic shard mode", zap.Strings("ddl", ddlJob.ddls))
+					s.tctx.L().Warn("skip shard DDL handle in optimistic shard mode", zap.Strings("ddl", ddlJob.ddls))
 				}
 			case s.optimist.PendingOperation() == nil:
 				err = terror.ErrWorkerDDLLockOpNotFound.Generate(shardInfo)
@@ -1401,7 +1388,7 @@ func (s *Syncer) fatalFunc(job *job, err error) {
 
 // DML synced with causality.
 func (s *Syncer) syncDML() {
-	defer s.wg.Done()
+	defer s.runWg.Done()
 
 	dmlJobCh := s.dmlJobCh
 	if s.cfg.Compact {
@@ -1415,7 +1402,8 @@ func (s *Syncer) syncDML() {
 	}
 }
 
-func (s *Syncer) waitTransactionEndBeforeExit(ctx context.Context) {
+func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
+	defer s.runWg.Done()
 	failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
 		s.tctx.L().Info("incr maxPauseOrStopWaitTime time ")
 		maxPauseOrStopWaitTime = time.Minute * 10
@@ -1436,7 +1424,7 @@ func (s *Syncer) waitTransactionEndBeforeExit(ctx context.Context) {
 		s.waitTransactionLock.Unlock()
 		select {
 		case <-s.runCtx.Done():
-			s.tctx.L().Info("run ctx done by waitComplete")
+			s.tctx.L().Info("syncer run exit so runCtx done")
 		case <-time.After(maxPauseOrStopWaitTime):
 			s.tctx.L().Info("wait transaction end timeout, exit now")
 			s.runCancel()
@@ -1448,7 +1436,7 @@ func (s *Syncer) waitTransactionEndBeforeExit(ctx context.Context) {
 }
 
 func (s *Syncer) updateTSOffsetCronJob(ctx context.Context) {
-	defer s.wg.Done()
+	defer s.runWg.Done()
 	// temporarily hard code there. if this metrics works well add this to config file.
 	ticker := time.NewTicker(time.Minute * 10)
 	defer ticker.Stop()
@@ -1465,7 +1453,7 @@ func (s *Syncer) updateTSOffsetCronJob(ctx context.Context) {
 }
 
 func (s *Syncer) updateLagCronJob(ctx context.Context) {
-	defer s.wg.Done()
+	defer s.runWg.Done()
 	// temporarily hard code there. if this metrics works well add this to config file.
 	ticker := time.NewTicker(time.Millisecond * 100)
 	defer ticker.Stop()
@@ -1491,19 +1479,36 @@ func (s *Syncer) updateTSOffset(ctx context.Context) error {
 
 // Run starts running for sync, we should guarantee it can rerun when paused.
 func (s *Syncer) Run(ctx context.Context) (err error) {
-	runCtx, runCancel := context.WithCancel(context.Background())
-	runTCtx := tcontext.NewContext(runCtx, s.tctx.L())
 	s.Lock()
-	s.runCtx = runCtx
-	s.runTCtx = runTCtx
-	s.runCancel = runCancel
-	s.rundone = make(chan struct{})
+	s.runCtx, s.runCancel = context.WithCancel(context.Background())
+	s.runTCtx = tcontext.NewContext(s.runCtx, s.tctx.L())
+	s.checkpointFlushWorker = &checkpointFlushWorker{
+		input:        make(chan *checkpointFlushTask, 16),
+		cp:           s.checkpoint,
+		execError:    &s.execError,
+		afterFlushFn: s.afterFlushCheckpoint,
+		addCountFunc: s.addCount,
+	}
 	s.Unlock()
 	defer func() {
-		// close rundone to notify other goroutine that syncer.Run is exited
-		close(s.rundone)
-		runCancel()
+		s.tctx.L().Info("in .... syncer run exit...........................................")
+		s.runCancel()
+		s.closeJobChans()
+		s.checkpointFlushWorker.Close()
+		s.runWg.Wait() // wait for all syncer.Run goroutine exit
+		s.tctx.L().Info("syncer run exit...........................................")
 	}()
+
+	// we should start this goroutine as soon as possible, because it's the only goroutine that cancel syncer.Run
+	s.runWg.Add(1)
+	go func() {
+		s.waitBeforeRunExit(ctx)
+	}()
+
+	// before sync run, we get the ts offset from upstream first
+	if utErr := s.updateTSOffset(ctx); utErr != nil {
+		return utErr
+	}
 
 	// some initialization that can't be put in Syncer.Init
 	fresh, err := s.IsFreshTask(s.runCtx)
@@ -1516,8 +1521,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			return err
 		}
 	}
-	// we should start this goroutine as soon as possible, because it's the only goroutine that cancel syncer.Run
-	go s.waitTransactionEndBeforeExit(ctx)
 
 	var (
 		flushCheckpoint bool
@@ -1539,13 +1542,23 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	} else {
 		cleanDumpFile = false
 	}
+
+	s.runWg.Add(1)
+	// start syncDML worker first because if there is no dml worker checkpointFlushWorker will blocked forever
+	go s.syncDML()
+	s.runWg.Add(1)
 	// start flush checkpoints worker. this worker mast start before s.flushCheckPoints()
-	s.wg.Add(1)
 	go func() {
-		defer s.wg.Done()
+		defer s.runWg.Done()
+		// also need to use a ctx different s.runCtx, checkpointFlushWorker worker will closed in the first defer
 		s.checkpointFlushWorker.Run(s.tctx)
 	}()
-
+	s.runWg.Add(1)
+	go s.syncDDL(adminQueueName, s.ddlDBConn, s.ddlJobCh)
+	s.runWg.Add(1)
+	go s.updateLagCronJob(s.runCtx)
+	s.runWg.Add(1)
+	go s.updateTSOffsetCronJob(s.runCtx)
 	if flushCheckpoint {
 		if err = s.flushCheckPoints(); err != nil {
 			s.tctx.L().Warn("fail to flush checkpoints when starting task", zap.Error(err))
@@ -1570,11 +1583,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		utils.OsExit(1)
 	})
 
-	// before sync run, we get the ts offset from upstream first
-	if utErr := s.updateTSOffset(ctx); utErr != nil {
-		return utErr
-	}
-
 	// startLocation is the start location for current received event
 	// currentLocation is the end location for current received event (End_log_pos in `show binlog events` for mysql)
 	// lastLocation is the end location for last received (ROTATE / QUERY / XID) event
@@ -1597,20 +1605,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			return terror.Annotate(err, "fail to restart streamer controller")
 		}
 	}
-
-	// all pre check passed, we can start all background jobs, they all use s.runCancel to cancel
-	s.wg.Add(1)
-	go s.updateTSOffsetCronJob(s.runCtx)
-
-	s.wg.Add(1)
-	go s.syncDML()
-
-	s.wg.Add(1)
-	go s.syncDDL(s.runTCtx, adminQueueName, s.ddlDBConn, s.ddlJobCh)
-
-	s.wg.Add(1)
-	go s.updateLagCronJob(s.runCtx)
-
 	// syncing progress with sharding DDL group
 	// 1. use the global streamer to sync regular binlog events
 	// 2. sharding DDL synced for some sharding groups
@@ -1628,6 +1622,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		traceSource             = fmt.Sprintf("%s.syncer.%s", s.cfg.SourceID, s.cfg.Name)
 	)
 
+	// this is second defer func in syncer.Run so in this time checkpointFlushWorker are still running
 	defer func() {
 		if err1 := recover(); err1 != nil {
 			failpoint.Inject("ExitAfterSaveOnlineDDL", func() {
@@ -3361,7 +3356,7 @@ func (s *Syncer) Close() {
 	if s.isClosed() {
 		return
 	}
-	s.stopSync()
+	s.stopStreamAndRollbackCheckpoint()
 	s.closeDBs()
 	s.checkpoint.Close()
 	if err := s.schemaTracker.Close(); err != nil {
@@ -3384,21 +3379,13 @@ func (s *Syncer) Kill() {
 	s.Close()
 }
 
-// stopSync stops syncing and rollback checkpoint now it used by Close,kILL and Pause
-// maybe we can refine the workflow more clear.
-func (s *Syncer) stopSync() {
-	// wait for s.Run() to finish
-	if s.rundone != nil {
-		<-s.rundone
-	}
-	s.closeJobChans()
-	s.wg.Wait() // wait job workers to return
-
+// stopStreamAndRollbackCheckpoint stop stream and rollback checkpoint now it used by Close() and Pause().
+func (s *Syncer) stopStreamAndRollbackCheckpoint() {
 	// before re-write workflow for s.syncer, simply close it
 	// when resuming, re-create s.syncer
 
 	if s.streamerController != nil {
-		s.streamerController.Close(s.runTCtx)
+		s.streamerController.Close(s.tctx)
 	}
 
 	// try to rollback checkpoints, if they already flushed, no effect, this operation should call before close schemaTracker
@@ -3423,7 +3410,7 @@ func (s *Syncer) Pause() {
 		s.tctx.L().Warn("try to pause, but already closed")
 		return
 	}
-	s.stopSync()
+	s.stopStreamAndRollbackCheckpoint()
 }
 
 // Resume resumes the paused process.

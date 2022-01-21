@@ -741,10 +741,10 @@ func (s *testSyncerSuite) TestcheckpointID(c *C) {
 
 func (s *testSyncerSuite) TestRun(c *C) {
 	// 1. run syncer with column mapping
-	// 2. execute some sqls which will trigger casuality
+	// 2. execute some sqls which will trigger causality
 	// 3. check the generated jobs
 	// 4. update config, add route rules, and update syncer
-	// 5. execute somes sqls and then check jobs generated
+	// 5. execute some sqls and then check jobs generated
 
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)

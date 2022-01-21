@@ -197,11 +197,11 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 	c.Assert(err, IsNil)
 	subtaskCfg.Mode = "full"
 	subtaskCfg.Timezone = "UTC"
-	c.Assert(s.getWorker(true).StartSubTask(&subtaskCfg, pb.Stage_Running, true), IsNil)
+	c.Assert(s.getSourceWorker(true).StartSubTask(&subtaskCfg, pb.Stage_Running, true), IsNil)
 
 	// check task in paused state
 	c.Assert(utils.WaitSomething(100, 100*time.Millisecond, func() bool {
-		subtaskStatus, _, _ := s.getWorker(true).QueryStatus(context.Background(), taskName)
+		subtaskStatus, _, _ := s.getSourceWorker(true).QueryStatus(context.Background(), taskName)
 		for _, st := range subtaskStatus {
 			if st.Name == taskName && st.Stage == pb.Stage_Paused {
 				return true
@@ -212,7 +212,7 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 	//nolint:errcheck
 	failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError")
 
-	rtsc, ok := s.getWorker(true).taskStatusChecker.(*realTaskStatusChecker)
+	rtsc, ok := s.getSourceWorker(true).taskStatusChecker.(*realTaskStatusChecker)
 	c.Assert(ok, IsTrue)
 	defer func() {
 		// close multiple time
@@ -222,7 +222,7 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 
 	// check task will be auto resumed
 	c.Assert(utils.WaitSomething(10, 100*time.Millisecond, func() bool {
-		sts, _, _ := s.getWorker(true).QueryStatus(context.Background(), taskName)
+		sts, _, _ := s.getSourceWorker(true).QueryStatus(context.Background(), taskName)
 		for _, st := range sts {
 			if st.Name == taskName && st.Stage == pb.Stage_Running {
 				return true
