@@ -20,8 +20,8 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/retry"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
@@ -66,7 +66,7 @@ type Client struct {
 
 // Wrap warps a clientv3.Client that provides etcd APIs required by TiCDC.
 func Wrap(cli *clientv3.Client, metrics map[string]prometheus.Counter) *Client {
-	return &Client{cli: cli, metrics: metrics}
+	return &Client{cli: cli, metrics: metrics, clock: clock.New()}
 }
 
 // Unwrap returns a clientv3.Client
@@ -114,10 +114,10 @@ func (c *Client) Get(ctx context.Context, key string, opts ...clientv3.OpOption)
 
 // Delete delegates request to clientv3.KV.Delete
 func (c *Client) Delete(ctx context.Context, key string, opts ...clientv3.OpOption) (resp *clientv3.DeleteResponse, err error) {
-	if metric, ok := c.metrics[EtcdTxn]; ok {
+	if metric, ok := c.metrics[EtcdDel]; ok {
 		metric.Inc()
 	}
-	// We don't retry on delete operatoin. It's dangerous.
+	// We don't retry on delete operation. It's dangerous.
 	return c.cli.Delete(ctx, key, opts...)
 }
 
@@ -228,7 +228,6 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 				}
 			}
 
-			ticker.Reset(etcdRequestProgressDuration)
 		case <-ticker.C:
 			if err := c.RequestProgress(ctx); err != nil {
 				log.Warn("failed to request progress for etcd watcher", zap.Error(err))

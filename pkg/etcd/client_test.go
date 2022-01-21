@@ -20,7 +20,7 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
 )
 
@@ -188,6 +188,7 @@ func (s *clientSuite) TestOutChBlocked(c *check.C) {
 	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
 	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
+
 	cli.Watcher = watcher
 
 	mockClock := clock.NewMock()
@@ -277,3 +278,4 @@ func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
 	// while WatchCh was reset
 	c.Assert(*watcher.rev, check.Equals, revision)
 }
+

@@ -20,10 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/flags"
-	"github.com/pingcap/ticdc/pkg/security"
 	tidbconfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -32,6 +28,10 @@ import (
 	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/flags"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
 

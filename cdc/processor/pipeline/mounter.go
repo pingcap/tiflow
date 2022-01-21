@@ -15,15 +15,15 @@ package pipeline
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/notify"
-	"github.com/pingcap/ticdc/pkg/pipeline"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/notify"
+	"github.com/pingcap/tiflow/pkg/pipeline"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"

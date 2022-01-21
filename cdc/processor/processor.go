@@ -25,21 +25,21 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/sink"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/sink"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -71,12 +71,14 @@ type processor struct {
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
 
-	metricResolvedTsGauge       prometheus.Gauge
-	metricResolvedTsLagGauge    prometheus.Gauge
-	metricCheckpointTsGauge     prometheus.Gauge
-	metricCheckpointTsLagGauge  prometheus.Gauge
-	metricSyncTableNumGauge     prometheus.Gauge
-	metricProcessorErrorCounter prometheus.Counter
+	metricResolvedTsGauge           prometheus.Gauge
+	metricResolvedTsLagGauge        prometheus.Gauge
+	metricMinResolvedTableIDGuage   prometheus.Gauge
+	metricCheckpointTsGauge         prometheus.Gauge
+	metricCheckpointTsLagGauge      prometheus.Gauge
+	metricMinCheckpointTableIDGuage prometheus.Gauge
+	metricSyncTableNumGauge         prometheus.Gauge
+	metricProcessorErrorCounter     prometheus.Counter
 }
 
 // newProcessor creates a new processor
@@ -90,12 +92,14 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		captureInfo:  ctx.GlobalVars().CaptureInfo,
 		cancel:       func() {},
 
-		metricResolvedTsGauge:       resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricResolvedTsLagGauge:    resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsGauge:     checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsLagGauge:  checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricSyncTableNumGauge:     syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricProcessorErrorCounter: processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsGauge:           resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsLagGauge:        resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricMinResolvedTableIDGuage:   resolvedTsMinTableIDGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsGauge:         checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsLagGauge:      checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricMinCheckpointTableIDGuage: checkpointTsMinTableIDGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricSyncTableNumGauge:         syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricProcessorErrorCounter:     processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
@@ -108,6 +112,7 @@ func newProcessor4Test(ctx cdcContext.Context,
 	p := newProcessor(ctx)
 	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
 	p.createTablePipeline = createTablePipeline
+	p.sinkManager = &sink.Manager{}
 	return p
 }
 
@@ -171,6 +176,8 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	if err := p.lazyInit(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
+	// sink manager will return this checkpointTs to sink node if sink node resolvedTs flush failed
+	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Info.GetCheckpointTs(state.Status))
 	if err := p.handleTableOperation(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -455,6 +462,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
+		ctx.ChangefeedVars().ID,
 		checkpointTs, ddlspans, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
@@ -566,6 +574,7 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 // handlePosition calculates the local resolved ts and local checkpoint ts
 func (p *processor) handlePosition(currentTs int64) {
 	minResolvedTs := uint64(math.MaxUint64)
+	minResolvedTableID := int64(0)
 	if p.schemaStorage != nil {
 		minResolvedTs = p.schemaStorage.ResolvedTs()
 	}
@@ -573,24 +582,29 @@ func (p *processor) handlePosition(currentTs int64) {
 		ts := table.ResolvedTs()
 		if ts < minResolvedTs {
 			minResolvedTs = ts
+			minResolvedTableID, _ = table.ID()
 		}
 	}
 
 	minCheckpointTs := minResolvedTs
+	minCheckpointTableID := int64(0)
 	for _, table := range p.tables {
 		ts := table.CheckpointTs()
 		if ts < minCheckpointTs {
 			minCheckpointTs = ts
+			minCheckpointTableID, _ = table.ID()
 		}
 	}
 
 	resolvedPhyTs := oracle.ExtractPhysical(minResolvedTs)
 	p.metricResolvedTsLagGauge.Set(float64(currentTs-resolvedPhyTs) / 1e3)
 	p.metricResolvedTsGauge.Set(float64(resolvedPhyTs))
+	p.metricMinResolvedTableIDGuage.Set(float64(minResolvedTableID))
 
 	checkpointPhyTs := oracle.ExtractPhysical(minCheckpointTs)
 	p.metricCheckpointTsLagGauge.Set(float64(currentTs-checkpointPhyTs) / 1e3)
 	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
+	p.metricMinCheckpointTableIDGuage.Set(float64(minCheckpointTableID))
 
 	// minResolvedTs and minCheckpointTs may less than global resolved ts and global checkpoint ts when a new table added, the startTs of the new table is less than global checkpoint ts.
 	if minResolvedTs != p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs ||
@@ -707,7 +721,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			}
 			markTableID = tableInfo.ID
 			return nil
-		}, retry.WithBackoffMaxDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
+		}, retry.WithBackoffBaseDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

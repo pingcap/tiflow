@@ -18,14 +18,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdtime"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 func Test(t *testing.T) {
