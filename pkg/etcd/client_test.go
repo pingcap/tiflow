@@ -17,6 +17,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -45,8 +46,6 @@ func (m *mockClient) Put(ctx context.Context, key, val string, opts ...clientv3.
 	return nil, errors.New("mock error")
 }
 
-<<<<<<< HEAD
-=======
 type mockWatcher struct {
 	clientv3.Watcher
 	watchCh      chan clientv3.WatchResponse
@@ -70,7 +69,6 @@ func (m mockWatcher) RequestProgress(ctx context.Context) error {
 	return nil
 }
 
->>>>>>> f90ca46e7 (etcd/client (ticdc): Prevent revision in WatchWitchChan fallback. (#3851))
 func (s *clientSuite) TestRetry(c *check.C) {
 	defer testleak.AfterTest(c)()
 	originValue := maxTries
@@ -117,8 +115,6 @@ func (s *etcdSuite) TestDelegateLease(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(ttlResp.TTL, check.Equals, int64(-1))
 }
-<<<<<<< HEAD
-=======
 
 // test no data lost when WatchCh blocked
 func (s *clientSuite) TestWatchChBlocked(c *check.C) {
@@ -281,4 +277,3 @@ func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
 	// while WatchCh was reset
 	c.Assert(*watcher.rev, check.Equals, revision)
 }
->>>>>>> f90ca46e7 (etcd/client (ticdc): Prevent revision in WatchWitchChan fallback. (#3851))

@@ -15,7 +15,9 @@ package etcd
 
 import (
 	"context"
+	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
@@ -41,6 +43,14 @@ const (
 	backoffBaseDelayInMs = 500
 	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
 	backoffMaxDelayInMs = 60 * 1000
+	// If no msg comes from a etcd watchCh for etcdWatchChTimeoutDuration long,
+	// we should cancel the watchCh and request a new watchCh from etcd client
+	etcdWatchChTimeoutDuration = 10 * time.Second
+	// If no msg comes from a etcd watchCh for etcdRequestProgressDuration long,
+	// we should call RequestProgress of etcd client
+	etcdRequestProgressDuration = 1 * time.Second
+	// etcdWatchChBufferSize is arbitrarily specified, it will be modified in the future
+	etcdWatchChBufferSize = 16
 )
 
 // set to var instead of const for mocking the value to speedup test
@@ -50,6 +60,8 @@ var maxTries int64 = 8
 type Client struct {
 	cli     *clientv3.Client
 	metrics map[string]prometheus.Counter
+	// clock is for making it easier to mock time-related data structures in unit tests
+	clock clock.Clock
 }
 
 // Wrap warps a clientv3.Client that provides etcd APIs required by TiCDC.
@@ -165,9 +177,6 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 
 // Watch delegates request to clientv3.Watcher.Watch
 func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
-<<<<<<< HEAD
-	return c.cli.Watch(ctx, key, opts...)
-=======
 	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
 	go c.WatchWithChan(ctx, watchCh, key, opts...)
 	return watchCh
@@ -235,7 +244,6 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			}
 		}
 	}
->>>>>>> f90ca46e7 (etcd/client (ticdc): Prevent revision in WatchWitchChan fallback. (#3851))
 }
 
 // RequestProgress requests a progress notify response be sent in all watch channels.
