@@ -245,6 +245,12 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 			affect, err = 0, terror.ErrDBExecuteFailed.Delegate(errors.New("SafeModeExit"), "mock")
 		}
 	})
+
+	failpoint.Inject("ErrorOnLastDML", func(_ failpoint.Value) {
+		if len(dmls) > len(jobs) {
+			affect, err = len(dmls), terror.ErrDBExecuteFailed.Delegate(errors.New("ErrorOnLastDML"), "mock")
+		}
+	})
 }
 
 // genSQLs generate SQLs in single row mode or multiple rows mode.
