@@ -74,7 +74,6 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api openAPI) {
 	v1 := router.Group("/api/v1")
 
 	v1.Use(logMiddleware())
-	// request will time out after 10 second
 	v1.Use(errorHandleMiddleware())
 
 	// common API
