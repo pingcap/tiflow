@@ -21,9 +21,8 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tiflow/dm/regexprrouter"
+	"github.com/pingcap/tiflow/dm/pkg/router"
 )
 
 var _ = Suite(&testCommonSuite{})
@@ -152,7 +151,7 @@ func (s *testCommonSuite) TestFetchTargetDoTables(c *C) {
 	// empty filter and router, just as upstream.
 	ba, err := filter.New(false, nil)
 	c.Assert(err, IsNil)
-	r, err := regexprrouter.NewRegExprRouter(false, nil)
+	r, err := router.NewRouter(false, nil)
 	c.Assert(err, IsNil)
 
 	schemas := []string{"shard1"}
@@ -179,7 +178,7 @@ func (s *testCommonSuite) TestFetchTargetDoTables(c *C) {
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
 	// route to the same downstream.
-	r, err = regexprrouter.NewRegExprRouter(false, []*router.TableRule{
+	r, err = router.NewRouter(false, []*router.TableRule{
 		{SchemaPattern: "shard*", TablePattern: "tbl*", TargetSchema: "shard", TargetTable: "tbl"},
 	})
 	c.Assert(err, IsNil)

@@ -35,15 +35,14 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/router"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
-	"github.com/pingcap/tiflow/dm/regexprrouter"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -431,7 +430,7 @@ type Loader struct {
 
 	fileJobQueue chan *fileJob
 
-	tableRouter   *regexprrouter.RegExprTable
+	tableRouter   *router.RouteTable
 	baList        *filter.Filter
 	columnMapping *cm.Mapping
 
@@ -877,7 +876,7 @@ func (l *Loader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	var (
 		err              error
 		oldBaList        *filter.Filter
-		oldTableRouter   *regexprrouter.RegExprTable
+		oldTableRouter   *router.RouteTable
 		oldColumnMapping *cm.Mapping
 	)
 
@@ -905,7 +904,7 @@ func (l *Loader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 
 	// update route, for loader, this almost useless, because schemas often have been restored
 	oldTableRouter = l.tableRouter
-	l.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, cfg.RouteRules)
+	l.tableRouter, err = router.NewRouter(cfg.CaseSensitive, cfg.RouteRules)
 	if err != nil {
 		return terror.ErrLoadUnitGenTableRouter.Delegate(err)
 	}
@@ -925,7 +924,7 @@ func (l *Loader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 }
 
 func (l *Loader) genRouter(rules []*router.TableRule) error {
-	l.tableRouter, _ = regexprrouter.NewRegExprRouter(l.cfg.CaseSensitive, []*router.TableRule{})
+	l.tableRouter, _ = router.NewRouter(l.cfg.CaseSensitive, []*router.TableRule{})
 	for _, rule := range rules {
 		err := l.tableRouter.AddRule(rule)
 		if err != nil {
@@ -1234,7 +1233,7 @@ func renameShardingSchema(query, srcSchema, dstSchema string, ansiquote bool) st
 	return SQLReplace(query, srcSchema, dstSchema, ansiquote)
 }
 
-func fetchMatchedLiteral(ctx *tcontext.Context, router *regexprrouter.RegExprTable, schema, table string) (targetSchema string, targetTable string) {
+func fetchMatchedLiteral(ctx *tcontext.Context, router *router.RouteTable, schema, table string) (targetSchema string, targetTable string) {
 	if schema == "" {
 		// nothing change
 		return schema, table

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package regexprrouter
+package router
 
 import (
 	"regexp"
@@ -19,21 +19,25 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	oldrouter "github.com/pingcap/tidb-tools/pkg/table-router"
+	tablerouter "github.com/pingcap/tidb-tools/pkg/table-router"
+
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 type (
-	TableRule  = oldrouter.TableRule
-	Table      = filter.Table
-	FilterRule = filter.Rules
+	TableRule       = tablerouter.TableRule
+	Table           = filter.Table
+	FilterRule      = filter.Rules
+	TableExtractor  = tablerouter.TableExtractor
+	SchemaExtractor = tablerouter.SchemaExtractor
+	SourceExtractor = tablerouter.SourceExtractor
 )
 
 type FilterType = int32
 
 const (
-	TblFilter  int32 = 1
-	SchmFilter int32 = 2
+	TblFilter FilterType = iota + 1
+	SchmFilter
 )
 
 type FilterWrapper struct {
@@ -44,13 +48,13 @@ type FilterWrapper struct {
 	rawRule *TableRule
 }
 
-type RegExprTable struct {
+type RouteTable struct {
 	filters       []*FilterWrapper
 	caseSensitive bool
 }
 
-func NewRegExprRouter(caseSensitive bool, rules []*TableRule) (*RegExprTable, error) {
-	r := &RegExprTable{
+func NewRouter(caseSensitive bool, rules []*TableRule) (*RouteTable, error) {
+	r := &RouteTable{
 		filters:       make([]*FilterWrapper, 0),
 		caseSensitive: caseSensitive,
 	}
@@ -62,7 +66,7 @@ func NewRegExprRouter(caseSensitive bool, rules []*TableRule) (*RegExprTable, er
 	return r, nil
 }
 
-func (r *RegExprTable) AddRule(rule *TableRule) error {
+func (r *RouteTable) AddRule(rule *TableRule) error {
 	err := rule.Valid()
 	if err != nil {
 		return errors.Trace(err)
@@ -107,7 +111,7 @@ func (r *RegExprTable) AddRule(rule *TableRule) error {
 	return nil
 }
 
-func (r *RegExprTable) Route(schema, table string) (string, string, error) {
+func (r *RouteTable) Route(schema, table string) (string, string, error) {
 	curTable := &Table{
 		Schema: schema,
 		Name:   table,
@@ -151,7 +155,7 @@ func (r *RegExprTable) Route(schema, table string) (string, string, error) {
 	return targetSchema, targetTable, nil
 }
 
-func (r *RegExprTable) AllRules() ([]TableRule, []TableRule) {
+func (r *RouteTable) AllRules() ([]TableRule, []TableRule) {
 	var (
 		schmRouteRules  []TableRule
 		tableRouteRules []TableRule
@@ -166,7 +170,7 @@ func (r *RegExprTable) AllRules() ([]TableRule, []TableRule) {
 	return schmRouteRules, tableRouteRules
 }
 
-func (r *RegExprTable) FetchExtendColumn(schema, table, source string) ([]string, []string) {
+func (r *RouteTable) FetchExtendColumn(schema, table, source string) ([]string, []string) {
 	var cols []string
 	var vals []string
 	rules := []*FilterWrapper{}
@@ -220,23 +224,17 @@ func (r *RegExprTable) FetchExtendColumn(schema, table, source string) ([]string
 func extractVal(s string, ext interface{}) string {
 	var params []string
 	switch e := ext.(type) {
-	case *oldrouter.TableExtractor:
+	case *tablerouter.TableExtractor:
 		if regExpr, err := regexp.Compile(e.TableRegexp); err == nil {
 			params = regExpr.FindStringSubmatch(s)
-		} else {
-			return ""
 		}
-	case *oldrouter.SchemaExtractor:
+	case *tablerouter.SchemaExtractor:
 		if regExpr, err := regexp.Compile(e.SchemaRegexp); err == nil {
 			params = regExpr.FindStringSubmatch(s)
-		} else {
-			return ""
 		}
-	case *oldrouter.SourceExtractor:
+	case *tablerouter.SourceExtractor:
 		if regExpr, err := regexp.Compile(e.SourceRegexp); err == nil {
 			params = regExpr.FindStringSubmatch(s)
-		} else {
-			return ""
 		}
 	}
 	var val strings.Builder
