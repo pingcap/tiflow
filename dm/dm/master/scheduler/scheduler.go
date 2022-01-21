@@ -366,7 +366,7 @@ func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName 
 	return err
 }
 
-// startSource add the upstream source config to the cluster.
+// addSource adds the upstream source config to the cluster.
 func (s *Scheduler) addSource(cfg *config.SourceConfig) error {
 	// 1. check whether exists.
 	if _, ok := s.sourceCfgs[cfg.SourceID]; ok {
