@@ -88,15 +88,11 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
 func (m *Manager) Close(ctx context.Context) error {
 	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
-<<<<<<< HEAD
 	if m.backendSink != nil {
-		return m.backendSink.Close(ctx)
-=======
-	if m.bufSink != nil {
 		log.Info("sinkManager try close bufSink",
 			zap.String("changefeed", m.changefeedID))
 		start := time.Now()
-		if err := m.bufSink.Close(ctx); err != nil {
+		if err := m.backendSink.Close(ctx); err != nil {
 			log.Info("close bufSink failed",
 				zap.String("changefeed", m.changefeedID),
 				zap.Duration("duration", time.Since(start)))
@@ -105,7 +101,6 @@ func (m *Manager) Close(ctx context.Context) error {
 		log.Info("close bufSink success",
 			zap.String("changefeed", m.changefeedID),
 			zap.Duration("duration", time.Since(start)))
->>>>>>> 25b134de8 (capture(cdc): add owner info to help debug etcd_worker, and also some in sink. (#4325))
 	}
 	return nil
 }
