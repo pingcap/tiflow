@@ -21,7 +21,7 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return perrors.Trace(ctx.Err())
 		default:
 		}
 		key, data, rev, err := etcdutils.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
@@ -76,7 +76,7 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 			continue
 		}
 
-		err = s.runLeaderService(s.leaderCtx)
+		err = s.leaderServiceFn(s.leaderCtx)
 		if err != nil {
 			if perrors.Cause(err) == context.Canceled ||
 				errors.ErrEtcdLeaderChanged.Equal(err) {
@@ -94,7 +94,6 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 	}
 }
 
-// nolint:unused
 func (s *Server) resign() {
 	s.resignFn()
 }
@@ -102,7 +101,7 @@ func (s *Server) resign() {
 func (s *Server) campaign(ctx context.Context, timeout time.Duration) error {
 	log.L().Info("start to campaign server master leader", zap.String("name", s.name()))
 	leaderCtx, resignFn, err := s.election.Campaign(ctx, s.member(), timeout)
-	switch err {
+	switch perrors.Cause(err) {
 	case nil:
 	case context.Canceled:
 		return ctx.Err()
@@ -128,16 +127,20 @@ func (s *Server) createLeaderClient(ctx context.Context, addrs []string) {
 		log.L().Error("create server master client failed", zap.Strings("addrs", addrs), zap.Error(err))
 		return
 	}
-	s.leaderClient = cli
+	s.leaderClient.Lock()
+	s.leaderClient.cli = cli
+	s.leaderClient.Unlock()
 }
 
 func (s *Server) closeLeaderClient() {
-	if s.leaderClient != nil {
-		err := s.leaderClient.Close()
+	s.leaderClient.Lock()
+	defer s.leaderClient.Unlock()
+	if s.leaderClient.cli != nil {
+		err := s.leaderClient.cli.Close()
 		if err != nil {
 			log.L().Warn("close leader client met error", zap.Error(err))
 		}
-		s.leaderClient = nil
+		s.leaderClient.cli = nil
 	}
 }
 

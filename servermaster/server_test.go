@@ -152,7 +152,9 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 		require.True(t, needForward)
 	}()
 	time.Sleep(time.Second)
-	s.leaderClient = &client.MasterClientImpl{}
+	s.leaderClient.Lock()
+	s.leaderClient.cli = &client.MasterClientImpl{}
+	s.leaderClient.Unlock()
 	s.leader.Store(&Member{Name: etcdName})
 	wg.Wait()
 }

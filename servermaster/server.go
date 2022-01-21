@@ -45,8 +45,12 @@ type Server struct {
 		sync.RWMutex
 		m []*Member
 	}
-	leaderClient *client.MasterClientImpl
-	membership   Membership
+	leaderClient struct {
+		sync.RWMutex
+		cli *client.MasterClientImpl
+	}
+	membership      Membership
+	leaderServiceFn func(context.Context) error
 
 	// sched scheduler
 	executorManager ExecutorManager
@@ -86,6 +90,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		testCtx:         ctx,
 		leader:          atomic.Value{},
 	}
+	server.leaderServiceFn = server.runLeaderService
 	return server, nil
 }
 
@@ -290,9 +295,11 @@ func (s *Server) Stop() {
 	if s.etcdClient != nil {
 		s.etcdClient.Close()
 	}
-	if s.leaderClient != nil {
-		s.leaderClient.Close()
+	s.leaderClient.Lock()
+	if s.leaderClient.cli != nil {
+		s.leaderClient.cli.Close()
 	}
+	s.leaderClient.Unlock()
 	if s.etcd != nil {
 		s.etcd.Close()
 	}
@@ -491,7 +498,9 @@ func (s *Server) isLeaderAndNeedForward(ctx context.Context) (isLeader, needForw
 		}
 	}
 	isLeader = leader.Name == s.name()
-	needForward = s.leaderClient != nil
+	s.leaderClient.RLock()
+	needForward = s.leaderClient.cli != nil
+	s.leaderClient.RUnlock()
 	return
 }
 
@@ -521,7 +530,11 @@ func (s *Server) rpcForwardIfNeeded(ctx context.Context, req interface{}, respPo
 			zap.String("to", leader.Name), zap.String("request", methodName))
 
 		params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)}
-		results := reflect.ValueOf(s.leaderClient.GetLeaderClient()).MethodByName(methodName).Call(params)
+		s.leaderClient.RLock()
+		defer s.leaderClient.RUnlock()
+		results := reflect.ValueOf(s.leaderClient.cli.GetLeaderClient()).
+			MethodByName(methodName).
+			Call(params)
 		// result's inner types should be (*pb.XXResponse, error), which is same as s.leaderClient.XXRPCMethod
 		reflect.ValueOf(respPointer).Elem().Set(results[0])
 		errInterface := results[1].Interface()
