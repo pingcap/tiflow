@@ -17,6 +17,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -72,6 +73,7 @@ type changefeed struct {
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
 	metricsChangefeedResolvedTsGauge      prometheus.Gauge
 	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
+	metricChangefeedTickDuration          prometheus.Observer
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
@@ -109,6 +111,8 @@ func newChangefeed4Test(
 }
 
 func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
+	startTime := time.Now()
+
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		c.errCh <- errors.Trace(err)
 		return nil
@@ -129,6 +133,12 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		})
 		c.releaseResources(ctx)
 	}
+
+	costTime := time.Since(startTime)
+	if costTime > changefeedLogsWarnDuration {
+		log.Warn("changefeed tick took too long", zap.String("changefeed", c.id), zap.Duration("duration", costTime))
+	}
+	c.metricChangefeedTickDuration.Observe(costTime.Seconds())
 }
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
@@ -185,7 +195,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// So we return here.
 		return nil
 	}
+	startTime := time.Now()
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(ctx, c.state, c.schema.AllPhysicalTables(), captures)
+	costTime := time.Since(startTime)
+	if costTime > schedulerLogsWarnDuration {
+		log.Warn("scheduler tick took too long", zap.String("changefeed", c.id), zap.Duration("duration", costTime))
+	}
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -296,6 +311,7 @@ LOOP:
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
 	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.WithLabelValues(c.id)
+	c.metricChangefeedTickDuration = changefeedTickDuration.WithLabelValues(c.id)
 
 	// create scheduler
 	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
@@ -337,6 +353,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id)
 	c.metricsChangefeedResolvedTsGauge = nil
 	c.metricsChangefeedResolvedTsLagGauge = nil
+
+	changefeedTickDuration.DeleteLabelValues(c.id)
+	c.metricChangefeedTickDuration = nil
 
 	c.initialized = false
 }
@@ -548,7 +567,14 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 }
 
 func (c *changefeed) Close(ctx cdcContext.Context) {
+	startTime := time.Now()
+
 	c.releaseResources(ctx)
+	costTime := time.Since(startTime)
+	if costTime > changefeedLogsWarnDuration {
+		log.Warn("changefeed close took too long", zap.String("changefeed", c.id), zap.Duration("duration", costTime))
+	}
+	changefeedCloseDuration.Observe(costTime.Seconds())
 }
 
 func (c *changefeed) GetInfoProvider() schedulerv2.InfoProvider {
